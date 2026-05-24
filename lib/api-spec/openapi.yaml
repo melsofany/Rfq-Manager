@@ -1,0 +1,1306 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: RFQ Management System API for Cortoba Supplies
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: rfq
+    description: RFQ management
+  - name: suppliers
+    description: Supplier management
+  - name: offers
+    description: Supplier offers/pricing
+  - name: analytics
+    description: Analytics and dashboards
+  - name: audit
+    description: Audit log
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # AUTH
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Employee login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "401":
+          description: Unauthorized
+
+  # EMPLOYEES
+  /employees:
+    get:
+      operationId: listEmployees
+      tags: [auth]
+      summary: List all employees
+      responses:
+        "200":
+          description: List of employees
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Employee"
+    post:
+      operationId: createEmployee
+      tags: [auth]
+      summary: Create employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+
+  /employees/{id}:
+    patch:
+      operationId: updateEmployee
+      tags: [auth]
+      summary: Update employee
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+
+  # SUPPLIERS
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [suppliers]
+      summary: List supplier categories
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierCategory"
+    post:
+      operationId: createCategory
+      tags: [suppliers]
+      summary: Create supplier category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCategory"
+
+  /categories/{id}:
+    patch:
+      operationId: updateCategory
+      tags: [suppliers]
+      summary: Update supplier category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierCategory"
+    delete:
+      operationId: deleteCategory
+      tags: [suppliers]
+      summary: Delete supplier category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /suppliers:
+    get:
+      operationId: listSuppliers
+      tags: [suppliers]
+      summary: List suppliers with optional category filter
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of suppliers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Supplier"
+    post:
+      operationId: createSupplier
+      tags: [suppliers]
+      summary: Create supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supplier"
+
+  /suppliers/{id}:
+    get:
+      operationId: getSupplier
+      tags: [suppliers]
+      summary: Get supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supplier"
+    patch:
+      operationId: updateSupplier
+      tags: [suppliers]
+      summary: Update supplier
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SupplierUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supplier"
+
+  /suppliers/{id}/score:
+    get:
+      operationId: getSupplierScore
+      tags: [suppliers]
+      summary: Get supplier performance score
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SupplierScore"
+
+  # RFQ
+  /rfq:
+    get:
+      operationId: listRfqs
+      tags: [rfq]
+      summary: List all RFQs
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of RFQs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Rfq"
+    post:
+      operationId: createRfq
+      tags: [rfq]
+      summary: Create a new RFQ from customer RFQ number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RfqInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rfq"
+
+  /rfq/{id}:
+    get:
+      operationId: getRfq
+      tags: [rfq]
+      summary: Get RFQ by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: RFQ
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rfq"
+    patch:
+      operationId: updateRfq
+      tags: [rfq]
+      summary: Update RFQ status
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RfqUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rfq"
+
+  /rfq/{id}/items:
+    get:
+      operationId: listRfqItems
+      tags: [rfq]
+      summary: Get items for an RFQ
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: RFQ items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RfqItem"
+
+  /rfq/{id}/send:
+    post:
+      operationId: sendRfqToSuppliers
+      tags: [rfq]
+      summary: Send RFQ to selected suppliers via email
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendRfqInput"
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendRfqResult"
+
+  /rfq/{id}/sent-log:
+    get:
+      operationId: getRfqSentLog
+      tags: [rfq]
+      summary: Get sent log for an RFQ
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Sent log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SentLogEntry"
+
+  /rfq/{id}/offers:
+    get:
+      operationId: getRfqOffers
+      tags: [rfq]
+      summary: Get all offers for an RFQ with price analysis
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Offers with analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RfqOffersResponse"
+
+  /rfq/lookup/{customerRfqNo}:
+    get:
+      operationId: lookupCustomerRfq
+      tags: [rfq]
+      summary: Lookup items from customer RFQ number (reads Google Sheets DATA sheet)
+      parameters:
+        - name: customerRfqNo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Customer RFQ items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerRfqItem"
+
+  # PRICING TOKEN (Supplier Portal)
+  /pricing/{token}:
+    get:
+      operationId: getPricingPage
+      tags: [offers]
+      summary: Get pricing page data by token (public - for suppliers)
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pricing page data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PricingPageData"
+        "404":
+          description: Token not found or expired
+
+  /pricing/{token}/submit:
+    post:
+      operationId: submitOffer
+      tags: [offers]
+      summary: Submit offer via pricing token (public - for suppliers)
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferInput"
+      responses:
+        "201":
+          description: Offer submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "400":
+          description: Token expired or invalid
+
+  /pricing/{token}/track:
+    post:
+      operationId: trackLinkOpen
+      tags: [offers]
+      summary: Track when supplier opens the pricing link
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tracked
+
+  # OFFERS
+  /offers:
+    get:
+      operationId: listOffers
+      tags: [offers]
+      summary: List all offers
+      parameters:
+        - name: rfqId
+          in: query
+          schema:
+            type: integer
+        - name: supplierId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of offers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Offer"
+
+  # ANALYTICS
+  /analytics/dashboard:
+    get:
+      operationId: getDashboardStats
+      tags: [analytics]
+      summary: Get dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /analytics/employee/{id}:
+    get:
+      operationId: getEmployeePerformance
+      tags: [analytics]
+      summary: Get employee performance metrics
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Employee performance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeePerformance"
+
+  /analytics/price-analysis/{rfqId}:
+    get:
+      operationId: getPriceAnalysis
+      tags: [analytics]
+      summary: Price analysis for an RFQ - compare offers, detect anomalies
+      parameters:
+        - name: rfqId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Price analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceAnalysis"
+
+  # AUDIT LOG
+  /audit:
+    get:
+      operationId: listAuditLogs
+      tags: [audit]
+      summary: List audit log entries
+      parameters:
+        - name: rfqId
+          in: query
+          schema:
+            type: integer
+        - name: employeeId
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditLog"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+
+    # AUTH
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [employee, token]
+      properties:
+        employee:
+          $ref: "#/components/schemas/Employee"
+        token:
+          type: string
+
+    Employee:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, purchasing]
+        phone:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    EmployeeInput:
+      type: object
+      required: [name, email, password, role]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, purchasing]
+        phone:
+          type: string
+
+    EmployeeUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, purchasing]
+        phone:
+          type: string
+        isActive:
+          type: boolean
+        password:
+          type: string
+
+    # CATEGORIES
+    SupplierCategory:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    # SUPPLIERS
+    Supplier:
+      type: object
+      required: [id, name, category]
+      properties:
+        id:
+          type: integer
+        supplierId:
+          type: string
+        name:
+          type: string
+        contactPerson:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        category:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    SupplierInput:
+      type: object
+      required: [name, category]
+      properties:
+        supplierId:
+          type: string
+        name:
+          type: string
+        contactPerson:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        category:
+          type: string
+
+    SupplierUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        contactPerson:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        category:
+          type: string
+        isActive:
+          type: boolean
+
+    SupplierScore:
+      type: object
+      required: [supplierId, totalScore]
+      properties:
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        totalScore:
+          type: number
+        onTimeScore:
+          type: number
+        priceScore:
+          type: number
+        responseRateScore:
+          type: number
+        qualityScore:
+          type: number
+        totalRfqsReceived:
+          type: integer
+        totalOffersSubmitted:
+          type: integer
+        responseRate:
+          type: number
+        avgPriceDelta:
+          type: number
+
+    # RFQ
+    Rfq:
+      type: object
+      required: [id, internalRfqNo, customerRfqNo, status, createdAt]
+      properties:
+        id:
+          type: integer
+        internalRfqNo:
+          type: string
+        customerRfqNo:
+          type: string
+        customerRfqDate:
+          type: ["string", "null"]
+        requiredResponseDate:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [draft, sent, partial, completed, closed]
+        employeeId:
+          type: integer
+        employeeName:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        expiresAt:
+          type: ["string", "null"]
+        itemCount:
+          type: integer
+        supplierCount:
+          type: integer
+        offerCount:
+          type: integer
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    RfqInput:
+      type: object
+      required: [customerRfqNo]
+      properties:
+        customerRfqNo:
+          type: string
+        notes:
+          type: string
+        expiresAt:
+          type: ["string", "null"]
+          description: ISO datetime after which supplier pricing is blocked
+
+    RfqUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [draft, sent, partial, completed, closed]
+        notes:
+          type: string
+
+    RfqItem:
+      type: object
+      required: [id, rfqId, description]
+      properties:
+        id:
+          type: integer
+        rfqId:
+          type: integer
+        itemId:
+          type: ["string", "null"]
+        lineItem:
+          type: ["string", "null"]
+        partNo:
+          type: ["string", "null"]
+        description:
+          type: string
+        uom:
+          type: ["string", "null"]
+        qty:
+          type: ["number", "null"]
+        referencePrice:
+          type: ["number", "null"]
+
+    CustomerRfqItem:
+      type: object
+      required: [description]
+      properties:
+        itemId:
+          type: string
+        lineItem:
+          type: string
+        partNo:
+          type: string
+        description:
+          type: string
+        uom:
+          type: string
+        qty:
+          type: number
+        referencePrice:
+          type: ["number", "null"]
+        rfqNo:
+          type: string
+        rfqDate:
+          type: string
+        requiredResponseDate:
+          type: string
+
+    SendRfqInput:
+      type: object
+      required: [supplierIds]
+      properties:
+        supplierIds:
+          type: array
+          items:
+            type: integer
+        closeDate:
+          type: string
+        notes:
+          type: string
+
+    SendRfqResult:
+      type: object
+      required: [sent, skipped]
+      properties:
+        sent:
+          type: integer
+        skipped:
+          type: integer
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              supplierId:
+                type: integer
+              supplierName:
+                type: string
+              status:
+                type: string
+              reason:
+                type: ["string", "null"]
+
+    SentLogEntry:
+      type: object
+      required: [id, rfqId, supplierId, token, createdAt]
+      properties:
+        id:
+          type: integer
+        rfqId:
+          type: integer
+        internalRfqNo:
+          type: string
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        contactPerson:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        employeeId:
+          type: integer
+        employeeName:
+          type: ["string", "null"]
+        token:
+          type: string
+        closeDate:
+          type: ["string", "null"]
+        linkOpened:
+          type: boolean
+        openCount:
+          type: integer
+        firstOpenedAt:
+          type: ["string", "null"]
+        lastOpenedAt:
+          type: ["string", "null"]
+        offerSubmitted:
+          type: boolean
+        createdAt:
+          type: string
+
+    # OFFERS / PRICING
+    PricingPageData:
+      type: object
+      required: [rfqNo, supplierName, items, closeDate, isExpired]
+      properties:
+        rfqNo:
+          type: string
+        supplierName:
+          type: string
+        contactPerson:
+          type: ["string", "null"]
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RfqItem"
+        closeDate:
+          type: string
+        isExpired:
+          type: boolean
+        alreadySubmitted:
+          type: boolean
+        existingOffer:
+          $ref: "#/components/schemas/Offer"
+
+    OfferInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [rfqItemId, price]
+            properties:
+              rfqItemId:
+                type: integer
+              price:
+                type: number
+              taxIncluded:
+                type: boolean
+              deliveryDays:
+                type: integer
+              notes:
+                type: string
+        generalNotes:
+          type: string
+
+    Offer:
+      type: object
+      required: [id, rfqId, supplierId, createdAt]
+      properties:
+        id:
+          type: integer
+        rfqId:
+          type: integer
+        supplierId:
+          type: integer
+        supplierName:
+          type: ["string", "null"]
+        sentLogId:
+          type: integer
+        employeeId:
+          type: ["integer", "null"]
+        totalPrice:
+          type: ["number", "null"]
+        generalNotes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/OfferItem"
+
+    OfferItem:
+      type: object
+      required: [id, offerId, rfqItemId, price]
+      properties:
+        id:
+          type: integer
+        offerId:
+          type: integer
+        rfqItemId:
+          type: integer
+        partNo:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        qty:
+          type: ["number", "null"]
+        uom:
+          type: ["string", "null"]
+        price:
+          type: number
+        taxIncluded:
+          type: boolean
+        deliveryDays:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+
+    RfqOffersResponse:
+      type: object
+      required: [rfq, offers, analysis]
+      properties:
+        rfq:
+          $ref: "#/components/schemas/Rfq"
+        offers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Offer"
+        analysis:
+          $ref: "#/components/schemas/PriceAnalysis"
+
+    # ANALYTICS
+    DashboardStats:
+      type: object
+      required: [totalRfqs, openRfqs, totalSuppliers, totalOffers]
+      properties:
+        totalRfqs:
+          type: integer
+        openRfqs:
+          type: integer
+        totalSuppliers:
+          type: integer
+        totalOffers:
+          type: integer
+        rfqsByStatus:
+          type: array
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+              count:
+                type: integer
+        recentRfqs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Rfq"
+        topSuppliers:
+          type: array
+          items:
+            $ref: "#/components/schemas/SupplierScore"
+        responseRateThisMonth:
+          type: number
+        avgResponseTimeHours:
+          type: number
+
+    EmployeePerformance:
+      type: object
+      required: [employee]
+      properties:
+        employee:
+          $ref: "#/components/schemas/Employee"
+        totalRfqsSent:
+          type: integer
+        totalOffersReceived:
+          type: integer
+        responseRate:
+          type: number
+        avgSendTimeHours:
+          type: number
+        totalPurchaseValue:
+          type: number
+        awardRate:
+          type: number
+        rfqsByMonth:
+          type: array
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+              count:
+                type: integer
+
+    PriceAnalysis:
+      type: object
+      required: [rfqId]
+      properties:
+        rfqId:
+          type: integer
+        itemAnalysis:
+          type: array
+          items:
+            type: object
+            properties:
+              rfqItemId:
+                type: integer
+              description:
+                type: string
+              partNo:
+                type: ["string", "null"]
+              qty:
+                type: ["number", "null"]
+              uom:
+                type: ["string", "null"]
+              referencePrice:
+                type: ["number", "null"]
+              minPrice:
+                type: ["number", "null"]
+              maxPrice:
+                type: ["number", "null"]
+              avgPrice:
+                type: ["number", "null"]
+              fairPrice:
+                type: ["number", "null"]
+              offers:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    supplierId:
+                      type: integer
+                    supplierName:
+                      type: string
+                    price:
+                      type: number
+                    taxIncluded:
+                      type: boolean
+                    deliveryDays:
+                      type: ["integer", "null"]
+                    deviation:
+                      type: number
+                    isLowest:
+                      type: boolean
+                    isAnomaly:
+                      type: boolean
+
+    # AUDIT
+    AuditLog:
+      type: object
+      required: [id, action, createdAt]
+      properties:
+        id:
+          type: integer
+        action:
+          type: string
+        entityType:
+          type: ["string", "null"]
+        entityId:
+          type: ["integer", "null"]
+        employeeId:
+          type: ["integer", "null"]
+        employeeName:
+          type: ["string", "null"]
+        description:
+          type: string
+        ipAddress:
+          type: ["string", "null"]
+        userAgent:
+          type: ["string", "null"]
+        createdAt:
+          type: string

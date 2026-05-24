@@ -1,0 +1,284 @@
+import { useGetDashboardStats, getGetDashboardStatsQueryKey } from "@workspace/api-client-react";
+import { Layout } from "@/components/Layout";
+import { StatusBadge } from "@/components/StatusBadge";
+import { Link } from "wouter";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { FileText, Users, TrendingUp, Inbox, ArrowRight, RefreshCw, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+
+const STATUS_COLORS: Record<string, string> = {
+  draft: "#6b7280",
+  sent: "#3b82f6",
+  partial: "#f59e0b",
+  completed: "#22c55e",
+  closed: "#64748b",
+};
+
+interface SyncStatus {
+  lastSyncAt: string | null;
+  lastSyncResult: "success" | "error" | null;
+  lastSyncError: string | null;
+  lastSyncStats: { rfqs: number; items: number; suppliers: number } | null;
+  deleted: { rfqs: number; items: number; suppliers: number } | null;
+  inProgress: boolean;
+}
+
+function KpiCard({ label, value, sub, icon: Icon, color }: {
+  label: string; value: number | string; sub?: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>; color: string;
+}) {
+  return (
+    <div className="bg-card border border-border rounded-lg p-5">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-muted-foreground text-xs uppercase tracking-wider font-medium">{label}</p>
+          <p className="text-3xl font-bold text-foreground mt-1">{value}</p>
+          {sub && <p className="text-muted-foreground text-xs mt-1">{sub}</p>}
+        </div>
+        <div className={`p-2 rounded-lg ${color}`}>
+          <Icon size={20} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SheetSyncCard() {
+  const { user } = useAuth();
+  const canSync = user?.role === "admin" || user?.role === "manager";
+
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sync/status", { credentials: "include" });
+      if (res.ok) setSyncStatus(await res.json());
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  // Poll while sync is in progress
+  useEffect(() => {
+    if (!syncStatus?.inProgress && !syncing) return;
+    const id = setInterval(fetchStatus, 2000);
+    return () => clearInterval(id);
+  }, [syncStatus?.inProgress, syncing, fetchStatus]);
+
+  async function triggerSync() {
+    setSyncing(true);
+    try {
+      await fetch("/api/sync/sheet", { method: "POST", credentials: "include" });
+      // Poll for completion
+      const poll = setInterval(async () => {
+        await fetchStatus();
+        const fresh = await fetch("/api/sync/status", { credentials: "include" }).then(r => r.json()) as SyncStatus;
+        if (!fresh.inProgress) {
+          setSyncStatus(fresh);
+          setSyncing(false);
+          clearInterval(poll);
+        }
+      }, 2000);
+    } catch {
+      setSyncing(false);
+    }
+  }
+
+  const isRunning = syncing || syncStatus?.inProgress;
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="font-semibold text-foreground text-sm">Google Sheet Sync</h2>
+          <p className="text-muted-foreground text-xs mt-0.5">Mirror of database — RFQs, Items, Suppliers</p>
+        </div>
+        {canSync && (
+          <button
+            onClick={triggerSync}
+            disabled={isRunning}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isRunning
+              ? <Loader2 size={13} className="animate-spin" />
+              : <RefreshCw size={13} />}
+            {isRunning ? "Syncing..." : "Sync Now"}
+          </button>
+        )}
+      </div>
+
+      {syncStatus?.lastSyncAt ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            {syncStatus.lastSyncResult === "success"
+              ? <CheckCircle size={14} className="text-green-500 shrink-0" />
+              : <AlertCircle size={14} className="text-red-500 shrink-0" />}
+            <span className="text-xs text-muted-foreground">
+              Last sync: {new Date(syncStatus.lastSyncAt).toLocaleString()}
+            </span>
+          </div>
+
+          {syncStatus.lastSyncResult === "success" && syncStatus.lastSyncStats && (
+            <div className="flex gap-4 text-xs text-muted-foreground pl-5">
+              <span>{syncStatus.lastSyncStats.rfqs} RFQs</span>
+              <span>{syncStatus.lastSyncStats.items} items</span>
+              <span>{syncStatus.lastSyncStats.suppliers} suppliers</span>
+              {syncStatus.deleted && (syncStatus.deleted.rfqs + syncStatus.deleted.items + syncStatus.deleted.suppliers) > 0 && (
+                <span className="text-amber-600 font-medium">
+                  {syncStatus.deleted.rfqs + syncStatus.deleted.items + syncStatus.deleted.suppliers} deleted from DB
+                </span>
+              )}
+            </div>
+          )}
+
+          {syncStatus.lastSyncResult === "error" && (
+            <p className="text-xs text-red-500 pl-5 truncate">{syncStatus.lastSyncError}</p>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {isRunning ? "First sync in progress..." : "No sync has run yet. Click Sync Now to start."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  const { data: stats, isLoading } = useGetDashboardStats({
+    query: { queryKey: getGetDashboardStatsQueryKey() },
+  });
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="p-6 space-y-4">
+          <div className="h-8 bg-muted rounded w-48 animate-pulse" />
+          <div className="grid grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-28 bg-muted rounded-lg animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  const chartData = stats?.rfqsByStatus?.map((s) => ({
+    name: s.status.charAt(0).toUpperCase() + s.status.slice(1),
+    value: s.count,
+    fill: STATUS_COLORS[s.status] || "#6b7280",
+  })) ?? [];
+
+  return (
+    <Layout>
+      <div className="p-6 space-y-6">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground text-sm">Overview of procurement activity</p>
+        </div>
+
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard label="Total RFQs" value={stats?.totalRfqs ?? 0} icon={FileText} color="bg-blue-50 text-blue-600" />
+          <KpiCard label="Open RFQs" value={stats?.openRfqs ?? 0} sub="Active" icon={Inbox} color="bg-amber-50 text-amber-600" />
+          <KpiCard label="Suppliers" value={stats?.totalSuppliers ?? 0} sub="Active" icon={Users} color="bg-green-50 text-green-600" />
+          <KpiCard label="Response Rate" value={`${stats?.responseRateThisMonth ?? 0}%`} sub="All time" icon={TrendingUp} color="bg-purple-50 text-purple-600" />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* RFQ Status Chart */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground text-sm mb-4">RFQs by Status</h2>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={chartData} barCategoryGap="30%">
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="value" radius={[3, 3, 0, 0]}>
+                    {chartData.map((entry, i) => (
+                      <Cell key={i} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data yet</div>
+            )}
+          </div>
+
+          {/* Top Suppliers */}
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground text-sm mb-4">Top Suppliers</h2>
+            {stats?.topSuppliers?.length ? (
+              <div className="space-y-3">
+                {stats.topSuppliers.map((s) => (
+                  <div key={s.supplierId} className="flex items-center justify-between">
+                    <span className="text-sm text-foreground truncate max-w-[200px]">{s.supplierName}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">{s.totalOffersSubmitted} offers</span>
+                      <div className="w-16 bg-muted rounded-full h-1.5">
+                        <div className="bg-primary h-1.5 rounded-full" style={{ width: `${s.responseRate}%` }} />
+                      </div>
+                      <span className="text-xs font-medium text-foreground w-10 text-right">{s.responseRate}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No supplier data yet</div>
+            )}
+          </div>
+        </div>
+
+        {/* Google Sheet Sync */}
+        <SheetSyncCard />
+
+        {/* Recent RFQs */}
+        <div className="bg-card border border-border rounded-lg">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+            <h2 className="font-semibold text-foreground text-sm">Recent RFQs</h2>
+            <Link href="/rfq">
+              <a className="text-primary text-xs flex items-center gap-1 hover:underline">View all <ArrowRight size={12} /></a>
+            </Link>
+          </div>
+          {stats?.recentRfqs?.length ? (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">Internal No.</th>
+                  <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">Customer RFQ</th>
+                  <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">Employee</th>
+                  <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">Status</th>
+                  <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.recentRfqs.map((rfq) => (
+                  <tr key={rfq.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                    <td className="px-5 py-3">
+                      <Link href={`/rfq/${rfq.id}`}>
+                        <a className="text-primary font-mono text-xs hover:underline">{rfq.internalRfqNo}</a>
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3 text-foreground text-xs font-mono">{rfq.customerRfqNo}</td>
+                    <td className="px-5 py-3 text-muted-foreground text-xs">{rfq.employeeName ?? "-"}</td>
+                    <td className="px-5 py-3"><StatusBadge status={rfq.status} /></td>
+                    <td className="px-5 py-3 text-muted-foreground text-xs">
+                      {new Date(rfq.createdAt).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="px-5 py-10 text-center text-muted-foreground text-sm">No RFQs yet</div>
+          )}
+        </div>
+      </div>
+    </Layout>
+  );
+}
