@@ -1,12 +1,17 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
 
+const SMTP_TIMEOUT_MS = 10000;
+
 function createTransporter() {
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT) || 587,
     secure: Number(process.env.SMTP_PORT) === 465,
     requireTLS: Number(process.env.SMTP_PORT) !== 465,
+    connectionTimeout: SMTP_TIMEOUT_MS,
+    greetingTimeout: SMTP_TIMEOUT_MS,
+    socketTimeout: SMTP_TIMEOUT_MS,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -21,6 +26,7 @@ export async function verifyEmailConnection(): Promise<{ ok: boolean; error?: st
   const transporter = createTransporter();
   try {
     await transporter.verify();
+    transporter.close();
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -63,19 +69,16 @@ export async function sendRfqEmail(opts: {
 </head>
 <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f3f4f6">
   <div style="max-width:700px;margin:32px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
-    <!-- Header -->
     <div style="background:#1e3a5f;padding:20px 32px">
       <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700">Cortoba Supplies</h1>
       <p style="margin:4px 0 0;color:#93c5fd;font-size:13px">قرطبة للتوريدات</p>
     </div>
-    <!-- Body -->
     <div style="padding:32px">
       <p style="margin:0 0 8px;font-size:15px;color:#374151">Dear <strong>${opts.toName}</strong>,</p>
       <p style="margin:0 0 20px;font-size:15px;color:#374151">
         We would like to request your best quotation for the following items.<br>
         <strong>RFQ Reference:</strong> ${opts.rfqNo} &nbsp;|&nbsp; <strong>Closing Date:</strong> ${opts.closeDate}
       </p>
-      <!-- Items Table -->
       <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px">
         <thead>
           <tr style="background:#1e3a5f;color:#ffffff">
@@ -88,7 +91,6 @@ export async function sendRfqEmail(opts: {
         </thead>
         <tbody>${itemRows}</tbody>
       </table>
-      <!-- CTA Button -->
       <div style="text-align:center;margin:32px 0">
         <a href="${opts.pricingUrl}"
            style="background:#1e3a5f;color:#ffffff;padding:14px 32px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600;display:inline-block">
@@ -104,7 +106,6 @@ export async function sendRfqEmail(opts: {
         The link expires on <strong>${opts.closeDate}</strong>.
       </p>
     </div>
-    <!-- Footer -->
     <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px">
       <p style="margin:0 0 4px;font-size:13px;color:#6b7280">
         Contact: <strong>${opts.employeeName}</strong>${opts.employeePhone ? " &nbsp;|&nbsp; " + opts.employeePhone : ""}
@@ -149,18 +150,21 @@ ${senderEmail}
 Cortoba Supplies — ش.الاسكندرية - برج نجمة مطروح الدور الرابع - مرسي مطروح
 `.trim();
 
-  await transporter.sendMail({
-    from: `"Cortoba Supplies قرطبة للتوريدات" <${senderEmail}>`,
-    replyTo: `"${opts.employeeName}" <${senderEmail}>`,
-    to: `"${opts.toName}" <${opts.to}>`,
-    subject: `Request for Quotation — ${opts.rfqNo} (Closing: ${opts.closeDate})`,
-    text,
-    html,
-    headers: {
-      "X-Priority": "1",
-      "X-Mailer": "Cortoba-RFQ-System",
-    },
-  });
-
-  logger.info({ to: opts.to, rfqNo: opts.rfqNo }, "RFQ email sent successfully");
+  try {
+    await transporter.sendMail({
+      from: `"Cortoba Supplies قرطبة للتوريدات" <${senderEmail}>`,
+      replyTo: `"${opts.employeeName}" <${senderEmail}>`,
+      to: `"${opts.toName}" <${opts.to}>`,
+      subject: `Request for Quotation — ${opts.rfqNo} (Closing: ${opts.closeDate})`,
+      text,
+      html,
+      headers: {
+        "X-Priority": "1",
+        "X-Mailer": "Cortoba-RFQ-System",
+      },
+    });
+    logger.info({ to: opts.to, rfqNo: opts.rfqNo }, "RFQ email sent successfully");
+  } finally {
+    transporter.close();
+  }
 }
