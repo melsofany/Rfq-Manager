@@ -193,15 +193,27 @@ import { Router } from "express";
     const { phone, message, supplierId } = req.body as { phone: string; message: string; supplierId?: number };
     if (!phone || !message) { res.status(400).json({ error: "phone and message are required" }); return; }
 
-    await sendWhatsAppText(phone, message);
     const normalized = normalizePhone(phone);
-
-    await db.insert(whatsappChatsTable).values({
-      direction: "outbound", phone: normalized,
-      supplierId: supplierId ?? null, body: message, isRead: true,
+      try {
+        await sendWhatsAppText(phone, message);
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        req.log.error({ err, phone: normalized }, "WhatsApp send failed");
+        let userMessage = "فشل إرسال الرسالة عبر WhatsApp.";
+        if (errMsg.includes("131047")) {
+          userMessage = "انتهت نافذة المحادثة (24 ساعة). لا يمكن إرسال رسائل حرة بعد 24 ساعة من آخر رسالة من المورد.";
+        } else if (errMsg.includes("131026")) {
+          userMessage = "رقم الهاتف غير مسجل على WhatsApp.";
+        }
+        res.status(400).json({ error: userMessage, detail: errMsg });
+        return;
+      }
+      await db.insert(whatsappChatsTable).values({
+        direction: "outbound", phone: normalized,
+        supplierId: supplierId ?? null, body: message, isRead: true,
+      });
+      res.json({ ok: true });
     });
-    res.json({ ok: true });
-  });
 
   // ─── POST /api/whatsapp/send-media — send image/document ─────────────────
   router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
