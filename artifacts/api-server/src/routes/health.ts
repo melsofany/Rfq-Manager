@@ -22,33 +22,45 @@ import { Router, type IRouter } from "express";
     });
   });
 
-  // No auth — diagnostic only, no secrets exposed
+  // No auth — diagnostic only, reveals no secrets
   router.get("/healthz/whatsapp", async (_req, res): Promise<void> => {
     const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
     const waToken = process.env.WHATSAPP_TOKEN;
+    const waBaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
     const apiVersion = "v22.0";
 
     if (!phoneNumberId || !waToken) {
       res.status(500).json({
         ok: false,
         error: "WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_TOKEN not set",
-        phone_number_id_set: !!phoneNumberId,
-        token_set: !!waToken,
       });
       return;
     }
 
     try {
-      const r = await fetch(
+      // 1. Validate token by fetching phone number details
+      const phoneRes = await fetch(
         `https://graph.facebook.com/${apiVersion}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,status`,
         { headers: { Authorization: `Bearer ${waToken}` } },
       );
-      const json = await r.json() as Record<string, unknown>;
-      if (!r.ok) {
-        res.status(r.status).json({ ok: false, http_status: r.status, wa_error: json });
-        return;
+      const phoneJson = await phoneRes.json() as Record<string, unknown>;
+
+      // 2. List approved templates (to check if rfq_notification exists)
+      let templates: unknown = null;
+      if (waBaId) {
+        const tplRes = await fetch(
+          `https://graph.facebook.com/${apiVersion}/${waBaId}/message_templates?fields=name,status,language`,
+          { headers: { Authorization: `Bearer ${waToken}` } },
+        );
+        templates = await tplRes.json();
       }
-      res.json({ ok: true, phone_number_id: phoneNumberId, details: json });
+
+      res.json({
+        ok: phoneRes.ok,
+        phone_details: phoneJson,
+        template_name_configured: process.env.WHATSAPP_TEMPLATE_NAME || "rfq_notification",
+        templates,
+      });
     } catch (err) {
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
     }
