@@ -264,17 +264,25 @@ export async function sendRfqWhatsApp(
     });
     logger.info({ to, rfqNo: opts.rfqNo }, "RFQ WhatsApp text sent");
   } catch (textErr) {
-    if (isOutsideWindowError(textErr)) {
-      // First contact — use pre-approved template
-      logger.info(
-        { to, rfqNo: opts.rfqNo },
-        "Outside 24-hour window — sending via WhatsApp template",
-      );
-      await sendRfqTemplate(to, opts);
-      usedTemplate = true;
-      logger.info({ to, rfqNo: opts.rfqNo }, "RFQ WhatsApp template sent successfully");
-    } else {
-      throw textErr;
+      if (isOutsideWindowError(textErr)) {
+        // First contact — use pre-approved template
+        logger.info(
+          { to, rfqNo: opts.rfqNo },
+          "Outside 24-hour window — sending via WhatsApp template",
+        );
+        try {
+          await sendRfqTemplate(to, opts);
+          usedTemplate = true;
+          logger.info({ to, rfqNo: opts.rfqNo }, "RFQ WhatsApp template sent successfully");
+        } catch (tplErr) {
+          // Template not approved/not found — log but don't throw so caller still records the attempt
+          logger.warn(
+            { err: tplErr, to, rfqNo: opts.rfqNo },
+            "WhatsApp template failed — no approved template available for first-contact message",
+          );
+        }
+      } else {
+        throw textErr;
     }
   }
 
