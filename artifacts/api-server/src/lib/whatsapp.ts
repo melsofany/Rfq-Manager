@@ -6,10 +6,10 @@ import { logger } from "./logger";
   const TOKEN = process.env.WHATSAPP_TOKEN;
 
   // Template names — override via env vars if needed
-  const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";  // UTILITY — works without opt-in
-  const TEMPLATE_PDF     = process.env.WHATSAPP_TEMPLATE_PDF     || "rfq_pdf_ar";       // DOCUMENT header + 4 body vars
-  const TEMPLATE_TEXT    = process.env.WHATSAPP_TEMPLATE_TEXT    || "rfq_send_ar";      // text-only fallback
-  const TEMPLATE_LANG    = process.env.WHATSAPP_TEMPLATE_LANG    || "ar";
+  const TEMPLATE_TEXT    = process.env.WHATSAPP_TEMPLATE_TEXT    || "rfq_send_ar";      // APPROVED — primary
+const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";  // UTILITY — fallback
+const TEMPLATE_PDF     = process.env.WHATSAPP_TEMPLATE_PDF     || "rfq_pdf_ar";       // PDF — fallback
+const TEMPLATE_LANG    = process.env.WHATSAPP_TEMPLATE_LANG    || "ar";
 
   interface WaApiError {
     error?: {
@@ -308,41 +308,32 @@ import { logger } from "./logger";
     let pdfSent = false;
     let usedTemplate = false;
 
-    // ── 1. Try UTILITY template first (works without opt-in for all contacts) ─────
+    // ── 1. rfq_send_ar — APPROVED text template (primary) ───────────────────────
     try {
-      await sendRfqTemplateUtility(to, opts);
+      await sendRfqTemplateTextOnly(to, opts);
       usedTemplate = true;
       return { pdfSent: false, usedTemplate };
-    } catch (utilityErr) {
-      logger.warn(
-        { err: utilityErr, to, rfqNo: opts.rfqNo },
-        "UTILITY template failed — trying PDF template",
-      );
+    } catch (textErr) {
+      logger.warn({ err: textErr, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying PDF template");
     }
 
-    // ── 2. Try PDF template ───────────────────────────────────────────────────────
+    // ── 2. rfq_pdf_ar — PDF template ─────────────────────────────────────────────
     try {
       await sendRfqTemplateWithPdf(to, opts);
       pdfSent = true;
       usedTemplate = true;
       return { pdfSent, usedTemplate };
-    } catch (pdfTplErr) {
-      logger.warn(
-        { err: pdfTplErr, to, rfqNo: opts.rfqNo },
-        "PDF template failed — trying text-only template",
-      );
+    } catch (pdfErr) {
+      logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "PDF template failed — trying UTILITY template");
     }
 
-    // ── 3. Try text-only template ─────────────────────────────────────────────────
+    // ── 3. rfq_utility_ar — UTILITY template (pending approval) ─────────────────
     try {
-      await sendRfqTemplateTextOnly(to, opts);
+      await sendRfqTemplateUtility(to, opts);
       usedTemplate = true;
       return { pdfSent: false, usedTemplate };
-    } catch (textTplErr) {
-      logger.warn(
-        { err: textTplErr, to, rfqNo: opts.rfqNo },
-        "Text-only template failed — trying plain text message",
-      );
+    } catch (utilErr) {
+      logger.warn({ err: utilErr, to, rfqNo: opts.rfqNo }, "UTILITY template failed — trying plain text");
     }
 
     // ── 4. Last resort: plain text (only works inside 24-hour window) ─────────────
