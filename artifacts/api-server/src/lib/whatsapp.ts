@@ -82,8 +82,9 @@ export async function sendRfqWhatsApp(opts: {
   employeeName: string;
   employeePhone?: string | null;
   notes?: string | null;
-}): Promise<void> {
+}): Promise<{ pdfSent: boolean }> {
   const to = normalizePhone(opts.phone);
+  let pdfSent = false;
 
   // ── 1. Try to generate & send PDF ──────────────────────────────────────
   try {
@@ -115,6 +116,7 @@ export async function sendRfqWhatsApp(opts: {
     });
 
     logger.info({ to, rfqNo: opts.rfqNo, response: docResponse }, "RFQ PDF document sent via WhatsApp");
+    pdfSent = true;
   } catch (pdfErr) {
     logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "PDF generation/upload failed — falling back to text only");
   }
@@ -157,6 +159,7 @@ export async function sendRfqWhatsApp(opts: {
   });
 
   logger.info({ to, rfqNo: opts.rfqNo }, "RFQ WhatsApp sent");
+  return { pdfSent };
 }
 
 export async function sendWhatsAppText(phone: string, text: string): Promise<void> {

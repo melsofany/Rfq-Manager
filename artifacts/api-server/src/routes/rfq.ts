@@ -355,7 +355,7 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
     // Send WhatsApp if supplier has phone
     if (supplier.phone) {
       try {
-        await sendRfqWhatsApp({
+        const { pdfSent } = await sendRfqWhatsApp({
           phone: supplier.phone,
           toName: supplier.contactPerson || supplier.name,
           rfqNo: rfq.internalRfqNo,
@@ -368,8 +368,17 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           employeePhone: employee?.phone,
           notes: rfq.notes ?? null,
         });
-        // Save outbound message to chat log
+        // Save outbound messages to chat log
         const normalizedPhone = supplier.phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+        if (pdfSent) {
+          await db.insert(whatsappChatsTable).values({
+            direction: "outbound",
+            phone: normalizedPhone,
+            supplierId: supplier.id,
+            body: `[PDF] RFQ-${rfq.internalRfqNo}.pdf — طلب عرض سعر`,
+            isRead: true,
+          });
+        }
         await db.insert(whatsappChatsTable).values({
           direction: "outbound",
           phone: normalizedPhone,
