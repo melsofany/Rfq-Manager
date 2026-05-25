@@ -204,53 +204,56 @@ export async function sendRfqWhatsApp(
   let usedTemplate = false;
 
   // ── 1. Try to generate & send PDF (only works inside 24-hour window) ──────
-  try {
-    // 15-second timeout prevents PDF hang from blocking text message
-      const pdfBuffer = await Promise.race([
+    try {
+      const pdfBuffer = await Promise.race<Buffer>([
         generateRfqPdf({
-      rfqNo: opts.rfqNo,
-      customerRfqNo: opts.customerRfqNo,
-      rfqDate: opts.rfqDate,
-      closeDate: opts.closeDate,
-      supplierName: opts.toName,
-      items: opts.items,
-      pricingUrl: opts.pricingUrl,
-      employeeName: opts.employeeName,
-      employeePhone: opts.employeePhone,
-      notes: opts.notes,
-    });
+          rfqNo: opts.rfqNo,
+          customerRfqNo: opts.customerRfqNo,
+          rfqDate: opts.rfqDate,
+          closeDate: opts.closeDate,
+          supplierName: opts.toName,
+          items: opts.items,
+          pricingUrl: opts.pricingUrl,
+          employeeName: opts.employeeName,
+          employeePhone: opts.employeePhone,
+          notes: opts.notes,
+        }),
+        new Promise<Buffer>((_, rej) =>
+          setTimeout(() => rej(new Error("PDF generation timed out")), 15000),
+        ),
+      ]);
 
-    const filename = `RFQ-${opts.rfqNo}.pdf`;
-    const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename);
+      const filename = `RFQ-${opts.rfqNo}.pdf`;
+      const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename);
 
-    await postMessage({
-      messaging_product: "whatsapp",
-      to,
-      type: "document",
-      document: {
-        id: mediaId,
-        filename,
-        caption: `طلب عرض سعر — ${opts.rfqNo}`,
-      },
-    });
+      await postMessage({
+        messaging_product: "whatsapp",
+        to,
+        type: "document",
+        document: {
+          id: mediaId,
+          filename,
+          caption: `طلب عرض سعر — ${opts.rfqNo}`,
+        },
+      });
 
-    logger.info({ to, rfqNo: opts.rfqNo }, "RFQ PDF document sent via WhatsApp");
-    pdfSent = true;
-  } catch (pdfErr) {
-    if (isOutsideWindowError(pdfErr)) {
-      logger.info(
-        { to, rfqNo: opts.rfqNo },
-        "PDF skipped — outside 24-hour window (no prior conversation)",
-      );
-    } else {
-      logger.warn(
-        { err: pdfErr, to, rfqNo: opts.rfqNo },
-        "PDF generation/upload failed — falling back to text only",
-      );
+      logger.info({ to, rfqNo: opts.rfqNo }, "RFQ PDF document sent via WhatsApp");
+      pdfSent = true;
+    } catch (pdfErr) {
+      if (isOutsideWindowError(pdfErr)) {
+        logger.info(
+          { to, rfqNo: opts.rfqNo },
+          "PDF skipped — outside 24-hour window (no prior conversation)",
+        );
+      } else {
+        logger.warn(
+          { err: pdfErr, to, rfqNo: opts.rfqNo },
+          "PDF generation/upload failed — falling back to text only",
+        );
+      }
     }
-  }
 
-  // ── 2. Send text message; fall back to template if outside 24-hour window ─
+    // ── 2. Send text message; fall back to template if outside 24-hour window ─
   const message = buildTextMessage(opts);
   try {
     await postMessage({
