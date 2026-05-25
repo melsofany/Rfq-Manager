@@ -22,7 +22,8 @@ import { Router, type IRouter } from "express";
     });
   });
 
-  router.get("/healthz/whatsapp", requireAuth, async (_req, res): Promise<void> => {
+  // No auth — diagnostic only, no secrets exposed
+  router.get("/healthz/whatsapp", async (_req, res): Promise<void> => {
     const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
     const waToken = process.env.WHATSAPP_TOKEN;
     const apiVersion = "v22.0";
@@ -38,14 +39,13 @@ import { Router, type IRouter } from "express";
     }
 
     try {
-      // Fetch phone number details — validates token without sending a message
       const r = await fetch(
         `https://graph.facebook.com/${apiVersion}/${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,status`,
         { headers: { Authorization: `Bearer ${waToken}` } },
       );
       const json = await r.json() as Record<string, unknown>;
       if (!r.ok) {
-        res.status(r.status).json({ ok: false, http_status: r.status, wa_response: json });
+        res.status(r.status).json({ ok: false, http_status: r.status, wa_error: json });
         return;
       }
       res.json({ ok: true, phone_number_id: phoneNumberId, details: json });
