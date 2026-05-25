@@ -1,3 +1,7 @@
+// Force IPv4 DNS resolution — Render does not support IPv6 outbound (ENETUNREACH)
+import { setDefaultResultOrder } from "dns";
+setDefaultResultOrder("ipv4first");
+
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runFullSync } from "./lib/sheetSync";
