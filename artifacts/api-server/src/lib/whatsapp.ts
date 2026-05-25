@@ -63,10 +63,17 @@ import { logger } from "./logger";
     }
     return json as object;
   }
-
   // Normalize phone: strip spaces/dashes, ensure starts with country code (no +)
+  // Handles Egyptian local format: 01xxxxxxxxxx → 201xxxxxxxxxx
   function normalizePhone(phone: string): string {
-    return phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+    let cleaned = phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+    // Handle 00xx international prefix (e.g. 0020... → 20...)
+    if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
+    // Egyptian local: 11 digits starting with 0 (01012345678 → 201012345678)
+    if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
+    // Egyptian mobile without leading 0: 10 digits starting with 1 (1012345678 → 201012345678)
+    if (cleaned.length === 10 && cleaned.startsWith("1")) cleaned = "20" + cleaned;
+    return cleaned;
   }
 
   // Extract the token segment from a pricing URL like .../q/TOKEN
