@@ -76,8 +76,12 @@ import PDFDocument from "pdfkit";
         doc.rect(0, 0, PAGE_W, 80).fill(BLUE);
 
         // Logo (top-right, since document is RTL visually)
-        const logoBuffer = getLogoBuffer();
-        doc.image(logoBuffer, PAGE_W - MARGIN - 62, 9, { height: 62 });
+        try {
+          const logoBuffer = getLogoBuffer();
+          doc.image(logoBuffer, PAGE_W - MARGIN - 62, 9, { height: 62 });
+        } catch {
+          // Skip logo if image data is corrupted — PDF continues without it
+        }
 
         // Title text (left side of header = right in RTL view)
         doc.font("Amiri").fontSize(22).fillColor("#ffffff")
