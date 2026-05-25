@@ -335,6 +335,9 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
     }));
 
     // Send email if supplier has email
+    let emailStatus: "sent" | "failed" | "no_email" = "no_email";
+    let emailError: string | null = null;
+
     if (supplier.email) {
       try {
         await sendRfqEmail({
@@ -347,8 +350,11 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           employeeName: employee?.name || "Procurement Team",
           employeePhone: employee?.phone,
         });
+        emailStatus = "sent";
       } catch (err) {
-        req.log.warn({ err, supplierId: supplier.id }, "Failed to send email");
+        emailStatus = "failed";
+        emailError = err instanceof Error ? err.message : String(err);
+        req.log.error({ err, supplierId: supplier.id, email: supplier.email }, "Failed to send RFQ email");
       }
     }
 
@@ -403,6 +409,7 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
       supplierName: supplier.name,
       status: "sent",
       reason: null,
+      email: { status: emailStatus, error: emailError },
       whatsapp: { status: whatsappStatus, error: whatsappError },
     });
   }
