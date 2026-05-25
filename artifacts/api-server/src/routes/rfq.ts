@@ -359,11 +359,14 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           phone: supplier.phone,
           toName: supplier.contactPerson || supplier.name,
           rfqNo: rfq.internalRfqNo,
+          customerRfqNo: rfq.customerRfqNo,
+          rfqDate: rfq.customerRfqDate ?? null,
           items: rfqItems,
           pricingUrl,
           closeDate: closeDate || "To be confirmed",
           employeeName: employee?.name || "Procurement Team",
           employeePhone: employee?.phone,
+          notes: rfq.notes ?? null,
         });
         // Save outbound message to chat log
         const normalizedPhone = supplier.phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");

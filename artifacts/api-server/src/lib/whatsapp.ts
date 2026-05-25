@@ -1,4 +1,5 @@
 import { logger } from "./logger";
+import { generateRfqPdf } from "./rfqPdf";
 
 const WHATSAPP_API_VERSION = "v19.0";
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
@@ -6,6 +7,10 @@ const TOKEN = process.env.WHATSAPP_TOKEN;
 
 function apiUrl(): string {
   return `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
+}
+
+function mediaUrl(): string {
+  return `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/media`;
 }
 
 async function postMessage(body: object): Promise<void> {
@@ -31,10 +36,39 @@ function normalizePhone(phone: string): string {
   return phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
 }
 
+// Upload a PDF buffer to WhatsApp media API and return the media ID
+async function uploadWhatsAppMedia(pdfBuffer: Buffer, filename: string): Promise<string> {
+  if (!PHONE_NUMBER_ID || !TOKEN) {
+    throw new Error("WhatsApp credentials not configured");
+  }
+
+  const blob = new Blob([pdfBuffer], { type: "application/pdf" });
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", "application/pdf");
+  form.append("file", blob, filename);
+
+  const res = await fetch(mediaUrl(), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}` },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`WhatsApp media upload error ${res.status}: ${text}`);
+  }
+
+  const json = await res.json() as { id: string };
+  return json.id;
+}
+
 export async function sendRfqWhatsApp(opts: {
   phone: string;
   toName: string;
   rfqNo: string;
+  customerRfqNo: string;
+  rfqDate?: string | null;
   items: Array<{
     lineItem?: string | null;
     partNo?: string | null;
@@ -46,9 +80,45 @@ export async function sendRfqWhatsApp(opts: {
   closeDate: string;
   employeeName: string;
   employeePhone?: string | null;
+  notes?: string | null;
 }): Promise<void> {
   const to = normalizePhone(opts.phone);
 
+  // ── 1. Try to generate & send PDF ──────────────────────────────────────
+  try {
+    const pdfBuffer = await generateRfqPdf({
+      rfqNo: opts.rfqNo,
+      customerRfqNo: opts.customerRfqNo,
+      rfqDate: opts.rfqDate,
+      closeDate: opts.closeDate,
+      supplierName: opts.toName,
+      items: opts.items,
+      pricingUrl: opts.pricingUrl,
+      employeeName: opts.employeeName,
+      employeePhone: opts.employeePhone,
+      notes: opts.notes,
+    });
+
+    const filename = `RFQ-${opts.rfqNo}.pdf`;
+    const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename);
+
+    await postMessage({
+      messaging_product: "whatsapp",
+      to,
+      type: "document",
+      document: {
+        id: mediaId,
+        filename,
+        caption: `طلب عرض سعر — ${opts.rfqNo}`,
+      },
+    });
+
+    logger.info({ to, rfqNo: opts.rfqNo }, "RFQ PDF document sent via WhatsApp");
+  } catch (pdfErr) {
+    logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "PDF generation/upload failed — falling back to text only");
+  }
+
+  // ── 2. Send the text message (always) ──────────────────────────────────
   const itemLines = opts.items
     .map((item, i) => {
       const line = item.lineItem || String(i + 1);
