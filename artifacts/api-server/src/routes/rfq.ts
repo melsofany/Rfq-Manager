@@ -353,6 +353,9 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
     }
 
     // Send WhatsApp if supplier has phone
+    let whatsappStatus: "sent" | "failed" | "no_phone" = "no_phone";
+    let whatsappError: string | null = null;
+
     if (supplier.phone) {
       try {
         const { pdfSent } = await sendRfqWhatsApp({
@@ -368,6 +371,7 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           employeePhone: employee?.phone,
           notes: rfq.notes ?? null,
         });
+        whatsappStatus = "sent";
         // Save outbound messages to chat log
         const normalizedPhone = supplier.phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
         if (pdfSent) {
@@ -387,12 +391,20 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           isRead: true,
         });
       } catch (err) {
-        req.log.warn({ err, supplierId: supplier.id }, "Failed to send WhatsApp");
+        whatsappStatus = "failed";
+        whatsappError = err instanceof Error ? err.message : String(err);
+        req.log.error({ err, supplierId: supplier.id, phone: supplier.phone }, "Failed to send WhatsApp");
       }
     }
 
     sent++;
-    results.push({ supplierId: supplier.id, supplierName: supplier.name, status: "sent", reason: null });
+    results.push({
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      status: "sent",
+      reason: null,
+      whatsapp: { status: whatsappStatus, error: whatsappError },
+    });
   }
 
   // Update RFQ status to sent if it was draft

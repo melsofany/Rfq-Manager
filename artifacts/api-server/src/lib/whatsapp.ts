@@ -1,7 +1,7 @@
 import { logger } from "./logger";
 import { generateRfqPdf } from "./rfqPdf";
 
-const WHATSAPP_API_VERSION = "v19.0";
+const WHATSAPP_API_VERSION = "v22.0";
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const TOKEN = process.env.WHATSAPP_TOKEN;
 
