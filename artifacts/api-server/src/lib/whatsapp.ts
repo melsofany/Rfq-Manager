@@ -205,7 +205,9 @@ export async function sendRfqWhatsApp(
 
   // ── 1. Try to generate & send PDF (only works inside 24-hour window) ──────
   try {
-    const pdfBuffer = await generateRfqPdf({
+    // 15-second timeout prevents PDF hang from blocking text message
+      const pdfBuffer = await Promise.race([
+        generateRfqPdf({
       rfqNo: opts.rfqNo,
       customerRfqNo: opts.customerRfqNo,
       rfqDate: opts.rfqDate,
