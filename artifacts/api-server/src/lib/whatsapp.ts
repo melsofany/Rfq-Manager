@@ -117,19 +117,25 @@ const TEMPLATE_LANG    = process.env.WHATSAPP_TEMPLATE_LANG    || "ar";
     notes?: string | null;
   }
 
+  // WhatsApp template params must not have newlines/tabs or more than 4 consecutive spaces
+  function sanitizeWaParam(text: string): string {
+    return text.replace(/[\r\n\t]/g, " ").replace(/ {5,}/g, "    ").trim();
+  }
+
   function buildItemsSummary(opts: SendRfqOpts): string {
-    return opts.items
+    const summary = opts.items
       .slice(0, 5)
       .map((item, i) => {
         const line = item.lineItem || String(i + 1);
         const qty = item.qty ? ` x${item.qty}` : "";
-        return `${line}. ${item.description}${qty}`;
+        return `${line}. ${sanitizeWaParam(item.description)}${qty}`;
       })
       .join("، ") + (opts.items.length > 5 ? `، وغيرها (${opts.items.length} صنف)` : "");
+    return sanitizeWaParam(summary);
   }
 
   function buildContactText(opts: SendRfqOpts): string {
-    return `${opts.employeeName}${opts.employeePhone ? " — " + opts.employeePhone : ""}`;
+    return sanitizeWaParam(`${opts.employeeName}${opts.employeePhone ? " — " + opts.employeePhone : ""}`);
   }
 
   /**
