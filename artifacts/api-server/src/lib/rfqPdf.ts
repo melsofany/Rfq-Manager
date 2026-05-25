@@ -1,5 +1,4 @@
 import PDFDocument from "pdfkit";
-  import { readFileSync } from "fs";
   import { resolve, dirname } from "path";
   import { fileURLToPath } from "url";
 
@@ -52,7 +51,6 @@ import PDFDocument from "pdfkit";
           size: "A4",
           margins: { top: 0, bottom: 0, left: 0, right: 0 },
           autoFirstPage: true,
-          bufferPages: true,
         });
 
         const chunks: Buffer[] = [];
