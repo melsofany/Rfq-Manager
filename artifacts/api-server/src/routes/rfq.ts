@@ -300,9 +300,11 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
   let sent = 0;
   let skipped = 0;
 
-  const baseUrl = process.env.REPLIT_DOMAINS
-    ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}`
-    : `http://localhost:${process.env.PORT}`;
+  const baseUrl =
+    process.env.BASE_URL ??
+    (process.env.REPLIT_DOMAINS
+      ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}`
+      : `http://localhost:${process.env.PORT}`);
 
   for (const supplier of suppliers) {
     // Duplicate check
