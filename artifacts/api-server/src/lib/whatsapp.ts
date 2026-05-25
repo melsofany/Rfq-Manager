@@ -167,7 +167,7 @@ function buildTextMessage(opts: SendRfqOpts): string {
  *   للاستفسار: {{5}}
  */
 async function sendRfqTemplate(to: string, opts: SendRfqOpts): Promise<void> {
-  const templateName = process.env.WHATSAPP_TEMPLATE_NAME || "rfq_notification";
+  const templateName = process.env.WHATSAPP_TEMPLATE_NAME || "rfq_send_ar";
   const templateLang = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
 
   await postMessage({
