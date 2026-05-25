@@ -119,7 +119,14 @@ export async function initDb(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
-    logger.info("initDb: all tables created");
+    // Add media columns to whatsapp_chats (safe migration — skipped if already present)
+      await client.query(`
+        ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS media_id TEXT;
+        ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS media_type TEXT;
+        ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS mime_type TEXT;
+        ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS filename TEXT;
+      `);
+      logger.info("initDb: all tables created");
 
     const accounts = [
       { name: "Admin", email: "admin@cortoba-supplies.com", password: "admin123", role: "admin" },
