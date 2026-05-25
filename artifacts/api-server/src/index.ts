@@ -19,6 +19,14 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+// Prevent uncaught exceptions (e.g. corrupt PNG in PDF) from crashing the server
+process.on("uncaughtException", (err) => {
+  logger.error({ err }, "Uncaught exception — keeping server alive");
+});
+process.on("unhandledRejection", (reason) => {
+  logger.error({ reason }, "Unhandled promise rejection — keeping server alive");
+});
+
 // Initialize DB schema and seed before starting server
 initDb()
   .then(() => {
