@@ -1,15 +1,31 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+function createTransporter() {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: Number(process.env.SMTP_PORT) === 465,
+    requireTLS: Number(process.env.SMTP_PORT) !== 465,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    tls: {
+      rejectUnauthorized: false,
+    },
+  });
+}
+
+export async function verifyEmailConnection(): Promise<{ ok: boolean; error?: string }> {
+  const transporter = createTransporter();
+  try {
+    await transporter.verify();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
 
 export async function sendRfqEmail(opts: {
   to: string;
@@ -21,7 +37,8 @@ export async function sendRfqEmail(opts: {
   employeeName: string;
   employeePhone?: string | null;
 }): Promise<void> {
-  const senderEmail = process.env.SMTP_USER || "info@cortoba-supplies.com";
+  const transporter = createTransporter();
+  const senderEmail = (process.env.SMTP_USER || "info@cortoba-supplies.com").toLowerCase();
 
   const itemRows = opts.items
     .map(
@@ -47,12 +64,9 @@ export async function sendRfqEmail(opts: {
 <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f3f4f6">
   <div style="max-width:700px;margin:32px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
     <!-- Header -->
-    <div style="background:#1e3a5f;padding:20px 32px;display:flex;align-items:center;gap:16px">
-      <img src="https://cd0d4b59-c14e-4bdf-a911-af2ae6ab2f35-00-f33uvebhfkde.spock.replit.dev/logo.png" alt="Cortoba Supplies" width="48" height="48" style="display:inline-block;vertical-align:middle;border-radius:6px;object-fit:contain" />
-      <div style="display:inline-block;vertical-align:middle;margin-left:12px">
-        <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700">Cortoba Supplies</h1>
-        <p style="margin:4px 0 0;color:#93c5fd;font-size:13px">قرطبة للتوريدات</p>
-      </div>
+    <div style="background:#1e3a5f;padding:20px 32px">
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700">Cortoba Supplies</h1>
+      <p style="margin:4px 0 0;color:#93c5fd;font-size:13px">قرطبة للتوريدات</p>
     </div>
     <!-- Body -->
     <div style="padding:32px">
@@ -105,7 +119,6 @@ export async function sendRfqEmail(opts: {
 </body>
 </html>`;
 
-  // Plain-text fallback — absence of this is a major spam trigger
   const itemsText = opts.items
     .map((item, i) =>
       `  ${item.lineItem || i + 1}. ${item.description}${item.partNo ? " [" + item.partNo + "]" : ""} — QTY: ${item.qty || "-"} ${item.uom || ""}`.trim()
@@ -149,5 +162,5 @@ Cortoba Supplies — ش.الاسكندرية - برج نجمة مطروح الد
     },
   });
 
-  logger.info({ to: opts.to, rfqNo: opts.rfqNo }, "RFQ email sent");
+  logger.info({ to: opts.to, rfqNo: opts.rfqNo }, "RFQ email sent successfully");
 }
