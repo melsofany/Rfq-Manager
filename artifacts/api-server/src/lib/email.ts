@@ -1,35 +1,66 @@
 import nodemailer from "nodemailer";
+import { promises as dns } from "dns";
 import { logger } from "./logger";
 
 const SMTP_TIMEOUT_MS = 10000;
 
-function createTransporter() {
+// Resolve hostname to IPv4 explicitly — Render drops IPv6 packets (ENETUNREACH).
+// We cache the result for 5 minutes to avoid a DNS lookup on every send.
+let cachedIpv4Host: string | null = null;
+let cacheExpiry = 0;
+
+async function resolveSmtpHost(hostname: string): Promise<string> {
+  const now = Date.now();
+  if (cachedIpv4Host && now < cacheExpiry) return cachedIpv4Host;
+
+  try {
+    const addrs = await dns.resolve4(hostname);
+    if (addrs.length > 0) {
+      cachedIpv4Host = addrs[0];
+      cacheExpiry = now + 5 * 60 * 1000;
+      logger.info({ hostname, resolvedIp: cachedIpv4Host }, "Resolved SMTP host to IPv4");
+      return cachedIpv4Host;
+    }
+  } catch (err) {
+    logger.warn({ err, hostname }, "IPv4 DNS resolve failed, falling back to hostname");
+  }
+  return hostname;
+}
+
+async function createTransporter() {
+  const rawHost = process.env.SMTP_HOST || "smtp.gmail.com";
+  const port = Number(process.env.SMTP_PORT) || 587;
+  // Resolve to IPv4 so Render does not pick the IPv6 address
+  const host = await resolveSmtpHost(rawHost);
+
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465,
-    requireTLS: Number(process.env.SMTP_PORT) !== 465,
+    host,
+    port,
+    secure: port === 465,
+    requireTLS: port !== 465,
     connectionTimeout: SMTP_TIMEOUT_MS,
     greetingTimeout: SMTP_TIMEOUT_MS,
     socketTimeout: SMTP_TIMEOUT_MS,
-    // Force IPv4 — Render does not support IPv6 outbound connections
-    family: 4,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
     tls: {
+      // Supply the original hostname for SNI so the Gmail cert validates correctly
+      servername: rawHost,
       rejectUnauthorized: false,
     },
   });
 }
 
-export async function verifyEmailConnection(): Promise<{ ok: boolean; error?: string }> {
-  const transporter = createTransporter();
+export async function verifyEmailConnection(): Promise<{ ok: boolean; resolvedHost?: string; error?: string }> {
+  const rawHost = process.env.SMTP_HOST || "smtp.gmail.com";
   try {
+    const addrs = await dns.resolve4(rawHost);
+    const transporter = await createTransporter();
     await transporter.verify();
     transporter.close();
-    return { ok: true };
+    return { ok: true, resolvedHost: addrs[0] };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -45,7 +76,7 @@ export async function sendRfqEmail(opts: {
   employeeName: string;
   employeePhone?: string | null;
 }): Promise<void> {
-  const transporter = createTransporter();
+  const transporter = await createTransporter();
   const senderEmail = (process.env.SMTP_USER || "info@cortoba-supplies.com").toLowerCase();
 
   const itemRows = opts.items
