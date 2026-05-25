@@ -13,7 +13,7 @@ function mediaUrl(): string {
   return `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/media`;
 }
 
-async function postMessage(body: object): Promise<void> {
+async function postMessage(body: object): Promise<object> {
   if (!PHONE_NUMBER_ID || !TOKEN) {
     throw new Error("WhatsApp credentials not configured (WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_TOKEN)");
   }
@@ -25,10 +25,11 @@ async function postMessage(body: object): Promise<void> {
     },
     body: JSON.stringify(body),
   });
+  const json = await res.json() as object;
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`WhatsApp API error ${res.status}: ${text}`);
+    throw new Error(`WhatsApp API error ${res.status}: ${JSON.stringify(json)}`);
   }
+  return json;
 }
 
 // Normalize phone: strip spaces/dashes, ensure starts with country code (no +)
@@ -54,12 +55,12 @@ async function uploadWhatsAppMedia(pdfBuffer: Buffer, filename: string): Promise
     body: form,
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`WhatsApp media upload error ${res.status}: ${text}`);
+  const json = await res.json() as { id?: string; error?: object };
+  if (!res.ok || !json.id) {
+    throw new Error(`WhatsApp media upload error ${res.status}: ${JSON.stringify(json)}`);
   }
 
-  const json = await res.json() as { id: string };
+  logger.info({ mediaId: json.id, filename }, "WhatsApp media uploaded");
   return json.id;
 }
 
@@ -102,7 +103,7 @@ export async function sendRfqWhatsApp(opts: {
     const filename = `RFQ-${opts.rfqNo}.pdf`;
     const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename);
 
-    await postMessage({
+    const docResponse = await postMessage({
       messaging_product: "whatsapp",
       to,
       type: "document",
@@ -113,7 +114,7 @@ export async function sendRfqWhatsApp(opts: {
       },
     });
 
-    logger.info({ to, rfqNo: opts.rfqNo }, "RFQ PDF document sent via WhatsApp");
+    logger.info({ to, rfqNo: opts.rfqNo, response: docResponse }, "RFQ PDF document sent via WhatsApp");
   } catch (pdfErr) {
     logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "PDF generation/upload failed — falling back to text only");
   }
