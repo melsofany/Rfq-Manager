@@ -6,9 +6,10 @@ import { logger } from "./logger";
   const TOKEN = process.env.WHATSAPP_TOKEN;
 
   // Template names — override via env vars if needed
-  const TEMPLATE_PDF  = process.env.WHATSAPP_TEMPLATE_PDF  || "rfq_pdf_ar";        // DOCUMENT header + 4 body vars
-  const TEMPLATE_TEXT = process.env.WHATSAPP_TEMPLATE_TEXT || "rfq_supplier_alert"; // text-only fallback + 5 body vars
-  const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
+  const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";  // UTILITY — works without opt-in
+  const TEMPLATE_PDF     = process.env.WHATSAPP_TEMPLATE_PDF     || "rfq_pdf_ar";       // DOCUMENT header + 4 body vars
+  const TEMPLATE_TEXT    = process.env.WHATSAPP_TEMPLATE_TEXT    || "rfq_send_ar";      // text-only fallback
+  const TEMPLATE_LANG    = process.env.WHATSAPP_TEMPLATE_LANG    || "ar";
 
   interface WaApiError {
     error?: {
@@ -36,11 +37,6 @@ import { logger } from "./logger";
     }
   }
 
-  // WhatsApp error 131047 = "Re-engagement message" = outside 24-hour window
-  function isOutsideWindowError(err: unknown): boolean {
-    return err instanceof WhatsAppApiError && err.waCode === 131047;
-  }
-
   async function postMessage(body: object): Promise<object> {
     if (!PHONE_NUMBER_ID || !TOKEN) {
       throw new Error("WhatsApp credentials not configured (WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_TOKEN)");
@@ -63,31 +59,25 @@ import { logger } from "./logger";
     }
     return json as object;
   }
+
   // Normalize phone: strip spaces/dashes, ensure starts with country code (no +)
-  // Handles Egyptian local format: 01xxxxxxxxxx → 201xxxxxxxxxx
   function normalizePhone(phone: string): string {
     let cleaned = phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
-    // Handle 00xx international prefix (e.g. 0020... → 20...)
     if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
-    // Egyptian local: 11 digits starting with 0 (01012345678 → 201012345678)
     if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
-    // Egyptian mobile without leading 0: 10 digits starting with 1 (1012345678 → 201012345678)
     if (cleaned.length === 10 && cleaned.startsWith("1")) cleaned = "20" + cleaned;
     return cleaned;
   }
 
-  // Extract the token segment from a pricing URL like .../q/TOKEN
   function extractPricingToken(pricingUrl: string): string {
     const parts = pricingUrl.split("/");
     return parts[parts.length - 1] || pricingUrl;
   }
 
-  // Upload a PDF buffer to WhatsApp media API and return the media ID
   async function uploadWhatsAppMedia(pdfBuffer: Buffer, filename: string): Promise<string> {
     if (!PHONE_NUMBER_ID || !TOKEN) {
       throw new Error("WhatsApp credentials not configured");
     }
-
     const blob = new Blob([pdfBuffer], { type: "application/pdf" });
     const form = new FormData();
     form.append("messaging_product", "whatsapp");
@@ -99,12 +89,10 @@ import { logger } from "./logger";
       headers: { Authorization: `Bearer ${TOKEN}` },
       body: form,
     });
-
     const json = (await res.json()) as { id?: string; error?: object };
     if (!res.ok || !json.id) {
       throw new Error(`WhatsApp media upload error ${res.status}: ${JSON.stringify(json)}`);
     }
-
     logger.info({ mediaId: json.id, filename }, "WhatsApp media uploaded");
     return json.id;
   }
@@ -145,19 +133,51 @@ import { logger } from "./logger";
   }
 
   /**
-   * PRIMARY: Send rfq_pdf_ar template (DOCUMENT header + 4 body vars + URL button).
-   * Generates the PDF, uploads it, then sends the template with the PDF attached.
-   *
-   * Template: rfq_pdf_ar
-   *   HEADER: DOCUMENT (media ID)
+   * PRIMARY: Send rfq_utility_ar template (UTILITY — works without opt-in).
+   * Template: rfq_utility_ar
    *   BODY {{1}}: supplier name
    *   BODY {{2}}: RFQ number
-   *   BODY {{3}}: close date
-   *   BODY {{4}}: employee name + phone
+   *   BODY {{3}}: items summary
+   *   BODY {{4}}: close date
+   *   BODY {{5}}: employee name + phone
    *   BUTTON URL {{1}}: pricing token
    */
+  async function sendRfqTemplateUtility(to: string, opts: SendRfqOpts): Promise<void> {
+    const pricingToken = extractPricingToken(opts.pricingUrl);
+    await postMessage({
+      messaging_product: "whatsapp",
+      to,
+      type: "template",
+      template: {
+        name: TEMPLATE_UTILITY,
+        language: { code: TEMPLATE_LANG },
+        components: [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: opts.toName },
+              { type: "text", text: opts.rfqNo },
+              { type: "text", text: buildItemsSummary(opts) },
+              { type: "text", text: opts.closeDate },
+              { type: "text", text: buildContactText(opts) },
+            ],
+          },
+          {
+            type: "button",
+            sub_type: "url",
+            index: "0",
+            parameters: [{ type: "text", text: pricingToken }],
+          },
+        ],
+      },
+    });
+    logger.info({ to, rfqNo: opts.rfqNo }, "RFQ UTILITY template sent via WhatsApp");
+  }
+
+  /**
+   * SECONDARY: Send rfq_pdf_ar template (DOCUMENT header + 4 body vars + URL button).
+   */
   async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<void> {
-    // Generate and upload PDF
     const pdfBuffer = await Promise.race<Buffer>([
       generateRfqPdf({
         rfqNo: opts.rfqNo,
@@ -212,25 +232,14 @@ import { logger } from "./logger";
         ],
       },
     });
-
-    logger.info({ to, rfqNo: opts.rfqNo, mediaId }, "RFQ PDF template sent via WhatsApp");
+    logger.info({ to, rfqNo: opts.rfqNo }, "RFQ PDF template sent via WhatsApp");
   }
 
   /**
-   * FALLBACK: Send rfq_supplier_alert template (text-only, 5 body vars + URL button).
-   * Used when PDF generation or upload fails.
-   *
-   * Template: rfq_supplier_alert
-   *   BODY {{1}}: supplier name
-   *   BODY {{2}}: RFQ number
-   *   BODY {{3}}: items summary
-   *   BODY {{4}}: close date
-   *   BODY {{5}}: employee name + phone
-   *   BUTTON URL {{1}}: pricing token
+   * TERTIARY: text-only template fallback.
    */
   async function sendRfqTemplateTextOnly(to: string, opts: SendRfqOpts): Promise<void> {
     const pricingToken = extractPricingToken(opts.pricingUrl);
-
     await postMessage({
       messaging_product: "whatsapp",
       to,
@@ -258,7 +267,6 @@ import { logger } from "./logger";
         ],
       },
     });
-
     logger.info({ to, rfqNo: opts.rfqNo }, "RFQ text-only template sent via WhatsApp");
   }
 
@@ -289,7 +297,7 @@ import { logger } from "./logger";
       ``,
       `_هذا الرابط خاص بشركتكم، يرجى عدم مشاركته._`,
       ``,
-      `للاستفسار: ${opts.employeeName}${opts.employeePhone ? " — " + opts.employeePhone : ""}`,
+      `للاستفسار: ${buildContactText(opts)}`,
     ].join("\n");
   }
 
@@ -300,7 +308,19 @@ import { logger } from "./logger";
     let pdfSent = false;
     let usedTemplate = false;
 
-    // ── 1. Try to send via PDF template (works for all contacts, incl. first-time) ──
+    // ── 1. Try UTILITY template first (works without opt-in for all contacts) ─────
+    try {
+      await sendRfqTemplateUtility(to, opts);
+      usedTemplate = true;
+      return { pdfSent: false, usedTemplate };
+    } catch (utilityErr) {
+      logger.warn(
+        { err: utilityErr, to, rfqNo: opts.rfqNo },
+        "UTILITY template failed — trying PDF template",
+      );
+    }
+
+    // ── 2. Try PDF template ───────────────────────────────────────────────────────
     try {
       await sendRfqTemplateWithPdf(to, opts);
       pdfSent = true;
@@ -313,7 +333,7 @@ import { logger } from "./logger";
       );
     }
 
-    // ── 2. Fallback: text-only template (no PDF) ──────────────────────────────────
+    // ── 3. Try text-only template ─────────────────────────────────────────────────
     try {
       await sendRfqTemplateTextOnly(to, opts);
       usedTemplate = true;
@@ -325,7 +345,7 @@ import { logger } from "./logger";
       );
     }
 
-    // ── 3. Last resort: plain text message (only works inside 24-hour window) ──────
+    // ── 4. Last resort: plain text (only works inside 24-hour window) ─────────────
     try {
       const message = buildTextMessage(opts);
       await postMessage({
