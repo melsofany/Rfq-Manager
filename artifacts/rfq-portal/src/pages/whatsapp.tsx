@@ -407,26 +407,41 @@ export default function WhatsAppPage() {
                       )}
 
                       {/* Outbound action buttons (appear on hover) */}
-                      {msg.direction === "outbound" && hoveredId === msg.id && editingId !== msg.id && (
-                        <div className="flex items-center gap-0.5 mb-1">
-                          {/* Edit — local only, WhatsApp doesn't support editing sent messages */}
-                          {!msg.mediaId && (
-                            <button
-                              onClick={() => { setEditingId(msg.id); setEditText(msg.body); }}
-                              title="تعديل في سجلاتنا فقط (WhatsApp لا يدعم تعديل الرسائل المرسلة)"
-                              className="p-1.5 rounded text-muted-foreground hover:text-blue-600 hover:bg-blue-50 transition-colors">
-                              <Pencil size={13} />
-                            </button>
-                          )}
-                          {/* Delete — tries WhatsApp API then removes from DB */}
-                          <button
-                            onClick={() => handleDelete(msg.id)}
-                            title={msg.waMessageId ? "حذف من سجلاتنا ومن WhatsApp" : "حذف من سجلاتنا فقط"}
-                            className="p-1.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors">
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      )}
+                      {msg.direction === "outbound" && hoveredId === msg.id && editingId !== msg.id && (() => {
+                        const ageMs = Date.now() - new Date(msg.createdAt).getTime();
+                        const canDelete = ageMs <= 60000; // WhatsApp only allows deletion within 60 seconds
+                        if (!canDelete && msg.mediaId) return null; // media-only bubble, nothing to show
+                        return (
+                          <div className="flex items-center gap-0.5 mb-1">
+                            {/* Edit — local only */}
+                            {!msg.mediaId && (
+                              <button
+                                onClick={() => { setEditingId(msg.id); setEditText(msg.body); }}
+                                title="تعديل في سجلاتنا فقط (WhatsApp لا يدعم تعديل الرسائل المرسلة)"
+                                className="p-1.5 rounded text-muted-foreground hover:text-blue-600 hover:bg-blue-50 transition-colors">
+                                <Pencil size={13} />
+                              </button>
+                            )}
+                            {/* Delete — only within 60 seconds */}
+                            {canDelete ? (
+                              <button
+                                onClick={() => handleDelete(msg.id)}
+                                title="حذف الرسالة (يُحذف من WhatsApp أيضاً خلال 60 ثانية من الإرسال)"
+                                className="p-1.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors">
+                                <Trash2 size={13} />
+                              </button>
+                            ) : (
+                              !msg.mediaId && (
+                                <span
+                                  title="انتهت مهلة الحذف (60 ثانية)"
+                                  className="p-1.5 rounded text-muted-foreground/30 cursor-not-allowed">
+                                  <Trash2 size={13} />
+                                </span>
+                              )
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <div className={cn(
                         "max-w-[72%] px-3.5 py-2 rounded-2xl text-sm shadow-sm",
