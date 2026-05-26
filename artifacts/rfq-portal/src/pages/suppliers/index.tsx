@@ -16,6 +16,11 @@ import { Input } from "@/components/ui/input";
 import { Plus, Search, Users, Settings, Pencil, Trash2, X, Check, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
+function parseCategories(cat: string | null | undefined): string[] {
+  if (!cat) return [];
+  return cat.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const { data: categories = [], isLoading } = useListCategories({
@@ -59,7 +64,7 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
 
   const deleteMutation = useDeleteCategory({
     mutation: {
-      onSuccess: (_data, variables) => {
+      onSuccess: (_data: unknown, variables: { id: number }) => {
         queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListSuppliersQueryKey() });
         setDeleteErrors((prev) => {
@@ -68,7 +73,7 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
           return next;
         });
       },
-      onError: (err: unknown, variables) => {
+      onError: (err: unknown, variables: { id: number }) => {
         const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
         setDeleteErrors((prev) => ({ ...prev, [variables.id]: msg ?? "Cannot delete category" }));
       },
@@ -110,7 +115,6 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Add new */}
           <form onSubmit={handleAdd} className="space-y-1.5">
             <div className="flex gap-2">
               <Input
@@ -131,7 +135,6 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
             )}
           </form>
 
-          {/* List */}
           <div className="space-y-1 max-h-72 overflow-y-auto">
             {isLoading ? (
               <p className="text-muted-foreground text-sm text-center py-4">Loading...</p>
@@ -167,10 +170,7 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
                     ) : (
                       <>
                         <span className="flex-1 text-sm text-foreground capitalize">{cat.name}</span>
-                        <button
-                          onClick={() => startEdit(cat.id, cat.name)}
-                          className="text-muted-foreground hover:text-foreground p-0.5"
-                        >
+                        <button onClick={() => startEdit(cat.id, cat.name)} className="text-muted-foreground hover:text-foreground p-0.5">
                           <Pencil size={13} />
                         </button>
                         <button
@@ -251,7 +251,6 @@ export default function SuppliersPage() {
           </div>
         </div>
 
-        {/* Filters */}
         <div className="flex gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -308,38 +307,45 @@ export default function SuppliersPage() {
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Contact</th>
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Email</th>
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Phone</th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Category</th>
+                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Categories</th>
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Status</th>
                 </tr>
               </thead>
               <tbody>
-                {suppliers.map((s) => (
-                  <tr
-                    key={s.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
-                    onClick={() => navigate(`/suppliers/${s.id}`)}
-                  >
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-foreground">{s.name}</p>
-                      {s.supplierId && <p className="text-muted-foreground text-xs font-mono">{s.supplierId}</p>}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">{s.contactPerson ?? "-"}</td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">{s.email ?? "-"}</td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">{s.phone ?? "-"}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground capitalize">
-                        {s.category}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        s.isActive ? "bg-green-50 text-green-700" : "bg-muted text-muted-foreground"
-                      }`}>
-                        {s.isActive ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {suppliers.map((s) => {
+                  const cats = parseCategories(s.category);
+                  return (
+                    <tr
+                      key={s.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
+                      onClick={() => navigate(`/suppliers/${s.id}`)}
+                    >
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-foreground">{s.name}</p>
+                        {s.supplierId && <p className="text-muted-foreground text-xs font-mono">{s.supplierId}</p>}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{s.contactPerson ?? "-"}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{s.email ?? "-"}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{s.phone ?? "-"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {cats.map((cat) => (
+                            <span key={cat} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground capitalize">
+                              {cat}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                          s.isActive ? "bg-green-50 text-green-700" : "bg-muted text-muted-foreground"
+                        }`}>
+                          {s.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
