@@ -1,15 +1,37 @@
 import { Router } from "express";
-import { db, suppliersTable, sentLogTable, offersTable, offerItemsTable, rfqItemsTable } from "@workspace/db";
-import { eq, ilike, or, and, count, avg, sql } from "drizzle-orm";
+import { db, suppliersTable, sentLogTable, offersTable } from "@workspace/db";
+import { eq, ilike, or, and, ne, count, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 
 const router = Router();
+
+// Helper: split stored comma-separated categories into array
+function toArray(cat: string | null | undefined): string[] {
+  if (!cat) return [];
+  return cat.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+// Helper: join array to comma-separated string for storage
+function toStored(cats: string | string[]): string {
+  if (Array.isArray(cats)) return cats.map((s) => s.trim()).filter(Boolean).join(",");
+  return String(cats).trim();
+}
 
 router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   const { category, search } = req.query as Record<string, string>;
 
   const conditions = [];
-  if (category) conditions.push(eq(suppliersTable.category, category));
+  if (category) {
+    // Match if category appears anywhere in comma-separated list
+    conditions.push(
+      or(
+        eq(suppliersTable.category, category),
+        ilike(suppliersTable.category, `${category},%`),
+        ilike(suppliersTable.category, `%,${category},%`),
+        ilike(suppliersTable.category, `%,${category}`),
+      )
+    );
+  }
   if (search) conditions.push(or(
     ilike(suppliersTable.name, `%${search}%`),
     ilike(suppliersTable.contactPerson, `%${search}%`),
@@ -22,25 +44,52 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   res.json(suppliers.map(s => ({
     id: s.id, supplierId: s.supplierId, name: s.name,
     contactPerson: s.contactPerson, email: s.email, phone: s.phone,
-    address: s.address, category: s.category, isActive: s.isActive,
-    createdAt: s.createdAt.toISOString(),
+    address: s.address, category: s.category, categories: toArray(s.category),
+    isActive: s.isActive, createdAt: s.createdAt.toISOString(),
   })));
 });
 
 router.post("/suppliers", requireAuth, async (req, res): Promise<void> => {
-  const { supplierId, name, contactPerson, email, phone, address, category } = req.body as Record<string, string>;
+  const { supplierId, name, contactPerson, email, phone, address } = req.body as Record<string, string>;
+  const rawCats = req.body.categories ?? req.body.category;
+  const category = toStored(rawCats || "general");
+
   if (!name || !category) {
     res.status(400).json({ error: "Name and category required" });
     return;
   }
+
+  // Duplicate email check
+  if (email && email.trim()) {
+    const [existing] = await db.select().from(suppliersTable)
+      .where(ilike(suppliersTable.email, email.trim()))
+      .limit(1);
+    if (existing) {
+      res.status(409).json({ error: `هذا الإيميل مسجل بالفعل للمورد: ${existing.name}` });
+      return;
+    }
+  }
+
+  // Duplicate phone check
+  if (phone && phone.trim()) {
+    const cleaned = phone.trim().replace(/\s+/g, "");
+    const [existing] = await db.select().from(suppliersTable)
+      .where(sql`replace(${suppliersTable.phone}, ' ', '') = ${cleaned}`)
+      .limit(1);
+    if (existing) {
+      res.status(409).json({ error: `رقم الهاتف مسجل بالفعل للمورد: ${existing.name}` });
+      return;
+    }
+  }
+
   const [supplier] = await db.insert(suppliersTable).values({
     supplierId, name, contactPerson, email, phone, address, category,
   }).returning();
   res.status(201).json({
     id: supplier.id, supplierId: supplier.supplierId, name: supplier.name,
     contactPerson: supplier.contactPerson, email: supplier.email, phone: supplier.phone,
-    address: supplier.address, category: supplier.category, isActive: supplier.isActive,
-    createdAt: supplier.createdAt.toISOString(),
+    address: supplier.address, category: supplier.category, categories: toArray(supplier.category),
+    isActive: supplier.isActive, createdAt: supplier.createdAt.toISOString(),
   });
 });
 
@@ -52,8 +101,8 @@ router.get("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
   res.json({
     id: supplier.id, supplierId: supplier.supplierId, name: supplier.name,
     contactPerson: supplier.contactPerson, email: supplier.email, phone: supplier.phone,
-    address: supplier.address, category: supplier.category, isActive: supplier.isActive,
-    createdAt: supplier.createdAt.toISOString(),
+    address: supplier.address, category: supplier.category, categories: toArray(supplier.category),
+    isActive: supplier.isActive, createdAt: supplier.createdAt.toISOString(),
   });
 });
 
@@ -61,17 +110,47 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const updates: Record<string, unknown> = {};
-  const allowed = ["name", "contactPerson", "email", "phone", "address", "category", "isActive"];
+  const allowed = ["name", "contactPerson", "email", "phone", "address", "isActive"];
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
+  // Handle categories
+  if (req.body.categories !== undefined || req.body.category !== undefined) {
+    const rawCats = req.body.categories ?? req.body.category;
+    updates.category = toStored(rawCats);
+  }
+
+  // Duplicate email check (exclude current supplier)
+  if (updates.email && String(updates.email).trim()) {
+    const emailVal = String(updates.email).trim();
+    const [existing] = await db.select().from(suppliersTable)
+      .where(and(ilike(suppliersTable.email, emailVal), ne(suppliersTable.id, id)))
+      .limit(1);
+    if (existing) {
+      res.status(409).json({ error: `هذا الإيميل مسجل بالفعل للمورد: ${existing.name}` });
+      return;
+    }
+  }
+
+  // Duplicate phone check (exclude current supplier)
+  if (updates.phone && String(updates.phone).trim()) {
+    const cleaned = String(updates.phone).trim().replace(/\s+/g, "");
+    const [existing] = await db.select().from(suppliersTable)
+      .where(and(sql`replace(${suppliersTable.phone}, ' ', '') = ${cleaned}`, ne(suppliersTable.id, id)))
+      .limit(1);
+    if (existing) {
+      res.status(409).json({ error: `رقم الهاتف مسجل بالفعل للمورد: ${existing.name}` });
+      return;
+    }
+  }
+
   const [supplier] = await db.update(suppliersTable).set(updates).where(eq(suppliersTable.id, id)).returning();
   if (!supplier) { res.status(404).json({ error: "Not found" }); return; }
   res.json({
     id: supplier.id, supplierId: supplier.supplierId, name: supplier.name,
     contactPerson: supplier.contactPerson, email: supplier.email, phone: supplier.phone,
-    address: supplier.address, category: supplier.category, isActive: supplier.isActive,
-    createdAt: supplier.createdAt.toISOString(),
+    address: supplier.address, category: supplier.category, categories: toArray(supplier.category),
+    isActive: supplier.isActive, createdAt: supplier.createdAt.toISOString(),
   });
 });
 
@@ -100,7 +179,7 @@ router.get("/suppliers/:id/score", requireAuth, async (req, res): Promise<void> 
   const totalOffers = offerStats?.total ?? 0;
   const responseRate = totalSent > 0 ? (totalOffers / totalSent) * 100 : 0;
   const responseRateScore = Math.min(responseRate, 100);
-  const priceScore = 70; // placeholder until historical data accumulates
+  const priceScore = 70;
   const onTimeScore = 80;
   const qualityScore = 75;
   const totalScore = (responseRateScore * 0.3 + priceScore * 0.4 + onTimeScore * 0.2 + qualityScore * 0.1);
