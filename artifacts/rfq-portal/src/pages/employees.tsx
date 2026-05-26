@@ -19,6 +19,7 @@ export default function EmployeesPage() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "purchasing", phone: "" });
+  const [formError, setFormError] = useState<string | null>(null);
 
   const { data: employees, isLoading } = useListEmployees({
     query: { queryKey: getListEmployeesQueryKey() },
@@ -30,6 +31,11 @@ export default function EmployeesPage() {
         queryClient.invalidateQueries({ queryKey: getListEmployeesQueryKey() });
         setShowForm(false);
         setForm({ name: "", email: "", password: "", role: "purchasing", phone: "" });
+        setFormError(null);
+      },
+      onError: (err: unknown) => {
+        const detail = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+        setFormError(detail ?? "فشل في إضافة الموظف، يرجى المحاولة مرة أخرى");
       },
     },
   });
@@ -67,7 +73,7 @@ export default function EmployeesPage() {
           <div className="bg-card border border-border rounded-lg p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-sm text-foreground">New Employee</h2>
-              <button onClick={() => setShowForm(false)} className="text-muted-foreground hover:text-foreground">
+              <button onClick={() => { setShowForm(false); setFormError(null); }} className="text-muted-foreground hover:text-foreground">
                 <X size={16} />
               </button>
             </div>
@@ -103,7 +109,12 @@ export default function EmployeesPage() {
               </div>
               <div className="col-span-2 flex gap-3 justify-end pt-1">
                 <Button type="button" variant="ghost" onClick={() => setShowForm(false)} size="sm">Cancel</Button>
-                <Button type="submit" size="sm" disabled={createMutation.isPending}>
+                {formError && (
+                  <div className="col-span-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700 text-right">
+                    ⚠ {formError}
+                  </div>
+                )}
+              <Button type="submit" size="sm" disabled={createMutation.isPending}>
                   {createMutation.isPending ? "Saving..." : "Create Employee"}
                 </Button>
               </div>

@@ -98,14 +98,33 @@ router.post("/employees", async (req, res): Promise<void> => {
     return;
   }
   const { name, email, password, role, phone } = req.body as Record<string, string>;
-  if (!name || !email || !password || !role) {
-    res.status(400).json({ error: "Missing required fields" });
-    return;
-  }
-  const passwordHash = await bcrypt.hash(password, 10);
-  const [employee] = await db.insert(employeesTable).values({
-    name, email: email.toLowerCase(), passwordHash, role, phone,
-  }).returning();
+    if (!name || !email || !password || !role) {
+      res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
+
+    // Reject duplicate email
+    const [existingEmail] = await db.select({ id: employeesTable.id })
+      .from(employeesTable).where(eq(employeesTable.email, email.toLowerCase())).limit(1);
+    if (existingEmail) {
+      res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل من قِبَل موظف آخر" });
+      return;
+    }
+
+    // Reject duplicate phone (if provided)
+    if (phone && phone.trim()) {
+      const [existingPhone] = await db.select({ id: employeesTable.id })
+        .from(employeesTable).where(eq(employeesTable.phone, phone.trim())).limit(1);
+      if (existingPhone) {
+        res.status(409).json({ error: "رقم الهاتف مستخدم بالفعل من قِبَل موظف آخر" });
+        return;
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const [employee] = await db.insert(employeesTable).values({
+      name, email: email.toLowerCase(), passwordHash, role, phone: phone?.trim() || null,
+    }).returning();
 
   logger.info({ employeeId: employee.id }, "Employee created");
   res.status(201).json({
