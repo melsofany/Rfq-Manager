@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Layout } from "@/components/Layout";
-import { MessageSquare, Send, Phone, RefreshCw, Paperclip, FileText, Download, X, Image as ImageIcon, Mic, Pencil, Trash2, Check } from "lucide-react";
+import { MessageSquare, Send, Phone, RefreshCw, Paperclip, FileText, Download, X, Image as ImageIcon, Mic, Pencil, Trash2, Check, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Chat {
@@ -28,6 +28,7 @@ interface Message {
   createdAt: string;
 }
 
+// ─── Avatar with optional WhatsApp profile picture ───────────────────────
 const AVATAR_COLORS = ["#16a34a","#2563eb","#9333ea","#ea580c","#dc2626","#0891b2","#d97706","#0f766e"];
 
 function getAvatarColor(seed: string): string {
@@ -36,20 +37,41 @@ function getAvatarColor(seed: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-function Avatar({ name, size = 36 }: { name: string; size?: number }) {
+function Avatar({ name, phone, size = 36 }: { name: string; phone?: string; size?: number }) {
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [imgFailed, setImgFailed] = useState(false);
+
+  useEffect(() => {
+    if (!phone || imgFailed) return;
+    setImgSrc(`/api/whatsapp/profile-picture/${encodeURIComponent(phone)}`);
+  }, [phone, imgFailed]);
+
   const initial = name.trim()[0]?.toUpperCase() ?? "?";
   const color = getAvatarColor(name);
+
+  if (imgSrc && !imgFailed) {
+    return (
+      <img
+        src={imgSrc}
+        alt={name}
+        onError={() => { setImgFailed(true); setImgSrc(null); }}
+        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+      />
+    );
+  }
+
   return (
-    <div
-      style={{ width: size, height: size, background: color, borderRadius: "50%", flexShrink: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        color: "white", fontWeight: 700, fontSize: Math.round(size * 0.42) }}
-    >
+    <div style={{
+      width: size, height: size, background: color, borderRadius: "50%", flexShrink: 0,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: "white", fontWeight: 700, fontSize: Math.round(size * 0.42),
+    }}>
       {initial}
     </div>
   );
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────
 function formatTime(dateStr: string) {
   const d = new Date(dateStr);
   const now = new Date();
@@ -60,31 +82,29 @@ function formatTime(dateStr: string) {
   return d.toLocaleDateString("ar-EG", { day: "2-digit", month: "2-digit" });
 }
 
+// lastInboundAt = time of the supplier's last message to us
+// WhatsApp Business API does NOT expose real online/last-seen status.
+// We approximate it from the last inbound message timestamp.
 function formatLastSeen(dateStr: string | null): { text: string; isOnline: boolean } {
   if (!dateStr) return { text: "", isOnline: false };
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 5) return { text: "متصل الآن", isOnline: true };
-  if (diffMins < 60) return { text: `متصل منذ ${diffMins} دقيقة`, isOnline: false };
+  if (diffMins < 5)  return { text: "متصل الآن", isOnline: true };
+  if (diffMins < 60) return { text: `آخر ظهور منذ ${diffMins} دقيقة`, isOnline: false };
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return { text: `متصل منذ ${diffHours} ساعة`, isOnline: false };
+  if (diffHours < 24) return { text: `آخر ظهور منذ ${diffHours} ساعة`, isOnline: false };
   const diffDays = Math.floor(diffHours / 24);
-  return { text: `متصل منذ ${diffDays} يوم`, isOnline: false };
+  return { text: `آخر ظهور منذ ${diffDays} يوم`, isOnline: false };
 }
 
 function MediaContent({ msg }: { msg: Message }) {
   const [imgError, setImgError] = useState(false);
   const [lightbox, setLightbox] = useState(false);
-
   if (!msg.mediaId) return null;
   const mediaUrl = `/api/whatsapp/media/${msg.mediaId}`;
 
   if (msg.mediaType === "image") {
-    if (imgError) return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground py-1">
-        <ImageIcon size={14} /> تعذر تحميل الصورة
-      </div>
-    );
+    if (imgError) return <div className="flex items-center gap-2 text-xs text-muted-foreground py-1"><ImageIcon size={14} /> تعذر تحميل الصورة</div>;
     return (
       <>
         <img src={mediaUrl} alt="صورة"
@@ -99,26 +119,15 @@ function MediaContent({ msg }: { msg: Message }) {
       </>
     );
   }
-
   if (msg.mediaType === "audio") {
-    return (
-      <div className="mt-1 mb-0.5">
-        <audio controls className="max-w-full h-9" style={{ minWidth: 200 }}>
-          <source src={mediaUrl} type={msg.mimeType || "audio/ogg"} />
-          متصفحك لا يدعم تشغيل الصوت
-        </audio>
-      </div>
-    );
+    return <div className="mt-1 mb-0.5"><audio controls className="max-w-full h-9" style={{ minWidth: 200 }}><source src={mediaUrl} type={msg.mimeType || "audio/ogg"} />متصفحك لا يدعم تشغيل الصوت</audio></div>;
   }
-
   if (msg.mediaType === "document" || msg.mediaType === "video") {
     const isVideo = msg.mediaType === "video";
     return (
       <div className="mt-1 mb-0.5">
         {isVideo ? (
-          <video controls className="max-w-full max-h-56 rounded-lg">
-            <source src={mediaUrl} type={msg.mimeType || "video/mp4"} />
-          </video>
+          <video controls className="max-w-full max-h-56 rounded-lg"><source src={mediaUrl} type={msg.mimeType || "video/mp4"} /></video>
         ) : (
           <a href={mediaUrl} download={msg.filename || "document"}
             className="flex items-center gap-2.5 bg-black/5 hover:bg-black/10 rounded-lg px-3 py-2 transition-colors group"
@@ -131,7 +140,6 @@ function MediaContent({ msg }: { msg: Message }) {
       </div>
     );
   }
-
   return null;
 }
 
@@ -155,20 +163,20 @@ export default function WhatsAppPage() {
 
   const selectedChat = chats.find(c => c.phone === selectedPhone);
 
-  async function loadChats() {
+  const loadChats = useCallback(async () => {
     try {
       const r = await fetch("/api/whatsapp/chats", { credentials: "include" });
       if (r.ok) setChats(await r.json());
     } catch { /* ignore */ }
-  }
+  }, []);
 
-  async function loadMessages(phone: string) {
+  const loadMessages = useCallback(async (phone: string) => {
     setLoading(true);
     try {
       const r = await fetch(`/api/whatsapp/chats/${encodeURIComponent(phone)}`, { credentials: "include" });
       if (r.ok) { setMessages(await r.json()); await loadChats(); }
     } finally { setLoading(false); }
-  }
+  }, [loadChats]);
 
   useEffect(() => {
     loadChats();
@@ -177,11 +185,9 @@ export default function WhatsAppPage() {
       if (selectedPhone) await loadMessages(selectedPhone);
     }, 10000);
     return () => clearInterval(interval);
-  }, [selectedPhone]);
+  }, [selectedPhone, loadChats, loadMessages]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
   async function handleSelectChat(phone: string) {
     setSelectedPhone(phone);
@@ -213,11 +219,7 @@ export default function WhatsAppPage() {
         body: JSON.stringify({ phone: selectedPhone, message: body, supplierId: selectedChat?.supplierId }),
       });
       if (r.ok) { await loadMessages(selectedPhone); }
-      else {
-        const err = await r.json();
-        alert("فشل الإرسال: " + (err.error || "خطأ غير معروف"));
-        setNewMsg(body);
-      }
+      else { const err = await r.json(); alert("فشل الإرسال: " + (err.error || "خطأ غير معروف")); setNewMsg(body); }
     } catch { alert("خطأ في الاتصال"); setNewMsg(body); }
     finally { setSending(false); }
   }
@@ -228,9 +230,7 @@ export default function WhatsAppPage() {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      const base64 = result.split(",")[1];
-      const preview = file.type.startsWith("image/") ? result : undefined;
-      setPendingFile({ file, base64, preview });
+      setPendingFile({ file, base64: result.split(",")[1], preview: file.type.startsWith("image/") ? result : undefined });
     };
     reader.readAsDataURL(file);
     e.target.value = "";
@@ -243,10 +243,8 @@ export default function WhatsAppPage() {
       const r = await fetch("/api/whatsapp/send-media", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: selectedPhone, supplierId: selectedChat?.supplierId,
-          base64: pendingFile.base64, mimeType: pendingFile.file.type, filename: pendingFile.file.name,
-        }),
+        body: JSON.stringify({ phone: selectedPhone, supplierId: selectedChat?.supplierId,
+          base64: pendingFile.base64, mimeType: pendingFile.file.type, filename: pendingFile.file.name }),
       });
       if (r.ok) { setPendingFile(null); await loadMessages(selectedPhone); }
       else { const err = await r.json(); alert("فشل إرسال الملف: " + (err.error || "خطأ غير معروف")); }
@@ -268,13 +266,14 @@ export default function WhatsAppPage() {
   }
 
   async function handleDelete(msgId: number) {
-    if (!confirm("هل تريد حذف هذه الرسالة؟")) return;
-    const r = await fetch(`/api/whatsapp/messages/${msgId}`, {
-      method: "DELETE", credentials: "include",
-    });
-    if (r.ok) {
-      setMessages(prev => prev.filter(m => m.id !== msgId));
-    }
+    const msg = messages.find(m => m.id === msgId);
+    const hasWaId = !!msg?.waMessageId;
+    const confirmMsg = hasWaId
+      ? "هل تريد حذف هذه الرسالة؟ سيتم حذفها من سجلاتنا ومحاولة حذفها عند المورد أيضاً."
+      : "هل تريد حذف هذه الرسالة من سجلاتنا؟";
+    if (!confirm(confirmMsg)) return;
+    const r = await fetch(`/api/whatsapp/messages/${msgId}`, { method: "DELETE", credentials: "include" });
+    if (r.ok) setMessages(prev => prev.filter(m => m.id !== msgId));
   }
 
   function getFileIcon(mime: string) {
@@ -312,39 +311,34 @@ export default function WhatsAppPage() {
                 <p className="text-muted-foreground/60 text-xs mt-1">ستظهر هنا رسائل الموردين</p>
               </div>
             ) : (
-              chats.map(chat => {
-                const seed = chat.supplierName ?? chat.phone;
-                return (
-                  <button key={chat.phone} onClick={() => handleSelectChat(chat.phone)}
-                    className={cn(
-                      "w-full text-left px-4 py-3 border-b border-border/50 hover:bg-muted/50 transition-colors flex items-start gap-3",
-                      selectedPhone === chat.phone && "bg-muted"
-                    )}>
-                    <div className="mt-0.5 relative">
-                      <Avatar name={seed} size={36} />
+              chats.map(chat => (
+                <button key={chat.phone} onClick={() => handleSelectChat(chat.phone)}
+                  className={cn(
+                    "w-full text-left px-4 py-3 border-b border-border/50 hover:bg-muted/50 transition-colors flex items-start gap-3",
+                    selectedPhone === chat.phone && "bg-muted"
+                  )}>
+                  <div className="mt-0.5">
+                    <Avatar name={chat.supplierName ?? chat.phone} phone={chat.phone} size={36} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-sm font-medium text-foreground truncate">{chat.supplierName ?? chat.phone}</span>
+                      <span className="text-xs text-muted-foreground flex-shrink-0">{formatTime(chat.lastAt)}</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-sm font-medium text-foreground truncate">{chat.supplierName ?? chat.phone}</span>
-                        <span className="text-xs text-muted-foreground flex-shrink-0">{formatTime(chat.lastAt)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-1 mt-0.5">
-                        <span className="text-xs text-muted-foreground truncate max-w-[170px]">{chat.lastMessage}</span>
-                        {Number(chat.unread) > 0 && (
-                          <span className="flex-shrink-0 bg-green-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                            {chat.unread}
-                          </span>
-                        )}
-                      </div>
-                      {chat.phone && (
-                        <p className="text-xs text-muted-foreground/50 mt-0.5 flex items-center gap-1">
-                          <Phone size={10} /> {chat.phone}
-                        </p>
+                    <div className="flex items-center justify-between gap-1 mt-0.5">
+                      <span className="text-xs text-muted-foreground truncate max-w-[170px]">{chat.lastMessage}</span>
+                      {Number(chat.unread) > 0 && (
+                        <span className="flex-shrink-0 bg-green-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                          {chat.unread}
+                        </span>
                       )}
                     </div>
-                  </button>
-                );
-              })
+                    <p className="text-xs text-muted-foreground/50 mt-0.5 flex items-center gap-1">
+                      <Phone size={10} /> {chat.phone}
+                    </p>
+                  </div>
+                </button>
+              ))
             )}
           </div>
         </div>
@@ -363,13 +357,18 @@ export default function WhatsAppPage() {
             <>
               {/* Chat header */}
               <div className="px-5 py-3 border-b border-border bg-card flex items-center gap-3">
-                <Avatar name={avatarSeed} size={40} />
-                <div>
+                <Avatar name={avatarSeed} phone={selectedPhone} size={40} />
+                <div className="flex-1">
                   <p className="text-sm font-semibold text-foreground">{selectedChat?.supplierName ?? selectedPhone}</p>
                   {lastSeen.text ? (
                     <p className={cn("text-xs flex items-center gap-1", lastSeen.isOnline ? "text-green-600 font-medium" : "text-muted-foreground")}>
-                      {lastSeen.isOnline && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />}
+                      {lastSeen.isOnline && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block animate-pulse" />}
                       {lastSeen.text}
+                      {!lastSeen.isOnline && (
+                        <span title="آخر ظهور مبني على آخر رسالة استلمناها — WhatsApp لا يكشف الحالة الحقيقية عبر Business API" className="opacity-40 cursor-help">
+                          <Info size={10} />
+                        </span>
+                      )}
                     </p>
                   ) : (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -383,40 +382,38 @@ export default function WhatsAppPage() {
               <div className="flex-1 overflow-y-auto p-4 space-y-2"
                 style={{ background: "linear-gradient(135deg, #f0fdf4 0%, #fafafa 100%)" }}>
                 {loading ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-muted-foreground text-sm">جاري التحميل...</div>
-                  </div>
+                  <div className="flex items-center justify-center h-full"><div className="text-muted-foreground text-sm">جاري التحميل...</div></div>
                 ) : messages.length === 0 ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-muted-foreground text-sm">لا توجد رسائل</div>
-                  </div>
+                  <div className="flex items-center justify-center h-full"><div className="text-muted-foreground text-sm">لا توجد رسائل</div></div>
                 ) : (
                   messages.map(msg => (
                     <div key={msg.id}
-                      className={cn("flex items-end gap-1", msg.direction === "outbound" ? "justify-end" : "justify-start")}
+                      className={cn("flex items-end gap-1.5", msg.direction === "outbound" ? "justify-end" : "justify-start")}
                       onMouseEnter={() => setHoveredId(msg.id)}
                       onMouseLeave={() => setHoveredId(null)}>
 
-                      {/* Inbound avatar */}
+                      {/* Inbound: show supplier avatar */}
                       {msg.direction === "inbound" && (
-                        <Avatar name={selectedChat?.supplierName ?? selectedPhone ?? "?"} size={28} />
+                        <Avatar name={selectedChat?.supplierName ?? selectedPhone ?? "?"} phone={selectedPhone ?? undefined} size={26} />
                       )}
 
-                      {/* Edit/Delete actions for outbound messages */}
+                      {/* Outbound action buttons (appear on hover) */}
                       {msg.direction === "outbound" && hoveredId === msg.id && editingId !== msg.id && (
                         <div className="flex items-center gap-0.5 mb-1">
+                          {/* Edit — local only, WhatsApp doesn't support editing sent messages */}
                           {!msg.mediaId && (
                             <button
                               onClick={() => { setEditingId(msg.id); setEditText(msg.body); }}
-                              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-black/5 transition-colors"
-                              title="تعديل">
+                              title="تعديل في سجلاتنا فقط (WhatsApp لا يدعم تعديل الرسائل المرسلة)"
+                              className="p-1.5 rounded text-muted-foreground hover:text-blue-600 hover:bg-blue-50 transition-colors">
                               <Pencil size={13} />
                             </button>
                           )}
+                          {/* Delete — tries WhatsApp API then removes from DB */}
                           <button
                             onClick={() => handleDelete(msg.id)}
-                            className="p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors"
-                            title="حذف">
+                            title={msg.waMessageId ? "حذف من سجلاتنا ومن WhatsApp" : "حذف من سجلاتنا فقط"}
+                            className="p-1.5 rounded text-muted-foreground hover:text-red-500 hover:bg-red-50 transition-colors">
                             <Trash2 size={13} />
                           </button>
                         </div>
@@ -431,14 +428,12 @@ export default function WhatsAppPage() {
                         {/* Inline edit mode */}
                         {editingId === msg.id ? (
                           <div className="space-y-1.5">
-                            <textarea
-                              value={editText}
-                              onChange={e => setEditText(e.target.value)}
+                            <p className="text-[10px] text-orange-500 mb-1 flex items-center gap-1">
+                              <Info size={9} /> التعديل في سجلاتنا فقط — WhatsApp لا يدعم تعديل الرسائل
+                            </p>
+                            <textarea value={editText} onChange={e => setEditText(e.target.value)}
                               className="w-full text-sm bg-white/70 border border-green-300 rounded px-2 py-1 focus:outline-none resize-none min-w-[180px]"
-                              rows={3}
-                              autoFocus
-                              style={{ direction: "rtl" }}
-                            />
+                              rows={3} autoFocus style={{ direction: "rtl" }} />
                             <div className="flex gap-1.5 justify-end">
                               <button onClick={() => setEditingId(null)}
                                 className="px-2 py-0.5 text-xs rounded border border-gray-200 text-muted-foreground hover:text-foreground">
@@ -475,13 +470,10 @@ export default function WhatsAppPage() {
               {/* Pending file preview */}
               {pendingFile && (
                 <div className="px-4 py-2 border-t border-border bg-muted/30 flex items-center gap-3">
-                  {pendingFile.preview ? (
-                    <img src={pendingFile.preview} alt="preview" className="w-14 h-14 object-cover rounded-lg border border-border" />
-                  ) : (
-                    <div className="w-14 h-14 rounded-lg border border-border bg-muted flex items-center justify-center">
-                      {getFileIcon(pendingFile.file.type)}
-                    </div>
-                  )}
+                  {pendingFile.preview
+                    ? <img src={pendingFile.preview} alt="preview" className="w-14 h-14 object-cover rounded-lg border border-border" />
+                    : <div className="w-14 h-14 rounded-lg border border-border bg-muted flex items-center justify-center">{getFileIcon(pendingFile.file.type)}</div>
+                  }
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{pendingFile.file.name}</p>
                     <p className="text-xs text-muted-foreground">{(pendingFile.file.size / 1024).toFixed(0)} KB</p>
@@ -498,13 +490,11 @@ export default function WhatsAppPage() {
                 <input ref={fileInputRef} type="file"
                   accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
                   className="hidden" onChange={handleFileSelect} />
-
                 <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending}
                   className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0 mb-[1px] disabled:opacity-40"
                   title="إرفاق ملف">
                   <Paperclip size={18} />
                 </button>
-
                 {pendingFile ? (
                   <div className="flex-1 rounded-xl border border-green-300 bg-green-50 px-3.5 py-2.5 text-sm text-green-700 flex items-center gap-2 min-h-[42px]">
                     {getFileIcon(pendingFile.file.type)}
@@ -514,10 +504,7 @@ export default function WhatsAppPage() {
                 ) : (
                   <textarea value={newMsg} onChange={e => setNewMsg(e.target.value)}
                     onKeyDown={e => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend(e as unknown as React.FormEvent);
-                      }
+                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(e as unknown as React.FormEvent); }
                     }}
                     placeholder="اكتب رسالة..."
                     rows={1}
@@ -525,7 +512,6 @@ export default function WhatsAppPage() {
                     style={{ direction: "rtl" }}
                     disabled={sending} />
                 )}
-
                 <button type="submit"
                   disabled={(!newMsg.trim() && !pendingFile) || sending}
                   className="w-10 h-10 rounded-full bg-green-500 hover:bg-green-600 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0">
