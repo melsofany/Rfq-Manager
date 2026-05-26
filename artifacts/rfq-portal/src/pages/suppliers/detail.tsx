@@ -15,8 +15,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, Phone, MapPin, Pencil, Trash2, X, Check } from "lucide-react";
-
+import { ArrowLeft, Mail, Phone, MapPin, Pencil, Trash2, X, Check, AlertCircle } from "lucide-react";
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
@@ -35,6 +34,11 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
   );
 }
 
+function parseCategories(cat: string | null | undefined): string[] {
+  if (!cat) return [];
+  return cat.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 export default function SupplierDetailPage() {
   const { id } = useParams<{ id: string }>();
   const supplierId = parseInt(id, 10);
@@ -45,6 +49,8 @@ export default function SupplierDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState<Record<string, string | boolean>>({});
+  const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const { data: categories = [] } = useListCategories({
     query: { queryKey: getListCategoriesQueryKey() },
@@ -63,6 +69,11 @@ export default function SupplierDetailPage() {
         queryClient.invalidateQueries({ queryKey: getGetSupplierQueryKey(supplierId) });
         queryClient.invalidateQueries({ queryKey: getListSuppliersQueryKey() });
         setEditing(false);
+        setServerError(null);
+      },
+      onError: (err: unknown) => {
+        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+        setServerError(msg ?? "حدث خطأ أثناء الحفظ");
       },
     },
   });
@@ -75,16 +86,32 @@ export default function SupplierDetailPage() {
       email: supplier.email ?? "",
       phone: supplier.phone ?? "",
       address: supplier.address ?? "",
-      category: supplier.category,
       isActive: supplier.isActive,
     });
+    setSelectedCats(new Set(parseCategories(supplier.category)));
+    setServerError(null);
     setEditing(true);
   };
 
   const saveEdit = () => {
+    if (selectedCats.size === 0) {
+      setServerError("يجب اختيار تصنيف واحد على الأقل");
+      return;
+    }
+    setServerError(null);
+    const category = Array.from(selectedCats).join(",");
     updateMutation.mutate({
       id: supplierId,
-      data: form as Parameters<typeof updateMutation.mutate>[0]["data"],
+      data: { ...form, category } as Parameters<typeof updateMutation.mutate>[0]["data"],
+    });
+  };
+
+  const toggleCat = (name: string) => {
+    setSelectedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
     });
   };
 
@@ -108,6 +135,8 @@ export default function SupplierDetailPage() {
   if (!supplier) {
     return <Layout><div className="p-6 text-muted-foreground text-sm">Supplier not found.</div></Layout>;
   }
+
+  const supplierCategories = parseCategories(supplier.category);
 
   return (
     <Layout>
@@ -141,7 +170,7 @@ export default function SupplierDetailPage() {
           )}
           {editing && (
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditing(false)}>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setEditing(false); setServerError(null); }}>
                 <X size={13} /> Cancel
               </Button>
               <Button size="sm" className="gap-1.5" onClick={saveEdit} disabled={updateMutation.isPending}>
@@ -159,12 +188,7 @@ export default function SupplierDetailPage() {
             </p>
             <div className="flex gap-2 shrink-0">
               <Button variant="outline" size="sm" onClick={() => setConfirmDelete(false)}>Cancel</Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={deleting}
-                onClick={handleDelete}
-              >
+              <Button size="sm" variant="destructive" disabled={deleting} onClick={handleDelete}>
                 {deleting ? "Deleting..." : "Yes, Delete"}
               </Button>
             </div>
@@ -199,17 +223,30 @@ export default function SupplierDetailPage() {
                   <Label>Address</Label>
                   <Input value={String(form.address ?? "")} onChange={(e) => upd("address", e.target.value)} />
                 </div>
-                <div className="space-y-1">
-                  <Label>Category *</Label>
-                  <select
-                    value={String(form.category ?? "")}
-                    onChange={(e) => upd("category", e.target.value)}
-                    className="w-full h-9 px-3 rounded border border-input bg-background text-sm text-foreground"
-                  >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.name} className="capitalize">{c.name}</option>
-                    ))}
-                  </select>
+                <div className="space-y-1.5">
+                  <Label>
+                    Categories *{" "}
+                    <span className="text-muted-foreground font-normal text-xs">(يمكن اختيار أكثر من تصنيف)</span>
+                  </Label>
+                  <div className="flex flex-wrap gap-2">
+                    {categories.map((c) => {
+                      const active = selectedCats.has(c.name);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => toggleCat(c.name)}
+                          className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors capitalize ${
+                            active
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-muted text-muted-foreground border-border hover:border-primary/50"
+                          }`}
+                        >
+                          {c.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -221,8 +258,11 @@ export default function SupplierDetailPage() {
                   />
                   <Label htmlFor="isActive">Active supplier</Label>
                 </div>
-                {updateMutation.isError && (
-                  <p className="text-xs text-destructive">Failed to save. Please try again.</p>
+                {serverError && (
+                  <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-3 py-2">
+                    <AlertCircle size={12} />
+                    <span>{serverError}</span>
+                  </div>
                 )}
               </div>
             ) : (
@@ -252,10 +292,17 @@ export default function SupplierDetailPage() {
                   </div>
                 )}
                 <div>
-                  <p className="text-muted-foreground text-xs">Category</p>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground capitalize mt-0.5">
-                    {supplier.category}
-                  </span>
+                  <p className="text-muted-foreground text-xs mb-1">Categories</p>
+                  <div className="flex flex-wrap gap-1">
+                    {supplierCategories.length > 0
+                      ? supplierCategories.map((cat) => (
+                          <span key={cat} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground capitalize">
+                            {cat}
+                          </span>
+                        ))
+                      : <span className="text-xs text-muted-foreground">—</span>
+                    }
+                  </div>
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs">Status</p>
