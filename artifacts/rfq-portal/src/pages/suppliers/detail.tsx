@@ -123,9 +123,22 @@ export default function SupplierDetailPage() {
   const handleDelete = async () => {
     setDeleting(true);
     try {
-      await fetch(`/api/suppliers/${supplierId}`, { method: "DELETE" });
+      const response = await fetch(`/api/suppliers/${supplierId}`, { method: "DELETE" });
+      if (!response.ok) {
+        let msg = `فشل الحذف (${response.status})`;
+        try {
+          const body = await response.json();
+          if (body?.error) msg = body.error;
+        } catch { /* ignore */ }
+        setServerError(msg);
+        setConfirmDelete(false);
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: getListSuppliersQueryKey() });
       navigate("/suppliers");
+    } catch {
+      setServerError("حدث خطأ في الاتصال بالخادم");
+      setConfirmDelete(false);
     } finally {
       setDeleting(false);
     }
