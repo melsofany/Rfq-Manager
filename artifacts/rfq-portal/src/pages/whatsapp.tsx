@@ -158,6 +158,12 @@ export default function WhatsAppPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  function showToast(msg: string, ok: boolean) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  }
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -267,21 +273,25 @@ export default function WhatsAppPage() {
 
   async function handleDelete(msgId: number) {
     const msg = messages.find(m => m.id === msgId);
-    const hasWaId = !!msg?.waMessageId;
-    const confirmMsg = hasWaId
-      ? "هل تريد حذف هذه الرسالة؟ سيتم حذفها من سجلاتنا ومحاولة حذفها عند المورد أيضاً."
-      : "هل تريد حذف هذه الرسالة من سجلاتنا؟";
-    if (!confirm(confirmMsg)) return;
+    if (!confirm("هل تريد حذف هذه الرسالة؟ سيتم حذفها من WhatsApp ومن سجلاتنا.")) return;
     try {
       const r = await fetch(`/api/whatsapp/messages/${msgId}`, { method: "DELETE", credentials: "include" });
       if (r.ok) {
+        const data = await r.json() as { ok: boolean; waDeletedOnPlatform?: boolean };
         setMessages(prev => prev.filter(m => m.id !== msgId));
+        if (data.waDeletedOnPlatform) {
+          showToast("تم حذف الرسالة من WhatsApp وسجلاتنا", true);
+        } else if (msg?.waMessageId) {
+          showToast("تم الحذف من سجلاتنا — تعذر الحذف من WhatsApp (ربما انتهت المهلة)", false);
+        } else {
+          showToast("تم الحذف من سجلاتنا", true);
+        }
       } else {
         const err = await r.json().catch(() => ({ error: "خطأ في الخادم" }));
-        alert("فشل الحذف: " + (err.error || r.status));
+        showToast("فشل الحذف: " + (err.error || r.status), false);
       }
     } catch {
-      alert("خطأ في الاتصال أثناء الحذف");
+      showToast("خطأ في الاتصال أثناء الحذف", false);
     }
   }
 
@@ -409,7 +419,7 @@ export default function WhatsAppPage() {
                       {/* Outbound action buttons (appear on hover) */}
                       {msg.direction === "outbound" && hoveredId === msg.id && editingId !== msg.id && (() => {
                         const ageMs = Date.now() - new Date(msg.createdAt).getTime();
-                        const canDelete = ageMs <= 60000; // WhatsApp only allows deletion within 60 seconds
+                        const canDelete = ageMs <= 86400000; // WhatsApp Business API allows deletion within 24 hours
                         if (!canDelete && msg.mediaId) return null; // media-only bubble, nothing to show
                         return (
                           <div className="flex items-center gap-0.5 mb-1">
@@ -548,6 +558,16 @@ export default function WhatsAppPage() {
           )}
         </div>
       </div>
+
+      {/* Toast notification */}
+      {toast && (
+        <div className={cn(
+          "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2 transition-all",
+          toast.ok ? "bg-green-600 text-white" : "bg-amber-500 text-white"
+        )}>
+          {toast.ok ? "✓" : "⚠"} {toast.msg}
+        </div>
+      )}
     </Layout>
   );
 }
