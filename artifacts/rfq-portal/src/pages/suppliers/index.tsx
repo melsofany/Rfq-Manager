@@ -13,8 +13,8 @@ import {
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Plus, Search, Users, Settings, Pencil, Trash2, X, Check } from "lucide-react";
+import { Plus, Search, Users, Settings, Pencil, Trash2, X, Check, AlertCircle } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -25,12 +25,20 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deleteErrors, setDeleteErrors] = useState<Record<number, string>>({});
 
   const createMutation = useCreateCategory({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
         setNewName("");
+        setAddError(null);
+      },
+      onError: (err: unknown) => {
+        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+        setAddError(msg ?? "Failed to add category");
       },
     },
   });
@@ -40,15 +48,29 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
         setEditingId(null);
+        setEditError(null);
+      },
+      onError: (err: unknown) => {
+        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+        setEditError(msg ?? "Failed to update category");
       },
     },
   });
 
   const deleteMutation = useDeleteCategory({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (_data, variables) => {
         queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
         queryClient.invalidateQueries({ queryKey: getListSuppliersQueryKey() });
+        setDeleteErrors((prev) => {
+          const next = { ...prev };
+          delete next[variables.id];
+          return next;
+        });
+      },
+      onError: (err: unknown, variables) => {
+        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+        setDeleteErrors((prev) => ({ ...prev, [variables.id]: msg ?? "Cannot delete category" }));
       },
     },
   });
@@ -56,16 +78,24 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
+    setAddError(null);
     createMutation.mutate({ data: { name: newName.trim() } });
   };
 
   const startEdit = (id: number, name: string) => {
     setEditingId(id);
     setEditName(name);
+    setEditError(null);
+    setDeleteErrors((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
 
   const saveEdit = (id: number) => {
     if (!editName.trim()) return;
+    setEditError(null);
     updateMutation.mutate({ id, data: { name: editName.trim() } });
   };
 
@@ -81,16 +111,24 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
 
         <div className="p-5 space-y-4">
           {/* Add new */}
-          <form onSubmit={handleAdd} className="flex gap-2">
-            <Input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="New category name..."
-              className="h-8 text-sm"
-            />
-            <Button type="submit" size="sm" disabled={createMutation.isPending || !newName.trim()} className="gap-1.5">
-              <Plus size={14} /> Add
-            </Button>
+          <form onSubmit={handleAdd} className="space-y-1.5">
+            <div className="flex gap-2">
+              <Input
+                value={newName}
+                onChange={(e) => { setNewName(e.target.value); setAddError(null); }}
+                placeholder="New category name..."
+                className="h-8 text-sm"
+              />
+              <Button type="submit" size="sm" disabled={createMutation.isPending || !newName.trim()} className="gap-1.5">
+                <Plus size={14} /> Add
+              </Button>
+            </div>
+            {addError && (
+              <div className="flex items-center gap-1.5 text-xs text-destructive">
+                <AlertCircle size={12} />
+                <span>{addError}</span>
+              </div>
+            )}
           </form>
 
           {/* List */}
@@ -101,47 +139,64 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
               <p className="text-muted-foreground text-sm text-center py-4">No categories yet</p>
             ) : (
               categories.map((cat) => (
-                <div key={cat.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/30">
-                  {editingId === cat.id ? (
-                    <>
-                      <Input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="h-7 text-sm flex-1"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") saveEdit(cat.id);
-                          if (e.key === "Escape") setEditingId(null);
-                        }}
-                      />
-                      <button
-                        onClick={() => saveEdit(cat.id)}
-                        className="text-green-600 hover:text-green-700 p-0.5"
-                        disabled={updateMutation.isPending}
-                      >
-                        <Check size={15} />
-                      </button>
-                      <button onClick={() => setEditingId(null)} className="text-muted-foreground hover:text-foreground p-0.5">
-                        <X size={15} />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="flex-1 text-sm text-foreground capitalize">{cat.name}</span>
-                      <button
-                        onClick={() => startEdit(cat.id, cat.name)}
-                        className="text-muted-foreground hover:text-foreground p-0.5"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        onClick={() => deleteMutation.mutate({ id: cat.id })}
-                        className="text-muted-foreground hover:text-destructive p-0.5"
-                        disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </>
+                <div key={cat.id} className="space-y-0.5">
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/30">
+                    {editingId === cat.id ? (
+                      <>
+                        <Input
+                          value={editName}
+                          onChange={(e) => { setEditName(e.target.value); setEditError(null); }}
+                          className="h-7 text-sm flex-1"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") saveEdit(cat.id);
+                            if (e.key === "Escape") setEditingId(null);
+                          }}
+                        />
+                        <button
+                          onClick={() => saveEdit(cat.id)}
+                          className="text-green-600 hover:text-green-700 p-0.5"
+                          disabled={updateMutation.isPending}
+                        >
+                          <Check size={15} />
+                        </button>
+                        <button onClick={() => { setEditingId(null); setEditError(null); }} className="text-muted-foreground hover:text-foreground p-0.5">
+                          <X size={15} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex-1 text-sm text-foreground capitalize">{cat.name}</span>
+                        <button
+                          onClick={() => startEdit(cat.id, cat.name)}
+                          className="text-muted-foreground hover:text-foreground p-0.5"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeleteErrors((prev) => { const next = { ...prev }; delete next[cat.id]; return next; });
+                            deleteMutation.mutate({ id: cat.id });
+                          }}
+                          className="text-muted-foreground hover:text-destructive p-0.5"
+                          disabled={deleteMutation.isPending}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {editingId === cat.id && editError && (
+                    <div className="flex items-center gap-1.5 text-xs text-destructive px-2">
+                      <AlertCircle size={12} />
+                      <span>{editError}</span>
+                    </div>
+                  )}
+                  {deleteErrors[cat.id] && (
+                    <div className="flex items-center gap-1.5 text-xs text-destructive px-2">
+                      <AlertCircle size={12} />
+                      <span>{deleteErrors[cat.id]}</span>
+                    </div>
                   )}
                 </div>
               ))
@@ -162,6 +217,8 @@ export default function SuppliersPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [showManage, setShowManage] = useState(false);
+  const { employee } = useAuth();
+  const isAdmin = employee?.role === "admin";
 
   const { data: categories = [] } = useListCategories({
     query: { queryKey: getListCategoriesQueryKey() },
@@ -183,9 +240,11 @@ export default function SuppliersPage() {
             <p className="text-muted-foreground text-sm">Manage supplier directory</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowManage(true)}>
-              <Settings size={14} /> Manage Categories
-            </Button>
+            {isAdmin && (
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowManage(true)}>
+                <Settings size={14} /> Manage Categories
+              </Button>
+            )}
             <Button onClick={() => navigate("/suppliers/new")} size="sm" className="gap-1.5">
               <Plus size={15} /> Add Supplier
             </Button>
