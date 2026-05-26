@@ -11,7 +11,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, AlertCircle } from "lucide-react";
 
 export default function NewSupplierPage() {
   const [, navigate] = useLocation();
@@ -28,8 +28,9 @@ export default function NewSupplierPage() {
     email: "",
     phone: "",
     address: "",
-    category: "",
   });
+  const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const createMutation = useCreateSupplier({
     mutation: {
@@ -37,18 +38,36 @@ export default function NewSupplierPage() {
         queryClient.invalidateQueries({ queryKey: getListSuppliersQueryKey() });
         navigate(`/suppliers/${supplier.id}`);
       },
+      onError: (err: unknown) => {
+        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+        setServerError(msg ?? "حدث خطأ أثناء الحفظ");
+      },
     },
   });
 
   const update = (field: string, value: string) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const data = { ...form, category: form.category || (categories[0]?.name ?? "general") };
-    createMutation.mutate({ data: data as Parameters<typeof createMutation.mutate>[0]["data"] });
+  const toggleCat = (name: string) => {
+    setSelectedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
   };
 
-  const selectedCategory = form.category || categories[0]?.name || "";
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setServerError(null);
+    if (selectedCats.size === 0) {
+      setServerError("يجب اختيار تصنيف واحد على الأقل");
+      return;
+    }
+    const category = Array.from(selectedCats).join(",");
+    createMutation.mutate({
+      data: { ...form, category } as Parameters<typeof createMutation.mutate>[0]["data"],
+    });
+  };
 
   return (
     <Layout>
@@ -85,24 +104,54 @@ export default function NewSupplierPage() {
               <Label>Phone</Label>
               <Input value={form.phone} onChange={(e) => update("phone", e.target.value)} placeholder="+966-12-345-6789" />
             </div>
-            <div className="space-y-1.5">
-              <Label>Category *</Label>
-              <select
-                value={selectedCategory}
-                onChange={(e) => update("category", e.target.value)}
-                className="w-full h-9 px-3 rounded border border-input bg-background text-sm text-foreground"
-                required
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.name} className="capitalize">{c.name}</option>
-                ))}
-              </select>
-            </div>
             <div className="space-y-1.5 col-span-2">
               <Label>Address</Label>
               <Input value={form.address} onChange={(e) => update("address", e.target.value)} placeholder="Riyadh, KSA" />
             </div>
           </div>
+
+          {/* Multi-category checkboxes */}
+          <div className="space-y-2">
+            <Label>
+              Categories *{" "}
+              <span className="text-muted-foreground font-normal text-xs">(يمكن اختيار أكثر من تصنيف)</span>
+            </Label>
+            {categories.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No categories available. Add categories first.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {categories.map((c) => {
+                  const active = selectedCats.has(c.name);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggleCat(c.name)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors capitalize ${
+                        active
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+                      }`}
+                    >
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {selectedCats.size > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Selected: {Array.from(selectedCats).join(", ")}
+              </p>
+            )}
+          </div>
+
+          {serverError && (
+            <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded px-3 py-2">
+              <AlertCircle size={14} />
+              <span>{serverError}</span>
+            </div>
+          )}
 
           <div className="flex gap-3 justify-end pt-2">
             <Link href="/suppliers">
