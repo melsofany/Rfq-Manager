@@ -34,8 +34,9 @@ export default function EmployeesPage() {
         setFormError(null);
       },
       onError: (err: unknown) => {
-        const detail = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-        setFormError(detail ?? "فشل في إضافة الموظف، يرجى المحاولة مرة أخرى");
+        // ApiError.data contains the parsed JSON body: { error: "..." }
+        const apiData = (err as { data?: { error?: string } })?.data;
+        setFormError(apiData?.error ?? "فشل في إضافة الموظف، يرجى المحاولة مرة أخرى");
       },
     },
   });
