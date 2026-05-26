@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Mail, Phone, MapPin, Pencil, Trash2, X, Check, AlertCircle } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
@@ -44,6 +45,10 @@ export default function SupplierDetailPage() {
   const supplierId = parseInt(id, 10);
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const { employee } = useAuth();
+
+  // Only admin and manager can delete
+  const canDelete = employee?.role === "admin" || employee?.role === "manager";
 
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -158,14 +163,16 @@ export default function SupplierDetailPage() {
               <Button variant="outline" size="sm" className="gap-1.5" onClick={startEdit}>
                 <Pencil size={13} /> Edit
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-destructive hover:bg-destructive/10 border-destructive/30"
-                onClick={() => setConfirmDelete(true)}
-              >
-                <Trash2 size={13} /> Delete
-              </Button>
+              {canDelete && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-destructive hover:bg-destructive/10 border-destructive/30"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 size={13} /> Delete
+                </Button>
+              )}
             </div>
           )}
           {editing && (
@@ -181,7 +188,7 @@ export default function SupplierDetailPage() {
         </div>
 
         {/* Delete confirmation */}
-        {confirmDelete && (
+        {confirmDelete && canDelete && (
           <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 flex items-center justify-between gap-4">
             <p className="text-sm text-destructive font-medium">
               Delete <strong>{supplier.name}</strong>? This action cannot be undone.
