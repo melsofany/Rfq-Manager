@@ -161,4 +161,19 @@ router.patch("/employees/:id", async (req, res): Promise<void> => {
   });
 });
 
+  // ─── DELETE /api/employees/:id ─────────────────────────────────────────────
+  router.delete("/employees/:id", async (req, res): Promise<void> => {
+    if (!req.session.employeeId || req.session.role !== "admin") {
+      res.status(403).json({ error: "Forbidden" }); return;
+    }
+    const id = parseInt(req.params.id as string, 10);
+    if (id === req.session.employeeId) {
+      res.status(400).json({ error: "لا يمكنك حذف حسابك أثناء تسجيل الدخول" }); return;
+    }
+    const [deleted] = await db.delete(employeesTable).where(eq(employeesTable.id, id)).returning();
+    if (!deleted) { res.status(404).json({ error: "الموظف غير موجود" }); return; }
+    logger.info({ employeeId: id }, "Employee deleted");
+    res.json({ ok: true });
+  });
+  
 export default router;
