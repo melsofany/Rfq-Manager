@@ -15,6 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Send, CheckSquare, Square, Search } from "lucide-react";
 
+function parseCategories(cat: string | null | undefined): string[] {
+  if (!cat) return [];
+  return cat.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 const CATEGORIES = ["all", "electrical", "cables", "mechanical", "safety & firefighting", "civil", "instrumentation", "HVAC"];
 
 export default function SendRfqPage() {
@@ -36,7 +41,7 @@ export default function SendRfqPage() {
 
   const sendMutation = useSendRfqToSuppliers({
     mutation: {
-      onSuccess: (result) => {
+      onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetRfqSentLogQueryKey(rfqId) });
         queryClient.invalidateQueries({ queryKey: getGetRfqQueryKey(rfqId) });
         navigate(`/rfq/${rfqId}`);
@@ -87,7 +92,6 @@ export default function SendRfqPage() {
           </div>
         </div>
 
-        {/* Close Date */}
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="flex items-end gap-4">
             <div className="space-y-1.5">
@@ -106,7 +110,6 @@ export default function SendRfqPage() {
           </div>
         </div>
 
-        {/* Supplier Selection */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
@@ -148,7 +151,7 @@ export default function SendRfqPage() {
                 <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Supplier</th>
                 <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Contact</th>
                 <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Email</th>
-                <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Category</th>
+                <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Categories</th>
               </tr>
             </thead>
             <tbody>
@@ -159,32 +162,39 @@ export default function SendRfqPage() {
                   </td>
                 </tr>
               ) : (
-                activeSuppliers.map((s) => (
-                  <tr
-                    key={s.id}
-                    className={`border-b border-border last:border-0 cursor-pointer transition-colors ${
-                      selectedIds.has(s.id) ? "bg-primary/5" : "hover:bg-muted/20"
-                    }`}
-                    onClick={() => toggleSupplier(s.id)}
-                  >
-                    <td className="px-4 py-3">
-                      {selectedIds.has(s.id)
-                        ? <CheckSquare size={16} className="text-primary" />
-                        : <Square size={16} className="text-muted-foreground" />}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-foreground">{s.name}</p>
-                      {s.supplierId && <p className="text-muted-foreground text-xs font-mono">{s.supplierId}</p>}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">{s.contactPerson ?? "-"}</td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">{s.email ?? <span className="text-amber-500">No email</span>}</td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground capitalize">
-                        {s.category}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                activeSuppliers.map((s) => {
+                  const cats = parseCategories(s.category);
+                  return (
+                    <tr
+                      key={s.id}
+                      className={`border-b border-border last:border-0 cursor-pointer transition-colors ${
+                        selectedIds.has(s.id) ? "bg-primary/5" : "hover:bg-muted/20"
+                      }`}
+                      onClick={() => toggleSupplier(s.id)}
+                    >
+                      <td className="px-4 py-3">
+                        {selectedIds.has(s.id)
+                          ? <CheckSquare size={16} className="text-primary" />
+                          : <Square size={16} className="text-muted-foreground" />}
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-foreground">{s.name}</p>
+                        {s.supplierId && <p className="text-muted-foreground text-xs font-mono">{s.supplierId}</p>}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{s.contactPerson ?? "-"}</td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{s.email ?? <span className="text-amber-500">No email</span>}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {cats.map((cat) => (
+                            <span key={cat} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground capitalize">
+                              {cat}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
