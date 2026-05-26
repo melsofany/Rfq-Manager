@@ -272,8 +272,17 @@ export default function WhatsAppPage() {
       ? "هل تريد حذف هذه الرسالة؟ سيتم حذفها من سجلاتنا ومحاولة حذفها عند المورد أيضاً."
       : "هل تريد حذف هذه الرسالة من سجلاتنا؟";
     if (!confirm(confirmMsg)) return;
-    const r = await fetch(`/api/whatsapp/messages/${msgId}`, { method: "DELETE", credentials: "include" });
-    if (r.ok) setMessages(prev => prev.filter(m => m.id !== msgId));
+    try {
+      const r = await fetch(`/api/whatsapp/messages/${msgId}`, { method: "DELETE", credentials: "include" });
+      if (r.ok) {
+        setMessages(prev => prev.filter(m => m.id !== msgId));
+      } else {
+        const err = await r.json().catch(() => ({ error: "خطأ في الخادم" }));
+        alert("فشل الحذف: " + (err.error || r.status));
+      }
+    } catch {
+      alert("خطأ في الاتصال أثناء الحذف");
+    }
   }
 
   function getFileIcon(mime: string) {
