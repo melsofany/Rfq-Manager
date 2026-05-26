@@ -1,17 +1,15 @@
 import { Router } from "express";
 import { db, suppliersTable, sentLogTable, offersTable } from "@workspace/db";
 import { eq, ilike, or, and, ne, count, sql } from "drizzle-orm";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireRole } from "../middlewares/auth";
 
 const router = Router();
 
-// Helper: split stored comma-separated categories into array
 function toArray(cat: string | null | undefined): string[] {
   if (!cat) return [];
   return cat.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-// Helper: join array to comma-separated string for storage
 function toStored(cats: string | string[]): string {
   if (Array.isArray(cats)) return cats.map((s) => s.trim()).filter(Boolean).join(",");
   return String(cats).trim();
@@ -22,7 +20,6 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
 
   const conditions = [];
   if (category) {
-    // Match if category appears anywhere in comma-separated list
     conditions.push(
       or(
         eq(suppliersTable.category, category),
@@ -49,6 +46,7 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   })));
 });
 
+// Any authenticated employee can add a supplier
 router.post("/suppliers", requireAuth, async (req, res): Promise<void> => {
   const { supplierId, name, contactPerson, email, phone, address } = req.body as Record<string, string>;
   const rawCats = req.body.categories ?? req.body.category;
@@ -59,23 +57,19 @@ router.post("/suppliers", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Duplicate email check
   if (email && email.trim()) {
     const [existing] = await db.select().from(suppliersTable)
-      .where(ilike(suppliersTable.email, email.trim()))
-      .limit(1);
+      .where(ilike(suppliersTable.email, email.trim())).limit(1);
     if (existing) {
       res.status(409).json({ error: `هذا الإيميل مسجل بالفعل للمورد: ${existing.name}` });
       return;
     }
   }
 
-  // Duplicate phone check
   if (phone && phone.trim()) {
     const cleaned = phone.trim().replace(/\s+/g, "");
     const [existing] = await db.select().from(suppliersTable)
-      .where(sql`replace(${suppliersTable.phone}, ' ', '') = ${cleaned}`)
-      .limit(1);
+      .where(sql`replace(${suppliersTable.phone}, ' ', '') = ${cleaned}`).limit(1);
     if (existing) {
       res.status(409).json({ error: `رقم الهاتف مسجل بالفعل للمورد: ${existing.name}` });
       return;
@@ -114,30 +108,25 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
-  // Handle categories
   if (req.body.categories !== undefined || req.body.category !== undefined) {
     const rawCats = req.body.categories ?? req.body.category;
     updates.category = toStored(rawCats);
   }
 
-  // Duplicate email check (exclude current supplier)
   if (updates.email && String(updates.email).trim()) {
     const emailVal = String(updates.email).trim();
     const [existing] = await db.select().from(suppliersTable)
-      .where(and(ilike(suppliersTable.email, emailVal), ne(suppliersTable.id, id)))
-      .limit(1);
+      .where(and(ilike(suppliersTable.email, emailVal), ne(suppliersTable.id, id))).limit(1);
     if (existing) {
       res.status(409).json({ error: `هذا الإيميل مسجل بالفعل للمورد: ${existing.name}` });
       return;
     }
   }
 
-  // Duplicate phone check (exclude current supplier)
   if (updates.phone && String(updates.phone).trim()) {
     const cleaned = String(updates.phone).trim().replace(/\s+/g, "");
     const [existing] = await db.select().from(suppliersTable)
-      .where(and(sql`replace(${suppliersTable.phone}, ' ', '') = ${cleaned}`, ne(suppliersTable.id, id)))
-      .limit(1);
+      .where(and(sql`replace(${suppliersTable.phone}, ' ', '') = ${cleaned}`, ne(suppliersTable.id, id))).limit(1);
     if (existing) {
       res.status(409).json({ error: `رقم الهاتف مسجل بالفعل للمورد: ${existing.name}` });
       return;
@@ -154,7 +143,8 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
-router.delete("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
+// Only admin or manager can delete a supplier
+router.delete("/suppliers/:id", requireRole("admin", "manager"), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const [deleted] = await db.delete(suppliersTable).where(eq(suppliersTable.id, id)).returning();
