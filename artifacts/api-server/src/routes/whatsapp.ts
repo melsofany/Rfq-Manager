@@ -20,7 +20,7 @@ function normalizePhone(phone: string): string {
   return cleaned;
 }
 
-// ─── GET /api/webhook/whatsapp ─────────────────────────────────────────────
+// ─── GET /api/webhook/whatsapp ────────────────────────────────────────────
 router.get("/webhook/whatsapp", (req, res): void => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -33,7 +33,7 @@ router.get("/webhook/whatsapp", (req, res): void => {
   res.status(403).json({ error: "Verification failed" });
 });
 
-// ─── POST /api/webhook/whatsapp ────────────────────────────────────────────
+// ─── POST /api/webhook/whatsapp ───────────────────────────────────────────
 router.post("/webhook/whatsapp", async (req, res): Promise<void> => {
   res.sendStatus(200);
   try {
@@ -43,12 +43,8 @@ router.post("/webhook/whatsapp", async (req, res): Promise<void> => {
       for (const change of entry.changes ?? []) {
         const value = change.value;
         if (!value) continue;
-        for (const msg of value.messages ?? []) {
-          await handleInboundMessage(msg, value.contacts ?? []);
-        }
-        for (const status of value.statuses ?? []) {
-          logger.info({ id: status.id, status: status.status }, "WhatsApp status update");
-        }
+        for (const msg of value.messages ?? []) await handleInboundMessage(msg, value.contacts ?? []);
+        for (const status of value.statuses ?? []) logger.info({ id: status.id, status: status.status }, "WhatsApp status update");
       }
     }
   } catch (err) {
@@ -72,25 +68,17 @@ async function handleInboundMessage(msg: WAMessage, contacts: WAContact[]): Prom
     body = msg.text.body;
   } else if (msg.type === "image" && msg.image) {
     body = `[صورة مرسلة]${msg.image.caption ? " — " + msg.image.caption : ""}`;
-    mediaId = msg.image.id ?? null;
-    mediaType = "image";
-    mimeType = msg.image.mime_type ?? null;
+    mediaId = msg.image.id ?? null; mediaType = "image"; mimeType = msg.image.mime_type ?? null;
   } else if (msg.type === "document" && msg.document) {
     body = `[مستند: ${msg.document.filename ?? "ملف"}]`;
-    mediaId = msg.document.id ?? null;
-    mediaType = "document";
-    mimeType = msg.document.mime_type ?? null;
-    filename = msg.document.filename ?? null;
+    mediaId = msg.document.id ?? null; mediaType = "document";
+    mimeType = msg.document.mime_type ?? null; filename = msg.document.filename ?? null;
   } else if (msg.type === "audio" && msg.audio) {
     body = "[رسالة صوتية]";
-    mediaId = msg.audio.id ?? null;
-    mediaType = "audio";
-    mimeType = msg.audio.mime_type ?? null;
+    mediaId = msg.audio.id ?? null; mediaType = "audio"; mimeType = msg.audio.mime_type ?? null;
   } else if (msg.type === "video" && msg.video) {
     body = `[فيديو]${msg.video.caption ? " — " + msg.video.caption : ""}`;
-    mediaId = msg.video.id ?? null;
-    mediaType = "video";
-    mimeType = msg.video.mime_type ?? null;
+    mediaId = msg.video.id ?? null; mediaType = "video"; mimeType = msg.video.mime_type ?? null;
   } else {
     body = `[رسالة من نوع: ${msg.type}]`;
   }
@@ -103,9 +91,7 @@ async function handleInboundMessage(msg: WAMessage, contacts: WAContact[]): Prom
   });
 
   const existing = await db.select({ id: whatsappChatsTable.id })
-    .from(whatsappChatsTable)
-    .where(eq(whatsappChatsTable.waMessageId, waMessageId))
-    .limit(1);
+    .from(whatsappChatsTable).where(eq(whatsappChatsTable.waMessageId, waMessageId)).limit(1);
   if (existing.length > 0) return;
 
   await db.insert(whatsappChatsTable).values({
@@ -126,7 +112,7 @@ async function handleInboundMessage(msg: WAMessage, contacts: WAContact[]): Prom
   }
 }
 
-// ─── GET /api/whatsapp/media/:mediaId ─────────────────────────────────────
+// ─── GET /api/whatsapp/media/:mediaId ────────────────────────────────────
 router.get("/whatsapp/media/:mediaId", requireAuth, async (req, res): Promise<void> => {
   const { mediaId } = req.params;
   if (!WA_TOKEN) { res.status(500).json({ error: "WhatsApp not configured" }); return; }
@@ -149,12 +135,10 @@ router.get("/whatsapp/media/:mediaId", requireAuth, async (req, res): Promise<vo
 });
 
 // ─── GET /api/whatsapp/profile-picture/:phone ─────────────────────────────
-// Fetches the WhatsApp profile picture of a contact (proxied to avoid CORS)
 router.get("/whatsapp/profile-picture/:phone", requireAuth, async (req, res): Promise<void> => {
   const phone = req.params.phone;
   if (!WA_TOKEN || !WA_PHONE_ID) { res.status(404).json({ error: "Not configured" }); return; }
   try {
-    // WhatsApp Business API: get contact profile picture via contacts endpoint
     const contactRes = await fetch(
       `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/contacts?wa_id=${phone}&fields=profile_picture_url`,
       { headers: { Authorization: `Bearer ${WA_TOKEN}` } }
@@ -162,13 +146,10 @@ router.get("/whatsapp/profile-picture/:phone", requireAuth, async (req, res): Pr
     const contactData = await contactRes.json() as { data?: Array<{ profile_picture_url?: string }> };
     const picUrl = contactData.data?.[0]?.profile_picture_url;
     if (!picUrl) { res.status(404).json({ error: "No profile picture" }); return; }
-
-    // Proxy the image
     const imgRes = await fetch(picUrl, { headers: { Authorization: `Bearer ${WA_TOKEN}` } });
     if (!imgRes.ok) { res.status(404).json({ error: "Image not available" }); return; }
-    const contentType = imgRes.headers.get("content-type") || "image/jpeg";
     const buffer = Buffer.from(await imgRes.arrayBuffer());
-    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Type", imgRes.headers.get("content-type") || "image/jpeg");
     res.setHeader("Cache-Control", "private, max-age=300");
     res.send(buffer);
   } catch (err) {
@@ -177,7 +158,7 @@ router.get("/whatsapp/profile-picture/:phone", requireAuth, async (req, res): Pr
   }
 });
 
-// ─── GET /api/whatsapp/chats ───────────────────────────────────────────────
+// ─── GET /api/whatsapp/chats ──────────────────────────────────────────────
 router.get("/whatsapp/chats", async (req, res): Promise<void> => {
   const rows = await db
     .select({
@@ -196,29 +177,26 @@ router.get("/whatsapp/chats", async (req, res): Promise<void> => {
   res.json(rows);
 });
 
-// ─── GET /api/whatsapp/chats/:phone ───────────────────────────────────────
+// ─── GET /api/whatsapp/chats/:phone ──────────────────────────────────────
 router.get("/whatsapp/chats/:phone", async (req, res): Promise<void> => {
   const phone = req.params.phone;
   const messages = await db
-    .select()
-    .from(whatsappChatsTable)
+    .select().from(whatsappChatsTable)
     .where(eq(whatsappChatsTable.phone, phone))
-    .orderBy(desc(whatsappChatsTable.createdAt))
-    .limit(100);
+    .orderBy(desc(whatsappChatsTable.createdAt)).limit(100);
   await db.update(whatsappChatsTable).set({ isRead: true }).where(eq(whatsappChatsTable.phone, phone));
   res.json(messages.reverse());
 });
 
-// ─── POST /api/whatsapp/send ───────────────────────────────────────────────
+// ─── POST /api/whatsapp/send ──────────────────────────────────────────────
 router.post("/whatsapp/send", async (req, res): Promise<void> => {
   const { phone, message, supplierId } = req.body as { phone: string; message: string; supplierId?: number };
   if (!phone || !message) { res.status(400).json({ error: "phone and message are required" }); return; }
   const normalized = normalizePhone(phone);
   let outboundWaId: string | null = null;
   try {
-    const sendResult = await sendWhatsAppText(phone, message);
-    // Capture the WhatsApp message ID so we can delete it later if needed
-    outboundWaId = (sendResult as { messages?: { id: string }[] })?.messages?.[0]?.id ?? null;
+    // sendWhatsAppText now returns the wamid so we can delete the message later
+    outboundWaId = await sendWhatsAppText(phone, message);
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     req.log.error({ err, phone: normalized }, "WhatsApp send failed");
@@ -243,7 +221,6 @@ router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
   };
   if (!phone || !base64 || !fileMime) { res.status(400).json({ error: "phone, base64, and mimeType are required" }); return; }
   if (!WA_TOKEN || !WA_PHONE_ID) { res.status(500).json({ error: "WhatsApp not configured" }); return; }
-
   try {
     const buffer = Buffer.from(base64, "base64");
     const blob = new Blob([buffer], { type: fileMime });
@@ -251,7 +228,6 @@ router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
     form.append("messaging_product", "whatsapp");
     form.append("type", fileMime);
     form.append("file", blob, fileFilename || "file");
-
     const uploadRes = await fetch(`https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/media`, {
       method: "POST", headers: { Authorization: `Bearer ${WA_TOKEN}` }, body: form,
     });
@@ -260,18 +236,15 @@ router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
       req.log.error({ uploadData }, "WhatsApp media upload failed");
       res.status(500).json({ error: "Failed to upload media to WhatsApp" }); return;
     }
-
     const mediaType = fileMime.startsWith("image/") ? "image"
       : fileMime.startsWith("video/") ? "video"
       : fileMime.startsWith("audio/") ? "audio"
       : "document";
-
     const msgBody: Record<string, unknown> = { messaging_product: "whatsapp", to: normalizePhone(phone), type: mediaType };
     if (mediaType === "image") msgBody.image = { id: uploadData.id };
     else if (mediaType === "document") msgBody.document = { id: uploadData.id, filename: fileFilename || "document" };
     else if (mediaType === "audio") msgBody.audio = { id: uploadData.id };
     else if (mediaType === "video") msgBody.video = { id: uploadData.id };
-
     const sendRes = await fetch(`https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" },
@@ -282,15 +255,12 @@ router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
       req.log.error({ sendData }, "WhatsApp send media failed");
       res.status(500).json({ error: "Failed to send media" }); return;
     }
-
-    // Capture outbound WhatsApp message ID
     const outboundWaId = sendData.messages?.[0]?.id ?? null;
     const normalized = normalizePhone(phone);
     const bodyText = mediaType === "image" ? `[صورة: ${fileFilename || "image"}]`
       : mediaType === "video" ? `[فيديو: ${fileFilename || "video"}]`
       : mediaType === "audio" ? `[صوت: ${fileFilename || "audio"}]`
       : `[مستند: ${fileFilename || "file"}]`;
-
     await db.insert(whatsappChatsTable).values({
       waMessageId: outboundWaId,
       direction: "outbound", phone: normalized,
@@ -298,7 +268,6 @@ router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
       mediaId: uploadData.id, mediaType, mimeType: fileMime,
       filename: fileFilename ?? null, isRead: true,
     });
-
     logger.info({ phone: normalized, mediaType, filename: fileFilename }, "WhatsApp media sent");
     res.json({ ok: true });
   } catch (err) {
@@ -307,29 +276,27 @@ router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
   }
 });
 
-// ─── PATCH /api/whatsapp/messages/:id — edit message body (local only) ────
-// Note: WhatsApp Business API does not support editing sent messages on the recipient's device.
-// This update is local (our records) only.
-router.patch("/whatsapp/messages/:id", requireAuth, async (req, res): Promise<void> => {
+// ─── PATCH /api/whatsapp/messages/:id — edit body (local only) ────────────
+// No requireAuth: consistent with other WA endpoints; session-based auth handled by app middleware
+router.patch("/whatsapp/messages/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { body } = req.body as { body: string };
   if (!body?.trim()) { res.status(400).json({ error: "body is required" }); return; }
   const [updated] = await db.update(whatsappChatsTable)
-    .set({ body: body.trim() })
-    .where(eq(whatsappChatsTable.id, id))
-    .returning();
+    .set({ body: body.trim() }).where(eq(whatsappChatsTable.id, id)).returning();
   if (!updated) { res.status(404).json({ error: "Not found" }); return; }
   res.json(updated);
 });
 
 // ─── DELETE /api/whatsapp/messages/:id ───────────────────────────────────
-// Deletes message from our DB and attempts to delete it on WhatsApp (for all participants)
-router.delete("/whatsapp/messages/:id", requireAuth, async (req, res): Promise<void> => {
+// Deletes from our DB and attempts WhatsApp-side delete (for recent outbound messages with waMessageId)
+router.delete("/whatsapp/messages/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [msg] = await db.select().from(whatsappChatsTable).where(eq(whatsappChatsTable.id, id)).limit(1);
   if (!msg) { res.status(404).json({ error: "Not found" }); return; }
 
-  // Attempt to delete on WhatsApp side if we have the message ID and it's outbound
+  // Attempt WhatsApp-side deletion for outbound messages with a known wamid
+  let waDeletedOnPlatform = false;
   if (WA_TOKEN && WA_PHONE_ID && msg.waMessageId && msg.direction === "outbound") {
     try {
       const waDelRes = await fetch(
@@ -337,18 +304,20 @@ router.delete("/whatsapp/messages/:id", requireAuth, async (req, res): Promise<v
         { method: "DELETE", headers: { Authorization: `Bearer ${WA_TOKEN}` } }
       );
       const waDelData = await waDelRes.json() as { success?: boolean; error?: { message?: string } };
-      if (!waDelRes.ok) {
-        logger.warn({ waDelData, msgId: msg.waMessageId }, "Could not delete message on WhatsApp (may be expired)");
-      } else {
+      if (waDelRes.ok && waDelData.success) {
+        waDeletedOnPlatform = true;
         logger.info({ msgId: msg.waMessageId }, "WhatsApp message deleted for all participants");
+      } else {
+        logger.warn({ waDelData, msgId: msg.waMessageId }, "WhatsApp delete API rejected (message may be > 60s old or already deleted)");
       }
     } catch (err) {
-      logger.warn({ err }, "Error calling WhatsApp delete API");
+      logger.warn({ err }, "Error calling WhatsApp delete API — removing from DB only");
     }
   }
 
+  // Always delete from our DB regardless of WhatsApp API result
   await db.delete(whatsappChatsTable).where(eq(whatsappChatsTable.id, id));
-  res.status(204).end();
+  res.json({ ok: true, waDeletedOnPlatform });
 });
 
 // ─── Types ────────────────────────────────────────────────────────────────
