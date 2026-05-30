@@ -44,7 +44,13 @@ router.post("/webhook/whatsapp", async (req, res): Promise<void> => {
         const value = change.value;
         if (!value) continue;
         for (const msg of value.messages ?? []) await handleInboundMessage(msg, value.contacts ?? []);
-        for (const status of value.statuses ?? []) logger.info({ id: status.id, status: status.status }, "WhatsApp status update");
+        for (const status of value.statuses ?? []) {
+            if (status.status === "failed") {
+              logger.error({ id: status.id, status: status.status, errors: status.errors }, "WhatsApp message delivery FAILED");
+            } else {
+              logger.info({ id: status.id, status: status.status }, "WhatsApp status update");
+            }
+          }
       }
     }
   } catch (err) {
