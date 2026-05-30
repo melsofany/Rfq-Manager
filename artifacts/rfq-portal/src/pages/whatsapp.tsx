@@ -171,7 +171,8 @@ export default function WhatsAppPage() {
     function normalizePhoneFE(raw: string): string {
       let cleaned = raw.replace(/[\s\-()]/g, "").replace(/^\+/, "");
       if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
-      if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
+      // Egyptian local: 01XXXXXXXXX (11 digits) → 2001XXXXXXXXX (13 digits)
+      if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "20" + cleaned;
       if (cleaned.length === 10 && cleaned.startsWith("1")) cleaned = "20" + cleaned;
       return cleaned;
     }
