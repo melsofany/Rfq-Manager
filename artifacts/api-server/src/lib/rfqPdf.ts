@@ -51,12 +51,15 @@ import PDFDocument from "pdfkit";
           size: "A4",
           margins: { top: 0, bottom: 0, left: 0, right: 0 },
           autoFirstPage: true,
+          compress: false,
         });
 
         const chunks: Buffer[] = [];
+        let settled = false;
+        const settle = (fn: () => void) => { if (!settled) { settled = true; fn(); } };
         doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-        doc.on("end", () => resolvePromise(Buffer.concat(chunks)));
-        doc.on("error", reject);
+        doc.on("end", () => settle(() => resolvePromise(Buffer.concat(chunks))));
+        doc.on("error", (err: Error) => settle(() => reject(err)));
 
         doc.registerFont("Amiri", fontPath);
 
