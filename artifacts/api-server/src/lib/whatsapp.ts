@@ -227,20 +227,22 @@ export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boo
   let pdfSent = false;
   let usedTemplate = false;
 
-  try {
-    await sendRfqTemplateTextOnly(to, opts);
-    usedTemplate = true;
-    return { pdfSent: false, usedTemplate };
-  } catch (textErr) {
-    logger.warn({ err: textErr, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying PDF template");
-  }
-
+  // Primary: rfq_pdf_ar (PDF attachment + button)
   try {
     await sendRfqTemplateWithPdf(to, opts);
     pdfSent = true; usedTemplate = true;
     return { pdfSent, usedTemplate };
   } catch (pdfErr) {
-    logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "PDF template failed — trying UTILITY template");
+    logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "rfq_pdf_ar failed — trying text-only template");
+  }
+
+  // Fallback 1: rfq_send_ar (text only + button)
+  try {
+    await sendRfqTemplateTextOnly(to, opts);
+    usedTemplate = true;
+    return { pdfSent: false, usedTemplate };
+  } catch (textErr) {
+    logger.warn({ err: textErr, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying UTILITY template");
   }
 
   try {
