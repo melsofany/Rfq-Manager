@@ -149,7 +149,7 @@ async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<vo
       pricingUrl: opts.pricingUrl, employeeName: opts.employeeName,
       employeePhone: opts.employeePhone, notes: opts.notes,
     }),
-    new Promise<Buffer>((_, rej) => setTimeout(() => rej(new Error("PDF generation timed out")), 15000)),
+    new Promise<Buffer>((_, rej) => setTimeout(() => rej(new Error("PDF generation timed out")), 8000)),
   ]);
   const filename = `RFQ-${opts.rfqNo}.pdf`;
   const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename);
@@ -233,7 +233,8 @@ export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boo
     pdfSent = true; usedTemplate = true;
     return { pdfSent, usedTemplate };
   } catch (pdfErr) {
-    logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "rfq_pdf_ar failed — trying text-only template");
+    const pdfErrMsg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
+      logger.warn({ err: pdfErr, errMsg: pdfErrMsg, to, rfqNo: opts.rfqNo }, "rfq_pdf_ar failed — trying text-only template");
   }
 
   // Fallback 1: rfq_send_ar (text only + button)
@@ -242,7 +243,8 @@ export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boo
     usedTemplate = true;
     return { pdfSent: false, usedTemplate };
   } catch (textErr) {
-    logger.warn({ err: textErr, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying UTILITY template");
+    const textErrMsg = textErr instanceof Error ? textErr.message : String(textErr);
+      logger.warn({ err: textErr, errMsg: textErrMsg, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying UTILITY template");
   }
 
   try {
@@ -250,7 +252,8 @@ export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boo
     usedTemplate = true;
     return { pdfSent: false, usedTemplate };
   } catch (utilErr) {
-    logger.warn({ err: utilErr, to, rfqNo: opts.rfqNo }, "UTILITY template failed — trying plain text");
+    const utilErrMsg = utilErr instanceof Error ? utilErr.message : String(utilErr);
+      logger.warn({ err: utilErr, errMsg: utilErrMsg, to, rfqNo: opts.rfqNo }, "UTILITY template failed — trying plain text");
   }
 
   try {
@@ -258,7 +261,8 @@ export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boo
     await postMessage({ messaging_product: "whatsapp", to, type: "text", text: { body: message, preview_url: false } });
     logger.info({ to, rfqNo: opts.rfqNo }, "RFQ WhatsApp plain text sent (fallback)");
   } catch (err) {
-    logger.warn({ err, to, rfqNo: opts.rfqNo }, "All WhatsApp send methods failed");
+    const allFailedMsg = err instanceof Error ? err.message : String(err);
+        logger.error({ err, errMsg: allFailedMsg, to, rfqNo: opts.rfqNo }, "All WhatsApp send methods failed — message NOT delivered");
     throw err;
   }
 
