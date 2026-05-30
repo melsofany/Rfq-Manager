@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Layout } from "@/components/Layout";
-import { MessageSquare, Send, Phone, RefreshCw, Paperclip, FileText, Download, X, Image as ImageIcon, Mic, Pencil, Trash2, Check, Info } from "lucide-react";
+import { MessageSquare, Send, Phone, RefreshCw, Paperclip, FileText, Download, X, Image as ImageIcon, Mic, Pencil, Trash2, Check, Info, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Chat {
@@ -164,7 +164,31 @@ export default function WhatsAppPage() {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 3500);
   }
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [newChatOpen, setNewChatOpen] = useState(false);
+    const [newChatInput, setNewChatInput] = useState("");
+    const [newChatError, setNewChatError] = useState("");
+
+    function normalizePhoneFE(raw: string): string {
+      let cleaned = raw.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+      if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
+      if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
+      if (cleaned.length === 10 && cleaned.startsWith("1")) cleaned = "20" + cleaned;
+      return cleaned;
+    }
+
+    function handleStartNewChat(e: React.FormEvent) {
+      e.preventDefault();
+      const raw = newChatInput.trim();
+      if (!raw) { setNewChatError("أدخل رقم الهاتف"); return; }
+      const normalized = normalizePhoneFE(raw);
+      if (normalized.length < 7) { setNewChatError("رقم الهاتف غير صحيح"); return; }
+      setNewChatOpen(false);
+      setNewChatInput("");
+      setNewChatError("");
+      handleSelectChat(normalized);
+    }
+
+      const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedChat = chats.find(c => c.phone === selectedPhone);
@@ -322,7 +346,36 @@ export default function WhatsAppPage() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          {/* New chat input panel */}
+            {newChatOpen && (
+              <div className="px-3 py-2.5 border-b border-border bg-muted/20">
+                <form onSubmit={handleStartNewChat} className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground font-medium">ابدأ محادثة جديدة</p>
+                  <div className="flex gap-1.5">
+                    <input
+                      autoFocus
+                      type="tel"
+                      value={newChatInput}
+                      onChange={e => { setNewChatInput(e.target.value); setNewChatError(""); }}
+                      placeholder="مثال: 01012345678"
+                      className="flex-1 text-sm rounded-lg border border-border bg-background px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-green-500/30 min-w-0"
+                      style={{ direction: "ltr" }}
+                    />
+                    <button type="submit"
+                      className="px-3 py-1.5 text-xs rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-colors flex-shrink-0">
+                      فتح
+                    </button>
+                    <button type="button" onClick={() => { setNewChatOpen(false); setNewChatInput(""); setNewChatError(""); }}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex-shrink-0">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  {newChatError && <p className="text-xs text-destructive">{newChatError}</p>}
+                </form>
+              </div>
+            )}
+
+                      <div className="flex-1 overflow-y-auto">
             {chats.length === 0 ? (
               <div className="p-8 text-center">
                 <MessageSquare size={36} className="mx-auto text-muted-foreground/20 mb-3" />
