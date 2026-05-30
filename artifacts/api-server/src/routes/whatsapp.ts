@@ -339,4 +339,57 @@ interface WAMessage {
 interface WAStatus { id: string; status: string; timestamp: string; recipient_id: string; }
 interface WAContact { wa_id: string; profile?: { name?: string }; }
 
-export default router;
+
+  // ─── POST /api/whatsapp/test-send (debug only) ────────────────────────────
+  router.post("/whatsapp/test-send", requireAuth, async (req, res): Promise<void> => {
+    const { phone } = req.body as { phone: string };
+    if (!phone) { res.status(400).json({ error: "phone required" }); return; }
+
+    const normalized = normalizePhone(phone);
+    const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const TOKEN = process.env.WHATSAPP_TOKEN;
+
+    if (!PHONE_ID || !TOKEN) { res.status(500).json({ error: "WhatsApp not configured" }); return; }
+
+    const url = `https://graph.facebook.com/v22.0/${PHONE_ID}/messages`;
+
+    // Test 1: plain text (will fail if outside 24h window)
+    const r1 = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to: normalized, type: "text", text: { body: "اختبار اتصال واتساب", preview_url: false } }),
+    });
+    const d1 = await r1.json();
+
+    // Test 2: rfq_send_ar template
+    const r2 = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp", to: normalized, type: "template",
+        template: {
+          name: "rfq_send_ar", language: { code: "ar" },
+          components: [
+            { type: "body", parameters: [
+              { type: "text", text: "مورد تجريبي" },
+              { type: "text", text: "CRQ-TEST" },
+              { type: "text", text: "اختبار" },
+              { type: "text", text: "2026-06-30" },
+              { type: "text", text: "مسؤول التسعير" },
+            ]},
+            { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "test" }] },
+          ],
+        },
+      }),
+    });
+    const d2 = await r2.json();
+
+    res.json({
+      phone_input: phone,
+      phone_normalized: normalized,
+      plain_text: { status: r1.status, body: d1 },
+      template_rfq_send_ar: { status: r2.status, body: d2 },
+    });
+  });
+
+  export default router;
