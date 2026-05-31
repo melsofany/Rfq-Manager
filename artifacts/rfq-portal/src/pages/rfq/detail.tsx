@@ -15,6 +15,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Send, Eye, CheckCircle2, XCircle, AlertTriangle, FileSpreadsheet, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type Tab = "items" | "sent" | "offers";
 
@@ -118,10 +119,21 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
 }
 
 async function exportToPdf(rfqId: number, rfqNo: string) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+  try {
     const response = await fetch(`/api/rfq/${rfqId}/offers/pdf`, {
       credentials: "include",
+      signal: controller.signal,
     });
-    if (!response.ok) throw new Error("Failed to generate PDF");
+    if (!response.ok) {
+      let errMsg = `Server error ${response.status}`;
+      try {
+        const json = await response.json();
+        if (json?.error) errMsg = json.error;
+      } catch { /* ignore */ }
+      throw new Error(errMsg);
+    }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -131,7 +143,10 @@ async function exportToPdf(rfqId: number, rfqNo: string) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  } finally {
+    clearTimeout(timeoutId);
   }
+}
 
 export default function RfqDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -150,6 +165,8 @@ export default function RfqDetailPage() {
     setExporting("excel");
     try {
       await exportToExcel(rfq.internalRfqNo, rfq.customerRfqNo, offersData as OffersData);
+    } catch (err) {
+      toast.error("Excel export failed: " + (err instanceof Error ? err.message : "Unknown error"));
     } finally {
       setExporting(null);
     }
@@ -160,6 +177,9 @@ export default function RfqDetailPage() {
     setExporting("pdf");
     try {
       await exportToPdf(rfqId, rfq.internalRfqNo);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error(`PDF export failed: ${msg}`);
     } finally {
       setExporting(null);
     }
