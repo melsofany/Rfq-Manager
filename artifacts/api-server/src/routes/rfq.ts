@@ -3,6 +3,7 @@ import { db, rfqTable, rfqItemsTable, sentLogTable, suppliersTable, employeesTab
 import { eq, and, ilike, or, count, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { generateToken } from "../lib/token";
+import { generateOffersPdf } from "../lib/offersPdf.js";
 import { sendRfqEmail } from "../lib/email";
 import { sendRfqWhatsApp } from "../lib/whatsapp";
 import { whatsappChatsTable } from "@workspace/db";
@@ -602,4 +603,120 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
   res.json({ rfq, offers: offersOut, analysis: { rfqId, itemAnalysis } });
 });
 
-export default router;
+
+  router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> => {
+    const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const rfqId = parseInt(raw, 10);
+
+    const [rfqRow] = await db.select({ rfq: rfqTable, employeeName: employeesTable.name })
+      .from(rfqTable).leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
+      .where(eq(rfqTable.id, rfqId));
+
+    if (!rfqRow) { res.status(404).json({ error: "Not found" }); return; }
+
+    const rfqItems = await db.select().from(rfqItemsTable).where(eq(rfqItemsTable.rfqId, rfqId));
+    const offers = await db.select({ offer: offersTable, supplierName: suppliersTable.name })
+      .from(offersTable)
+      .leftJoin(suppliersTable, eq(offersTable.supplierId, suppliersTable.id))
+      .where(eq(offersTable.rfqId, rfqId));
+
+    const offerIds = offers.map((o) => o.offer.id);
+    const offerItems = offerIds.length > 0
+      ? await db.select({ item: offerItemsTable, rfqItem: rfqItemsTable })
+          .from(offerItemsTable)
+          .leftJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+          .where(inArray(offerItemsTable.offerId, offerIds))
+      : [];
+
+    const itemsByOffer: Record<number, typeof offerItems> = {};
+    for (const oi of offerItems) {
+      if (!itemsByOffer[oi.item.offerId]) itemsByOffer[oi.item.offerId] = [];
+      itemsByOffer[oi.item.offerId].push(oi);
+    }
+
+    const itemAnalysis = rfqItems.map((rfqItem) => {
+      const prices: number[] = [];
+      const offerDetails: Array<{
+        supplierName: string;
+        price: number;
+        taxIncluded: boolean;
+        deliveryDays: number | null;
+        deviation: number;
+        isLowest: boolean;
+        isAnomaly: boolean;
+      }> = [];
+
+      for (const o of offers) {
+        const ois = itemsByOffer[o.offer.id] || [];
+        const oi = ois.find((x) => x.item.rfqItemId === rfqItem.id);
+        if (oi) {
+          const price = parseFloat(oi.item.price);
+          prices.push(price);
+          offerDetails.push({
+            supplierName: o.supplierName || "",
+            price,
+            taxIncluded: oi.item.taxIncluded,
+            deliveryDays: oi.item.deliveryDays,
+            deviation: 0,
+            isLowest: false,
+            isAnomaly: false,
+          });
+        }
+      }
+
+      if (prices.length > 0) {
+        const minPrice = Math.min(...prices);
+        const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+        const maxPrice = Math.max(...prices);
+        for (const od of offerDetails) {
+          od.deviation = avgPrice > 0 ? ((od.price - avgPrice) / avgPrice) * 100 : 0;
+          od.isLowest = od.price === minPrice;
+          od.isAnomaly = Math.abs(od.deviation) > 50;
+        }
+        return {
+          rfqItemId: rfqItem.id,
+          description: rfqItem.description,
+          partNo: rfqItem.partNo,
+          qty: rfqItem.qty ? parseFloat(rfqItem.qty) : null,
+          uom: rfqItem.uom,
+          referencePrice: rfqItem.referencePrice ? parseFloat(rfqItem.referencePrice) : null,
+          minPrice, maxPrice, avgPrice,
+          offers: offerDetails,
+        };
+      }
+
+      return {
+        rfqItemId: rfqItem.id,
+        description: rfqItem.description,
+        partNo: rfqItem.partNo,
+        qty: rfqItem.qty ? parseFloat(rfqItem.qty) : null,
+        uom: rfqItem.uom,
+        referencePrice: rfqItem.referencePrice ? parseFloat(rfqItem.referencePrice) : null,
+        minPrice: null, maxPrice: null, avgPrice: null,
+        offers: [],
+      };
+    });
+
+    const exportDate = new Date().toLocaleDateString("en-GB");
+
+    try {
+      const pdfBuffer = await generateOffersPdf({
+        rfqNo: rfqRow.rfq.internalRfqNo,
+        customerRfqNo: rfqRow.rfq.customerRfqNo,
+        exportDate,
+        itemAnalysis,
+      });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="RFQ-Comparison-${rfqRow.rfq.internalRfqNo}.pdf"`
+      );
+      res.send(pdfBuffer);
+    } catch (err) {
+      req.log.error({ err }, "Failed to generate offers PDF");
+      res.status(500).json({ error: "PDF generation failed" });
+    }
+  });
+
+  export default router;
