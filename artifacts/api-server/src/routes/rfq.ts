@@ -604,17 +604,20 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
 });
 
 
-  router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> => {
+router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> => {
+  try {
     const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const rfqId = parseInt(raw, 10);
+    if (isNaN(rfqId)) { res.status(400).json({ error: "Invalid RFQ id" }); return; }
 
     const [rfqRow] = await db.select({ rfq: rfqTable, employeeName: employeesTable.name })
       .from(rfqTable).leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
       .where(eq(rfqTable.id, rfqId));
 
-    if (!rfqRow) { res.status(404).json({ error: "Not found" }); return; }
+    if (!rfqRow) { res.status(404).json({ error: "RFQ not found" }); return; }
 
     const rfqItems = await db.select().from(rfqItemsTable).where(eq(rfqItemsTable.rfqId, rfqId));
+
     const offers = await db.select({ offer: offersTable, supplierName: suppliersTable.name })
       .from(offersTable)
       .leftJoin(suppliersTable, eq(offersTable.supplierId, suppliersTable.id))
@@ -651,12 +654,12 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
         const oi = ois.find((x) => x.item.rfqItemId === rfqItem.id);
         if (oi) {
           const price = parseFloat(oi.item.price);
-          prices.push(price);
+          if (!isNaN(price)) prices.push(price);
           offerDetails.push({
-            supplierName: o.supplierName || "",
+            supplierName: o.supplierName ?? "Unknown",
             price,
-            taxIncluded: oi.item.taxIncluded,
-            deliveryDays: oi.item.deliveryDays,
+            taxIncluded: oi.item.taxIncluded ?? false,
+            deliveryDays: oi.item.deliveryDays ?? null,
             deviation: 0,
             isLowest: false,
             isAnomaly: false,
@@ -664,59 +667,49 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
         }
       }
 
-      if (prices.length > 0) {
-        const minPrice = Math.min(...prices);
-        const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
-        const maxPrice = Math.max(...prices);
-        for (const od of offerDetails) {
-          od.deviation = avgPrice > 0 ? ((od.price - avgPrice) / avgPrice) * 100 : 0;
-          od.isLowest = od.price === minPrice;
-          od.isAnomaly = Math.abs(od.deviation) > 50;
-        }
-        return {
-          rfqItemId: rfqItem.id,
-          description: rfqItem.description,
-          partNo: rfqItem.partNo,
-          qty: rfqItem.qty ? parseFloat(rfqItem.qty) : null,
-          uom: rfqItem.uom,
-          referencePrice: rfqItem.referencePrice ? parseFloat(rfqItem.referencePrice) : null,
-          minPrice, maxPrice, avgPrice,
-          offers: offerDetails,
-        };
+      const avg = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
+      const minP = prices.length > 0 ? Math.min(...prices) : null;
+      const maxP = prices.length > 0 ? Math.max(...prices) : null;
+      const avgP = prices.length > 0 ? avg : null;
+
+      for (const od of offerDetails) {
+        od.deviation = avg > 0 ? ((od.price - avg) / avg) * 100 : 0;
+        od.isLowest = od.price === minP;
+        od.isAnomaly = avg > 0 && Math.abs(od.deviation) > 30;
       }
 
       return {
         rfqItemId: rfqItem.id,
         description: rfqItem.description,
         partNo: rfqItem.partNo,
-        qty: rfqItem.qty ? parseFloat(rfqItem.qty) : null,
+        qty: rfqItem.qty != null ? Number(rfqItem.qty) : null,
         uom: rfqItem.uom,
-        referencePrice: rfqItem.referencePrice ? parseFloat(rfqItem.referencePrice) : null,
-        minPrice: null, maxPrice: null, avgPrice: null,
-        offers: [],
+        referencePrice: rfqItem.referencePrice != null ? parseFloat(rfqItem.referencePrice) : null,
+        minPrice: minP,
+        maxPrice: maxP,
+        avgPrice: avgP,
+        offers: offerDetails,
       };
     });
 
-    const exportDate = new Date().toLocaleDateString("en-GB");
+    const exportDate = new Date().toLocaleDateString("en-EG");
 
-    try {
-      const pdfBuffer = await generateOffersPdf({
-        rfqNo: rfqRow.rfq.internalRfqNo,
-        customerRfqNo: rfqRow.rfq.customerRfqNo,
-        exportDate,
-        itemAnalysis,
-      });
+    const pdfBuffer = await generateOffersPdf({
+      rfqNo: rfqRow.rfq.internalRfqNo,
+      customerRfqNo: rfqRow.rfq.customerRfqNo,
+      exportDate,
+      itemAnalysis,
+    });
 
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="RFQ-Comparison-${rfqRow.rfq.internalRfqNo}.pdf"`
-      );
-      res.send(pdfBuffer);
-    } catch (err) {
-      req.log.error({ err }, "Failed to generate offers PDF");
-      res.status(500).json({ error: "PDF generation failed" });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="RFQ-Comparison-${rfqRow.rfq.internalRfqNo}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate offers PDF");
+    if (!res.headersSent) {
+      res.status(500).json({ error: "PDF generation failed", detail: err instanceof Error ? err.message : String(err) });
     }
-  });
+  }
+});
 
-  export default router;
+export default router;
