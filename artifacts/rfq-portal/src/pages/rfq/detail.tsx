@@ -118,34 +118,19 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
   writeFile(wb, `RFQ-Comparison-${rfqNo}.xlsx`);
 }
 
-async function exportToPdf(rfqId: number, rfqNo: string) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60_000);
-  try {
-    const response = await fetch(`/api/rfq/${rfqId}/offers/pdf`, {
-      credentials: "include",
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      let errMsg = `Server error ${response.status}`;
-      try {
-        const json = await response.json();
-        if (json?.error) errMsg = json.error;
-      } catch { /* ignore */ }
-      throw new Error(errMsg);
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `RFQ-Comparison-${rfqNo}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } finally {
-    clearTimeout(timeoutId);
-  }
+async function exportToPdf(rfqId: number, rfqNo: string): Promise<void> {
+  // Use direct link navigation — most reliable cross-browser download method.
+  // A fetch+blob approach revokes the object URL before the browser reads it,
+  // causing silent download failures. Direct navigation avoids that entirely.
+  const a = document.createElement("a");
+  a.href = `/api/rfq/` + rfqId + `/offers/pdf`;
+  a.download = `RFQ-Comparison-` + rfqNo + `.pdf`;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Small delay so the browser can initiate the download before we reset state
+  await new Promise<void>((resolve) => setTimeout(resolve, 1500));
 }
 
 export default function RfqDetailPage() {
