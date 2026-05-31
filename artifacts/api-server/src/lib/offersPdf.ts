@@ -47,6 +47,11 @@ import PDFDocument from "pdfkit";
 
   export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
     return new Promise((resolvePromise, reject) => {
+      // Safety timeout: if PDFKit never emits "end", reject after 25s
+      const pdfTimeout = setTimeout(() => {
+        reject(new Error("PDF generation timed out — font file may be missing or PDFKit stream stalled"));
+      }, 25000);
+
       try {
         const fontPath = getFontPath();
         const doc = new PDFDocument({
@@ -63,8 +68,14 @@ import PDFDocument from "pdfkit";
           if (!settled) { settled = true; fn(); }
         };
         doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-        doc.on("end", () => settle(() => resolvePromise(Buffer.concat(chunks))));
-        doc.on("error", (err: Error) => settle(() => reject(err)));
+        doc.on("end", () => {
+          clearTimeout(pdfTimeout);
+          settle(() => resolvePromise(Buffer.concat(chunks)));
+        });
+        doc.on("error", (err: Error) => {
+          clearTimeout(pdfTimeout);
+          settle(() => reject(err));
+        });
 
         doc.registerFont("Amiri", fontPath);
 
@@ -224,6 +235,7 @@ import PDFDocument from "pdfkit";
 
         doc.end();
       } catch (err) {
+        clearTimeout(pdfTimeout);
         reject(err);
       }
     });
