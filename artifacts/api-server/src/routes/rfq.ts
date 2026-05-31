@@ -607,6 +607,12 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
 router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const rfqId = parseInt(raw, 10);
+  // Guarantee client gets a response within 22 s regardless of DB/PDF hang
+  const routeTimer = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({ error: "Request timed out", detail: "PDF generation exceeded 22 s — DB or font issue" });
+    }
+  }, 22_000);
   try {
     const [rfqRow] = await db.select({ rfq: rfqTable, employeeName: employeesTable.name })
       .from(rfqTable).leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
@@ -717,6 +723,8 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
     if (!res.headersSent) {
       res.status(500).json({ error: "PDF generation failed", detail: err instanceof Error ? err.message : String(err) });
     }
+  } finally {
+    clearTimeout(routeTimer);
   }
 });
 
