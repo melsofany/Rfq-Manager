@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
-  import { resolve, dirname } from "path";
-  import { fileURLToPath } from "url";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+import { existsSync } from "fs";
 
   export interface OffersPdfOptions {
     rfqNo: string;
@@ -36,10 +37,22 @@ import PDFDocument from "pdfkit";
     return Buffer.from(base64, "base64");
   }
 
-  function getFontPath(): string {
-    const currentDir = dirname(fileURLToPath(import.meta.url));
-    return resolve(currentDir, "assets/fonts/Amiri-Regular.ttf");
+function getFontPath(): string {
+  // build.mjs banner sets globalThis.__dirname to the bundle directory.
+  // Use it for reliable asset resolution inside an esbuild ESM bundle.
+  const g = globalThis as Record<string, unknown>;
+  const baseDir: string =
+    typeof g.__dirname === "string"
+      ? (g.__dirname as string)
+      : dirname(fileURLToPath(import.meta.url));
+  const fontPath = resolve(baseDir, "assets/fonts/Amiri-Regular.ttf");
+  if (!existsSync(fontPath)) {
+    throw new Error(
+      `Amiri font missing at: ${fontPath} (baseDir=${baseDir})`
+    );
   }
+  return fontPath;
+}
 
   function fmt(n: number): string {
     return n.toLocaleString("en-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
