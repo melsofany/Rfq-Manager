@@ -10,7 +10,13 @@ function getPool(): pg.Pool {
       "DATABASE_URL must be set. Did you forget to provision a database?",
     );
   }
-  return new Pool({ connectionString: process.env.DATABASE_URL });
+  return new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 5,
+      connectionTimeoutMillis: 10_000,  // fail fast if pool exhausted
+      idleTimeoutMillis: 30_000,
+      statement_timeout: 20_000,       // kill queries that run > 20s
+    });
 }
 
 let _pool: pg.Pool | undefined;
