@@ -117,94 +117,21 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
   writeFile(wb, `RFQ-Comparison-${rfqNo}.xlsx`);
 }
 
-async function exportToPdf(rfqNo: string, customerRfqNo: string, offersData: OffersData) {
-  const jsPDFModule = await import("jspdf");
-  const jsPDF = jsPDFModule.default;
-  const autoTableModule = await import("jspdf-autotable");
-  const autoTable = autoTableModule.default;
-
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-
-  const headerColor: [number, number, number] = [30, 58, 95];
-  const lightGray: [number, number, number] = [248, 249, 250];
-
-  doc.setFontSize(14);
-  doc.setTextColor(...headerColor);
-  doc.text("Cortoba Supplies", 14, 16);
-  doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100);
-  doc.text("RFQ Price Comparison Report", 14, 22);
-  doc.text(`Internal RFQ: ${rfqNo}   |   Customer RFQ: ${customerRfqNo}   |   ${new Date().toLocaleDateString("en-EG")}`, 14, 28);
-
-  let yOffset = 35;
-
-  const items = offersData.analysis?.itemAnalysis ?? [];
-
-  items.forEach((item, idx) => {
-    if (yOffset > 170) {
-      doc.addPage();
-      yOffset = 15;
-    }
-
-    const sorted = item.offers.slice().sort((a, b) => a.price - b.price);
-
-    autoTable(doc, {
-      startY: yOffset,
-      head: [[
-        {
-          content: `${idx + 1}. ${item.description}${item.partNo ? `  (${item.partNo})` : ""}${item.qty ? `  QTY: ${item.qty} ${item.uom ?? ""}` : ""}${item.referencePrice != null ? `  |  Ref: EGP ${item.referencePrice.toFixed(2)}` : ""}`,
-          colSpan: 6,
-          styles: { fillColor: headerColor, textColor: [255, 255, 255] as [number, number, number], fontSize: 8, fontStyle: "bold" },
-        },
-      ], ["Supplier", "Unit Price (EGP)", "Tax Inc.", "Lead (days)", "vs. Avg", "Lowest?"]],
-      body: sorted.length === 0
-        ? [["No offers received yet", "", "", "", "", ""]]
-        : [
-            ...sorted.map((o) => [
-              o.supplierName,
-              o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 }),
-              o.taxIncluded ? "Yes" : "No",
-              o.deliveryDays ?? "-",
-              `${o.deviation > 0 ? "+" : ""}${o.deviation.toFixed(1)}%`,
-              o.isLowest ? "YES" : "",
-            ]),
-            [
-              { content: "Summary", styles: { fontStyle: "bold" as const, fillColor: lightGray } },
-              {
-                content: `Min: ${item.minPrice?.toFixed(2) ?? "-"}   Avg: ${item.avgPrice?.toFixed(2) ?? "-"}   Max: ${item.maxPrice?.toFixed(2) ?? "-"}`,
-                colSpan: 5,
-                styles: { fillColor: lightGray, fontStyle: "italic" as const },
-              },
-            ],
-          ],
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [220, 228, 240] as [number, number, number], textColor: [30, 58, 95] as [number, number, number], fontStyle: "bold" },
-      columnStyles: {
-        1: { halign: "right" },
-        2: { halign: "center" },
-        3: { halign: "center" },
-        4: { halign: "right" },
-        5: { halign: "center" },
-      },
-      didParseCell: (data) => {
-        if (data.section === "body" && data.column.index === 5 && data.cell.raw === "YES") {
-          data.cell.styles.textColor = [22, 101, 52];
-          data.cell.styles.fontStyle = "bold";
-        }
-        if (data.section === "body" && data.column.index === 4) {
-          const val = String(data.cell.raw ?? "");
-          if (val.startsWith("-")) data.cell.styles.textColor = [22, 101, 52];
-          else if (val.startsWith("+")) data.cell.styles.textColor = [185, 28, 28];
-        }
-      },
-      margin: { left: 14, right: 14 },
+async function exportToPdf(rfqId: number, rfqNo: string) {
+    const response = await fetch(`/api/rfq/${rfqId}/offers/pdf`, {
+      credentials: "include",
     });
-
-    yOffset = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
-  });
-
-  doc.save(`RFQ-Comparison-${rfqNo}.pdf`);
-}
+    if (!response.ok) throw new Error("Failed to generate PDF");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `RFQ-Comparison-${rfqNo}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
 export default function RfqDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -229,10 +156,10 @@ export default function RfqDetailPage() {
   };
 
   const handleExportPdf = async () => {
-    if (!rfq || !offersData) return;
+    if (!rfq) return;
     setExporting("pdf");
     try {
-      await exportToPdf(rfq.internalRfqNo, rfq.customerRfqNo, offersData as OffersData);
+      await exportToPdf(rfqId, rfq.internalRfqNo);
     } finally {
       setExporting(null);
     }
