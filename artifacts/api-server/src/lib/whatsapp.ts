@@ -149,7 +149,7 @@ async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<vo
       pricingUrl: opts.pricingUrl, employeeName: opts.employeeName,
       employeePhone: opts.employeePhone, notes: opts.notes,
     }),
-    new Promise<Buffer>((_, rej) => setTimeout(() => rej(new Error("PDF generation timed out")), 8000)),
+    new Promise<Buffer>((_, rej) => setTimeout(() => rej(new Error("PDF generation timed out")), 25000)),
   ]);
   const filename = `RFQ-${opts.rfqNo}.pdf`;
   const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename);
