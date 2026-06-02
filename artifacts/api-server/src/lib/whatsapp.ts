@@ -109,17 +109,21 @@ function sanitizeWaParam(text: string): string {
 }
 
 function buildItemsSummary(opts: SendRfqOpts): string {
-  const summary = opts.items
-    .slice(0, 5)
-    .map((item, i) => {
-      const line = item.lineItem || String(i + 1);
-      const qty = item.qty ? ` x${item.qty}` : "";
-      return `${line}. ${sanitizeWaParam(item.description)}${qty}`;
-    })
-    .join("، ") + (opts.items.length > 5 ? `، وغيرها (${opts.items.length} صنف)` : "");
-  return sanitizeWaParam(summary);
-}
-
+    const suffix = opts.items.length > 5 ? `، وغيرها (${opts.items.length} صنف)` : "";
+    const summary = opts.items
+      .slice(0, 5)
+      .map((item, i) => {
+        const line = item.lineItem || String(i + 1);
+        const qty = item.qty ? ` x${item.qty}` : "";
+        return `${line}. ${sanitizeWaParam(item.description)}${qty}`;
+      })
+      .join("، ") + suffix;
+    const full = sanitizeWaParam(summary);
+    // WhatsApp template params must stay well under 1024-char limit
+    if (full.length <= 800) return full;
+    return full.slice(0, 800 - suffix.length).trimEnd() + "…" + suffix;
+  }
+  
 function buildContactText(opts: SendRfqOpts): string {
   return sanitizeWaParam(`${opts.employeeName}${opts.employeePhone ? " — " + opts.employeePhone : ""}`);
 }
@@ -233,54 +237,53 @@ function buildTextMessage(opts: SendRfqOpts): string {
 }
 
 export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boolean; usedTemplate: boolean; waMessageId: string | null }> {
-  const to = normalizePhone(opts.phone);
-  let pdfSent = false;
-  let usedTemplate = false;
+    const to = normalizePhone(opts.phone);
+    const methodErrors: string[] = [];
 
-  // Primary: rfq_pdf_ar (PDF attachment + button)
-  try {
-    const waId = await sendRfqTemplateWithPdf(to, opts);
-    pdfSent = true; usedTemplate = true;
-    return { pdfSent, usedTemplate, waMessageId: waId || null };
-  } catch (pdfErr) {
-    const pdfErrMsg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
-    logger.warn({ err: pdfErr, errMsg: pdfErrMsg, to, rfqNo: opts.rfqNo }, "rfq_pdf_ar failed — trying text-only template");
+    // Primary: rfq_pdf_ar (PDF attachment + button)
+    try {
+      const waId = await sendRfqTemplateWithPdf(to, opts);
+      logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_pdf_ar template");
+      return { pdfSent: true, usedTemplate: true, waMessageId: waId || null };
+    } catch (pdfErr) {
+      const msg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
+      methodErrors.push(`rfq_pdf_ar: ${msg}`);
+      logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "rfq_pdf_ar failed — trying rfq_send_ar");
+    }
+
+    // Fallback 1: rfq_send_ar (text only + button)
+    try {
+      const waId = await sendRfqTemplateTextOnly(to, opts);
+      logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_send_ar template");
+      return { pdfSent: false, usedTemplate: true, waMessageId: waId || null };
+    } catch (textErr) {
+      const msg = textErr instanceof Error ? textErr.message : String(textErr);
+      methodErrors.push(`rfq_send_ar: ${msg}`);
+      logger.warn({ err: textErr, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying rfq_utility_ar");
+    }
+
+    // Fallback 2: rfq_utility_ar
+    try {
+      const waId = await sendRfqTemplateUtility(to, opts);
+      logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_utility_ar template");
+      return { pdfSent: false, usedTemplate: true, waMessageId: waId || null };
+    } catch (utilErr) {
+      const msg = utilErr instanceof Error ? utilErr.message : String(utilErr);
+      methodErrors.push(`rfq_utility_ar: ${msg}`);
+      logger.warn({ err: utilErr, to, rfqNo: opts.rfqNo }, "All 3 templates failed");
+    }
+
+    // All templates failed.
+    // NOTE: We intentionally do NOT fall back to plain text — plain text messages
+    // are silently accepted by the WhatsApp API (returns a wamid) but are NEVER
+    // delivered to recipients who haven't opened a conversation in the last 24 hours.
+    // This creates a false "✓ أُرسل" in the UI while the supplier receives nothing.
+    // Instead we throw so the UI correctly shows "✗ فشل" with the real error.
+    const combined = methodErrors.join(" | ");
+    logger.error({ to, rfqNo: opts.rfqNo, methodErrors }, "All WhatsApp templates failed — message NOT sent");
+    throw new Error(`فشل إرسال واتساب. الأخطاء: ${combined}`);
   }
-
-  // Fallback 1: rfq_send_ar (text only + button)
-  try {
-    const waId = await sendRfqTemplateTextOnly(to, opts);
-    usedTemplate = true;
-    return { pdfSent: false, usedTemplate, waMessageId: waId || null };
-  } catch (textErr) {
-    const textErrMsg = textErr instanceof Error ? textErr.message : String(textErr);
-    logger.warn({ err: textErr, errMsg: textErrMsg, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying UTILITY template");
-  }
-
-  // Fallback 2: rfq_utility_ar
-  try {
-    const waId = await sendRfqTemplateUtility(to, opts);
-    usedTemplate = true;
-    return { pdfSent: false, usedTemplate, waMessageId: waId || null };
-  } catch (utilErr) {
-    const utilErrMsg = utilErr instanceof Error ? utilErr.message : String(utilErr);
-    logger.warn({ err: utilErr, errMsg: utilErrMsg, to, rfqNo: opts.rfqNo }, "UTILITY template failed — trying plain text");
-  }
-
-  // Fallback 3: plain text
-  try {
-    const message = buildTextMessage(opts);
-    const result = await postMessage({ messaging_product: "whatsapp", to, type: "text", text: { body: message, preview_url: false } });
-    const waId = result.messages?.[0]?.id ?? null;
-    logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ WhatsApp plain text sent (fallback)");
-    return { pdfSent: false, usedTemplate: false, waMessageId: waId };
-  } catch (err) {
-    const allFailedMsg = err instanceof Error ? err.message : String(err);
-    logger.error({ err, errMsg: allFailedMsg, to, rfqNo: opts.rfqNo }, "All WhatsApp send methods failed — message NOT delivered");
-    throw err;
-  }
-}
-
+  
 // Returns the WhatsApp message ID (wamid) so callers can store it for later deletion.
 export async function sendWhatsAppText(phone: string, text: string): Promise<string | null> {
   const to = normalizePhone(phone);
