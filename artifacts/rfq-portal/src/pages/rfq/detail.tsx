@@ -192,7 +192,7 @@ export default function RfqDetailPage() {
 
   const { data: rfq, isLoading } = useGetRfq(rfqId, { query: { queryKey: getGetRfqQueryKey(rfqId), enabled: !!rfqId } });
   const { data: items } = useListRfqItems(rfqId, { query: { queryKey: getListRfqItemsQueryKey(rfqId), enabled: !!rfqId } });
-  const { data: sentLog } = useGetRfqSentLog(rfqId, { query: { queryKey: getGetRfqSentLogQueryKey(rfqId), enabled: tab === "sent" && !!rfqId } });
+  const { data: sentLog, isLoading: sentLogLoading } = useGetRfqSentLog(rfqId, { query: { queryKey: getGetRfqSentLogQueryKey(rfqId), enabled: tab === "sent" && !!rfqId } });
   const { data: offersData } = useGetRfqOffers(rfqId, { query: { queryKey: getGetRfqOffersQueryKey(rfqId), enabled: (tab === "offers" || exporting != null) && !!rfqId } });
 
   const handleExportExcel = async () => {
@@ -332,10 +332,10 @@ export default function RfqDetailPage() {
           </div>
 
           {/* Export: Dispatch Report on Sent tab */}
-          {tab === "sent" && (sentLog?.length ?? 0) > 0 && (
+          {tab === "sent" && (rfq.supplierCount ?? 0) > 0 && (
             <div className="flex items-center gap-2 pb-0.5">
               <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8"
-                onClick={handleExportDispatch} disabled={exporting !== null}>
+                onClick={handleExportDispatch} disabled={exporting !== null || sentLogLoading}>
                 <ClipboardList size={14} className="text-blue-600" />
                 {exporting === "dispatch" ? "جاري التصدير..." : "تقرير الإرسال PDF"}
               </Button>
@@ -409,7 +409,11 @@ export default function RfqDetailPage() {
         {/* Sent Log Tab */}
         {tab === "sent" && (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
-            {!sentLog?.length ? (
+            {sentLogLoading ? (
+              <div className="p-8 text-center text-muted-foreground text-sm animate-pulse">
+                جاري تحميل سجل الإرسال...
+              </div>
+            ) : !sentLog?.length ? (
               <div className="p-8 text-center text-muted-foreground text-sm">
                 RFQ hasn't been sent to any suppliers yet.
                 <div className="mt-3">
