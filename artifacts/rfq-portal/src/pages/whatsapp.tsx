@@ -148,6 +148,7 @@ interface PendingFile { file: File; base64: string; preview?: string; }
 export default function WhatsAppPage() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  const prevUnreadRef = useRef<number>(0);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMsg, setNewMsg] = useState("");
   const [sending, setSending] = useState(false);
@@ -193,10 +194,39 @@ export default function WhatsAppPage() {
 
   const selectedChat = chats.find(c => c.phone === selectedPhone);
 
+  function playNotificationSound() {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      const gainNode = ctx.createGain();
+      gainNode.connect(ctx.destination);
+      gainNode.gain.setValueAtTime(0, ctx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+
+      const osc1 = ctx.createOscillator();
+      osc1.connect(gainNode);
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(880, ctx.currentTime);
+      osc1.frequency.setValueAtTime(1100, ctx.currentTime + 0.15);
+      osc1.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.5);
+      osc1.onended = () => ctx.close();
+    } catch { /* browser may block until user interaction */ }
+  }
+
   const loadChats = useCallback(async () => {
     try {
       const r = await fetch("/api/whatsapp/chats", { credentials: "include" });
-      if (r.ok) setChats(await r.json());
+      if (r.ok) {
+        const data: Chat[] = await r.json();
+        const totalUnread = data.reduce((sum, c) => sum + Number(c.unread ?? 0), 0);
+        if (totalUnread > prevUnreadRef.current) {
+          playNotificationSound();
+        }
+        prevUnreadRef.current = totalUnread;
+        setChats(data);
+      }
     } catch { /* ignore */ }
   }, []);
 
