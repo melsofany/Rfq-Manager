@@ -260,7 +260,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
         es.onmessage = async (ev: MessageEvent) => {
           if (!ev.data?.trim()) return;
           try {
-            const payload = JSON.parse(ev.data as string) as { type: string; phone?: string };
+            const payload = JSON.parse(ev.data as string) as { type: string; phone?: string; reason?: string; codes?: number[] };
+            if (payload.type === "delivery_failed") {
+              const reason = payload.reason ?? "فشل تسليم رسالة واتساب";
+              setToast({ msg: reason, ok: false });
+              return;
+            }
             if (payload.type !== "new_message") return;
             const ip = payload.phone ?? "";
             const fresh = await loadChats();
