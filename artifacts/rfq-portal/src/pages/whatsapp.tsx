@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
   import { Layout } from "@/components/Layout";
   import {
-    Search, Send, Phone, RefreshCw, Paperclip, FileText, Download, X,
+    Search, Send, Phone, RefreshCw, Paperclip, FileText, Download, X, Settings,
     Image as ImageIcon, Mic, Pencil, Trash2, Check, Info, Plus, CheckCheck,
     MoreVertical, Filter, Archive, Star, Tag, ChevronDown, Bell, BellOff,
     Smile, Clock, AlertCircle, User, Hash, ArrowLeft,
@@ -197,7 +197,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
     const [newPhoneErr, setNewPhoneErr] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const [unreadOnly, setUnreadOnly] = useState(false);
+      const [unreadOnly, setUnreadOnly] = useState(false);
+      const [showDiagnose, setShowDiagnose] = useState(false);
+      const [diagnoseData, setDiagnoseData] = useState<Record<string, unknown> | null>(null);
+      const [diagnosing, setDiagnosing] = useState(false);
 
     const prevUnread = useRef(0);
     const selectedRef = useRef<string | null>(null);
@@ -301,11 +304,26 @@ import { useState, useEffect, useRef, useCallback } from "react";
     }
 
     async function handleRefresh() {
-      setRefreshing(true);
-      await loadChats();
-      if (selected) await loadMessages(selected);
-      setRefreshing(false);
-    }
+        setRefreshing(true);
+        await loadChats();
+        if (selected) await loadMessages(selected);
+        setRefreshing(false);
+      }
+
+      async function handleDiagnose() {
+        setShowDiagnose(true);
+        if (diagnoseData) return;
+        setDiagnosing(true);
+        try {
+          const r = await fetch("/api/whatsapp/diagnose", { credentials: "include" });
+          const data = await r.json() as Record<string, unknown>;
+          setDiagnoseData(data);
+        } catch (e) {
+          setDiagnoseData({ error: String(e) });
+        } finally {
+          setDiagnosing(false);
+        }
+      }
 
     async function handleSend(e?: React.FormEvent) {
       e?.preventDefault();
@@ -439,6 +457,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
                 <button onClick={handleRefresh} title="تحديث"
                   className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                   <RefreshCw size={14} className={cn(refreshing && "animate-spin")} />
+                </button>
+                <button onClick={handleDiagnose} title="تشخيص WhatsApp"
+                  className={cn("p-1.5 rounded-lg transition-colors", showDiagnose ? "bg-amber-100 text-amber-600" : "text-muted-foreground hover:text-foreground hover:bg-muted")}>
+                  <Settings size={14} />
                 </button>
               </div>
             </div>
