@@ -608,71 +608,63 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
 
 
 router.get("/rfq/:id/dispatch-report", requireAuth, async (req, res): Promise<void> => {
-    const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const rfqId = parseInt(raw, 10);
-    // Stream PDF directly to response — avoids buffering the entire PDF before sending,
-    // which was causing a 20s timeout on Render's low-CPU free tier during font subsetting.
-    try {
-      const [rfqRow] = await db.select({ rfq: rfqTable })
-        .from(rfqTable).where(eq(rfqTable.id, rfqId));
-      if (!rfqRow) { res.status(404).json({ error: "RFQ not found" }); return; }
+      const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const rfqId = parseInt(raw, 10);
+      try {
+        const [rfqRow] = await db.select({ rfq: rfqTable })
+          .from(rfqTable).where(eq(rfqTable.id, rfqId));
+        if (!rfqRow) { res.status(404).json({ error: "RFQ not found" }); return; }
 
-      const rows = await db.select({
-        log: sentLogTable,
-        supplierName: suppliersTable.name,
-        contactPerson: suppliersTable.contactPerson,
-        phone: suppliersTable.phone,
-        email: suppliersTable.email,
-      }).from(sentLogTable)
-        .leftJoin(suppliersTable, eq(sentLogTable.supplierId, suppliersTable.id))
-        .where(eq(sentLogTable.rfqId, rfqId));
+        const rows = await db.select({
+          log: sentLogTable,
+          supplierName: suppliersTable.name,
+          contactPerson: suppliersTable.contactPerson,
+          phone: suppliersTable.phone,
+          email: suppliersTable.email,
+        }).from(sentLogTable)
+          .leftJoin(suppliersTable, eq(sentLogTable.supplierId, suppliersTable.id))
+          .where(eq(sentLogTable.rfqId, rfqId));
 
-      if (!rows.length) {
-        res.status(404).json({ error: "No suppliers found for this RFQ" });
-        return;
+        if (!rows.length) {
+          res.status(404).json({ error: "No suppliers found for this RFQ" });
+          return;
+        }
+
+        const suppliers = rows.map(r => ({
+          supplierName: r.supplierName ?? "",
+          contactPerson: r.contactPerson ?? null,
+          phone: r.phone ?? null,
+          email: r.email ?? null,
+          linkOpened: r.log.linkOpened,
+          openCount: r.log.openCount,
+          offerSubmitted: r.log.offerSubmitted,
+          createdAt: r.log.createdAt.toISOString(),
+        }));
+
+        const exportDate = new Date().toLocaleDateString("en-GB");
+
+        // Use buffer approach: Helvetica fonts need no subsetting → instant generation.
+        // Buffer lets us set Content-Length so the browser knows when the response ends.
+        const pdfBuffer = await generateDispatchReportPdf({
+          rfqNo: rfqRow.rfq.internalRfqNo,
+          customerRfqNo: rfqRow.rfq.customerRfqNo,
+          exportDate,
+          suppliers,
+        });
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader("Content-Disposition",
+          `attachment; filename="Dispatch-Report-${rfqRow.rfq.internalRfqNo}.pdf"`);
+        res.setHeader("Content-Length", pdfBuffer.length);
+        res.end(pdfBuffer);
+      } catch (err) {
+        req.log.error({ err }, "Failed to generate dispatch report PDF");
+        if (!res.headersSent) {
+          res.status(500).json({ error: "PDF generation failed", detail: err instanceof Error ? err.message : String(err) });
+        }
       }
-
-      const suppliers = rows.map(r => ({
-        supplierName: r.supplierName ?? "",
-        contactPerson: r.contactPerson ?? null,
-        phone: r.phone ?? null,
-        email: r.email ?? null,
-        linkOpened: r.log.linkOpened,
-        openCount: r.log.openCount,
-        offerSubmitted: r.log.offerSubmitted,
-        createdAt: r.log.createdAt.toISOString(),
-      }));
-
-      const exportDate = new Date().toLocaleDateString("en-GB");
-
-      // Send headers immediately so the browser knows a PDF is coming,
-      // then stream — first bytes arrive before slow font subsetting completes.
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition",
-        `attachment; filename="Dispatch-Report-${rfqRow.rfq.internalRfqNo}.pdf"`);
-
-      const doc = createDispatchReportPdfDoc({
-        rfqNo: rfqRow.rfq.internalRfqNo,
-        customerRfqNo: rfqRow.rfq.customerRfqNo,
-        exportDate,
-        suppliers,
-      });
-
-      doc.on("error", (err: Error) => {
-        req.log.error({ err }, "PDF stream error in dispatch report");
-        if (!res.writableEnded) res.end();
-      });
-
-      doc.pipe(res);
-      doc.end();
-    } catch (err) {
-      req.log.error({ err }, "Failed to generate dispatch report PDF");
-      if (!res.headersSent) {
-        res.status(500).json({ error: "PDF generation failed", detail: err instanceof Error ? err.message : String(err) });
-      }
-    }
-  });
-  
+    });
+    
 router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const rfqId = parseInt(raw, 10);
