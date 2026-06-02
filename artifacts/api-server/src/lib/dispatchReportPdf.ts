@@ -1,7 +1,4 @@
 import PDFDocument from "pdfkit";
-  import { resolve, dirname } from "path";
-  import { fileURLToPath } from "url";
-  import { existsSync, readFileSync } from "fs";
 
   export interface DispatchSupplier {
     supplierName: string;
@@ -29,28 +26,6 @@ import PDFDocument from "pdfkit";
     return Buffer.from(base64, "base64");
   }
 
-  // Cache the Amiri font as a Buffer at module load time.
-  // PDFKit font subsetting is CPU-intensive; caching avoids repeated disk reads
-  // and allows Node.js to reuse the same Buffer across requests.
-  let _cachedFontBuffer: Buffer | null = null;
-
-  function getFontBuffer(): Buffer {
-    if (_cachedFontBuffer) return _cachedFontBuffer;
-    const g = globalThis as Record<string, unknown>;
-    const baseDir: string =
-      typeof g.__dirname === "string"
-        ? (g.__dirname as string)
-        : dirname(fileURLToPath(import.meta.url));
-    const fontPath = resolve(baseDir, "assets/fonts/Amiri-Regular.ttf");
-    if (!existsSync(fontPath)) {
-      throw new Error(
-        `Amiri font missing at: ${fontPath} (baseDir=${baseDir})`
-      );
-    }
-    _cachedFontBuffer = readFileSync(fontPath);
-    return _cachedFontBuffer;
-  }
-
   function channel(s: DispatchSupplier): string {
     const hasPhone = !!(s.phone?.trim());
     const hasEmail = !!(s.email?.trim());
@@ -65,9 +40,11 @@ import PDFDocument from "pdfkit";
   }
 
   /**
-   * Creates and draws the dispatch report PDF document.
-   * Does NOT call doc.end() — caller must call doc.end() after piping.
-   * Use this for streaming: pipe doc to res, then call doc.end().
+   * Creates and draws the dispatch report PDF document using built-in
+   * Helvetica fonts only — NO font file loading, NO font subsetting.
+   * PDFKit built-in fonts generate in milliseconds regardless of CPU.
+   *
+   * Does NOT call doc.end(). Caller must pipe then call doc.end().
    */
   export function createDispatchReportPdfDoc(opts: DispatchReportOptions): PDFKit.PDFDocument {
     const doc = new PDFDocument({
@@ -77,8 +54,6 @@ import PDFDocument from "pdfkit";
       autoFirstPage: true,
       compress: false,
     });
-
-    doc.registerFont("Amiri", getFontBuffer());
 
     const PAGE_W = doc.page.width;
     const PAGE_H = doc.page.height;
@@ -93,9 +68,9 @@ import PDFDocument from "pdfkit";
     function drawPageHeader(y0: number) {
       doc.rect(0, y0, PAGE_W, 72).fill(BLUE);
       try { doc.image(getLogoBuffer(), PAGE_W - MARGIN - 56, y0 + 7, { height: 58 }); } catch { /* ok */ }
-      doc.font("Amiri").fontSize(20).fillColor("#ffffff")
+      doc.font("Helvetica-Bold").fontSize(18).fillColor("#ffffff")
         .text("Dispatch Report - RFQ", MARGIN, y0 + 14, { lineBreak: false });
-      doc.font("Amiri").fontSize(9).fillColor(GOLD)
+      doc.font("Helvetica").fontSize(9).fillColor(GOLD)
         .text("RFQ DISPATCH REPORT", MARGIN, y0 + 44, { lineBreak: false });
       return y0 + 72;
     }
@@ -106,25 +81,24 @@ import PDFDocument from "pdfkit";
     doc.rect(0, y, PAGE_W, INFO_H).fill(GREY_BG);
     doc.rect(0, y + INFO_H - 2, PAGE_W, 2).fill(GOLD);
     const infoCells = [
-      { label: "Internal RFQ No", value: opts.rfqNo },
+      { label: "Internal RFQ No",  value: opts.rfqNo },
       { label: "Customer RFQ No",  value: opts.customerRfqNo },
-      { label: "Export Date",       value: opts.exportDate },
-      { label: "Supplier Count",    value: String(opts.suppliers.length) },
+      { label: "Export Date",      value: opts.exportDate },
+      { label: "Supplier Count",   value: String(opts.suppliers.length) },
     ];
     const cellW = CW / infoCells.length;
     infoCells.forEach((cell, i) => {
       const cx = MARGIN + i * cellW;
-      doc.font("Amiri").fontSize(7).fillColor("#7a8fa6")
+      doc.font("Helvetica").fontSize(7).fillColor("#7a8fa6")
         .text(cell.label, cx, y + 7, { width: cellW, align: "center", lineBreak: false });
-      doc.font("Amiri").fontSize(11).fillColor(BLUE)
+      doc.font("Helvetica-Bold").fontSize(11).fillColor(BLUE)
         .text(cell.value, cx, y + 22, { width: cellW, align: "center", lineBreak: false });
     });
     y += INFO_H;
 
     y += 10;
-    doc.font("Amiri").fontSize(11).fillColor(BLUE)
-      .text("Suppliers who received this RFQ", MARGIN, y,
-        { width: CW, align: "left", lineBreak: false });
+    doc.font("Helvetica-Bold").fontSize(11).fillColor(BLUE)
+      .text("Suppliers who received this RFQ", MARGIN, y, { width: CW, align: "left", lineBreak: false });
     y += 20;
 
     const ROW_H = 24;
@@ -137,7 +111,7 @@ import PDFDocument from "pdfkit";
       doc.rect(MARGIN, ty, CW, ROW_H).fill(BLUE);
       let tx = MARGIN;
       tableHeaders.forEach((h, i) => {
-        doc.font("Amiri").fontSize(8).fillColor("#ffffff")
+        doc.font("Helvetica-Bold").fontSize(8).fillColor("#ffffff")
           .text(h, tx + 2, ty + 7, { width: colW[i] - 4, align: "center", lineBreak: false });
         tx += colW[i];
       });
@@ -149,7 +123,7 @@ import PDFDocument from "pdfkit";
     opts.suppliers.forEach((s, idx) => {
       if (y + ROW_H > PAGE_H - 28) {
         doc.rect(0, PAGE_H - 22, PAGE_W, 22).fill(BLUE);
-        doc.font("Amiri").fontSize(8).fillColor(GOLD)
+        doc.font("Helvetica").fontSize(8).fillColor(GOLD)
           .text("Cortoba Supplies  |  INFO@CORTOBA-SUPPLIES.COM",
             MARGIN, PAGE_H - 14, { width: CW, align: "center", lineBreak: false });
         doc.addPage({ size: "A4", margins: { top: 0, bottom: 0, left: 0, right: 0 } });
@@ -170,21 +144,20 @@ import PDFDocument from "pdfkit";
       const offerText = s.offerSubmitted ? "Yes" : "No";
 
       const cells = [
-        { t: String(idx + 1),       c: "#666",    a: "center" as const },
-        { t: s.supplierName || "-", c: "#1a2a3a", a: "left"   as const },
-        { t: s.contactPerson || "-",c: "#555",    a: "left"   as const },
-        { t: s.phone || "-",        c: BLUE,      a: "center" as const },
-        { t: meth,                  c: methColor, a: "center" as const },
-        { t: openText,              c: s.linkOpened ? GREEN_C : "#aaa", a: "center" as const },
-        { t: offerText,             c: s.offerSubmitted ? GREEN_C : "#aaa", a: "center" as const },
-        { t: fmtDate(s.createdAt),  c: "#666",    a: "center" as const },
+        { t: String(idx + 1),        c: "#666",    a: "center" as const },
+        { t: s.supplierName || "-",  c: "#1a2a3a", a: "left"   as const },
+        { t: s.contactPerson || "-", c: "#555",    a: "left"   as const },
+        { t: s.phone || "-",         c: BLUE,      a: "center" as const },
+        { t: meth,                   c: methColor, a: "center" as const },
+        { t: openText,               c: s.linkOpened ? GREEN_C : "#aaa", a: "center" as const },
+        { t: offerText,              c: s.offerSubmitted ? GREEN_C : "#aaa", a: "center" as const },
+        { t: fmtDate(s.createdAt),   c: "#666",    a: "center" as const },
       ];
 
       let tx = MARGIN;
       cells.forEach((cell, i) => {
-        doc.font("Amiri").fontSize(8.5).fillColor(cell.c)
-          .text(cell.t, tx + 3, y + 7,
-            { width: colW[i] - 6, align: cell.a, lineBreak: false });
+        doc.font("Helvetica").fontSize(8.5).fillColor(cell.c)
+          .text(cell.t, tx + 3, y + 7, { width: colW[i] - 6, align: cell.a, lineBreak: false });
         tx += colW[i];
       });
       y += ROW_H;
@@ -201,7 +174,7 @@ import PDFDocument from "pdfkit";
     const submitted  = opts.suppliers.filter(s => s.offerSubmitted).length;
     doc.rect(MARGIN, y, CW, 28).fill(GREY_BG);
     doc.rect(MARGIN, y, CW, 28).stroke("#d0dbe8");
-    doc.font("Amiri").fontSize(9).fillColor(BLUE)
+    doc.font("Helvetica").fontSize(9).fillColor(BLUE)
       .text(
         `Total: ${opts.suppliers.length} suppliers  |  WhatsApp: ${waCount}  |  Email: ${emailCount}  |  Opened link: ${opened}  |  Submitted offer: ${submitted}`,
         MARGIN + 4, y + 9, { width: CW - 8, align: "center", lineBreak: false }
@@ -209,7 +182,7 @@ import PDFDocument from "pdfkit";
 
     const footerY = PAGE_H - 22;
     doc.rect(0, footerY, PAGE_W, 22).fill(BLUE);
-    doc.font("Amiri").fontSize(8).fillColor(GOLD)
+    doc.font("Helvetica").fontSize(8).fillColor(GOLD)
       .text("Cortoba Supplies  |  INFO@CORTOBA-SUPPLIES.COM",
         MARGIN, footerY + 7, { width: CW, align: "center", lineBreak: false });
 
@@ -222,23 +195,18 @@ import PDFDocument from "pdfkit";
    */
   export function generateDispatchReportPdf(opts: DispatchReportOptions): Promise<Buffer> {
     return new Promise((resolvePromise, reject) => {
-      const pdfTimeout = setTimeout(
-        () => reject(new Error("PDF generation timed out")),
-        55_000
-      );
       try {
         const doc = createDispatchReportPdfDoc(opts);
         const chunks: Buffer[] = [];
         let settled = false;
         const settle = (fn: () => void) => {
-          if (!settled) { settled = true; clearTimeout(pdfTimeout); fn(); }
+          if (!settled) { settled = true; fn(); }
         };
         doc.on("data", (c: Buffer) => chunks.push(c));
         doc.on("end", () => settle(() => resolvePromise(Buffer.concat(chunks))));
         doc.on("error", (e: Error) => settle(() => reject(e)));
         doc.end();
       } catch (err) {
-        clearTimeout(pdfTimeout);
         reject(err);
       }
     });
