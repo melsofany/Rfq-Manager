@@ -382,26 +382,38 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           notes: rfq.notes ?? null,
         });
         whatsappStatus = "sent";
-        // Save outbound messages to chat log
-        const normalizedPhone = supplier.phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
-        if (pdfSent) {
-          await db.insert(whatsappChatsTable).values({
-            waMessageId: sentWaId,
-            direction: "outbound",
-            phone: normalizedPhone,
-            supplierId: supplier.id,
-            body: `[PDF] RFQ-${rfq.internalRfqNo}.pdf — طلب عرض سعر`,
-            isRead: true,
-          });
-        }
-        await db.insert(whatsappChatsTable).values({
-          waMessageId: sentWaId,
-          direction: "outbound",
-          phone: normalizedPhone,
-          supplierId: supplier.id,
-          body: `[RFQ ${rfq.internalRfqNo}] تم إرسال طلب عرض السعر — ${pricingUrl}`,
-          isRead: true,
-        });
+          // Save outbound messages to chat log
+          // Note: normalizePhone mirrors whatsapp.ts logic exactly
+          let normalizedPhone = supplier.phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+          if (normalizedPhone.startsWith("00")) normalizedPhone = normalizedPhone.slice(2);
+          if (normalizedPhone.length === 11 && normalizedPhone.startsWith("0")) normalizedPhone = "2" + normalizedPhone;
+          if (normalizedPhone.length === 10 && normalizedPhone.startsWith("1")) normalizedPhone = "20" + normalizedPhone;
+
+          try {
+            if (pdfSent) {
+              await db.insert(whatsappChatsTable).values({
+                waMessageId: sentWaId,   // unique wamid for PDF message
+                direction: "outbound",
+                phone: normalizedPhone,
+                supplierId: supplier.id,
+                body: `[PDF] RFQ-${rfq.internalRfqNo}.pdf — طلب عرض سعر`,
+                isRead: true,
+              });
+            }
+            // Text entry: use null for waMessageId to avoid unique constraint conflict
+            // when the same wamid would be inserted twice for the same template send
+            await db.insert(whatsappChatsTable).values({
+              waMessageId: pdfSent ? null : sentWaId,
+              direction: "outbound",
+              phone: normalizedPhone,
+              supplierId: supplier.id,
+              body: `[RFQ ${rfq.internalRfqNo}] تم إرسال طلب عرض السعر — ${pricingUrl}`,
+              isRead: true,
+            });
+          } catch (chatErr) {
+            // Chat log errors should not fail the overall send result
+            req.log.warn({ err: chatErr, supplierId: supplier.id }, "Failed to save WhatsApp chat log entry");
+          }
       } catch (err) {
         whatsappStatus = "failed";
         whatsappError = err instanceof Error ? err.message : String(err);
