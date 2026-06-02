@@ -51,12 +51,12 @@ import { useState } from "react";
 
     const sendMutation = useSendRfqToSuppliers({
       mutation: {
-        onSuccess: (data: { results?: SendResult[] } | unknown) => {
+        onSuccess: (data: { details?: SendResult[]; sent?: number } | unknown) => {
           queryClient.invalidateQueries({ queryKey: getGetRfqSentLogQueryKey(rfqId) });
           queryClient.invalidateQueries({ queryKey: getGetRfqQueryKey(rfqId) });
           const details = (data as { details?: SendResult[] })?.details;
-          if (results?.length) {
-            setSendResults(results);
+          if (details?.length) {
+            setSendResults(details);
           } else {
             navigate(`/rfq/${rfqId}`);
           }
