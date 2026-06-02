@@ -70,16 +70,32 @@ import { Router, type Response } from "express";
           for (const msg of value.messages ?? []) await handleInboundMessage(msg, value.contacts ?? []);
           for (const status of value.statuses ?? []) {
               if (status.status === "failed") {
-                logger.error({ id: status.id, status: status.status, errors: status.errors }, "WhatsApp message delivery FAILED");
-                try {
-                  await db.delete(whatsappChatsTable).where(eq(whatsappChatsTable.waMessageId, status.id));
-                  logger.info({ waMessageId: status.id }, "Removed chat records for failed WhatsApp delivery");
-                } catch (delErr) {
-                  logger.warn({ err: delErr, waMessageId: status.id }, "Could not remove failed delivery chat records");
+                  const errCodes = ((status as { errors?: Array<{ code?: number; error_data?: { details?: string } }> }).errors ?? []).map((e) => e.code);
+                  const errDetails = ((status as { errors?: Array<{ code?: number; error_data?: { details?: string } }> }).errors ?? []).map((e) => e.error_data?.details).filter(Boolean).join(" | ");
+                  logger.error({ id: status.id, status: status.status, errors: (status as { errors?: unknown }).errors }, "WhatsApp message delivery FAILED");
+
+                  // Broadcast human-readable failure reason to connected UI clients
+                  let failureReason = "فشل تسليم رسالة واتساب";
+                  if (errCodes.includes(131042)) {
+                    failureReason = "⚠️ فواتير واتساب بيزنس غير مسددة — يرجى تسوية الفاتورة على Meta Business لاستئناف إرسال الرسائل.";
+                  } else if (errCodes.includes(131026)) {
+                    failureReason = "رقم المستلم غير مسجل على واتساب";
+                  } else if (errCodes.includes(131047)) {
+                    failureReason = "انتهت نافذة المحادثة (24 ساعة)";
+                  } else if (errDetails) {
+                    failureReason = errDetails;
+                  }
+                  broadcastWaEvent({ type: "delivery_failed", waMessageId: status.id, reason: failureReason, codes: errCodes } as { type: string; phone?: string });
+
+                  try {
+                    await db.delete(whatsappChatsTable).where(eq(whatsappChatsTable.waMessageId, status.id));
+                    logger.info({ waMessageId: status.id }, "Removed chat records for failed WhatsApp delivery");
+                  } catch (delErr) {
+                    logger.warn({ err: delErr, waMessageId: status.id }, "Could not remove failed delivery chat records");
+                  }
+                } else {
+                  logger.info({ id: status.id, status: status.status }, "WhatsApp status update");
                 }
-              } else {
-                logger.info({ id: status.id, status: status.status }, "WhatsApp status update");
-              }
             }
         }
       }
