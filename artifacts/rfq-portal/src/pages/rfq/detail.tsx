@@ -119,44 +119,34 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
 }
 
 async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90_000);
-    try {
-      const response = await fetch(`/api/rfq/${rfqId}/dispatch-report`, {
-        credentials: "include",
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        let errMsg = `Server error ${response.status}`;
-        try {
-          const json = await response.json();
-          if (json?.detail) errMsg = json.detail;
-          else if (json?.error) errMsg = json.error;
-        } catch { /* ignore */ }
-        throw new Error(errMsg);
-      }
-      const blob = await response.blob();
-      if (!blob || blob.size === 0) {
-        throw new Error("الملف المُولَّد فارغ — تحقق من سجل الإرسال أو تواصل مع الدعم الفني");
-      }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Dispatch-Report-${rfqNo}.pdf`;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 1500);
-      toast.success("تم تصدير تقرير الإرسال بنجاح ✓");
-    } finally {
-      clearTimeout(timeoutId);
+    // Server-side timeouts guarantee a response in ≤30 s — no client abort needed
+    const response = await fetch(`/api/rfq/${rfqId}/dispatch-report`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      let errMsg = `Server error ${response.status}`;
+      try {
+        const json = await response.json();
+        if (json?.detail) errMsg = json.detail;
+        else if (json?.error) errMsg = json.error;
+      } catch { /* ignore */ }
+      throw new Error(errMsg);
     }
+    const blob = await response.blob();
+    if (!blob || blob.size === 0) {
+      throw new Error("الملف المُولَّد فارغ — تحقق من سجل الإرسال أو تواصل مع الدعم الفني");
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Dispatch-Report-${rfqNo}.pdf`;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
   }
-  
-async function exportToPdf(rfqId: number, rfqNo: string): Promise<void> {
+
+  async function exportToPdf(rfqId: number, rfqNo: string): Promise<void> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 35_000);
   try {
