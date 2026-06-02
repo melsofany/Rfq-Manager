@@ -4,6 +4,7 @@ import { eq, and, ilike, or, count, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { generateToken } from "../lib/token";
 import { generateOffersPdf } from "../lib/offersPdf.js";
+import { generateDispatchReportPdf } from "../lib/dispatchReportPdf.js";
 import { sendRfqEmail } from "../lib/email";
 import { sendRfqWhatsApp } from "../lib/whatsapp";
 import { whatsappChatsTable } from "@workspace/db";
@@ -605,6 +606,66 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
   res.json({ rfq, offers: offersOut, analysis: { rfqId, itemAnalysis } });
 });
 
+
+router.get("/rfq/:id/dispatch-report", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const rfqId = parseInt(raw, 10);
+  const routeTimer = setTimeout(() => {
+    if (!res.headersSent) res.status(504).json({ error: "Request timed out" });
+  }, 22_000);
+  try {
+    const [rfqRow] = await db.select({ rfq: rfqTable })
+      .from(rfqTable).where(eq(rfqTable.id, rfqId));
+    if (!rfqRow) { clearTimeout(routeTimer); res.status(404).json({ error: "RFQ not found" }); return; }
+
+    const rows = await db.select({
+      log: sentLogTable,
+      supplierName: suppliersTable.name,
+      contactPerson: suppliersTable.contactPerson,
+      phone: suppliersTable.phone,
+      email: suppliersTable.email,
+    }).from(sentLogTable)
+      .leftJoin(suppliersTable, eq(sentLogTable.supplierId, suppliersTable.id))
+      .where(eq(sentLogTable.rfqId, rfqId));
+
+    if (!rows.length) {
+      clearTimeout(routeTimer);
+      res.status(404).json({ error: "No suppliers found for this RFQ" });
+      return;
+    }
+
+    const suppliers = rows.map(r => ({
+      supplierName: r.supplierName ?? "",
+      contactPerson: r.contactPerson ?? null,
+      phone: r.phone ?? null,
+      email: r.email ?? null,
+      linkOpened: r.log.linkOpened,
+      openCount: r.log.openCount,
+      offerSubmitted: r.log.offerSubmitted,
+      createdAt: r.log.createdAt.toISOString(),
+    }));
+
+    const exportDate = new Date().toLocaleDateString("en-GB");
+    const pdfBuffer = await generateDispatchReportPdf({
+      rfqNo: rfqRow.rfq.internalRfqNo,
+      customerRfqNo: rfqRow.rfq.customerRfqNo,
+      exportDate,
+      suppliers,
+    });
+
+    clearTimeout(routeTimer);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition",
+      `attachment; filename="Dispatch-Report-${rfqRow.rfq.internalRfqNo}.pdf"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    clearTimeout(routeTimer);
+    req.log.error({ err }, "Failed to generate dispatch report PDF");
+    if (!res.headersSent) {
+      res.status(500).json({ error: "PDF generation failed", detail: err instanceof Error ? err.message : String(err) });
+    }
+  }
+});
 
 router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
