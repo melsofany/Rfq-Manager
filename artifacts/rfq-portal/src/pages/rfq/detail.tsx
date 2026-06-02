@@ -13,7 +13,7 @@ import {
 import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Send, Eye, CheckCircle2, XCircle, AlertTriangle, FileSpreadsheet, FileText } from "lucide-react";
+import { ArrowLeft, Send, Eye, CheckCircle2, XCircle, AlertTriangle, FileSpreadsheet, FileText, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -118,6 +118,38 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
   writeFile(wb, `RFQ-Comparison-${rfqNo}.xlsx`);
 }
 
+async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 35_000);
+  try {
+    const response = await fetch(`/api/rfq/${rfqId}/dispatch-report`, {
+      credentials: "include",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      let errMsg = `Server error ${response.status}`;
+      try {
+        const json = await response.json();
+        if (json?.detail) errMsg = json.detail;
+        else if (json?.error) errMsg = json.error;
+      } catch { /* ignore */ }
+      throw new Error(errMsg);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Dispatch-Report-${rfqNo}.pdf`;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function exportToPdf(rfqId: number, rfqNo: string): Promise<void> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 35_000);
@@ -156,7 +188,7 @@ export default function RfqDetailPage() {
   const rfqId = parseInt(id, 10);
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("items");
-  const [exporting, setExporting] = useState<"excel" | "pdf" | null>(null);
+  const [exporting, setExporting] = useState<"excel" | "pdf" | "dispatch" | null>(null);
 
   const { data: rfq, isLoading } = useGetRfq(rfqId, { query: { queryKey: getGetRfqQueryKey(rfqId), enabled: !!rfqId } });
   const { data: items } = useListRfqItems(rfqId, { query: { queryKey: getListRfqItemsQueryKey(rfqId), enabled: !!rfqId } });
@@ -170,6 +202,18 @@ export default function RfqDetailPage() {
       await exportToExcel(rfq.internalRfqNo, rfq.customerRfqNo, offersData as OffersData);
     } catch (err) {
       toast.error("Excel export failed: " + (err instanceof Error ? err.message : "Unknown error"));
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportDispatch = async () => {
+    if (!rfq) return;
+    setExporting("dispatch");
+    try {
+      await exportDispatchReport(rfqId, rfq.internalRfqNo);
+    } catch (err) {
+      toast.error("Dispatch report failed: " + (err instanceof Error ? err.message : "Unknown error"));
     } finally {
       setExporting(null);
     }
@@ -287,7 +331,17 @@ export default function RfqDetailPage() {
             ))}
           </div>
 
-          {/* Export buttons — shown only on Offers tab when there's data */}
+          {/* Export: Dispatch Report on Sent tab */}
+          {tab === "sent" && (sentLog?.length ?? 0) > 0 && (
+            <div className="flex items-center gap-2 pb-0.5">
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8"
+                onClick={handleExportDispatch} disabled={exporting !== null}>
+                <ClipboardList size={14} className="text-blue-600" />
+                {exporting === "dispatch" ? "جاري التصدير..." : "تقرير الإرسال PDF"}
+              </Button>
+            </div>
+          )}
+          {/* Export: Offers tab */}
           {tab === "offers" && hasOffers && (
             <div className="flex items-center gap-2 pb-0.5">
               <Button
@@ -369,6 +423,7 @@ export default function RfqDetailPage() {
                 <thead>
                   <tr className="bg-muted/30 border-b border-border text-left">
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Supplier</th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Phone</th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Email</th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Link Opened</th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Views</th>
@@ -384,6 +439,7 @@ export default function RfqDetailPage() {
                         <p className="font-medium text-foreground text-sm">{log.supplierName}</p>
                         {log.contactPerson && <p className="text-muted-foreground text-xs">{log.contactPerson}</p>}
                       </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{log.phone ?? "-"}</td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">{log.email ?? "-"}</td>
                       <td className="px-4 py-3 text-center">
                         {log.linkOpened
