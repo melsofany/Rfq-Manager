@@ -54,7 +54,7 @@ import { useState } from "react";
         onSuccess: (data: { results?: SendResult[] } | unknown) => {
           queryClient.invalidateQueries({ queryKey: getGetRfqSentLogQueryKey(rfqId) });
           queryClient.invalidateQueries({ queryKey: getGetRfqQueryKey(rfqId) });
-          const results = (data as { results?: SendResult[] })?.results;
+          const details = (data as { details?: SendResult[] })?.details;
           if (results?.length) {
             setSendResults(results);
           } else {
@@ -155,7 +155,7 @@ import { useState } from "react";
                           <div>
                             <span className="inline-flex items-center gap-1 text-red-600 text-xs"><XCircle size={13} /> فشل</span>
                             {r.whatsapp.error && (
-                              <p className="text-[10px] text-red-500 mt-0.5 max-w-[200px] break-all">{r.whatsapp.error.slice(0, 120)}</p>
+                              <p className="text-[10px] text-red-500 mt-0.5 max-w-xs break-all">{r.whatsapp.error}</p>
                             )}
                           </div>
                         )}
