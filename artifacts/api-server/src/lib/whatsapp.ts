@@ -19,6 +19,10 @@ interface WaApiError {
   };
 }
 
+interface WaApiResponse {
+  messages?: { id: string }[];
+}
+
 function apiUrl(): string {
   return `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
 }
@@ -36,7 +40,7 @@ class WhatsAppApiError extends Error {
   }
 }
 
-async function postMessage(body: object): Promise<object> {
+async function postMessage(body: object): Promise<WaApiResponse> {
   if (!PHONE_NUMBER_ID || !TOKEN) {
     throw new Error("WhatsApp credentials not configured (WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_TOKEN)");
   }
@@ -45,12 +49,12 @@ async function postMessage(body: object): Promise<object> {
     headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const json = (await res.json()) as WaApiError;
+  const json = (await res.json()) as WaApiError & WaApiResponse;
   if (!res.ok) {
     const code = json?.error?.code;
     throw new WhatsAppApiError(`WhatsApp API error ${res.status}: ${JSON.stringify(json)}`, code);
   }
-  return json as object;
+  return json;
 }
 
 function normalizePhone(phone: string): string {
@@ -120,9 +124,9 @@ function buildContactText(opts: SendRfqOpts): string {
   return sanitizeWaParam(`${opts.employeeName}${opts.employeePhone ? " — " + opts.employeePhone : ""}`);
 }
 
-async function sendRfqTemplateUtility(to: string, opts: SendRfqOpts): Promise<void> {
+async function sendRfqTemplateUtility(to: string, opts: SendRfqOpts): Promise<string> {
   const pricingToken = extractPricingToken(opts.pricingUrl);
-  await postMessage({
+  const result = await postMessage({
     messaging_product: "whatsapp", to, type: "template",
     template: {
       name: TEMPLATE_UTILITY, language: { code: TEMPLATE_LANG },
@@ -138,10 +142,12 @@ async function sendRfqTemplateUtility(to: string, opts: SendRfqOpts): Promise<vo
       ],
     },
   });
-  logger.info({ to, rfqNo: opts.rfqNo }, "RFQ UTILITY template sent via WhatsApp");
+  const waMessageId = result.messages?.[0]?.id ?? "";
+  logger.info({ to, rfqNo: opts.rfqNo, waMessageId }, "RFQ UTILITY template sent via WhatsApp");
+  return waMessageId;
 }
 
-async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<void> {
+async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<string> {
   const pdfBuffer = await Promise.race<Buffer>([
     generateRfqPdf({
       rfqNo: opts.rfqNo, customerRfqNo: opts.customerRfqNo, rfqDate: opts.rfqDate,
@@ -154,7 +160,7 @@ async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<vo
   const filename = `RFQ-${opts.rfqNo}.pdf`;
   const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename);
   const pricingToken = extractPricingToken(opts.pricingUrl);
-  await postMessage({
+  const result = await postMessage({
     messaging_product: "whatsapp", to, type: "template",
     template: {
       name: TEMPLATE_PDF, language: { code: TEMPLATE_LANG },
@@ -170,12 +176,14 @@ async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<vo
       ],
     },
   });
-  logger.info({ to, rfqNo: opts.rfqNo }, "RFQ PDF template sent via WhatsApp");
+  const waMessageId = result.messages?.[0]?.id ?? "";
+  logger.info({ to, rfqNo: opts.rfqNo, waMessageId }, "RFQ PDF template sent via WhatsApp");
+  return waMessageId;
 }
 
-async function sendRfqTemplateTextOnly(to: string, opts: SendRfqOpts): Promise<void> {
+async function sendRfqTemplateTextOnly(to: string, opts: SendRfqOpts): Promise<string> {
   const pricingToken = extractPricingToken(opts.pricingUrl);
-  await postMessage({
+  const result = await postMessage({
     messaging_product: "whatsapp", to, type: "template",
     template: {
       name: TEMPLATE_TEXT, language: { code: TEMPLATE_LANG },
@@ -191,7 +199,9 @@ async function sendRfqTemplateTextOnly(to: string, opts: SendRfqOpts): Promise<v
       ],
     },
   });
-  logger.info({ to, rfqNo: opts.rfqNo }, "RFQ text-only template sent via WhatsApp");
+  const waMessageId = result.messages?.[0]?.id ?? "";
+  logger.info({ to, rfqNo: opts.rfqNo, waMessageId }, "RFQ text-only template sent via WhatsApp");
+  return waMessageId;
 }
 
 function buildTextMessage(opts: SendRfqOpts): string {
@@ -222,51 +232,53 @@ function buildTextMessage(opts: SendRfqOpts): string {
   ].join("\n");
 }
 
-export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boolean; usedTemplate: boolean }> {
+export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boolean; usedTemplate: boolean; waMessageId: string | null }> {
   const to = normalizePhone(opts.phone);
   let pdfSent = false;
   let usedTemplate = false;
 
   // Primary: rfq_pdf_ar (PDF attachment + button)
   try {
-    await sendRfqTemplateWithPdf(to, opts);
+    const waId = await sendRfqTemplateWithPdf(to, opts);
     pdfSent = true; usedTemplate = true;
-    return { pdfSent, usedTemplate };
+    return { pdfSent, usedTemplate, waMessageId: waId || null };
   } catch (pdfErr) {
     const pdfErrMsg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
-      logger.warn({ err: pdfErr, errMsg: pdfErrMsg, to, rfqNo: opts.rfqNo }, "rfq_pdf_ar failed — trying text-only template");
+    logger.warn({ err: pdfErr, errMsg: pdfErrMsg, to, rfqNo: opts.rfqNo }, "rfq_pdf_ar failed — trying text-only template");
   }
 
   // Fallback 1: rfq_send_ar (text only + button)
   try {
-    await sendRfqTemplateTextOnly(to, opts);
+    const waId = await sendRfqTemplateTextOnly(to, opts);
     usedTemplate = true;
-    return { pdfSent: false, usedTemplate };
+    return { pdfSent: false, usedTemplate, waMessageId: waId || null };
   } catch (textErr) {
     const textErrMsg = textErr instanceof Error ? textErr.message : String(textErr);
-      logger.warn({ err: textErr, errMsg: textErrMsg, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying UTILITY template");
+    logger.warn({ err: textErr, errMsg: textErrMsg, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying UTILITY template");
   }
 
+  // Fallback 2: rfq_utility_ar
   try {
-    await sendRfqTemplateUtility(to, opts);
+    const waId = await sendRfqTemplateUtility(to, opts);
     usedTemplate = true;
-    return { pdfSent: false, usedTemplate };
+    return { pdfSent: false, usedTemplate, waMessageId: waId || null };
   } catch (utilErr) {
     const utilErrMsg = utilErr instanceof Error ? utilErr.message : String(utilErr);
-      logger.warn({ err: utilErr, errMsg: utilErrMsg, to, rfqNo: opts.rfqNo }, "UTILITY template failed — trying plain text");
+    logger.warn({ err: utilErr, errMsg: utilErrMsg, to, rfqNo: opts.rfqNo }, "UTILITY template failed — trying plain text");
   }
 
+  // Fallback 3: plain text
   try {
     const message = buildTextMessage(opts);
-    await postMessage({ messaging_product: "whatsapp", to, type: "text", text: { body: message, preview_url: false } });
-    logger.info({ to, rfqNo: opts.rfqNo }, "RFQ WhatsApp plain text sent (fallback)");
+    const result = await postMessage({ messaging_product: "whatsapp", to, type: "text", text: { body: message, preview_url: false } });
+    const waId = result.messages?.[0]?.id ?? null;
+    logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ WhatsApp plain text sent (fallback)");
+    return { pdfSent: false, usedTemplate: false, waMessageId: waId };
   } catch (err) {
     const allFailedMsg = err instanceof Error ? err.message : String(err);
-        logger.error({ err, errMsg: allFailedMsg, to, rfqNo: opts.rfqNo }, "All WhatsApp send methods failed — message NOT delivered");
+    logger.error({ err, errMsg: allFailedMsg, to, rfqNo: opts.rfqNo }, "All WhatsApp send methods failed — message NOT delivered");
     throw err;
   }
-
-  return { pdfSent, usedTemplate };
 }
 
 // Returns the WhatsApp message ID (wamid) so callers can store it for later deletion.
@@ -277,7 +289,7 @@ export async function sendWhatsAppText(phone: string, text: string): Promise<str
     to,
     type: "text",
     text: { body: text, preview_url: false },
-  }) as { messages?: { id: string }[] };
+  });
   logger.info({ to }, "WhatsApp text sent");
   return result?.messages?.[0]?.id ?? null;
 }
