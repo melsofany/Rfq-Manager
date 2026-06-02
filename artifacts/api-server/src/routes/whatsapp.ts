@@ -471,6 +471,74 @@ import { Router, type Response } from "express";
     res.json({ configured: true, phone: phoneInfo, templates, creds });
   });
 
+    // ─── Test-send: POST /api/whatsapp/test-send ─────────────────────────────
+    // Send a template message to a specific number and return the raw API result.
+    // Useful for diagnosing delivery issues. Requires auth.
+    router.post("/whatsapp/test-send", requireAuth, async (req, res): Promise<void> => {
+      const { phone } = req.body as { phone?: string };
+      if (!phone) { res.status(400).json({ error: "phone required" }); return; }
+
+      const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+      const TOK = process.env.WHATSAPP_TOKEN;
+      const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";
+      const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
+
+      // Normalize phone (mirrors whatsapp.ts logic exactly)
+      let normalized = phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+      if (normalized.startsWith("00")) normalized = normalized.slice(2);
+      if (normalized.length === 11 && normalized.startsWith("0")) normalized = "2" + normalized;
+      if (normalized.length === 10 && normalized.startsWith("1")) normalized = "20" + normalized;
+
+      if (!PHONE_ID || !TOK) {
+        res.json({ normalized, error: "WhatsApp credentials not configured" });
+        return;
+      }
+
+      // Try sending a minimal utility template as a test
+      const body = {
+        messaging_product: "whatsapp",
+        to: normalized,
+        type: "template",
+        template: {
+          name: TEMPLATE_UTILITY,
+          language: { code: TEMPLATE_LANG },
+          components: [
+            { type: "body", parameters: [
+              { type: "text", text: "اختبار" },
+              { type: "text", text: "TEST-000" },
+              { type: "text", text: "اختبار التسليم" },
+              { type: "text", text: "31/12/2026" },
+              { type: "text", text: "فريق المشتريات" },
+            ]},
+            { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "test" }] },
+          ],
+        },
+      };
+
+      try {
+        const apiRes = await fetch(`https://graph.facebook.com/v22.0/${PHONE_ID}/messages`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${TOK}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const json = await apiRes.json();
+        res.json({
+          normalized,
+          originalPhone: phone,
+          httpStatus: apiRes.status,
+          httpOk: apiRes.ok,
+          whatsappResponse: json,
+          templateUsed: TEMPLATE_UTILITY,
+          note: apiRes.ok
+            ? "API accepted the message — check your WhatsApp to confirm delivery"
+            : "API rejected the message — see whatsappResponse for error details",
+        });
+      } catch (err) {
+        res.json({ normalized, originalPhone: phone, error: String(err) });
+      }
+    });
+
+  
   // ─── Types ────────────────────────────────────────────────────────────────
   interface WhatsAppWebhookPayload {
     object: string;
