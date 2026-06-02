@@ -13,7 +13,7 @@ import {
   ChevronRight,
   MessageSquare,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -33,6 +33,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { employee, logout } = useAuth();
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [waUnread, setWaUnread] = useState(0);
+
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const r = await fetch("/api/whatsapp/chats", { credentials: "include" });
+        if (r.ok) {
+          const chats: { unread: number }[] = await r.json();
+          const total = chats.reduce((sum, c) => sum + Number(c.unread ?? 0), 0);
+          setWaUnread(total);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 12000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -79,8 +96,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                   )}
                 >
-                  <item.icon size={18} className="flex-shrink-0" />
-                  {sidebarOpen && <span className="truncate">{item.label}</span>}
+                  <div className="relative flex-shrink-0">
+                    <item.icon size={18} />
+                    {item.href === "/whatsapp" && waUnread > 0 && !sidebarOpen && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-green-500 text-white text-[9px] rounded-full min-w-[14px] h-[14px] flex items-center justify-center font-bold px-0.5 leading-none">
+                        {waUnread > 99 ? "99+" : waUnread}
+                      </span>
+                    )}
+                  </div>
+                  {sidebarOpen && <span className="truncate flex-1">{item.label}</span>}
+                  {sidebarOpen && item.href === "/whatsapp" && waUnread > 0 && (
+                    <span className="bg-green-500 text-white text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center font-bold px-1 flex-shrink-0">
+                      {waUnread > 99 ? "99+" : waUnread}
+                    </span>
+                  )}
                 </a>
               </Link>
             );
