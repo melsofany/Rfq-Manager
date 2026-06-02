@@ -120,7 +120,7 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
 
 async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 35_000);
+    const timeoutId = setTimeout(() => controller.abort(), 90_000);
     try {
       const response = await fetch(`/api/rfq/${rfqId}/dispatch-report`, {
         credentials: "include",
