@@ -367,7 +367,7 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
 
     if (supplier.phone) {
       try {
-        const { pdfSent } = await sendRfqWhatsApp({
+        const { pdfSent, waMessageId: sentWaId } = await sendRfqWhatsApp({
           phone: supplier.phone,
           toName: supplier.contactPerson || supplier.name,
           rfqNo: rfq.internalRfqNo,
@@ -385,6 +385,7 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
         const normalizedPhone = supplier.phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
         if (pdfSent) {
           await db.insert(whatsappChatsTable).values({
+            waMessageId: sentWaId,
             direction: "outbound",
             phone: normalizedPhone,
             supplierId: supplier.id,
@@ -393,6 +394,7 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           });
         }
         await db.insert(whatsappChatsTable).values({
+          waMessageId: sentWaId,
           direction: "outbound",
           phone: normalizedPhone,
           supplierId: supplier.id,
