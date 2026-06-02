@@ -404,6 +404,73 @@ import { Router, type Response } from "express";
     });
   });
 
+  
+  // ─── GET /api/whatsapp/diagnose ───────────────────────────────────────────
+  router.get("/whatsapp/diagnose", requireAuth, async (req, res): Promise<void> => {
+    const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    const TOK = process.env.WHATSAPP_TOKEN;
+    const WABA_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+    const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
+    const TEMPLATE_NAMES = [
+      process.env.WHATSAPP_TEMPLATE_PDF     || "rfq_pdf_ar",
+      process.env.WHATSAPP_TEMPLATE_TEXT    || "rfq_send_ar",
+      process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar",
+    ];
+
+    if (!PHONE_ID || !TOK) {
+      res.json({ configured: false, error: "Missing WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_TOKEN" });
+      return;
+    }
+
+    // 1. Phone number details
+    let phoneInfo: Record<string, unknown> = {};
+    try {
+      const r = await fetch(
+        `https://graph.facebook.com/v22.0/${PHONE_ID}?fields=display_phone_number,verified_name,quality_rating,status,platform_type`,
+        { headers: { Authorization: `Bearer ${TOK}` } }
+      );
+      phoneInfo = await r.json() as Record<string, unknown>;
+    } catch (e) {
+      phoneInfo = { error: String(e) };
+    }
+
+    // 2. Template status (needs WABA_ID)
+    let templates: Record<string, unknown> = {};
+    if (WABA_ID) {
+      try {
+        const r = await fetch(
+          `https://graph.facebook.com/v22.0/${WABA_ID}/message_templates?limit=30&fields=name,status,quality_score,language,category`,
+          { headers: { Authorization: `Bearer ${TOK}` } }
+        );
+        const data = await r.json() as { data?: Array<{ name: string; status: string; language: string; category?: string; quality_score?: unknown }> };
+        const all = data.data ?? [];
+        // Filter to our templates
+        const ourTemplates = all.filter(t => TEMPLATE_NAMES.includes(t.name) || t.language === TEMPLATE_LANG);
+        templates = {
+          total: all.length,
+          our_templates: ourTemplates,
+          all_names: all.map(t => ({ name: t.name, status: t.status, lang: t.language })),
+        };
+      } catch (e) {
+        templates = { error: String(e) };
+      }
+    } else {
+      templates = { warning: "WHATSAPP_BUSINESS_ACCOUNT_ID not set — cannot check template status" };
+    }
+
+    // 3. Credentials summary (no secrets exposed)
+    const creds = {
+      WHATSAPP_PHONE_NUMBER_ID: PHONE_ID ? "✓ set (" + PHONE_ID.slice(0, 5) + "...)" : "✗ missing",
+      WHATSAPP_TOKEN: TOK ? "✓ set (length=" + TOK.length + ")" : "✗ missing",
+      WHATSAPP_BUSINESS_ACCOUNT_ID: WABA_ID ? "✓ set" : "✗ missing — add this env var to check template status",
+      WHATSAPP_VERIFY_TOKEN: process.env.WHATSAPP_VERIFY_TOKEN ? "✓ set" : "✗ missing",
+      template_names: TEMPLATE_NAMES,
+      template_lang: TEMPLATE_LANG,
+    };
+
+    res.json({ configured: true, phone: phoneInfo, templates, creds });
+  });
+
   // ─── Types ────────────────────────────────────────────────────────────────
   interface WhatsAppWebhookPayload {
     object: string;
