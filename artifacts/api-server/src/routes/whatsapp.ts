@@ -47,6 +47,14 @@ router.post("/webhook/whatsapp", async (req, res): Promise<void> => {
         for (const status of value.statuses ?? []) {
             if (status.status === "failed") {
               logger.error({ id: status.id, status: status.status, errors: status.errors }, "WhatsApp message delivery FAILED");
+              // Remove chat records tied to this failed message so the supplier
+              // does not appear in the WhatsApp chat list for a message they never received.
+              try {
+                await db.delete(whatsappChatsTable).where(eq(whatsappChatsTable.waMessageId, status.id));
+                logger.info({ waMessageId: status.id }, "Removed chat records for failed WhatsApp delivery");
+              } catch (delErr) {
+                logger.warn({ err: delErr, waMessageId: status.id }, "Could not remove failed delivery chat records");
+              }
             } else {
               logger.info({ id: status.id, status: status.status }, "WhatsApp status update");
             }
