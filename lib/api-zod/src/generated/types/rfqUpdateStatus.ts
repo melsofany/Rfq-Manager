@@ -15,4 +15,5 @@ export const RfqUpdateStatus = {
   partial: 'partial',
   completed: 'completed',
   closed: 'closed',
+  cancelled: 'cancelled',
 } as const;

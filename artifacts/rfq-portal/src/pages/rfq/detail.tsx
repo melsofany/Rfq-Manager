@@ -5,6 +5,7 @@ import {
   useListRfqItems,
   useGetRfqSentLog,
   useGetRfqOffers,
+  useUpdateRfq,
   getGetRfqQueryKey,
   getListRfqItemsQueryKey,
   getGetRfqSentLogQueryKey,
@@ -13,7 +14,7 @@ import {
 import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Send, Eye, CheckCircle2, XCircle, AlertTriangle, FileSpreadsheet, FileText, ClipboardList } from "lucide-react";
+import { ArrowLeft, Send, Eye, CheckCircle2, XCircle, AlertTriangle, FileSpreadsheet, FileText, ClipboardList, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -191,6 +192,20 @@ export default function RfqDetailPage() {
   const { data: sentLog, isLoading: sentLogLoading } = useGetRfqSentLog(rfqId, { query: { queryKey: getGetRfqSentLogQueryKey(rfqId), enabled: tab === "sent" && !!rfqId } });
   const { data: offersData } = useGetRfqOffers(rfqId, { query: { queryKey: getGetRfqOffersQueryKey(rfqId), enabled: (tab === "offers" || exporting != null) && !!rfqId } });
 
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const cancelMutation = useUpdateRfq({
+    mutation: {
+      onSuccess: () => {
+        toast.success("تم إلغاء طلب التسعير بنجاح");
+        navigate("/rfq");
+      },
+      onError: () => {
+        toast.error("حدث خطأ أثناء إلغاء الطلب");
+        setShowCancelConfirm(false);
+      },
+    },
+  });
+
   const handleExportExcel = async () => {
     if (!rfq || !offersData) return;
     setExporting("excel");
@@ -271,7 +286,37 @@ export default function RfqDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {rfq.status !== "closed" && (
+            {rfq.status === "draft" && (
+              showCancelConfirm ? (
+                <>
+                  <span className="text-xs text-muted-foreground">هل أنت متأكد من الإلغاء؟</span>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => cancelMutation.mutate({ id: rfqId, data: { status: "cancelled" } })}
+                    disabled={cancelMutation.isPending}
+                    className="gap-1.5"
+                  >
+                    <Trash2 size={14} />
+                    نعم، إلغاء
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowCancelConfirm(false)}>
+                    لا
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCancelConfirm(true)}
+                  className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
+                >
+                  <Trash2 size={14} />
+                  إلغاء الطلب
+                </Button>
+              )
+            )}
+            {rfq.status !== "closed" && rfq.status !== "cancelled" && (
               <Button onClick={() => navigate(`/rfq/${rfqId}/send`)} size="sm" className="gap-1.5">
                 <Send size={14} />
                 Send to Suppliers

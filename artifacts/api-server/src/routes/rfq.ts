@@ -246,12 +246,35 @@ router.get("/rfq/:id", requireAuth, async (req, res): Promise<void> => {
 router.patch("/rfq/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
+
+  // Only draft RFQs can be cancelled
+  if (req.body.status === "cancelled") {
+    const [existing] = await db.select().from(rfqTable).where(eq(rfqTable.id, id));
+    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+    if (existing.status !== "draft") {
+      res.status(400).json({ error: "فقط طلبات التسعير المسودة يمكن إلغاؤها" });
+      return;
+    }
+  }
+
   const updates: Record<string, unknown> = {};
   if (req.body.status) updates.status = req.body.status;
   if (req.body.notes !== undefined) updates.notes = req.body.notes;
 
   const [rfq] = await db.update(rfqTable).set(updates).where(eq(rfqTable.id, id)).returning();
   if (!rfq) { res.status(404).json({ error: "Not found" }); return; }
+
+  if (req.body.status === "cancelled") {
+    await db.insert(auditLogTable).values({
+      action: "rfq.cancelled",
+      entityType: "rfq",
+      entityId: id,
+      employeeId: req.session.employeeId,
+      description: `Cancelled RFQ ${rfq.internalRfqNo}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+  }
 
   res.json({
     id: rfq.id, internalRfqNo: rfq.internalRfqNo, customerRfqNo: rfq.customerRfqNo,

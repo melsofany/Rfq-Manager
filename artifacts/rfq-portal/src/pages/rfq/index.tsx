@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, FileText } from "lucide-react";
 
-const STATUSES = ["all", "draft", "sent", "partial", "completed", "closed"];
+const STATUSES = ["all", "draft", "sent", "partial", "completed", "closed", "cancelled"];
 
 export default function RfqListPage() {
   const [, navigate] = useLocation();

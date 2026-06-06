@@ -143,6 +143,7 @@ export const RfqStatus = {
   partial: 'partial',
   completed: 'completed',
   closed: 'closed',
+  cancelled: 'cancelled',
 } as const;
 
 export interface Rfq {
@@ -187,6 +188,7 @@ export const RfqUpdateStatus = {
   partial: 'partial',
   completed: 'completed',
   closed: 'closed',
+  cancelled: 'cancelled',
 } as const;
 
 export interface RfqUpdate {
