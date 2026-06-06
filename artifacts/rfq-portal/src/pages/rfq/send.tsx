@@ -4,10 +4,12 @@ import { useState } from "react";
   import {
     useGetRfq,
     useListSuppliers,
+    useListCategories,
     useSendRfqToSuppliers,
     getGetRfqQueryKey,
     getListSuppliersQueryKey,
     getGetRfqSentLogQueryKey,
+    getListCategoriesQueryKey,
   } from "@workspace/api-client-react";
   import { Layout } from "@/components/Layout";
   import { Button } from "@/components/ui/button";
