@@ -61,21 +61,7 @@ import { useState } from "react";
       query: { queryKey: getListCategoriesQueryKey() },
     });
 
-    // Merge API categories with any categories already stored on the supplier
-      // so orphaned categories (not in supplier_categories table) still appear in edit form
-      const mergedCategories = useMemo(() => {
-        const base = [...categories];
-        const existingNames = new Set(base.map((c) => c.name));
-        for (const catName of parseCategories(supplier?.category)) {
-          if (!existingNames.has(catName)) {
-            base.push({ id: -(existingNames.size + 1), name: catName });
-            existingNames.add(catName);
-          }
-        }
-        return base.sort((a, b) => a.name.localeCompare(b.name));
-      }, [categories, supplier?.category]);
-
-      const { data: supplier, isLoading } = useGetSupplier(supplierId, {
+    const { data: supplier, isLoading } = useGetSupplier(supplierId, {
       query: { queryKey: getGetSupplierQueryKey(supplierId), enabled: !!supplierId },
     });
     const { data: score } = useGetSupplierScore(supplierId, {
