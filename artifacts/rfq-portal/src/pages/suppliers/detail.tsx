@@ -68,6 +68,19 @@ import { useState } from "react";
       query: { queryKey: getGetSupplierScoreQueryKey(supplierId), enabled: !!supplierId },
     });
 
+    // Merge API categories with any categories stored on the supplier that are not in supplier_categories
+    const mergedCategories = useMemo(() => {
+      const base = [...categories];
+      const existingNames = new Set(base.map((c) => c.name));
+      for (const catName of parseCategories(supplier?.category)) {
+        if (!existingNames.has(catName)) {
+          base.push({ id: -(existingNames.size + 1), name: catName });
+          existingNames.add(catName);
+        }
+      }
+      return base.sort((a, b) => a.name.localeCompare(b.name));
+    }, [categories, supplier?.category]);
+
     const updateMutation = useUpdateSupplier({
       mutation: {
         onSuccess: () => {
