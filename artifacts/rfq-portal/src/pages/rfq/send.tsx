@@ -20,8 +20,6 @@ import { useState } from "react";
     return cat.split(",").map((s) => s.trim()).filter(Boolean);
   }
 
-  const { data: dbCategories = [] } = useListCategories({ query: { queryKey: getListCategoriesQueryKey() } });
-    const CATEGORIES = ["all", ...dbCategories.map((c) => c.name)];
 
   type SendResult = {
     supplierId: number;
@@ -43,6 +41,9 @@ import { useState } from "react";
     const [search, setSearch] = useState("");
     const [closeDate, setCloseDate] = useState("");
     const [sendResults, setSendResults] = useState<SendResult[] | null>(null);
+
+    const { data: dbCategories = [] } = useListCategories({ query: { queryKey: getListCategoriesQueryKey() } });
+    const CATEGORIES = ["all", ...dbCategories.map((c) => c.name)];
 
     const { data: rfq } = useGetRfq(rfqId, { query: { queryKey: getGetRfqQueryKey(rfqId), enabled: !!rfqId } });
     const { data: suppliers } = useListSuppliers(
