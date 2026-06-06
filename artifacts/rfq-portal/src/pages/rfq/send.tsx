@@ -20,7 +20,8 @@ import { useState } from "react";
     return cat.split(",").map((s) => s.trim()).filter(Boolean);
   }
 
-  const CATEGORIES = ["all", "electrical", "cables", "mechanical", "safety & firefighting", "civil", "instrumentation", "HVAC"];
+  const { data: dbCategories = [] } = useListCategories({ query: { queryKey: getListCategoriesQueryKey() } });
+    const CATEGORIES = ["all", ...dbCategories.map((c) => c.name)];
 
   type SendResult = {
     supplierId: number;
