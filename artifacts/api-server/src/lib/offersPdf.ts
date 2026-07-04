@@ -156,35 +156,36 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
         new Set(opts.itemAnalysis.flatMap((ia) => ia.offers.map((o) => o.supplierName)))
       );
 
-      // Fixed columns: #, Description, Part No, QTY/UOM
-      const fixedCols = [
+      // Layout: [mainCols...] [supGroupW × n] [summaryCol]
+      // Summary is always LAST — consistent between header and data rows.
+      const mainCols = [
         { label: "#", w: 26 },
         { label: "Description", w: 160 },
         { label: "Part No", w: 82 },
         { label: "QTY", w: 54 },
-        { label: "Summary (Incl. VAT)", w: 148 },
       ];
-      const fixedW = fixedCols.reduce((s, c) => s + c.w, 0);
-      const remaining = CONTENT_W - fixedW;
-      // Each supplier gets 2 sub-columns: Original | Incl. VAT
+      const SUMMARY_W = 148;
+      const mainW = mainCols.reduce((s, c) => s + c.w, 0);
+      const remaining = CONTENT_W - mainW - SUMMARY_W;
       const supGroupW = allSuppliers.length > 0 ? Math.max(90, Math.floor(remaining / allSuppliers.length)) : 90;
       const supColW = Math.floor(supGroupW / 2);
 
-      const totalTableW = fixedW + supGroupW * allSuppliers.length;
+      const totalTableW = mainW + supGroupW * allSuppliers.length + SUMMARY_W;
       const tableX = MARGIN + Math.max(0, (CONTENT_W - totalTableW) / 2);
       const ROW_H = 22;
       const PAGE_H = doc.page.height;
 
       const drawHeader = (hy: number): number => {
-        // Top row — supplier names spanning 2 sub-cols each
         doc.rect(tableX, hy, totalTableW, ROW_H).fill(BLUE);
-        // Fixed col headers
+
+        // Main cols
         let cx = tableX;
-        fixedCols.forEach((col) => {
+        mainCols.forEach((col) => {
           doc.font(FONT_BOLD).fontSize(7).fillColor("#ffffff")
             .text(col.label, cx + 2, hy + 7, { width: col.w - 4, align: "center", lineBreak: false });
           cx += col.w;
         });
+
         // Supplier group headers
         allSuppliers.forEach((s) => {
           doc.font(FONT_BOLD).fontSize(7).fillColor("#ffffff")
@@ -192,11 +193,16 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
           cx += supGroupW;
         });
 
-        // Second row — sub-headers for each supplier
+        // Summary header (last)
+        doc.font(FONT_BOLD).fontSize(7).fillColor("#ffffff")
+          .text("Summary (Incl. VAT)", cx + 2, hy + 7, { width: SUMMARY_W - 4, align: "center", lineBreak: false });
+
+        // Second row — sub-headers
         const subY = hy + ROW_H;
         doc.rect(tableX, subY, totalTableW, 16).fill("#2a4a6c");
+
         cx = tableX;
-        fixedCols.forEach((col) => {
+        mainCols.forEach((col) => {
           doc.rect(cx, subY, col.w, 16).stroke(BORDER);
           cx += col.w;
         });
@@ -208,6 +214,8 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
             .text("Incl. VAT *", cx + 2, subY + 4, { width: supColW - 4, align: "center", lineBreak: false });
           cx += supColW;
         });
+        // Summary sub-header
+        doc.rect(cx, subY, SUMMARY_W, 16).stroke(BORDER);
 
         return subY + 16;
       };
@@ -228,9 +236,9 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
         const rowBg = idx % 2 === 0 ? "#ffffff" : GREY;
         doc.rect(tableX, y, totalTableW, ROW_H).fill(rowBg);
 
-        // Draw light cell borders
+        // Cell borders
         let cx = tableX;
-        fixedCols.forEach((col) => {
+        mainCols.forEach((col) => {
           doc.rect(cx, y, col.w, ROW_H).stroke(BORDER);
           cx += col.w;
         });
@@ -238,26 +246,27 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
           doc.rect(cx, y, supGroupW, ROW_H).stroke(BORDER);
           cx += supGroupW;
         });
+        doc.rect(cx, y, SUMMARY_W, ROW_H).stroke(BORDER);
 
-        // Fill fixed cols
+        // Fill main cols
         cx = tableX;
         const textY = y + 7;
 
         doc.font(FONT).fontSize(7.5).fillColor("#555")
-          .text(String(idx + 1), cx + 2, textY, { width: fixedCols[0].w - 4, align: "center", lineBreak: false });
-        cx += fixedCols[0].w;
+          .text(String(idx + 1), cx + 2, textY, { width: mainCols[0].w - 4, align: "center", lineBreak: false });
+        cx += mainCols[0].w;
 
         doc.font(FONT).fontSize(7.5).fillColor("#1a1a1a")
-          .text(item.description, cx + 3, textY, { width: fixedCols[1].w - 6, lineBreak: false });
-        cx += fixedCols[1].w;
+          .text(item.description, cx + 3, textY, { width: mainCols[1].w - 6, lineBreak: false });
+        cx += mainCols[1].w;
 
         doc.font(FONT).fontSize(7).fillColor("#555")
-          .text(item.partNo ?? "—", cx + 2, textY, { width: fixedCols[2].w - 4, align: "center", lineBreak: false });
-        cx += fixedCols[2].w;
+          .text(item.partNo ?? "—", cx + 2, textY, { width: mainCols[2].w - 4, align: "center", lineBreak: false });
+        cx += mainCols[2].w;
 
         doc.font(FONT).fontSize(7.5).fillColor("#333")
-          .text(item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—", cx + 2, textY, { width: fixedCols[3].w - 4, align: "center", lineBreak: false });
-        cx += fixedCols[3].w;
+          .text(item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—", cx + 2, textY, { width: mainCols[3].w - 4, align: "center", lineBreak: false });
+        cx += mainCols[3].w;
 
         // Supplier price columns
         const bySupplier: Record<string, { price: number; priceWithVat: number; isLowest: boolean; isAnomaly: boolean }> = {};
@@ -281,29 +290,21 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
             cx += supColW;
           } else {
             const priceColor = p.isLowest ? GREEN : p.isAnomaly ? AMBER : "#333";
-            // Original price
             doc.font(FONT).fontSize(7.5).fillColor("#555")
               .text(fmt(p.price), cx + 2, textY, { width: supColW - 4, align: "right", lineBreak: false });
             cx += supColW;
-            // VAT-normalized price
             doc.font(FONT_BOLD).fontSize(7.5).fillColor(priceColor)
-              .text(fmt(p.priceWithVat), cx + 2, textY, { width: supColW - 4, align: "right", lineBreak: false });
-            if (p.isLowest) {
-              doc.font(FONT).fontSize(6).fillColor(GREEN)
-                .text("LOW", cx + 2, textY - 4, { width: supColW - 4, align: "left", lineBreak: false });
-            }
+              .text(fmt(p.priceWithVat) + (p.isLowest ? " ✓" : ""), cx + 2, textY, { width: supColW - 4, align: "right", lineBreak: false });
             cx += supColW;
           }
         });
 
-        // Summary col (VAT-inclusive min/avg/max)
-        const summaryCol = fixedCols[4];
-        const sx = tableX + fixedCols.slice(0, 4).reduce((a, c) => a + c.w, 0) + supGroupW * allSuppliers.length;
+        // Summary col — always last
         const summaryText = item.minPrice != null
           ? `Min: ${fmt(item.minPrice)}\nAvg: ${fmt(item.avgPrice!)}\nMax: ${fmt(item.maxPrice!)}`
           : "No quotes";
         doc.font(FONT).fontSize(6.5).fillColor("#444")
-          .text(summaryText, sx + 2, y + 3, { width: summaryCol.w - 6, align: "center", lineBreak: true });
+          .text(summaryText, cx + 2, y + 3, { width: SUMMARY_W - 6, align: "center", lineBreak: true });
 
         y += ROW_H;
       });

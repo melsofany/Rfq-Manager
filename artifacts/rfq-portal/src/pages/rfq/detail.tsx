@@ -93,11 +93,22 @@ function PriceCell({
   );
 }
 
+// ── Normalize offers: compute priceWithVat if missing from API response ────────
+function normalizeItems(offersData: OffersData): ItemAnalysis[] {
+  return (offersData.analysis?.itemAnalysis ?? []).map((item) => ({
+    ...item,
+    offers: (item.offers as OfferRow[]).map((o) => ({
+      ...o,
+      priceWithVat: (o as OfferRow).priceWithVat ?? (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
+    })),
+  }));
+}
+
 // ── Excel export ─────────────────────────────────────────────────────────────
 async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: OffersData) {
   const { utils, writeFile } = await import("xlsx");
   const wb = utils.book_new();
-  const items = offersData.analysis?.itemAnalysis ?? [];
+  const items = normalizeItems(offersData);
 
   const summaryRows: unknown[][] = [
     ["Cortoba Supplies — قرطبة للتوريدات"],
@@ -187,16 +198,22 @@ async function exportToPdf(
   customerRfqNo: string,
   offersData: OffersData,
 ): Promise<void> {
-  // Dynamic imports to keep initial bundle small
-  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+  // Dynamic imports — jsPDF v4 uses named export { jsPDF }
+  const [jspdfMod, { default: autoTable }] = await Promise.all([
     import("jspdf"),
     import("jspdf-autotable"),
   ]);
+  // Support both named export (v4) and default export (older)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const JsPDF: new (...args: unknown[]) => unknown = (jspdfMod as Record<string, unknown>).jsPDF as never
+    ?? (jspdfMod as Record<string, unknown>).default as never;
+  if (!JsPDF) throw new Error("jsPDF module could not be loaded");
 
-  const items: ItemAnalysis[] = offersData.analysis?.itemAnalysis ?? [];
+  const items: ItemAnalysis[] = normalizeItems(offersData);
   if (items.length === 0) throw new Error("لا توجد عروض لتصديرها");
 
-  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const doc = new (JsPDF as any)({ orientation: "landscape", unit: "mm", format: "a4" });
 
   const BLUE = [26, 58, 92] as [number, number, number];
   const GOLD = [200, 168, 75] as [number, number, number];
