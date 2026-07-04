@@ -14,74 +14,110 @@ import {
 import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Send, Eye, CheckCircle2, XCircle, AlertTriangle, FileSpreadsheet, FileText, ClipboardList, Trash2 } from "lucide-react";
+import {
+  ArrowLeft, Send, Eye, CheckCircle2, XCircle,
+  AlertTriangle, FileSpreadsheet, FileText, ClipboardList, Trash2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+const VAT_RATE = 0.14;
+const VAT_LABEL = "14%";
+
 type Tab = "items" | "sent" | "offers";
 
-function PriceCell({ value, isLowest, isAnomaly }: { value: number; isLowest: boolean; isAnomaly: boolean }) {
-  return (
-    <span className={cn(
-      "font-mono text-xs",
-      isLowest && "text-green-700 font-bold",
-      isAnomaly && "text-amber-600"
-    )}>
-      {value.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
-      {isLowest && <span className="ml-1 text-green-600 text-[10px]">LOW</span>}
-      {isAnomaly && <span className="ml-1 text-amber-600 text-[10px]"><AlertTriangle size={10} className="inline" /></span>}
-    </span>
-  );
-}
+type OfferRow = {
+  supplierId: number;
+  supplierName: string;
+  price: number;
+  priceWithVat: number;
+  taxIncluded: boolean;
+  deliveryDays?: number | null;
+  deviation: number;
+  isLowest: boolean;
+  isAnomaly: boolean;
+};
+
+type ItemAnalysis = {
+  rfqItemId: number;
+  description: string;
+  partNo?: string | null;
+  qty?: string | number | null;
+  uom?: string | null;
+  referencePrice?: number | null;
+  minPrice?: number | null;
+  maxPrice?: number | null;
+  avgPrice?: number | null;
+  offers: OfferRow[];
+};
 
 type OffersData = {
-  analysis?: {
-    itemAnalysis?: Array<{
-      rfqItemId: number;
-      description: string;
-      partNo?: string | null;
-      qty?: string | null;
-      uom?: string | null;
-      referencePrice?: number | null;
-      minPrice?: number | null;
-      maxPrice?: number | null;
-      avgPrice?: number | null;
-      offers: Array<{
-        supplierId: number;
-        supplierName: string;
-        price: number;
-        taxIncluded: boolean;
-        deliveryDays?: number | null;
-        deviation: number;
-        isLowest: boolean;
-        isAnomaly: boolean;
-      }>;
-    }>;
-  };
+  analysis?: { itemAnalysis?: ItemAnalysis[] };
   offers?: unknown[];
 };
 
+// ── Price cell ──────────────────────────────────────────────────────────────
+function PriceCell({
+  price,
+  priceWithVat,
+  taxIncluded,
+  isLowest,
+  isAnomaly,
+}: {
+  price: number;
+  priceWithVat: number;
+  taxIncluded: boolean;
+  isLowest: boolean;
+  isAnomaly: boolean;
+}) {
+  return (
+    <div className="text-right leading-tight">
+      {/* VAT-inclusive price — primary comparison value */}
+      <div className={cn(
+        "font-mono text-xs font-semibold",
+        isLowest && "text-green-700",
+        isAnomaly && !isLowest && "text-amber-600",
+        !isLowest && !isAnomaly && "text-foreground",
+      )}>
+        {priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
+        {isLowest && <span className="ml-1 text-[9px] bg-green-100 text-green-700 rounded px-1">أقل سعر</span>}
+        {isAnomaly && !isLowest && <AlertTriangle size={10} className="inline ml-1 text-amber-500" />}
+      </div>
+      {/* Original price — secondary, shown if tax was excluded */}
+      {!taxIncluded && (
+        <div className="text-[10px] text-muted-foreground font-mono">
+          قبل الضريبة: {price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Excel export ─────────────────────────────────────────────────────────────
 async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: OffersData) {
   const { utils, writeFile } = await import("xlsx");
   const wb = utils.book_new();
-
   const items = offersData.analysis?.itemAnalysis ?? [];
 
   const summaryRows: unknown[][] = [
-    ["Cortoba Supplies - قرطبة للتوريدات"],
-    ["RFQ Price Comparison Report"],
+    ["Cortoba Supplies — قرطبة للتوريدات"],
+    ["تقرير مقارنة الأسعار — RFQ Price Comparison (VAT Inclusive)"],
     [`Internal RFQ: ${rfqNo}`, `Customer RFQ: ${customerRfqNo}`],
-    [`Exported: ${new Date().toLocaleDateString("en-EG")}`],
+    [`Exported: ${new Date().toLocaleDateString("en-EG")}`, `VAT Rate: ${VAT_LABEL}`],
     [],
-    ["#", "Part No", "Description", "QTY", "UOM", "Ref. Price (EGP)", "Supplier", "Unit Price (EGP)", "Tax Inc.", "Lead (days)", "vs. Avg %", "Lowest?"],
+    [
+      "#", "Part No", "Description", "QTY", "UOM", "Ref. Price (EGP)",
+      "Supplier", "Original Price (EGP)", "Tax Inc.", "Price incl. VAT (EGP)",
+      "Lead (days)", "vs. Avg (VAT-adj) %", "Lowest?",
+    ],
   ];
 
   items.forEach((item, idx) => {
-    const sorted = item.offers.slice().sort((a, b) => a.price - b.price);
+    const sorted = item.offers.slice().sort((a, b) => a.priceWithVat - b.priceWithVat);
     if (sorted.length === 0) {
       summaryRows.push([
         idx + 1, item.partNo ?? "-", item.description, item.qty ?? "-", item.uom ?? "-",
-        item.referencePrice ?? "-", "No offers yet", "", "", "", "", "",
+        item.referencePrice ?? "-", "No offers yet", "", "", "", "", "", "",
       ]);
     } else {
       sorted.forEach((o, oi) => {
@@ -95,16 +131,16 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
           o.supplierName,
           o.price,
           o.taxIncluded ? "Yes" : "No",
+          o.priceWithVat,
           o.deliveryDays ?? "-",
           `${o.deviation > 0 ? "+" : ""}${o.deviation.toFixed(1)}%`,
           o.isLowest ? "YES" : "",
         ]);
       });
       summaryRows.push([
-        "", "", "", "", "", "",
-        "Summary",
+        "", "", "", "", "", "", "Summary (Incl. VAT)",
         `Min: ${item.minPrice?.toFixed(2) ?? "-"} | Avg: ${item.avgPrice?.toFixed(2) ?? "-"} | Max: ${item.maxPrice?.toFixed(2) ?? "-"}`,
-        "", "", "", "",
+        "", "", "", "", "",
       ]);
       summaryRows.push([]);
     }
@@ -113,73 +149,250 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
   const ws = utils.aoa_to_sheet(summaryRows);
   ws["!cols"] = [
     { wch: 4 }, { wch: 14 }, { wch: 40 }, { wch: 8 }, { wch: 8 },
-    { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 8 },
+    { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 8 },
   ];
   utils.book_append_sheet(wb, ws, "Price Comparison");
   writeFile(wb, `RFQ-Comparison-${rfqNo}.xlsx`);
 }
 
+// ── Dispatch report PDF (server-side) ────────────────────────────────────────
 async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void> {
-    // Server-side timeouts guarantee a response in ≤30 s — no client abort needed
-    const response = await fetch(`/api/rfq/${rfqId}/dispatch-report`, {
-      credentials: "include",
-    });
-    if (!response.ok) {
-      let errMsg = `Server error ${response.status}`;
-      try {
-        const json = await response.json();
-        if (json?.detail) errMsg = json.detail;
-        else if (json?.error) errMsg = json.error;
-      } catch { /* ignore */ }
-      throw new Error(errMsg);
-    }
-    const blob = await response.blob();
-    if (!blob || blob.size === 0) {
-      throw new Error("الملف المُولَّد فارغ — تحقق من سجل الإرسال أو تواصل مع الدعم الفني");
-    }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Dispatch-Report-${rfqNo}.pdf`;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  const response = await fetch(`/api/rfq/${rfqId}/dispatch-report`, { credentials: "include" });
+  if (!response.ok) {
+    let errMsg = `Server error ${response.status}`;
+    try {
+      const json = await response.json();
+      if (json?.detail) errMsg = json.detail;
+      else if (json?.error) errMsg = json.error;
+    } catch { /* ignore */ }
+    throw new Error(errMsg);
   }
-
-  async function exportToPdf(rfqId: number, rfqNo: string): Promise<void> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 35_000);
-  try {
-    const response = await fetch(`/api/rfq/${rfqId}/offers/pdf`, {
-      credentials: "include",
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      let errMsg = `Server error ${response.status}`;
-      try {
-        const json = await response.json();
-        if (json?.detail) errMsg = json.detail;
-        else if (json?.error) errMsg = json.error;
-      } catch { /* ignore */ }
-      throw new Error(errMsg);
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `RFQ-Comparison-${rfqNo}.pdf`;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    // Delay revoke so the browser finishes reading the blob before it is freed
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  } finally {
-    clearTimeout(timeoutId);
+  const blob = await response.blob();
+  if (!blob || blob.size === 0) {
+    throw new Error("الملف المُولَّد فارغ — تحقق من سجل الإرسال أو تواصل مع الدعم الفني");
   }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Dispatch-Report-${rfqNo}.pdf`;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
+// ── Offers PDF — client-side via jsPDF + autotable ───────────────────────────
+async function exportToPdf(
+  rfqNo: string,
+  customerRfqNo: string,
+  offersData: OffersData,
+): Promise<void> {
+  // Dynamic imports to keep initial bundle small
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+
+  const items: ItemAnalysis[] = offersData.analysis?.itemAnalysis ?? [];
+  if (items.length === 0) throw new Error("لا توجد عروض لتصديرها");
+
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+  const BLUE = [26, 58, 92] as [number, number, number];
+  const GOLD = [200, 168, 75] as [number, number, number];
+  const GREEN = [22, 101, 52] as [number, number, number];
+  const AMBER = [180, 83, 9] as [number, number, number];
+  const WHITE: [number, number, number] = [255, 255, 255];
+  const GREY: [number, number, number] = [244, 248, 252];
+
+  const PW = doc.internal.pageSize.getWidth();
+  const MARGIN = 10;
+  const CW = PW - MARGIN * 2;
+
+  // ── Header ────────────────────────────────────────────────────────────────
+  doc.setFillColor(...BLUE);
+  doc.rect(0, 0, PW, 22, "F");
+  doc.setTextColor(...WHITE);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("RFQ PRICE COMPARISON REPORT", MARGIN + 2, 10);
+  doc.setTextColor(...GOLD);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text("Cortoba Supplies | VAT-inclusive comparison", MARGIN + 2, 17);
+
+  // ── Info band ─────────────────────────────────────────────────────────────
+  doc.setFillColor(...GREY);
+  doc.rect(MARGIN, 24, CW, 14, "F");
+  doc.setFillColor(...GOLD);
+  doc.rect(MARGIN, 38, CW, 1, "F");
+
+  const infoCells = [
+    { label: "Internal RFQ", value: rfqNo },
+    { label: "Customer RFQ", value: customerRfqNo },
+    { label: "Export Date", value: new Date().toLocaleDateString("en-GB") },
+    { label: "Items", value: String(items.length) },
+    { label: "VAT Rate", value: VAT_LABEL },
+  ];
+  const cellW = CW / infoCells.length;
+  infoCells.forEach((c, i) => {
+    const cx = MARGIN + i * cellW + cellW / 2;
+    doc.setTextColor(136, 153, 170);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "normal");
+    doc.text(c.label, cx, 29, { align: "center" });
+    doc.setTextColor(...BLUE);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text(c.value, cx, 36, { align: "center" });
+  });
+
+  // ── VAT note ──────────────────────────────────────────────────────────────
+  doc.setTextColor(100, 100, 100);
+  doc.setFontSize(6.5);
+  doc.setFont("helvetica", "italic");
+  doc.text(
+    `(*) "Price incl. VAT" column = supplier price × 1.14 when tax NOT included, otherwise price as-is. Min/Avg/Max are VAT-adjusted.`,
+    MARGIN,
+    43,
+  );
+
+  // ── Build table data ──────────────────────────────────────────────────────
+  const allSuppliers = Array.from(
+    new Set(items.flatMap((item) => item.offers.map((o) => o.supplierName)))
+  );
+
+  // Headers
+  const head: (string | { content: string; colSpan?: number })[][] = [];
+
+  // Row 1: fixed cols + supplier group spans
+  const row1: { content: string; colSpan?: number; styles?: object }[] = [
+    { content: "#" },
+    { content: "Description" },
+    { content: "Part No" },
+    { content: "QTY / UOM" },
+    ...allSuppliers.map((s) => ({
+      content: s,
+      colSpan: 2,
+      styles: { halign: "center" as const },
+    })),
+    { content: "Summary (Incl. VAT)" },
+  ];
+  head.push(row1 as never);
+
+  // Row 2: sub-headers for each supplier pair
+  const row2: { content: string; styles?: object }[] = [
+    { content: "" },
+    { content: "" },
+    { content: "" },
+    { content: "" },
+    ...allSuppliers.flatMap(() => [
+      { content: "Original (EGP)", styles: { fontSize: 6, textColor: [180, 83, 9] } },
+      { content: "Incl. VAT (EGP) *", styles: { fontSize: 6, textColor: [22, 101, 52] } },
+    ]),
+    { content: "" },
+  ];
+  head.push(row2 as never);
+
+  // Body rows
+  const body: (string | { content: string; styles: object })[][] = [];
+
+  items.forEach((item, idx) => {
+    const bySupplier = new Map<string, OfferRow>();
+    for (const o of item.offers) bySupplier.set(o.supplierName, o);
+
+    const summaryText =
+      item.minPrice != null
+        ? `Min: ${item.minPrice.toFixed(2)}\nAvg: ${item.avgPrice?.toFixed(2)}\nMax: ${item.maxPrice?.toFixed(2)}`
+        : "No quotes";
+
+    const row: (string | { content: string; styles: object })[] = [
+      String(idx + 1),
+      item.description,
+      item.partNo ?? "—",
+      item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—",
+      ...allSuppliers.flatMap((s) => {
+        const o = bySupplier.get(s);
+        if (!o) return ["—", "—"];
+        const origColor = o.taxIncluded ? [80, 80, 80] : [140, 100, 0];
+        const vatColor = o.isLowest ? GREEN : o.isAnomaly ? AMBER : [50, 50, 50];
+        return [
+          {
+            content: o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 }),
+            styles: { textColor: origColor, halign: "right" },
+          },
+          {
+            content: o.priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 }) + (o.isLowest ? " ✓" : ""),
+            styles: { textColor: vatColor, fontStyle: o.isLowest ? "bold" : "normal", halign: "right" },
+          },
+        ];
+      }),
+      summaryText,
+    ];
+    body.push(row);
+  });
+
+  // ── Render table ──────────────────────────────────────────────────────────
+  autoTable(doc, {
+    head,
+    body,
+    startY: 46,
+    margin: { left: MARGIN, right: MARGIN },
+    tableWidth: CW,
+    styles: {
+      font: "helvetica",
+      fontSize: 7.5,
+      cellPadding: 2,
+      lineColor: [208, 219, 232],
+      lineWidth: 0.2,
+      overflow: "linebreak",
+    },
+    headStyles: {
+      fillColor: BLUE,
+      textColor: WHITE,
+      fontStyle: "bold",
+      fontSize: 7,
+      halign: "center",
+    },
+    alternateRowStyles: { fillColor: GREY },
+    columnStyles: {
+      0: { cellWidth: 8, halign: "center" },
+      1: { cellWidth: 55 },
+      2: { cellWidth: 25, halign: "center" },
+      3: { cellWidth: 18, halign: "center" },
+      // Supplier cols assigned dynamically; last col = summary
+      [4 + allSuppliers.length * 2]: { cellWidth: 38 },
+    },
+    didDrawPage: (data) => {
+      // Repeat header on each page
+      if (data.pageNumber > 1) {
+        doc.setFillColor(...BLUE);
+        doc.rect(0, 0, PW, 10, "F");
+        doc.setTextColor(...GOLD);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "bold");
+        doc.text(`${rfqNo} — Cont.`, MARGIN, 7);
+      }
+      // Footer
+      const pageH = doc.internal.pageSize.getHeight();
+      doc.setFillColor(...BLUE);
+      doc.rect(0, pageH - 10, PW, 10, "F");
+      doc.setTextColor(...GOLD);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      doc.text(
+        `Cortoba Supplies | INFO@CORTOBA-SUPPLIES.COM | All values in EGP | VAT ${VAT_LABEL} applied to tax-exclusive prices`,
+        PW / 2,
+        pageH - 4,
+        { align: "center" },
+      );
+    },
+  });
+
+  doc.save(`RFQ-Comparison-${rfqNo}.pdf`);
+}
+
+// ── Main page component ───────────────────────────────────────────────────────
 export default function RfqDetailPage() {
   const { id } = useParams<{ id: string }>();
   const rfqId = parseInt(id, 10);
@@ -187,10 +400,21 @@ export default function RfqDetailPage() {
   const [tab, setTab] = useState<Tab>("items");
   const [exporting, setExporting] = useState<"excel" | "pdf" | "dispatch" | null>(null);
 
-  const { data: rfq, isLoading } = useGetRfq(rfqId, { query: { queryKey: getGetRfqQueryKey(rfqId), enabled: !!rfqId } });
-  const { data: items } = useListRfqItems(rfqId, { query: { queryKey: getListRfqItemsQueryKey(rfqId), enabled: !!rfqId } });
-  const { data: sentLog, isLoading: sentLogLoading } = useGetRfqSentLog(rfqId, { query: { queryKey: getGetRfqSentLogQueryKey(rfqId), enabled: tab === "sent" && !!rfqId } });
-  const { data: offersData } = useGetRfqOffers(rfqId, { query: { queryKey: getGetRfqOffersQueryKey(rfqId), enabled: (tab === "offers" || exporting != null) && !!rfqId } });
+  const { data: rfq, isLoading } = useGetRfq(rfqId, {
+    query: { queryKey: getGetRfqQueryKey(rfqId), enabled: !!rfqId },
+  });
+  const { data: items } = useListRfqItems(rfqId, {
+    query: { queryKey: getListRfqItemsQueryKey(rfqId), enabled: !!rfqId },
+  });
+  const { data: sentLog, isLoading: sentLogLoading } = useGetRfqSentLog(rfqId, {
+    query: { queryKey: getGetRfqSentLogQueryKey(rfqId), enabled: tab === "sent" && !!rfqId },
+  });
+  const { data: offersData } = useGetRfqOffers(rfqId, {
+    query: {
+      queryKey: getGetRfqOffersQueryKey(rfqId),
+      enabled: (tab === "offers" || exporting != null) && !!rfqId,
+    },
+  });
 
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const cancelMutation = useUpdateRfq({
@@ -231,10 +455,10 @@ export default function RfqDetailPage() {
   };
 
   const handleExportPdf = async () => {
-    if (!rfq) return;
+    if (!rfq || !offersData) return;
     setExporting("pdf");
     try {
-      await exportToPdf(rfqId, rfq.internalRfqNo);
+      await exportToPdf(rfq.internalRfqNo, rfq.customerRfqNo, offersData as OffersData);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       toast.error(`PDF export failed: ${msg}`);
@@ -282,7 +506,9 @@ export default function RfqDetailPage() {
                 <h1 className="text-xl font-bold text-foreground font-mono">{rfq.internalRfqNo}</h1>
                 <StatusBadge status={rfq.status} />
               </div>
-              <p className="text-muted-foreground text-sm mt-0.5">Customer RFQ: <span className="font-mono">{rfq.customerRfqNo}</span></p>
+              <p className="text-muted-foreground text-sm mt-0.5">
+                Customer RFQ: <span className="font-mono">{rfq.customerRfqNo}</span>
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -375,13 +601,19 @@ export default function RfqDetailPage() {
           {/* Export: Dispatch Report on Sent tab */}
           {tab === "sent" && (rfq.supplierCount ?? 0) > 0 && (
             <div className="flex items-center gap-2 pb-0.5">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8"
-                onClick={handleExportDispatch} disabled={exporting !== null || sentLogLoading}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs h-8"
+                onClick={handleExportDispatch}
+                disabled={exporting !== null || sentLogLoading}
+              >
                 <ClipboardList size={14} className="text-blue-600" />
                 {exporting === "dispatch" ? "جاري التصدير..." : "تقرير الإرسال PDF"}
               </Button>
             </div>
           )}
+
           {/* Export: Offers tab */}
           {tab === "offers" && hasOffers && (
             <div className="flex items-center gap-2 pb-0.5">
@@ -393,7 +625,7 @@ export default function RfqDetailPage() {
                 disabled={exporting !== null}
               >
                 <FileSpreadsheet size={14} className="text-green-600" />
-                {exporting === "excel" ? "Exporting..." : "Export Excel"}
+                {exporting === "excel" ? "جاري التصدير..." : "Export Excel"}
               </Button>
               <Button
                 variant="outline"
@@ -403,7 +635,7 @@ export default function RfqDetailPage() {
                 disabled={exporting !== null}
               >
                 <FileText size={14} className="text-red-500" />
-                {exporting === "pdf" ? "Exporting..." : "Export PDF"}
+                {exporting === "pdf" ? "جاري إنشاء PDF..." : "Export PDF"}
               </Button>
             </div>
           )}
@@ -512,79 +744,151 @@ export default function RfqDetailPage() {
         {/* Offers & Analysis Tab */}
         {tab === "offers" && (
           <div className="space-y-5">
+            {/* VAT notice banner */}
+            {hasOffers && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-800">
+                <AlertTriangle size={14} className="text-amber-500 shrink-0" />
+                <span>
+                  جميع مقارنات الأسعار تأخذ في الحسبان{" "}
+                  <strong>ضريبة القيمة المضافة {VAT_LABEL}</strong>.
+                  الأسعار التي لا تشمل الضريبة يُضاف إليها {VAT_RATE * 100}% للمقارنة العادلة.
+                  العمود <strong>"السعر شاملاً ض.ق.م"</strong> هو المرجع للمقارنة.
+                </span>
+              </div>
+            )}
+
             {!hasOffers ? (
               <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm">
                 No offers received yet.
               </div>
             ) : (
               <>
-                {offersData?.analysis?.itemAnalysis?.map((item) => (
-                  <div key={item.rfqItemId} className="bg-card border border-border rounded-lg overflow-hidden">
-                    <div className="px-5 py-3 border-b border-border bg-muted/20">
-                      <p className="font-medium text-foreground text-sm">{item.description}</p>
-                      <p className="text-muted-foreground text-xs mt-0.5">
-                        {item.partNo && <span className="font-mono mr-2">{item.partNo}</span>}
-                        {item.qty && `QTY: ${item.qty} ${item.uom ?? ""}`}
-                        {item.referencePrice != null && (
-                          <span className="ml-2">Ref: EGP {item.referencePrice.toLocaleString("en-EG", { minimumFractionDigits: 2 })}</span>
-                        )}
-                      </p>
-                    </div>
-                    {item.offers.length === 0 ? (
-                      <div className="px-5 py-4 text-muted-foreground text-xs">No quotes for this item yet</div>
-                    ) : (
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-muted/10 border-b border-border text-left">
-                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium">Supplier</th>
-                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">Unit Price (EGP)</th>
-                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-center">Tax Inc.</th>
-                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-center">Lead (days)</th>
-                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">vs. Avg</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {item.offers
-                            .slice()
-                            .sort((a, b) => a.price - b.price)
-                            .map((o) => (
-                              <tr key={o.supplierId} className="border-b border-border last:border-0">
-                                <td className="px-4 py-2.5 text-foreground text-sm">{o.supplierName}</td>
-                                <td className="px-4 py-2.5 text-right">
-                                  <PriceCell value={o.price} isLowest={o.isLowest} isAnomaly={o.isAnomaly} />
+                {offersData?.analysis?.itemAnalysis?.map((item) => {
+                  // Ensure priceWithVat exists (fallback for older API responses)
+                  const enrichedOffers: OfferRow[] = (item.offers as OfferRow[]).map((o) => ({
+                    ...o,
+                    priceWithVat:
+                      (o as OfferRow).priceWithVat ??
+                      (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
+                  }));
+
+                  return (
+                    <div key={item.rfqItemId} className="bg-card border border-border rounded-lg overflow-hidden">
+                      {/* Item header */}
+                      <div className="px-5 py-3 border-b border-border bg-muted/20">
+                        <p className="font-medium text-foreground text-sm">{item.description}</p>
+                        <p className="text-muted-foreground text-xs mt-0.5">
+                          {item.partNo && <span className="font-mono mr-2">{item.partNo}</span>}
+                          {item.qty && `QTY: ${item.qty} ${item.uom ?? ""}`}
+                          {item.referencePrice != null && (
+                            <span className="ml-2">
+                              Ref: EGP{" "}
+                              {item.referencePrice.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+
+                      {enrichedOffers.length === 0 ? (
+                        <div className="px-5 py-4 text-muted-foreground text-xs">No quotes for this item yet</div>
+                      ) : (
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-muted/10 border-b border-border text-left">
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">المورد</th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
+                                السعر الأصلي (ج.م)
+                              </th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-center">
+                                يشمل الضريبة؟
+                              </th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
+                                السعر شاملاً ض.ق.م {VAT_LABEL}
+                              </th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-center">
+                                مدة التسليم
+                              </th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
+                                مقارنة بالمتوسط
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {enrichedOffers
+                              .slice()
+                              .sort((a, b) => a.priceWithVat - b.priceWithVat)
+                              .map((o) => (
+                                <tr key={o.supplierId} className="border-b border-border last:border-0 hover:bg-muted/5">
+                                  <td className="px-4 py-2.5 text-foreground text-sm font-medium">
+                                    {o.supplierName}
+                                  </td>
+                                  {/* Original price */}
+                                  <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
+                                    {o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
+                                  </td>
+                                  {/* Tax included indicator */}
+                                  <td className="px-4 py-2.5 text-center text-xs">
+                                    {o.taxIncluded ? (
+                                      <span className="inline-flex items-center gap-0.5 text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">
+                                        <CheckCircle2 size={10} /> نعم
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-0.5 text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                                        <XCircle size={10} /> لا
+                                      </span>
+                                    )}
+                                  </td>
+                                  {/* VAT-inclusive price (primary comparison) */}
+                                  <td className="px-4 py-2.5">
+                                    <PriceCell
+                                      price={o.price}
+                                      priceWithVat={o.priceWithVat}
+                                      taxIncluded={o.taxIncluded}
+                                      isLowest={o.isLowest}
+                                      isAnomaly={o.isAnomaly}
+                                    />
+                                  </td>
+                                  {/* Delivery days */}
+                                  <td className="px-4 py-2.5 text-center text-xs text-muted-foreground">
+                                    {o.deliveryDays != null ? `${o.deliveryDays} يوم` : "—"}
+                                  </td>
+                                  {/* Deviation from average (VAT-adjusted) */}
+                                  <td className={cn(
+                                    "px-4 py-2.5 text-right text-xs font-medium",
+                                    o.deviation < 0 ? "text-green-600" : "text-red-500"
+                                  )}>
+                                    {o.deviation > 0 ? "+" : ""}{o.deviation.toFixed(1)}%
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                          {item.minPrice != null && (
+                            <tfoot className="bg-muted/30 border-t border-border">
+                              <tr>
+                                <td className="px-4 py-2 text-xs text-muted-foreground font-semibold" colSpan={3}>
+                                  ملخص الأسعار شاملة ض.ق.م {VAT_LABEL}
                                 </td>
-                                <td className="px-4 py-2.5 text-center text-xs text-muted-foreground">
-                                  {o.taxIncluded ? "Yes" : "No"}
-                                </td>
-                                <td className="px-4 py-2.5 text-center text-xs text-muted-foreground">
-                                  {o.deliveryDays ?? "-"}
-                                </td>
-                                <td className={cn(
-                                  "px-4 py-2.5 text-right text-xs font-medium",
-                                  o.deviation < 0 ? "text-green-600" : "text-red-500"
-                                )}>
-                                  {o.deviation > 0 ? "+" : ""}{o.deviation.toFixed(1)}%
+                                <td className="px-4 py-2 text-right text-xs text-foreground font-mono" colSpan={3}>
+                                  <span className="text-green-700 font-semibold">
+                                    أقل: {item.minPrice.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
+                                  </span>
+                                  <span className="mx-2 text-muted-foreground">|</span>
+                                  <span>
+                                    متوسط: {item.avgPrice?.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
+                                  </span>
+                                  <span className="mx-2 text-muted-foreground">|</span>
+                                  <span className="text-red-500">
+                                    أعلى: {item.maxPrice?.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
+                                  </span>
                                 </td>
                               </tr>
-                            ))}
-                        </tbody>
-                        {item.minPrice != null && (
-                          <tfoot className="bg-muted/20">
-                            <tr>
-                              <td className="px-4 py-2 text-xs text-muted-foreground font-medium">Summary</td>
-                              <td className="px-4 py-2 text-right text-xs text-muted-foreground" colSpan={2}>
-                                Min: {item.minPrice?.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
-                                &nbsp;|&nbsp;Avg: {item.avgPrice?.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
-                                &nbsp;|&nbsp;Max: {item.maxPrice?.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
-                              </td>
-                              <td colSpan={2} />
-                            </tr>
-                          </tfoot>
-                        )}
-                      </table>
-                    )}
-                  </div>
-                ))}
+                            </tfoot>
+                          )}
+                        </table>
+                      )}
+                    </div>
+                  );
+                })}
               </>
             )}
           </div>

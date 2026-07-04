@@ -517,6 +517,8 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const rfqId = parseInt(raw, 10);
 
+  const VAT_RATE = 0.14;
+
   const [rfqRow] = await db.select({ rfq: rfqTable, employeeName: employeesTable.name })
     .from(rfqTable).leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
     .where(eq(rfqTable.id, rfqId));
@@ -542,13 +544,15 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
     itemsByOffer[oi.item.offerId].push(oi);
   }
 
-  // Price analysis per rfq item
+  // Price analysis per rfq item — all min/avg/max calculations use VAT-inclusive prices
   const rfqItems = await db.select().from(rfqItemsTable).where(eq(rfqItemsTable.rfqId, rfqId));
   const itemAnalysis = rfqItems.map(rfqItem => {
-    const prices: number[] = [];
+    const vatPrices: number[] = [];
     const offerDetails: Array<{
-      supplierId: number; supplierName: string; price: number;
-      taxIncluded: boolean; deliveryDays: number | null; deviation: number; isLowest: boolean; isAnomaly: boolean;
+      supplierId: number; supplierName: string;
+      price: number; priceWithVat: number;
+      taxIncluded: boolean; deliveryDays: number | null;
+      deviation: number; isLowest: boolean; isAnomaly: boolean;
     }> = [];
 
     for (const o of offers) {
@@ -556,11 +560,14 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       const oi = ois.find(x => x.item.rfqItemId === rfqItem.id);
       if (oi) {
         const price = parseFloat(oi.item.price);
-        prices.push(price);
+        // Normalize: if supplier did NOT include tax, add 14% VAT for fair comparison
+        const priceWithVat = oi.item.taxIncluded ? price : price * (1 + VAT_RATE);
+        vatPrices.push(priceWithVat);
         offerDetails.push({
           supplierId: o.offer.supplierId,
           supplierName: o.supplierName || "",
           price,
+          priceWithVat,
           taxIncluded: oi.item.taxIncluded,
           deliveryDays: oi.item.deliveryDays,
           deviation: 0,
@@ -570,15 +577,15 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       }
     }
 
-    if (prices.length > 0) {
-      const minPrice = Math.min(...prices);
-      const maxPrice = Math.max(...prices);
-      const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+    if (vatPrices.length > 0) {
+      const minPrice = Math.min(...vatPrices);
+      const maxPrice = Math.max(...vatPrices);
+      const avgPrice = vatPrices.reduce((a, b) => a + b, 0) / vatPrices.length;
       const fairPrice = avgPrice;
 
       for (const od of offerDetails) {
-        od.deviation = avgPrice > 0 ? ((od.price - avgPrice) / avgPrice) * 100 : 0;
-        od.isLowest = od.price === minPrice;
+        od.deviation = avgPrice > 0 ? ((od.priceWithVat - avgPrice) / avgPrice) * 100 : 0;
+        od.isLowest = od.priceWithVat === minPrice;
         od.isAnomaly = Math.abs(od.deviation) > 50;
       }
 
@@ -757,11 +764,13 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
       itemsByOffer[oi.item.offerId].push(oi);
     }
 
+    const PDF_VAT_RATE = 0.14;
     const itemAnalysis = rfqItems.map((rfqItem) => {
-      const prices: number[] = [];
+      const vatPrices: number[] = [];
       const offerDetails: Array<{
         supplierName: string;
         price: number;
+        priceWithVat: number;
         taxIncluded: boolean;
         deliveryDays: number | null;
         deviation: number;
@@ -774,10 +783,12 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
         const oi = ois.find((x) => x.item.rfqItemId === rfqItem.id);
         if (oi) {
           const price = parseFloat(oi.item.price);
-          prices.push(price);
+          const priceWithVat = oi.item.taxIncluded ? price : price * (1 + PDF_VAT_RATE);
+          vatPrices.push(priceWithVat);
           offerDetails.push({
             supplierName: o.supplierName || "",
             price,
+            priceWithVat,
             taxIncluded: oi.item.taxIncluded,
             deliveryDays: oi.item.deliveryDays,
             deviation: 0,
@@ -787,13 +798,13 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
         }
       }
 
-      if (prices.length > 0) {
-        const minPrice = Math.min(...prices);
-        const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
-        const maxPrice = Math.max(...prices);
+      if (vatPrices.length > 0) {
+        const minPrice = Math.min(...vatPrices);
+        const avgPrice = vatPrices.reduce((a, b) => a + b, 0) / vatPrices.length;
+        const maxPrice = Math.max(...vatPrices);
         for (const od of offerDetails) {
-          od.deviation = avgPrice > 0 ? ((od.price - avgPrice) / avgPrice) * 100 : 0;
-          od.isLowest = od.price === minPrice;
+          od.deviation = avgPrice > 0 ? ((od.priceWithVat - avgPrice) / avgPrice) * 100 : 0;
+          od.isLowest = od.priceWithVat === minPrice;
           od.isAnomaly = Math.abs(od.deviation) > 50;
         }
         return {
