@@ -192,53 +192,40 @@ async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void>
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
-// ── Offers PDF — html2canvas screenshot → jsPDF ──────────────────────────────
+// ── Offers PDF — print window opened SYNC then populated async ────────────────
 async function exportToPdf(
   rfqNo: string,
   customerRfqNo: string,
   offersData: OffersData,
-  employeeName?: string | null,
-  rfqId?: number,
+  employeeName: string | null | undefined,
+  rfqId: number | undefined,
+  printWin: Window,
 ): Promise<void> {
   const items: ItemAnalysis[] = normalizeItems(offersData);
   if (items.length === 0) throw new Error("لا توجد عروض لتصديرها");
 
-  // ── 1. Fetch close date ───────────────────────────────────────────────────
+  // Fetch close date
   let closeDate: string | null = null;
   try {
     if (rfqId) {
-      const slResp = await fetch(`/api/rfq/${rfqId}/sent-log`, { credentials: "include" });
-      if (slResp.ok) {
-        const sl = (await slResp.json()) as Array<{ closeDate?: string | null }>;
+      const r = await fetch(`/api/rfq/${rfqId}/sent-log`, { credentials: "include" });
+      if (r.ok) {
+        const sl = (await r.json()) as Array<{ closeDate?: string | null }>;
         closeDate = sl?.find((e) => e.closeDate)?.closeDate ?? null;
       }
     }
   } catch { /* skip */ }
 
-  // ── 2. Fetch logo as data URL ─────────────────────────────────────────────
+  // Fetch logo as data URL
   let logoSrc = "";
   try {
-    const lr = await fetch("/logo.png");
-    if (lr.ok) {
-      const blob = await lr.blob();
+    const r = await fetch("/logo.png");
+    if (r.ok) {
+      const blob = await r.blob();
       logoSrc = await new Promise<string>((res) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-    }
-  } catch { /* skip */ }
-
-  // ── 3. Fetch Amiri Arabic font as data URL (avoids CORS) ─────────────────
-  let fontDataUrl = "";
-  try {
-    const fr = await fetch("/fonts/Amiri-Regular.ttf");
-    if (fr.ok) {
-      const fontBlob = await fr.blob();
-      fontDataUrl = await new Promise<string>((res) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result as string);
-        reader.readAsDataURL(fontBlob);
+        const rd = new FileReader();
+        rd.onload = () => res(rd.result as string);
+        rd.readAsDataURL(blob);
       });
     }
   } catch { /* skip */ }
@@ -250,195 +237,160 @@ async function exportToPdf(
     new Set(items.flatMap((i) => i.offers.map((o) => o.supplierName)))
   );
 
-  // ── 4. Build supplier columns ─────────────────────────────────────────────
-  const supplierHeaderCells = allSuppliers
-    .map((s) => `<th colspan="2" style="background:#1e4570;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px">${s}</th>`)
-    .join("");
-  const supplierSubHeader = allSuppliers
-    .map(
-      () =>
-        `<th style="background:#2a4a6c;color:#c8a84b;padding:4px;border:1px solid #3a5a7c;font-size:9px;font-weight:400">السعر الأصلي (ج.م)</th>
-         <th style="background:#2a4a6c;color:#90d090;padding:4px;border:1px solid #3a5a7c;font-size:9px;font-weight:400">شامل ض.ق.م</th>`
-    )
-    .join("");
+  // Supplier header
+  const supHeaders = allSuppliers.map(
+    (s) => `<th colspan="2">${s}</th>`
+  ).join("");
+  const supSubHeaders = allSuppliers.map(
+    () => `<th class="s">السعر (ج.م)</th><th class="s v">شامل ض.ق.م ✱</th>`
+  ).join("");
 
-  // ── 5. Build table rows ───────────────────────────────────────────────────
-  const rows = items
-    .map((item, idx) => {
-      const bySupplier = new Map<string, OfferRow>();
-      for (const o of item.offers) bySupplier.set(o.supplierName, o);
-      const supCells = allSuppliers
-        .map((s) => {
-          const o = bySupplier.get(s);
-          if (!o) return `<td style="text-align:center;color:#aaa;border:1px solid #e0e8f0;padding:4px">—</td><td style="text-align:center;color:#aaa;border:1px solid #e0e8f0;padding:4px">—</td>`;
-          const vc = o.isLowest ? "#166534" : o.isAnomaly ? "#b45309" : "#111";
-          const fw = o.isLowest ? "bold" : "normal";
-          return `<td style="text-align:left;direction:ltr;border:1px solid #e0e8f0;padding:4px;font-size:10px">${o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}</td>
-                  <td style="text-align:left;direction:ltr;color:${vc};font-weight:${fw};border:1px solid #e0e8f0;padding:4px;font-size:10px">${o.priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })}${o.isLowest ? " ✓" : ""}</td>`;
-        })
-        .join("");
-      const summary =
-        item.minPrice != null
-          ? `أقل: ${item.minPrice.toFixed(2)} | متوسط: ${item.avgPrice?.toFixed(2)} | أعلى: ${item.maxPrice?.toFixed(2)}`
-          : "لا توجد عروض";
-      const bg = idx % 2 === 0 ? "#fff" : "#f4f8fc";
-      return `<tr style="background:${bg}">
-        <td style="text-align:center;border:1px solid #e0e8f0;padding:4px;font-size:10px">${idx + 1}</td>
-        <td style="border:1px solid #e0e8f0;padding:4px;font-size:10px">${item.description}</td>
-        <td style="text-align:center;direction:ltr;border:1px solid #e0e8f0;padding:4px;font-size:10px">${item.partNo ?? "—"}</td>
-        <td style="text-align:center;direction:ltr;border:1px solid #e0e8f0;padding:4px;font-size:10px">${item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—"}</td>
-        ${supCells}
-        <td style="border:1px solid #e0e8f0;padding:4px;font-size:9px;color:#444">${summary}</td>
-      </tr>`;
-    })
-    .join("");
+  // Rows
+  const rows = items.map((item, idx) => {
+    const map = new Map<string, OfferRow>();
+    for (const o of item.offers) map.set(o.supplierName, o);
+    const cells = allSuppliers.map((s) => {
+      const o = map.get(s);
+      if (!o) return `<td>—</td><td>—</td>`;
+      const cls = o.isLowest ? ' class="low"' : o.isAnomaly ? ' class="hi"' : '';
+      return `<td>${o.price.toLocaleString("en-EG",{minimumFractionDigits:2})}</td>
+              <td${cls}>${o.priceWithVat.toLocaleString("en-EG",{minimumFractionDigits:2})}${o.isLowest?" ✓":""}</td>`;
+    }).join("");
+    const sum = item.minPrice != null
+      ? `أقل: ${item.minPrice.toFixed(2)}<br>متوسط: ${item.avgPrice?.toFixed(2)}<br>أعلى: ${item.maxPrice?.toFixed(2)}`
+      : "—";
+    const bg = idx % 2 === 0 ? "" : ' class="alt"';
+    return `<tr${bg}>
+      <td class="c">${idx + 1}</td>
+      <td class="d">${item.description}</td>
+      <td class="c ltr">${item.partNo ?? "—"}</td>
+      <td class="c ltr">${item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—"}</td>
+      ${cells}
+      <td class="sm">${sum}</td>
+    </tr>`;
+  }).join("");
 
-  // ── 6. Load html2canvas from CDN ─────────────────────────────────────────
-  type H2C = (el: HTMLElement, opts?: Record<string, unknown>) => Promise<HTMLCanvasElement>;
-  const win = window as Window & { html2canvas?: H2C };
-  if (!win.html2canvas) {
-    await new Promise<void>((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error("تعذّر تحميل مكتبة html2canvas"));
-      document.head.appendChild(s);
-    });
+  const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>RFQ ${rfqNo}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Cairo',Arial,sans-serif;direction:rtl;font-size:11px;background:#fff;color:#111;padding:6mm}
+  @media print{
+    @page{size:A4 landscape;margin:6mm}
+    body{padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .nop{display:none}
   }
-  const html2canvas = win.html2canvas!;
 
-  // ── 7. Inject font into the document ─────────────────────────────────────
-  const fontStyle = document.createElement("style");
-  fontStyle.textContent = fontDataUrl
-    ? `@font-face { font-family: 'Amiri'; src: url('${fontDataUrl}') format('truetype'); font-weight: normal; }`
-    : "";
-  document.head.appendChild(fontStyle);
+  /* ── Header ── */
+  .hdr{display:flex;align-items:center;justify-content:space-between;background:#1a3a5c;color:#fff;padding:10px 16px;border-radius:6px 6px 0 0}
+  .hdr img{height:52px;width:auto}
+  .company{font-size:20px;font-weight:700;color:#c8a84b}
+  .company-en{font-size:10px;color:#9bb8d4;margin:2px 0}
+  .rtitle{font-size:13px;font-weight:600;margin-top:4px}
 
-  // ── 8. Build the report div ───────────────────────────────────────────────
-  const div = document.createElement("div");
-  div.style.cssText =
-    "position:fixed;left:-9999px;top:0;width:1122px;background:#fff;" +
-    "font-family:'Amiri','Arial Unicode MS',Arial,sans-serif;direction:rtl;z-index:99999;padding:8px;";
+  /* ── Info band ── */
+  .meta{display:flex;border:1px solid #d0dbe8;border-top:none;border-bottom:3px solid #c8a84b}
+  .mc{flex:1;text-align:center;padding:6px 4px;border-left:1px solid #d0dbe8;background:#f7fafd}
+  .mc:last-child{border-left:none}
+  .ml{font-size:8.5px;color:#6b7e8f;font-weight:600;display:block}
+  .ml2{font-size:7.5px;color:#9baab8;display:block;margin-bottom:3px}
+  .mv{font-size:12px;font-weight:700;color:#1a3a5c}
 
-  div.innerHTML = `
-<div style="background:#1a3a5c;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-radius:4px 4px 0 0">
+  /* ── Note ── */
+  .note{font-size:9px;color:#555;padding:4px 10px;background:#fffbf0;border-bottom:1px solid #e8d98a;margin-bottom:0}
+
+  /* ── Table ── */
+  table{width:100%;border-collapse:collapse;margin-top:0}
+  th{background:#1a3a5c;color:#fff;padding:5px 4px;text-align:center;border:1px solid #2d527a;font-size:10px;font-weight:600}
+  th.s{background:#24466e;color:#c8e0f0;font-weight:400;font-size:9px}
+  th.v{color:#a8e0a8}
+  td{padding:5px 4px;border:1px solid #dde6f0;vertical-align:middle;font-size:10px}
+  tr.alt td{background:#f2f7fc}
+  td.c{text-align:center}
+  td.ltr{direction:ltr;unicode-bidi:embed;text-align:center}
+  td.d{max-width:180px;word-break:break-word}
+  td.sm{font-size:8.5px;color:#444;line-height:1.7}
+  td.low{color:#15803d;font-weight:700}
+  td.hi{color:#b45309}
+
+  /* ── Footer ── */
+  .ftr{background:#1a3a5c;color:#c8a84b;text-align:center;font-size:9px;padding:6px;border-radius:0 0 6px 6px;margin-top:6px}
+
+  /* ── Print button ── */
+  .nop{text-align:center;padding:16px;background:#f0f4f8}
+  .nop button{background:#1a3a5c;color:#fff;border:none;padding:10px 32px;font-family:Cairo,sans-serif;font-size:14px;font-weight:600;cursor:pointer;border-radius:6px;margin:4px}
+  .nop button:hover{background:#245a82}
+  .nop .sec{background:#64748b}
+</style>
+</head>
+<body>
+
+<div class="hdr">
   <div>
-    <div style="font-size:22px;font-weight:700;color:#c8a84b">قرطبة للتوريدات</div>
-    <div style="font-size:10px;color:#aaccee;margin:2px 0">Cortoba Supplies</div>
-    <div style="font-size:13px;font-weight:600;margin-top:4px">تقرير مقارنة عروض الأسعار — RFQ Price Comparison Report</div>
+    <div class="company">قرطبة للتوريدات</div>
+    <div class="company-en">Cortoba Supplies</div>
+    <div class="rtitle">تقرير مقارنة عروض الأسعار &mdash; RFQ Price Comparison Report</div>
   </div>
-  ${logoSrc ? `<img src="${logoSrc}" style="height:54px;width:auto" alt="Logo">` : ""}
+  ${logoSrc ? `<img src="${logoSrc}" alt="">` : ""}
 </div>
-<div style="display:flex;background:#f4f8fc;border-bottom:3px solid #c8a84b">
-  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
-    <div style="font-size:9px;color:#7a8fa0;font-weight:600">رقم الطلب الداخلي</div>
-    <div style="font-size:8px;color:#aab">Internal RFQ</div>
-    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${rfqNo}</div>
-  </div>
-  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
-    <div style="font-size:9px;color:#7a8fa0;font-weight:600">رقم طلب العميل</div>
-    <div style="font-size:8px;color:#aab">Customer RFQ</div>
-    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${customerRfqNo}</div>
-  </div>
-  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
-    <div style="font-size:9px;color:#7a8fa0;font-weight:600">أعده</div>
-    <div style="font-size:8px;color:#aab">Prepared By</div>
-    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${employeeName ?? "—"}</div>
-  </div>
-  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
-    <div style="font-size:9px;color:#7a8fa0;font-weight:600">تاريخ الإغلاق</div>
-    <div style="font-size:8px;color:#aab">Close Date</div>
-    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${closeDate ?? "—"}</div>
-  </div>
-  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
-    <div style="font-size:9px;color:#7a8fa0;font-weight:600">تاريخ التصدير</div>
-    <div style="font-size:8px;color:#aab">Export Date</div>
-    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${exportDate}</div>
-  </div>
-  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
-    <div style="font-size:9px;color:#7a8fa0;font-weight:600">عدد البنود</div>
-    <div style="font-size:8px;color:#aab">Items</div>
-    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${items.length}</div>
-  </div>
-  <div style="flex:1;text-align:center;padding:7px 4px">
-    <div style="font-size:9px;color:#7a8fa0;font-weight:600">ض.ق.م</div>
-    <div style="font-size:8px;color:#aab">VAT</div>
-    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${VAT_LABEL}</div>
-  </div>
+
+<div class="meta">
+  <div class="mc"><span class="ml">رقم الطلب الداخلي</span><span class="ml2">Internal RFQ</span><span class="mv">${rfqNo}</span></div>
+  <div class="mc"><span class="ml">رقم طلب العميل</span><span class="ml2">Customer RFQ</span><span class="mv">${customerRfqNo}</span></div>
+  <div class="mc"><span class="ml">أعده</span><span class="ml2">Prepared By</span><span class="mv">${employeeName ?? "—"}</span></div>
+  <div class="mc"><span class="ml">تاريخ الإغلاق</span><span class="ml2">Close Date</span><span class="mv">${closeDate ?? "—"}</span></div>
+  <div class="mc"><span class="ml">تاريخ التصدير</span><span class="ml2">Export Date</span><span class="mv">${exportDate}</span></div>
+  <div class="mc"><span class="ml">البنود</span><span class="ml2">Items</span><span class="mv">${items.length}</span></div>
+  <div class="mc"><span class="ml">ض.ق.م</span><span class="ml2">VAT</span><span class="mv">${VAT_LABEL}</span></div>
 </div>
-<div style="font-size:9px;color:#555;padding:5px 8px;background:#fffbea;border-bottom:1px solid #e5d980">
-  (*) شامل ض.ق.م = السعر × 1.14 إن لم تشمل الضريبة | ✓ = أقل سعر | جميع القيم بالجنيه المصري
-</div>
-<table style="width:100%;border-collapse:collapse">
+
+<div class="note">✱ شامل ض.ق.م = السعر × 1.14 إن لم تشمل الضريبة، أو كما هو إن شملتها &nbsp;|&nbsp; ✓ = أقل سعر &nbsp;|&nbsp; جميع القيم بالجنيه المصري</div>
+
+<table>
   <thead>
     <tr>
-      <th rowspan="2" style="background:#1a3a5c;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px;width:28px">#</th>
-      <th rowspan="2" style="background:#1a3a5c;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px;text-align:right;width:180px">البيان / Description</th>
-      <th rowspan="2" style="background:#1a3a5c;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px;width:80px">Part No</th>
-      <th rowspan="2" style="background:#1a3a5c;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px;width:55px">الكمية</th>
-      ${supplierHeaderCells}
-      <th rowspan="2" style="background:#1a3a5c;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px;width:130px">ملخص (شامل ض.ق.م)</th>
+      <th rowspan="2" style="width:28px">#</th>
+      <th rowspan="2" style="text-align:right;min-width:150px">البيان</th>
+      <th rowspan="2" style="min-width:80px">Part No</th>
+      <th rowspan="2" style="width:55px">الكمية</th>
+      ${supHeaders}
+      <th rowspan="2" style="min-width:110px">ملخص (شامل ض.ق.م)</th>
     </tr>
-    <tr>${supplierSubHeader}</tr>
+    <tr>${supSubHeaders}</tr>
   </thead>
   <tbody>${rows}</tbody>
 </table>
-<div style="background:#1a3a5c;color:#c8a84b;text-align:center;font-size:9px;padding:6px;border-radius:0 0 4px 4px;margin-top:4px">
-  قرطبة للتوريدات | INFO@CORTOBA-SUPPLIES.COM${closeDate ? ` | تاريخ الإغلاق: ${closeDate}` : ""} | ض.ق.م ${VAT_LABEL} | ${exportDate}
-</div>`;
 
-  document.body.appendChild(div);
+<div class="ftr">
+  قرطبة للتوريدات &nbsp;|&nbsp; INFO@CORTOBA-SUPPLIES.COM
+  ${closeDate ? `&nbsp;|&nbsp; تاريخ الإغلاق: ${closeDate}` : ""}
+  &nbsp;|&nbsp; ض.ق.م ${VAT_LABEL} &nbsp;|&nbsp; ${exportDate}
+</div>
 
-  // Wait for Amiri font + images to render
-  await document.fonts.ready;
-  await new Promise<void>((r) => setTimeout(r, 800));
+<div class="nop">
+  <button onclick="window.print()">🖨️ &nbsp; طباعة / حفظ PDF</button>
+  <button class="sec" onclick="window.close()">✕ إغلاق</button>
+</div>
 
-  // ── 9. Capture with html2canvas ───────────────────────────────────────────
-  const canvas = await html2canvas(div, {
-    scale: 2,
-    useCORS: true,
-    allowTaint: false,
-    backgroundColor: "#ffffff",
-    logging: false,
-    width: 1122,
-    height: div.scrollHeight,
+<script>
+  // Wait for Cairo font then auto-print
+  document.fonts.ready.then(function() {
+    setTimeout(function(){ window.print(); }, 1000);
   });
+</script>
+</body>
+</html>`;
 
-  document.body.removeChild(div);
-  document.head.removeChild(fontStyle);
-
-  // ── 10. Create PDF with jsPDF ─────────────────────────────────────────────
-  const jspdfMod = await import("jspdf");
-  const JsPDF = (jspdfMod as { jsPDF?: typeof jspdfMod.jsPDF; default?: typeof jspdfMod.jsPDF }).jsPDF
-    ?? (jspdfMod as { jsPDF?: typeof jspdfMod.jsPDF; default?: typeof jspdfMod.jsPDF }).default;
-  const doc = new JsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  const PW = doc.internal.pageSize.getWidth();   // 297 mm
-  const PH = doc.internal.pageSize.getHeight();  // 210 mm
-
-  const totalPx = canvas.height;
-  const pxPerMm = canvas.width / PW;
-  const pageHeightPx = Math.floor(PH * pxPerMm);
-
-  let yPx = 0;
-  let firstPage = true;
-  while (yPx < totalPx) {
-    if (!firstPage) doc.addPage();
-    firstPage = false;
-    const sliceH = Math.min(pageHeightPx, totalPx - yPx);
-
-    const slice = document.createElement("canvas");
-    slice.width = canvas.width;
-    slice.height = sliceH;
-    const ctx = slice.getContext("2d")!;
-    ctx.drawImage(canvas, 0, yPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
-
-    const sliceData = slice.toDataURL("image/jpeg", 0.92);
-    const sliceHmm = sliceH / pxPerMm;
-    doc.addImage(sliceData, "JPEG", 0, 0, PW, sliceHmm);
-    yPx += pageHeightPx;
-  }
-
-  doc.save(`RFQ-Comparison-${rfqNo}.pdf`);
+  // Write final HTML to the already-open window
+  printWin.document.open();
+  printWin.document.write(html);
+  printWin.document.close();
 }
 
 // ── Main page component ───────────────────────────────────────────────────────
@@ -503,17 +455,50 @@ export default function RfqDetailPage() {
     }
   };
 
-  const handleExportPdf = async () => {
+  const handleExportPdf = () => {
     if (!rfq || !offersData) return;
-    setExporting("pdf");
-    try {
-      await exportToPdf(rfq.internalRfqNo, rfq.customerRfqNo, offersData as OffersData, rfq.employeeName, rfqId);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      toast.error(`PDF export failed: ${msg}`);
-    } finally {
-      setExporting(null);
+
+    // ⚠ window.open MUST be called synchronously (before any await)
+    // to avoid popup blocker — so we open first, populate async.
+    const printWin = window.open(
+      "",
+      "_blank",
+      "width=1280,height=860,scrollbars=yes,resizable=yes"
+    );
+    if (!printWin) {
+      toast.error(
+        "يرجى السماح بالنوافذ المنبثقة في المتصفح ثم أعد المحاولة"
+      );
+      return;
     }
+
+    // Show loading state immediately
+    printWin.document.write(
+      '<html dir="rtl"><body style="font-family:Arial;text-align:center;padding:60px;font-size:16px;color:#1a3a5c">⏳ جاري إعداد التقرير...</body></html>'
+    );
+
+    setExporting("pdf");
+
+    const run = async () => {
+      try {
+        await exportToPdf(
+          rfq.internalRfqNo,
+          rfq.customerRfqNo,
+          offersData as OffersData,
+          rfq.employeeName,
+          rfqId,
+          printWin
+        );
+      } catch (err) {
+        printWin.close();
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        toast.error(`فشل التصدير: ${msg}`);
+      } finally {
+        setExporting(null);
+      }
+    };
+
+    run();
   };
 
   if (isLoading) {
