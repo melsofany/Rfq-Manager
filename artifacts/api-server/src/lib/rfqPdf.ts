@@ -40,14 +40,18 @@ function formatDate(d: string): string {
 }
 
 /**
- * Strips trailing zeros from a plain numeric string.
+ * Strips trailing zeros from a plain numeric string using regex only —
+ * no parseFloat, so large numbers can't silently switch to scientific notation.
  * "2.000" → "2",  "2.500" → "2.5",  "12abc" → "12abc" (unchanged)
+ * "001.2300" → "001.23"  (preserves leading zeros; caller owns that decision)
  */
 function formatQty(qty: string | null | undefined): string {
   if (!qty) return "—";
   const t = qty.trim();
+  // Only process purely numeric strings (optional leading sign, digits, optional decimal part)
   if (!/^-?\d+(\.\d+)?$/.test(t)) return t;
-  return String(parseFloat(t));
+  // Strip trailing zeros after decimal point, then strip a lone trailing dot
+  return t.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }
 
 function getFontPath(): string {
