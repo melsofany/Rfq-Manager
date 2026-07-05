@@ -9,6 +9,8 @@ export interface OffersPdfOptions {
   rfqNo: string;
   customerRfqNo: string;
   exportDate: string;
+  employeeName?: string | null;
+  closeDate?: string | null;
   itemAnalysis: Array<{
     rfqItemId: number;
     description: string;
@@ -61,7 +63,6 @@ function fmt(n: number): string {
 
 export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    // Hard timeout — if PDFKit never emits "end", reject after 20s
     const hardTimeout = setTimeout(() => {
       reject(new Error("PDF generation timed out"));
     }, 20_000);
@@ -90,7 +91,6 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
       doc.on("end", () => settle(() => resolve(Buffer.concat(chunks))));
       doc.on("error", (err: Error) => settle(() => reject(err)));
 
-      // Register Arabic font if available, else fall back to Helvetica
       const fontPath = getFontPath();
       const FONT = fontPath ? "Amiri" : "Helvetica";
       const FONT_BOLD = fontPath ? "Amiri" : "Helvetica-Bold";
@@ -108,44 +108,72 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
       const BORDER = "#d0dbe8";
 
       // ── HEADER ────────────────────────────────────────────────────────────
-      doc.rect(MARGIN, MARGIN, CONTENT_W, 60).fill(BLUE);
+      // Taller header to include company name and logo
+      const HEADER_H = 72;
+      doc.rect(MARGIN, MARGIN, CONTENT_W, HEADER_H).fill(BLUE);
 
-      // Logo
+      // Logo on right side
       try {
-        doc.image(getLogoBuffer(), MARGIN + CONTENT_W - 60, MARGIN + 4, { height: 52 });
+        doc.image(getLogoBuffer(), MARGIN + CONTENT_W - 68, MARGIN + 6, { height: 58 });
       } catch { /* skip */ }
 
-      doc.font(FONT).fontSize(18).fillColor("#ffffff")
-        .text("RFQ PRICE COMPARISON REPORT", MARGIN + 14, MARGIN + 10, { lineBreak: false });
-      doc.font(FONT).fontSize(10).fillColor(GOLD)
-        .text("\u062a\u0642\u0631\u064a\u0631 \u0645\u0642\u0627\u0631\u0646\u0629 \u0623\u0633\u0639\u0627\u0631 \u0627\u0644\u0639\u0631\u0648\u0636 | Cortoba Supplies", MARGIN + 14, MARGIN + 36, { lineBreak: false });
+      // Company name (Arabic) - large
+      doc.font(FONT).fontSize(15).fillColor(GOLD)
+        .text("\u0642\u0631\u0637\u0628\u0629 \u0644\u0644\u062a\u0648\u0631\u064a\u062f\u0627\u062a", MARGIN + 14, MARGIN + 8, { lineBreak: false });
+      // Company name (English) - smaller
+      doc.font(FONT).fontSize(9).fillColor("#aaccee")
+        .text("Cortoba Supplies", MARGIN + 14, MARGIN + 30, { lineBreak: false });
+
+      // Report title
+      doc.font(FONT).fontSize(11).fillColor("#ffffff")
+        .text("RFQ PRICE COMPARISON REPORT", MARGIN + 14, MARGIN + 48, { lineBreak: false });
+      // Arabic subtitle
+      doc.font(FONT).fontSize(8).fillColor(GOLD)
+        .text("\u062a\u0642\u0631\u064a\u0631 \u0645\u0642\u0627\u0631\u0646\u0629 \u0639\u0631\u0648\u0636 \u0627\u0644\u0623\u0633\u0639\u0627\u0631", MARGIN + 14, MARGIN + 62, { lineBreak: false });
 
       // ── INFO BAND ─────────────────────────────────────────────────────────
-      const infoY = MARGIN + 66;
-      doc.rect(MARGIN, infoY, CONTENT_W, 38).fill(GREY);
-      doc.rect(MARGIN, infoY + 36, CONTENT_W, 2).fill(GOLD);
+      const infoY = MARGIN + HEADER_H + 4;
+      doc.rect(MARGIN, infoY, CONTENT_W, 42).fill(GREY);
+      doc.rect(MARGIN, infoY + 40, CONTENT_W, 2).fill(GOLD);
 
-      const infoCells = [
-        { label: "Internal RFQ", value: opts.rfqNo },
-        { label: "Customer RFQ", value: opts.customerRfqNo },
-        { label: "Export Date", value: opts.exportDate },
-        { label: "Items", value: String(opts.itemAnalysis.length) },
-        { label: "VAT Rate", value: "14%" },
+      // Build info cells dynamically — include employee name and close date if present
+      const infoCells: Array<{ label: string; labelAr: string; value: string }> = [
+        { label: "Internal RFQ", labelAr: "\u0631\u0642\u0645 \u0627\u0644\u0637\u0644\u0628 \u0627\u0644\u062f\u0627\u062e\u0644\u064a", value: opts.rfqNo },
+        { label: "Customer RFQ", labelAr: "\u0631\u0642\u0645 \u0637\u0644\u0628 \u0627\u0644\u0639\u0645\u064a\u0644", value: opts.customerRfqNo },
+        {
+          label: "Prepared By",
+          labelAr: "\u0623\u0639\u062f\u0647",
+          value: opts.employeeName || "—",
+        },
+        {
+          label: "Close Date",
+          labelAr: "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0625\u063a\u0644\u0627\u0642",
+          value: opts.closeDate || "—",
+        },
+        { label: "Export Date", labelAr: "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u062a\u0635\u062f\u064a\u0631", value: opts.exportDate },
+        { label: "Items", labelAr: "\u0639\u062f\u062f \u0627\u0644\u0628\u0646\u0648\u062f", value: String(opts.itemAnalysis.length) },
+        { label: "VAT Rate", labelAr: "\u0646\u0633\u0628\u0629 \u0636 \u0642 \u0645", value: "14%" },
       ];
+
       const cellW = CONTENT_W / infoCells.length;
       infoCells.forEach((c, i) => {
         const cx = MARGIN + i * cellW;
-        doc.font(FONT).fontSize(7).fillColor("#8899aa")
-          .text(c.label, cx + 2, infoY + 6, { width: cellW - 4, align: "center", lineBreak: false });
-        doc.font(FONT_BOLD).fontSize(10).fillColor(BLUE)
-          .text(c.value, cx + 2, infoY + 20, { width: cellW - 4, align: "center", lineBreak: false });
+        // Arabic label
+        doc.font(FONT).fontSize(6).fillColor("#8899aa")
+          .text(c.labelAr, cx + 2, infoY + 4, { width: cellW - 4, align: "center", lineBreak: false });
+        // English label
+        doc.font(FONT).fontSize(5.5).fillColor("#aaaaaa")
+          .text(c.label, cx + 2, infoY + 14, { width: cellW - 4, align: "center", lineBreak: false });
+        // Value
+        doc.font(FONT_BOLD).fontSize(9).fillColor(BLUE)
+          .text(c.value, cx + 2, infoY + 24, { width: cellW - 4, align: "center", lineBreak: false });
       });
 
       // ── VAT NOTE ──────────────────────────────────────────────────────────
-      const noteY = infoY + 46;
-      doc.font(FONT).fontSize(7.5).fillColor("#555555")
+      const noteY = infoY + 48;
+      doc.font(FONT).fontSize(7).fillColor("#555555")
         .text(
-          "(*) Prices in the \"Incl. VAT\" column are normalized for comparison: supplier price is used as-is when tax is included, or multiplied by 1.14 when tax is excluded.",
+          "(*) \u0627\u0644\u0623\u0633\u0639\u0627\u0631 \u0641\u064a \u0639\u0645\u0648\u062f \"\u0634\u0627\u0645\u0644\u0627\u064b \u0636.q.\u0645\" \u062a\u0634\u0645\u0644 14% \u0625\u0630\u0627 \u0644\u0645 \u062a\u0643\u0646 \u0645\u062f\u0631\u062c\u0629 \u0623\u0635\u0644\u0627\u064b \u2014 Prices in \"Incl. VAT\" column = original \u00d7 1.14 when tax excluded, or as-is when included.",
           MARGIN, noteY, { width: CONTENT_W, lineBreak: false }
         );
 
@@ -156,13 +184,11 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
         new Set(opts.itemAnalysis.flatMap((ia) => ia.offers.map((o) => o.supplierName)))
       );
 
-      // Layout: [mainCols...] [supGroupW × n] [summaryCol]
-      // Summary is always LAST — consistent between header and data rows.
       const mainCols = [
         { label: "#", w: 26 },
-        { label: "Description", w: 160 },
+        { label: "Description / \u0627\u0644\u0628\u064a\u0627\u0646", w: 160 },
         { label: "Part No", w: 82 },
-        { label: "QTY", w: 54 },
+        { label: "QTY / \u0627\u0644\u0643\u0645\u064a\u0629", w: 54 },
       ];
       const SUMMARY_W = 148;
       const mainW = mainCols.reduce((s, c) => s + c.w, 0);
@@ -178,7 +204,6 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
       const drawHeader = (hy: number): number => {
         doc.rect(tableX, hy, totalTableW, ROW_H).fill(BLUE);
 
-        // Main cols
         let cx = tableX;
         mainCols.forEach((col) => {
           doc.font(FONT_BOLD).fontSize(7).fillColor("#ffffff")
@@ -186,18 +211,15 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
           cx += col.w;
         });
 
-        // Supplier group headers
         allSuppliers.forEach((s) => {
           doc.font(FONT_BOLD).fontSize(7).fillColor("#ffffff")
             .text(s, cx + 2, hy + 7, { width: supGroupW - 4, align: "center", lineBreak: false });
           cx += supGroupW;
         });
 
-        // Summary header (last)
         doc.font(FONT_BOLD).fontSize(7).fillColor("#ffffff")
-          .text("Summary (Incl. VAT)", cx + 2, hy + 7, { width: SUMMARY_W - 4, align: "center", lineBreak: false });
+          .text("\u0645\u0644\u062e\u0635 / Summary (Incl. VAT)", cx + 2, hy + 7, { width: SUMMARY_W - 4, align: "center", lineBreak: false });
 
-        // Second row — sub-headers
         const subY = hy + ROW_H;
         doc.rect(tableX, subY, totalTableW, 16).fill("#2a4a6c");
 
@@ -208,13 +230,12 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
         });
         allSuppliers.forEach(() => {
           doc.font(FONT).fontSize(6.5).fillColor(GOLD)
-            .text("Original", cx + 2, subY + 4, { width: supColW - 4, align: "center", lineBreak: false });
+            .text("\u0627\u0644\u0633\u0639\u0631 \u0627\u0644\u0623\u0635\u0644\u064a", cx + 2, subY + 4, { width: supColW - 4, align: "center", lineBreak: false });
           cx += supColW;
           doc.font(FONT).fontSize(6.5).fillColor(GOLD)
-            .text("Incl. VAT *", cx + 2, subY + 4, { width: supColW - 4, align: "center", lineBreak: false });
+            .text("\u0634\u0627\u0645\u0644 \u0636.q.\u0645 *", cx + 2, subY + 4, { width: supColW - 4, align: "center", lineBreak: false });
           cx += supColW;
         });
-        // Summary sub-header
         doc.rect(cx, subY, SUMMARY_W, 16).stroke(BORDER);
 
         return subY + 16;
@@ -222,13 +243,12 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
 
       y = drawHeader(y);
 
-      // Draw rows
       opts.itemAnalysis.forEach((item, idx) => {
         if (y + ROW_H > PAGE_H - MARGIN - 20) {
           doc.addPage({ size: "A4", layout: "landscape", margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN } });
           doc.rect(MARGIN, MARGIN, CONTENT_W, 22).fill(BLUE);
           doc.font(FONT_BOLD).fontSize(9).fillColor(GOLD)
-            .text(`Cont. - ${opts.rfqNo}`, MARGIN + 8, MARGIN + 6, { lineBreak: false });
+            .text(`\u062a\u0627\u0628\u0639 - ${opts.rfqNo}`, MARGIN + 8, MARGIN + 6, { lineBreak: false });
           y = MARGIN + 28;
           y = drawHeader(y);
         }
@@ -236,7 +256,6 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
         const rowBg = idx % 2 === 0 ? "#ffffff" : GREY;
         doc.rect(tableX, y, totalTableW, ROW_H).fill(rowBg);
 
-        // Cell borders
         let cx = tableX;
         mainCols.forEach((col) => {
           doc.rect(cx, y, col.w, ROW_H).stroke(BORDER);
@@ -248,7 +267,6 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
         });
         doc.rect(cx, y, SUMMARY_W, ROW_H).stroke(BORDER);
 
-        // Fill main cols
         cx = tableX;
         const textY = y + 7;
 
@@ -268,7 +286,6 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
           .text(item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—", cx + 2, textY, { width: mainCols[3].w - 4, align: "center", lineBreak: false });
         cx += mainCols[3].w;
 
-        // Supplier price columns
         const bySupplier: Record<string, { price: number; priceWithVat: number; isLowest: boolean; isAnomaly: boolean }> = {};
         for (const o of item.offers) {
           bySupplier[o.supplierName] = {
@@ -294,15 +311,14 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
               .text(fmt(p.price), cx + 2, textY, { width: supColW - 4, align: "right", lineBreak: false });
             cx += supColW;
             doc.font(FONT_BOLD).fontSize(7.5).fillColor(priceColor)
-              .text(fmt(p.priceWithVat) + (p.isLowest ? " ✓" : ""), cx + 2, textY, { width: supColW - 4, align: "right", lineBreak: false });
+              .text(fmt(p.priceWithVat) + (p.isLowest ? " \u2713" : ""), cx + 2, textY, { width: supColW - 4, align: "right", lineBreak: false });
             cx += supColW;
           }
         });
 
-        // Summary col — always last
         const summaryText = item.minPrice != null
-          ? `Min: ${fmt(item.minPrice)}\nAvg: ${fmt(item.avgPrice!)}\nMax: ${fmt(item.maxPrice!)}`
-          : "No quotes";
+          ? `\u0623\u0642\u0644: ${fmt(item.minPrice)}\n\u0645\u062a\u0648\u0633\u0637: ${fmt(item.avgPrice!)}\n\u0623\u0639\u0644\u0649: ${fmt(item.maxPrice!)}`
+          : "\u0644\u0627 \u062a\u0648\u062c\u062f \u0639\u0631\u0648\u0636";
         doc.font(FONT).fontSize(6.5).fillColor("#444")
           .text(summaryText, cx + 2, y + 3, { width: SUMMARY_W - 6, align: "center", lineBreak: true });
 
@@ -312,9 +328,9 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
       // ── FOOTER ────────────────────────────────────────────────────────────
       const footerY = doc.page.height - MARGIN + 4;
       doc.rect(MARGIN, footerY - 6, CONTENT_W, 22).fill(BLUE);
-      doc.font(FONT).fontSize(8).fillColor(GOLD)
+      doc.font(FONT).fontSize(7.5).fillColor(GOLD)
         .text(
-          `Cortoba Supplies | INFO@CORTOBA-SUPPLIES.COM | ${opts.exportDate} | All monetary values in EGP | VAT 14% applied to tax-exclusive prices`,
+          `\u0642\u0631\u0637\u0628\u0629 \u0644\u0644\u062a\u0648\u0631\u064a\u062f\u0627\u062a | INFO@CORTOBA-SUPPLIES.COM | ${opts.exportDate}${opts.closeDate ? " | \u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0625\u063a\u0644\u0627\u0642: " + opts.closeDate : ""} | \u062c\u0645\u064a\u0639 \u0627\u0644\u0642\u064a\u0645 \u0628\u0627\u0644\u062c\u0646\u064a\u0647 \u0627\u0644\u0645\u0635\u0631\u064a | \u0636.q.\u0645 14%`,
           MARGIN + 4,
           footerY + 2,
           { width: CONTENT_W - 8, align: "center", lineBreak: false }
