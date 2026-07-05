@@ -31,13 +31,20 @@ function formatDate(d: string): string {
 }
 
 /**
- * Removes trailing zeros from a numeric quantity string.
+ * Removes trailing zeros from a purely numeric quantity string.
+ * Only converts strings that are entirely numeric (with optional leading/
+ * trailing whitespace and an optional single decimal point).
+ * Non-numeric or mixed strings are returned unchanged so we never silently
+ * misrepresent the value (e.g. "1,200.00" stays "1,200.00", "12abc" stays "12abc").
  * Examples: "2.000" → "2",  "2.500" → "2.5",  "1.250" → "1.25"
  */
 function formatQty(qty: string | null | undefined): string {
   if (!qty) return "—";
-  const num = parseFloat(qty);
-  if (isNaN(num)) return qty;
+  const trimmed = qty.trim();
+  // Accept only fully numeric strings: optional sign, digits, optional single dot
+  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return trimmed;
+  const num = parseFloat(trimmed);
+  if (isNaN(num)) return trimmed;
   return String(num);
 }
 
