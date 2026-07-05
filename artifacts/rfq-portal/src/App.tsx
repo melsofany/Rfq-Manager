@@ -19,6 +19,7 @@ import EmployeesPage from "@/pages/employees";
 import AuditPage from "@/pages/audit";
 import PricingPage from "@/pages/pricing";
 import WhatsAppPage from "@/pages/whatsapp";
+import ItemsPage from "@/pages/items";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -107,6 +108,10 @@ function Router() {
 
       <Route path="/whatsapp">
         <ProtectedRoute component={WhatsAppPage} />
+      </Route>
+
+      <Route path="/items">
+        <ProtectedRoute component={ItemsPage} />
       </Route>
 
       <Route component={NotFound} />

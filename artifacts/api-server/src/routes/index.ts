@@ -10,6 +10,7 @@ import auditRouter from "./audit";
 import syncRouter from "./sync";
 import categoriesRouter from "./categories";
 import whatsappRouter from "./whatsapp";
+import itemsRouter from "./items";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(auditRouter);
 router.use(syncRouter);
 router.use(categoriesRouter);
 router.use(whatsappRouter);
+router.use(itemsRouter);
 
 export default router;

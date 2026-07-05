@@ -6,10 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type OfferInputItemsItem = {
-  rfqItemId: number;
-  price: number;
-  taxIncluded?: boolean;
-  deliveryDays?: number;
-  notes?: string;
+export type SearchItemsParams = {
+q: string;
 };

@@ -6,22 +6,19 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface OfferItem {
-  id: number;
-  offerId: number;
-  rfqItemId: number;
+export interface ItemSupplierResponse {
+  supplierId: number;
+  supplierName: string;
+  responded: boolean;
+  offerSubmitted: boolean;
+  linkOpened: boolean;
   /** @nullable */
-  partNo?: string | null;
-  /** @nullable */
-  description?: string | null;
-  /** @nullable */
-  qty?: number | null;
-  /** @nullable */
-  uom?: string | null;
-  price: number;
+  price?: number | null;
   taxIncluded?: boolean;
   /** @nullable */
   deliveryDays?: number | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  offerDate?: string | null;
 }

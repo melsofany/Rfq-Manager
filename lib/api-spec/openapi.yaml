@@ -573,6 +573,28 @@ paths:
         "200":
           description: Tracked
 
+  # ITEMS SEARCH
+  /items/search:
+    get:
+      operationId: searchItems
+      tags: [rfq]
+      summary: Search items across all RFQs by description, part number, or line item
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Item search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ItemHistory"
+
   # OFFERS
   /offers:
     get:
@@ -1278,6 +1300,81 @@ components:
                       type: boolean
                     isAnomaly:
                       type: boolean
+
+    # ITEM HISTORY (search result)
+    ItemSupplierResponse:
+      type: object
+      required: [supplierId, supplierName, responded, offerSubmitted, linkOpened]
+      properties:
+        supplierId:
+          type: integer
+        supplierName:
+          type: string
+        responded:
+          type: boolean
+        offerSubmitted:
+          type: boolean
+        linkOpened:
+          type: boolean
+        price:
+          type: ["number", "null"]
+        taxIncluded:
+          type: boolean
+        deliveryDays:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        offerDate:
+          type: ["string", "null"]
+
+    ItemHistory:
+      type: object
+      required: [rfqItemId, description, rfqId, internalRfqNo, customerRfqNo, rfqStatus, rfqDate, sentCount, respondedCount, notRespondedCount, suppliers]
+      properties:
+        rfqItemId:
+          type: integer
+        lineItem:
+          type: ["string", "null"]
+        partNo:
+          type: ["string", "null"]
+        description:
+          type: string
+        uom:
+          type: ["string", "null"]
+        qty:
+          type: ["number", "null"]
+        referencePrice:
+          type: ["number", "null"]
+        rfqId:
+          type: integer
+        internalRfqNo:
+          type: string
+        customerRfqNo:
+          type: string
+        rfqStatus:
+          type: string
+        rfqDate:
+          type: string
+        rfqResponseDate:
+          type: ["string", "null"]
+        employeeName:
+          type: ["string", "null"]
+        sentCount:
+          type: integer
+        respondedCount:
+          type: integer
+        notRespondedCount:
+          type: integer
+        minPrice:
+          type: ["number", "null"]
+        maxPrice:
+          type: ["number", "null"]
+        avgPrice:
+          type: ["number", "null"]
+        suppliers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSupplierResponse"
 
     # AUDIT
     AuditLog:

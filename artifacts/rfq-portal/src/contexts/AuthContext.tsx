@@ -17,7 +17,7 @@ const AuthContext = createContext<AuthContextValue>({
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useGetMe({ query: { retry: false } });
+  const { data, isLoading } = useGetMe({ query: { retry: false, queryKey: getGetMeQueryKey() } });
   const logoutMutation = useLogout();
 
   const employee = data ?? null;
