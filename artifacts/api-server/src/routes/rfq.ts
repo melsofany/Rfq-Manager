@@ -831,12 +831,20 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
       };
     });
 
-    const exportDate = new Date().toLocaleDateString("en-GB");
+    const exportDate = new Date().toLocaleDateString("ar-EG", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+    // Fetch the close date from the sent log (use the first non-null entry)
+    const sentLogRows = await db.select({ closeDate: sentLogTable.closeDate })
+      .from(sentLogTable)
+      .where(eq(sentLogTable.rfqId, rfqId));
+    const closeDate = sentLogRows.find(r => r.closeDate)?.closeDate ?? null;
 
     const pdfBuffer = await generateOffersPdf({
       rfqNo: rfqRow.rfq.internalRfqNo,
       customerRfqNo: rfqRow.rfq.customerRfqNo,
       exportDate,
+      employeeName: rfqRow.employeeName ?? null,
+      closeDate,
       itemAnalysis,
     });
 
