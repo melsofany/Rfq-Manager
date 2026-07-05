@@ -2,7 +2,7 @@ import { logger } from "./logger";
 import { generateRfqPdf } from "./rfqPdf";
 
 const WHATSAPP_API_VERSION = "v22.0";
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER;
 const TOKEN = process.env.WHATSAPP_TOKEN;
 
 const TEMPLATE_TEXT    = process.env.WHATSAPP_TEMPLATE_TEXT    || "rfq_send_ar";
