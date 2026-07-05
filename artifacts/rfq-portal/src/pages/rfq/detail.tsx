@@ -192,7 +192,7 @@ async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void>
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
-// ── Offers PDF — client-side via jsPDF + autotable + Amiri Arabic font ─────
+// ── Offers PDF — Arabic print window ─────────────────────────────────────────
 async function exportToPdf(
   rfqNo: string,
   customerRfqNo: string,
@@ -200,47 +200,10 @@ async function exportToPdf(
   employeeName?: string | null,
   rfqId?: number,
 ): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [jspdfMod, { default: autoTable }] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const JsPDF: new (...args: unknown[]) => unknown = (jspdfMod as Record<string, unknown>).jsPDF as never
-    ?? (jspdfMod as Record<string, unknown>).default as never;
-  if (!JsPDF) throw new Error("jsPDF module could not be loaded");
-
   const items: ItemAnalysis[] = normalizeItems(offersData);
   if (items.length === 0) throw new Error("لا توجد عروض لتصديرها");
 
-  // ── Load Amiri Arabic font ────────────────────────────────────────────────
-  let arabicFontB64: string | null = null;
-  try {
-    const fontResp = await fetch("/fonts/Amiri-Regular.ttf");
-    if (fontResp.ok) {
-      const buf = await fontResp.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      let binary = "";
-      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-      arabicFontB64 = btoa(binary);
-    }
-  } catch { /* fallback to helvetica */ }
-
-  // ── Load company logo ─────────────────────────────────────────────────────
-  let logoDataUrl: string | null = null;
-  try {
-    const logoResp = await fetch("/logo.png");
-    if (logoResp.ok) {
-      const blob = await logoResp.blob();
-      logoDataUrl = await new Promise<string>((res) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-    }
-  } catch { /* skip logo */ }
-
-  // ── Fetch close date from sent log ────────────────────────────────────────
+  // Fetch close date
   let closeDate: string | null = null;
   try {
     if (rfqId) {
@@ -252,227 +215,156 @@ async function exportToPdf(
     }
   } catch { /* skip */ }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const doc = new (JsPDF as any)({ orientation: "landscape", unit: "mm", format: "a4" });
+  const exportDate = new Date().toLocaleDateString("ar-EG", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const allSuppliers = Array.from(new Set(items.flatMap((i) => i.offers.map((o) => o.supplierName))));
 
-  // Register Amiri font if loaded
-  const FONT_AR = arabicFontB64 ? "Amiri" : "helvetica";
-  if (arabicFontB64) {
-    doc.addFileToVFS("Amiri-Regular.ttf", arabicFontB64);
-    doc.addFont("Amiri-Regular.ttf", "Amiri", "normal");
-  }
+  const supplierHeaderCells = allSuppliers.map(
+    (s) => `<th colspan="2" class="sup-head">${s}</th>`
+  ).join("");
+  const supplierSubHeader = allSuppliers.map(() =>
+    `<th class="sub-h">السعر الأصلي<br>(ج.م)</th><th class="sub-h grn">شامل ض.ق.م *</th>`
+  ).join("");
 
-  const BLUE = [26, 58, 92] as [number, number, number];
-  const GOLD = [200, 168, 75] as [number, number, number];
-  const GREEN = [22, 101, 52] as [number, number, number];
-  const AMBER = [180, 83, 9] as [number, number, number];
-  const WHITE: [number, number, number] = [255, 255, 255];
-  const GREY: [number, number, number] = [244, 248, 252];
+  // Logo as data URL for cross-origin safety
+  let logoSrc = "";
+  try {
+    const lr = await fetch("/logo.png");
+    if (lr.ok) {
+      const blob = await lr.blob();
+      logoSrc = await new Promise<string>((res) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    }
+  } catch { /* skip */ }
 
-  const PW = doc.internal.pageSize.getWidth();
-  const MARGIN = 10;
-  const CW = PW - MARGIN * 2;
-
-  // ── Header ────────────────────────────────────────────────────────────────
-  const HEADER_H = 28;
-  doc.setFillColor(...BLUE);
-  doc.rect(0, 0, PW, HEADER_H, "F");
-
-  // Logo (top-right)
-  if (logoDataUrl) {
-    try { doc.addImage(logoDataUrl, "PNG", PW - 22, 2, 18, 18); } catch { /* skip */ }
-  }
-
-  // Company name Arabic
-  doc.setFont(FONT_AR, "normal");
-  doc.setTextColor(...GOLD);
-  doc.setFontSize(13);
-  doc.text("قرطبة للتوريدات", MARGIN + 2, 10);
-  // Company name English + report title
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(180, 210, 240);
-  doc.text("Cortoba Supplies", MARGIN + 2, 17);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(...WHITE);
-  doc.setFontSize(10);
-  doc.text("RFQ PRICE COMPARISON REPORT", MARGIN + 2, 25);
-
-  // ── Info band ─────────────────────────────────────────────────────────────
-  const INFO_Y = HEADER_H + 2;
-  doc.setFillColor(...GREY);
-  doc.rect(MARGIN, INFO_Y, CW, 18, "F");
-  doc.setFillColor(...GOLD);
-  doc.rect(MARGIN, INFO_Y + 18, CW, 0.8, "F");
-
-  const infoCells: { arLabel: string; enLabel: string; value: string }[] = [
-    { arLabel: "رقم الطلب الداخلي", enLabel: "Internal RFQ", value: rfqNo },
-    { arLabel: "رقم طلب العميل", enLabel: "Customer RFQ", value: customerRfqNo },
-    { arLabel: "أعده", enLabel: "Prepared By", value: employeeName ?? "—" },
-    { arLabel: "تاريخ الإغلاق", enLabel: "Close Date", value: closeDate ?? "—" },
-    { arLabel: "تاريخ التصدير", enLabel: "Export Date", value: new Date().toLocaleDateString("en-GB") },
-    { arLabel: "عدد البنود", enLabel: "Items", value: String(items.length) },
-    { arLabel: "ض.q.م", enLabel: "VAT Rate", value: VAT_LABEL },
-  ];
-  const cellW = CW / infoCells.length;
-  infoCells.forEach((c, i) => {
-    const cx = MARGIN + i * cellW + cellW / 2;
-    // Arabic label
-    doc.setFont(FONT_AR, "normal");
-    doc.setTextColor(100, 120, 140);
-    doc.setFontSize(6);
-    doc.text(c.arLabel, cx, INFO_Y + 5, { align: "center" });
-    // English label
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5);
-    doc.setTextColor(150, 165, 180);
-    doc.text(c.enLabel, cx, INFO_Y + 9, { align: "center" });
-    // Value
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...BLUE);
-    doc.text(c.value, cx, INFO_Y + 16, { align: "center" });
-  });
-
-  // ── VAT note ──────────────────────────────────────────────────────────────
-  const NOTE_Y = INFO_Y + 22;
-  doc.setFont(FONT_AR, "normal");
-  doc.setTextColor(100, 100, 100);
-  doc.setFontSize(6);
-  doc.text(
-    `(*) عمود "شامل ض.ق.م": السعر × 1.14 إذا لم تشمل الضريبة، أو كما هو إن شملتها. | (*) Price incl. VAT = price × 1.14 when tax excluded, as-is otherwise.`,
-    MARGIN,
-    NOTE_Y,
-  );
-
-  // ── Table ─────────────────────────────────────────────────────────────────
-  const allSuppliers = Array.from(
-    new Set(items.flatMap((item) => item.offers.map((o) => o.supplierName)))
-  );
-
-  const head: (string | { content: string; colSpan?: number; styles?: object })[][] = [];
-
-  const row1: { content: string; colSpan?: number; styles?: object }[] = [
-    { content: "#" },
-    { content: "Description / البيان" },
-    { content: "Part No" },
-    { content: "QTY / UOM" },
-    ...allSuppliers.map((s) => ({
-      content: s,
-      colSpan: 2,
-      styles: { halign: "center" as const },
-    })),
-    { content: "ملخص / Summary" },
-  ];
-  head.push(row1 as never);
-
-  const row2: { content: string; styles?: object }[] = [
-    { content: "" },
-    { content: "" },
-    { content: "" },
-    { content: "" },
-    ...allSuppliers.flatMap(() => [
-      { content: "السعر الأصلي (EGP)", styles: { fontSize: 6, textColor: [180, 83, 9] } },
-      { content: "شامل ض.ق.م (EGP) *", styles: { fontSize: 6, textColor: [22, 101, 52] } },
-    ]),
-    { content: "" },
-  ];
-  head.push(row2 as never);
-
-  const body: (string | { content: string; styles: object })[][] = [];
-
-  items.forEach((item, idx) => {
+  const rows = items.map((item, idx) => {
     const bySupplier = new Map<string, OfferRow>();
     for (const o of item.offers) bySupplier.set(o.supplierName, o);
+    const supCells = allSuppliers.map((s) => {
+      const o = bySupplier.get(s);
+      if (!o) return `<td class="dash">—</td><td class="dash">—</td>`;
+      const vc = o.isLowest ? "color:#166534;font-weight:700" : o.isAnomaly ? "color:#b45309" : "color:#111";
+      return `<td class="num">${o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}</td>
+              <td class="num" style="${vc}">${o.priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })}${o.isLowest ? " ✓" : ""}</td>`;
+    }).join("");
+    const summary = item.minPrice != null
+      ? `أقل: ${item.minPrice.toFixed(2)} / متوسط: ${item.avgPrice?.toFixed(2)} / أعلى: ${item.maxPrice?.toFixed(2)}`
+      : "لا توجد عروض";
+    const bg = idx % 2 === 0 ? "#fff" : "#f4f8fc";
+    return `<tr style="background:${bg}">
+      <td class="ct">${idx + 1}</td>
+      <td class="desc">${item.description}</td>
+      <td class="ct ltr">${item.partNo ?? "—"}</td>
+      <td class="ct ltr">${item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—"}</td>
+      ${supCells}
+      <td class="summary">${summary}</td>
+    </tr>`;
+  }).join("");
 
-    const summaryText =
-      item.minPrice != null
-        ? `أقل: ${item.minPrice.toFixed(2)}
-متوسط: ${item.avgPrice?.toFixed(2)}
-أعلى: ${item.maxPrice?.toFixed(2)}`
-        : "لا توجد عروض";
+  const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<title>تقرير مقارنة الأسعار — ${rfqNo}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Cairo',Arial,sans-serif;direction:rtl;background:#fff;color:#222;font-size:11px}
+@media print{
+  @page{size:A4 landscape;margin:6mm}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .no-print{display:none!important}
+}
+.hdr{background:#1a3a5c;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 16px}
+.co-ar{font-size:19px;font-weight:700;color:#c8a84b}
+.co-en{font-size:10px;color:#aaccee;margin:2px 0}
+.rpt-title{font-size:13px;font-weight:600}
+.hdr img{height:54px;width:auto}
+.info{display:flex;background:#f4f8fc;border-bottom:3px solid #c8a84b}
+.ic{flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8}
+.ic:last-child{border-left:none}
+.il-ar{font-size:9px;color:#7a8fa0;font-weight:600}
+.il-en{font-size:7.5px;color:#aab;margin-bottom:3px}
+.iv{font-size:12px;font-weight:700;color:#1a3a5c;direction:ltr;unicode-bidi:plaintext}
+.note{font-size:9px;color:#555;padding:5px 8px;background:#fffbea;border-bottom:1px solid #e5d980}
+table{width:100%;border-collapse:collapse}
+th{background:#1a3a5c;color:#fff;padding:6px 4px;text-align:center;border:1px solid #3a5a7c;font-size:10px;font-weight:600}
+td{padding:5px 4px;border:1px solid #e0e8f0;vertical-align:middle}
+.sup-head{background:#1e4570}
+.sub-h{background:#2a4a6c;color:#c8a84b;font-size:9px;font-weight:400}
+.grn{color:#90d090}
+.ct{text-align:center;font-size:10px}
+.ltr{direction:ltr;unicode-bidi:plaintext}
+.num{text-align:left;direction:ltr;font-size:10px}
+.dash{text-align:center;color:#aaa;font-size:10px}
+.desc{font-size:10px;max-width:180px}
+.summary{font-size:9px;color:#444;line-height:1.8}
+.ftr{background:#1a3a5c;color:#c8a84b;text-align:center;font-size:9px;padding:6px;margin-top:8px}
+.print-btn{display:flex;gap:10px;justify-content:center;padding:14px;background:#f0f4f8}
+.print-btn button{background:#1a3a5c;color:#fff;border:none;padding:10px 28px;font-family:Cairo,sans-serif;font-size:14px;cursor:pointer;border-radius:6px;font-weight:600}
+.print-btn button:hover{background:#25527a}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div>
+    <div class="co-ar">قرطبة للتوريدات</div>
+    <div class="co-en">Cortoba Supplies</div>
+    <div class="rpt-title">تقرير مقارنة عروض الأسعار — RFQ Price Comparison</div>
+  </div>
+  ${logoSrc ? `<img src="${logoSrc}" alt="Logo">` : ""}
+</div>
+<div class="info">
+  <div class="ic"><div class="il-ar">رقم الطلب الداخلي</div><div class="il-en">Internal RFQ</div><div class="iv">${rfqNo}</div></div>
+  <div class="ic"><div class="il-ar">رقم طلب العميل</div><div class="il-en">Customer RFQ</div><div class="iv">${customerRfqNo}</div></div>
+  <div class="ic"><div class="il-ar">أعده</div><div class="il-en">Prepared By</div><div class="iv" style="direction:rtl">${employeeName ?? "—"}</div></div>
+  <div class="ic"><div class="il-ar">تاريخ الإغلاق</div><div class="il-en">Close Date</div><div class="iv">${closeDate ?? "—"}</div></div>
+  <div class="ic"><div class="il-ar">تاريخ التصدير</div><div class="il-en">Export Date</div><div class="iv">${exportDate}</div></div>
+  <div class="ic"><div class="il-ar">عدد البنود</div><div class="il-en">Items</div><div class="iv">${items.length}</div></div>
+  <div class="ic"><div class="il-ar">ض.ق.م</div><div class="il-en">VAT Rate</div><div class="iv">${VAT_LABEL}</div></div>
+</div>
+<div class="note">(*) عمود "شامل ض.ق.م": السعر × 1.14 إن لم تشمل الضريبة، أو كما هو إن شملتها. ✓ = أقل سعر. &nbsp;|&nbsp; (*) "Incl. VAT" = price × 1.14 if tax excluded, as-is otherwise. ✓ = lowest.</div>
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2" style="width:28px">#</th>
+      <th rowspan="2" style="text-align:right;width:180px">البيان / Description</th>
+      <th rowspan="2" style="width:80px">Part No</th>
+      <th rowspan="2" style="width:55px">الكمية</th>
+      ${supplierHeaderCells}
+      <th rowspan="2" style="width:130px">ملخص (شامل ض.ق.م)</th>
+    </tr>
+    <tr>${supplierSubHeader}</tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="ftr">قرطبة للتوريدات | INFO@CORTOBA-SUPPLIES.COM${closeDate ? ` | تاريخ الإغلاق: ${closeDate}` : ""} | جميع القيم بالجنيه المصري | ض.ق.م ${VAT_LABEL} | تاريخ التصدير: ${exportDate}</div>
 
-    const row: (string | { content: string; styles: object })[] = [
-      String(idx + 1),
-      item.description,
-      item.partNo ?? "—",
-      item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—",
-      ...allSuppliers.flatMap((s) => {
-        const o = bySupplier.get(s);
-        if (!o) return ["—", "—"];
-        const origColor = o.taxIncluded ? [80, 80, 80] : [140, 100, 0];
-        const vatColor = o.isLowest ? GREEN : o.isAnomaly ? AMBER : [50, 50, 50];
-        return [
-          {
-            content: o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 }),
-            styles: { textColor: origColor, halign: "right" },
-          },
-          {
-            content: o.priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 }) + (o.isLowest ? " ✓" : ""),
-            styles: { textColor: vatColor, fontStyle: o.isLowest ? "bold" : "normal", halign: "right" },
-          },
-        ];
-      }),
-      summaryText,
-    ];
-    body.push(row);
+<div class="print-btn no-print">
+  <button onclick="window.print()">🖨️ طباعة / حفظ PDF</button>
+  <button onclick="window.close()" style="background:#64748b">✕ إغلاق</button>
+</div>
+
+<script>
+  document.fonts.ready.then(function(){
+    setTimeout(function(){ window.print(); }, 900);
   });
+</script>
+</body>
+</html>`;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  autoTable(doc, {
-    head,
-    body,
-    startY: NOTE_Y + 4,
-    margin: { left: MARGIN, right: MARGIN },
-    tableWidth: CW,
-    styles: {
-      font: FONT_AR,
-      fontSize: 7.5,
-      cellPadding: 2,
-      lineColor: [208, 219, 232],
-      lineWidth: 0.2,
-      overflow: "linebreak",
-    },
-    headStyles: {
-      fillColor: BLUE,
-      textColor: WHITE,
-      fontStyle: "bold",
-      fontSize: 7,
-      halign: "center",
-    },
-    alternateRowStyles: { fillColor: GREY },
-    columnStyles: {
-      0: { cellWidth: 8, halign: "center" },
-      1: { cellWidth: 55 },
-      2: { cellWidth: 25, halign: "center" },
-      3: { cellWidth: 18, halign: "center" },
-      [4 + allSuppliers.length * 2]: { cellWidth: 38 },
-    },
-    didDrawPage: (data: { pageNumber: number }) => {
-      if (data.pageNumber > 1) {
-        doc.setFillColor(...BLUE);
-        doc.rect(0, 0, PW, 10, "F");
-        doc.setFont(FONT_AR, "normal");
-        doc.setTextColor(...GOLD);
-        doc.setFontSize(8);
-        doc.text(`${rfqNo} — تابع`, MARGIN, 7);
-      }
-      const pageH = doc.internal.pageSize.getHeight();
-      doc.setFillColor(...BLUE);
-      doc.rect(0, pageH - 10, PW, 10, "F");
-      doc.setFont(FONT_AR, "normal");
-      doc.setTextColor(...GOLD);
-      doc.setFontSize(7);
-      doc.text(
-        `قرطبة للتوريدات | INFO@CORTOBA-SUPPLIES.COM${closeDate ? " | تاريخ الإغلاق: " + closeDate : ""} | جميع القيم بالجنيه المصري | ض.ق.م ${VAT_LABEL}`,
-        PW / 2,
-        pageH - 4,
-        { align: "center" },
-      );
-    },
-  });
-
-  doc.save(`RFQ-Comparison-${rfqNo}.pdf`);
+  const printWindow = window.open("", "_blank", "width=1280,height=860,scrollbars=yes");
+  if (!printWindow) {
+    throw new Error("تعذّر فتح نافذة الطباعة — يرجى السماح بالنوافذ المنبثقة في المتصفح ثم أعد المحاولة");
+  }
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
 }
 
 // ── Main page component ───────────────────────────────────────────────────────
