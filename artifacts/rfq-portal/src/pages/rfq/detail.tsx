@@ -192,7 +192,7 @@ async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void>
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
-// ── Offers PDF — hidden iframe + Cairo Arabic font ──────────────────────────
+// ── Offers PDF — html2canvas screenshot → jsPDF ──────────────────────────────
 async function exportToPdf(
   rfqNo: string,
   customerRfqNo: string,
@@ -203,7 +203,7 @@ async function exportToPdf(
   const items: ItemAnalysis[] = normalizeItems(offersData);
   if (items.length === 0) throw new Error("لا توجد عروض لتصديرها");
 
-  // Fetch close date from sent-log
+  // ── 1. Fetch close date ───────────────────────────────────────────────────
   let closeDate: string | null = null;
   try {
     if (rfqId) {
@@ -215,63 +215,7 @@ async function exportToPdf(
     }
   } catch { /* skip */ }
 
-  const exportDate = new Date().toLocaleDateString("ar-EG", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-  });
-  const allSuppliers = Array.from(
-    new Set(items.flatMap((i) => i.offers.map((o) => o.supplierName)))
-  );
-
-  // Build supplier column headers
-  const supplierHeaderCells = allSuppliers
-    .map((s) => `<th colspan="2" class="sup-head">${s}</th>`)
-    .join("");
-  const supplierSubHeader = allSuppliers
-    .map(
-      () =>
-        `<th class="sub-h">السعر الأصلي<br>(ج.م)</th><th class="sub-h grn">شامل ض.ق.م *</th>`
-    )
-    .join("");
-
-  // Build table rows
-  const rows = items
-    .map((item, idx) => {
-      const bySupplier = new Map<string, OfferRow>();
-      for (const o of item.offers) bySupplier.set(o.supplierName, o);
-
-      const supCells = allSuppliers
-        .map((s) => {
-          const o = bySupplier.get(s);
-          if (!o)
-            return `<td class="dash">—</td><td class="dash">—</td>`;
-          const vc = o.isLowest
-            ? "color:#166534;font-weight:700"
-            : o.isAnomaly
-            ? "color:#b45309"
-            : "color:#111";
-          return `<td class="num">${o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}</td>
-                  <td class="num" style="${vc}">${o.priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })}${o.isLowest ? " ✓" : ""}</td>`;
-        })
-        .join("");
-
-      const summary =
-        item.minPrice != null
-          ? `أقل: ${item.minPrice.toFixed(2)}<br>متوسط: ${item.avgPrice?.toFixed(2)}<br>أعلى: ${item.maxPrice?.toFixed(2)}`
-          : "لا توجد عروض";
-
-      const bg = idx % 2 === 0 ? "#fff" : "#f4f8fc";
-      return `<tr style="background:${bg}">
-        <td class="ct">${idx + 1}</td>
-        <td class="desc">${item.description}</td>
-        <td class="ct ltr">${item.partNo ?? "—"}</td>
-        <td class="ct ltr">${item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—"}</td>
-        ${supCells}
-        <td class="summary">${summary}</td>
-      </tr>`;
-    })
-    .join("");
-
-  // Fetch logo as data URL (same-origin, no CORS issue)
+  // ── 2. Fetch logo as data URL ─────────────────────────────────────────────
   let logoSrc = "";
   try {
     const lr = await fetch("/logo.png");
@@ -285,119 +229,216 @@ async function exportToPdf(
     }
   } catch { /* skip */ }
 
-  // ── Build the HTML document ──────────────────────────────────────────────
-  const html = `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<title>RFQ ${rfqNo}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Cairo',Arial,sans-serif;direction:rtl;background:#fff;color:#222;font-size:11px;padding:4mm}
-@media print{
-  @page{size:A4 landscape;margin:6mm}
-  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:0}
-}
-.hdr{background:#1a3a5c;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-radius:4px 4px 0 0}
-.co-ar{font-size:20px;font-weight:700;color:#c8a84b}
-.co-en{font-size:10px;color:#aaccee;margin:2px 0}
-.rpt{font-size:13px;font-weight:600;margin-top:4px}
-.hdr img{height:54px;width:auto}
-.info{display:flex;background:#f4f8fc;border-bottom:3px solid #c8a84b}
-.ic{flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8}
-.ic:last-child{border-left:none}
-.il-ar{font-size:9px;color:#7a8fa0;font-weight:600}
-.il-en{font-size:7.5px;color:#aab;margin-bottom:3px}
-.iv{font-size:12px;font-weight:700;color:#1a3a5c}
-.note{font-size:9px;color:#555;padding:5px 8px;background:#fffbea;border-bottom:1px solid #e5d980}
-table{width:100%;border-collapse:collapse;margin-top:0}
-th{background:#1a3a5c;color:#fff;padding:6px 4px;text-align:center;border:1px solid #3a5a7c;font-size:10px;font-weight:600}
-td{padding:5px 4px;border:1px solid #e0e8f0;vertical-align:middle}
-.sup-head{background:#1e4570}
-.sub-h{background:#2a4a6c;color:#c8a84b;font-size:9px;font-weight:400}
-.grn{color:#90d090}
-.ct{text-align:center;font-size:10px}
-.ltr{direction:ltr;unicode-bidi:embed}
-.num{text-align:left;direction:ltr;font-size:10px;unicode-bidi:embed}
-.dash{text-align:center;color:#aaa;font-size:10px}
-.desc{font-size:10px;max-width:180px}
-.summary{font-size:9px;color:#444;line-height:1.8}
-.ftr{background:#1a3a5c;color:#c8a84b;text-align:center;font-size:9px;padding:6px;border-radius:0 0 4px 4px;margin-top:6px}
-</style>
-</head>
-<body>
-<div class="hdr">
+  // ── 3. Fetch Amiri Arabic font as data URL (avoids CORS) ─────────────────
+  let fontDataUrl = "";
+  try {
+    const fr = await fetch("/fonts/Amiri-Regular.ttf");
+    if (fr.ok) {
+      const fontBlob = await fr.blob();
+      fontDataUrl = await new Promise<string>((res) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result as string);
+        reader.readAsDataURL(fontBlob);
+      });
+    }
+  } catch { /* skip */ }
+
+  const exportDate = new Date().toLocaleDateString("ar-EG", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+  });
+  const allSuppliers = Array.from(
+    new Set(items.flatMap((i) => i.offers.map((o) => o.supplierName)))
+  );
+
+  // ── 4. Build supplier columns ─────────────────────────────────────────────
+  const supplierHeaderCells = allSuppliers
+    .map((s) => `<th colspan="2" style="background:#1e4570;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px">${s}</th>`)
+    .join("");
+  const supplierSubHeader = allSuppliers
+    .map(
+      () =>
+        `<th style="background:#2a4a6c;color:#c8a84b;padding:4px;border:1px solid #3a5a7c;font-size:9px;font-weight:400">السعر الأصلي (ج.م)</th>
+         <th style="background:#2a4a6c;color:#90d090;padding:4px;border:1px solid #3a5a7c;font-size:9px;font-weight:400">شامل ض.ق.م</th>`
+    )
+    .join("");
+
+  // ── 5. Build table rows ───────────────────────────────────────────────────
+  const rows = items
+    .map((item, idx) => {
+      const bySupplier = new Map<string, OfferRow>();
+      for (const o of item.offers) bySupplier.set(o.supplierName, o);
+      const supCells = allSuppliers
+        .map((s) => {
+          const o = bySupplier.get(s);
+          if (!o) return `<td style="text-align:center;color:#aaa;border:1px solid #e0e8f0;padding:4px">—</td><td style="text-align:center;color:#aaa;border:1px solid #e0e8f0;padding:4px">—</td>`;
+          const vc = o.isLowest ? "#166534" : o.isAnomaly ? "#b45309" : "#111";
+          const fw = o.isLowest ? "bold" : "normal";
+          return `<td style="text-align:left;direction:ltr;border:1px solid #e0e8f0;padding:4px;font-size:10px">${o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}</td>
+                  <td style="text-align:left;direction:ltr;color:${vc};font-weight:${fw};border:1px solid #e0e8f0;padding:4px;font-size:10px">${o.priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })}${o.isLowest ? " ✓" : ""}</td>`;
+        })
+        .join("");
+      const summary =
+        item.minPrice != null
+          ? `أقل: ${item.minPrice.toFixed(2)} | متوسط: ${item.avgPrice?.toFixed(2)} | أعلى: ${item.maxPrice?.toFixed(2)}`
+          : "لا توجد عروض";
+      const bg = idx % 2 === 0 ? "#fff" : "#f4f8fc";
+      return `<tr style="background:${bg}">
+        <td style="text-align:center;border:1px solid #e0e8f0;padding:4px;font-size:10px">${idx + 1}</td>
+        <td style="border:1px solid #e0e8f0;padding:4px;font-size:10px">${item.description}</td>
+        <td style="text-align:center;direction:ltr;border:1px solid #e0e8f0;padding:4px;font-size:10px">${item.partNo ?? "—"}</td>
+        <td style="text-align:center;direction:ltr;border:1px solid #e0e8f0;padding:4px;font-size:10px">${item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—"}</td>
+        ${supCells}
+        <td style="border:1px solid #e0e8f0;padding:4px;font-size:9px;color:#444">${summary}</td>
+      </tr>`;
+    })
+    .join("");
+
+  // ── 6. Load html2canvas from CDN ─────────────────────────────────────────
+  type H2C = (el: HTMLElement, opts?: Record<string, unknown>) => Promise<HTMLCanvasElement>;
+  const win = window as Window & { html2canvas?: H2C };
+  if (!win.html2canvas) {
+    await new Promise<void>((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("تعذّر تحميل مكتبة html2canvas"));
+      document.head.appendChild(s);
+    });
+  }
+  const html2canvas = win.html2canvas!;
+
+  // ── 7. Inject font into the document ─────────────────────────────────────
+  const fontStyle = document.createElement("style");
+  fontStyle.textContent = fontDataUrl
+    ? `@font-face { font-family: 'Amiri'; src: url('${fontDataUrl}') format('truetype'); font-weight: normal; }`
+    : "";
+  document.head.appendChild(fontStyle);
+
+  // ── 8. Build the report div ───────────────────────────────────────────────
+  const div = document.createElement("div");
+  div.style.cssText =
+    "position:fixed;left:-9999px;top:0;width:1122px;background:#fff;" +
+    "font-family:'Amiri','Arial Unicode MS',Arial,sans-serif;direction:rtl;z-index:99999;padding:8px;";
+
+  div.innerHTML = `
+<div style="background:#1a3a5c;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-radius:4px 4px 0 0">
   <div>
-    <div class="co-ar">قرطبة للتوريدات</div>
-    <div class="co-en">Cortoba Supplies</div>
-    <div class="rpt">تقرير مقارنة عروض الأسعار — RFQ Price Comparison Report</div>
+    <div style="font-size:22px;font-weight:700;color:#c8a84b">قرطبة للتوريدات</div>
+    <div style="font-size:10px;color:#aaccee;margin:2px 0">Cortoba Supplies</div>
+    <div style="font-size:13px;font-weight:600;margin-top:4px">تقرير مقارنة عروض الأسعار — RFQ Price Comparison Report</div>
   </div>
-  ${logoSrc ? `<img src="${logoSrc}" alt="Logo">` : ""}
+  ${logoSrc ? `<img src="${logoSrc}" style="height:54px;width:auto" alt="Logo">` : ""}
 </div>
-<div class="info">
-  <div class="ic"><div class="il-ar">رقم الطلب الداخلي</div><div class="il-en">Internal RFQ</div><div class="iv">${rfqNo}</div></div>
-  <div class="ic"><div class="il-ar">رقم طلب العميل</div><div class="il-en">Customer RFQ</div><div class="iv">${customerRfqNo}</div></div>
-  <div class="ic"><div class="il-ar">أعده</div><div class="il-en">Prepared By</div><div class="iv" style="direction:rtl;unicode-bidi:embed">${employeeName ?? "—"}</div></div>
-  <div class="ic"><div class="il-ar">تاريخ الإغلاق</div><div class="il-en">Close Date</div><div class="iv">${closeDate ?? "—"}</div></div>
-  <div class="ic"><div class="il-ar">تاريخ التصدير</div><div class="il-en">Export Date</div><div class="iv">${exportDate}</div></div>
-  <div class="ic"><div class="il-ar">عدد البنود</div><div class="il-en">Items</div><div class="iv">${items.length}</div></div>
-  <div class="ic"><div class="il-ar">ض.ق.م</div><div class="il-en">VAT Rate</div><div class="iv">${VAT_LABEL}</div></div>
+<div style="display:flex;background:#f4f8fc;border-bottom:3px solid #c8a84b">
+  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
+    <div style="font-size:9px;color:#7a8fa0;font-weight:600">رقم الطلب الداخلي</div>
+    <div style="font-size:8px;color:#aab">Internal RFQ</div>
+    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${rfqNo}</div>
+  </div>
+  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
+    <div style="font-size:9px;color:#7a8fa0;font-weight:600">رقم طلب العميل</div>
+    <div style="font-size:8px;color:#aab">Customer RFQ</div>
+    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${customerRfqNo}</div>
+  </div>
+  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
+    <div style="font-size:9px;color:#7a8fa0;font-weight:600">أعده</div>
+    <div style="font-size:8px;color:#aab">Prepared By</div>
+    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${employeeName ?? "—"}</div>
+  </div>
+  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
+    <div style="font-size:9px;color:#7a8fa0;font-weight:600">تاريخ الإغلاق</div>
+    <div style="font-size:8px;color:#aab">Close Date</div>
+    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${closeDate ?? "—"}</div>
+  </div>
+  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
+    <div style="font-size:9px;color:#7a8fa0;font-weight:600">تاريخ التصدير</div>
+    <div style="font-size:8px;color:#aab">Export Date</div>
+    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${exportDate}</div>
+  </div>
+  <div style="flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8">
+    <div style="font-size:9px;color:#7a8fa0;font-weight:600">عدد البنود</div>
+    <div style="font-size:8px;color:#aab">Items</div>
+    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${items.length}</div>
+  </div>
+  <div style="flex:1;text-align:center;padding:7px 4px">
+    <div style="font-size:9px;color:#7a8fa0;font-weight:600">ض.ق.م</div>
+    <div style="font-size:8px;color:#aab">VAT</div>
+    <div style="font-size:12px;font-weight:700;color:#1a3a5c">${VAT_LABEL}</div>
+  </div>
 </div>
-<div class="note">(*) شامل ض.ق.م = السعر × 1.14 إن لم تشمل الضريبة | ✓ = أقل سعر | جميع القيم بالجنيه المصري</div>
-<table>
+<div style="font-size:9px;color:#555;padding:5px 8px;background:#fffbea;border-bottom:1px solid #e5d980">
+  (*) شامل ض.ق.م = السعر × 1.14 إن لم تشمل الضريبة | ✓ = أقل سعر | جميع القيم بالجنيه المصري
+</div>
+<table style="width:100%;border-collapse:collapse">
   <thead>
     <tr>
-      <th rowspan="2" style="width:28px">#</th>
-      <th rowspan="2" style="text-align:right;width:180px">البيان / Description</th>
-      <th rowspan="2" style="width:80px">Part No</th>
-      <th rowspan="2" style="width:55px">الكمية</th>
+      <th rowspan="2" style="background:#1a3a5c;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px;width:28px">#</th>
+      <th rowspan="2" style="background:#1a3a5c;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px;text-align:right;width:180px">البيان / Description</th>
+      <th rowspan="2" style="background:#1a3a5c;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px;width:80px">Part No</th>
+      <th rowspan="2" style="background:#1a3a5c;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px;width:55px">الكمية</th>
       ${supplierHeaderCells}
-      <th rowspan="2" style="width:130px">ملخص (شامل ض.ق.م)</th>
+      <th rowspan="2" style="background:#1a3a5c;color:#fff;padding:6px 4px;border:1px solid #3a5a7c;font-size:10px;width:130px">ملخص (شامل ض.ق.م)</th>
     </tr>
     <tr>${supplierSubHeader}</tr>
   </thead>
   <tbody>${rows}</tbody>
 </table>
-<div class="ftr">قرطبة للتوريدات | INFO@CORTOBA-SUPPLIES.COM${closeDate ? ` | تاريخ الإغلاق: ${closeDate}` : ""} | ض.ق.م ${VAT_LABEL} | ${exportDate}</div>
-</body>
-</html>`;
+<div style="background:#1a3a5c;color:#c8a84b;text-align:center;font-size:9px;padding:6px;border-radius:0 0 4px 4px;margin-top:4px">
+  قرطبة للتوريدات | INFO@CORTOBA-SUPPLIES.COM${closeDate ? ` | تاريخ الإغلاق: ${closeDate}` : ""} | ض.ق.م ${VAT_LABEL} | ${exportDate}
+</div>`;
 
-  // ── Print via hidden iframe (no popup required) ───────────────────────────
-  const iframe = document.createElement("iframe");
-  iframe.style.cssText =
-    "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;border:0;opacity:0;";
-  document.body.appendChild(iframe);
+  document.body.appendChild(div);
 
-  const iwin = iframe.contentWindow!;
-  const idoc = iframe.contentDocument ?? iwin.document;
-  idoc.open();
-  idoc.write(html);
-  idoc.close();
+  // Wait for Amiri font + images to render
+  await document.fonts.ready;
+  await new Promise<void>((r) => setTimeout(r, 800));
 
-  // Wait for Cairo font to load inside iframe (with timeout fallback)
-  await new Promise<void>((resolve) => {
-    const cleanup = setTimeout(resolve, 4000); // max 4 s wait
-    const check = setInterval(() => {
-      if (idoc.fonts) {
-        clearInterval(check);
-        idoc.fonts.ready
-          .then(() => setTimeout(resolve, 600))
-          .catch(() => resolve())
-          .finally(() => clearTimeout(cleanup));
-      }
-    }, 100);
+  // ── 9. Capture with html2canvas ───────────────────────────────────────────
+  const canvas = await html2canvas(div, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: false,
+    backgroundColor: "#ffffff",
+    logging: false,
+    width: 1122,
+    height: div.scrollHeight,
   });
 
-  iwin.focus();
-  iwin.print();
+  document.body.removeChild(div);
+  document.head.removeChild(fontStyle);
 
-  // Clean up after dialog closes
-  setTimeout(() => {
-    if (document.body.contains(iframe)) document.body.removeChild(iframe);
-  }, 2000);
+  // ── 10. Create PDF with jsPDF ─────────────────────────────────────────────
+  const jspdfMod = await import("jspdf");
+  const JsPDF = (jspdfMod as { jsPDF?: typeof jspdfMod.jsPDF; default?: typeof jspdfMod.jsPDF }).jsPDF
+    ?? (jspdfMod as { jsPDF?: typeof jspdfMod.jsPDF; default?: typeof jspdfMod.jsPDF }).default;
+  const doc = new JsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const PW = doc.internal.pageSize.getWidth();   // 297 mm
+  const PH = doc.internal.pageSize.getHeight();  // 210 mm
+
+  const totalPx = canvas.height;
+  const pxPerMm = canvas.width / PW;
+  const pageHeightPx = Math.floor(PH * pxPerMm);
+
+  let yPx = 0;
+  let firstPage = true;
+  while (yPx < totalPx) {
+    if (!firstPage) doc.addPage();
+    firstPage = false;
+    const sliceH = Math.min(pageHeightPx, totalPx - yPx);
+
+    const slice = document.createElement("canvas");
+    slice.width = canvas.width;
+    slice.height = sliceH;
+    const ctx = slice.getContext("2d")!;
+    ctx.drawImage(canvas, 0, yPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+
+    const sliceData = slice.toDataURL("image/jpeg", 0.92);
+    const sliceHmm = sliceH / pxPerMm;
+    doc.addImage(sliceData, "JPEG", 0, 0, PW, sliceHmm);
+    yPx += pageHeightPx;
+  }
+
+  doc.save(`RFQ-Comparison-${rfqNo}.pdf`);
 }
 
 // ── Main page component ───────────────────────────────────────────────────────
