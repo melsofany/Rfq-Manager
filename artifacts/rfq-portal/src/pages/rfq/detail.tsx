@@ -166,30 +166,49 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
   writeFile(wb, `RFQ-Comparison-${rfqNo}.xlsx`);
 }
 
-// ── Dispatch report PDF (server-side) ────────────────────────────────────────
+// ── Dispatch report PDF — rewritten from scratch ─────────────────────────────
 async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void> {
-  const response = await fetch(`/api/rfq/${rfqId}/dispatch-report`, { credentials: "include" });
-  if (!response.ok) {
-    let errMsg = `Server error ${response.status}`;
-    try {
-      const json = await response.json();
-      if (json?.detail) errMsg = json.detail;
-      else if (json?.error) errMsg = json.error;
-    } catch { /* ignore */ }
-    throw new Error(errMsg);
+  // 1. Fetch PDF from the server
+  let response: Response;
+  try {
+    response = await fetch(`/api/rfq/${rfqId}/dispatch-report`, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/pdf" },
+    });
+  } catch (networkErr) {
+    throw new Error("تعذّر الاتصال بالخادم — تحقق من اتصالك بالإنترنت");
   }
+
+  // 2. Handle non-OK responses
+  if (!response.ok) {
+    let detail = `خطأ ${response.status}`;
+    try {
+      const errJson = await response.json() as { detail?: string; error?: string };
+      detail = errJson.detail ?? errJson.error ?? detail;
+    } catch { /* keep default */ }
+    throw new Error(detail);
+  }
+
+  // 3. Read response as blob
   const blob = await response.blob();
   if (!blob || blob.size === 0) {
-    throw new Error("الملف المُولَّد فارغ — تحقق من سجل الإرسال أو تواصل مع الدعم الفني");
+    throw new Error("الملف المُولَّد فارغ — تواصل مع الدعم الفني");
   }
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `Dispatch-Report-${rfqNo}.pdf`;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+
+  // 4. Trigger browser download
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor    = document.createElement("a");
+  anchor.href        = objectUrl;
+  anchor.download    = `Dispatch-Report-${rfqNo}.pdf`;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  // Clean up after the download starts
+  setTimeout(() => {
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(objectUrl);
+  }, 200);
 }
 
 // ── Offers PDF — print window opened SYNC then populated async ────────────────

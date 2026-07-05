@@ -649,84 +649,87 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
 });
 
 
-router.get("/rfq/:id/dispatch-report", requireAuth, async (req, res): Promise<void> => {
-    const raw   = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const rfqId = parseInt(raw, 10);
-    req.log.info({ rfqId }, "dispatch-report: request received");
+router.get('/rfq/:id/dispatch-report', requireAuth, async (req, res): Promise<void> => {
+  const rfqId = parseInt(req.params.id as string, 10);
+  if (isNaN(rfqId)) {
+    res.status(400).json({ error: 'Invalid RFQ ID' });
+    return;
+  }
 
-    function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-      return Promise.race([
-        promise,
-        new Promise<T>((_, rej) =>
-          setTimeout(() => rej(new Error(label + " timed out after " + ms + "ms")), ms)
-        ),
-      ]);
+  req.log.info({ rfqId }, 'dispatch-report: start');
+
+  try {
+    // 1. Fetch the RFQ record
+    const [rfqRow] = await db
+      .select({ rfq: rfqTable })
+      .from(rfqTable)
+      .where(eq(rfqTable.id, rfqId));
+
+    if (!rfqRow) {
+      res.status(404).json({ error: 'RFQ not found' });
+      return;
     }
 
-    try {
-      req.log.info({ rfqId }, "dispatch-report: fetching rfq row");
-      const rfqRows = await withTimeout(
-        db.select({ rfq: rfqTable }).from(rfqTable).where(eq(rfqTable.id, rfqId)),
-        8000, "DB:rfq"
-      );
-      const rfqRow = rfqRows[0];
-      if (!rfqRow) { res.status(404).json({ error: "RFQ not found" }); return; }
-      req.log.info({ rfqId }, "dispatch-report: rfq row ok, fetching sent-log");
+    // 2. Fetch sent-log joined with supplier details
+    const rows = await db
+      .select({
+        log:           sentLogTable,
+        supplierName:  suppliersTable.name,
+        contactPerson: suppliersTable.contactPerson,
+        phone:         suppliersTable.phone,
+        email:         suppliersTable.email,
+      })
+      .from(sentLogTable)
+      .leftJoin(suppliersTable, eq(sentLogTable.supplierId, suppliersTable.id))
+      .where(eq(sentLogTable.rfqId, rfqId));
 
-      const rows = await withTimeout(
-        db.select({
-          log: sentLogTable,
-          supplierName:  suppliersTable.name,
-          contactPerson: suppliersTable.contactPerson,
-          phone:         suppliersTable.phone,
-          email:         suppliersTable.email,
-        })
-          .from(sentLogTable)
-          .leftJoin(suppliersTable, eq(sentLogTable.supplierId, suppliersTable.id))
-          .where(eq(sentLogTable.rfqId, rfqId)),
-        8000, "DB:sentLog"
-      );
-      req.log.info({ rfqId, rowCount: rows.length }, "dispatch-report: sent-log ok, generating pdf");
-      if (!rows.length) { res.status(404).json({ error: "No suppliers found for this RFQ" }); return; }
+    req.log.info({ rfqId, rowCount: rows.length }, 'dispatch-report: fetched sent-log');
 
-      const suppliers = rows.map(r => ({
-        supplierName:   r.supplierName  ?? "",
-        contactPerson:  r.contactPerson ?? null,
-        phone:          r.phone         ?? null,
-        email:          r.email         ?? null,
-        linkOpened:     r.log.linkOpened,
-        openCount:      r.log.openCount,
-        offerSubmitted: r.log.offerSubmitted,
-        createdAt:      r.log.createdAt.toISOString(),
-      }));
-
-      const pdfBuffer = await withTimeout(
-        generateDispatchReportPdf({
-          rfqNo:         rfqRow.rfq.internalRfqNo,
-          customerRfqNo: rfqRow.rfq.customerRfqNo,
-          exportDate:    new Date().toLocaleDateString("en-GB"),
-          suppliers,
-        }),
-        10000, "PDF:generate"
-      );
-      req.log.info({ rfqId, bytes: pdfBuffer.length }, "dispatch-report: sending pdf");
-
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition",
-        `attachment; filename="Dispatch-Report-${rfqRow.rfq.internalRfqNo}.pdf"`);
-      res.setHeader("Content-Length", pdfBuffer.length);
-      res.end(pdfBuffer);
-    } catch (err) {
-      req.log.error({ err }, "dispatch-report: FAILED");
-      if (!res.headersSent) {
-        res.status(500).json({
-          error:  "PDF generation failed",
-          detail: err instanceof Error ? err.message : String(err),
-        });
-      }
+    if (!rows.length) {
+      res.status(404).json({ error: 'لا يوجد سجل إرسال لهذا الطلب' });
+      return;
     }
-  });
-  
+
+    // 3. Build supplier list for PDF
+    const suppliers = rows.map(r => ({
+      supplierName:   r.supplierName  ?? '',
+      contactPerson:  r.contactPerson ?? null,
+      phone:          r.phone         ?? null,
+      email:          r.email         ?? null,
+      linkOpened:     r.log.linkOpened,
+      openCount:      r.log.openCount,
+      offerSubmitted: r.log.offerSubmitted,
+      createdAt:      r.log.createdAt.toISOString(),
+    }));
+
+    // 4. Generate PDF buffer
+    const pdfBuffer = await generateDispatchReportPdf({
+      rfqNo:         rfqRow.rfq.internalRfqNo,
+      customerRfqNo: rfqRow.rfq.customerRfqNo ?? '',
+      exportDate:    new Date().toLocaleDateString('en-GB'),
+      suppliers,
+    });
+
+    req.log.info({ rfqId, bytes: pdfBuffer.length }, 'dispatch-report: sending pdf');
+
+    // 5. Send the PDF
+    res.set({
+      'Content-Type':        'application/pdf',
+      'Content-Disposition': `attachment; filename="Dispatch-Report-${rfqRow.rfq.internalRfqNo}.pdf"`,
+      'Content-Length':      String(pdfBuffer.length),
+    });
+    res.send(pdfBuffer);
+
+  } catch (err) {
+    req.log.error({ err }, 'dispatch-report: failed');
+    if (!res.headersSent) {
+      res.status(500).json({
+        error:  'فشل إنشاء تقرير الإرسال',
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+});
 
 router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
