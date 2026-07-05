@@ -4,7 +4,7 @@ import { eq, and, ilike, or, count, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { generateToken } from "../lib/token";
 import { generateOffersPdf } from "../lib/offersPdf.js";
-import { generateDispatchReportPdf, createDispatchReportPdfDoc } from "../lib/dispatchReportPdf.js";
+import { generateDispatchReportPdf } from "../lib/dispatchReportPdf.js";
 import { sendRfqEmail } from "../lib/email";
 import { sendRfqWhatsApp } from "../lib/whatsapp";
 import { whatsappChatsTable } from "@workspace/db";
