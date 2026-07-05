@@ -192,18 +192,19 @@ async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void>
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
-// ── Offers PDF — client-side via jsPDF + autotable ───────────────────────────
+// ── Offers PDF — client-side via jsPDF + autotable + Amiri Arabic font ─────
 async function exportToPdf(
   rfqNo: string,
   customerRfqNo: string,
   offersData: OffersData,
+  employeeName?: string | null,
+  rfqId?: number,
 ): Promise<void> {
-  // Dynamic imports — jsPDF v4 uses named export { jsPDF }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [jspdfMod, { default: autoTable }] = await Promise.all([
     import("jspdf"),
     import("jspdf-autotable"),
   ]);
-  // Support both named export (v4) and default export (older)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const JsPDF: new (...args: unknown[]) => unknown = (jspdfMod as Record<string, unknown>).jsPDF as never
     ?? (jspdfMod as Record<string, unknown>).default as never;
@@ -212,8 +213,54 @@ async function exportToPdf(
   const items: ItemAnalysis[] = normalizeItems(offersData);
   if (items.length === 0) throw new Error("لا توجد عروض لتصديرها");
 
+  // ── Load Amiri Arabic font ────────────────────────────────────────────────
+  let arabicFontB64: string | null = null;
+  try {
+    const fontResp = await fetch("/fonts/Amiri-Regular.ttf");
+    if (fontResp.ok) {
+      const buf = await fontResp.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+      arabicFontB64 = btoa(binary);
+    }
+  } catch { /* fallback to helvetica */ }
+
+  // ── Load company logo ─────────────────────────────────────────────────────
+  let logoDataUrl: string | null = null;
+  try {
+    const logoResp = await fetch("/logo.png");
+    if (logoResp.ok) {
+      const blob = await logoResp.blob();
+      logoDataUrl = await new Promise<string>((res) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    }
+  } catch { /* skip logo */ }
+
+  // ── Fetch close date from sent log ────────────────────────────────────────
+  let closeDate: string | null = null;
+  try {
+    if (rfqId) {
+      const slResp = await fetch(`/api/rfq/${rfqId}/sent-log`, { credentials: "include" });
+      if (slResp.ok) {
+        const sl = await slResp.json() as Array<{ closeDate?: string | null }>;
+        closeDate = sl?.find((e) => e.closeDate)?.closeDate ?? null;
+      }
+    }
+  } catch { /* skip */ }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const doc = new (JsPDF as any)({ orientation: "landscape", unit: "mm", format: "a4" });
+
+  // Register Amiri font if loaded
+  const FONT_AR = arabicFontB64 ? "Amiri" : "helvetica";
+  if (arabicFontB64) {
+    doc.addFileToVFS("Amiri-Regular.ttf", arabicFontB64);
+    doc.addFont("Amiri-Regular.ttf", "Amiri", "normal");
+  }
 
   const BLUE = [26, 58, 92] as [number, number, number];
   const GOLD = [200, 168, 75] as [number, number, number];
@@ -227,65 +274,87 @@ async function exportToPdf(
   const CW = PW - MARGIN * 2;
 
   // ── Header ────────────────────────────────────────────────────────────────
+  const HEADER_H = 28;
   doc.setFillColor(...BLUE);
-  doc.rect(0, 0, PW, 22, "F");
-  doc.setTextColor(...WHITE);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.text("RFQ PRICE COMPARISON REPORT", MARGIN + 2, 10);
+  doc.rect(0, 0, PW, HEADER_H, "F");
+
+  // Logo (top-right)
+  if (logoDataUrl) {
+    try { doc.addImage(logoDataUrl, "PNG", PW - 22, 2, 18, 18); } catch { /* skip */ }
+  }
+
+  // Company name Arabic
+  doc.setFont(FONT_AR, "normal");
   doc.setTextColor(...GOLD);
+  doc.setFontSize(13);
+  doc.text("قرطبة للتوريدات", MARGIN + 2, 10);
+  // Company name English + report title
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.text("Cortoba Supplies | VAT-inclusive comparison", MARGIN + 2, 17);
+  doc.setTextColor(180, 210, 240);
+  doc.text("Cortoba Supplies", MARGIN + 2, 17);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...WHITE);
+  doc.setFontSize(10);
+  doc.text("RFQ PRICE COMPARISON REPORT", MARGIN + 2, 25);
 
   // ── Info band ─────────────────────────────────────────────────────────────
+  const INFO_Y = HEADER_H + 2;
   doc.setFillColor(...GREY);
-  doc.rect(MARGIN, 24, CW, 14, "F");
+  doc.rect(MARGIN, INFO_Y, CW, 18, "F");
   doc.setFillColor(...GOLD);
-  doc.rect(MARGIN, 38, CW, 1, "F");
+  doc.rect(MARGIN, INFO_Y + 18, CW, 0.8, "F");
 
-  const infoCells = [
-    { label: "Internal RFQ", value: rfqNo },
-    { label: "Customer RFQ", value: customerRfqNo },
-    { label: "Export Date", value: new Date().toLocaleDateString("en-GB") },
-    { label: "Items", value: String(items.length) },
-    { label: "VAT Rate", value: VAT_LABEL },
+  const infoCells: { arLabel: string; enLabel: string; value: string }[] = [
+    { arLabel: "رقم الطلب الداخلي", enLabel: "Internal RFQ", value: rfqNo },
+    { arLabel: "رقم طلب العميل", enLabel: "Customer RFQ", value: customerRfqNo },
+    { arLabel: "أعده", enLabel: "Prepared By", value: employeeName ?? "—" },
+    { arLabel: "تاريخ الإغلاق", enLabel: "Close Date", value: closeDate ?? "—" },
+    { arLabel: "تاريخ التصدير", enLabel: "Export Date", value: new Date().toLocaleDateString("en-GB") },
+    { arLabel: "عدد البنود", enLabel: "Items", value: String(items.length) },
+    { arLabel: "ض.q.م", enLabel: "VAT Rate", value: VAT_LABEL },
   ];
   const cellW = CW / infoCells.length;
   infoCells.forEach((c, i) => {
     const cx = MARGIN + i * cellW + cellW / 2;
-    doc.setTextColor(136, 153, 170);
-    doc.setFontSize(6.5);
+    // Arabic label
+    doc.setFont(FONT_AR, "normal");
+    doc.setTextColor(100, 120, 140);
+    doc.setFontSize(6);
+    doc.text(c.arLabel, cx, INFO_Y + 5, { align: "center" });
+    // English label
     doc.setFont("helvetica", "normal");
-    doc.text(c.label, cx, 29, { align: "center" });
-    doc.setTextColor(...BLUE);
-    doc.setFontSize(9);
+    doc.setFontSize(5);
+    doc.setTextColor(150, 165, 180);
+    doc.text(c.enLabel, cx, INFO_Y + 9, { align: "center" });
+    // Value
     doc.setFont("helvetica", "bold");
-    doc.text(c.value, cx, 36, { align: "center" });
+    doc.setFontSize(8.5);
+    doc.setTextColor(...BLUE);
+    doc.text(c.value, cx, INFO_Y + 16, { align: "center" });
   });
 
   // ── VAT note ──────────────────────────────────────────────────────────────
+  const NOTE_Y = INFO_Y + 22;
+  doc.setFont(FONT_AR, "normal");
   doc.setTextColor(100, 100, 100);
-  doc.setFontSize(6.5);
-  doc.setFont("helvetica", "italic");
+  doc.setFontSize(6);
   doc.text(
-    `(*) "Price incl. VAT" column = supplier price × 1.14 when tax NOT included, otherwise price as-is. Min/Avg/Max are VAT-adjusted.`,
+    `(*) عمود "شامل ض.ق.م": السعر × 1.14 إذا لم تشمل الضريبة، أو كما هو إن شملتها. | (*) Price incl. VAT = price × 1.14 when tax excluded, as-is otherwise.`,
     MARGIN,
-    43,
+    NOTE_Y,
   );
 
-  // ── Build table data ──────────────────────────────────────────────────────
+  // ── Table ─────────────────────────────────────────────────────────────────
   const allSuppliers = Array.from(
     new Set(items.flatMap((item) => item.offers.map((o) => o.supplierName)))
   );
 
-  // Headers
-  const head: (string | { content: string; colSpan?: number })[][] = [];
+  const head: (string | { content: string; colSpan?: number; styles?: object })[][] = [];
 
-  // Row 1: fixed cols + supplier group spans
   const row1: { content: string; colSpan?: number; styles?: object }[] = [
     { content: "#" },
-    { content: "Description" },
+    { content: "Description / البيان" },
     { content: "Part No" },
     { content: "QTY / UOM" },
     ...allSuppliers.map((s) => ({
@@ -293,25 +362,23 @@ async function exportToPdf(
       colSpan: 2,
       styles: { halign: "center" as const },
     })),
-    { content: "Summary (Incl. VAT)" },
+    { content: "ملخص / Summary" },
   ];
   head.push(row1 as never);
 
-  // Row 2: sub-headers for each supplier pair
   const row2: { content: string; styles?: object }[] = [
     { content: "" },
     { content: "" },
     { content: "" },
     { content: "" },
     ...allSuppliers.flatMap(() => [
-      { content: "Original (EGP)", styles: { fontSize: 6, textColor: [180, 83, 9] } },
-      { content: "Incl. VAT (EGP) *", styles: { fontSize: 6, textColor: [22, 101, 52] } },
+      { content: "السعر الأصلي (EGP)", styles: { fontSize: 6, textColor: [180, 83, 9] } },
+      { content: "شامل ض.ق.م (EGP) *", styles: { fontSize: 6, textColor: [22, 101, 52] } },
     ]),
     { content: "" },
   ];
   head.push(row2 as never);
 
-  // Body rows
   const body: (string | { content: string; styles: object })[][] = [];
 
   items.forEach((item, idx) => {
@@ -320,8 +387,10 @@ async function exportToPdf(
 
     const summaryText =
       item.minPrice != null
-        ? `Min: ${item.minPrice.toFixed(2)}\nAvg: ${item.avgPrice?.toFixed(2)}\nMax: ${item.maxPrice?.toFixed(2)}`
-        : "No quotes";
+        ? `أقل: ${item.minPrice.toFixed(2)}
+متوسط: ${item.avgPrice?.toFixed(2)}
+أعلى: ${item.maxPrice?.toFixed(2)}`
+        : "لا توجد عروض";
 
     const row: (string | { content: string; styles: object })[] = [
       String(idx + 1),
@@ -349,15 +418,15 @@ async function exportToPdf(
     body.push(row);
   });
 
-  // ── Render table ──────────────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   autoTable(doc, {
     head,
     body,
-    startY: 46,
+    startY: NOTE_Y + 4,
     margin: { left: MARGIN, right: MARGIN },
     tableWidth: CW,
     styles: {
-      font: "helvetica",
+      font: FONT_AR,
       fontSize: 7.5,
       cellPadding: 2,
       lineColor: [208, 219, 232],
@@ -377,28 +446,25 @@ async function exportToPdf(
       1: { cellWidth: 55 },
       2: { cellWidth: 25, halign: "center" },
       3: { cellWidth: 18, halign: "center" },
-      // Supplier cols assigned dynamically; last col = summary
       [4 + allSuppliers.length * 2]: { cellWidth: 38 },
     },
-    didDrawPage: (data) => {
-      // Repeat header on each page
+    didDrawPage: (data: { pageNumber: number }) => {
       if (data.pageNumber > 1) {
         doc.setFillColor(...BLUE);
         doc.rect(0, 0, PW, 10, "F");
+        doc.setFont(FONT_AR, "normal");
         doc.setTextColor(...GOLD);
         doc.setFontSize(8);
-        doc.setFont("helvetica", "bold");
-        doc.text(`${rfqNo} — Cont.`, MARGIN, 7);
+        doc.text(`${rfqNo} — تابع`, MARGIN, 7);
       }
-      // Footer
       const pageH = doc.internal.pageSize.getHeight();
       doc.setFillColor(...BLUE);
       doc.rect(0, pageH - 10, PW, 10, "F");
+      doc.setFont(FONT_AR, "normal");
       doc.setTextColor(...GOLD);
       doc.setFontSize(7);
-      doc.setFont("helvetica", "normal");
       doc.text(
-        `Cortoba Supplies | INFO@CORTOBA-SUPPLIES.COM | All values in EGP | VAT ${VAT_LABEL} applied to tax-exclusive prices`,
+        `قرطبة للتوريدات | INFO@CORTOBA-SUPPLIES.COM${closeDate ? " | تاريخ الإغلاق: " + closeDate : ""} | جميع القيم بالجنيه المصري | ض.ق.م ${VAT_LABEL}`,
         PW / 2,
         pageH - 4,
         { align: "center" },
@@ -472,29 +538,10 @@ export default function RfqDetailPage() {
   };
 
   const handleExportPdf = async () => {
-    if (!rfq) return;
+    if (!rfq || !offersData) return;
     setExporting("pdf");
     try {
-      const response = await fetch(`/api/rfq/${rfqId}/offers/pdf`, { credentials: "include" });
-      if (!response.ok) {
-        let errMsg = `Server error ${response.status}`;
-        try {
-          const json = await response.json();
-          if (json?.detail) errMsg = json.detail;
-          else if (json?.error) errMsg = json.error;
-        } catch { /* ignore */ }
-        throw new Error(errMsg);
-      }
-      const blob = await response.blob();
-      if (!blob || blob.size === 0) throw new Error("الملف المُولَّد فارغ");
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `RFQ-Comparison-${rfq.internalRfqNo}.pdf`;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+      await exportToPdf(rfq.internalRfqNo, rfq.customerRfqNo, offersData as OffersData, rfq.employeeName, rfqId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       toast.error(`PDF export failed: ${msg}`);
