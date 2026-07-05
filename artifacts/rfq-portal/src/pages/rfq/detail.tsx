@@ -472,10 +472,29 @@ export default function RfqDetailPage() {
   };
 
   const handleExportPdf = async () => {
-    if (!rfq || !offersData) return;
+    if (!rfq) return;
     setExporting("pdf");
     try {
-      await exportToPdf(rfq.internalRfqNo, rfq.customerRfqNo, offersData as OffersData);
+      const response = await fetch(`/api/rfq/${rfqId}/offers/pdf`, { credentials: "include" });
+      if (!response.ok) {
+        let errMsg = `Server error ${response.status}`;
+        try {
+          const json = await response.json();
+          if (json?.detail) errMsg = json.detail;
+          else if (json?.error) errMsg = json.error;
+        } catch { /* ignore */ }
+        throw new Error(errMsg);
+      }
+      const blob = await response.blob();
+      if (!blob || blob.size === 0) throw new Error("الملف المُولَّد فارغ");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `RFQ-Comparison-${rfq.internalRfqNo}.pdf`;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       toast.error(`PDF export failed: ${msg}`);
