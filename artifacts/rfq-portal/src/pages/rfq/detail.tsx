@@ -192,7 +192,7 @@ async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void>
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
-// ── Offers PDF — Arabic print window ─────────────────────────────────────────
+// ── Offers PDF — hidden iframe + Cairo Arabic font ──────────────────────────
 async function exportToPdf(
   rfqNo: string,
   customerRfqNo: string,
@@ -203,29 +203,75 @@ async function exportToPdf(
   const items: ItemAnalysis[] = normalizeItems(offersData);
   if (items.length === 0) throw new Error("لا توجد عروض لتصديرها");
 
-  // Fetch close date
+  // Fetch close date from sent-log
   let closeDate: string | null = null;
   try {
     if (rfqId) {
       const slResp = await fetch(`/api/rfq/${rfqId}/sent-log`, { credentials: "include" });
       if (slResp.ok) {
-        const sl = await slResp.json() as Array<{ closeDate?: string | null }>;
+        const sl = (await slResp.json()) as Array<{ closeDate?: string | null }>;
         closeDate = sl?.find((e) => e.closeDate)?.closeDate ?? null;
       }
     }
   } catch { /* skip */ }
 
-  const exportDate = new Date().toLocaleDateString("ar-EG", { day: "2-digit", month: "2-digit", year: "numeric" });
-  const allSuppliers = Array.from(new Set(items.flatMap((i) => i.offers.map((o) => o.supplierName))));
+  const exportDate = new Date().toLocaleDateString("ar-EG", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+  });
+  const allSuppliers = Array.from(
+    new Set(items.flatMap((i) => i.offers.map((o) => o.supplierName)))
+  );
 
-  const supplierHeaderCells = allSuppliers.map(
-    (s) => `<th colspan="2" class="sup-head">${s}</th>`
-  ).join("");
-  const supplierSubHeader = allSuppliers.map(() =>
-    `<th class="sub-h">السعر الأصلي<br>(ج.م)</th><th class="sub-h grn">شامل ض.ق.م *</th>`
-  ).join("");
+  // Build supplier column headers
+  const supplierHeaderCells = allSuppliers
+    .map((s) => `<th colspan="2" class="sup-head">${s}</th>`)
+    .join("");
+  const supplierSubHeader = allSuppliers
+    .map(
+      () =>
+        `<th class="sub-h">السعر الأصلي<br>(ج.م)</th><th class="sub-h grn">شامل ض.ق.م *</th>`
+    )
+    .join("");
 
-  // Logo as data URL for cross-origin safety
+  // Build table rows
+  const rows = items
+    .map((item, idx) => {
+      const bySupplier = new Map<string, OfferRow>();
+      for (const o of item.offers) bySupplier.set(o.supplierName, o);
+
+      const supCells = allSuppliers
+        .map((s) => {
+          const o = bySupplier.get(s);
+          if (!o)
+            return `<td class="dash">—</td><td class="dash">—</td>`;
+          const vc = o.isLowest
+            ? "color:#166534;font-weight:700"
+            : o.isAnomaly
+            ? "color:#b45309"
+            : "color:#111";
+          return `<td class="num">${o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}</td>
+                  <td class="num" style="${vc}">${o.priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })}${o.isLowest ? " ✓" : ""}</td>`;
+        })
+        .join("");
+
+      const summary =
+        item.minPrice != null
+          ? `أقل: ${item.minPrice.toFixed(2)}<br>متوسط: ${item.avgPrice?.toFixed(2)}<br>أعلى: ${item.maxPrice?.toFixed(2)}`
+          : "لا توجد عروض";
+
+      const bg = idx % 2 === 0 ? "#fff" : "#f4f8fc";
+      return `<tr style="background:${bg}">
+        <td class="ct">${idx + 1}</td>
+        <td class="desc">${item.description}</td>
+        <td class="ct ltr">${item.partNo ?? "—"}</td>
+        <td class="ct ltr">${item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—"}</td>
+        ${supCells}
+        <td class="summary">${summary}</td>
+      </tr>`;
+    })
+    .join("");
+
+  // Fetch logo as data URL (same-origin, no CORS issue)
   let logoSrc = "";
   try {
     const lr = await fetch("/logo.png");
@@ -239,75 +285,47 @@ async function exportToPdf(
     }
   } catch { /* skip */ }
 
-  const rows = items.map((item, idx) => {
-    const bySupplier = new Map<string, OfferRow>();
-    for (const o of item.offers) bySupplier.set(o.supplierName, o);
-    const supCells = allSuppliers.map((s) => {
-      const o = bySupplier.get(s);
-      if (!o) return `<td class="dash">—</td><td class="dash">—</td>`;
-      const vc = o.isLowest ? "color:#166534;font-weight:700" : o.isAnomaly ? "color:#b45309" : "color:#111";
-      return `<td class="num">${o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}</td>
-              <td class="num" style="${vc}">${o.priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })}${o.isLowest ? " ✓" : ""}</td>`;
-    }).join("");
-    const summary = item.minPrice != null
-      ? `أقل: ${item.minPrice.toFixed(2)} / متوسط: ${item.avgPrice?.toFixed(2)} / أعلى: ${item.maxPrice?.toFixed(2)}`
-      : "لا توجد عروض";
-    const bg = idx % 2 === 0 ? "#fff" : "#f4f8fc";
-    return `<tr style="background:${bg}">
-      <td class="ct">${idx + 1}</td>
-      <td class="desc">${item.description}</td>
-      <td class="ct ltr">${item.partNo ?? "—"}</td>
-      <td class="ct ltr">${item.qty != null ? `${item.qty} ${item.uom ?? ""}`.trim() : "—"}</td>
-      ${supCells}
-      <td class="summary">${summary}</td>
-    </tr>`;
-  }).join("");
-
+  // ── Build the HTML document ──────────────────────────────────────────────
   const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width">
-<title>تقرير مقارنة الأسعار — ${rfqNo}</title>
+<title>RFQ ${rfqNo}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Cairo',Arial,sans-serif;direction:rtl;background:#fff;color:#222;font-size:11px}
+body{font-family:'Cairo',Arial,sans-serif;direction:rtl;background:#fff;color:#222;font-size:11px;padding:4mm}
 @media print{
   @page{size:A4 landscape;margin:6mm}
-  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .no-print{display:none!important}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:0}
 }
-.hdr{background:#1a3a5c;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 16px}
-.co-ar{font-size:19px;font-weight:700;color:#c8a84b}
+.hdr{background:#1a3a5c;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-radius:4px 4px 0 0}
+.co-ar{font-size:20px;font-weight:700;color:#c8a84b}
 .co-en{font-size:10px;color:#aaccee;margin:2px 0}
-.rpt-title{font-size:13px;font-weight:600}
+.rpt{font-size:13px;font-weight:600;margin-top:4px}
 .hdr img{height:54px;width:auto}
 .info{display:flex;background:#f4f8fc;border-bottom:3px solid #c8a84b}
 .ic{flex:1;text-align:center;padding:7px 4px;border-left:1px solid #d0dbe8}
 .ic:last-child{border-left:none}
 .il-ar{font-size:9px;color:#7a8fa0;font-weight:600}
 .il-en{font-size:7.5px;color:#aab;margin-bottom:3px}
-.iv{font-size:12px;font-weight:700;color:#1a3a5c;direction:ltr;unicode-bidi:plaintext}
+.iv{font-size:12px;font-weight:700;color:#1a3a5c}
 .note{font-size:9px;color:#555;padding:5px 8px;background:#fffbea;border-bottom:1px solid #e5d980}
-table{width:100%;border-collapse:collapse}
+table{width:100%;border-collapse:collapse;margin-top:0}
 th{background:#1a3a5c;color:#fff;padding:6px 4px;text-align:center;border:1px solid #3a5a7c;font-size:10px;font-weight:600}
 td{padding:5px 4px;border:1px solid #e0e8f0;vertical-align:middle}
 .sup-head{background:#1e4570}
 .sub-h{background:#2a4a6c;color:#c8a84b;font-size:9px;font-weight:400}
 .grn{color:#90d090}
 .ct{text-align:center;font-size:10px}
-.ltr{direction:ltr;unicode-bidi:plaintext}
-.num{text-align:left;direction:ltr;font-size:10px}
+.ltr{direction:ltr;unicode-bidi:embed}
+.num{text-align:left;direction:ltr;font-size:10px;unicode-bidi:embed}
 .dash{text-align:center;color:#aaa;font-size:10px}
 .desc{font-size:10px;max-width:180px}
 .summary{font-size:9px;color:#444;line-height:1.8}
-.ftr{background:#1a3a5c;color:#c8a84b;text-align:center;font-size:9px;padding:6px;margin-top:8px}
-.print-btn{display:flex;gap:10px;justify-content:center;padding:14px;background:#f0f4f8}
-.print-btn button{background:#1a3a5c;color:#fff;border:none;padding:10px 28px;font-family:Cairo,sans-serif;font-size:14px;cursor:pointer;border-radius:6px;font-weight:600}
-.print-btn button:hover{background:#25527a}
+.ftr{background:#1a3a5c;color:#c8a84b;text-align:center;font-size:9px;padding:6px;border-radius:0 0 4px 4px;margin-top:6px}
 </style>
 </head>
 <body>
@@ -315,20 +333,20 @@ td{padding:5px 4px;border:1px solid #e0e8f0;vertical-align:middle}
   <div>
     <div class="co-ar">قرطبة للتوريدات</div>
     <div class="co-en">Cortoba Supplies</div>
-    <div class="rpt-title">تقرير مقارنة عروض الأسعار — RFQ Price Comparison</div>
+    <div class="rpt">تقرير مقارنة عروض الأسعار — RFQ Price Comparison Report</div>
   </div>
   ${logoSrc ? `<img src="${logoSrc}" alt="Logo">` : ""}
 </div>
 <div class="info">
   <div class="ic"><div class="il-ar">رقم الطلب الداخلي</div><div class="il-en">Internal RFQ</div><div class="iv">${rfqNo}</div></div>
   <div class="ic"><div class="il-ar">رقم طلب العميل</div><div class="il-en">Customer RFQ</div><div class="iv">${customerRfqNo}</div></div>
-  <div class="ic"><div class="il-ar">أعده</div><div class="il-en">Prepared By</div><div class="iv" style="direction:rtl">${employeeName ?? "—"}</div></div>
+  <div class="ic"><div class="il-ar">أعده</div><div class="il-en">Prepared By</div><div class="iv" style="direction:rtl;unicode-bidi:embed">${employeeName ?? "—"}</div></div>
   <div class="ic"><div class="il-ar">تاريخ الإغلاق</div><div class="il-en">Close Date</div><div class="iv">${closeDate ?? "—"}</div></div>
   <div class="ic"><div class="il-ar">تاريخ التصدير</div><div class="il-en">Export Date</div><div class="iv">${exportDate}</div></div>
   <div class="ic"><div class="il-ar">عدد البنود</div><div class="il-en">Items</div><div class="iv">${items.length}</div></div>
   <div class="ic"><div class="il-ar">ض.ق.م</div><div class="il-en">VAT Rate</div><div class="iv">${VAT_LABEL}</div></div>
 </div>
-<div class="note">(*) عمود "شامل ض.ق.م": السعر × 1.14 إن لم تشمل الضريبة، أو كما هو إن شملتها. ✓ = أقل سعر. &nbsp;|&nbsp; (*) "Incl. VAT" = price × 1.14 if tax excluded, as-is otherwise. ✓ = lowest.</div>
+<div class="note">(*) شامل ض.ق.م = السعر × 1.14 إن لم تشمل الضريبة | ✓ = أقل سعر | جميع القيم بالجنيه المصري</div>
 <table>
   <thead>
     <tr>
@@ -343,28 +361,43 @@ td{padding:5px 4px;border:1px solid #e0e8f0;vertical-align:middle}
   </thead>
   <tbody>${rows}</tbody>
 </table>
-<div class="ftr">قرطبة للتوريدات | INFO@CORTOBA-SUPPLIES.COM${closeDate ? ` | تاريخ الإغلاق: ${closeDate}` : ""} | جميع القيم بالجنيه المصري | ض.ق.م ${VAT_LABEL} | تاريخ التصدير: ${exportDate}</div>
-
-<div class="print-btn no-print">
-  <button onclick="window.print()">🖨️ طباعة / حفظ PDF</button>
-  <button onclick="window.close()" style="background:#64748b">✕ إغلاق</button>
-</div>
-
-<script>
-  document.fonts.ready.then(function(){
-    setTimeout(function(){ window.print(); }, 900);
-  });
-</script>
+<div class="ftr">قرطبة للتوريدات | INFO@CORTOBA-SUPPLIES.COM${closeDate ? ` | تاريخ الإغلاق: ${closeDate}` : ""} | ض.ق.م ${VAT_LABEL} | ${exportDate}</div>
 </body>
 </html>`;
 
-  const printWindow = window.open("", "_blank", "width=1280,height=860,scrollbars=yes");
-  if (!printWindow) {
-    throw new Error("تعذّر فتح نافذة الطباعة — يرجى السماح بالنوافذ المنبثقة في المتصفح ثم أعد المحاولة");
-  }
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
+  // ── Print via hidden iframe (no popup required) ───────────────────────────
+  const iframe = document.createElement("iframe");
+  iframe.style.cssText =
+    "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;border:0;opacity:0;";
+  document.body.appendChild(iframe);
+
+  const iwin = iframe.contentWindow!;
+  const idoc = iframe.contentDocument ?? iwin.document;
+  idoc.open();
+  idoc.write(html);
+  idoc.close();
+
+  // Wait for Cairo font to load inside iframe (with timeout fallback)
+  await new Promise<void>((resolve) => {
+    const cleanup = setTimeout(resolve, 4000); // max 4 s wait
+    const check = setInterval(() => {
+      if (idoc.fonts) {
+        clearInterval(check);
+        idoc.fonts.ready
+          .then(() => setTimeout(resolve, 600))
+          .catch(() => resolve())
+          .finally(() => clearTimeout(cleanup));
+      }
+    }, 100);
+  });
+
+  iwin.focus();
+  iwin.print();
+
+  // Clean up after dialog closes
+  setTimeout(() => {
+    if (document.body.contains(iframe)) document.body.removeChild(iframe);
+  }, 2000);
 }
 
 // ── Main page component ───────────────────────────────────────────────────────
