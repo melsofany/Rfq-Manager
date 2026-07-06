@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { db, suppliersTable, whatsappChatsTable } from "@workspace/db";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import {
   Whatsapp,
   PHONE_NUMBER_ID,
@@ -28,7 +28,7 @@ function normalizePhone(phone: string): string {
 // ─── SSE: real-time push to connected browser clients ─────────────────────
 const sseClients = new Set<Response>();
 
-export function broadcastWaEvent(event: { type: string; phone?: string }) {
+export function broadcastWaEvent(event: { type: string; phone?: string; [key: string]: unknown }) {
   const payload = `data: ${JSON.stringify(event)}\n\n`;
   for (const client of sseClients) {
     try { (client as Response).write(payload); } catch { sseClients.delete(client); }
@@ -41,7 +41,6 @@ router.get("/whatsapp/events", requireAuth, (req, res): void => {
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
-  // heartbeat every 25 s to survive proxies / load-balancers
   const hb = setInterval(() => {
     try { res.write(": heartbeat\n\n"); } catch { clearInterval(hb); sseClients.delete(res); }
   }, 25000);
@@ -49,11 +48,7 @@ router.get("/whatsapp/events", requireAuth, (req, res): void => {
   req.on("close", () => { clearInterval(hb); sseClients.delete(res); });
 });
 
-// ─── Webhook: handled via the whatsapp-api-js official Cloud API client ────
-// GET performs Meta's subscription handshake; POST parses inbound
-// messages/status updates using the library's typed event emitters instead
-// of manually walking the raw entry/changes payload shape.
-
+// ─── Webhook GET: Meta subscription handshake ─────────────────────────────
 router.get("/webhook/whatsapp", (req, res): void => {
   if (!WEBHOOK_VERIFY_TOKEN) {
     res.status(500).json({ error: "WHATSAPP_VERIFY_TOKEN not configured" });
@@ -106,7 +101,7 @@ Whatsapp.on.status = async ({ status, id, error }) => {
     } else if (errDetails) {
       failureReason = errDetails;
     }
-    broadcastWaEvent({ type: "delivery_failed", waMessageId: id, reason: failureReason, codes: errCode ? [errCode] : [] } as { type: string; phone?: string });
+    broadcastWaEvent({ type: "delivery_failed", waMessageId: id, reason: failureReason, codes: errCode ? [errCode] : [] });
 
     try {
       await db.delete(whatsappChatsTable).where(eq(whatsappChatsTable.waMessageId, id));
@@ -126,7 +121,6 @@ router.post("/webhook/whatsapp", async (req: Request & { rawBody?: string }, res
     if (req.rawBody && signature) {
       await Whatsapp.post(req.body, req.rawBody, signature);
     } else {
-      // No app secret configured — process without signature verification.
       await Whatsapp.post(req.body);
     }
   } catch (err) {
@@ -151,7 +145,6 @@ async function handleInboundMessage(
   reply: (message: import("whatsapp-api-js/types").ClientMessage) => Promise<unknown>,
 ): Promise<void> {
   const waMessageId = msg.id;
-
   let body: string;
   let mediaId: string | null = null;
   let mediaType: string | null = null;
@@ -191,41 +184,31 @@ async function handleInboundMessage(
   await db.insert(whatsappChatsTable).values({
     waMessageId, direction: "inbound", phone,
     supplierId: matchedSupplier?.id ?? null,
-    body, mediaId, mediaType, mimeType, filename, isRead: false,
+    body, mediaId, mediaType, mimeType, filename,
+    isRead: false,
   });
 
-  try {
-    await Whatsapp.markAsRead(phoneID, waMessageId);
-  } catch {
-    // non-critical
-  }
-  logger.info({ phone, senderName, supplierId: matchedSupplier?.id, body: body.slice(0, 80) }, "WhatsApp inbound message saved");
+  try { await Whatsapp.markAsRead(phoneID, waMessageId); } catch { /* non-critical */ }
 
-  // Push real-time event to all SSE-connected browser clients
-  broadcastWaEvent({ type: "new_message", phone });
-
-  if (!matchedSupplier) {
-    try {
-      const { Text } = await import("whatsapp-api-js/messages");
-      await reply(new Text(`شكراً للتواصل مع قرطبة للتوريدات.\n\nلم نتمكن من التعرف على رقمك في سجلاتنا. يرجى التواصل مباشرة مع فريق المشتريات.`));
-    } catch (err) {
-      logger.warn({ err }, "Could not send auto-reply to unknown sender");
-    }
-  }
+  logger.info({ from: phone, type: msg.type, supplier: matchedSupplier?.name }, "WhatsApp inbound message saved");
+  broadcastWaEvent({ type: "new_message", phone, senderName });
+  void reply;
 }
 
 // ─── GET /api/whatsapp/media/:mediaId ────────────────────────────────────
 router.get("/whatsapp/media/:mediaId", requireAuth, async (req, res): Promise<void> => {
   const { mediaId } = req.params;
-  if (!isWhatsAppConfigured) { res.status(500).json({ error: "WhatsApp not configured" }); return; }
+  if (!isWhatsAppConfigured) { res.status(503).json({ error: "WhatsApp not configured" }); return; }
   try {
     const metaRes = await Whatsapp.$$apiFetch$$(`https://graph.facebook.com/${WA_API_VERSION}/${mediaId}`);
-    const meta = await metaRes.json() as { url?: string; mime_type?: string };
-    if (!meta.url) { res.status(404).json({ error: "Media not found" }); return; }
-    const mediaRes = await Whatsapp.$$apiFetch$$(meta.url);
-    const contentType = meta.mime_type || mediaRes.headers.get("content-type") || "application/octet-stream";
+    const metaData = await metaRes.json() as { url?: string; mime_type?: string; error?: object };
+    if (!metaRes.ok || !metaData.url) {
+      res.status(404).json({ error: "Media not found", detail: metaData.error }); return;
+    }
+    const mediaRes = await Whatsapp.$$apiFetch$$(metaData.url);
+    if (!mediaRes.ok) { res.status(404).json({ error: "Media download failed" }); return; }
     const buffer = Buffer.from(await mediaRes.arrayBuffer());
-    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Type", metaData.mime_type || "application/octet-stream");
     res.setHeader("Cache-Control", "private, max-age=3600");
     res.send(buffer);
   } catch (err) {
@@ -258,7 +241,7 @@ router.get("/whatsapp/profile-picture/:phone", requireAuth, async (req, res): Pr
 });
 
 // ─── GET /api/whatsapp/chats ──────────────────────────────────────────────
-router.get("/whatsapp/chats", async (req, res): Promise<void> => {
+router.get("/whatsapp/chats", requireAuth, async (req, res): Promise<void> => {
   const rows = await db
     .select({
       phone: whatsappChatsTable.phone,
@@ -277,18 +260,18 @@ router.get("/whatsapp/chats", async (req, res): Promise<void> => {
 });
 
 // ─── GET /api/whatsapp/chats/:phone ──────────────────────────────────────
-router.get("/whatsapp/chats/:phone", async (req, res): Promise<void> => {
+router.get("/whatsapp/chats/:phone", requireAuth, async (req, res): Promise<void> => {
   const phone = req.params.phone;
   const messages = await db
     .select().from(whatsappChatsTable)
     .where(eq(whatsappChatsTable.phone, phone))
-    .orderBy(desc(whatsappChatsTable.createdAt)).limit(100);
+    .orderBy(desc(whatsappChatsTable.createdAt)).limit(200);
   await db.update(whatsappChatsTable).set({ isRead: true }).where(eq(whatsappChatsTable.phone, phone));
   res.json(messages.reverse());
 });
 
 // ─── POST /api/whatsapp/send ──────────────────────────────────────────────
-router.post("/whatsapp/send", async (req, res): Promise<void> => {
+router.post("/whatsapp/send", requireAuth, async (req, res): Promise<void> => {
   const { phone, message, supplierId } = req.body as { phone: string; message: string; supplierId?: number };
   if (!phone || !message) { res.status(400).json({ error: "phone and message are required" }); return; }
   const normalized = normalizePhone(phone);
@@ -297,7 +280,7 @@ router.post("/whatsapp/send", async (req, res): Promise<void> => {
     outboundWaId = await sendWhatsAppText(phone, message);
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    req.log.error({ err, phone: normalized }, "WhatsApp send failed");
+    logger.error({ err, phone: normalized }, "WhatsApp send failed");
     let userMessage = "فشل إرسال الرسالة عبر WhatsApp.";
     if (errMsg.includes("131047")) userMessage = "انتهت نافذة المحادثة (24 ساعة). لا يمكن إرسال رسائل حرة بعد 24 ساعة من آخر رسالة من المورد.";
     else if (errMsg.includes("131026")) userMessage = "رقم الهاتف غير مسجل على WhatsApp.";
@@ -313,7 +296,7 @@ router.post("/whatsapp/send", async (req, res): Promise<void> => {
 });
 
 // ─── POST /api/whatsapp/send-media ────────────────────────────────────────
-router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
+router.post("/whatsapp/send-media", requireAuth, async (req, res): Promise<void> => {
   const { phone, supplierId, base64, mimeType: fileMime, filename: fileFilename } = req.body as {
     phone: string; supplierId?: number; base64: string; mimeType: string; filename?: string;
   };
@@ -331,7 +314,7 @@ router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
     });
     const uploadData = await uploadRes.json() as { id?: string; error?: object };
     if (!uploadRes.ok || !uploadData.id) {
-      req.log.error({ uploadData }, "WhatsApp media upload failed");
+      logger.error({ uploadData }, "WhatsApp media upload failed");
       res.status(500).json({ error: "Failed to upload media to WhatsApp" }); return;
     }
     const mediaType = fileMime.startsWith("image/") ? "image"
@@ -348,7 +331,7 @@ router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
     const normalized = normalizePhone(phone);
     const sendResult = await Whatsapp.sendMessage(WA_PHONE_ID, normalized, message);
     if ("error" in sendResult && sendResult.error) {
-      req.log.error({ sendResult }, "WhatsApp send media failed");
+      logger.error({ sendResult }, "WhatsApp send media failed");
       res.status(500).json({ error: "Failed to send media" }); return;
     }
     const outboundWaId = sendResult.messages?.[0]?.id ?? null;
@@ -366,13 +349,13 @@ router.post("/whatsapp/send-media", async (req, res): Promise<void> => {
     logger.info({ phone: normalized, mediaType, filename: fileFilename }, "WhatsApp media sent");
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Error in send-media");
+    logger.error({ err }, "Error in send-media");
     res.status(500).json({ error: "Internal error" });
   }
 });
 
 // ─── PATCH /api/whatsapp/messages/:id ────────────────────────────────────
-router.patch("/whatsapp/messages/:id", async (req, res): Promise<void> => {
+router.patch("/whatsapp/messages/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const { body } = req.body as { body: string };
   if (!body?.trim()) { res.status(400).json({ error: "body is required" }); return; }
@@ -383,7 +366,7 @@ router.patch("/whatsapp/messages/:id", async (req, res): Promise<void> => {
 });
 
 // ─── DELETE /api/whatsapp/messages/:id ───────────────────────────────────
-router.delete("/whatsapp/messages/:id", async (req, res): Promise<void> => {
+router.delete("/whatsapp/messages/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   const [msg] = await db.select().from(whatsappChatsTable).where(eq(whatsappChatsTable.id, id)).limit(1);
   if (!msg) { res.status(404).json({ error: "Not found" }); return; }
@@ -406,43 +389,139 @@ router.delete("/whatsapp/messages/:id", async (req, res): Promise<void> => {
       logger.warn({ err }, "Error calling WhatsApp delete API — removing from DB only");
     }
   }
-
   await db.delete(whatsappChatsTable).where(eq(whatsappChatsTable.id, id));
   res.json({ ok: true, waDeletedOnPlatform });
 });
 
-// ─── POST /api/whatsapp/test-send (debug only) ────────────────────────────
-router.post("/whatsapp/test-send", requireAuth, async (req, res): Promise<void> => {
-  const { phone } = req.body as { phone: string };
-  if (!phone) { res.status(400).json({ error: "phone required" }); return; }
-  if (!isWhatsAppConfigured) { res.status(500).json({ error: "WhatsApp not configured" }); return; }
+// ─── GET /api/whatsapp/templates (Meta Business API templates) ────────────
+router.get("/whatsapp/templates", requireAuth, async (req, res): Promise<void> => {
+  const WABA_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+  if (!isWhatsAppConfigured) { res.status(503).json({ error: "WhatsApp not configured" }); return; }
+  if (!WABA_ID) { res.status(400).json({ error: "WHATSAPP_BUSINESS_ACCOUNT_ID not set — يجب إضافة هذا المتغير البيئي" }); return; }
+  try {
+    const r = await Whatsapp.$$apiFetch$$(
+      `https://graph.facebook.com/${WA_API_VERSION}/${WABA_ID}/message_templates?limit=100&fields=name,status,quality_score,language,category,components`
+    );
+    const data = await r.json() as { data?: unknown[]; error?: unknown; paging?: unknown };
+    if (!r.ok) { res.status(500).json({ error: data.error || "Failed to fetch templates" }); return; }
+    res.json({ templates: data.data ?? [], paging: data.paging ?? null });
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch WhatsApp templates");
+    res.status(500).json({ error: "Failed to fetch templates from Meta" });
+  }
+});
 
+// ─── POST /api/whatsapp/send-template ────────────────────────────────────
+router.post("/whatsapp/send-template", requireAuth, async (req, res): Promise<void> => {
+  const { phone, templateName, language, components, supplierId } = req.body as {
+    phone: string; templateName: string; language?: string;
+    components?: unknown[]; supplierId?: number;
+  };
+  if (!phone || !templateName) { res.status(400).json({ error: "phone and templateName required" }); return; }
+  if (!isWhatsAppConfigured) { res.status(503).json({ error: "WhatsApp not configured" }); return; }
   const normalized = normalizePhone(phone);
-  const { Text, Template, Language, BodyComponent, BodyParameter, URLComponent } = await import("whatsapp-api-js/messages");
+  try {
+    const body = JSON.stringify({
+      messaging_product: "whatsapp",
+      to: normalized,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: language || "ar" },
+        components: components || [],
+      },
+    });
+    const r = await Whatsapp.$$apiFetch$$(`https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    const data = await r.json() as { messages?: Array<{ id: string }>; error?: unknown };
+    if (!r.ok) {
+      logger.error({ data, phone: normalized, templateName }, "WhatsApp template send failed");
+      res.status(400).json({ error: data.error || "Failed to send template" });
+      return;
+    }
+    const waId = data.messages?.[0]?.id ?? null;
+    await db.insert(whatsappChatsTable).values({
+      waMessageId: waId, direction: "outbound", phone: normalized,
+      supplierId: supplierId ?? null, body: `[قالب: ${templateName}]`, isRead: true,
+    });
+    logger.info({ phone: normalized, templateName, waId }, "WhatsApp template sent");
+    res.json({ ok: true, waMessageId: waId });
+  } catch (err) {
+    logger.error({ err, phone: normalized, templateName }, "Error sending WhatsApp template");
+    res.status(500).json({ error: "Failed to send template" });
+  }
+});
 
-  const textResult = await Whatsapp.sendMessage(WA_PHONE_ID, normalized, new Text("اختبار اتصال واتساب", false));
+// ─── GET /api/whatsapp/contacts ──────────────────────────────────────────
+router.get("/whatsapp/contacts", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const suppliers = await db
+      .select()
+      .from(suppliersTable)
+      .where(eq(suppliersTable.isActive, true))
+      .orderBy(suppliersTable.name);
+    const withPhone = suppliers.filter(s => s.phone && s.phone.trim());
+    res.json(withPhone);
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch WhatsApp contacts");
+    res.status(500).json({ error: "Failed to fetch contacts" });
+  }
+});
 
-  const templateName = process.env.WHATSAPP_TEMPLATE_TEXT || "rfq_send_ar";
-  const template = new Template(
-    templateName,
-    new Language("ar"),
-    new BodyComponent(
-      new BodyParameter("مورد تجريبي"),
-      new BodyParameter("CRQ-TEST"),
-      new BodyParameter("اختبار"),
-      new BodyParameter("2026-06-30"),
-      new BodyParameter("مسؤول التسعير"),
-    ),
-    new URLComponent("test"),
-  );
-  const templateResult = await Whatsapp.sendMessage(WA_PHONE_ID, normalized, template);
+// ─── GET /api/whatsapp/stats ──────────────────────────────────────────────
+router.get("/whatsapp/stats", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const [stats] = await db.select({
+      total: sql<number>`COUNT(*)`,
+      unread: sql<number>`COUNT(*) FILTER (WHERE ${whatsappChatsTable.direction} = 'inbound' AND ${whatsappChatsTable.isRead} = false)`,
+      totalChats: sql<number>`COUNT(DISTINCT ${whatsappChatsTable.phone})`,
+      outbound: sql<number>`COUNT(*) FILTER (WHERE ${whatsappChatsTable.direction} = 'outbound')`,
+      inbound: sql<number>`COUNT(*) FILTER (WHERE ${whatsappChatsTable.direction} = 'inbound')`,
+    }).from(whatsappChatsTable);
+    res.json(stats);
+  } catch (err) {
+    logger.error({ err }, "Failed to fetch WhatsApp stats");
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
 
-  res.json({
-    phone_input: phone,
-    phone_normalized: normalized,
-    plain_text: textResult,
-    [`template_${templateName}`]: templateResult,
-  });
+// ─── POST /api/whatsapp/broadcast ─────────────────────────────────────────
+router.post("/whatsapp/broadcast", requireAuth, async (req, res): Promise<void> => {
+  const { phones, message, supplierIds } = req.body as {
+    phones: string[]; message: string; supplierIds?: number[];
+  };
+  if (!phones?.length || !message?.trim()) {
+    res.status(400).json({ error: "phones and message are required" }); return;
+  }
+  if (!isWhatsAppConfigured) { res.status(503).json({ error: "WhatsApp not configured" }); return; }
+
+  const results: Array<{ phone: string; supplierId?: number; ok: boolean; error?: string; waId?: string | null }> = [];
+  for (let i = 0; i < phones.length; i++) {
+    const phone = phones[i];
+    const supplierId = supplierIds?.[i];
+    try {
+      const waId = await sendWhatsAppText(phone, message);
+      const normalized = normalizePhone(phone);
+      await db.insert(whatsappChatsTable).values({
+        waMessageId: waId, direction: "outbound", phone: normalized,
+        supplierId: supplierId ?? null, body: message, isRead: true,
+      });
+      results.push({ phone, supplierId, ok: true, waId });
+      logger.info({ phone: normalized, supplierId }, "Broadcast message sent");
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      results.push({ phone, supplierId, ok: false, error: errMsg });
+      logger.warn({ err, phone }, "Broadcast message failed for one recipient");
+    }
+  }
+
+  const successCount = results.filter(r => r.ok).length;
+  const failCount = results.filter(r => !r.ok).length;
+  logger.info({ successCount, failCount, total: phones.length }, "Broadcast completed");
+  res.json({ ok: true, results, successCount, failCount });
 });
 
 // ─── GET /api/whatsapp/diagnose ───────────────────────────────────────────
@@ -460,7 +539,6 @@ router.get("/whatsapp/diagnose", requireAuth, async (req, res): Promise<void> =>
     return;
   }
 
-  // 1. Phone number details
   let phoneInfo: Record<string, unknown> = {};
   try {
     const r = await Whatsapp.$$apiFetch$$(
@@ -471,7 +549,6 @@ router.get("/whatsapp/diagnose", requireAuth, async (req, res): Promise<void> =>
     phoneInfo = { error: String(e) };
   }
 
-  // 2. Template status (needs WABA_ID)
   let templates: Record<string, unknown> = {};
   if (WABA_ID) {
     try {
@@ -493,7 +570,6 @@ router.get("/whatsapp/diagnose", requireAuth, async (req, res): Promise<void> =>
     templates = { warning: "WHATSAPP_BUSINESS_ACCOUNT_ID not set — cannot check template status" };
   }
 
-  // 3. Credentials summary (no secrets exposed)
   const creds = {
     WHATSAPP_PHONE_NUMBER_ID: WA_PHONE_ID ? "✓ set (" + WA_PHONE_ID.slice(0, 5) + "...)" : "✗ missing",
     WHATSAPP_TOKEN: WA_TOKEN ? "✓ set (length=" + WA_TOKEN.length + ")" : "✗ missing",
@@ -502,7 +578,7 @@ router.get("/whatsapp/diagnose", requireAuth, async (req, res): Promise<void> =>
     WHATSAPP_VERIFY_TOKEN: WEBHOOK_VERIFY_TOKEN ? "✓ set" : "✗ missing",
     template_names: TEMPLATE_NAMES,
     template_lang: TEMPLATE_LANG,
-    library: "whatsapp-api-js v6 (open-source, official Meta Cloud API wrapper)",
+    library: "whatsapp-api-js v6 (open-source, official Meta Cloud API wrapper — github.com/Secreto31126/whatsapp-api-js)",
   };
 
   res.json({ configured: true, phone: phoneInfo, templates, creds });
