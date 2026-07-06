@@ -53,7 +53,15 @@ function rtl(text: string): string {
 
 function formatDate(d: string): string {
   try {
-    return new Date(d).toLocaleDateString("ar-EG");
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return d;
+    // Use Western (ASCII) digits in DD/MM/YYYY format.
+    // Arabic-Indic numerals from ar-EG locale appear reversed in PDFKit
+    // because PDFKit renders text LTR; e.g. "٢٠٢٦" is read RTL as "٦٢٠٢".
+    const dd = String(dt.getDate()).padStart(2, "0");
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const yyyy = dt.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
   } catch {
     return d;
   }
@@ -262,40 +270,56 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
         return x;
       }
 
-      const ROW_H = 22;
+      const ROW_H     = 22;   // minimum row height (pt)
+      const ROW_PAD_V = 6;    // vertical padding (top + bottom inside each row)
+      const FONT_SIZE = 9.5;
 
       // Header row
       doc.rect(M, y, CW, ROW_H).fill(BLUE);
       colLbls.forEach((lbl, i) => {
-        doc.font("Amiri").fontSize(9.5).fillColor("#ffffff")
+        doc.font("Amiri").fontSize(FONT_SIZE).fillColor("#ffffff")
           .text(lbl, colX(i) + 2, y + 5, {
             width: colWArr[i] - 4, align: "center", lineBreak: false,
           });
       });
       y += ROW_H;
 
-      // Data rows
+      // Data rows — height is dynamic so long descriptions don't overflow
       opts.items.forEach((item, idx) => {
+        const descText  = rtl(item.description);
+        const descWidth = colWArr[2] - 6;
+
+        // Measure how tall the description text will be when word-wrapped
+        doc.font("Amiri").fontSize(FONT_SIZE);
+        const descTextH = doc.heightOfString(descText, { width: descWidth });
+        const rowH = Math.max(ROW_H, descTextH + ROW_PAD_V * 2);
+
         const bg = idx % 2 === 0 ? "#ffffff" : "#f4f7fb";
-        doc.rect(M, y, CW, ROW_H).fill(bg).stroke("#d8e2ee");
+        doc.rect(M, y, CW, rowH).fill(bg).stroke("#d8e2ee");
 
         const vals = [
           String(idx + 1),
           item.partNo ?? "—",
-          rtl(item.description),     // description is Arabic text → apply rtl()
+          descText,
           formatQty(item.qty),
           item.uom ?? "—",
         ];
 
         vals.forEach((v, i) => {
-          doc.font("Amiri").fontSize(9.5).fillColor("#2c3e50")
-            .text(v, colX(i) + 3, y + 5, {
-              width: colWArr[i] - 6,
-              align: i === 2 ? "right" : "center",
-              lineBreak: false,
+          const isDesc = i === 2;
+          // Vertically center non-description columns; top-align description
+          const cellY = isDesc
+            ? y + ROW_PAD_V
+            : y + (rowH - FONT_SIZE) / 2 - 1;
+
+          doc.font("Amiri").fontSize(FONT_SIZE).fillColor("#2c3e50")
+            .text(v, colX(i) + 3, cellY, {
+              width:     colWArr[i] - 6,
+              align:     isDesc ? "right" : "center",
+              lineBreak: isDesc,          // wrap only the description column
             });
         });
-        y += ROW_H;
+        y += rowH;
       });
 
       // ═══════════════════════════════════════════════════════════════════
