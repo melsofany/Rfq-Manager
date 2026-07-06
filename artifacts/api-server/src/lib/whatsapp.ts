@@ -1,35 +1,52 @@
+import { WhatsAppAPI } from "whatsapp-api-js";
+import {
+  Text,
+  Template,
+  Language,
+  HeaderComponent,
+  HeaderParameter,
+  BodyComponent,
+  BodyParameter,
+  URLComponent,
+  Document as WADocument,
+} from "whatsapp-api-js/messages";
 import { logger } from "./logger";
 import { generateRfqPdf } from "./rfqPdf";
 
-const WHATSAPP_API_VERSION = "v22.0";
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER;
-const TOKEN = process.env.WHATSAPP_TOKEN;
+// ─── Official WhatsApp Business (Meta) Cloud API client ──────────────────────
+// This module is built on top of the open-source "whatsapp-api-js" library
+// (https://github.com/Secreto31126/whatsapp-api-js), a TypeScript wrapper
+// around Meta's official WhatsApp Cloud API. It replaces the previous
+// hand-rolled `fetch()` calls to graph.facebook.com with typed message
+// builders and a single authenticated client.
+
+export const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER || "";
+const TOKEN = process.env.WHATSAPP_TOKEN || "";
+// Optional but recommended: enables verification of Meta's X-Hub-Signature-256
+// header on incoming webhooks. Without it the client runs in "insecure" mode
+// (still functional, just skips signature verification).
+const APP_SECRET = process.env.WHATSAPP_APP_SECRET;
+export const WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 
 const TEMPLATE_TEXT    = process.env.WHATSAPP_TEMPLATE_TEXT    || "rfq_send_ar";
 const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";
 const TEMPLATE_PDF     = process.env.WHATSAPP_TEMPLATE_PDF     || "rfq_pdf_ar";
 const TEMPLATE_LANG    = process.env.WHATSAPP_TEMPLATE_LANG    || "ar";
 
-interface WaApiError {
-  error?: {
-    code?: number;
-    error_subcode?: number;
-    message?: string;
-    error_data?: { details?: string };
-  };
-}
+export const isWhatsAppConfigured = Boolean(PHONE_NUMBER_ID && TOKEN);
 
-interface WaApiResponse {
-  messages?: { id: string }[];
-}
-
-function apiUrl(): string {
-  return `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
-}
-
-function mediaUrl(): string {
-  return `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/media`;
-}
+export const Whatsapp = APP_SECRET
+  ? new WhatsAppAPI({
+      token: TOKEN || "unconfigured",
+      appSecret: APP_SECRET,
+      webhookVerifyToken: WEBHOOK_VERIFY_TOKEN,
+      secure: true,
+    })
+  : new WhatsAppAPI({
+      token: TOKEN || "unconfigured",
+      webhookVerifyToken: WEBHOOK_VERIFY_TOKEN,
+      secure: false,
+    });
 
 class WhatsAppApiError extends Error {
   waCode?: number;
@@ -40,21 +57,10 @@ class WhatsAppApiError extends Error {
   }
 }
 
-async function postMessage(body: object): Promise<WaApiResponse> {
-  if (!PHONE_NUMBER_ID || !TOKEN) {
+function requireConfigured(): void {
+  if (!isWhatsAppConfigured) {
     throw new Error("WhatsApp credentials not configured (WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_TOKEN)");
   }
-  const res = await fetch(apiUrl(), {
-    method: "POST",
-    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json()) as WaApiError & WaApiResponse;
-  if (!res.ok) {
-    const code = json?.error?.code;
-    throw new WhatsAppApiError(`WhatsApp API error ${res.status}: ${JSON.stringify(json)}`, code);
-  }
-  return json;
 }
 
 function normalizePhone(phone: string): string {
@@ -70,16 +76,26 @@ function extractPricingToken(pricingUrl: string): string {
   return parts[parts.length - 1] || pricingUrl;
 }
 
-async function uploadWhatsAppMedia(pdfBuffer: Buffer, filename: string): Promise<string> {
-  if (!PHONE_NUMBER_ID || !TOKEN) throw new Error("WhatsApp credentials not configured");
-  const blob = new Blob([pdfBuffer], { type: "application/pdf" });
+// Uploads a media buffer to Meta's Cloud API and returns the resulting media ID.
+// The library doesn't expose a typed multipart-form helper for uploadMedia, so
+// we use its authenticated `$$apiFetch$$` escape hatch — still the official,
+// token-authenticated client, just for an operation the wrapper leaves generic.
+async function uploadWhatsAppMedia(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
+  requireConfigured();
+  const blob = new Blob([new Uint8Array(buffer)], { type: mimeType });
   const form = new FormData();
   form.append("messaging_product", "whatsapp");
-  form.append("type", "application/pdf");
+  form.append("type", mimeType);
   form.append("file", blob, filename);
-  const res = await fetch(mediaUrl(), { method: "POST", headers: { Authorization: `Bearer ${TOKEN}` }, body: form });
+
+  const res = await Whatsapp.$$apiFetch$$(
+    `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/media`,
+    { method: "POST", body: form }
+  );
   const json = (await res.json()) as { id?: string; error?: object };
-  if (!res.ok || !json.id) throw new Error(`WhatsApp media upload error ${res.status}: ${JSON.stringify(json)}`);
+  if (!res.ok || !json.id) {
+    throw new Error(`WhatsApp media upload error ${res.status}: ${JSON.stringify(json)}`);
+  }
   logger.info({ mediaId: json.id, filename }, "WhatsApp media uploaded");
   return json.id;
 }
@@ -109,46 +125,51 @@ function sanitizeWaParam(text: string): string {
 }
 
 function buildItemsSummary(opts: SendRfqOpts): string {
-    const suffix = opts.items.length > 5 ? `، وغيرها (${opts.items.length} صنف)` : "";
-    const summary = opts.items
-      .slice(0, 5)
-      .map((item, i) => {
-        const line = item.lineItem || String(i + 1);
-        const qty = item.qty ? ` x${item.qty}` : "";
-        return `${line}. ${sanitizeWaParam(item.description)}${qty}`;
-      })
-      .join("، ") + suffix;
-    const full = sanitizeWaParam(summary);
-    // WhatsApp template params must stay well under 1024-char limit
-    if (full.length <= 800) return full;
-    return full.slice(0, 800 - suffix.length).trimEnd() + "…" + suffix;
-  }
-  
+  const suffix = opts.items.length > 5 ? `، وغيرها (${opts.items.length} صنف)` : "";
+  const summary = opts.items
+    .slice(0, 5)
+    .map((item, i) => {
+      const line = item.lineItem || String(i + 1);
+      const qty = item.qty ? ` x${item.qty}` : "";
+      return `${line}. ${sanitizeWaParam(item.description)}${qty}`;
+    })
+    .join("، ") + suffix;
+  const full = sanitizeWaParam(summary);
+  // WhatsApp template params must stay well under 1024-char limit
+  if (full.length <= 800) return full;
+  return full.slice(0, 800 - suffix.length).trimEnd() + "…" + suffix;
+}
+
 function buildContactText(opts: SendRfqOpts): string {
   return sanitizeWaParam(`${opts.employeeName}${opts.employeePhone ? " — " + opts.employeePhone : ""}`);
 }
 
+async function sendTemplate(to: string, template: Template): Promise<string> {
+  requireConfigured();
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, template);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? "";
+}
+
 async function sendRfqTemplateUtility(to: string, opts: SendRfqOpts): Promise<string> {
   const pricingToken = extractPricingToken(opts.pricingUrl);
-  const result = await postMessage({
-    messaging_product: "whatsapp", to, type: "template",
-    template: {
-      name: TEMPLATE_UTILITY, language: { code: TEMPLATE_LANG },
-      components: [
-        { type: "body", parameters: [
-          { type: "text", text: opts.toName },
-          { type: "text", text: opts.rfqNo },
-          { type: "text", text: buildItemsSummary(opts) },
-          { type: "text", text: opts.closeDate },
-          { type: "text", text: buildContactText(opts) },
-        ]},
-        { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: pricingToken }] },
-      ],
-    },
-  });
-  const waMessageId = result.messages?.[0]?.id ?? "";
-  logger.info({ to, rfqNo: opts.rfqNo, waMessageId }, "RFQ UTILITY template sent via WhatsApp");
-  return waMessageId;
+  const template = new Template(
+    TEMPLATE_UTILITY,
+    new Language(TEMPLATE_LANG),
+    new BodyComponent(
+      new BodyParameter(opts.toName),
+      new BodyParameter(opts.rfqNo),
+      new BodyParameter(buildItemsSummary(opts)),
+      new BodyParameter(opts.closeDate),
+      new BodyParameter(buildContactText(opts)),
+    ),
+    new URLComponent(pricingToken),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ UTILITY template sent via WhatsApp");
+  return waId;
 }
 
 async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<string> {
@@ -162,149 +183,108 @@ async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<st
     new Promise<Buffer>((_, rej) => setTimeout(() => rej(new Error("PDF generation timed out")), 12000)),
   ]);
   const filename = `RFQ-${opts.rfqNo}.pdf`;
-  const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename);
+  const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename, "application/pdf");
   const pricingToken = extractPricingToken(opts.pricingUrl);
-  const result = await postMessage({
-    messaging_product: "whatsapp", to, type: "template",
-    template: {
-      name: TEMPLATE_PDF, language: { code: TEMPLATE_LANG },
-      components: [
-        { type: "header", parameters: [{ type: "document", document: { id: mediaId, filename } }] },
-        { type: "body", parameters: [
-          { type: "text", text: opts.toName },
-          { type: "text", text: opts.rfqNo },
-          { type: "text", text: opts.closeDate },
-          { type: "text", text: buildContactText(opts) },
-        ]},
-        { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: pricingToken }] },
-      ],
-    },
-  });
-  const waMessageId = result.messages?.[0]?.id ?? "";
-  logger.info({ to, rfqNo: opts.rfqNo, waMessageId }, "RFQ PDF template sent via WhatsApp");
-  return waMessageId;
+  const template = new Template(
+    TEMPLATE_PDF,
+    new Language(TEMPLATE_LANG),
+    new HeaderComponent(new HeaderParameter(new WADocument(mediaId, true, undefined, filename))),
+    new BodyComponent(
+      new BodyParameter(opts.toName),
+      new BodyParameter(opts.rfqNo),
+      new BodyParameter(opts.closeDate),
+      new BodyParameter(buildContactText(opts)),
+    ),
+    new URLComponent(pricingToken),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ PDF template sent via WhatsApp");
+  return waId;
 }
 
 async function sendRfqTemplateTextOnly(to: string, opts: SendRfqOpts): Promise<string> {
   const pricingToken = extractPricingToken(opts.pricingUrl);
-  const result = await postMessage({
-    messaging_product: "whatsapp", to, type: "template",
-    template: {
-      name: TEMPLATE_TEXT, language: { code: TEMPLATE_LANG },
-      components: [
-        { type: "body", parameters: [
-          { type: "text", text: opts.toName },
-          { type: "text", text: opts.rfqNo },
-          { type: "text", text: buildItemsSummary(opts) },
-          { type: "text", text: opts.closeDate },
-          { type: "text", text: buildContactText(opts) },
-        ]},
-        { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: pricingToken }] },
-      ],
-    },
-  });
-  const waMessageId = result.messages?.[0]?.id ?? "";
-  logger.info({ to, rfqNo: opts.rfqNo, waMessageId }, "RFQ text-only template sent via WhatsApp");
-  return waMessageId;
-}
-
-function buildTextMessage(opts: SendRfqOpts): string {
-  const itemLines = opts.items.map((item, i) => {
-    const line = item.lineItem || String(i + 1);
-    const part = item.partNo ? ` [${item.partNo}]` : "";
-    const qty = item.qty ? ` — الكمية: ${item.qty}${item.uom ? " " + item.uom : ""}` : "";
-    return `${line}. ${item.description}${part}${qty}`;
-  }).join("\n");
-  return [
-    `*طلب عرض سعر — ${opts.rfqNo}*`,
-    `───────────────────`,
-    `عزيزنا ${opts.toName}،`,
-    ``,
-    `تود شركة قرطبة للتوريدات الحصول على أفضل عرض سعر للأصناف التالية:`,
-    ``,
-    itemLines,
-    ``,
-    `───────────────────`,
-    `*تاريخ الإغلاق:* ${opts.closeDate}`,
-    ``,
-    `لتقديم عرضك، يرجى الضغط على الرابط التالي:`,
-    opts.pricingUrl,
-    ``,
-    `_هذا الرابط خاص بشركتكم، يرجى عدم مشاركته._`,
-    ``,
-    `للاستفسار: ${buildContactText(opts)}`,
-  ].join("\n");
+  const template = new Template(
+    TEMPLATE_TEXT,
+    new Language(TEMPLATE_LANG),
+    new BodyComponent(
+      new BodyParameter(opts.toName),
+      new BodyParameter(opts.rfqNo),
+      new BodyParameter(buildItemsSummary(opts)),
+      new BodyParameter(opts.closeDate),
+      new BodyParameter(buildContactText(opts)),
+    ),
+    new URLComponent(pricingToken),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ text-only template sent via WhatsApp");
+  return waId;
 }
 
 export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boolean; usedTemplate: boolean; waMessageId: string | null }> {
-    const to = normalizePhone(opts.phone);
-    const methodErrors: string[] = [];
+  const to = normalizePhone(opts.phone);
+  const methodErrors: string[] = [];
 
-    // Primary: rfq_pdf_ar (PDF attachment + button)
-    try {
-      const waId = await sendRfqTemplateWithPdf(to, opts);
-      logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_pdf_ar template");
-      return { pdfSent: true, usedTemplate: true, waMessageId: waId || null };
-    } catch (pdfErr) {
-      const msg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
-      methodErrors.push(`rfq_pdf_ar: ${msg}`);
-      logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "rfq_pdf_ar failed — trying rfq_send_ar");
-    }
-
-    // Fallback 1: rfq_send_ar (text only + button)
-    try {
-      const waId = await sendRfqTemplateTextOnly(to, opts);
-      logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_send_ar template");
-      return { pdfSent: false, usedTemplate: true, waMessageId: waId || null };
-    } catch (textErr) {
-      const msg = textErr instanceof Error ? textErr.message : String(textErr);
-      methodErrors.push(`rfq_send_ar: ${msg}`);
-      logger.warn({ err: textErr, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying rfq_utility_ar");
-    }
-
-    // Fallback 2: rfq_utility_ar
-    try {
-      const waId = await sendRfqTemplateUtility(to, opts);
-      logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_utility_ar template");
-      return { pdfSent: false, usedTemplate: true, waMessageId: waId || null };
-    } catch (utilErr) {
-      const msg = utilErr instanceof Error ? utilErr.message : String(utilErr);
-      methodErrors.push(`rfq_utility_ar: ${msg}`);
-      logger.warn({ err: utilErr, to, rfqNo: opts.rfqNo }, "All 3 templates failed");
-    }
-
-    // All templates failed.
-    // NOTE: We intentionally do NOT fall back to plain text — plain text messages
-    // are silently accepted by the WhatsApp API (returns a wamid) but are NEVER
-    // delivered to recipients who haven't opened a conversation in the last 24 hours.
-    // This creates a false "✓ أُرسل" in the UI while the supplier receives nothing.
-    // Instead we throw so the UI correctly shows "✗ فشل" with the real error.
-    const combined = methodErrors.join(" | ");
-    logger.error({ to, rfqNo: opts.rfqNo, methodErrors }, "All WhatsApp templates failed — message NOT sent");
-    throw new Error(`فشل إرسال واتساب. الأخطاء: ${combined}`);
+  // Primary: rfq_pdf_ar (PDF attachment + button)
+  try {
+    const waId = await sendRfqTemplateWithPdf(to, opts);
+    logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_pdf_ar template");
+    return { pdfSent: true, usedTemplate: true, waMessageId: waId || null };
+  } catch (pdfErr) {
+    const msg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
+    methodErrors.push(`rfq_pdf_ar: ${msg}`);
+    logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "rfq_pdf_ar failed — trying rfq_send_ar");
   }
-  
+
+  // Fallback 1: rfq_send_ar (text only + button)
+  try {
+    const waId = await sendRfqTemplateTextOnly(to, opts);
+    logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_send_ar template");
+    return { pdfSent: false, usedTemplate: true, waMessageId: waId || null };
+  } catch (textErr) {
+    const msg = textErr instanceof Error ? textErr.message : String(textErr);
+    methodErrors.push(`rfq_send_ar: ${msg}`);
+    logger.warn({ err: textErr, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying rfq_utility_ar");
+  }
+
+  // Fallback 2: rfq_utility_ar
+  try {
+    const waId = await sendRfqTemplateUtility(to, opts);
+    logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_utility_ar template");
+    return { pdfSent: false, usedTemplate: true, waMessageId: waId || null };
+  } catch (utilErr) {
+    const msg = utilErr instanceof Error ? utilErr.message : String(utilErr);
+    methodErrors.push(`rfq_utility_ar: ${msg}`);
+    logger.warn({ err: utilErr, to, rfqNo: opts.rfqNo }, "All 3 templates failed");
+  }
+
+  // All templates failed.
+  // NOTE: We intentionally do NOT fall back to plain text — plain text messages
+  // are silently accepted by the WhatsApp API (returns a wamid) but are NEVER
+  // delivered to recipients who haven't opened a conversation in the last 24 hours.
+  // This creates a false "✓ أُرسل" in the UI while the supplier receives nothing.
+  // Instead we throw so the UI correctly shows "✗ فشل" with the real error.
+  const combined = methodErrors.join(" | ");
+  logger.error({ to, rfqNo: opts.rfqNo, methodErrors }, "All WhatsApp templates failed — message NOT sent");
+  throw new Error(`فشل إرسال واتساب. الأخطاء: ${combined}`);
+}
+
 // Returns the WhatsApp message ID (wamid) so callers can store it for later deletion.
 export async function sendWhatsAppText(phone: string, text: string): Promise<string | null> {
+  requireConfigured();
   const to = normalizePhone(phone);
-  const result = await postMessage({
-    messaging_product: "whatsapp",
-    to,
-    type: "text",
-    text: { body: text, preview_url: false },
-  });
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, new Text(text));
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
   logger.info({ to }, "WhatsApp text sent");
-  return result?.messages?.[0]?.id ?? null;
+  return result.messages?.[0]?.id ?? null;
 }
 
 export async function markWhatsAppRead(messageId: string): Promise<void> {
-  if (!PHONE_NUMBER_ID || !TOKEN) return;
+  if (!isWhatsAppConfigured) return;
   try {
-    await fetch(apiUrl(), {
-      method: "POST",
-      headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ messaging_product: "whatsapp", status: "read", message_id: messageId }),
-    });
+    await Whatsapp.markAsRead(PHONE_NUMBER_ID, messageId);
   } catch {
     // non-critical
   }

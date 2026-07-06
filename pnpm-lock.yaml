@@ -233,6 +233,9 @@ importers:
       pino-http:
         specifier: ^10.5.0
         version: 10.5.0
+      whatsapp-api-js:
+        specifier: ^6.2.1
+        version: 6.2.1
     devDependencies:
       '@types/bcrypt':
         specifier: ^6.0.0
@@ -3349,6 +3352,7 @@ packages:
   tsconfck@3.1.6:
     resolution: {integrity: sha512-ks6Vjr/jEw0P1gmOVwutM3B7fWxoWBL2KRDb1JfqGVawBmO5UsvmWOQFGHBPl5yxYz4eERr19E6L7NMv+Fej4w==}
     engines: {node: ^18 || >=20}
+    deprecated: unmaintained
     hasBin: true
     peerDependencies:
       typescript: ^5.0.0
@@ -3523,6 +3527,10 @@ packages:
   web-streams-polyfill@3.3.3:
     resolution: {integrity: sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw==}
     engines: {node: '>= 8'}
+
+  whatsapp-api-js@6.2.1:
+    resolution: {integrity: sha512-nK/7ku9Cg1PrQkb5vm7QJqpzZFi1CCMMsW1IDB2rOVOceQlr4KO53GtQ//xT4Z6XasS96arW1b0RxvIMxjvDog==}
+    engines: {node: '>=16'}
 
   which@2.0.2:
     resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
@@ -6430,6 +6438,8 @@ snapshots:
       yaml: 2.8.4
 
   web-streams-polyfill@3.3.3: {}
+
+  whatsapp-api-js@6.2.1: {}
 
   which@2.0.2:
     dependencies:

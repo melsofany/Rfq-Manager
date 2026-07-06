@@ -37,7 +37,13 @@ app.use(session({
   },
 }));
 
-app.use(express.json());
+// Capture the raw request body for routes that need to verify Meta's
+// X-Hub-Signature-256 webhook signature (see routes/whatsapp.ts).
+app.use(express.json({
+  verify: (req: Request & { rawBody?: string }, _res, buf) => {
+    req.rawBody = buf.toString("utf8");
+  },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
