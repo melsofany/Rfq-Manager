@@ -301,10 +301,11 @@ router.get("/rfq/:id/items", requireAuth, async (req, res): Promise<void> => {
 router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const rfqId = parseInt(raw, 10);
-  const { supplierIds, closeDate, notes: sendNotes } = req.body as {
+  const { supplierIds, closeDate, notes: sendNotes, force } = req.body as {
     supplierIds: number[];
     closeDate?: string;
     notes?: string;
+    force?: boolean;
   };
 
   if (!supplierIds?.length) {
@@ -331,15 +332,31 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
       ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}`
       : `http://localhost:${process.env.PORT}`);
 
+  req.log.info(
+    { rfqId, rfqNo: rfq.internalRfqNo, supplierCount: suppliers.length, force: !!force, baseUrl },
+    "RFQ send: starting"
+  );
+
   for (const supplier of suppliers) {
-    // Duplicate check
+    // Duplicate check — bypassed when force=true (explicit resend)
     const [existing] = await db.select().from(sentLogTable)
       .where(and(eq(sentLogTable.rfqId, rfqId), eq(sentLogTable.supplierId, supplier.id)));
 
-    if (existing) {
+    if (existing && !force) {
       skipped++;
+      req.log.warn(
+        { rfqId, supplierId: supplier.id, supplierName: supplier.name },
+        "RFQ send: SKIPPED — already sent (pass force=true to resend)"
+      );
       results.push({ supplierId: supplier.id, supplierName: supplier.name, status: "skipped", reason: "Already sent" });
       continue;
+    }
+
+    // force-resend: remove the old sent-log row so the supplier gets a fresh token/link
+    if (existing && force) {
+      await db.delete(sentLogTable)
+        .where(and(eq(sentLogTable.rfqId, rfqId), eq(sentLogTable.supplierId, supplier.id)));
+      req.log.info({ rfqId, supplierId: supplier.id, supplierName: supplier.name }, "RFQ send: force-resend — removed old sent-log");
     }
 
     const token = generateToken();
@@ -352,6 +369,12 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
     });
 
     const pricingUrl = `${baseUrl}/q/${token}`;
+
+    req.log.info(
+      { rfqId, supplierId: supplier.id, supplierName: supplier.name,
+        hasEmail: !!supplier.email, hasPhone: !!supplier.phone, pricingUrl },
+      "RFQ send: processing supplier"
+    );
 
     const rfqItems = items.map(i => ({
       lineItem: i.lineItem,
@@ -378,11 +401,14 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           employeePhone: employee?.phone,
         });
         emailStatus = "sent";
+        req.log.info({ supplierId: supplier.id, email: supplier.email }, "RFQ send: email OK");
       } catch (err) {
         emailStatus = "failed";
         emailError = err instanceof Error ? err.message : String(err);
-        req.log.error({ err, supplierId: supplier.id, email: supplier.email }, "Failed to send RFQ email");
+        req.log.error({ err, supplierId: supplier.id, email: supplier.email }, "RFQ send: email FAILED");
       }
+    } else {
+      req.log.warn({ supplierId: supplier.id, supplierName: supplier.name }, "RFQ send: no email on supplier");
     }
 
     // Send WhatsApp if supplier has phone
@@ -405,46 +431,49 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           notes: rfq.notes ?? null,
         });
         whatsappStatus = "sent";
-          // Save outbound messages to chat log
-          // Note: normalizePhone mirrors whatsapp.ts logic exactly
-          let normalizedPhone = supplier.phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
-          if (normalizedPhone.startsWith("00")) normalizedPhone = normalizedPhone.slice(2);
-          if (normalizedPhone.length === 11 && normalizedPhone.startsWith("0")) normalizedPhone = "2" + normalizedPhone;
-          if (normalizedPhone.length === 10 && normalizedPhone.startsWith("1")) normalizedPhone = "20" + normalizedPhone;
+        req.log.info({ supplierId: supplier.id, phone: supplier.phone, pdfSent }, "RFQ send: WhatsApp OK");
 
-          try {
-            if (pdfSent) {
-              await db.insert(whatsappChatsTable).values({
-                waMessageId: sentWaId,   // unique wamid for PDF message
-                direction: "outbound",
-                phone: normalizedPhone,
-                supplierId: supplier.id,
-                body: `[PDF] RFQ-${rfq.internalRfqNo}.pdf — طلب عرض سعر`,
-                isRead: true,
-              });
-            }
-            // Text entry: use null for waMessageId to avoid unique constraint conflict
-            // when the same wamid would be inserted twice for the same template send
+        let normalizedPhone = supplier.phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+        if (normalizedPhone.startsWith("00")) normalizedPhone = normalizedPhone.slice(2);
+        if (normalizedPhone.length === 11 && normalizedPhone.startsWith("0")) normalizedPhone = "2" + normalizedPhone;
+        if (normalizedPhone.length === 10 && normalizedPhone.startsWith("1")) normalizedPhone = "20" + normalizedPhone;
+
+        try {
+          if (pdfSent) {
             await db.insert(whatsappChatsTable).values({
-              waMessageId: pdfSent ? null : sentWaId,
+              waMessageId: sentWaId,
               direction: "outbound",
               phone: normalizedPhone,
               supplierId: supplier.id,
-              body: `[RFQ ${rfq.internalRfqNo}] تم إرسال طلب عرض السعر — ${pricingUrl}`,
+              body: `[PDF] RFQ-${rfq.internalRfqNo}.pdf — طلب عرض سعر`,
               isRead: true,
             });
-          } catch (chatErr) {
-            // Chat log errors should not fail the overall send result
-            req.log.warn({ err: chatErr, supplierId: supplier.id }, "Failed to save WhatsApp chat log entry");
           }
+          await db.insert(whatsappChatsTable).values({
+            waMessageId: pdfSent ? null : sentWaId,
+            direction: "outbound",
+            phone: normalizedPhone,
+            supplierId: supplier.id,
+            body: `[RFQ ${rfq.internalRfqNo}] تم إرسال طلب عرض السعر — ${pricingUrl}`,
+            isRead: true,
+          });
+        } catch (chatErr) {
+          req.log.warn({ err: chatErr, supplierId: supplier.id }, "RFQ send: chat log insert failed (non-fatal)");
+        }
       } catch (err) {
         whatsappStatus = "failed";
         whatsappError = err instanceof Error ? err.message : String(err);
-        req.log.error({ err, supplierId: supplier.id, phone: supplier.phone }, "Failed to send WhatsApp");
+        req.log.error({ err, supplierId: supplier.id, phone: supplier.phone }, "RFQ send: WhatsApp FAILED");
       }
+    } else {
+      req.log.warn({ supplierId: supplier.id, supplierName: supplier.name }, "RFQ send: no phone on supplier");
     }
 
     sent++;
+    req.log.info(
+      { supplierId: supplier.id, supplierName: supplier.name, emailStatus, whatsappStatus },
+      "RFQ send: supplier done"
+    );
     results.push({
       supplierId: supplier.id,
       supplierName: supplier.name,
