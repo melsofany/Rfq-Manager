@@ -322,7 +322,11 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
     ? await db.select().from(employeesTable).where(eq(employeesTable.id, req.session.employeeId!))
     : [];
 
-  const results: Array<{ supplierId: number; supplierName: string; status: string; reason: string | null }> = [];
+  const results: Array<{
+    supplierId: number; supplierName: string; status: string; reason: string | null;
+    email?: { status: string; error: string | null };
+    whatsapp?: { status: string; error: string | null };
+  }> = [];
   let sent = 0;
   let skipped = 0;
 
@@ -352,27 +356,54 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
       continue;
     }
 
-    // force-resend: remove the old sent-log row so the supplier gets a fresh token/link
+    let token: string;
+
     if (existing && force) {
-      await db.delete(sentLogTable)
-        .where(and(eq(sentLogTable.rfqId, rfqId), eq(sentLogTable.supplierId, supplier.id)));
-      req.log.info({ rfqId, supplierId: supplier.id, supplierName: supplier.name }, "RFQ send: force-resend — removed old sent-log");
+      // Guard: if the supplier already submitted an offer referencing this sent-log row,
+      // deleting it would violate the FK (offers.sent_log_id → sent_log.id). Skip instead.
+      const [linkedOffer] = await db.select({ id: offersTable.id })
+        .from(offersTable)
+        .where(eq(offersTable.sentLogId, existing.id));
+
+      if (linkedOffer) {
+        skipped++;
+        req.log.warn(
+          { rfqId, supplierId: supplier.id, supplierName: supplier.name, offerId: linkedOffer.id },
+          "RFQ send: force-resend SKIPPED — offer already submitted (FK protects sent-log row)"
+        );
+        results.push({ supplierId: supplier.id, supplierName: supplier.name, status: "skipped", reason: "Offer already submitted" });
+        continue;
+      }
+
+      // Atomically delete old row and insert new one with a fresh token
+      token = generateToken();
+      await db.transaction(async (tx) => {
+        await tx.delete(sentLogTable)
+          .where(and(eq(sentLogTable.rfqId, rfqId), eq(sentLogTable.supplierId, supplier.id)));
+        await tx.insert(sentLogTable).values({
+          rfqId, supplierId: supplier.id,
+          employeeId: req.session.employeeId,
+          token, closeDate,
+        });
+      });
+      req.log.info({ rfqId, supplierId: supplier.id, supplierName: supplier.name }, "RFQ send: force-resend — sent-log replaced atomically");
+    } else {
+      // First-time send: insert fresh row
+      token = generateToken();
+      await db.insert(sentLogTable).values({
+        rfqId, supplierId: supplier.id,
+        employeeId: req.session.employeeId,
+        token, closeDate,
+      });
     }
 
-    const token = generateToken();
-    await db.insert(sentLogTable).values({
-      rfqId,
-      supplierId: supplier.id,
-      employeeId: req.session.employeeId,
-      token,
-      closeDate,
-    });
-
     const pricingUrl = `${baseUrl}/q/${token}`;
+    // Log only the last 6 chars of the token — never log full bearer token
+    const tokenSuffix = token.slice(-6);
 
     req.log.info(
       { rfqId, supplierId: supplier.id, supplierName: supplier.name,
-        hasEmail: !!supplier.email, hasPhone: !!supplier.phone, pricingUrl },
+        hasEmail: !!supplier.email, hasPhone: !!supplier.phone, tokenSuffix },
       "RFQ send: processing supplier"
     );
 
