@@ -1,10 +1,11 @@
 import PDFDocument from "pdfkit";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { existsSync } from "fs";
 
 export interface RfqPdfOptions {
   rfqNo: string;
-  customerRfqNo: string;
+  customerRfqNo: string;   // kept in interface for backward-compat but NOT shown in PDF
   rfqDate?: string | null;
   closeDate: string;
   supplierName: string;
@@ -22,6 +23,33 @@ export interface RfqPdfOptions {
   notes?: string | null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RTL helper
+//
+// PDFKit renders characters left-to-right in the order they appear in the
+// string.  Arabic Unicode text is stored in *logical* (reading) order, which
+// is right-to-left, so a 3-word Arabic string rendered LTR appears with its
+// words in reverse visual order.
+//
+// Fix: reverse the word sequence before handing it to PDFKit.  PDFKit then
+// places word-1 (the RTL-last word) at the left, word-N (the RTL-first word)
+// at the right, and an Arabic reader scanning right-to-left sees the correct
+// reading order.
+//
+// This applies only to strings that contain Arabic characters and have more
+// than one whitespace-delimited token.  Single words and Latin-only strings
+// are returned unchanged.
+// ─────────────────────────────────────────────────────────────────────────────
+const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+
+function rtl(text: string): string {
+  if (!text) return text;
+  const trimmed = text.trim();
+  if (!ARABIC_RE.test(trimmed)) return trimmed;   // no Arabic → leave as-is
+  const words = trimmed.split(/\s+/);
+  if (words.length <= 1) return trimmed;           // single token → no reversal
+  return words.reverse().join(" ");
+}
 
 function formatDate(d: string): string {
   try {
@@ -34,15 +62,11 @@ function formatDate(d: string): string {
 /**
  * Strips trailing zeros from a plain numeric string using regex only —
  * no parseFloat, so large numbers can't silently switch to scientific notation.
- * "2.000" → "2",  "2.500" → "2.5",  "12abc" → "12abc" (unchanged)
- * "001.2300" → "001.23"  (preserves leading zeros; caller owns that decision)
  */
 function formatQty(qty: string | null | undefined): string {
   if (!qty) return "—";
   const t = qty.trim();
-  // Only process purely numeric strings (optional leading sign, digits, optional decimal part)
   if (!/^-?\d+(\.\d+)?$/.test(t)) return t;
-  // Strip trailing zeros after decimal point, then strip a lone trailing dot
   return t.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }
 
@@ -51,10 +75,17 @@ function getFontPath(): string {
   return resolve(currentDir, "assets/fonts/Amiri-Regular.ttf");
 }
 
+function getLogoPath(): string {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  return resolve(currentDir, "assets/logo.png");
+}
+
 export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
   return new Promise((resolvePromise, reject) => {
     try {
       const fontPath = getFontPath();
+      const logoPath = getLogoPath();
+      const hasLogo  = existsSync(logoPath);
 
       const doc = new PDFDocument({
         size: "A4",
@@ -68,9 +99,9 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       const settle = (fn: () => void) => {
         if (!settled) { settled = true; fn(); }
       };
-      doc.on("data", (c: Buffer) => chunks.push(c));
-      doc.on("end",  () => settle(() => resolvePromise(Buffer.concat(chunks))));
-      doc.on("error",(e: Error) => settle(() => reject(e)));
+      doc.on("data",  (c: Buffer) => chunks.push(c));
+      doc.on("end",   () => settle(() => resolvePromise(Buffer.concat(chunks))));
+      doc.on("error", (e: Error) => settle(() => reject(e)));
 
       doc.registerFont("Amiri", fontPath);
 
@@ -82,7 +113,9 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       const LGREY  = "#eef2f7";
 
       // ── Format dates ─────────────────────────────────────────────────────
-      const rfqDate   = opts.rfqDate ? formatDate(opts.rfqDate) : formatDate(new Date().toISOString());
+      const rfqDate   = opts.rfqDate
+        ? formatDate(opts.rfqDate)
+        : formatDate(new Date().toISOString());
       const closeDate = formatDate(opts.closeDate);
 
       // ═══════════════════════════════════════════════════════════════════
@@ -94,12 +127,11 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       doc.rect(0, HDR_H - 3, PAGE_W, 3).fill(GOLD);
 
       // ── RIGHT block: document title (RTL start position) ─────────────
-      // Arabic readers start from the right — the document type goes here.
-      const TITLE_X = PAGE_W / 2;          // right half of header
+      const TITLE_X = PAGE_W / 2;
       const TITLE_W = PAGE_W / 2 - M;
 
       doc.font("Amiri").fontSize(24).fillColor("#ffffff")
-        .text("طلب عرض سعر", TITLE_X, 14, {
+        .text(rtl("طلب عرض سعر"), TITLE_X, 14, {
           width: TITLE_W, align: "right", lineBreak: false,
         });
       doc.font("Amiri").fontSize(9).fillColor(GOLD)
@@ -118,15 +150,24 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       const CO_TEXT_X = M + LOGO_SIZE + 8;
       const CO_TEXT_W = PAGE_W / 2 - LOGO_SIZE - M - 16;
 
-      // Company monogram — pure vector, no image/zlib dependency
-      doc.roundedRect(LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE, 6).fill(GOLD);
-      doc.font("Amiri").fontSize(22).fillColor(BLUE)
-        .text("ق", LOGO_X, LOGO_Y + LOGO_SIZE / 2 - 14, {
-          width: LOGO_SIZE, align: "center", lineBreak: false,
+      if (hasLogo) {
+        // Use the actual company logo image
+        doc.image(logoPath, LOGO_X, LOGO_Y, {
+          width:  LOGO_SIZE,
+          height: LOGO_SIZE,
+          fit:    [LOGO_SIZE, LOGO_SIZE],
         });
+      } else {
+        // Fallback: vector monogram (no external image dependency)
+        doc.roundedRect(LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE, 6).fill(GOLD);
+        doc.font("Amiri").fontSize(22).fillColor(BLUE)
+          .text("ق", LOGO_X, LOGO_Y + LOGO_SIZE / 2 - 14, {
+            width: LOGO_SIZE, align: "center", lineBreak: false,
+          });
+      }
 
       doc.font("Amiri").fontSize(11).fillColor(GOLD)
-        .text("قرطبة للتوريدات", CO_TEXT_X, 12, {
+        .text(rtl("قرطبة للتوريدات"), CO_TEXT_X, 12, {
           width: CO_TEXT_W, align: "left", lineBreak: false,
         });
       doc.font("Amiri").fontSize(8).fillColor("#c0d8f0")
@@ -134,11 +175,11 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
           width: CO_TEXT_W, align: "left", lineBreak: false,
         });
       doc.font("Amiri").fontSize(7).fillColor("#8aaec8")
-        .text("ش.الإسكندرية - برج نجمة مطروح، الدور الرابع", CO_TEXT_X, 46, {
+        .text(rtl("ش.الإسكندرية - برج نجمة مطروح، الدور الرابع"), CO_TEXT_X, 46, {
           width: CO_TEXT_W, align: "left", lineBreak: false,
         });
       doc.font("Amiri").fontSize(7).fillColor("#8aaec8")
-        .text("مرسي مطروح  |  ت: 432-972-587", CO_TEXT_X, 59, {
+        .text(rtl("مرسي مطروح  |  ت: 432-972-587"), CO_TEXT_X, 59, {
           width: CO_TEXT_W, align: "left", lineBreak: false,
         });
       doc.font("Amiri").fontSize(7).fillColor("#8aaec8")
@@ -147,22 +188,21 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
         });
 
       // ═══════════════════════════════════════════════════════════════════
-      // INFO BAND  (4 cells, rendered right → left for RTL)
-      // Order on page (right → left): رقم الطلب | رقم RFQ | تاريخ | آخر موعد
+      // INFO BAND  — 3 cells (customerRfqNo removed per requirement)
+      // RTL order (right → left): رقم الطلب | تاريخ الإصدار | آخر موعد للرد
       // ═══════════════════════════════════════════════════════════════════
       const IY  = HDR_H;
       const IH  = 50;
       doc.rect(0, IY, PAGE_W, IH).fill(LGREY);
 
       const infoCells = [
-        { label: "رقم الطلب الداخلي", value: opts.rfqNo },
-        { label: "رقم RFQ العميل",    value: opts.customerRfqNo },
-        { label: "تاريخ الإصدار",     value: rfqDate },
-        { label: "آخر موعد للرد",     value: closeDate },
+        { label: rtl("رقم الطلب الداخلي"), value: opts.rfqNo },
+        { label: rtl("تاريخ الإصدار"),     value: rfqDate },
+        { label: rtl("آخر موعد للرد"),     value: closeDate },
       ];
       const cellW = CW / infoCells.length;
 
-      // i=0 → rightmost cell  (RTL start)
+      // i=0 → rightmost cell (RTL start)
       infoCells.forEach((cell, i) => {
         const cx = M + (infoCells.length - 1 - i) * cellW;
         doc.font("Amiri").fontSize(7.5).fillColor("#7a90a8")
@@ -176,22 +216,22 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       // ═══════════════════════════════════════════════════════════════════
       let y = IY + IH + 12;
 
-      // Supplier label + name  (align: "right" = RTL start)
+      // Supplier label + name
       const supplierLine = opts.contactPerson
         ? `${opts.supplierName} — ${opts.contactPerson}`
         : opts.supplierName;
 
       doc.font("Amiri").fontSize(8.5).fillColor("#8899aa")
-        .text("إلى المورّد:", M, y, { width: CW, align: "right", lineBreak: false });
+        .text(rtl("إلى المورّد:"), M, y, { width: CW, align: "right", lineBreak: false });
       y += 15;
 
       doc.font("Amiri").fontSize(14).fillColor(BLUE)
-        .text(supplierLine, M, y, { width: CW, align: "right", lineBreak: false });
+        .text(rtl(supplierLine), M, y, { width: CW, align: "right", lineBreak: false });
       y += 24;
 
       doc.font("Amiri").fontSize(9.5).fillColor("#555555")
         .text(
-          "يسرنا الاستفسار عن أسعار الأصناف التالية، ونرجو التفضل بتزويدنا بعروض الأسعار قبل التاريخ المحدد أعلاه.",
+          rtl("يسرنا الاستفسار عن أسعار الأصناف التالية، ونرجو التفضل بتزويدنا بعروض الأسعار قبل التاريخ المحدد أعلاه."),
           M, y, { width: CW, align: "right" },
         );
       y += 26;
@@ -206,20 +246,17 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       //   #  |  رقم القطعة  |  الوصف  |  الكمية  |  الوحدة
       // ═══════════════════════════════════════════════════════════════════
 
-      // Column definitions — index 0 = rightmost in RTL
       const C_NUM  = 34;
       const C_PART = 100;
       const C_QTY  = 60;
       const C_UOM  = 54;
       const C_DESC = CW - C_NUM - C_PART - C_QTY - C_UOM;
 
-      // colW[i] and colX[i] describe the physical x position on the page.
-      // colX(0) = rightmost column (#), colX(4) = leftmost column (الوحدة).
-      const colWArr  = [C_NUM, C_PART, C_DESC, C_QTY, C_UOM];
-      const colLbls  = ["#", "رقم القطعة", "الوصف", "الكمية", "الوحدة"];
+      const colWArr = [C_NUM, C_PART, C_DESC, C_QTY, C_UOM];
+      // Column labels — single Arabic words, no reversal needed
+      const colLbls = ["#", rtl("رقم القطعة"), rtl("الوصف"), rtl("الكمية"), rtl("الوحدة")];
 
       function colX(idx: number): number {
-        // x = right edge of content area minus cumulative widths up to idx
         let x = M + CW;
         for (let k = 0; k <= idx; k++) x -= colWArr[k];
         return x;
@@ -245,7 +282,7 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
         const vals = [
           String(idx + 1),
           item.partNo ?? "—",
-          item.description,
+          rtl(item.description),     // description is Arabic text → apply rtl()
           formatQty(item.qty),
           item.uom ?? "—",
         ];
@@ -254,7 +291,6 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
           doc.font("Amiri").fontSize(9.5).fillColor("#2c3e50")
             .text(v, colX(i) + 3, y + 5, {
               width: colWArr[i] - 6,
-              // Description column (index 2) uses right-align for Arabic text
               align: i === 2 ? "right" : "center",
               lineBreak: false,
             });
@@ -272,11 +308,11 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
         // Accent bar on the RIGHT edge (RTL start of the block)
         doc.rect(M + CW - 4, y, 4, NH).fill(BLUE);
         doc.font("Amiri").fontSize(8.5).fillColor("#7a90a8")
-          .text("ملاحظات:", M + 6, y + 7, {
+          .text(rtl("ملاحظات:"), M + 6, y + 7, {
             width: CW - 18, align: "right", lineBreak: false,
           });
         doc.font("Amiri").fontSize(10.5).fillColor("#2c3e50")
-          .text(opts.notes.trim(), M + 6, y + 24, {
+          .text(rtl(opts.notes.trim()), M + 6, y + 24, {
             width: CW - 18, align: "right", lineBreak: false,
           });
         y += NH;
@@ -288,24 +324,27 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       const FY = Math.max(y + 20, doc.page.height - 58);
       doc.rect(M, FY, CW, 1.5).fill(GOLD);
 
-      const contact = [
-        opts.employeeName,
-        opts.employeePhone,
+      // Employee name is Arabic → reverse; phone and email stay as-is
+      const contactParts = [
+        opts.employeeName ? rtl(opts.employeeName) : null,
+        opts.employeePhone ?? null,
         "INFO@CORTOBA-SUPPLIES.COM",
-      ].filter(Boolean).join("   |   ");
+      ].filter(Boolean);
+      const contact = contactParts.join("   |   ");
 
       doc.font("Amiri").fontSize(9.5).fillColor("#555555")
         .text(contact, M, FY + 8, { width: CW, align: "center", lineBreak: false });
 
       doc.font("Amiri").fontSize(7.5).fillColor("#999999")
         .text(
-          "ش.الإسكندرية - برج نجمة مطروح، الدور الرابع - مرسي مطروح   |   ت: 432-972-587   |   س-ت: 21618",
+          rtl("ش.الإسكندرية - برج نجمة مطروح، الدور الرابع - مرسي مطروح") +
+          "   |   ت: 432-972-587   |   س-ت: 21618",
           M, FY + 24,
           { width: CW, align: "center", lineBreak: false },
         );
 
       doc.font("Amiri").fontSize(7).fillColor("#aaaaaa")
-        .text("قرطبة للتوريدات — CORTOBA SUPPLIES", M, FY + 38, {
+        .text(rtl("قرطبة للتوريدات") + " — CORTOBA SUPPLIES", M, FY + 38, {
           width: CW, align: "center", lineBreak: false,
         });
 

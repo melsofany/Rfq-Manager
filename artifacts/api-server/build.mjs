@@ -126,6 +126,21 @@ async function copyFonts(distDir) {
   for (const file of files) {
     await copyFile(path.join(srcFonts, file), path.join(destFonts, file));
   }
+
+  // Copy root asset files (logo.png, etc.)
+  const srcAssets = path.resolve(artifactDir, "src/assets");
+  const destAssets = path.resolve(distDir, "assets");
+  await mkdir(destAssets, { recursive: true });
+  const assetFiles = await readdir(srcAssets).catch(() => []);
+  for (const file of assetFiles) {
+    // Only copy files (not sub-directories like fonts/)
+    const srcPath = path.join(srcAssets, file);
+    const { stat } = await import("node:fs/promises");
+    const s = await stat(srcPath).catch(() => null);
+    if (s && s.isFile()) {
+      await copyFile(srcPath, path.join(destAssets, file));
+    }
+  }
 }
 
 buildAll().catch((err) => {
