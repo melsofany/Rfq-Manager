@@ -1,45 +1,103 @@
-/**
- * WhatsApp integration via @whiskeysockets/baileys
- * GitHub: https://github.com/WhiskeySockets/Baileys (26k+ stars, MIT-licensed)
- *
- * Connects to WhatsApp by scanning a QR code.
- * No Meta Business account or approval required.
- */
-import makeWASocket, {
-  DisconnectReason,
-  useMultiFileAuthState,
-  downloadMediaMessage,
-  type WASocket,
-} from "@whiskeysockets/baileys";
-import { Boom } from "@hapi/boom";
-import * as QRCode from "qrcode";
-import { randomUUID } from "node:crypto";
-import path from "node:path";
-import fs from "node:fs";
+import { WhatsAppAPI } from "whatsapp-api-js";
+import {
+  Text,
+  Template,
+  Language,
+  HeaderComponent,
+  HeaderParameter,
+  BodyComponent,
+  BodyParameter,
+  URLComponent,
+  Document as WADocument,
+} from "whatsapp-api-js/messages";
 import { logger } from "./logger";
+import { generateRfqPdf } from "./rfqPdf";
 
-// ─── Storage Directories ──────────────────────────────────────────────────
-export const AUTH_DIR =
-  process.env.WA_AUTH_DIR ?? path.join(process.cwd(), "wa-auth");
-export const MEDIA_DIR =
-  process.env.WA_MEDIA_DIR ?? path.join(process.cwd(), "wa-media");
+// ─── Official WhatsApp Business (Meta) Cloud API client ──────────────────────
+// This module is built on top of the open-source "whatsapp-api-js" library
+// (https://github.com/Secreto31126/whatsapp-api-js), a TypeScript wrapper
+// around Meta's official WhatsApp Cloud API. It replaces the previous
+// hand-rolled `fetch()` calls to graph.facebook.com with typed message
+// builders and a single authenticated client.
 
-for (const dir of [AUTH_DIR, MEDIA_DIR]) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+export const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER || "";
+const TOKEN = process.env.WHATSAPP_TOKEN || "";
+// Optional but recommended: enables verification of Meta's X-Hub-Signature-256
+// header on incoming webhooks. Without it the client runs in "insecure" mode
+// (still functional, just skips signature verification).
+const APP_SECRET = process.env.WHATSAPP_APP_SECRET;
+export const WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+
+const TEMPLATE_TEXT    = process.env.WHATSAPP_TEMPLATE_TEXT    || "rfq_send_ar";
+const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";
+const TEMPLATE_PDF     = process.env.WHATSAPP_TEMPLATE_PDF     || "rfq_pdf_ar";
+const TEMPLATE_LANG    = process.env.WHATSAPP_TEMPLATE_LANG    || "ar";
+
+export const isWhatsAppConfigured = Boolean(PHONE_NUMBER_ID && TOKEN);
+
+export const Whatsapp = APP_SECRET
+  ? new WhatsAppAPI({
+      token: TOKEN || "unconfigured",
+      appSecret: APP_SECRET,
+      webhookVerifyToken: WEBHOOK_VERIFY_TOKEN,
+      secure: true,
+    })
+  : new WhatsAppAPI({
+      token: TOKEN || "unconfigured",
+      webhookVerifyToken: WEBHOOK_VERIFY_TOKEN,
+      secure: false,
+    });
+
+class WhatsAppApiError extends Error {
+  waCode?: number;
+  constructor(message: string, waCode?: number) {
+    super(message);
+    this.name = "WhatsAppApiError";
+    this.waCode = waCode;
+  }
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────
-export type WaStatus = "disconnected" | "qr" | "connecting" | "connected";
+function requireConfigured(): void {
+  if (!isWhatsAppConfigured) {
+    throw new Error("WhatsApp credentials not configured (WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_TOKEN)");
+  }
+}
 
-export interface InboundMessage {
-  waMessageId: string;
-  phone: string;
-  body: string;
-  mediaId: string | null;
-  mediaType: string | null;
-  mimeType: string | null;
-  filename: string | null;
-  senderName: string;
+function normalizePhone(phone: string): string {
+  let cleaned = phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+  if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
+  if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
+  if (cleaned.length === 10 && cleaned.startsWith("1")) cleaned = "20" + cleaned;
+  return cleaned;
+}
+
+function extractPricingToken(pricingUrl: string): string {
+  const parts = pricingUrl.split("/");
+  return parts[parts.length - 1] || pricingUrl;
+}
+
+// Uploads a media buffer to Meta's Cloud API and returns the resulting media ID.
+// The library doesn't expose a typed multipart-form helper for uploadMedia, so
+// we use its authenticated `$$apiFetch$$` escape hatch — still the official,
+// token-authenticated client, just for an operation the wrapper leaves generic.
+async function uploadWhatsAppMedia(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
+  requireConfigured();
+  const blob = new Blob([new Uint8Array(buffer)], { type: mimeType });
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("type", mimeType);
+  form.append("file", blob, filename);
+
+  const res = await Whatsapp.$$apiFetch$$(
+    `https://graph.facebook.com/v22.0/${PHONE_NUMBER_ID}/media`,
+    { method: "POST", body: form }
+  );
+  const json = (await res.json()) as { id?: string; error?: object };
+  if (!res.ok || !json.id) {
+    throw new Error(`WhatsApp media upload error ${res.status}: ${JSON.stringify(json)}`);
+  }
+  logger.info({ mediaId: json.id, filename }, "WhatsApp media uploaded");
+  return json.id;
 }
 
 export interface SendRfqOpts {
@@ -62,323 +120,172 @@ export interface SendRfqOpts {
   notes?: string | null;
 }
 
-// ─── State ────────────────────────────────────────────────────────────────
-let sock: WASocket | null = null;
-let _status: WaStatus = "disconnected";
-let _qrDataUrl: string | null = null;
-let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
-// ─── Mutable callback handlers (set by routes/whatsapp.ts) ───────────────
-export const handlers = {
-  onQr: null as ((qrDataUrl: string) => void) | null,
-  onStatus: null as ((status: WaStatus) => void) | null,
-  onInboundMessage: null as ((msg: InboundMessage) => Promise<void>) | null,
-};
-
-// ─── Helpers ──────────────────────────────────────────────────────────────
-export const isWhatsAppConfigured = true;
-
-export function normalizePhone(phone: string): string {
-  let c = phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
-  if (c.startsWith("00")) c = c.slice(2);
-  if (c.length === 11 && c.startsWith("0")) c = "2" + c;
-  if (c.length === 10 && c.startsWith("1")) c = "20" + c;
-  return c;
+function sanitizeWaParam(text: string): string {
+  return text.replace(/[\r\n\t]/g, " ").replace(/ {5,}/g, "    ").trim();
 }
 
-function toJid(phone: string): string {
-  return normalizePhone(phone) + "@s.whatsapp.net";
-}
-
-async function saveMedia(buffer: Buffer): Promise<string> {
-  const uuid = randomUUID();
-  fs.writeFileSync(path.join(MEDIA_DIR, uuid), buffer);
-  return uuid;
-}
-
-// ─── Socket lifecycle ─────────────────────────────────────────────────────
-async function startSocket(): Promise<void> {
-  if (_reconnectTimer) {
-    clearTimeout(_reconnectTimer);
-    _reconnectTimer = null;
-  }
-
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-  const silentPino = (await import("pino")).default({ level: "silent" });
-
-  sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: false,
-    logger: silentPino as Parameters<typeof makeWASocket>[0]["logger"],
-    browser: ["Cortoba RFQ Manager", "Chrome", "120.0.0"],
-    connectTimeoutMs: 30_000,
-    defaultQueryTimeoutMs: 30_000,
-  });
-
-  sock.ev.on("creds.update", saveCreds);
-
-  sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      try {
-        _qrDataUrl = await QRCode.toDataURL(qr, { width: 320, margin: 2 });
-        _status = "qr";
-        handlers.onQr?.(_qrDataUrl);
-        handlers.onStatus?.("qr");
-      } catch (err) {
-        logger.error({ err }, "Failed to generate QR code image");
-      }
-    }
-
-    if (connection === "connecting") {
-      _status = "connecting";
-      handlers.onStatus?.("connecting");
-    }
-
-    if (connection === "open") {
-      _status = "connected";
-      _qrDataUrl = null;
-      handlers.onStatus?.("connected");
-      logger.info("WhatsApp connected via Baileys");
-    }
-
-    if (connection === "close") {
-      _status = "disconnected";
-      _qrDataUrl = null;
-      handlers.onStatus?.("disconnected");
-
-      const statusCode = (lastDisconnect?.error as Boom | undefined)?.output
-        ?.statusCode;
-      const loggedOut =
-        statusCode === DisconnectReason.loggedOut ||
-        statusCode === DisconnectReason.forbidden;
-
-      logger.warn({ statusCode }, "WhatsApp connection closed");
-
-      if (loggedOut) {
-        logger.warn("WhatsApp logged out — clearing auth, will show QR");
-        try {
-          fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-          fs.mkdirSync(AUTH_DIR, { recursive: true });
-        } catch { /* ignore */ }
-      }
-      _reconnectTimer = setTimeout(startSocket, loggedOut ? 2_000 : 5_000);
-    }
-  });
-
-  sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (type !== "notify") return;
-
-    for (const msg of messages) {
-      if (msg.key.fromMe) continue;
-      if (!msg.message) continue;
-
-      const remoteJid = msg.key.remoteJid ?? "";
-      if (remoteJid.endsWith("@g.us")) continue;
-
-      const phone = remoteJid.replace("@s.whatsapp.net", "");
-      const waMessageId = msg.key.id ?? randomUUID();
-      const senderName = msg.pushName ?? "";
-
-      let body = "";
-      let mediaId: string | null = null;
-      let mediaType: string | null = null;
-      let mimeType: string | null = null;
-      let filename: string | null = null;
-
-      const c = msg.message;
-
-      try {
-        if (c.conversation) {
-          body = c.conversation;
-        } else if (c.extendedTextMessage?.text) {
-          body = c.extendedTextMessage.text;
-        } else if (c.imageMessage) {
-          body =
-            "[صورة مرسلة]" +
-            (c.imageMessage.caption ? " — " + c.imageMessage.caption : "");
-          mediaType = "image";
-          mimeType = c.imageMessage.mimetype ?? "image/jpeg";
-          const buf = (await downloadMediaMessage(msg, "buffer", {})) as Buffer;
-          mediaId = await saveMedia(buf);
-        } else if (c.documentMessage) {
-          filename = c.documentMessage.fileName ?? "ملف";
-          body = "[مستند: " + filename + "]";
-          mediaType = "document";
-          mimeType = c.documentMessage.mimetype ?? "application/octet-stream";
-          const buf = (await downloadMediaMessage(msg, "buffer", {})) as Buffer;
-          mediaId = await saveMedia(buf);
-        } else if (c.audioMessage) {
-          body = "[رسالة صوتية]";
-          mediaType = "audio";
-          mimeType = c.audioMessage.mimetype ?? "audio/ogg; codecs=opus";
-          const buf = (await downloadMediaMessage(msg, "buffer", {})) as Buffer;
-          mediaId = await saveMedia(buf);
-        } else if (c.videoMessage) {
-          body =
-            "[فيديو]" +
-            (c.videoMessage.caption ? " — " + c.videoMessage.caption : "");
-          mediaType = "video";
-          mimeType = c.videoMessage.mimetype ?? "video/mp4";
-          const buf = (await downloadMediaMessage(msg, "buffer", {})) as Buffer;
-          mediaId = await saveMedia(buf);
-        } else {
-          body =
-            "[رسالة من نوع: " + (Object.keys(c)[0] ?? "غير معروف") + "]";
-        }
-      } catch (mediaErr) {
-        logger.warn({ mediaErr }, "Failed to process message media");
-        if (!body) body = "[رسالة]";
-      }
-
-      try {
-        await handlers.onInboundMessage?.({
-          waMessageId,
-          phone,
-          body,
-          mediaId,
-          mediaType,
-          mimeType,
-          filename,
-          senderName,
-        });
-        await sock?.readMessages([msg.key]);
-      } catch (err) {
-        logger.error({ err }, "Error processing inbound WhatsApp message");
-      }
-    }
-  });
-}
-
-// ─── Initialize on module load ────────────────────────────────────────────
-startSocket().catch((err) => logger.error({ err }, "WhatsApp init failed"));
-
-// ─── Public API ───────────────────────────────────────────────────────────
-export function getStatus(): WaStatus {
-  return _status;
-}
-export function getQrDataUrl(): string | null {
-  return _qrDataUrl;
-}
-
-export async function getProfilePicture(
-  phone: string,
-): Promise<string | null> {
-  if (!sock || _status !== "connected") return null;
-  try {
-    return await sock.profilePictureUrl(toJid(phone), "image");
-  } catch {
-    return null;
-  }
-}
-
-export async function disconnectAndReset(): Promise<void> {
-  try { await sock?.logout(); } catch { /* ignore */ }
-  sock = null;
-  try {
-    fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-    fs.mkdirSync(AUTH_DIR, { recursive: true });
-  } catch { /* ignore */ }
-  _status = "disconnected";
-  _qrDataUrl = null;
-  await startSocket();
-}
-
-export async function sendWhatsAppText(
-  phone: string,
-  text: string,
-): Promise<string | null> {
-  if (!sock || _status !== "connected") {
-    throw new Error(
-      "WhatsApp غير متصل — يرجى مسح رمز QR من صفحة الواتساب أولاً",
-    );
-  }
-  const result = await sock.sendMessage(toJid(phone), { text });
-  return result?.key.id ?? null;
-}
-
-export async function sendWhatsAppMedia(
-  phone: string,
-  buffer: Buffer,
-  mimeType: string,
-  filename?: string,
-  caption?: string,
-): Promise<string | null> {
-  if (!sock || _status !== "connected") {
-    throw new Error("WhatsApp غير متصل");
-  }
-  const jid = toJid(phone);
-  let result;
-  if (mimeType.startsWith("image/")) {
-    result = await sock.sendMessage(jid, { image: buffer, caption: caption ?? "" });
-  } else if (mimeType.startsWith("video/")) {
-    result = await sock.sendMessage(jid, { video: buffer, caption: caption ?? "" });
-  } else if (mimeType.startsWith("audio/")) {
-    result = await sock.sendMessage(jid, { audio: buffer, mimetype: mimeType, ptt: false });
-  } else {
-    result = await sock.sendMessage(jid, {
-      document: buffer,
-      mimetype: mimeType,
-      fileName: filename ?? "file",
-      caption: caption ?? "",
-    });
-  }
-  return result?.key.id ?? null;
-}
-
-export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{
-  pdfSent: boolean;
-  usedTemplate: boolean;
-  waMessageId: string | null;
-}> {
-  if (!sock || _status !== "connected") {
-    throw new Error(
-      "WhatsApp غير متصل — يرجى مسح رمز QR من صفحة الواتساب أولاً",
-    );
-  }
-
-  const itemsList = opts.items
-    .slice(0, 10)
+function buildItemsSummary(opts: SendRfqOpts): string {
+  const suffix = opts.items.length > 5 ? `، وغيرها (${opts.items.length} صنف)` : "";
+  const summary = opts.items
+    .slice(0, 5)
     .map((item, i) => {
-      const line = item.lineItem ?? String(i + 1);
-      const qty = item.qty
-        ? " — الكمية: " + item.qty + (item.uom ? " " + item.uom : "")
-        : "";
-      return line + ". " + item.description + qty;
+      const line = item.lineItem || String(i + 1);
+      const qty = item.qty ? ` x${item.qty}` : "";
+      return `${line}. ${sanitizeWaParam(item.description)}${qty}`;
     })
-    .join("\n");
-
-  const moreItems =
-    opts.items.length > 10
-      ? "\n... وغيرها (" + opts.items.length + " صنف إجمالاً)"
-      : "";
-
-  const lines = [
-    "*طلب عروض أسعار — قرطبة للتوريدات*",
-    "",
-    "السيد/ة: *" + opts.toName + "*",
-    "",
-    "🔖 رقم الطلب: *" + opts.rfqNo + "*",
-    "📅 تاريخ الطلب: " + (opts.rfqDate ?? new Date().toLocaleDateString("ar-EG")),
-    "⏰ آخر موعد للرد: *" + opts.closeDate + "*",
-    "",
-    "📋 *الأصناف المطلوبة:*",
-    itemsList + moreItems,
-    "",
-    "🔗 لتقديم عرض الأسعار:",
-    opts.pricingUrl,
-    "",
-    "📞 للاستفسار: " + opts.employeeName + (opts.employeePhone ? " — " + opts.employeePhone : ""),
-    ...(opts.notes ? ["", "📝 ملاحظات: " + opts.notes] : []),
-  ];
-
-  const result = await sock.sendMessage(toJid(opts.phone), {
-    text: lines.join("\n"),
-  });
-  return { pdfSent: false, usedTemplate: false, waMessageId: result?.key.id ?? null };
+    .join("، ") + suffix;
+  const full = sanitizeWaParam(summary);
+  // WhatsApp template params must stay well under 1024-char limit
+  if (full.length <= 800) return full;
+  return full.slice(0, 800 - suffix.length).trimEnd() + "…" + suffix;
 }
 
-export async function markWhatsAppRead(): Promise<void> {
-  // Read receipts are sent automatically via sock.readMessages above
+function buildContactText(opts: SendRfqOpts): string {
+  return sanitizeWaParam(`${opts.employeeName}${opts.employeePhone ? " — " + opts.employeePhone : ""}`);
+}
+
+async function sendTemplate(to: string, template: Template): Promise<string> {
+  requireConfigured();
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, template);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? "";
+}
+
+async function sendRfqTemplateUtility(to: string, opts: SendRfqOpts): Promise<string> {
+  const pricingToken = extractPricingToken(opts.pricingUrl);
+  const template = new Template(
+    TEMPLATE_UTILITY,
+    new Language(TEMPLATE_LANG),
+    new BodyComponent(
+      new BodyParameter(opts.toName),
+      new BodyParameter(opts.rfqNo),
+      new BodyParameter(buildItemsSummary(opts)),
+      new BodyParameter(opts.closeDate),
+      new BodyParameter(buildContactText(opts)),
+    ),
+    new URLComponent(pricingToken),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ UTILITY template sent via WhatsApp");
+  return waId;
+}
+
+async function sendRfqTemplateWithPdf(to: string, opts: SendRfqOpts): Promise<string> {
+  const pdfBuffer = await Promise.race<Buffer>([
+    generateRfqPdf({
+      rfqNo: opts.rfqNo, customerRfqNo: opts.customerRfqNo, rfqDate: opts.rfqDate,
+      closeDate: opts.closeDate, supplierName: opts.toName, items: opts.items,
+      pricingUrl: opts.pricingUrl, employeeName: opts.employeeName,
+      employeePhone: opts.employeePhone, notes: opts.notes,
+    }),
+    new Promise<Buffer>((_, rej) => setTimeout(() => rej(new Error("PDF generation timed out")), 12000)),
+  ]);
+  const filename = `RFQ-${opts.rfqNo}.pdf`;
+  const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename, "application/pdf");
+  const pricingToken = extractPricingToken(opts.pricingUrl);
+  const template = new Template(
+    TEMPLATE_PDF,
+    new Language(TEMPLATE_LANG),
+    new HeaderComponent(new HeaderParameter(new WADocument(mediaId, true, undefined, filename))),
+    new BodyComponent(
+      new BodyParameter(opts.toName),
+      new BodyParameter(opts.rfqNo),
+      new BodyParameter(opts.closeDate),
+      new BodyParameter(buildContactText(opts)),
+    ),
+    new URLComponent(pricingToken),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ PDF template sent via WhatsApp");
+  return waId;
+}
+
+async function sendRfqTemplateTextOnly(to: string, opts: SendRfqOpts): Promise<string> {
+  const pricingToken = extractPricingToken(opts.pricingUrl);
+  const template = new Template(
+    TEMPLATE_TEXT,
+    new Language(TEMPLATE_LANG),
+    new BodyComponent(
+      new BodyParameter(opts.toName),
+      new BodyParameter(opts.rfqNo),
+      new BodyParameter(buildItemsSummary(opts)),
+      new BodyParameter(opts.closeDate),
+      new BodyParameter(buildContactText(opts)),
+    ),
+    new URLComponent(pricingToken),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ text-only template sent via WhatsApp");
+  return waId;
+}
+
+export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boolean; usedTemplate: boolean; waMessageId: string | null }> {
+  const to = normalizePhone(opts.phone);
+  const methodErrors: string[] = [];
+
+  // Primary: rfq_pdf_ar (PDF attachment + button)
+  try {
+    const waId = await sendRfqTemplateWithPdf(to, opts);
+    logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_pdf_ar template");
+    return { pdfSent: true, usedTemplate: true, waMessageId: waId || null };
+  } catch (pdfErr) {
+    const msg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
+    methodErrors.push(`rfq_pdf_ar: ${msg}`);
+    logger.warn({ err: pdfErr, to, rfqNo: opts.rfqNo }, "rfq_pdf_ar failed — trying rfq_send_ar");
+  }
+
+  // Fallback 1: rfq_send_ar (text only + button)
+  try {
+    const waId = await sendRfqTemplateTextOnly(to, opts);
+    logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_send_ar template");
+    return { pdfSent: false, usedTemplate: true, waMessageId: waId || null };
+  } catch (textErr) {
+    const msg = textErr instanceof Error ? textErr.message : String(textErr);
+    methodErrors.push(`rfq_send_ar: ${msg}`);
+    logger.warn({ err: textErr, to, rfqNo: opts.rfqNo }, "rfq_send_ar failed — trying rfq_utility_ar");
+  }
+
+  // Fallback 2: rfq_utility_ar
+  try {
+    const waId = await sendRfqTemplateUtility(to, opts);
+    logger.info({ to, rfqNo: opts.rfqNo, waMessageId: waId }, "RFQ sent via rfq_utility_ar template");
+    return { pdfSent: false, usedTemplate: true, waMessageId: waId || null };
+  } catch (utilErr) {
+    const msg = utilErr instanceof Error ? utilErr.message : String(utilErr);
+    methodErrors.push(`rfq_utility_ar: ${msg}`);
+    logger.warn({ err: utilErr, to, rfqNo: opts.rfqNo }, "All 3 templates failed");
+  }
+
+  // All templates failed.
+  // NOTE: We intentionally do NOT fall back to plain text — plain text messages
+  // are silently accepted by the WhatsApp API (returns a wamid) but are NEVER
+  // delivered to recipients who haven't opened a conversation in the last 24 hours.
+  // This creates a false "✓ أُرسل" in the UI while the supplier receives nothing.
+  // Instead we throw so the UI correctly shows "✗ فشل" with the real error.
+  const combined = methodErrors.join(" | ");
+  logger.error({ to, rfqNo: opts.rfqNo, methodErrors }, "All WhatsApp templates failed — message NOT sent");
+  throw new Error(`فشل إرسال واتساب. الأخطاء: ${combined}`);
+}
+
+// Returns the WhatsApp message ID (wamid) so callers can store it for later deletion.
+export async function sendWhatsAppText(phone: string, text: string): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, new Text(text));
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  logger.info({ to }, "WhatsApp text sent");
+  return result.messages?.[0]?.id ?? null;
+}
+
+export async function markWhatsAppRead(messageId: string): Promise<void> {
+  if (!isWhatsAppConfigured) return;
+  try {
+    await Whatsapp.markAsRead(PHONE_NUMBER_ID, messageId);
+  } catch {
+    // non-critical
+  }
 }
