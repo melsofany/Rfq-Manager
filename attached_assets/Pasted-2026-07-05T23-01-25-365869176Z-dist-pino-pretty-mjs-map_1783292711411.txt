@@ -1,0 +1,50 @@
+2026-07-05T23:01:25.365869176Z   dist/pino-pretty.mjs.map           204.0kb
+2026-07-05T23:01:25.365871836Z   dist/thread-stream-worker.mjs.map   12.0kb
+2026-07-05T23:01:25.365874096Z 
+2026-07-05T23:01:25.365877336Z ⚡ Done in 502ms
+2026-07-05T23:01:27.805345963Z ==> Uploading build...
+2026-07-05T23:02:04.053424295Z ==> Uploaded in 5.2s. Compression took 31.0s
+2026-07-05T23:02:04.08305415Z ==> Build successful 🎉
+2026-07-05T23:02:06.543281978Z ==> Deploying...
+2026-07-05T23:02:06.617556728Z ==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+2026-07-05T23:02:27.386600816Z ==> Running 'node artifacts/api-server/dist/index.mjs'
+2026-07-05T23:02:30.703611194Z Warning: connect.session() MemoryStore is not
+2026-07-05T23:02:30.703632924Z designed for a production environment, as it will leak
+2026-07-05T23:02:30.703635995Z memory, and will not scale past a single process.
+2026-07-05T23:02:30.767852607Z {"level":30,"time":1783292550705,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","msg":"initDb: connecting to database..."}
+2026-07-05T23:02:30.790266314Z {"level":30,"time":1783292550789,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","msg":"initDb: connected successfully"}
+2026-07-05T23:02:30.815442444Z {"level":30,"time":1783292550810,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","msg":"initDb: all tables created"}
+2026-07-05T23:02:31.313753125Z {"level":30,"time":1783292551313,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","msg":"initDb: seed complete"}
+2026-07-05T23:02:31.361220118Z {"level":30,"time":1783292551314,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","msg":"DB initialized successfully"}
+2026-07-05T23:02:31.361235819Z {"level":30,"time":1783292551360,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","port":10000,"msg":"Server listening"}
+2026-07-05T23:02:31.361239999Z {"level":30,"time":1783292551361,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","intervalMinutes":5,"msg":"Sheet auto-sync scheduled"}
+2026-07-05T23:02:31.732033816Z {"level":30,"time":1783292551731,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":1,"method":"HEAD","url":"/"},"res":{"statusCode":200},"responseTime":21,"msg":"request completed"}
+2026-07-05T23:02:39.620735733Z ==> Your service is live 🎉
+2026-07-05T23:02:39.732137135Z ==> 
+2026-07-05T23:02:39.73803816Z ==> ///////////////////////////////////////////////////////////
+2026-07-05T23:02:39.743198893Z ==> 
+2026-07-05T23:02:39.7487023Z ==> Available at your primary URL https://cortoba-rfq.onrender.com
+2026-07-05T23:02:39.753323406Z ==> 
+2026-07-05T23:02:39.760134955Z ==> ///////////////////////////////////////////////////////////
+2026-07-05T23:03:01.366845272Z {"level":30,"time":1783292581364,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","msg":"Sheet sync started"}
+2026-07-05T23:03:04.883398302Z {"level":30,"time":1783292584883,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","rfqs":87,"items":446,"suppliers":149,"offerItems":168,"msg":"Mirror sheet updated"}
+2026-07-05T23:03:05.377770413Z {"level":30,"time":1783292585376,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","stats":{"rfqs":87,"items":446,"suppliers":149,"offerItems":168},"deleted":{"rfqs":0,"items":0,"suppliers":0},"msg":"Sheet sync completed"}
+2026-07-05T23:03:09.279655797Z {"level":30,"time":1783292589276,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":2,"method":"GET","url":"/"},"res":{"statusCode":200},"responseTime":25,"msg":"request completed"}
+2026-07-05T23:03:09.597956555Z {"level":30,"time":1783292589597,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":3,"method":"GET","url":"/assets/index-cxn-rtqz.css"},"res":{"statusCode":200},"responseTime":23,"msg":"request completed"}
+2026-07-05T23:03:09.98595857Z {"level":30,"time":1783292589983,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":4,"method":"GET","url":"/assets/index-DUO6dupz.js"},"res":{"statusCode":200},"responseTime":27,"msg":"request completed"}
+2026-07-05T23:03:11.134246979Z {"level":30,"time":1783292591133,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":5,"method":"GET","url":"/api/auth/me"},"res":{"statusCode":401},"responseTime":12,"msg":"request completed"}
+2026-07-05T23:03:11.430298534Z {"level":30,"time":1783292591430,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":6,"method":"GET","url":"/logo.png"},"res":{"statusCode":200},"responseTime":3,"msg":"request completed"}
+2026-07-05T23:03:11.539993855Z {"level":30,"time":1783292591539,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":7,"method":"GET","url":"/favicon.svg"},"res":{"statusCode":200},"responseTime":3,"msg":"request completed"}
+2026-07-05T23:03:11.77458969Z {"level":30,"time":1783292591774,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":8,"method":"GET","url":"/favicon.svg"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+2026-07-05T23:03:12.171621009Z {"level":30,"time":1783292592171,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":9,"method":"GET","url":"/favicon.svg"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+2026-07-05T23:03:20.061994429Z {"level":30,"time":1783292600061,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":10,"method":"POST","url":"/api/auth/login"},"employeeId":247,"msg":"Employee logged in"}
+2026-07-05T23:03:20.063311738Z {"level":30,"time":1783292600063,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":10,"method":"POST","url":"/api/auth/login"},"res":{"statusCode":200},"responseTime":139,"msg":"request completed"}
+2026-07-05T23:03:20.339087315Z {"level":30,"time":1783292600338,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":11,"method":"GET","url":"/api/auth/me"},"res":{"statusCode":200},"responseTime":2,"msg":"request completed"}
+2026-07-05T23:03:20.39636903Z {"level":30,"time":1783292600396,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":12,"method":"GET","url":"/favicon.svg"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+2026-07-05T23:03:20.611663849Z {"level":30,"time":1783292600610,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":13,"method":"GET","url":"/api/analytics/dashboard"},"res":{"statusCode":304},"responseTime":35,"msg":"request completed"}
+2026-07-05T23:03:20.621182765Z {"level":30,"time":1783292600620,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":14,"method":"GET","url":"/api/whatsapp/chats"},"res":{"statusCode":304},"responseTime":9,"msg":"request completed"}
+2026-07-05T23:03:20.675715458Z {"level":30,"time":1783292600675,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":15,"method":"GET","url":"/favicon.svg"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+2026-07-05T23:03:20.886375002Z {"level":30,"time":1783292600886,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":16,"method":"GET","url":"/api/sync/status"},"res":{"statusCode":200},"responseTime":2,"msg":"request completed"}
+2026-07-05T23:03:23.554322585Z {"level":30,"time":1783292603554,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":19,"method":"GET","url":"/favicon.svg"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+2026-07-05T23:03:23.608519791Z {"level":30,"time":1783292603608,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":17,"method":"GET","url":"/api/rfq"},"res":{"statusCode":200},"responseTime":103,"msg":"request completed"}
+2026-07-05T23:03:23.713483395Z {"level":30,"time":1783292603713,"pid":52,"hostname":"srv-d894ofmq1p3s73fh04vg-7654f49c84-pz8jh","req":{"id":18,"method":"GET","url":"/api/whatsapp/chats"},"res":{"statusCode":304},"responseTime":203,"msg":"request completed"}
