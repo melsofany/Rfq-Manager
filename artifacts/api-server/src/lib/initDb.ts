@@ -126,6 +126,7 @@ export async function initDb(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         CONSTRAINT uniq_wa_reaction UNIQUE (wa_message_id, reactor_phone)
       );
+      CREATE INDEX IF NOT EXISTS idx_wa_reactions_msg_id ON whatsapp_reactions (wa_message_id);
       CREATE TABLE IF NOT EXISTS whatsapp_media (
         wa_media_id TEXT PRIMARY KEY,
         data BYTEA NOT NULL,
