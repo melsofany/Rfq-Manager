@@ -6,3 +6,5 @@ export * from "./offers";
 export * from "./audit_log";
 export * from "./categories";
 export * from "./whatsapp_chats";
+export * from "./whatsapp_reactions";
+export * from "./whatsapp_media";

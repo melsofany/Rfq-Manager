@@ -19,6 +19,7 @@ interface Chat {
   lastInboundAt: string | null;
   unread: number;
 }
+interface Reaction { reactorPhone: string; emoji: string; }
 interface Message {
   id: number;
   waMessageId: string | null;
@@ -32,6 +33,7 @@ interface Message {
   filename: string | null;
   isRead: boolean;
   createdAt: string;
+  reactions?: Reaction[];
 }
 interface Template {
   name: string;
@@ -90,6 +92,7 @@ const AVATAR_COLORS = [
   "#3b82f6","#14b8a6","#f59e0b","#ef4444","#06b6d4",
 ];
 const WA_GREEN = "#25d366";
+const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"] as const;
 const WA_DARK = "#128C7E";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -309,6 +312,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [emojiPickerForMsg, setEmojiPickerForMsg] = useState<string | null>(null);
   const [editBody, setEditBody] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newPhone, setNewPhone] = useState("");
@@ -352,6 +356,14 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     } finally { setLoading(false); }
   }, [loadChats]);
 
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!emojiPickerForMsg) return;
+    function close() { setEmojiPickerForMsg(null); }
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [emojiPickerForMsg]);
+
   // SSE
   useEffect(() => {
     let es: EventSource | null = null;
@@ -384,6 +396,14 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               const name = chat?.supplierName || ev.senderName || ev.phone;
               showToast(`رسالة جديدة من ${name}`, true, ev.phone);
             }
+          } else if (ev.type === "reaction") {
+            // Real-time reaction from another device / inbound contact
+            const { waMessageId, reactorPhone, emoji } = ev as { waMessageId: string; reactorPhone: string; emoji: string };
+            setMessages(prev => prev.map(m => {
+              if (m.waMessageId !== waMessageId) return m;
+              const reactions = (m.reactions ?? []).filter(r => r.reactorPhone !== reactorPhone);
+              return { ...m, reactions: emoji ? [...reactions, { reactorPhone, emoji }] : reactions };
+            }));
           } else if (ev.type === "delivery_failed") {
             showToast(ev.reason || "فشل تسليم رسالة", false);
             await loadChats();
@@ -478,6 +498,24 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     if (!confirm("حذف هذه الرسالة؟")) return;
     await fetch(`/api/whatsapp/messages/${id}`, { method: "DELETE", credentials: "include" });
     setMessages(prev => prev.filter(m => m.id !== id));
+  }
+
+  async function handleReact(waMessageId: string, emoji: string) {
+    // Find the phone for this message
+    const msg = messages.find(m => m.waMessageId === waMessageId);
+    if (!msg) return;
+    // Optimistic update: toggle own reaction
+    const isRemoving = (msg.reactions ?? []).some(r => r.reactorPhone === "me" && r.emoji === emoji);
+    setMessages(prev => prev.map(m => {
+      if (m.waMessageId !== waMessageId) return m;
+      const reactions = (m.reactions ?? []).filter(r => r.reactorPhone !== "me");
+      return { ...m, reactions: isRemoving ? reactions : [...reactions, { reactorPhone: "me", emoji }] };
+    }));
+    await fetch("/api/whatsapp/react", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ waMessageId, toPhone: msg.phone, emoji: isRemoving ? "" : emoji }),
+    });
   }
 
   async function handleEditSave(id: number) {
@@ -761,6 +799,33 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                                 "absolute top-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5",
                                 isOut ? "left-0 -translate-x-full pl-1" : "right-0 translate-x-full pr-1"
                               )}>
+                                {/* Reaction button */}
+                                {msg.waMessageId && (
+                                  <div className="relative">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setEmojiPickerForMsg(emojiPickerForMsg === msg.waMessageId ? null : msg.waMessageId!); }}
+                                      className="w-6 h-6 rounded-full bg-white shadow flex items-center justify-center hover:bg-muted"
+                                      title="تفاعل">
+                                      <Smile size={10} className="text-muted-foreground" />
+                                    </button>
+                                    {emojiPickerForMsg === msg.waMessageId && (
+                                      <div
+                                        onClick={(e) => e.stopPropagation()}
+                                        className={cn(
+                                          "absolute bottom-7 z-50 flex gap-0.5 bg-white rounded-full shadow-xl border border-border/30 p-1",
+                                          isOut ? "right-0" : "left-0"
+                                        )}>
+                                        {QUICK_EMOJIS.map(emoji => (
+                                          <button key={emoji}
+                                            onClick={() => { handleReact(msg.waMessageId!, emoji); setEmojiPickerForMsg(null); }}
+                                            className="w-8 h-8 flex items-center justify-center text-base hover:bg-muted rounded-full transition-colors">
+                                            {emoji}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                                 {isOut && !msg.mediaId && (
                                   <button onClick={() => { setEditingId(msg.id); setEditBody(msg.body); }}
                                     className="w-6 h-6 rounded-full bg-white shadow flex items-center justify-center hover:bg-muted"
@@ -774,6 +839,33 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                                   <Trash2 size={10} className="text-red-400" />
                                 </button>
                               </div>
+                              {/* Reactions display */}
+                              {(msg.reactions ?? []).length > 0 && (
+                                <div className={cn("flex gap-1 mt-1 flex-wrap", isOut ? "justify-end" : "justify-start")}>
+                                  {Array.from(
+                                    (msg.reactions ?? []).reduce((acc, r) => {
+                                      const list = acc.get(r.emoji) ?? [];
+                                      list.push(r.reactorPhone);
+                                      acc.set(r.emoji, list);
+                                      return acc;
+                                    }, new Map<string, string[]>())
+                                  ).map(([emoji, reactors]) => (
+                                    <button key={emoji}
+                                      onClick={() => msg.waMessageId && handleReact(msg.waMessageId, emoji)}
+                                      className={cn(
+                                        "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs shadow-sm border transition-colors",
+                                        reactors.includes("me")
+                                          ? "bg-green-100 border-green-300 hover:bg-green-200"
+                                          : "bg-white/90 border-border/40 hover:bg-white"
+                                      )}>
+                                      <span>{emoji}</span>
+                                      {reactors.length > 1 && (
+                                        <span className="text-muted-foreground text-[10px] ml-0.5">{reactors.length}</span>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>

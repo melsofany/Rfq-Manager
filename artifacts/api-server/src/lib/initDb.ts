@@ -118,6 +118,21 @@ export async function initDb(): Promise<void> {
         is_read BOOLEAN NOT NULL DEFAULT false,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS whatsapp_reactions (
+        id SERIAL PRIMARY KEY,
+        wa_message_id TEXT NOT NULL,
+        reactor_phone TEXT NOT NULL,
+        emoji TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT uniq_wa_reaction UNIQUE (wa_message_id, reactor_phone)
+      );
+      CREATE TABLE IF NOT EXISTS whatsapp_media (
+        wa_media_id TEXT PRIMARY KEY,
+        data BYTEA NOT NULL,
+        mime_type TEXT NOT NULL,
+        filename TEXT,
+        stored_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     // Add media columns to whatsapp_chats (safe migration — skipped if already present)
       await client.query(`

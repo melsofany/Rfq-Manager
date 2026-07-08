@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { db, suppliersTable, whatsappChatsTable } from "@workspace/db";
+import { db, suppliersTable, whatsappChatsTable, whatsappReactionsTable, whatsappMediaTable } from "@workspace/db";
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import {
   Whatsapp,
@@ -78,7 +78,12 @@ router.get("/webhook/whatsapp", (req, res): void => {
 // Register the inbound-message handler once at module load.
 Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
   try {
-    await handleInboundMessage(phoneID, from, message as unknown as ServerMessage, name, reply);
+    const msg = message as unknown as ServerMessage;
+    if (msg.type === "reaction") {
+      await handleReactionWebhook(from, msg);
+    } else {
+      await handleInboundMessage(phoneID, from, msg, name, reply);
+    }
   } catch (err) {
     logger.error({ err }, "WhatsApp inbound message handling error");
   }
@@ -135,6 +140,7 @@ interface ServerMessage {
   document?: { id?: string; filename?: string; mime_type?: string };
   audio?: { id?: string; mime_type?: string };
   video?: { id?: string; caption?: string; mime_type?: string };
+  reaction?: { message_id: string; emoji: string };
 }
 
 async function handleInboundMessage(
@@ -190,9 +196,68 @@ async function handleInboundMessage(
 
   try { await Whatsapp.markAsRead(phoneID, waMessageId); } catch { /* non-critical */ }
 
+  // Cache media binary in background so it survives Meta's 30-day expiry
+  if (mediaId) { void downloadAndStoreMedia(mediaId, mimeType ?? "application/octet-stream"); }
+
   logger.info({ from: phone, type: msg.type, supplier: matchedSupplier?.name }, "WhatsApp inbound message saved");
   broadcastWaEvent({ type: "new_message", phone, senderName });
   void reply;
+}
+
+// ─── Background: download + store media binary ─────────────────────────
+async function downloadAndStoreMedia(mediaId: string, fallbackMime: string): Promise<void> {
+  try {
+    // Skip if already cached
+    const existing = await db.select({ waMediaId: whatsappMediaTable.waMediaId })
+      .from(whatsappMediaTable).where(eq(whatsappMediaTable.waMediaId, mediaId)).limit(1);
+    if (existing.length > 0) return;
+
+    const metaRes = await Whatsapp.$$apiFetch$$(`https://graph.facebook.com/${WA_API_VERSION}/${mediaId}`);
+    if (!metaRes.ok) return;
+    const metaData = await metaRes.json() as { url?: string; mime_type?: string };
+    if (!metaData.url) return;
+
+    const mediaRes = await Whatsapp.$$apiFetch$$(metaData.url);
+    if (!mediaRes.ok) return;
+    const buffer = Buffer.from(await mediaRes.arrayBuffer());
+
+    await db.insert(whatsappMediaTable).values({
+      waMediaId: mediaId,
+      data: buffer,
+      mimeType: metaData.mime_type ?? fallbackMime,
+    }).onConflictDoNothing();
+
+    logger.info({ mediaId, bytes: buffer.length }, "WhatsApp media cached to DB");
+  } catch (err) {
+    logger.warn({ err, mediaId }, "Background media cache failed (non-critical)");
+  }
+}
+
+// ─── Handle reaction webhook ──────────────────────────────────────────────
+async function handleReactionWebhook(from: string, msg: ServerMessage): Promise<void> {
+  const phone = normalizePhone(from);
+  const reaction = msg.reaction;
+  if (!reaction) return;
+  const { message_id: waMessageId, emoji } = reaction;
+
+  if (!emoji || emoji.trim() === "") {
+    // Remove reaction
+    await db.delete(whatsappReactionsTable)
+      .where(and(
+        eq(whatsappReactionsTable.waMessageId, waMessageId),
+        eq(whatsappReactionsTable.reactorPhone, phone)
+      ));
+  } else {
+    // Upsert reaction
+    await db.insert(whatsappReactionsTable).values({
+      waMessageId, reactorPhone: phone, emoji,
+    }).onConflictDoUpdate({
+      target: [whatsappReactionsTable.waMessageId, whatsappReactionsTable.reactorPhone],
+      set: { emoji },
+    });
+  }
+  broadcastWaEvent({ type: "reaction", waMessageId, reactorPhone: phone, emoji });
+  logger.info({ waMessageId, phone, emoji }, "WhatsApp reaction processed");
 }
 
 // ─── GET /api/whatsapp/media/:mediaId ────────────────────────────────────
@@ -200,6 +265,17 @@ router.get("/whatsapp/media/:mediaId", requireAuth, async (req, res): Promise<vo
   const { mediaId } = req.params;
   if (!isWhatsAppConfigured) { res.status(503).json({ error: "WhatsApp not configured" }); return; }
   try {
+    // Try DB cache first (avoids Meta 30-day expiry)
+    const cached = await db.select().from(whatsappMediaTable)
+      .where(eq(whatsappMediaTable.waMediaId, mediaId)).limit(1);
+    if (cached.length > 0) {
+      res.setHeader("Content-Type", cached[0].mimeType);
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      res.send(cached[0].data);
+      return;
+    }
+
+    // Fallback: fetch from Meta and store for next time
     const metaRes = await Whatsapp.$$apiFetch$$(`https://graph.facebook.com/${WA_API_VERSION}/${mediaId}`);
     const metaData = await metaRes.json() as { url?: string; mime_type?: string; error?: object };
     if (!metaRes.ok || !metaData.url) {
@@ -208,8 +284,14 @@ router.get("/whatsapp/media/:mediaId", requireAuth, async (req, res): Promise<vo
     const mediaRes = await Whatsapp.$$apiFetch$$(metaData.url);
     if (!mediaRes.ok) { res.status(404).json({ error: "Media download failed" }); return; }
     const buffer = Buffer.from(await mediaRes.arrayBuffer());
-    res.setHeader("Content-Type", metaData.mime_type || "application/octet-stream");
-    res.setHeader("Cache-Control", "private, max-age=3600");
+    const mime = metaData.mime_type || "application/octet-stream";
+
+    // Store in DB (fire-and-forget)
+    void db.insert(whatsappMediaTable).values({ waMediaId: mediaId, data: buffer, mimeType: mime })
+      .onConflictDoNothing();
+
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Cache-Control", "private, max-age=86400");
     res.send(buffer);
   } catch (err) {
     logger.error({ err, mediaId }, "Failed to proxy WhatsApp media");
@@ -267,7 +349,71 @@ router.get("/whatsapp/chats/:phone", requireAuth, async (req, res): Promise<void
     .where(eq(whatsappChatsTable.phone, phone))
     .orderBy(desc(whatsappChatsTable.createdAt)).limit(200);
   await db.update(whatsappChatsTable).set({ isRead: true }).where(eq(whatsappChatsTable.phone, phone));
-  res.json(messages.reverse());
+
+  // Attach reactions to each message
+  const msgIds = messages.map(m => m.waMessageId).filter(Boolean) as string[];
+  const reactionMap = new Map<string, Array<{ reactorPhone: string; emoji: string }>>();
+  if (msgIds.length > 0) {
+    const reactions = await db.select().from(whatsappReactionsTable)
+      .where(inArray(whatsappReactionsTable.waMessageId, msgIds));
+    for (const r of reactions) {
+      const list = reactionMap.get(r.waMessageId) ?? [];
+      list.push({ reactorPhone: r.reactorPhone, emoji: r.emoji });
+      reactionMap.set(r.waMessageId, list);
+    }
+  }
+
+  const enriched = messages.reverse().map(m => ({
+    ...m,
+    reactions: m.waMessageId ? (reactionMap.get(m.waMessageId) ?? []) : [],
+  }));
+  res.json(enriched);
+});
+
+// ─── POST /api/whatsapp/react ─────────────────────────────────────────────
+router.post("/whatsapp/react", requireAuth, async (req, res): Promise<void> => {
+  const { waMessageId, toPhone, emoji } = req.body as { waMessageId: string; toPhone: string; emoji: string };
+  if (!waMessageId || !toPhone) { res.status(400).json({ error: "waMessageId and toPhone are required" }); return; }
+  if (!isWhatsAppConfigured) { res.status(503).json({ error: "WhatsApp not configured" }); return; }
+  try {
+    // Send reaction via Meta API
+    await Whatsapp.$$apiFetch$$(
+      `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/messages`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: toPhone,
+          type: "reaction",
+          reaction: { message_id: waMessageId, emoji: emoji ?? "" },
+        }),
+      }
+    );
+
+    // Persist locally (reactorPhone = "me" = our account)
+    if (emoji && emoji.trim() !== "") {
+      await db.insert(whatsappReactionsTable).values({
+        waMessageId, reactorPhone: "me", emoji,
+      }).onConflictDoUpdate({
+        target: [whatsappReactionsTable.waMessageId, whatsappReactionsTable.reactorPhone],
+        set: { emoji },
+      });
+    } else {
+      await db.delete(whatsappReactionsTable)
+        .where(and(
+          eq(whatsappReactionsTable.waMessageId, waMessageId),
+          eq(whatsappReactionsTable.reactorPhone, "me")
+        ));
+    }
+
+    broadcastWaEvent({ type: "reaction", waMessageId, reactorPhone: "me", emoji });
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err, waMessageId }, "Failed to send WhatsApp reaction");
+    res.status(500).json({ error: "Failed to send reaction" });
+  }
 });
 
 // ─── POST /api/whatsapp/send ──────────────────────────────────────────────
