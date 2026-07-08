@@ -313,14 +313,14 @@ import { useState } from "react";
                   })
                 )}
               </tbody>
-            </table>
+            </table></div>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <p className="text-sm text-muted-foreground">
               {selectedIds.size} supplier{selectedIds.size !== 1 ? "s" : ""} selected
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-col-reverse sm:flex-row gap-3 sm:self-end">
               <Link href={`/rfq/${rfqId}`}>
                 <a className="inline-flex items-center px-4 py-2 text-sm rounded border border-border text-muted-foreground hover:text-foreground">
                   Cancel

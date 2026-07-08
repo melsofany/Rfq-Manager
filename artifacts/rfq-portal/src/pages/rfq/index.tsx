@@ -21,20 +21,20 @@ export default function RfqListPage() {
 
   return (
     <Layout>
-      <div className="p-6 space-y-5">
-        <div className="flex items-center justify-between">
+      <div className="p-4 sm:p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-foreground">RFQ Management</h1>
             <p className="text-muted-foreground text-sm">Request for Quotation workflow</p>
           </div>
-          <Button onClick={() => navigate("/rfq/new")} size="sm" className="gap-1.5">
+          <Button onClick={() => navigate("/rfq/new")} size="sm" className="gap-1.5 self-start sm:self-auto">
             <Plus size={15} />
             New RFQ
           </Button>
         </div>
 
         {/* Filters */}
-        <div className="flex gap-3 flex-wrap">
+        <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -44,12 +44,12 @@ export default function RfqListPage() {
               className="pl-8 h-8 text-sm"
             />
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 overflow-x-auto pb-0.5 flex-nowrap">
             {STATUSES.map((s) => (
               <button
                 key={s}
                 onClick={() => setStatus(s)}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors capitalize ${
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors capitalize flex-shrink-0 ${
                   status === s
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:text-foreground"
@@ -74,7 +74,7 @@ export default function RfqListPage() {
               </Button>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-left">
                   <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Internal No.</th>
@@ -121,7 +121,7 @@ export default function RfqListPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
       </div>

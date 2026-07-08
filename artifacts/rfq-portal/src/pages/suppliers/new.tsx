@@ -71,7 +71,7 @@ export default function NewSupplierPage() {
 
   return (
     <Layout>
-      <div className="p-6 max-w-2xl space-y-5">
+      <div className="p-4 sm:p-6 max-w-2xl space-y-5">
         <div className="flex items-center gap-3">
           <Link href="/suppliers">
             <a className="text-muted-foreground hover:text-foreground"><ArrowLeft size={18} /></a>
@@ -83,7 +83,7 @@ export default function NewSupplierPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="bg-card border border-border rounded-lg p-6 space-y-5">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Supplier ID</Label>
               <Input value={form.supplierId} onChange={(e) => update("supplierId", e.target.value)} placeholder="SUP-001" />

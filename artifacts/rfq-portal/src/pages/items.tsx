@@ -326,7 +326,7 @@ export default function ItemsPage() {
 
   return (
     <Layout>
-      <div className="p-6 space-y-5 max-w-5xl mx-auto">
+      <div className="p-4 sm:p-6 space-y-5 max-w-5xl mx-auto">
         {/* Page header */}
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">

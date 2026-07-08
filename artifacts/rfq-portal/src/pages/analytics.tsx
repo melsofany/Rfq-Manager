@@ -24,7 +24,7 @@ export default function AnalyticsPage() {
 
   return (
     <Layout>
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         <div>
           <h1 className="text-xl font-bold text-foreground">Analytics</h1>
           <p className="text-muted-foreground text-sm">Procurement performance overview</p>
@@ -73,7 +73,7 @@ export default function AnalyticsPage() {
             {/* KPI Summary */}
             <div className="bg-card border border-border rounded-lg p-5 col-span-full">
               <h2 className="font-semibold text-sm text-foreground mb-4">Key Metrics</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="bg-muted/30 rounded-lg p-4 text-center">
                   <p className="text-3xl font-bold text-foreground">{stats?.totalRfqs ?? 0}</p>
                   <p className="text-muted-foreground text-xs mt-1">Total RFQs</p>

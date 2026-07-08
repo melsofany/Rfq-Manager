@@ -154,9 +154,9 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <Layout>
-        <div className="p-6 space-y-4">
+        <div className="p-4 sm:p-6 space-y-4">
           <div className="h-8 bg-muted rounded w-48 animate-pulse" />
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="h-28 bg-muted rounded-lg animate-pulse" />
             ))}
@@ -246,6 +246,7 @@ export default function DashboardPage() {
             </Link>
           </div>
           {stats?.recentRfqs?.length ? (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
@@ -274,6 +275,7 @@ export default function DashboardPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           ) : (
             <div className="px-5 py-10 text-center text-muted-foreground text-sm">No RFQs yet</div>
           )}

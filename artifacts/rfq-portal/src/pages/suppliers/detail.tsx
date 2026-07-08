@@ -171,10 +171,10 @@ import { useState, useMemo } from "react";
 
     return (
       <Layout>
-        <div className="p-6 max-w-3xl space-y-5">
+        <div className="p-4 sm:p-6 max-w-3xl space-y-5">
 
           {/* Header */}
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div className="flex items-center gap-3">
               <Link href="/suppliers">
                 <a className="text-muted-foreground hover:text-foreground"><ArrowLeft size={18} /></a>

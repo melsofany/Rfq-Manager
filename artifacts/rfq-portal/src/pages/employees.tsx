@@ -133,7 +133,7 @@ import { useState } from "react";
 
     return (
       <Layout>
-        <div className="p-6 space-y-5">
+        <div className="p-4 sm:p-6 space-y-5">
 
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -155,7 +155,7 @@ import { useState } from "react";
                   <X size={16} />
                 </button>
               </div>
-              <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate({ data: createForm as Parameters<typeof createMutation.mutate>[0]["data"] }); }} className="grid grid-cols-2 gap-4">
+              <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate({ data: createForm as Parameters<typeof createMutation.mutate>[0]["data"] }); }} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>الاسم الكامل *</Label>
                   <Input value={createForm.name} onChange={(e) => updateCreate("name", e.target.value)} placeholder="أحمد الرشيدي" required />
@@ -206,7 +206,7 @@ import { useState } from "react";
                     <X size={18} />
                   </button>
                 </div>
-                <form onSubmit={handleEditSubmit} className="grid grid-cols-2 gap-4">
+                <form onSubmit={handleEditSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label>الاسم الكامل *</Label>
                     <Input value={editForm.name} onChange={(e) => updateEdit("name", e.target.value)} required />
@@ -288,7 +288,7 @@ import { useState } from "react";
                 <p className="text-muted-foreground text-sm">لا يوجد موظفون</p>
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/30 border-b border-border text-right">
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الاسم</th>
@@ -374,7 +374,7 @@ import { useState } from "react";
                     );
                   })}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
         </div>

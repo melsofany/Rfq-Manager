@@ -545,7 +545,7 @@ export default function RfqDetailPage() {
 
   return (
     <Layout>
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3">
@@ -845,7 +845,7 @@ export default function RfqDetailPage() {
                       {enrichedOffers.length === 0 ? (
                         <div className="px-5 py-4 text-muted-foreground text-xs">No quotes for this item yet</div>
                       ) : (
-                        <table className="w-full text-sm">
+                        <div className="overflow-x-auto"><table className="w-full text-sm">
                           <thead>
                             <tr className="bg-muted/10 border-b border-border text-left">
                               <th className="px-4 py-2 text-muted-foreground text-xs font-medium">المورد</th>
@@ -937,7 +937,7 @@ export default function RfqDetailPage() {
                               </tr>
                             </tfoot>
                           )}
-                        </table>
+                        </table></div>
                       )}
                     </div>
                   );

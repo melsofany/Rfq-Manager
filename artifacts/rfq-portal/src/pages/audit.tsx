@@ -21,7 +21,7 @@ export default function AuditPage() {
 
   return (
     <Layout>
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         <div>
           <h1 className="text-xl font-bold text-foreground">Audit Log</h1>
           <p className="text-muted-foreground text-sm">System activity trail</p>
@@ -36,7 +36,7 @@ export default function AuditPage() {
               <p className="text-muted-foreground text-sm">No audit entries yet</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/30 border-b border-border text-left">
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Timestamp</th>
@@ -63,7 +63,7 @@ export default function AuditPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
       </div>

@@ -233,8 +233,8 @@ export default function SuppliersPage() {
     <Layout>
       {showManage && <ManageCategoriesDialog onClose={() => setShowManage(false)} />}
 
-      <div className="p-6 space-y-5">
-        <div className="flex items-center justify-between">
+      <div className="p-4 sm:p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold text-foreground">Suppliers</h1>
             <p className="text-muted-foreground text-sm">Manage supplier directory</p>
@@ -300,7 +300,7 @@ export default function SuppliersPage() {
               </Button>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/30 border-b border-border text-left">
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Supplier</th>
@@ -347,7 +347,7 @@ export default function SuppliersPage() {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
       </div>
