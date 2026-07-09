@@ -12,6 +12,7 @@ import {
 } from "whatsapp-api-js/messages";
 import { logger } from "./logger";
 import { generateRfqPdf } from "./rfqPdf";
+import { generatePoPdf } from "./poPdf";
 
 // ─── Official WhatsApp Business (Meta) Cloud API client ──────────────────────
 // This module is built on top of the open-source "whatsapp-api-js" library
@@ -270,8 +271,6 @@ export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boo
 }
 
 // ─── PO dispatch via WhatsApp ─────────────────────────────────────────────────
-import { generatePoPdf } from "./poPdf";
-
 export interface SendPoOpts {
   phone: string;
   supplierName: string;
