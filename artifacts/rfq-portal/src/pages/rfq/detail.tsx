@@ -700,7 +700,7 @@ export default function RfqDetailPage() {
             {!items?.length ? (
               <div className="p-8 text-center text-muted-foreground text-sm">No items on this RFQ yet.</div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/30 border-b border-border text-left">
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-10">#</th>
@@ -727,7 +727,7 @@ export default function RfqDetailPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
         )}
@@ -749,7 +749,7 @@ export default function RfqDetailPage() {
                 </div>
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/30 border-b border-border text-left">
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Supplier</th>
@@ -789,7 +789,7 @@ export default function RfqDetailPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
         )}

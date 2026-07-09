@@ -135,7 +135,7 @@ import { useState } from "react";
               <div className="px-4 py-2.5 border-b border-border bg-muted/20">
                 <p className="text-sm font-medium text-foreground">تفاصيل كل مورد</p>
               </div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-right">
                     <th className="px-4 py-2 text-muted-foreground text-xs font-medium">المورد</th>
@@ -181,7 +181,7 @@ import { useState } from "react";
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
 
             <div className="flex justify-end">
@@ -254,7 +254,7 @@ import { useState } from "react";
               </div>
             </div>
 
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/30 border-b border-border text-left">
                   <th className="px-4 py-2.5 w-10">

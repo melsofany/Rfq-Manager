@@ -490,7 +490,7 @@ export default function NewRfqPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table></div>
+              </table>
             </div>
           </div>
 
