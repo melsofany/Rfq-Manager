@@ -130,6 +130,107 @@ function PoNumberCombobox({
   );
 }
 
+function SupplierCombobox({
+  value,
+  onChange,
+  suppliers,
+  disabled,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  suppliers: { id: number; name: string }[];
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selected = suppliers.find((s) => String(s.id) === value);
+
+  // What to show in the input: if open → the typed query, else the selected name or empty
+  const displayValue = open ? query : (selected?.name ?? "");
+
+  const filtered = query
+    ? suppliers.filter((s) => s.name.toLowerCase().includes(query.toLowerCase())).slice(0, 50)
+    : suppliers.slice(0, 50);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const handleSelect = (id: number) => {
+    onChange(String(id));
+    setQuery("");
+    setOpen(false);
+  };
+
+  const handleClear = () => {
+    onChange("");
+    setQuery("");
+    setOpen(false);
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div className="flex">
+        <input
+          type="text"
+          value={displayValue}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => { setQuery(""); setOpen(true); }}
+          disabled={disabled}
+          placeholder="Type to search..."
+          className="h-7 w-full flex-1 min-w-0 text-xs rounded-l border border-border bg-background px-1.5 disabled:opacity-50 outline-none focus:ring-1 focus:ring-ring"
+        />
+        {value ? (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={handleClear}
+            className="border border-l-0 border-border rounded-r-md px-1.5 bg-muted hover:bg-muted/80 text-muted-foreground disabled:opacity-50"
+            title="Clear"
+          >
+            ×
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setOpen((o) => !o)}
+            className="border border-l-0 border-border rounded-r-md px-1.5 bg-muted hover:bg-muted/80 text-muted-foreground disabled:opacity-50"
+          >
+            <ChevronDown size={12} />
+          </button>
+        )}
+      </div>
+      {open && (
+        <ul className="absolute z-50 mt-1 w-full min-w-[180px] max-h-48 overflow-y-auto bg-popover border border-border rounded-md shadow-lg text-xs">
+          {filtered.length === 0 ? (
+            <li className="px-3 py-2 text-muted-foreground">No suppliers found</li>
+          ) : (
+            filtered.map((s) => (
+              <li
+                key={s.id}
+                onMouseDown={(e) => { e.preventDefault(); handleSelect(s.id); }}
+                className={`px-3 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground ${String(s.id) === value ? "font-medium bg-accent/50" : ""}`}
+              >
+                {s.name}
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function NewPurchaseOrderPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
@@ -361,17 +462,12 @@ export default function NewPurchaseOrderPage() {
                           <td className="px-2 py-1.5 text-xs">{row.uom || "—"}</td>
                           <td className="px-2 py-1.5 text-xs font-medium">{row.qty || "—"}</td>
                           <td className="px-2 py-1.5">
-                            <select
+                            <SupplierCombobox
                               value={row.supplierId}
-                              onChange={(e) => updateSupplier(row.id, e.target.value)}
+                              onChange={(id) => updateSupplier(row.id, id)}
+                              suppliers={activeSuppliers}
                               disabled={!selectedIds.has(row.id)}
-                              className="h-7 w-full text-xs rounded border border-border bg-background px-1.5 disabled:opacity-50"
-                            >
-                              <option value="">Select supplier...</option>
-                              {activeSuppliers.map((s) => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                              ))}
-                            </select>
+                            />
                           </td>
                           <td className="px-2 py-1.5">
                             {priceLoadingIds.has(row.id) ? (
