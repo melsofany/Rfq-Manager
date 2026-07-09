@@ -6,9 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface RfqItem {
+export interface PurchaseOrderItem {
   id: number;
-  rfqId: number;
+  poId: number;
+  /** @nullable */
+  supplierId?: number | null;
+  /** @nullable */
+  supplierName?: string | null;
   /** @nullable */
   itemId?: string | null;
   /** @nullable */

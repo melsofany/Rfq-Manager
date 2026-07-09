@@ -100,6 +100,89 @@ export async function listSheetRfqNumbers(sheetName = "DATA"): Promise<string[]>
   return unique.sort();
 }
 
+export interface SheetPoItem {
+  itemId: string | null;
+  lineItem: string | null;
+  partNo: string | null;
+  description: string;
+  uom: string | null;
+  qty: number | null;
+  referencePrice: number | null;
+  poNo: string;
+}
+
+/**
+ * Look up purchase order items from Google Sheets by purchase order number.
+ *
+ * Same DATA sheet as RFQ lookup, but items are matched on column K
+ * (purchase order number) and quantity is read from column M
+ * (the PO quantity), not column H (the RFQ quantity):
+ *   A: Item ID      B: UOM          C: Line Item
+ *   D: Part No      E: Description  F: RFQ No
+ *   G: Date/RFQ     H: QTY (RFQ)    I: Price/RFQ
+ *   J: Res. Date     K: PO No        L: (unused)
+ *   M: QTY (PO)
+ *
+ * Rows where column K matches poNo are returned.
+ */
+export async function lookupPoFromSheet(
+  poNo: string,
+  sheetName = "DATA"
+): Promise<SheetPoItem[]> {
+  const sheetId = process.env.GOOGLE_SHEET_ID;
+  if (!sheetId) throw new Error("GOOGLE_SHEET_ID not set");
+
+  const auth = getAuth(true);
+  const sheets = google.sheets({ version: "v4", auth });
+
+  const range = `${sheetName}!A2:M`;
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range,
+  });
+
+  const rows = response.data.values ?? [];
+  logger.info({ total: rows.length, poNo }, "Google Sheets rows fetched (PO lookup)");
+
+  const matched = rows.filter((row) => {
+    const cellPoNo = String(row[10] ?? "").trim();
+    return cellPoNo === poNo.trim();
+  });
+
+  if (matched.length === 0) return [];
+
+  return matched.map((row) => ({
+    itemId: String(row[0] ?? "").trim() || null,
+    uom: String(row[1] ?? "").trim() || null,
+    lineItem: String(row[2] ?? "").trim() || null,
+    partNo: String(row[3] ?? "").trim() || null,
+    description: String(row[4] ?? "").trim() || "(no description)",
+    poNo: String(row[10] ?? "").trim(),
+    qty: row[12] != null && row[12] !== "" ? parseFloat(String(row[12])) : null,
+    referencePrice: row[8] != null && row[8] !== "" ? parseFloat(String(row[8])) : null,
+  }));
+}
+
+/**
+ * List all unique purchase order numbers in the sheet (column K, excluding header).
+ */
+export async function listSheetPoNumbers(sheetName = "DATA"): Promise<string[]> {
+  const sheetId = process.env.GOOGLE_SHEET_ID;
+  if (!sheetId) throw new Error("GOOGLE_SHEET_ID not set");
+
+  const auth = getAuth(true);
+  const sheets = google.sheets({ version: "v4", auth });
+
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: `${sheetName}!K2:K`,
+  });
+
+  const rows = response.data.values ?? [];
+  const unique = [...new Set(rows.map((r) => String(r[0] ?? "").trim()).filter(Boolean))];
+  return unique.sort();
+}
+
 /**
  * Get the list of sheet tab names in the spreadsheet.
  */

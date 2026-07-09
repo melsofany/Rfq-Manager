@@ -5,27 +5,23 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
-import type { RfqStatus } from './rfqStatus';
+import type { PurchaseOrderStatus } from './purchaseOrderStatus';
 
-export interface Rfq {
+export interface PurchaseOrder {
   id: number;
-  internalRfqNo: string;
-  customerRfqNo: string;
+  internalPoNo: string;
+  sheetPoNo: string;
   /** @nullable */
-  customerRfqDate?: string | null;
+  receiverName?: string | null;
   /** @nullable */
-  requiredResponseDate?: string | null;
-  status: RfqStatus;
+  receiverPhone?: string | null;
+  status: PurchaseOrderStatus;
   employeeId?: number;
   /** @nullable */
   employeeName?: string | null;
   /** @nullable */
   notes?: string | null;
-  /** @nullable */
-  expiresAt?: string | null;
   itemCount?: number;
-  supplierCount?: number;
-  offerCount?: number;
   createdAt: string;
   updatedAt?: string;
 }

@@ -20,7 +20,8 @@ import AuditPage from "@/pages/audit";
 import PricingPage from "@/pages/pricing";
 import WhatsAppPage from "@/pages/whatsapp";
 import ItemsPage from "@/pages/items";
-import PurchaseOrdersPage from "@/pages/purchase-orders";
+import PurchaseOrdersPage from "@/pages/purchase-orders/index";
+import NewPurchaseOrderPage from "@/pages/purchase-orders/new";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -113,6 +114,10 @@ function Router() {
 
       <Route path="/items">
         <ProtectedRoute component={ItemsPage} />
+      </Route>
+
+      <Route path="/purchase-orders/new">
+        <ProtectedRoute component={NewPurchaseOrderPage} />
       </Route>
 
       <Route path="/purchase-orders">

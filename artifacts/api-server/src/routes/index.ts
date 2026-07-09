@@ -11,6 +11,7 @@ import syncRouter from "./sync";
 import categoriesRouter from "./categories";
 import whatsappRouter from "./whatsapp";
 import itemsRouter from "./items";
+import poRouter from "./po";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(syncRouter);
 router.use(categoriesRouter);
 router.use(whatsappRouter);
 router.use(itemsRouter);
+router.use(poRouter);
 
 export default router;

@@ -6,16 +6,15 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface CustomerRfqItem {
+export interface SheetPoItem {
   itemId?: string;
   lineItem?: string;
   partNo?: string;
   description: string;
   uom?: string;
-  qty?: number;
+  /** @nullable */
+  qty?: number | null;
   /** @nullable */
   referencePrice?: number | null;
-  rfqNo?: string;
-  rfqDate?: string;
-  requiredResponseDate?: string;
+  poNo?: string;
 }

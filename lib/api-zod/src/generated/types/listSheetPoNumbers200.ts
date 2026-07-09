@@ -5,9 +5,7 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
-import type { Employee } from './employee';
 
-export interface AuthResponse {
-  employee: Employee;
-  token: string;
-}
+export type ListSheetPoNumbers200 = {
+  poNumbers: string[];
+};

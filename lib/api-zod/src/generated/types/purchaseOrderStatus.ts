@@ -6,14 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type RfqUpdateStatus = typeof RfqUpdateStatus[keyof typeof RfqUpdateStatus];
+export type PurchaseOrderStatus = typeof PurchaseOrderStatus[keyof typeof PurchaseOrderStatus];
 
 
-export const RfqUpdateStatus = {
+export const PurchaseOrderStatus = {
   draft: 'draft',
   sent: 'sent',
-  partial: 'partial',
-  completed: 'completed',
-  closed: 'closed',
   cancelled: 'cancelled',
 } as const;
