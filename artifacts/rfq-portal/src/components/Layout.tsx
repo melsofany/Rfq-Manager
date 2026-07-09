@@ -12,6 +12,7 @@ import {
   LogOut,
   MessageSquare,
   Package,
+  ShoppingCart,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ const navItems = [
   { href: "/rfq", label: "RFQ Management", icon: FileText },
   { href: "/suppliers", label: "Suppliers", icon: Users },
   { href: "/items", label: "Items", icon: Package },
+  { href: "/purchase-orders", label: "Purchase Orders (PO)", icon: ShoppingCart },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/whatsapp", label: "WhatsApp", icon: MessageSquare },
 ];
