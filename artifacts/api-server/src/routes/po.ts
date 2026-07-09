@@ -6,8 +6,11 @@ import {
   suppliersTable,
   employeesTable,
   auditLogTable,
+  offersTable,
+  offerItemsTable,
+  rfqItemsTable,
 } from "@workspace/db";
-import { eq, count, inArray, sql } from "drizzle-orm";
+import { eq, count, inArray, sql, and, or } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { lookupPoFromSheet, listSheetPoNumbers } from "../lib/googleSheets";
 
@@ -165,6 +168,57 @@ router.get("/po/sheets/po-numbers", requireAuth, async (req, res): Promise<void>
     req.log.error({ err }, "Failed to list PO numbers from sheet");
     res.status(500).json({ error: "Failed to connect to Google Sheets", details: (err as Error).message });
   }
+});
+
+// GET /api/po/supplier-price?supplierId=X&description=Y&partNo=Z
+// Looks up the most recent quoted price from a supplier for an item matching description or partNo
+router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> => {
+  const { supplierId, description, partNo } = req.query as Record<string, string>;
+
+  if (!supplierId || !description) {
+    res.status(400).json({ error: "supplierId and description required" });
+    return;
+  }
+
+  const supplierIdInt = parseInt(supplierId, 10);
+  if (isNaN(supplierIdInt)) {
+    res.status(400).json({ error: "Invalid supplierId" });
+    return;
+  }
+
+  const descNorm = description.trim().toLowerCase();
+
+  // Find the most recent offer item from this supplier where rfqItem description or partNo matches
+  const conditions: ReturnType<typeof and>[] = [eq(offersTable.supplierId, supplierIdInt)];
+  if (partNo && partNo.trim()) {
+    conditions.push(
+      or(
+        sql`lower(${rfqItemsTable.description}) = ${descNorm}`,
+        eq(rfqItemsTable.partNo, partNo.trim())
+      )!
+    );
+  } else {
+    conditions.push(sql`lower(${rfqItemsTable.description}) = ${descNorm}`);
+  }
+
+  const results = await db
+    .select({
+      price: offerItemsTable.price,
+      offeredAt: offersTable.createdAt,
+    })
+    .from(offerItemsTable)
+    .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+    .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+    .where(and(...conditions))
+    .orderBy(sql`${offersTable.createdAt} DESC`)
+    .limit(1);
+
+  if (results.length === 0) {
+    res.json({ price: null });
+    return;
+  }
+
+  res.json({ price: parseFloat(results[0].price) });
 });
 
 router.get("/po/:id", requireAuth, async (req, res): Promise<void> => {

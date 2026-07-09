@@ -11,7 +11,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, ChevronDown, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, Loader2, Trash2 } from "lucide-react";
 
 interface SheetItem {
   itemId: string | null;
@@ -32,7 +32,7 @@ interface PoItemRow {
   description: string;
   uom: string | null;
   qty: string;
-  referencePrice: string;
+  unitPrice: string;
   supplierId: string;
 }
 
@@ -46,6 +46,23 @@ function useSheetPoNumbers() {
     },
     staleTime: 5 * 60 * 1000,
   });
+}
+
+async function fetchSupplierPrice(
+  supplierId: number,
+  description: string,
+  partNo: string | null
+): Promise<number | null> {
+  const params = new URLSearchParams({ supplierId: String(supplierId), description });
+  if (partNo) params.append("partNo", partNo);
+  try {
+    const res = await fetch(`/api/po/supplier-price?${params}`, { credentials: "include" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data.price === "number" ? data.price : null;
+  } catch {
+    return null;
+  }
 }
 
 function PoNumberCombobox({
@@ -128,9 +145,10 @@ export default function NewPurchaseOrderPage() {
 
   const [items, setItems] = useState<PoItemRow[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [priceLoadingIds, setPriceLoadingIds] = useState<Set<string>>(new Set());
 
-  const { data: poNumbersData } = useSheetPoNumbers();
-  const suggestions = poNumbersData?.poNumbers ?? [];
+  const { data: sheetPoNumbers } = useSheetPoNumbers();
+  const suggestions = sheetPoNumbers?.poNumbers ?? [];
 
   const { data: suppliers } = useListSuppliers(
     {},
@@ -140,7 +158,7 @@ export default function NewPurchaseOrderPage() {
 
   const createMutation = useCreatePurchaseOrder({
     mutation: {
-      onSuccess: (po) => {
+      onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
         navigate(`/purchase-orders`);
       },
@@ -169,7 +187,7 @@ export default function NewPurchaseOrderPage() {
           description: item.description,
           uom: item.uom,
           qty: item.qty != null ? String(item.qty) : "",
-          referencePrice: item.referencePrice != null ? String(item.referencePrice) : "",
+          unitPrice: "",
           supplierId: "",
         }));
         setItems(mapped);
@@ -211,10 +229,41 @@ export default function NewPurchaseOrderPage() {
       next.delete(id);
       return next;
     });
+    setPriceLoadingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
-  const updateSupplier = (id: string, supplierId: string) =>
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, supplierId } : i)));
+  const updateUnitPrice = (id: string, unitPrice: string) =>
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, unitPrice } : i)));
+
+  const updateSupplier = (id: string, supplierId: string) => {
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, supplierId, unitPrice: "" } : i)));
+
+    if (supplierId) {
+      const item = items.find((i) => i.id === id);
+      if (item) {
+        setPriceLoadingIds((prev) => new Set([...prev, id]));
+        fetchSupplierPrice(parseInt(supplierId, 10), item.description, item.partNo)
+          .then((price) => {
+            setItems((prev) =>
+              prev.map((i) =>
+                i.id === id ? { ...i, unitPrice: price != null ? String(price) : "" } : i
+              )
+            );
+          })
+          .finally(() => {
+            setPriceLoadingIds((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+          });
+      }
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -234,7 +283,7 @@ export default function NewPurchaseOrderPage() {
           description: i.description,
           uom: i.uom || undefined,
           qty: i.qty ? parseFloat(i.qty) : undefined,
-          referencePrice: i.referencePrice ? parseFloat(i.referencePrice) : undefined,
+          referencePrice: i.unitPrice ? parseFloat(i.unitPrice) : undefined,
           supplierId: i.supplierId ? parseInt(i.supplierId, 10) : undefined,
         })),
       },
@@ -246,7 +295,7 @@ export default function NewPurchaseOrderPage() {
 
   return (
     <Layout>
-      <div className="p-4 sm:p-6 max-w-5xl space-y-6">
+      <div className="p-4 sm:p-6 max-w-6xl space-y-6">
         <div className="flex items-center gap-3">
           <Link href="/purchase-orders">
             <a className="text-muted-foreground hover:text-foreground">
@@ -290,7 +339,8 @@ export default function NewPurchaseOrderPage() {
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">Description</th>
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">UOM</th>
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">Qty (PO)</th>
-                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">Supplier</th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[160px]">Supplier</th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[120px]">Unit price</th>
                         <th className="px-2 py-2.5" />
                       </tr>
                     </thead>
@@ -307,7 +357,7 @@ export default function NewPurchaseOrderPage() {
                           </td>
                           <td className="px-2 py-1.5 text-xs">{row.lineItem || "—"}</td>
                           <td className="px-2 py-1.5 text-xs">{row.partNo || "—"}</td>
-                          <td className="px-2 py-1.5 text-xs">{row.description}</td>
+                          <td className="px-2 py-1.5 text-xs max-w-[220px]">{row.description}</td>
                           <td className="px-2 py-1.5 text-xs">{row.uom || "—"}</td>
                           <td className="px-2 py-1.5 text-xs font-medium">{row.qty || "—"}</td>
                           <td className="px-2 py-1.5">
@@ -323,6 +373,25 @@ export default function NewPurchaseOrderPage() {
                               ))}
                             </select>
                           </td>
+                          <td className="px-2 py-1.5">
+                            {priceLoadingIds.has(row.id) ? (
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground h-7 px-1.5">
+                                <Loader2 size={11} className="animate-spin" />
+                                <span>Loading...</span>
+                              </div>
+                            ) : (
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={row.unitPrice}
+                                onChange={(e) => updateUnitPrice(row.id, e.target.value)}
+                                disabled={!selectedIds.has(row.id)}
+                                placeholder={row.supplierId ? "No offer found" : "—"}
+                                className="h-7 text-xs w-28 disabled:opacity-50"
+                              />
+                            )}
+                          </td>
                           <td className="px-2 py-1.5 text-center">
                             <button type="button" onClick={() => removeItem(row.id)} className="text-muted-foreground hover:text-destructive">
                               <Trash2 size={14} />
@@ -332,6 +401,9 @@ export default function NewPurchaseOrderPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="px-4 py-2.5 border-t border-border bg-muted/10 text-xs text-muted-foreground">
+                  Unit prices are auto-filled from the supplier's most recent offer. You can edit them manually if needed.
                 </div>
               </div>
 
