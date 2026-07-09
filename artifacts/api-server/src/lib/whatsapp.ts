@@ -32,6 +32,7 @@ export const WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const TEMPLATE_TEXT    = process.env.WHATSAPP_TEMPLATE_TEXT    || "rfq_send_ar";
 const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";
 const TEMPLATE_PDF     = process.env.WHATSAPP_TEMPLATE_PDF     || "rfq_pdf_ar";
+const TEMPLATE_PO_PDF  = process.env.WHATSAPP_TEMPLATE_PO_PDF  || "po_pdf_ar";
 const TEMPLATE_LANG    = process.env.WHATSAPP_TEMPLATE_LANG    || "ar";
 
 export const isWhatsAppConfigured = Boolean(PHONE_NUMBER_ID && TOKEN);
@@ -292,16 +293,25 @@ export interface SendPoOpts {
   }>;
 }
 
+function buildPoContactText(opts: SendPoOpts): string {
+  return sanitizeWaParam(
+    `${opts.employeeName}${opts.employeePhone ? " — " + opts.employeePhone : ""}`
+  );
+}
+
 /**
- * Sends a PO PDF to a supplier via WhatsApp as a document message.
- * Uses the Meta Cloud API direct document send (works within 24h conversation window).
- * Returns the wamid on success; throws on failure.
+ * Sends a PO PDF to a supplier via WhatsApp using the `po_pdf_ar` approved template.
+ * Template structure:
+ *   Header  : DOCUMENT (PDF attachment)
+ *   Body    : {{1}} supplier name, {{2}} PO number, {{3}} employee contact
+ * Falls back to a plain document message if the template call fails
+ * (works within 24-hour conversation window).
  */
 export async function sendPoWhatsApp(opts: SendPoOpts): Promise<string | null> {
   requireConfigured();
-
   const to = normalizePhone(opts.phone);
 
+  // Generate PDF once — shared by template attempt and fallback
   const pdfBuffer = await Promise.race<Buffer>([
     generatePoPdf({
       poNo: opts.poNo,
@@ -315,25 +325,54 @@ export async function sendPoWhatsApp(opts: SendPoOpts): Promise<string | null> {
       notes: opts.notes,
       items: opts.items,
     }),
-    new Promise<Buffer>((_, rej) => setTimeout(() => rej(new Error("PO PDF generation timed out")), 12000)),
+    new Promise<Buffer>((_, rej) =>
+      setTimeout(() => rej(new Error("PO PDF generation timed out")), 12000)
+    ),
   ]);
 
   const filename = `PO-${opts.poNo}.pdf`;
   const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename, "application/pdf");
 
-  // Send as a document message (works in 24h conversation window)
+  const toName = sanitizeWaParam(opts.contactPerson ?? opts.supplierName);
+
+  // Primary: po_pdf_ar approved template (works outside 24h window)
+  try {
+    const template = new Template(
+      TEMPLATE_PO_PDF,
+      new Language(TEMPLATE_LANG),
+      new HeaderComponent(
+        new HeaderParameter(new WADocument(mediaId, true, undefined, filename))
+      ),
+      new BodyComponent(
+        new BodyParameter(toName),                   // {{1}} supplier / contact name
+        new BodyParameter(opts.poNo),                // {{2}} PO number
+        new BodyParameter(buildPoContactText(opts)), // {{3}} employee contact
+      ),
+    );
+    const waId = await sendTemplate(to, template);
+    logger.info({ to, poNo: opts.poNo, waId }, "PO sent via po_pdf_ar template");
+    return waId || null;
+  } catch (templateErr) {
+    logger.warn({ err: templateErr, to, poNo: opts.poNo },
+      "po_pdf_ar template failed — falling back to direct document send");
+  }
+
+  // Fallback: direct document message (requires active 24h conversation window)
   const result = await Whatsapp.sendMessage(
     PHONE_NUMBER_ID,
     to,
-    new WADocument(mediaId, true, sanitizeWaParam(`أمر الشراء رقم ${opts.poNo} — ${opts.supplierName}`), filename)
+    new WADocument(
+      mediaId,
+      true,
+      sanitizeWaParam(`أمر الشراء رقم ${opts.poNo} — ${opts.supplierName}`),
+      filename,
+    )
   );
-
   if ("error" in result && result.error) {
     throw new Error(`WhatsApp API error: ${JSON.stringify(result.error)}`);
   }
-
   const wamid = result.messages?.[0]?.id ?? null;
-  logger.info({ to, poNo: opts.poNo, wamid }, "PO PDF sent via WhatsApp");
+  logger.info({ to, poNo: opts.poNo, wamid }, "PO PDF sent via direct document (fallback)");
   return wamid;
 }
 
