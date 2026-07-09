@@ -269,6 +269,75 @@ export async function sendRfqWhatsApp(opts: SendRfqOpts): Promise<{ pdfSent: boo
   throw new Error(`فشل إرسال واتساب. الأخطاء: ${combined}`);
 }
 
+// ─── PO dispatch via WhatsApp ─────────────────────────────────────────────────
+import { generatePoPdf } from "./poPdf";
+
+export interface SendPoOpts {
+  phone: string;
+  supplierName: string;
+  contactPerson?: string | null;
+  poNo: string;
+  poDate?: string | null;
+  receiverName?: string | null;
+  receiverPhone?: string | null;
+  employeeName: string;
+  employeePhone?: string | null;
+  notes?: string | null;
+  items: Array<{
+    lineItem?: string | null;
+    partNo?: string | null;
+    description: string;
+    qty?: string | number | null;
+    uom?: string | null;
+    unitPrice?: string | number | null;
+  }>;
+}
+
+/**
+ * Sends a PO PDF to a supplier via WhatsApp as a document message.
+ * Uses the Meta Cloud API direct document send (works within 24h conversation window).
+ * Returns the wamid on success; throws on failure.
+ */
+export async function sendPoWhatsApp(opts: SendPoOpts): Promise<string | null> {
+  requireConfigured();
+
+  const to = normalizePhone(opts.phone);
+
+  const pdfBuffer = await Promise.race<Buffer>([
+    generatePoPdf({
+      poNo: opts.poNo,
+      poDate: opts.poDate,
+      supplierName: opts.supplierName,
+      contactPerson: opts.contactPerson,
+      receiverName: opts.receiverName,
+      receiverPhone: opts.receiverPhone,
+      employeeName: opts.employeeName,
+      employeePhone: opts.employeePhone,
+      notes: opts.notes,
+      items: opts.items,
+    }),
+    new Promise<Buffer>((_, rej) => setTimeout(() => rej(new Error("PO PDF generation timed out")), 12000)),
+  ]);
+
+  const filename = `PO-${opts.poNo}.pdf`;
+  const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename, "application/pdf");
+
+  // Send as a document message (works in 24h conversation window)
+  const result = await Whatsapp.sendMessage(
+    PHONE_NUMBER_ID,
+    to,
+    new WADocument(mediaId, true, sanitizeWaParam(`أمر الشراء رقم ${opts.poNo} — ${opts.supplierName}`), filename)
+  );
+
+  if ("error" in result && result.error) {
+    throw new Error(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+
+  const wamid = result.messages?.[0]?.id ?? null;
+  logger.info({ to, poNo: opts.poNo, wamid }, "PO PDF sent via WhatsApp");
+  return wamid;
+}
+
 // Returns the WhatsApp message ID (wamid) so callers can store it for later deletion.
 export async function sendWhatsAppText(phone: string, text: string): Promise<string | null> {
   requireConfigured();

@@ -13,6 +13,9 @@ import {
 import { eq, count, inArray, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { lookupPoFromSheet, listSheetPoNumbers } from "../lib/googleSheets";
+import { generatePoPdf } from "../lib/poPdf";
+import { sendPoWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp";
+import { sendPoEmail } from "../lib/email";
 
 const router = Router();
 
@@ -231,6 +234,213 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
   }
 
   res.json({ price: null });
+});
+
+// POST /api/po/:id/dispatch — generate PDF per supplier and send via WhatsApp + email
+router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+
+  // Fetch PO + employee
+  const [poRow] = await db.select({ po: purchaseOrdersTable, employeeName: employeesTable.name, employeePhone: employeesTable.phone })
+    .from(purchaseOrdersTable)
+    .leftJoin(employeesTable, eq(purchaseOrdersTable.employeeId, employeesTable.id))
+    .where(eq(purchaseOrdersTable.id, id));
+
+  if (!poRow) {
+    res.status(404).json({ error: "Purchase order not found" });
+    return;
+  }
+
+  // Fetch all items with supplier info
+  const itemRows = await db.select({ item: purchaseOrderItemsTable, supplier: suppliersTable })
+    .from(purchaseOrderItemsTable)
+    .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
+    .where(eq(purchaseOrderItemsTable.poId, id));
+
+  // Group items by supplierId (skip items without a supplier)
+  const bySupplier = new Map<number, { supplier: typeof suppliersTable.$inferSelect; items: typeof itemRows }>();
+  for (const row of itemRows) {
+    if (!row.item.supplierId || !row.supplier) continue;
+    const sid = row.item.supplierId;
+    if (!bySupplier.has(sid)) bySupplier.set(sid, { supplier: row.supplier, items: [] });
+    bySupplier.get(sid)!.items.push(row);
+  }
+
+  if (bySupplier.size === 0) {
+    res.status(400).json({ error: "No items have a supplier assigned" });
+    return;
+  }
+
+  const results: Array<{
+    supplierId: number;
+    supplierName: string;
+    emailSent: boolean;
+    emailError: string | null;
+    whatsappSent: boolean;
+    whatsappError: string | null;
+  }> = [];
+
+  const poNo = poRow.po.internalPoNo;
+  const poDate = poRow.po.createdAt.toISOString();
+  const employeeName = poRow.employeeName ?? "Cortoba Supplies";
+  const employeePhone = poRow.employeePhone ?? null;
+  const receiverName = poRow.po.receiverName ?? null;
+  const receiverPhone = poRow.po.receiverPhone ?? null;
+  const notes = poRow.po.notes ?? null;
+
+  for (const [supplierId, { supplier, items }] of bySupplier) {
+    const pdfItems = items.map((r) => ({
+      lineItem: r.item.lineItem,
+      partNo: r.item.partNo,
+      description: r.item.description,
+      qty: r.item.qty,
+      uom: r.item.uom,
+      unitPrice: r.item.referencePrice,
+    }));
+
+    // Generate PDF once per supplier
+    let pdfBuffer: Buffer | null = null;
+    try {
+      pdfBuffer = await generatePoPdf({
+        poNo,
+        poDate,
+        supplierName: supplier.name,
+        contactPerson: supplier.contactPerson,
+        receiverName,
+        receiverPhone,
+        employeeName,
+        employeePhone,
+        notes,
+        items: pdfItems,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      results.push({ supplierId, supplierName: supplier.name, emailSent: false, emailError: `PDF error: ${msg}`, whatsappSent: false, whatsappError: `PDF error: ${msg}` });
+      continue;
+    }
+
+    let emailSent = false;
+    let emailError: string | null = null;
+    let whatsappSent = false;
+    let whatsappError: string | null = null;
+
+    // Send email if supplier has email
+    if (supplier.email?.trim()) {
+      try {
+        await sendPoEmail({
+          to: supplier.email.trim(),
+          toName: supplier.contactPerson ?? supplier.name,
+          poNo,
+          poDate,
+          receiverName,
+          receiverPhone,
+          employeeName,
+          employeePhone,
+          notes,
+          items: pdfItems,
+          pdfBuffer,
+        });
+        emailSent = true;
+      } catch (err) {
+        emailError = err instanceof Error ? err.message : String(err);
+        req.log.error({ err, supplierId, email: supplier.email }, "PO dispatch: email failed");
+      }
+    }
+
+    // Send WhatsApp if supplier has phone and WhatsApp is configured
+    if (supplier.phone?.trim() && isWhatsAppConfigured) {
+      try {
+        await sendPoWhatsApp({
+          phone: supplier.phone.trim(),
+          supplierName: supplier.name,
+          contactPerson: supplier.contactPerson,
+          poNo,
+          poDate,
+          receiverName,
+          receiverPhone,
+          employeeName,
+          employeePhone,
+          notes,
+          items: pdfItems,
+        });
+        whatsappSent = true;
+      } catch (err) {
+        whatsappError = err instanceof Error ? err.message : String(err);
+        req.log.error({ err, supplierId, phone: supplier.phone }, "PO dispatch: WhatsApp failed");
+      }
+    } else if (!isWhatsAppConfigured) {
+      whatsappError = "WhatsApp not configured";
+    } else if (!supplier.phone?.trim()) {
+      whatsappError = "No phone number";
+    }
+
+    results.push({ supplierId, supplierName: supplier.name, emailSent, emailError, whatsappSent, whatsappError });
+  }
+
+  // Update PO status to "sent" if at least one message went through
+  const anySent = results.some((r) => r.emailSent || r.whatsappSent);
+  if (anySent) {
+    await db.update(purchaseOrdersTable)
+      .set({ status: "sent", updatedAt: new Date() })
+      .where(eq(purchaseOrdersTable.id, id));
+
+    await db.insert(auditLogTable).values({
+      action: "po.dispatched",
+      entityType: "po",
+      entityId: id,
+      employeeId: req.session.employeeId,
+      description: `Dispatched PO ${poNo} to ${results.filter((r) => r.emailSent || r.whatsappSent).length} supplier(s)`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+  }
+
+  res.json({ poNo, results });
+});
+
+// GET /api/po/:id/pdf/:supplierId — download PO PDF for a specific supplier
+router.get("/po/:id/pdf/:supplierId", requireAuth, async (req, res): Promise<void> => {
+  const poId = parseInt(req.params.id, 10);
+  const supplierId = parseInt(req.params.supplierId, 10);
+
+  const [poRow] = await db.select({ po: purchaseOrdersTable, employeeName: employeesTable.name, employeePhone: employeesTable.phone })
+    .from(purchaseOrdersTable)
+    .leftJoin(employeesTable, eq(purchaseOrdersTable.employeeId, employeesTable.id))
+    .where(eq(purchaseOrdersTable.id, poId));
+
+  if (!poRow) { res.status(404).json({ error: "PO not found" }); return; }
+
+  const [supplierRow] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, supplierId));
+  if (!supplierRow) { res.status(404).json({ error: "Supplier not found" }); return; }
+
+  const items = await db.select({ item: purchaseOrderItemsTable })
+    .from(purchaseOrderItemsTable)
+    .where(and(eq(purchaseOrderItemsTable.poId, poId), eq(purchaseOrderItemsTable.supplierId, supplierId)));
+
+  const pdfBuffer = await generatePoPdf({
+    poNo: poRow.po.internalPoNo,
+    poDate: poRow.po.createdAt.toISOString(),
+    supplierName: supplierRow.name,
+    contactPerson: supplierRow.contactPerson,
+    receiverName: poRow.po.receiverName,
+    receiverPhone: poRow.po.receiverPhone,
+    employeeName: poRow.employeeName ?? "Cortoba Supplies",
+    employeePhone: poRow.employeePhone ?? null,
+    notes: poRow.po.notes,
+    items: items.map((r) => ({
+      lineItem: r.item.lineItem,
+      partNo: r.item.partNo,
+      description: r.item.description,
+      qty: r.item.qty,
+      uom: r.item.uom,
+      unitPrice: r.item.referencePrice,
+    })),
+  });
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="PO-${poRow.po.internalPoNo}-${supplierRow.name}.pdf"`);
+  res.send(pdfBuffer);
 });
 
 router.get("/po/:id", requireAuth, async (req, res): Promise<void> => {

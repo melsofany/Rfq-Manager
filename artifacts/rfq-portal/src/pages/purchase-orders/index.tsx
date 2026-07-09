@@ -86,7 +86,7 @@ export default function PurchaseOrdersListPage() {
               </thead>
               <tbody>
                 {purchaseOrders?.map((po) => (
-                  <tr key={po.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                  <tr key={po.id} onClick={() => navigate(`/purchase-orders/${po.id}`)} className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer">
                     <td className="px-4 py-3">
                       <span className="font-mono text-xs text-primary font-medium">{po.internalPoNo}</span>
                     </td>

@@ -22,6 +22,7 @@ import WhatsAppPage from "@/pages/whatsapp";
 import ItemsPage from "@/pages/items";
 import PurchaseOrdersPage from "@/pages/purchase-orders/index";
 import NewPurchaseOrderPage from "@/pages/purchase-orders/new";
+import PurchaseOrderDetailPage from "@/pages/purchase-orders/detail";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,6 +119,10 @@ function Router() {
 
       <Route path="/purchase-orders/new">
         <ProtectedRoute component={NewPurchaseOrderPage} />
+      </Route>
+
+      <Route path="/purchase-orders/:id">
+        <ProtectedRoute component={PurchaseOrderDetailPage} />
       </Route>
 
       <Route path="/purchase-orders">
