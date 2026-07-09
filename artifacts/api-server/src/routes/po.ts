@@ -10,7 +10,7 @@ import {
   offerItemsTable,
   rfqItemsTable,
 } from "@workspace/db";
-import { eq, count, inArray, sql, and, or } from "drizzle-orm";
+import { eq, count, inArray, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { lookupPoFromSheet, listSheetPoNumbers } from "../lib/googleSheets";
 
@@ -188,37 +188,49 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
 
   const descNorm = description.trim().toLowerCase();
 
-  // Find the most recent offer item from this supplier where rfqItem description or partNo matches
-  const conditions: ReturnType<typeof and>[] = [eq(offersTable.supplierId, supplierIdInt)];
-  if (partNo && partNo.trim()) {
-    conditions.push(
-      or(
-        sql`lower(${rfqItemsTable.description}) = ${descNorm}`,
-        eq(rfqItemsTable.partNo, partNo.trim())
-      )!
-    );
-  } else {
-    conditions.push(sql`lower(${rfqItemsTable.description}) = ${descNorm}`);
-  }
-
-  const results = await db
-    .select({
-      price: offerItemsTable.price,
-      offeredAt: offersTable.createdAt,
-    })
+  // Search by description (case-insensitive) first
+  const byDesc = await db
+    .select({ price: offerItemsTable.price })
     .from(offerItemsTable)
     .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
     .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
-    .where(and(...conditions))
+    .where(
+      and(
+        eq(offersTable.supplierId, supplierIdInt),
+        sql`lower(${rfqItemsTable.description}) = ${descNorm}`
+      )
+    )
     .orderBy(sql`${offersTable.createdAt} DESC`)
     .limit(1);
 
-  if (results.length === 0) {
-    res.json({ price: null });
+  if (byDesc.length > 0) {
+    res.json({ price: parseFloat(byDesc[0].price) });
     return;
   }
 
-  res.json({ price: parseFloat(results[0].price) });
+  // Fallback: search by part number if provided
+  if (partNo && partNo.trim()) {
+    const byPart = await db
+      .select({ price: offerItemsTable.price })
+      .from(offerItemsTable)
+      .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+      .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+      .where(
+        and(
+          eq(offersTable.supplierId, supplierIdInt),
+          eq(rfqItemsTable.partNo, partNo.trim())
+        )
+      )
+      .orderBy(sql`${offersTable.createdAt} DESC`)
+      .limit(1);
+
+    if (byPart.length > 0) {
+      res.json({ price: parseFloat(byPart[0].price) });
+      return;
+    }
+  }
+
+  res.json({ price: null });
 });
 
 router.get("/po/:id", requireAuth, async (req, res): Promise<void> => {
