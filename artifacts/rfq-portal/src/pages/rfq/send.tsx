@@ -115,7 +115,7 @@ import { useState } from "react";
             </div>
 
             {/* Summary */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
                 <p className="text-2xl font-bold text-green-700">{waOk.length}</p>
                 <p className="text-xs text-green-600 mt-0.5">واتساب أُرسل ✓</p>
