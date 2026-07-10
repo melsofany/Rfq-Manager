@@ -134,6 +134,31 @@ export async function initDb(): Promise<void> {
         filename TEXT,
         stored_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS purchase_orders (
+        id SERIAL PRIMARY KEY,
+        internal_po_no TEXT NOT NULL UNIQUE,
+        sheet_po_no TEXT NOT NULL,
+        receiver_name TEXT,
+        receiver_phone TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        employee_id INTEGER REFERENCES employees(id),
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS purchase_order_items (
+        id SERIAL PRIMARY KEY,
+        po_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        item_id TEXT,
+        line_item TEXT,
+        part_no TEXT,
+        description TEXT NOT NULL,
+        uom TEXT,
+        qty NUMERIC(15,4),
+        reference_price NUMERIC(15,4),
+        supplier_id INTEGER REFERENCES suppliers(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     // Add media columns to whatsapp_chats (safe migration — skipped if already present)
       await client.query(`
