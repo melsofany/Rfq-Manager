@@ -19,14 +19,23 @@ import { sendPoEmail } from "../lib/email";
 
 const router = Router();
 
-// Generate internal PO number: PO-YYYY-XXXXXX
-// Uses MAX of existing numbers for the current year to avoid UNIQUE constraint
-// violations when records have been deleted (COUNT-based approach would repeat numbers).
-async function generateInternalPoNo(): Promise<string> {
+// Arbitrary advisory lock key used to serialize PO number generation.
+// Only one transaction at a time can hold this lock, preventing duplicate
+// internalPoNo values even under concurrent creates.
+const PO_LOCK_KEY = 7_391_042;
+
+/**
+ * Generate the next internal PO number for the current year.
+ * Must be called inside a Drizzle transaction with the advisory lock already held.
+ * Uses MAX of existing numbers (not COUNT) so deletions never cause collisions.
+ */
+async function generateInternalPoNoInTx(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0]
+): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `PO-${year}-`;
 
-  const [result] = await db
+  const [result] = await tx
     .select({ maxNo: sql<string | null>`max(${purchaseOrdersTable.internalPoNo})` })
     .from(purchaseOrdersTable)
     .where(sql`${purchaseOrdersTable.internalPoNo} like ${prefix + "%"}`);
@@ -34,7 +43,7 @@ async function generateInternalPoNo(): Promise<string> {
   let seq = 1;
   if (result?.maxNo) {
     const lastSeq = parseInt(result.maxNo.slice(prefix.length), 10);
-    if (!isNaN(lastSeq)) seq = lastSeq + 1;
+    if (!isNaN(lastSeq) && lastSeq > 0) seq = lastSeq + 1;
   }
 
   return `${prefix}${String(seq).padStart(6, "0")}`;
@@ -110,9 +119,13 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
   }
 
   try {
-    const internalPoNo = await generateInternalPoNo();
+    const created = await db.transaction(async (tx) => {
+      // Acquire a transaction-level advisory lock so concurrent PO creates
+      // are serialized and cannot generate duplicate internalPoNo values.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${PO_LOCK_KEY})`);
 
-    const result = await db.transaction(async (tx) => {
+      const internalPoNo = await generateInternalPoNoInTx(tx);
+
       const [po] = await tx.insert(purchaseOrdersTable).values({
         internalPoNo,
         sheetPoNo,
@@ -151,18 +164,18 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
     });
 
     res.status(201).json({
-      id: result.id,
-      internalPoNo: result.internalPoNo,
-      sheetPoNo: result.sheetPoNo,
-      receiverName: result.receiverName,
-      receiverPhone: result.receiverPhone,
-      status: result.status,
-      employeeId: result.employeeId,
+      id: created.id,
+      internalPoNo: created.internalPoNo,
+      sheetPoNo: created.sheetPoNo,
+      receiverName: created.receiverName,
+      receiverPhone: created.receiverPhone,
+      status: created.status,
+      employeeId: created.employeeId,
       employeeName: null,
-      notes: result.notes,
+      notes: created.notes,
       itemCount: validItems.length,
-      createdAt: result.createdAt.toISOString(),
-      updatedAt: result.updatedAt.toISOString(),
+      createdAt: created.createdAt.toISOString(),
+      updatedAt: created.updatedAt.toISOString(),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to create purchase order");
