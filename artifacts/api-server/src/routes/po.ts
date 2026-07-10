@@ -9,6 +9,7 @@ import {
   offersTable,
   offerItemsTable,
   rfqItemsTable,
+  whatsappChatsTable,
 } from "@workspace/db";
 import { eq, count, inArray, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
@@ -18,6 +19,14 @@ import { sendPoWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp";
 import { sendPoEmail } from "../lib/email";
 
 const router = Router();
+
+function normalizePhone(phone: string): string {
+  let cleaned = phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+  if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
+  if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
+  if (cleaned.length === 10 && cleaned.startsWith("1")) cleaned = "20" + cleaned;
+  return cleaned;
+}
 
 // Arbitrary advisory lock key used to serialize PO number generation.
 // Only one transaction at a time can hold this lock, preventing duplicate
@@ -388,7 +397,7 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
     // Send WhatsApp if supplier has phone and WhatsApp is configured
     if (supplier.phone?.trim() && isWhatsAppConfigured) {
       try {
-        await sendPoWhatsApp({
+        const wamid = await sendPoWhatsApp({
           phone: supplier.phone.trim(),
           supplierName: supplier.name,
           contactPerson: supplier.contactPerson,
@@ -402,6 +411,21 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
           items: pdfItems,
         });
         whatsappSent = true;
+
+        // Save to whatsapp_chats so the message appears in the chat history
+        const chatPhone = normalizePhone(supplier.phone.trim());
+        await db.insert(whatsappChatsTable).values({
+          waMessageId: wamid ?? null,
+          direction: "outbound",
+          phone: chatPhone,
+          supplierId,
+          body: `[أمر شراء PDF: ${poNo}]`,
+          mediaType: "document",
+          filename: `PO-${poNo}.pdf`,
+          isRead: true,
+        }).catch((saveErr) => {
+          req.log.error({ err: saveErr, supplierId, poNo }, "PO dispatch: failed to save WhatsApp chat record");
+        });
       } catch (err) {
         whatsappError = err instanceof Error ? err.message : String(err);
         req.log.error({ err, supplierId, phone: supplier.phone }, "PO dispatch: WhatsApp failed");
