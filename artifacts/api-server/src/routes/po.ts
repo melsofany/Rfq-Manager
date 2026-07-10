@@ -20,11 +20,24 @@ import { sendPoEmail } from "../lib/email";
 const router = Router();
 
 // Generate internal PO number: PO-YYYY-XXXXXX
+// Uses MAX of existing numbers for the current year to avoid UNIQUE constraint
+// violations when records have been deleted (COUNT-based approach would repeat numbers).
 async function generateInternalPoNo(): Promise<string> {
   const year = new Date().getFullYear();
-  const [result] = await db.select({ cnt: count() }).from(purchaseOrdersTable);
-  const seq = String((result?.cnt ?? 0) + 1).padStart(6, "0");
-  return `PO-${year}-${seq}`;
+  const prefix = `PO-${year}-`;
+
+  const [result] = await db
+    .select({ maxNo: sql<string | null>`max(${purchaseOrdersTable.internalPoNo})` })
+    .from(purchaseOrdersTable)
+    .where(sql`${purchaseOrdersTable.internalPoNo} like ${prefix + "%"}`);
+
+  let seq = 1;
+  if (result?.maxNo) {
+    const lastSeq = parseInt(result.maxNo.slice(prefix.length), 10);
+    if (!isNaN(lastSeq)) seq = lastSeq + 1;
+  }
+
+  return `${prefix}${String(seq).padStart(6, "0")}`;
 }
 
 router.get("/po", requireAuth, async (req, res): Promise<void> => {
@@ -96,55 +109,66 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const internalPoNo = await generateInternalPoNo();
-  const [po] = await db.insert(purchaseOrdersTable).values({
-    internalPoNo,
-    sheetPoNo,
-    receiverName: receiverName || null,
-    receiverPhone: receiverPhone || null,
-    status: "draft",
-    employeeId: req.session.employeeId,
-    notes: notes || null,
-  }).returning();
+  try {
+    const internalPoNo = await generateInternalPoNo();
 
-  await db.insert(purchaseOrderItemsTable).values(
-    validItems.map((it) => ({
-      poId: po.id,
-      itemId: it.itemId || null,
-      lineItem: it.lineItem || null,
-      partNo: it.partNo || null,
-      description: it.description.trim(),
-      uom: it.uom || null,
-      qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
-      referencePrice: it.referencePrice != null && it.referencePrice !== "" ? String(it.referencePrice) : null,
-      supplierId: it.supplierId ?? null,
-    }))
-  );
+    const result = await db.transaction(async (tx) => {
+      const [po] = await tx.insert(purchaseOrdersTable).values({
+        internalPoNo,
+        sheetPoNo,
+        receiverName: receiverName || null,
+        receiverPhone: receiverPhone || null,
+        status: "draft",
+        employeeId: req.session.employeeId,
+        notes: notes || null,
+      }).returning();
 
-  await db.insert(auditLogTable).values({
-    action: "po.created",
-    entityType: "po",
-    entityId: po.id,
-    employeeId: req.session.employeeId,
-    description: `Created purchase order ${internalPoNo} for PO ${sheetPoNo} with ${validItems.length} item(s)`,
-    ipAddress: req.ip,
-    userAgent: req.get("user-agent"),
-  });
+      await tx.insert(purchaseOrderItemsTable).values(
+        validItems.map((it) => ({
+          poId: po.id,
+          itemId: it.itemId || null,
+          lineItem: it.lineItem || null,
+          partNo: it.partNo || null,
+          description: it.description.trim(),
+          uom: it.uom || null,
+          qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
+          referencePrice: it.referencePrice != null && it.referencePrice !== "" ? String(it.referencePrice) : null,
+          supplierId: it.supplierId ?? null,
+        }))
+      );
 
-  res.status(201).json({
-    id: po.id,
-    internalPoNo: po.internalPoNo,
-    sheetPoNo: po.sheetPoNo,
-    receiverName: po.receiverName,
-    receiverPhone: po.receiverPhone,
-    status: po.status,
-    employeeId: po.employeeId,
-    employeeName: null,
-    notes: po.notes,
-    itemCount: validItems.length,
-    createdAt: po.createdAt.toISOString(),
-    updatedAt: po.updatedAt.toISOString(),
-  });
+      await tx.insert(auditLogTable).values({
+        action: "po.created",
+        entityType: "po",
+        entityId: po.id,
+        employeeId: req.session.employeeId,
+        description: `Created purchase order ${internalPoNo} for PO ${sheetPoNo} with ${validItems.length} item(s)`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+
+      return po;
+    });
+
+    res.status(201).json({
+      id: result.id,
+      internalPoNo: result.internalPoNo,
+      sheetPoNo: result.sheetPoNo,
+      receiverName: result.receiverName,
+      receiverPhone: result.receiverPhone,
+      status: result.status,
+      employeeId: result.employeeId,
+      employeeName: null,
+      notes: result.notes,
+      itemCount: validItems.length,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create purchase order");
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Failed to create purchase order", details: message });
+  }
 });
 
 router.get("/po/lookup/:poNo", requireAuth, async (req, res): Promise<void> => {
