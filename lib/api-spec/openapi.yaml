@@ -1267,6 +1267,9 @@ components:
           type: ["number", "null"]
         supplierId:
           type: ["integer", "null"]
+        taxIncluded:
+          type: boolean
+          default: false
 
     PurchaseOrderItem:
       type: object
@@ -1294,6 +1297,8 @@ components:
           type: ["number", "null"]
         referencePrice:
           type: ["number", "null"]
+        taxIncluded:
+          type: boolean
 
     SheetPoItem:
       type: object

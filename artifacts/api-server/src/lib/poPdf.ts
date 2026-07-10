@@ -3,6 +3,8 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 
+const VAT_RATE = 0.14; // Egyptian standard VAT 14%
+
 export interface PoPdfOptions {
   poNo: string;
   poDate?: string | null;
@@ -20,10 +22,11 @@ export interface PoPdfOptions {
     qty?: string | number | null;
     uom?: string | null;
     unitPrice?: string | number | null;
+    taxIncluded?: boolean;
   }>;
 }
 
-// ─── RTL helper (same as rfqPdf) ────────────────────────────────────────────
+// ─── RTL helper ─────────────────────────────────────────────────────────────
 const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
 function rtl(text: string): string {
@@ -51,9 +54,12 @@ function fmt(v: string | number | null | undefined): string {
   if (v == null || v === "") return "—";
   const s = String(v).trim();
   if (!s) return "—";
-  // Strip trailing zeros for numeric values
   if (/^-?\d+(\.\d+)?$/.test(s)) return s.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
   return s;
+}
+
+function fmtMoney(n: number): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function getFontPath(): string {
@@ -105,7 +111,6 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       doc.rect(0, 0, PAGE_W, HDR_H).fill(BLUE);
       doc.rect(0, HDR_H - 3, PAGE_W, 3).fill(GOLD);
 
-      // Right block — document identity
       const TITLE_X = PAGE_W / 2;
       const TITLE_W = PAGE_W / 2 - M;
 
@@ -116,7 +121,6 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       doc.font("Amiri").fontSize(8).fillColor("#aaccee")
         .text(`رقم: ${opts.poNo}`, TITLE_X, 63, { width: TITLE_W, align: "right", lineBreak: false });
 
-      // Left block — logo + company
       const LOGO_SIZE = 52;
       const LOGO_X    = M;
       const LOGO_Y    = (HDR_H - LOGO_SIZE) / 2;
@@ -143,7 +147,7 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
         .text("INFO@CORTOBA-SUPPLIES.COM", CO_TEXT_X, 72, { width: CO_TEXT_W, align: "left", lineBreak: false });
 
       // ════════════════════════════════════════════════════════════════
-      // INFO BAND — PO No. | Date
+      // INFO BAND
       // ════════════════════════════════════════════════════════════════
       const IY = HDR_H;
       const IH = 50;
@@ -168,7 +172,6 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       // ════════════════════════════════════════════════════════════════
       let y = IY + IH + 12;
 
-      // Supplier
       const supplierLine = opts.contactPerson
         ? `${opts.supplierName} — ${opts.contactPerson}`
         : opts.supplierName;
@@ -189,21 +192,30 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
       y += 28;
 
       // ════════════════════════════════════════════════════════════════
-      // ITEMS TABLE — columns (RTL reading right→left):
-      //   # | Part No | Description | Qty | UOM | Unit Price
-      //
-      // Physical page order (left→right):
-      //   السعر | الوحدة | الكمية | الوصف | رقم القطعة | #
+      // ITEMS TABLE
+      // Columns (RTL, right→left): # | رقم القطعة | الوصف | الكمية | الوحدة | سعر الوحدة | الإجمالي | ض.ق.م
+      // Physical order (left→right): ض.ق.م | الإجمالي | السعر | الوحدة | الكمية | الوصف | رقم القطعة | #
       // ════════════════════════════════════════════════════════════════
-      const C_NUM   = 30;
-      const C_PART  = 90;
-      const C_QTY   = 52;
-      const C_UOM   = 48;
-      const C_PRICE = 72;
-      const C_DESC  = CW - C_NUM - C_PART - C_QTY - C_UOM - C_PRICE;
+      const C_NUM   = 26;
+      const C_PART  = 80;
+      const C_QTY   = 44;
+      const C_UOM   = 40;
+      const C_PRICE = 64;
+      const C_TOTAL = 70;
+      const C_TAX   = 46;   // "شامل ض.ق.م" badge column
+      const C_DESC  = CW - C_NUM - C_PART - C_QTY - C_UOM - C_PRICE - C_TOTAL - C_TAX;
 
-      const colWArr = [C_NUM, C_PART, C_DESC, C_QTY, C_UOM, C_PRICE];
-      const colLbls = ["#", rtl("رقم القطعة"), rtl("الوصف"), rtl("الكمية"), rtl("الوحدة"), rtl("سعر الوحدة")];
+      const colWArr = [C_NUM, C_PART, C_DESC, C_QTY, C_UOM, C_PRICE, C_TOTAL, C_TAX];
+      const colLbls = [
+        "#",
+        rtl("رقم القطعة"),
+        rtl("الوصف"),
+        rtl("الكمية"),
+        rtl("الوحدة"),
+        rtl("سعر الوحدة"),
+        rtl("الإجمالي"),
+        rtl("ض.ق.م"),
+      ];
 
       function colX(idx: number): number {
         let x = M + CW;
@@ -213,13 +225,13 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
 
       const ROW_H     = 22;
       const ROW_PAD_V = 6;
-      const FONT_SIZE = 9.5;
+      const FONT_SIZE = 9;
 
       // Header row
       doc.rect(M, y, CW, ROW_H).fill(BLUE);
       colLbls.forEach((lbl, i) => {
-        doc.font("Amiri").fontSize(FONT_SIZE).fillColor("#ffffff")
-          .text(lbl, colX(i) + 2, y + 5, { width: colWArr[i] - 4, align: "center", lineBreak: false });
+        doc.font("Amiri").fontSize(FONT_SIZE - 0.5).fillColor("#ffffff")
+          .text(lbl, colX(i) + 2, y + 6, { width: colWArr[i] - 4, align: "center", lineBreak: false });
       });
       y += ROW_H;
 
@@ -235,16 +247,25 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
         const bg = idx % 2 === 0 ? "#ffffff" : "#f4f7fb";
         doc.rect(M, y, CW, rowH).fill(bg).stroke("#d8e2ee");
 
-        const vals = [
+        // Calculate line total
+        const qty   = parseFloat(String(item.qty   ?? 0)) || 0;
+        const price = parseFloat(String(item.unitPrice ?? 0)) || 0;
+        const lineTotal = qty * price;
+        const hasTax = !!item.taxIncluded;
+
+        const vals: string[] = [
           String(idx + 1),
           fmt(item.partNo),
           descText,
           fmt(item.qty),
           fmt(item.uom),
           fmt(item.unitPrice),
+          lineTotal > 0 ? fmtMoney(lineTotal) : "—",
+          "",  // tax badge drawn separately
         ];
 
         vals.forEach((v, i) => {
+          if (i === 7) return; // drawn separately below
           const isDesc = i === 2;
           const cellY = isDesc ? y + ROW_PAD_V : y + (rowH - FONT_SIZE) / 2 - 1;
           doc.font("Amiri").fontSize(FONT_SIZE).fillColor("#2c3e50")
@@ -254,14 +275,87 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
               lineBreak: isDesc,
             });
         });
+
+        // Tax badge in last column
+        if (hasTax) {
+          const badgeX = colX(7) + 4;
+          const badgeW = colWArr[7] - 8;
+          const badgeH = 13;
+          const badgeY = y + (rowH - badgeH) / 2;
+          doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 3).fill("#e8f5e9");
+          doc.font("Amiri").fontSize(7).fillColor("#2e7d32")
+            .text(rtl("شامل ض.ق.م"), badgeX, badgeY + 2.5, { width: badgeW, align: "center", lineBreak: false });
+        } else {
+          // dash
+          doc.font("Amiri").fontSize(FONT_SIZE).fillColor("#aaaaaa")
+            .text("—", colX(7) + 3, y + (rowH - FONT_SIZE) / 2 - 1, { width: colWArr[7] - 6, align: "center", lineBreak: false });
+        }
+
         y += rowH;
       });
+
+      // ════════════════════════════════════════════════════════════════
+      // TOTALS SECTION
+      // For items with taxIncluded=true:  price already contains 14% VAT
+      //   → preTax = price / 1.14,  vat = price - preTax
+      // For items with taxIncluded=false: no VAT in price
+      //   → preTax = price,          vat = 0
+      // ════════════════════════════════════════════════════════════════
+      let grandTotal = 0;
+      let totalVat   = 0;
+
+      for (const item of opts.items) {
+        const qty   = parseFloat(String(item.qty   ?? 0)) || 0;
+        const price = parseFloat(String(item.unitPrice ?? 0)) || 0;
+        const lineTotal = qty * price;
+        grandTotal += lineTotal;
+        if (item.taxIncluded && lineTotal > 0) {
+          // Extract VAT already embedded in price
+          totalVat += lineTotal - lineTotal / (1 + VAT_RATE);
+        }
+      }
+      const preTaxTotal = grandTotal - totalVat;
+
+      const TOTALS_W = 220;
+      const TOTALS_X = M + CW - TOTALS_W;
+      const T_ROW_H  = 20;
+      y += 4;
+
+      type TotalRow = { label: string; value: string; bold?: boolean; highlight?: boolean };
+      const totalRows: TotalRow[] = [];
+
+      if (totalVat > 0) {
+        totalRows.push({ label: rtl("الإجمالي قبل الضريبة"), value: fmtMoney(preTaxTotal) });
+        totalRows.push({ label: `${rtl("ضريبة القيمة المضافة")} (14%)`, value: fmtMoney(totalVat) });
+      }
+      totalRows.push({ label: rtl("الإجمالي الكلي"), value: fmtMoney(grandTotal), bold: true, highlight: true });
+
+      for (const row of totalRows) {
+        const bg = row.highlight ? BLUE : (row.bold ? LGREY : "#ffffff");
+        const fg = row.highlight ? "#ffffff" : (row.bold ? BLUE : "#333333");
+
+        doc.rect(TOTALS_X, y, TOTALS_W, T_ROW_H).fill(bg).stroke("#d8e2ee");
+
+        // Label (right side)
+        doc.font("Amiri").fontSize(9).fillColor(fg)
+          .text(row.label, TOTALS_X + 4, y + (T_ROW_H - 9) / 2,
+            { width: TOTALS_W - 70, align: "right", lineBreak: false });
+
+        // Value (left side)
+        doc.font("Amiri").fontSize(row.bold ? 10 : 9).fillColor(row.highlight ? GOLD : fg)
+          .text(row.value, TOTALS_X + TOTALS_W - 70, y + (T_ROW_H - 9) / 2,
+            { width: 66, align: "center", lineBreak: false });
+
+        y += T_ROW_H;
+      }
+
+      y += 4;
 
       // ════════════════════════════════════════════════════════════════
       // RECEIVER BOX
       // ════════════════════════════════════════════════════════════════
       if (opts.receiverName || opts.receiverPhone) {
-        y += 12;
+        y += 8;
         const RH = 46;
         doc.rect(M, y, CW, RH).fill("#f0f5fa");
         doc.rect(M + CW - 4, y, 4, RH).fill(GOLD);

@@ -114,6 +114,7 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
       qty?: string | number | null;
       referencePrice?: string | number | null;
       supplierId?: number | null;
+      taxIncluded?: boolean;
     }>;
   };
 
@@ -156,6 +157,7 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
           qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
           referencePrice: it.referencePrice != null && it.referencePrice !== "" ? String(it.referencePrice) : null,
           supplierId: it.supplierId ?? null,
+          taxIncluded: it.taxIncluded ?? false,
         }))
       );
 
@@ -343,6 +345,7 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
       qty: r.item.qty,
       uom: r.item.uom,
       unitPrice: r.item.referencePrice,
+      taxIncluded: r.item.taxIncluded ?? false,
     }));
 
     // Generate PDF once per supplier
@@ -496,6 +499,7 @@ router.get("/po/:id/pdf/:supplierId", requireAuth, async (req, res): Promise<voi
       qty: r.item.qty,
       uom: r.item.uom,
       unitPrice: r.item.referencePrice,
+      taxIncluded: r.item.taxIncluded ?? false,
     })),
   });
 
@@ -562,6 +566,7 @@ router.get("/po/:id/items", requireAuth, async (req, res): Promise<void> => {
     uom: r.item.uom,
     qty: r.item.qty ? parseFloat(r.item.qty) : null,
     referencePrice: r.item.referencePrice ? parseFloat(r.item.referencePrice) : null,
+    taxIncluded: r.item.taxIncluded ?? false,
   })));
 });
 

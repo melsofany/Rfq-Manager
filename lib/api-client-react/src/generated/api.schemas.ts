@@ -316,6 +316,7 @@ export interface PurchaseOrderItemInput {
   referencePrice?: number | null;
   /** @nullable */
   supplierId?: number | null;
+  taxIncluded?: boolean;
 }
 
 export interface PurchaseOrderInput {
@@ -347,6 +348,7 @@ export interface PurchaseOrderItem {
   qty?: number | null;
   /** @nullable */
   referencePrice?: number | null;
+  taxIncluded?: boolean;
 }
 
 export interface SheetPoItem {

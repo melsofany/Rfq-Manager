@@ -156,10 +156,17 @@ export async function initDb(): Promise<void> {
         uom TEXT,
         qty NUMERIC(15,4),
         reference_price NUMERIC(15,4),
+        tax_included BOOLEAN NOT NULL DEFAULT false,
         supplier_id INTEGER REFERENCES suppliers(id),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    // Add tax_included to purchase_order_items (safe migration — skipped if already present)
+    await client.query(`
+      ALTER TABLE purchase_order_items
+        ADD COLUMN IF NOT EXISTS tax_included BOOLEAN NOT NULL DEFAULT false;
+    `);
+
     // Add media columns to whatsapp_chats (safe migration — skipped if already present)
       await client.query(`
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS media_id TEXT;

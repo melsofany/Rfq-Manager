@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { employeesTable } from "./employees";
@@ -28,6 +28,7 @@ export const purchaseOrderItemsTable = pgTable("purchase_order_items", {
   uom: text("uom"),
   qty: numeric("qty", { precision: 15, scale: 4 }),
   referencePrice: numeric("reference_price", { precision: 15, scale: 4 }),
+  taxIncluded: boolean("tax_included").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -34,6 +34,7 @@ interface PoItemRow {
   qty: string;
   unitPrice: string;
   supplierId: string;
+  taxIncluded: boolean;
 }
 
 function useSheetPoNumbers() {
@@ -146,8 +147,6 @@ function SupplierCombobox({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selected = suppliers.find((s) => String(s.id) === value);
-
-  // What to show in the input: if open → the typed query, else the selected name or empty
   const displayValue = open ? query : (selected?.name ?? "");
 
   const filtered = query
@@ -165,17 +164,8 @@ function SupplierCombobox({
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  const handleSelect = (id: number) => {
-    onChange(String(id));
-    setQuery("");
-    setOpen(false);
-  };
-
-  const handleClear = () => {
-    onChange("");
-    setQuery("");
-    setOpen(false);
-  };
+  const handleSelect = (id: number) => { onChange(String(id)); setQuery(""); setOpen(false); };
+  const handleClear  = () => { onChange(""); setQuery(""); setOpen(false); };
 
   return (
     <div ref={containerRef} className="relative">
@@ -290,6 +280,7 @@ export default function NewPurchaseOrderPage() {
           qty: item.qty != null ? String(item.qty) : "",
           unitPrice: "",
           supplierId: "",
+          taxIncluded: false,
         }));
         setItems(mapped);
         setSelectedIds(new Set(mapped.map((m) => m.id)));
@@ -307,42 +298,32 @@ export default function NewPurchaseOrderPage() {
   };
 
   const toggleAll = () => {
-    if (selectedIds.size === items.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(items.map((i) => i.id)));
-    }
+    if (selectedIds.size === items.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(items.map((i) => i.id)));
   };
 
   const toggleOne = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
   const removeItem = (id: string) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-    setPriceLoadingIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
+    setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+    setPriceLoadingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
   };
 
   const updateUnitPrice = (id: string, unitPrice: string) =>
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, unitPrice } : i)));
 
+  const updateTaxIncluded = (id: string, taxIncluded: boolean) =>
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, taxIncluded } : i)));
+
   const updateSupplier = (id: string, supplierId: string) => {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, supplierId, unitPrice: "" } : i)));
-
     if (supplierId) {
       const item = items.find((i) => i.id === id);
       if (item) {
@@ -356,15 +337,29 @@ export default function NewPurchaseOrderPage() {
             );
           })
           .finally(() => {
-            setPriceLoadingIds((prev) => {
-              const next = new Set(prev);
-              next.delete(id);
-              return next;
-            });
+            setPriceLoadingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
           });
       }
     }
   };
+
+  // Live totals summary
+  const selectedItems = items.filter((i) => selectedIds.has(i.id));
+  const grandTotal = selectedItems.reduce((sum, i) => {
+    const qty   = parseFloat(i.qty)       || 0;
+    const price = parseFloat(i.unitPrice) || 0;
+    return sum + qty * price;
+  }, 0);
+  const vatTotal = selectedItems.reduce((sum, i) => {
+    if (!i.taxIncluded) return sum;
+    const qty   = parseFloat(i.qty)       || 0;
+    const price = parseFloat(i.unitPrice) || 0;
+    const lineTotal = qty * price;
+    return sum + (lineTotal - lineTotal / 1.14);
+  }, 0);
+  const preTaxTotal = grandTotal - vatTotal;
+  const hasAnyPrice = selectedItems.some((i) => parseFloat(i.unitPrice) > 0);
+  const hasTaxItems = selectedItems.some((i) => i.taxIncluded && parseFloat(i.unitPrice) > 0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -386,12 +381,13 @@ export default function NewPurchaseOrderPage() {
           qty: i.qty ? parseFloat(i.qty) : undefined,
           referencePrice: i.unitPrice ? parseFloat(i.unitPrice) : undefined,
           supplierId: i.supplierId ? parseInt(i.supplierId, 10) : undefined,
+          taxIncluded: i.taxIncluded,
         })),
       },
     });
   };
 
-  const allSelected = items.length > 0 && selectedIds.size === items.length;
+  const allSelected   = items.length > 0 && selectedIds.size === items.length;
   const selectedCount = selectedIds.size;
 
   return (
@@ -431,9 +427,7 @@ export default function NewPurchaseOrderPage() {
                     <thead>
                       <tr className="bg-muted/30 border-b border-border text-left">
                         <th className="px-3 py-2.5">
-                          <button type="button" onClick={toggleAll} className="text-muted-foreground">
-                            <input type="checkbox" checked={allSelected} readOnly className="cursor-pointer" onClick={toggleAll} />
-                          </button>
+                          <input type="checkbox" checked={allSelected} readOnly className="cursor-pointer" onClick={toggleAll} />
                         </th>
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">Line item</th>
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">Part no.</th>
@@ -442,12 +436,15 @@ export default function NewPurchaseOrderPage() {
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">Qty (PO)</th>
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[160px]">Supplier</th>
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[120px]">Unit price</th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium text-center" title="السعر شامل ضريبة القيمة المضافة 14%">
+                          شامل ض.ق.م
+                        </th>
                         <th className="px-2 py-2.5" />
                       </tr>
                     </thead>
                     <tbody>
                       {items.map((row) => (
-                        <tr key={row.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                        <tr key={row.id} className={`border-b border-border last:border-0 hover:bg-muted/20 ${row.taxIncluded && selectedIds.has(row.id) ? "bg-green-50/40 dark:bg-green-950/20" : ""}`}>
                           <td className="px-3 py-2 text-center">
                             <input
                               type="checkbox"
@@ -488,6 +485,17 @@ export default function NewPurchaseOrderPage() {
                               />
                             )}
                           </td>
+                          {/* Tax included checkbox */}
+                          <td className="px-2 py-1.5 text-center">
+                            <input
+                              type="checkbox"
+                              checked={row.taxIncluded}
+                              onChange={(e) => updateTaxIncluded(row.id, e.target.checked)}
+                              disabled={!selectedIds.has(row.id)}
+                              className="cursor-pointer h-4 w-4 accent-green-600 disabled:opacity-40"
+                              title="السعر شامل ضريبة القيمة المضافة 14%"
+                            />
+                          </td>
                           <td className="px-2 py-1.5 text-center">
                             <button type="button" onClick={() => removeItem(row.id)} className="text-muted-foreground hover:text-destructive">
                               <Trash2 size={14} />
@@ -498,8 +506,37 @@ export default function NewPurchaseOrderPage() {
                     </tbody>
                   </table>
                 </div>
-                <div className="px-4 py-2.5 border-t border-border bg-muted/10 text-xs text-muted-foreground">
-                  Unit prices are auto-filled from the supplier's most recent offer. You can edit them manually if needed.
+
+                {/* Totals summary */}
+                {hasAnyPrice && (
+                  <div className="border-t border-border bg-muted/10 px-4 py-3 flex flex-col items-end gap-1 text-sm">
+                    {hasTaxItems && (
+                      <>
+                        <div className="flex gap-6 text-muted-foreground text-xs">
+                          <span>الإجمالي قبل الضريبة</span>
+                          <span className="font-medium text-foreground tabular-nums">
+                            {preTaxTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex gap-6 text-muted-foreground text-xs">
+                          <span>ضريبة القيمة المضافة (14%)</span>
+                          <span className="font-medium text-green-700 tabular-nums">
+                            + {vatTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex gap-6 text-sm font-semibold">
+                      <span>{hasTaxItems ? "الإجمالي الكلي" : "الإجمالي"}</span>
+                      <span className="tabular-nums">
+                        {grandTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="px-4 py-2 border-t border-border bg-muted/5 text-xs text-muted-foreground">
+                  Unit prices auto-filled from supplier's latest offer. Check <strong>شامل ض.ق.م</strong> if the price already includes 14% VAT.
                 </div>
               </div>
 
