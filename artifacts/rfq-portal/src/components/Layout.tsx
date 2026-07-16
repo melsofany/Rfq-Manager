@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   LayoutDashboard,
   FileText,
@@ -13,31 +14,33 @@ import {
   MessageSquare,
   Package,
   ShoppingCart,
+  Languages,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/rfq", label: "RFQ Management", icon: FileText },
-  { href: "/suppliers", label: "Suppliers", icon: Users },
-  { href: "/items", label: "Items", icon: Package },
-  { href: "/purchase-orders", label: "Purchase Orders (PO)", icon: ShoppingCart },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/whatsapp", label: "WhatsApp", icon: MessageSquare },
-];
-
-const adminItems = [
-  { href: "/employees", label: "Employees", icon: UserCog },
-  { href: "/audit", label: "Audit Log", icon: ClipboardList },
-];
-
 export function Layout({ children }: { children: React.ReactNode }) {
   const { employee, logout } = useAuth();
   const [location] = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(true);   // desktop collapsed state
-  const [mobileOpen, setMobileOpen] = useState(false);    // mobile drawer state
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [waUnread, setWaUnread] = useState(0);
+  const { t, lang, setLang } = useLanguage();
+
+  const navItems = [
+    { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
+    { href: "/rfq", label: t("nav.rfq"), icon: FileText },
+    { href: "/suppliers", label: t("nav.suppliers"), icon: Users },
+    { href: "/items", label: t("nav.items"), icon: Package },
+    { href: "/purchase-orders", label: t("nav.purchaseOrders"), icon: ShoppingCart },
+    { href: "/analytics", label: t("nav.analytics"), icon: BarChart3 },
+    { href: "/whatsapp", label: t("nav.whatsapp"), icon: MessageSquare },
+  ];
+
+  const adminItems = [
+    { href: "/employees", label: t("nav.employees"), icon: UserCog },
+    { href: "/audit", label: t("nav.auditLog"), icon: ClipboardList },
+  ];
 
   // Close mobile drawer on route change
   useEffect(() => { setMobileOpen(false); }, [location]);
@@ -81,7 +84,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <img src="/logo.png" alt="Cortoba Supplies" className="h-9 w-9 object-contain flex-shrink-0" />
               <div className="overflow-hidden">
                 <p className="text-sidebar-foreground font-bold text-sm leading-tight truncate">Cortoba Supplies</p>
-                <p className="text-sidebar-foreground/50 text-xs leading-tight truncate">قرطبة للتوريدات</p>
+                <p className="text-sidebar-foreground/50 text-xs leading-tight truncate">{t("app.subtitle")}</p>
               </div>
             </div>
           )}
@@ -141,7 +144,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {employee?.role === "admin" && (
             <>
               {(sidebarOpen || mobile) && (
-                <p className="text-sidebar-foreground/30 text-xs px-2 pt-3 pb-1 uppercase tracking-wider">Admin</p>
+                <p className="text-sidebar-foreground/30 text-xs px-2 pt-3 pb-1 uppercase tracking-wider">{t("nav.admin")}</p>
               )}
               {adminItems.map((item) => {
                 const active = location === item.href || location.startsWith(item.href + "/");
@@ -165,8 +168,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
           )}
         </nav>
 
-        {/* User */}
-        <div className="border-t border-sidebar-border px-3 py-3">
+        {/* User + Language Toggle */}
+        <div className="border-t border-sidebar-border px-3 py-3 space-y-2">
+          {/* Language toggle */}
+          {(sidebarOpen || mobile) && (
+            <button
+              onClick={() => setLang(lang === "en" ? "ar" : "en")}
+              className="flex items-center gap-1.5 w-full px-2 py-1.5 rounded text-xs font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+              title={t("lang.toggle")}
+            >
+              <Languages size={14} className="flex-shrink-0" />
+              <span>{t("lang.toggle")}</span>
+            </button>
+          )}
+          {!sidebarOpen && !mobile && (
+            <button
+              onClick={() => setLang(lang === "en" ? "ar" : "en")}
+              className="flex items-center justify-center w-full py-1 rounded text-xs font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+              title={t("lang.toggle")}
+            >
+              <Languages size={14} />
+            </button>
+          )}
+          {/* User info */}
           <div className={cn("flex items-center", (sidebarOpen || mobile) ? "gap-2" : "justify-center")}>
             <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
               {employee?.name?.[0]?.toUpperCase() ?? "?"}
@@ -203,14 +227,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <img src="/logo.png" alt="logo" className="h-7 w-7 object-contain flex-shrink-0" />
           <p className="text-sidebar-foreground font-bold text-sm truncate">Cortoba Supplies</p>
         </div>
-        {waUnread > 0 && (
-          <Link href="/whatsapp">
-            <a className="ml-auto flex items-center gap-1 bg-green-500 text-white text-xs rounded-full px-2.5 py-1 font-bold">
-              <MessageSquare size={12} />
-              {waUnread > 99 ? "99+" : waUnread}
-            </a>
-          </Link>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setLang(lang === "en" ? "ar" : "en")}
+            className="text-sidebar-foreground/60 hover:text-sidebar-foreground text-xs font-medium px-2 py-1 rounded border border-sidebar-border hover:bg-sidebar-accent/50 transition-colors"
+          >
+            {t("lang.toggle")}
+          </button>
+          {waUnread > 0 && (
+            <Link href="/whatsapp">
+              <a className="flex items-center gap-1 bg-green-500 text-white text-xs rounded-full px-2.5 py-1 font-bold">
+                <MessageSquare size={12} />
+                {waUnread > 99 ? "99+" : waUnread}
+              </a>
+            </Link>
+          )}
+        </div>
       </header>
 
       {/* ── Mobile drawer overlay backdrop ────────────────────────────── */}

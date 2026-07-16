@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Layout } from "@/components/Layout";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Search, Send, Phone, RefreshCw, Paperclip, FileText, Download, X, Settings,
   Image as ImageIcon, Mic, Trash2, Check, Info, Plus, CheckCheck,
@@ -215,16 +216,17 @@ export default function WhatsAppPage() {
       .catch(() => {});
   }, []);
 
+  const { t, dir } = useLanguage();
   const tabs: Array<{ id: Tab; label: string; icon: React.ElementType; badge?: number }> = [
-    { id: "chats", label: "المحادثات", icon: MessageSquare, badge: globalStats?.unread || undefined },
-    { id: "templates", label: "القوالب", icon: LayoutIcon },
-    { id: "broadcast", label: "إرسال جماعي", icon: Users },
-    { id: "settings", label: "الإعدادات", icon: Settings },
+    { id: "chats", label: t("whatsapp.chats"), icon: MessageSquare, badge: globalStats?.unread || undefined },
+    { id: "templates", label: t("whatsapp.templates"), icon: LayoutIcon },
+    { id: "broadcast", label: t("whatsapp.broadcast"), icon: Users },
+    { id: "settings", label: t("whatsapp.settings"), icon: Settings },
   ];
 
   return (
     <Layout>
-      <div className="h-[calc(100vh-4rem)] flex flex-col bg-[#f0f2f5]" dir="rtl">
+      <div className="h-[calc(100vh-4rem)] flex flex-col bg-[#f0f2f5]" dir={dir}>
         {/* ─── Header + Tabs ─────────────────────────────────────────── */}
         <div className="bg-white border-b border-border flex-shrink-0">
           <div className="px-4 pt-4 pb-0 flex items-center justify-between">
@@ -234,7 +236,7 @@ export default function WhatsAppPage() {
                 <MessageSquare size={18} className="text-white" />
               </div>
               <div>
-                <h1 className="text-base font-bold text-foreground leading-tight">واتساب بيزنس</h1>
+                <h1 className="text-base font-bold text-foreground leading-tight">{t("whatsapp.title")}</h1>
                 <p className="text-xs text-muted-foreground leading-tight">
                   Meta Business API · whatsapp-api-js
                 </p>
@@ -244,16 +246,16 @@ export default function WhatsAppPage() {
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <MessageSquare size={12} />
-                  {globalStats.totalChats} محادثة
+                  {globalStats.totalChats} {t("whatsapp.conversations")}
                 </span>
                 <span className="flex items-center gap-1">
                   <BarChart2 size={12} />
-                  {globalStats.inbound} وارد / {globalStats.outbound} صادر
+                  {globalStats.inbound} {t("whatsapp.inbound")} / {globalStats.outbound} {t("whatsapp.outbound")}
                 </span>
                 {(globalStats.unread || 0) > 0 && (
                   <span className="flex items-center gap-1 text-green-600 font-medium">
                     <Bell size={12} />
-                    {globalStats.unread} غير مقروء
+                    {globalStats.unread} {t("whatsapp.unread")}
                   </span>
                 )}
               </div>
@@ -300,6 +302,7 @@ export default function WhatsAppPage() {
 // CHATS TAB
 // ══════════════════════════════════════════════════════════════════════════
 function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
+  const { t } = useLanguage();
   const [chats, setChats] = useState<Chat[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "suppliers">("all");
@@ -382,8 +385,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
           if (ev.type === "new_message") {
             playNotifSound();
             if ("Notification" in window && Notification.permission === "granted") {
-              new Notification("رسالة واتساب جديدة", {
-                body: ev.senderName ? `من: ${ev.senderName}` : `من: ${ev.phone}`,
+              new Notification(t("whatsapp.newMessage"), {
+                body: ev.senderName ? `${t("whatsapp.from")} ${ev.senderName}` : `${t("whatsapp.from")} ${ev.phone}`,
                 icon: "/logo.png", tag: "wa", renotify: true,
               });
             }
@@ -394,7 +397,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
             } else {
               const chat = fresh?.find(c => c.phone === ev.phone);
               const name = chat?.supplierName || ev.senderName || ev.phone;
-              showToast(`رسالة جديدة من ${name}`, true, ev.phone);
+              showToast(`${t("whatsapp.newMessage").replace("WhatsApp ", "")}: ${name}`, true, ev.phone);
             }
           } else if (ev.type === "reaction") {
             // Real-time reaction from another device / inbound contact
@@ -405,7 +408,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               return { ...m, reactions: emoji ? [...reactions, { reactorPhone, emoji }] : reactions };
             }));
           } else if (ev.type === "delivery_failed") {
-            showToast(ev.reason || "فشل تسليم رسالة", false);
+            showToast(ev.reason || t("whatsapp.deliveryFailed"), false);
             await loadChats();
           }
         } catch { /* ignore */ }
@@ -455,8 +458,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
         body: JSON.stringify({ phone: selected, message: body, supplierId: chat?.supplierId }),
       });
       if (r.ok) { await loadMessages(selected); }
-      else { const e2 = await r.json(); showToast("فشل الإرسال: " + (e2.error || "خطأ"), false); setDraft(body); }
-    } catch { showToast("خطأ في الاتصال", false); setDraft(body); }
+      else { const e2 = await r.json(); showToast(t("whatsapp.sendFailed") + ": " + (e2.error || ""), false); setDraft(body); }
+    } catch { showToast(t("whatsapp.sendFailed"), false); setDraft(body); }
     finally { setSending(false); }
   }
 
@@ -475,8 +478,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
         }),
       });
       if (r.ok) { setPendingFile(null); await loadMessages(selected); }
-      else { const e2 = await r.json(); showToast("فشل إرسال الملف: " + (e2.error || "خطأ"), false); }
-    } catch { showToast("خطأ في الاتصال", false); }
+      else { const e2 = await r.json(); showToast(t("whatsapp.sendFailed") + ": " + (e2.error || ""), false); }
+    } catch { showToast(t("whatsapp.sendFailed"), false); }
     finally { setUploading(false); setSending(false); }
   }
 
@@ -495,7 +498,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   }
 
   async function handleDeleteMsg(id: number) {
-    if (!confirm("حذف هذه الرسالة؟")) return;
+    if (!confirm(t("whatsapp.deleteConfirm"))) return;
     await fetch(`/api/whatsapp/messages/${id}`, { method: "DELETE", credentials: "include" });
     setMessages(prev => prev.filter(m => m.id !== id));
   }
@@ -568,13 +571,13 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
             <div className="relative flex-1">
               <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="بحث..."
+                placeholder={t("whatsapp.search")}
                 className="w-full bg-[#f0f2f5] rounded-full pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
                 dir="rtl" />
             </div>
             <button onClick={() => setNewChatOpen(true)}
               className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
-              title="محادثة جديدة">
+              title={t("whatsapp.newChat")}>
               <Plus size={16} className="text-muted-foreground" />
             </button>
             <button onClick={handleRefresh} disabled={refreshing}
@@ -591,7 +594,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                   filter === f ? "text-white" : "bg-muted text-muted-foreground hover:bg-muted/80"
                 )}
                 style={filter === f ? { background: WA_GREEN } : {}}>
-                {f === "all" ? "الكل" : f === "unread" ? "غير مقروء" : "موردين"}
+                {f === "all" ? t("whatsapp.filter.all") : f === "unread" ? t("whatsapp.filter.unread") : t("whatsapp.filter.suppliers")}
               </button>
             ))}
           </div>
@@ -602,7 +605,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
           {filteredChats.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-muted-foreground text-sm gap-2">
               <MessageSquare size={24} className="opacity-30" />
-              <span>{search ? "لا توجد نتائج" : "لا توجد محادثات"}</span>
+              <span>{search ? t("whatsapp.noResults") : t("whatsapp.noChats")}</span>
             </div>
           ) : filteredChats.map(chat => (
             <button key={chat.phone} onClick={() => handleSelect(chat.phone)}
@@ -638,11 +641,11 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
         {newChatOpen && (
           <div className="absolute inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setNewChatOpen(false)}>
             <div className="bg-white rounded-2xl shadow-2xl p-5 w-80" onClick={e => e.stopPropagation()}>
-              <h3 className="text-base font-bold mb-3 text-right">محادثة جديدة</h3>
+              <h3 className="text-base font-bold mb-3 text-right">{t("whatsapp.newChatTitle")}</h3>
               {/* Quick contacts */}
               {contacts.length > 0 && (
                 <div className="mb-3">
-                  <p className="text-xs text-muted-foreground mb-2 text-right">اختر مورد:</p>
+                  <p className="text-xs text-muted-foreground mb-2 text-right">{t("whatsapp.selectSupplier")}</p>
                   <div className="max-h-40 overflow-y-auto space-y-1">
                     {contacts.map(s => (
                       <button key={s.id} onClick={() => {
@@ -661,7 +664,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                   </div>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mb-1.5 text-right">أو أدخل رقم هاتف:</p>
+              <p className="text-xs text-muted-foreground mb-1.5 text-right">{t("whatsapp.orEnterPhone")}</p>
               <input value={newPhone} onChange={e => setNewPhone(e.target.value)}
                 placeholder="+20 1xx xxx xxxx"
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-3"
@@ -669,11 +672,11 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                 onKeyDown={e => { if (e.key === "Enter") handleStartNewChat(); }} />
               <div className="flex gap-2 justify-end">
                 <button onClick={() => setNewChatOpen(false)}
-                  className="px-4 py-1.5 text-sm rounded-lg hover:bg-muted transition-colors">إلغاء</button>
+                  className="px-4 py-1.5 text-sm rounded-lg hover:bg-muted transition-colors">{t("whatsapp.cancel")}</button>
                 <button onClick={handleStartNewChat}
                   className="px-4 py-1.5 text-sm rounded-lg text-white transition-colors"
                   style={{ background: WA_GREEN }}
-                  disabled={!newPhone.trim()}>بدء</button>
+                  disabled={!newPhone.trim()}>{t("whatsapp.start")}</button>
               </div>
             </div>
           </div>
@@ -691,12 +694,12 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
             </div>
             <div className="text-center">
               <p className="text-xl font-semibold text-muted-foreground">WhatsApp Business</p>
-              <p className="text-sm text-muted-foreground mt-1">اختر محادثة من القائمة أو ابدأ محادثة جديدة</p>
+              <p className="text-sm text-muted-foreground mt-1">{t("whatsapp.selectChat")}</p>
             </div>
             <button onClick={() => setSidebarCollapsed(false)}
               className="px-5 py-2 rounded-full text-white text-sm font-medium transition-colors"
               style={{ background: WA_GREEN }}>
-              عرض المحادثات
+              {t("whatsapp.viewChats")}
             </button>
           </div>
         ) : (
@@ -717,7 +720,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               <div className="flex items-center gap-1">
                 <button onClick={() => setInfoOpen(!infoOpen)}
                   className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors"
-                  title="معلومات">
+                  title={t("whatsapp.info")}>
                   <Info size={16} className="text-muted-foreground" />
                 </button>
                 <button onClick={handleRefresh}
@@ -740,8 +743,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                   ) : messages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
                       <MessageSquare size={32} className="opacity-20" />
-                      <p className="text-sm">لا توجد رسائل بعد</p>
-                      <p className="text-xs">ابدأ المحادثة بإرسال رسالة</p>
+                      <p className="text-sm">{t("whatsapp.noMessages")}</p>
+                      <p className="text-xs">{t("whatsapp.startChat")}</p>
                     </div>
                   ) : (
                     messages.map((msg, idx) => {
@@ -772,9 +775,9 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                                     className="flex-1 text-sm border rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-400 min-w-0"
                                     onKeyDown={e => { if (e.key === "Enter") handleEditSave(msg.id); if (e.key === "Escape") setEditingId(null); }} />
                                   <button onClick={() => handleEditSave(msg.id)}
-                                    className="text-green-600 text-xs font-medium">حفظ</button>
+                                    className="text-green-600 text-xs font-medium">{t("whatsapp.save")}</button>
                                   <button onClick={() => setEditingId(null)}
-                                    className="text-muted-foreground text-xs">إلغاء</button>
+                                    className="text-muted-foreground text-xs">{t("whatsapp.cancel")}</button>
                                 </div>
                               ) : msg.mediaId ? (
                                 <MediaMessage msg={msg} />
@@ -892,7 +895,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                       className="hidden" onChange={handleFileChange} />
                     <button type="button" onClick={() => fileRef.current?.click()}
                       className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors flex-shrink-0"
-                      title="إرفاق ملف">
+                      title={t("whatsapp.attach")}>
                       <Paperclip size={18} className="text-muted-foreground" />
                     </button>
                     {pendingFile && !pendingFile.preview ? (
@@ -904,7 +907,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                     ) : (
                       <textarea ref={textareaRef} value={draft} onChange={e => setDraft(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                        placeholder="اكتب رسالة..."
+                        placeholder={t("whatsapp.typeMessage")}
                         rows={1}
                         className="flex-1 resize-none rounded-2xl border border-border bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400/30 focus:border-green-400/60 transition-all min-h-[42px] max-h-28"
                         style={{ direction: "rtl" }} disabled={sending} />
@@ -928,7 +931,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                     <button onClick={() => setInfoOpen(false)}>
                       <X size={16} className="text-muted-foreground" />
                     </button>
-                    <span className="font-semibold text-sm">معلومات المورد</span>
+                    <span className="font-semibold text-sm">{t("whatsapp.supplierInfo")}</span>
                   </div>
                   <div className="p-4 flex flex-col items-center gap-3 border-b border-border">
                     <Avatar name={displayName} phone={selected || ""} size={64} />
@@ -941,23 +944,23 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                     {selectedChat.supplierId && (
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">{selectedChat.supplierId}</span>
-                        <span className="font-medium">رقم المورد</span>
+                        <span className="font-medium">{t("whatsapp.supplierId")}</span>
                       </div>
                     )}
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">{formatTime(selectedChat.lastAt)}</span>
-                      <span className="font-medium">آخر رسالة</span>
+                      <span className="font-medium">{t("whatsapp.lastMessage")}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{messages.length}</span>
-                      <span className="font-medium text-muted-foreground">عدد الرسائل</span>
+                      <span className="font-medium text-muted-foreground">{t("whatsapp.messageCount")}</span>
                     </div>
                   </div>
                   <div className="p-3 mt-auto border-t border-border">
                     <button onClick={() => { navigator.clipboard.writeText(selected || ""); }}
                       className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground py-1.5 rounded-lg hover:bg-muted transition-colors">
                       <Copy size={12} />
-                      نسخ الرقم
+                      {t("whatsapp.copyNumber")}
                     </button>
                   </div>
                 </div>
@@ -992,6 +995,7 @@ let setActiveTabExternal: ((t: Tab) => void) | undefined;
 // TEMPLATES TAB
 // ══════════════════════════════════════════════════════════════════════════
 function TemplatesTab() {
+  const { t, dir } = useLanguage();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1014,13 +1018,13 @@ function TemplatesTab() {
       .then(r => r.ok ? r.json() : []).then(setContacts).catch(() => {});
   }, []);
 
-  const filtered = templates.filter(t => {
-    const matchSearch = !search || t.name.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = filterStatus === "ALL" || t.status === filterStatus;
+  const filtered = templates.filter(tmpl => {
+    const matchSearch = !search || tmpl.name.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = filterStatus === "ALL" || tmpl.status === filterStatus;
     return matchSearch && matchStatus;
   });
 
-  const statuses = ["ALL", ...Array.from(new Set(templates.map(t => t.status)))];
+  const statuses = ["ALL", ...Array.from(new Set(templates.map(tmpl => tmpl.status)))];
 
   function getStatusColor(status: string) {
     if (status === "APPROVED") return "text-green-600 bg-green-50";
@@ -1029,9 +1033,9 @@ function TemplatesTab() {
     return "text-muted-foreground bg-muted";
   }
   function getStatusLabel(status: string) {
-    if (status === "APPROVED") return "معتمد";
-    if (status === "PENDING") return "قيد المراجعة";
-    if (status === "REJECTED") return "مرفوض";
+    if (status === "APPROVED") return t("whatsapp.templates.status.APPROVED");
+    if (status === "PENDING") return t("whatsapp.templates.status.PENDING");
+    if (status === "REJECTED") return t("whatsapp.templates.status.REJECTED");
     return status;
   }
 
@@ -1049,36 +1053,36 @@ function TemplatesTab() {
         }),
       });
       const data = await r.json();
-      if (r.ok) setSendResult({ ok: true, msg: "تم الإرسال بنجاح ✓" });
-      else setSendResult({ ok: false, msg: data.error || "فشل الإرسال" });
+      if (r.ok) setSendResult({ ok: true, msg: t("whatsapp.sendSuccess") });
+      else setSendResult({ ok: false, msg: data.error || t("whatsapp.sendFailed") });
     } catch (e) {
-      setSendResult({ ok: false, msg: "خطأ في الاتصال" });
+      setSendResult({ ok: false, msg: t("whatsapp.sendFailed") });
     } finally { setSending(false); }
   }
 
-  function getTemplatePreview(t: Template): string {
-    const body = t.components?.find(c => c.type === "BODY");
-    return body?.text || "(لا يوجد نص معاينة)";
+  function getTemplatePreview(tpl: Template): string {
+    const body = tpl.components?.find(c => c.type === "BODY");
+    return body?.text || t("whatsapp.templates.noPreview");
   }
-  function getTemplateHeader(t: Template): string | null {
-    const header = t.components?.find(c => c.type === "HEADER");
+  function getTemplateHeader(tpl: Template): string | null {
+    const header = tpl.components?.find(c => c.type === "HEADER");
     return header?.text || null;
   }
-  function getTemplateButtons(t: Template): Array<{ text: string; type: string }> {
-    const btns = t.components?.find(c => c.type === "BUTTONS");
+  function getTemplateButtons(tpl: Template): Array<{ text: string; type: string }> {
+    const btns = tpl.components?.find(c => c.type === "BUTTONS");
     return btns?.buttons?.map(b => ({ text: b.text, type: b.type })) || [];
   }
 
   return (
-    <div className="h-full flex" dir="rtl">
+    <div className="h-full flex" dir={dir}>
       {/* Template List */}
       <div className="w-72 flex-shrink-0 bg-white border-l border-border flex flex-col">
         <div className="p-3 border-b border-border">
-          <h2 className="font-bold text-sm mb-2">قوالب Meta Business</h2>
+          <h2 className="font-bold text-sm mb-2">{t("whatsapp.templates.title")}</h2>
           <div className="relative mb-2">
             <Search size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="بحث في القوالب..."
+              placeholder={t("whatsapp.templates.search")}
               className="w-full bg-[#f0f2f5] rounded-full pl-3 pr-8 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-green-400" />
           </div>
           <div className="flex flex-wrap gap-1">
@@ -1089,7 +1093,7 @@ function TemplatesTab() {
                   filterStatus === s ? "text-white" : "bg-muted text-muted-foreground"
                 )}
                 style={filterStatus === s ? { background: WA_GREEN } : {}}>
-                {s === "ALL" ? "الكل" : getStatusLabel(s)}
+                {s === "ALL" ? t("whatsapp.filter.all") : getStatusLabel(s)}
               </button>
             ))}
           </div>
@@ -1103,33 +1107,33 @@ function TemplatesTab() {
             <div className="p-4 text-center">
               <AlertCircle size={24} className="text-red-400 mx-auto mb-2" />
               <p className="text-xs text-red-500">{error}</p>
-              <p className="text-xs text-muted-foreground mt-1">تأكد من إضافة WHATSAPP_BUSINESS_ACCOUNT_ID</p>
+              <p className="text-xs text-muted-foreground mt-1">Check WHATSAPP_BUSINESS_ACCOUNT_ID</p>
             </div>
           ) : filtered.length === 0 ? (
             <div className="p-4 text-center text-muted-foreground text-xs">
-              {templates.length === 0 ? "لا توجد قوالب" : "لا توجد نتائج"}
+              {templates.length === 0 ? t("whatsapp.templates.noTemplates") : t("whatsapp.templates.noResults")}
             </div>
-          ) : filtered.map(t => (
-            <button key={t.name} onClick={() => { setSelectedTemplate(t); setSendResult(null); }}
+          ) : filtered.map(tmpl => (
+            <button key={tmpl.name} onClick={() => { setSelectedTemplate(tmpl); setSendResult(null); }}
               className={cn(
                 "w-full text-right px-3 py-2.5 border-b border-border/40 hover:bg-[#f0f2f5] transition-colors",
-                selectedTemplate?.name === t.name && "bg-[#f0f2f5]"
+                selectedTemplate?.name === tmpl.name && "bg-[#f0f2f5]"
               )}>
               <div className="flex items-center justify-between gap-1 mb-0.5">
-                <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", getStatusColor(t.status))}>
-                  {getStatusLabel(t.status)}
+                <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", getStatusColor(tmpl.status))}>
+                  {getStatusLabel(tmpl.status)}
                 </span>
-                <span className="text-xs font-semibold text-foreground truncate">{t.name}</span>
+                <span className="text-xs font-semibold text-foreground truncate">{tmpl.name}</span>
               </div>
               <div className="text-[10px] text-muted-foreground text-right">
-                {t.category} · {t.language}
+                {tmpl.category} · {tmpl.language}
               </div>
             </button>
           ))}
         </div>
         <div className="p-2 border-t border-border">
           <p className="text-[10px] text-muted-foreground text-center">
-            {filtered.length} قالب من {templates.length}
+            {filtered.length} {t("whatsapp.templates.count")} {templates.length}
           </p>
         </div>
       </div>
@@ -1139,7 +1143,7 @@ function TemplatesTab() {
         {!selectedTemplate ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
             <LayoutIcon size={48} className="opacity-20" />
-            <p className="text-sm">اختر قالباً لعرض تفاصيله وإرساله</p>
+            <p className="text-sm">{t("whatsapp.templates.select")}</p>
           </div>
         ) : (
           <div className="p-4 h-full overflow-y-auto">
@@ -1176,23 +1180,23 @@ function TemplatesTab() {
 
               {/* Send form */}
               <div className="space-y-3">
-                <h4 className="font-semibold text-sm text-right">إرسال القالب</h4>
+                <h4 className="font-semibold text-sm text-right">{t("whatsapp.templates.send")}</h4>
                 <div>
                   <label className="text-xs text-muted-foreground block mb-1 text-right">
-                    اختر مورداً أو أدخل رقم هاتف:
+                    {t("whatsapp.templates.chooseSupplier")}
                   </label>
                   <select
                     value={sendPhone}
                     onChange={e => setSendPhone(e.target.value)}
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-2"
-                    dir="rtl">
-                    <option value="">-- اختر مورد --</option>
+                    dir={dir}>
+                    <option value="">{t("whatsapp.templates.selectSupplier")}</option>
                     {contacts.map(s => (
                       <option key={s.id} value={s.phone || ""}>{s.name} ({s.phone})</option>
                     ))}
                   </select>
                   <input value={sendPhone} onChange={e => setSendPhone(e.target.value)}
-                    placeholder="أو أدخل رقم مباشرة: +20..."
+                    placeholder={t("whatsapp.templates.phonePlaceholder")}
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
                     dir="ltr" />
                 </div>
@@ -1209,11 +1213,11 @@ function TemplatesTab() {
                   disabled={!sendPhone.trim() || sending || selectedTemplate.status !== "APPROVED"}
                   className="w-full py-2.5 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   style={{ background: WA_GREEN }}>
-                  {sending ? <><Loader2 size={16} className="animate-spin" /> جاري الإرسال...</> : <><Send size={16} /> إرسال القالب</>}
+                  {sending ? <><Loader2 size={16} className="animate-spin" /> {t("whatsapp.templates.sending")}</> : <><Send size={16} /> {t("whatsapp.templates.send")}</>}
                 </button>
                 {selectedTemplate.status !== "APPROVED" && (
                   <p className="text-xs text-amber-600 text-center">
-                    هذا القالب غير معتمد بعد — لا يمكن إرساله
+                    {t("whatsapp.templates.notApproved")}
                   </p>
                 )}
               </div>
@@ -1222,7 +1226,7 @@ function TemplatesTab() {
             {/* Template components breakdown */}
             {selectedTemplate.components && selectedTemplate.components.length > 0 && (
               <div className="max-w-lg mx-auto bg-white rounded-2xl shadow-sm p-4">
-                <h4 className="font-bold text-sm mb-3 text-right">مكونات القالب</h4>
+                <h4 className="font-bold text-sm mb-3 text-right">{t("whatsapp.templates.components")}</h4>
                 <div className="space-y-2">
                   {selectedTemplate.components.map((comp, i) => (
                     <div key={i} className="border border-border rounded-lg p-3">
@@ -1252,6 +1256,7 @@ function TemplatesTab() {
 // BROADCAST TAB
 // ══════════════════════════════════════════════════════════════════════════
 function BroadcastTab() {
+  const { t, dir } = useLanguage();
   const [contacts, setContacts] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -1302,34 +1307,34 @@ function BroadcastTab() {
       }));
       setResults(enriched);
     } catch {
-      setResults([{ phone: "خطأ", ok: false, error: "فشل الاتصال بالخادم" }]);
+      setResults([{ phone: "error", ok: false, error: t("whatsapp.broadcast.errorServer") }]);
     } finally { setSending(false); }
   }
 
   const selectedContacts = contacts.filter(c => selected.has(c.id));
 
   return (
-    <div className="h-full flex" dir="rtl">
+    <div className="h-full flex" dir={dir}>
       {/* Contact Selection */}
       <div className="w-72 flex-shrink-0 bg-white border-l border-border flex flex-col">
         <div className="p-3 border-b border-border">
           <div className="flex items-center justify-between mb-2">
             <button onClick={toggleAll} className="text-xs text-green-600 font-medium hover:underline">
-              {selected.size === filtered.length ? "إلغاء الكل" : "تحديد الكل"}
+              {selected.size === filtered.length ? t("whatsapp.broadcast.deselectAll") : t("whatsapp.broadcast.selectAll")}
             </button>
-            <h2 className="font-bold text-sm">اختر الموردين</h2>
+            <h2 className="font-bold text-sm">{t("whatsapp.broadcast.selectSuppliers")}</h2>
           </div>
           <div className="relative mb-2">
             <Search size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="بحث..."
+              placeholder={t("whatsapp.broadcast.search")}
               className="w-full bg-[#f0f2f5] rounded-full pl-3 pr-8 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-green-400" />
           </div>
           <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)}
             className="w-full text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-400"
-            dir="rtl">
+            dir={dir}>
             {categories.map(c => (
-              <option key={c} value={c}>{c === "ALL" ? "كل الفئات" : c}</option>
+              <option key={c} value={c}>{c === "ALL" ? t("whatsapp.broadcast.allCategories") : c}</option>
             ))}
           </select>
         </div>
@@ -1339,7 +1344,7 @@ function BroadcastTab() {
               <Loader2 size={20} className="animate-spin text-muted-foreground" />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="p-4 text-center text-muted-foreground text-xs">لا توجد موردين</div>
+            <div className="p-4 text-center text-muted-foreground text-xs">{t("whatsapp.broadcast.noSuppliers")}</div>
           ) : filtered.map(c => (
             <button key={c.id} onClick={() => {
               const next = new Set(selected);
@@ -1366,7 +1371,7 @@ function BroadcastTab() {
         </div>
         <div className="p-2 border-t border-border">
           <p className="text-[10px] text-muted-foreground text-center">
-            {selected.size} محدد من {contacts.length}
+            {selected.size} {t("whatsapp.broadcast.selected")} {contacts.length}
           </p>
         </div>
       </div>
@@ -1378,7 +1383,7 @@ function BroadcastTab() {
           {selectedContacts.length > 0 && (
             <div className="bg-white rounded-2xl p-4 shadow-sm">
               <h3 className="font-semibold text-sm mb-2 text-right">
-                المستلمون ({selectedContacts.length})
+                {t("whatsapp.broadcast.recipients")} ({selectedContacts.length})
               </h3>
               <div className="flex flex-wrap gap-1.5">
                 {selectedContacts.slice(0, 12).map(c => (
@@ -1391,7 +1396,7 @@ function BroadcastTab() {
                   </span>
                 ))}
                 {selectedContacts.length > 12 && (
-                  <span className="text-xs text-muted-foreground py-1">+{selectedContacts.length - 12} آخرين</span>
+                  <span className="text-xs text-muted-foreground py-1">+{selectedContacts.length - 12} {t("whatsapp.broadcast.moreRecipients")}</span>
                 )}
               </div>
             </div>
@@ -1399,21 +1404,21 @@ function BroadcastTab() {
 
           {/* Message Compose */}
           <div className="bg-white rounded-2xl p-4 shadow-sm">
-            <h3 className="font-semibold text-sm mb-3 text-right">كتابة الرسالة</h3>
+            <h3 className="font-semibold text-sm mb-3 text-right">{t("whatsapp.broadcast.writeMessage")}</h3>
             <textarea value={message} onChange={e => setMessage(e.target.value)}
-              placeholder="اكتب رسالتك هنا..."
+              placeholder={t("whatsapp.broadcast.placeholder")}
               rows={6}
               className="w-full border rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-green-400/30 focus:border-green-400/60"
-              dir="rtl" />
+              dir={dir} />
             <div className="flex items-center justify-between mt-3">
-              <span className="text-xs text-muted-foreground">{message.length} حرف</span>
+              <span className="text-xs text-muted-foreground">{message.length} {t("whatsapp.broadcast.chars")}</span>
               <button onClick={handleBroadcast}
                 disabled={selected.size === 0 || !message.trim() || sending}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 style={{ background: WA_GREEN }}>
                 {sending
-                  ? <><Loader2 size={16} className="animate-spin" /> جاري الإرسال...</>
-                  : <><Zap size={16} /> إرسال لـ {selected.size} مورد</>}
+                  ? <><Loader2 size={16} className="animate-spin" /> {t("whatsapp.broadcast.sending")}</>
+                  : <><Zap size={16} /> {t("whatsapp.broadcast.send")} {selected.size} {t("whatsapp.broadcast.supplier")}</>}
               </button>
             </div>
           </div>
@@ -1425,14 +1430,14 @@ function BroadcastTab() {
                 <div className="flex gap-3 text-xs">
                   <span className="text-green-600 font-medium flex items-center gap-1">
                     <CheckCircle size={12} />
-                    {results.filter(r => r.ok).length} نجح
+                    {results.filter(r => r.ok).length} {t("whatsapp.broadcast.succeeded")}
                   </span>
                   <span className="text-red-500 font-medium flex items-center gap-1">
                     <XCircle size={12} />
-                    {results.filter(r => !r.ok).length} فشل
+                    {results.filter(r => !r.ok).length} {t("whatsapp.broadcast.failed")}
                   </span>
                 </div>
-                <h4 className="font-semibold text-sm">نتائج الإرسال</h4>
+                <h4 className="font-semibold text-sm">{t("whatsapp.broadcast.results")}</h4>
               </div>
               <div className="space-y-1.5 max-h-48 overflow-y-auto">
                 {results.map((r, i) => (
@@ -1460,6 +1465,7 @@ function BroadcastTab() {
 // SETTINGS TAB
 // ══════════════════════════════════════════════════════════════════════════
 function SettingsTab() {
+  const { t, dir } = useLanguage();
   const [diagnose, setDiagnose] = useState<DiagnoseResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [testPhone, setTestPhone] = useState("");
@@ -1485,11 +1491,11 @@ function SettingsTab() {
       const r = await fetch("/api/whatsapp/send", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: testPhone.trim(), message: "✅ اختبار اتصال واتساب بيزنس — Meta Cloud API" }),
+        body: JSON.stringify({ phone: testPhone.trim(), message: "✅ WhatsApp Business connection test — Meta Cloud API" }),
       });
       const data = await r.json();
-      setTestResult(r.ok ? "✅ تم الإرسال بنجاح" : `❌ ${data.error}`);
-    } catch { setTestResult("❌ خطأ في الاتصال"); }
+      setTestResult(r.ok ? `✅ ${t("whatsapp.sendSuccess")}` : `❌ ${data.error}`);
+    } catch { setTestResult(`❌ ${t("whatsapp.sendFailed")}`); }
     finally { setTesting(false); }
   }
 
@@ -1502,7 +1508,7 @@ function SettingsTab() {
   const webhookUrl = `${typeof window !== "undefined" ? window.location.origin : "https://your-app.onrender.com"}/api/webhook/whatsapp`;
 
   return (
-    <div className="h-full overflow-y-auto p-4 bg-[#f0f2f5]" dir="rtl">
+    <div className="h-full overflow-y-auto p-4 bg-[#f0f2f5]" dir={dir}>
       <div className="max-w-2xl mx-auto space-y-4">
         {loading ? (
           <div className="flex justify-center py-16">
@@ -1517,12 +1523,12 @@ function SettingsTab() {
                   style={{ background: WA_GREEN }}>
                   <Phone size={18} className="text-white" />
                 </div>
-                <h2 className="font-bold text-base">حالة الحساب</h2>
+                <h2 className="font-bold text-base">{t("whatsapp.settings.accountStatus")}</h2>
               </div>
               {!diagnose?.configured ? (
                 <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl text-red-600 text-sm">
                   <AlertCircle size={18} />
-                  {diagnose?.error || "واتساب غير مهيأ — تحقق من المتغيرات البيئية"}
+                  {diagnose?.error || t("whatsapp.settings.notConfigured")}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1530,7 +1536,7 @@ function SettingsTab() {
                     <CheckCircle size={20} className="text-green-500 flex-shrink-0" />
                     <div className="flex-1 text-right">
                       <div className="font-bold text-sm text-green-800">
-                        {diagnose.phone?.verified_name || "مهيأ"}
+                        {diagnose.phone?.verified_name || t("whatsapp.settings.configured")}
                       </div>
                       <div className="text-xs text-green-600">
                         {diagnose.phone?.display_phone_number} · {diagnose.phone?.status}
@@ -1544,10 +1550,10 @@ function SettingsTab() {
                         diagnose.phone.quality_rating === "HIGH" ? "text-green-600" :
                           diagnose.phone.quality_rating === "MEDIUM" ? "text-amber-600" : "text-red-600"
                       )}>
-                        {diagnose.phone.quality_rating === "HIGH" ? "عالية" :
-                          diagnose.phone.quality_rating === "MEDIUM" ? "متوسطة" : "منخفضة"}
+                        {diagnose.phone.quality_rating === "HIGH" ? t("whatsapp.settings.quality.HIGH") :
+                          diagnose.phone.quality_rating === "MEDIUM" ? t("whatsapp.settings.quality.MEDIUM") : t("whatsapp.settings.quality.LOW")}
                       </span>
-                      <span className="text-muted-foreground">جودة الرسائل</span>
+                      <span className="text-muted-foreground">{t("whatsapp.settings.messageQuality")}</span>
                     </div>
                   )}
                 </div>
@@ -1559,14 +1565,14 @@ function SettingsTab() {
               <div className="bg-white rounded-2xl shadow-sm p-5">
                 <h2 className="font-bold text-base mb-4 flex items-center gap-2">
                   <BarChart2 size={18} className="text-green-500" />
-                  إحصائيات
+                  {t("whatsapp.settings.statistics")}
                 </h2>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: "إجمالي المحادثات", value: stats.totalChats, color: "text-blue-600" },
-                    { label: "غير مقروء", value: stats.unread, color: "text-red-500" },
-                    { label: "رسائل واردة", value: stats.inbound, color: "text-green-600" },
-                    { label: "رسائل صادرة", value: stats.outbound, color: "text-purple-600" },
+                    { label: t("whatsapp.settings.totalChats"), value: stats.totalChats, color: "text-blue-600" },
+                    { label: t("whatsapp.settings.unread"), value: stats.unread, color: "text-red-500" },
+                    { label: t("whatsapp.settings.inbound"), value: stats.inbound, color: "text-green-600" },
+                    { label: t("whatsapp.settings.outbound"), value: stats.outbound, color: "text-purple-600" },
                   ].map(s => (
                     <div key={s.label} className="border border-border rounded-xl p-3 text-right">
                       <div className={cn("text-2xl font-bold", s.color)}>{s.value || 0}</div>
@@ -1581,18 +1587,18 @@ function SettingsTab() {
             <div className="bg-white rounded-2xl shadow-sm p-5">
               <h2 className="font-bold text-base mb-4 flex items-center gap-2">
                 <Zap size={18} className="text-amber-500" />
-                إعداد الـ Webhook
+                {t("whatsapp.settings.webhook")}
               </h2>
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-muted-foreground block mb-1 text-right">رابط الـ Webhook URL:</label>
+                  <label className="text-xs text-muted-foreground block mb-1 text-right">{t("whatsapp.settings.webhookUrl")}</label>
                   <div className="flex items-center gap-2">
                     <button onClick={copyWebhookUrl}
                       className={cn(
                         "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all",
                         copied ? "border-green-400 text-green-600 bg-green-50" : "border-border hover:bg-muted"
                       )}>
-                      {copied ? <><CheckCircle size={12} /> تم النسخ</> : <><Copy size={12} /> نسخ</>}
+                      {copied ? <><CheckCircle size={12} /> {t("whatsapp.settings.copied")}</> : <><Copy size={12} /> {t("whatsapp.settings.copy")}</>}
                     </button>
                     <div className="flex-1 bg-[#f0f2f5] rounded-lg px-3 py-1.5 text-xs font-mono text-muted-foreground truncate text-left">
                       {webhookUrl}
@@ -1600,18 +1606,18 @@ function SettingsTab() {
                   </div>
                 </div>
                 <div className="bg-amber-50 rounded-xl p-3 text-xs text-amber-700 space-y-1 text-right">
-                  <p className="font-semibold">خطوات إعداد الـ Webhook في Meta:</p>
+                  <p className="font-semibold">{t("whatsapp.settings.webhookSteps")}</p>
                   <ol className="space-y-0.5 list-decimal list-inside text-right">
-                    <li>اذهب إلى Meta Business Suite → WhatsApp → Configuration</li>
-                    <li>في قسم Webhooks، أضف الرابط أعلاه كـ Callback URL</li>
-                    <li>ضع نفس قيمة WHATSAPP_VERIFY_TOKEN كـ Verify Token</li>
-                    <li>اشترك في: messages, message_deliveries, message_reads</li>
+                    <li>{t("whatsapp.settings.webhookStep1")}</li>
+                    <li>{t("whatsapp.settings.webhookStep2")}</li>
+                    <li>{t("whatsapp.settings.webhookStep3")}</li>
+                    <li>{t("whatsapp.settings.webhookStep4")}</li>
                   </ol>
                 </div>
                 <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener noreferrer"
                   className="flex items-center justify-center gap-1.5 text-xs text-blue-600 hover:underline">
                   <ExternalLink size={12} />
-                  فتح Meta Developers Console
+                  {t("whatsapp.settings.openMeta")}
                 </a>
               </div>
             </div>
@@ -1621,7 +1627,7 @@ function SettingsTab() {
               <div className="bg-white rounded-2xl shadow-sm p-5">
                 <h2 className="font-bold text-base mb-4 flex items-center gap-2">
                   <Eye size={18} className="text-blue-500" />
-                  حالة المتغيرات البيئية
+                  {t("whatsapp.settings.envVars")}
                 </h2>
                 <div className="space-y-2">
                   {Object.entries(diagnose.creds).map(([key, val]) => {
@@ -1645,7 +1651,7 @@ function SettingsTab() {
               <div className="bg-white rounded-2xl shadow-sm p-5">
                 <h2 className="font-bold text-base mb-4 flex items-center gap-2">
                   <LayoutIcon size={18} className="text-purple-500" />
-                  ملخص القوالب
+                  {t("whatsapp.settings.templatesSummary")}
                 </h2>
                 {diagnose.templates.warning ? (
                   <div className="text-xs text-amber-600 bg-amber-50 p-3 rounded-xl">
@@ -1657,17 +1663,17 @@ function SettingsTab() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">إجمالي القوالب: {diagnose.templates.total}</p>
-                    {(diagnose.templates.our_templates || []).map((t) => (
-                      <div key={t.name} className="flex items-center justify-between text-xs border border-border rounded-lg p-2.5">
+                    <p className="text-sm text-muted-foreground">{t("whatsapp.settings.totalTemplates")} {diagnose.templates.total}</p>
+                    {(diagnose.templates.our_templates || []).map((tmpl) => (
+                      <div key={tmpl.name} className="flex items-center justify-between text-xs border border-border rounded-lg p-2.5">
                         <span className={cn(
                           "font-medium px-2 py-0.5 rounded-full",
-                          t.status === "APPROVED" ? "text-green-600 bg-green-50" :
-                            t.status === "PENDING" ? "text-amber-600 bg-amber-50" : "text-red-500 bg-red-50"
+                          tmpl.status === "APPROVED" ? "text-green-600 bg-green-50" :
+                            tmpl.status === "PENDING" ? "text-amber-600 bg-amber-50" : "text-red-500 bg-red-50"
                         )}>
-                          {t.status === "APPROVED" ? "معتمد" : t.status === "PENDING" ? "قيد المراجعة" : t.status}
+                          {tmpl.status === "APPROVED" ? t("whatsapp.templates.status.APPROVED") : tmpl.status === "PENDING" ? t("whatsapp.templates.status.PENDING") : tmpl.status}
                         </span>
-                        <span className="font-mono text-foreground">{t.name}</span>
+                        <span className="font-mono text-foreground">{tmpl.name}</span>
                       </div>
                     ))}
                   </div>
@@ -1679,17 +1685,17 @@ function SettingsTab() {
             <div className="bg-white rounded-2xl shadow-sm p-5">
               <h2 className="font-bold text-base mb-4 flex items-center gap-2">
                 <Send size={18} className="text-green-500" />
-                إرسال رسالة اختبار
+                {t("whatsapp.settings.testMessage")}
               </h2>
               <div className="flex gap-2">
                 <button onClick={handleTestSend} disabled={!testPhone.trim() || testing}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-white text-sm font-medium transition-all disabled:opacity-40 flex-shrink-0"
                   style={{ background: WA_GREEN }}>
                   {testing ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                  إرسال
+                  {t("whatsapp.settings.send")}
                 </button>
                 <input value={testPhone} onChange={e => setTestPhone(e.target.value)}
-                  placeholder="رقم الهاتف (+20...)"
+                  placeholder={t("whatsapp.settings.phonePlaceholder")}
                   className="flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400/30"
                   dir="ltr" />
               </div>
@@ -1702,7 +1708,7 @@ function SettingsTab() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground mt-2 text-right">
-                مدعوم بـ whatsapp-api-js — Meta Business Cloud API (v22.0)
+                {t("whatsapp.settings.poweredBy")}
               </p>
             </div>
           </>

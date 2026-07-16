@@ -5,7 +5,8 @@ import { useLogin, getGetMeQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Languages } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function LoginPage() {
   const [, navigate] = useLocation();
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const { t, lang, setLang } = useLanguage();
 
   const loginMutation = useLogin({
     mutation: {
@@ -21,7 +23,7 @@ export default function LoginPage() {
         navigate("/dashboard");
       },
       onError: () => {
-        setError("Invalid email or password");
+        setError(t("login.error"));
       },
     },
   });
@@ -35,18 +37,28 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
+        {/* Language toggle */}
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={() => setLang(lang === "en" ? "ar" : "en")}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded border border-border hover:bg-muted transition-colors"
+          >
+            <Languages size={13} />
+            {t("lang.toggle")}
+          </button>
+        </div>
         <div className="text-center mb-8">
           <img src="/logo.png" alt="Cortoba Supplies" className="h-20 w-20 object-contain mx-auto mb-3" />
-          <h1 className="text-2xl font-bold text-foreground">Cortoba Supplies</h1>
-          <p className="text-muted-foreground text-sm mt-1">قرطبة للتوريدات</p>
-          <p className="text-muted-foreground text-xs mt-1">ش.الاسكندرية - برج نجمة مطروح الدور الرابع - مرسي مطروح</p>
-          <p className="text-muted-foreground text-sm mt-3">Sign in to your account</p>
+          <h1 className="text-2xl font-bold text-foreground">{t("login.title")}</h1>
+          <p className="text-muted-foreground text-sm mt-1">{t("login.subtitle")}</p>
+          <p className="text-muted-foreground text-xs mt-1">{t("login.address")}</p>
+          <p className="text-muted-foreground text-sm mt-3">{t("login.signIn")}</p>
         </div>
 
         <div className="bg-card border border-border rounded-lg p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">{t("login.email")}</Label>
               <Input
                 id="email"
                 type="email"
@@ -59,7 +71,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("login.password")}</Label>
               <Input
                 id="password"
                 type="password"
@@ -82,7 +94,7 @@ export default function LoginPage() {
               className="w-full"
               disabled={loginMutation.isPending}
             >
-              {loginMutation.isPending ? "Signing in..." : "Sign In"}
+              {loginMutation.isPending ? t("login.signingIn") : t("login.button")}
             </Button>
           </form>
         </div>

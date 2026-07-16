@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, FileText, Clock, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const STATUSES = ["all", "DRAFT", "SENT", "QUOTED", "FAILED", "SUCCESS"];
 
@@ -40,7 +41,7 @@ function useClosingSoon() {
 }
 
 function ClosingSoonRow({ rfq, navigate }: { rfq: ClosingSoonRfq; navigate: (path: string) => void }) {
-  const time = new Date(rfq.expiresAt).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+  const time = new Date(rfq.expiresAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   return (
     <tr
       className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer text-xs"
@@ -58,6 +59,7 @@ function ClosingSoonRow({ rfq, navigate }: { rfq: ClosingSoonRfq; navigate: (pat
 }
 
 function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useLanguage();
   const { data, isLoading } = useClosingSoon();
   const [open, setOpen] = useState(true);
 
@@ -66,13 +68,13 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
   const tableHead = (
     <thead>
       <tr className="bg-muted/20 border-b border-border text-left">
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">رقم الطلب</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">رقم العميل</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">الموظف</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">الحالة</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">موردون</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">عروض</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">وقت الإغلاق</th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">{t("rfq.closingSoon.rfqNo")}</th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">{t("rfq.closingSoon.customerRfq")}</th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">{t("rfq.closingSoon.employee")}</th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">{t("rfq.closingSoon.status")}</th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">{t("rfq.closingSoon.suppliers")}</th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">{t("rfq.closingSoon.offers")}</th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">{t("rfq.closingSoon.closeTime")}</th>
       </tr>
     </thead>
   );
@@ -87,13 +89,13 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
       >
         <AlertTriangle size={15} className="text-amber-600 flex-shrink-0" />
         <span className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex-1">
-          تقرير الطلبات التي ستغلق قريبًا
+          {t("rfq.closingSoon.title")}
         </span>
         {isLoading ? (
-          <span className="text-xs text-amber-600 animate-pulse">جاري التحميل...</span>
+          <span className="text-xs text-amber-600 animate-pulse">{t("rfq.closingSoon.loading")}</span>
         ) : (
           <span className="text-xs font-medium bg-amber-600 text-white rounded-full px-2 py-0.5">
-            {totalCount} طلب
+            {totalCount} {t("rfq.requests")}
           </span>
         )}
         {open ? <ChevronUp size={14} className="text-amber-600" /> : <ChevronDown size={14} className="text-amber-600" />}
@@ -101,7 +103,7 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
 
       {open && !isLoading && totalCount === 0 && (
         <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-amber-700 dark:text-amber-400">
-          لا توجد طلبات ستغلق في اليومين القادمين
+          {t("rfq.closingSoon.noItems")}
         </div>
       )}
 
@@ -114,7 +116,7 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
               <div className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950/30 border-b border-amber-200 dark:border-amber-800">
                 <Clock size={13} className="text-red-500" />
                 <span className="text-xs font-semibold text-red-700 dark:text-red-400">
-                  تغلق غدًا ({data.tomorrow.length} طلب)
+                  {t("rfq.closingSoon.tomorrow")} ({data.tomorrow.length} {t("rfq.requests")})
                 </span>
               </div>
               <div className="overflow-x-auto">
@@ -136,7 +138,7 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
               <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800">
                 <Clock size={13} className="text-amber-500" />
                 <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  تغلق بعد غد ({data.dayAfterTomorrow.length} طلب)
+                  {t("rfq.closingSoon.dayAfter")} ({data.dayAfterTomorrow.length} {t("rfq.requests")})
                 </span>
               </div>
               <div className="overflow-x-auto">
@@ -162,23 +164,34 @@ export default function RfqListPage() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const { t } = useLanguage();
 
   const { data: rfqs, isLoading } = useListRfqs(
     { status: status !== "all" ? status : undefined, search: search || undefined },
     { query: { queryKey: getListRfqsQueryKey({ status: status !== "all" ? status : undefined, search: search || undefined }) } }
   );
 
+  const statusLabel = (s: string) => {
+    if (s === "all") return t("rfq.filter.all");
+    if (s === "DRAFT") return t("rfq.filter.draft");
+    if (s === "SENT") return t("rfq.filter.sent");
+    if (s === "QUOTED") return t("rfq.filter.quoted");
+    if (s === "FAILED") return t("rfq.filter.failed");
+    if (s === "SUCCESS") return t("rfq.filter.success");
+    return s;
+  };
+
   return (
     <Layout>
       <div className="p-4 sm:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-foreground">RFQ Management</h1>
-            <p className="text-muted-foreground text-sm">Request for Quotation workflow</p>
+            <h1 className="text-xl font-bold text-foreground">{t("rfq.title")}</h1>
+            <p className="text-muted-foreground text-sm">{t("rfq.subtitle")}</p>
           </div>
           <Button onClick={() => navigate("/rfq/new")} size="sm" className="gap-1.5 self-start sm:self-auto">
             <Plus size={15} />
-            New RFQ
+            {t("rfq.new")}
           </Button>
         </div>
 
@@ -207,7 +220,7 @@ export default function RfqListPage() {
                     : "bg-muted text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {s === "all" ? "الكل" : s === "DRAFT" ? "مسودة" : s === "SENT" ? "تم الإرسال" : s === "QUOTED" ? "عروض واردة" : s === "FAILED" ? "فشل" : s === "SUCCESS" ? "ناجح" : s}
+                {statusLabel(s)}
               </button>
             ))}
           </div>

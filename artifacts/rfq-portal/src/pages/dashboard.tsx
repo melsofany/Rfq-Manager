@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { FileText, Users, TrendingUp, Inbox, ArrowRight, RefreshCw, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: "#6b7280",
@@ -13,7 +14,6 @@ const STATUS_COLORS: Record<string, string> = {
   QUOTED: "#f97316",
   FAILED: "#ef4444",
   SUCCESS: "#22c55e",
-  // legacy
   draft: "#6b7280",
   sent: "#3b82f6",
   partial: "#f97316",
@@ -66,7 +66,6 @@ function SheetSyncCard() {
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
-  // Poll while sync is in progress
   useEffect(() => {
     if (!syncStatus?.inProgress && !syncing) return;
     const id = setInterval(fetchStatus, 2000);
@@ -77,7 +76,6 @@ function SheetSyncCard() {
     setSyncing(true);
     try {
       await fetch("/api/sync/sheet", { method: "POST", credentials: "include" });
-      // Poll for completion
       const poll = setInterval(async () => {
         await fetchStatus();
         const fresh = await fetch("/api/sync/status", { credentials: "include" }).then(r => r.json()) as SyncStatus;
@@ -153,6 +151,7 @@ function SheetSyncCard() {
 }
 
 export default function DashboardPage() {
+  const { t } = useLanguage();
   const { data: stats, isLoading } = useGetDashboardStats({
     query: { queryKey: getGetDashboardStatsQueryKey() },
   });
@@ -173,7 +172,7 @@ export default function DashboardPage() {
   }
 
   const chartData = stats?.rfqsByStatus?.map((s) => ({
-    name: s.status === 'DRAFT' ? 'مسودة' : s.status === 'SENT' ? 'تم الإرسال' : s.status === 'QUOTED' ? 'عروض واردة' : s.status === 'FAILED' ? 'فشل' : s.status === 'SUCCESS' ? 'ناجح' : s.status.charAt(0).toUpperCase() + s.status.slice(1),
+    name: t(`status.${s.status}`),
     value: s.count,
     fill: STATUS_COLORS[s.status] || "#6b7280",
   })) ?? [];
@@ -182,22 +181,22 @@ export default function DashboardPage() {
     <Layout>
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground text-sm">Overview of procurement activity</p>
+          <h1 className="text-xl font-bold text-foreground">{t("dashboard.title")}</h1>
+          <p className="text-muted-foreground text-sm">{t("dashboard.subtitle")}</p>
         </div>
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard label="Total RFQs" value={stats?.totalRfqs ?? 0} icon={FileText} color="bg-blue-50 text-blue-600" />
-          <KpiCard label="Open RFQs" value={stats?.openRfqs ?? 0} sub="Active" icon={Inbox} color="bg-amber-50 text-amber-600" />
-          <KpiCard label="Suppliers" value={stats?.totalSuppliers ?? 0} sub="Active" icon={Users} color="bg-green-50 text-green-600" />
-          <KpiCard label="Response Rate" value={`${stats?.responseRateThisMonth ?? 0}%`} sub="All time" icon={TrendingUp} color="bg-purple-50 text-purple-600" />
+          <KpiCard label={t("dashboard.totalRfqs")} value={stats?.totalRfqs ?? 0} icon={FileText} color="bg-blue-50 text-blue-600" />
+          <KpiCard label={t("dashboard.openRfqs")} value={stats?.openRfqs ?? 0} sub={t("dashboard.active")} icon={Inbox} color="bg-amber-50 text-amber-600" />
+          <KpiCard label={t("dashboard.suppliers")} value={stats?.totalSuppliers ?? 0} sub={t("dashboard.active")} icon={Users} color="bg-green-50 text-green-600" />
+          <KpiCard label={t("dashboard.responseRate")} value={`${stats?.responseRateThisMonth ?? 0}%`} sub={t("dashboard.allTime")} icon={TrendingUp} color="bg-purple-50 text-purple-600" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* RFQ Status Chart */}
           <div className="bg-card border border-border rounded-lg p-5">
-            <h2 className="font-semibold text-foreground text-sm mb-4">RFQs by Status</h2>
+            <h2 className="font-semibold text-foreground text-sm mb-4">{t("dashboard.rfqsByStatus")}</h2>
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={chartData} barCategoryGap="30%">
@@ -212,20 +211,20 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data yet</div>
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">{t("dashboard.noData")}</div>
             )}
           </div>
 
           {/* Top Suppliers */}
           <div className="bg-card border border-border rounded-lg p-5">
-            <h2 className="font-semibold text-foreground text-sm mb-4">Top Suppliers</h2>
+            <h2 className="font-semibold text-foreground text-sm mb-4">{t("dashboard.topSuppliers")}</h2>
             {stats?.topSuppliers?.length ? (
               <div className="space-y-3">
                 {stats.topSuppliers.map((s) => (
                   <div key={s.supplierId} className="flex items-center justify-between">
                     <span className="text-sm text-foreground truncate max-w-[200px]">{s.supplierName}</span>
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground">{s.totalOffersSubmitted} offers</span>
+                      <span className="text-xs text-muted-foreground">{s.totalOffersSubmitted} {t("dashboard.offers")}</span>
                       <div className="w-16 bg-muted rounded-full h-1.5">
                         <div className="bg-primary h-1.5 rounded-full" style={{ width: `${s.responseRate}%` }} />
                       </div>
@@ -235,7 +234,7 @@ export default function DashboardPage() {
                 ))}
               </div>
             ) : (
-              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No supplier data yet</div>
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">{t("dashboard.noSupplierData")}</div>
             )}
           </div>
         </div>
@@ -246,9 +245,9 @@ export default function DashboardPage() {
         {/* Recent RFQs */}
         <div className="bg-card border border-border rounded-lg">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <h2 className="font-semibold text-foreground text-sm">Recent RFQs</h2>
+            <h2 className="font-semibold text-foreground text-sm">{t("dashboard.recentRfqs")}</h2>
             <Link href="/rfq">
-              <a className="text-primary text-xs flex items-center gap-1 hover:underline">View all <ArrowRight size={12} /></a>
+              <a className="text-primary text-xs flex items-center gap-1 hover:underline">{t("dashboard.viewAll")} <ArrowRight size={12} /></a>
             </Link>
           </div>
           {stats?.recentRfqs?.length ? (
@@ -283,7 +282,7 @@ export default function DashboardPage() {
             </table>
             </div>
           ) : (
-            <div className="px-5 py-10 text-center text-muted-foreground text-sm">No RFQs yet</div>
+            <div className="px-5 py-10 text-center text-muted-foreground text-sm">{t("dashboard.noRfqs")}</div>
           )}
         </div>
       </div>

@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
@@ -147,11 +148,13 @@ function AppInner() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AppInner />
-        <Toaster />
-        <Sonner richColors position="top-center" />
-      </TooltipProvider>
+      <LanguageProvider>
+        <TooltipProvider>
+          <AppInner />
+          <Toaster />
+          <Sonner richColors position="top-center" />
+        </TooltipProvider>
+      </LanguageProvider>
     </QueryClientProvider>
   );
 }
