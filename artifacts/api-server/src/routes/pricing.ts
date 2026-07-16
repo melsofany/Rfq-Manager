@@ -22,9 +22,18 @@ router.get("/pricing/:token", async (req, res): Promise<void> => {
   }
 
   const now = new Date();
+  // closeDate is stored as a plain date string (e.g. "2025-07-20").
+  // new Date("2025-07-20") parses as midnight UTC — which would mark the
+  // entire day as expired at 00:00 UTC even though the day isn't over yet.
+  // Fix: treat closeDate as expired only AFTER that day ends (i.e. add 1 day).
+  const closeDateExpired = log.log.closeDate != null && (() => {
+    const d = new Date(log.log.closeDate!);
+    d.setDate(d.getDate() + 1); // expire at the START of the next day
+    return d <= now;
+  })();
   const isExpired =
     (log.rfq.expiresAt != null && log.rfq.expiresAt < now) ||
-    (log.log.closeDate != null && new Date(log.log.closeDate) < now);
+    closeDateExpired;
   const items = await db.select().from(rfqItemsTable).where(eq(rfqItemsTable.rfqId, log.rfq.id));
 
   // Check if already submitted
@@ -108,9 +117,14 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
   }
 
   const now2 = new Date();
+  const closeDateExpired2 = log.log.closeDate != null && (() => {
+    const d = new Date(log.log.closeDate!);
+    d.setDate(d.getDate() + 1);
+    return d <= now2;
+  })();
   const isExpired =
     (log.rfq.expiresAt != null && log.rfq.expiresAt < now2) ||
-    (log.log.closeDate != null && new Date(log.log.closeDate) < now2);
+    closeDateExpired2;
   if (isExpired) {
     res.status(400).json({ error: "This link has expired" });
     return;
