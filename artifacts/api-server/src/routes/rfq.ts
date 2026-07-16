@@ -928,4 +928,58 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
   }
 });
 
+// GET /api/rfq/closing-soon — RFQs expiring tomorrow or the day after (active statuses only)
+router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => {
+  const now = new Date();
+
+  // Build day boundaries in UTC
+  const startOfTomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0));
+  const endOfTomorrow   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 23, 59, 59, 999));
+  const startOfDayAfter = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2, 0, 0, 0, 0));
+  const endOfDayAfter   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2, 23, 59, 59, 999));
+
+  const rows = await db.select({
+    rfq: rfqTable,
+    employeeName: employeesTable.name,
+  }).from(rfqTable)
+    .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
+    .where(
+      and(
+        sql`${rfqTable.status} IN ('SENT', 'QUOTED')`,
+        sql`${rfqTable.expiresAt} IS NOT NULL`,
+        sql`${rfqTable.expiresAt} BETWEEN ${startOfTomorrow.toISOString()}::timestamptz AND ${endOfDayAfter.toISOString()}::timestamptz`
+      )
+    );
+
+  if (rows.length === 0) {
+    res.json({ tomorrow: [], dayAfterTomorrow: [] });
+    return;
+  }
+
+  const rfqIds = rows.map(r => r.rfq.id);
+  const offerCounts = await db.select({ rfqId: offersTable.rfqId, cnt: count() })
+    .from(offersTable).where(inArray(offersTable.rfqId, rfqIds)).groupBy(offersTable.rfqId);
+  const sentCounts = await db.select({ rfqId: sentLogTable.rfqId, cnt: count() })
+    .from(sentLogTable).where(inArray(sentLogTable.rfqId, rfqIds)).groupBy(sentLogTable.rfqId);
+
+  const offerMap = Object.fromEntries(offerCounts.map(r => [r.rfqId, r.cnt]));
+  const sentMap  = Object.fromEntries(sentCounts.map(r => [r.rfqId, r.cnt]));
+
+  const shaped = rows.map(r => ({
+    id: r.rfq.id,
+    internalRfqNo: r.rfq.internalRfqNo,
+    customerRfqNo: r.rfq.customerRfqNo,
+    status: r.rfq.status,
+    expiresAt: r.rfq.expiresAt!.toISOString(),
+    employeeName: r.employeeName ?? null,
+    supplierCount: sentMap[r.rfq.id] ?? 0,
+    offerCount: offerMap[r.rfq.id] ?? 0,
+  }));
+
+  const tomorrow       = shaped.filter(r => new Date(r.expiresAt) <= endOfTomorrow);
+  const dayAfterTomorrow = shaped.filter(r => new Date(r.expiresAt) > endOfTomorrow);
+
+  res.json({ tomorrow, dayAfterTomorrow });
+});
+
 export default router;
