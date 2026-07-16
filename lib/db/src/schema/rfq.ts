@@ -9,7 +9,7 @@ export const rfqTable = pgTable("rfq", {
   customerRfqNo: text("customer_rfq_no").notNull(),
   customerRfqDate: text("customer_rfq_date"),
   requiredResponseDate: text("required_response_date"),
-  status: text("status").notNull().default("draft"),
+  status: text("status").notNull().default("DRAFT"),
   employeeId: integer("employee_id").references(() => employeesTable.id),
   notes: text("notes"),
   expiresAt: timestamp("expires_at", { withTimezone: true }),

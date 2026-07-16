@@ -20,8 +20,51 @@ async function generateInternalRfqNo(): Promise<string> {
   return `CRQ-${year}-${seq}`;
 }
 
+// Auto-transition SENT RFQs with expired expiresAt and no offers → FAILED
+async function autoFailExpiredRfqs(): Promise<void> {
+  const now = new Date();
+  // Find all SENT RFQs where expiresAt has passed
+  const expiredSent = await db.select({ id: rfqTable.id, internalRfqNo: rfqTable.internalRfqNo })
+    .from(rfqTable)
+    .where(sql`${rfqTable.status} = 'SENT' AND ${rfqTable.expiresAt} IS NOT NULL AND ${rfqTable.expiresAt} < ${now.toISOString()}::timestamptz`);
+
+  if (expiredSent.length === 0) return;
+
+  const expiredIds = expiredSent.map(r => r.id);
+
+  // Find which have at least one offer (those stay as-is or become QUOTED)
+  const withOffers = await db.select({ rfqId: offersTable.rfqId })
+    .from(offersTable)
+    .where(inArray(offersTable.rfqId, expiredIds))
+    .groupBy(offersTable.rfqId);
+
+  const withOffersSet = new Set(withOffers.map(r => r.rfqId));
+  const toFail = expiredSent.filter(r => !withOffersSet.has(r.id));
+
+  if (toFail.length === 0) return;
+
+  const toFailIds = toFail.map(r => r.id);
+  await db.update(rfqTable)
+    .set({ status: 'FAILED' })
+    .where(inArray(rfqTable.id, toFailIds));
+
+  // Audit each auto-transition
+  for (const rfq of toFail) {
+    await db.insert(auditLogTable).values({
+      action: 'rfq.auto_failed',
+      entityType: 'rfq',
+      entityId: rfq.id,
+      description: `RFQ ${rfq.internalRfqNo} auto-marked FAILED: closing date passed with no offers received`,
+    }).catch(() => { /* non-fatal */ });
+  }
+}
+
+
 router.get("/rfq", requireAuth, async (req, res): Promise<void> => {
   const { status, employeeId, search } = req.query as Record<string, string>;
+
+  // Auto-fail SENT RFQs whose closing date has passed with no offers received
+  await autoFailExpiredRfqs().catch(() => { /* non-fatal */ });
 
   const rows = await db.select({
     rfq: rfqTable,
