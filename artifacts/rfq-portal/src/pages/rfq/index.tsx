@@ -62,7 +62,6 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
   const [open, setOpen] = useState(true);
 
   const totalCount = (data?.tomorrow.length ?? 0) + (data?.dayAfterTomorrow.length ?? 0);
-  if (!isLoading && totalCount === 0) return null;
 
   const tableHead = (
     <thead>
@@ -100,7 +99,13 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
         {open ? <ChevronUp size={14} className="text-amber-600" /> : <ChevronDown size={14} className="text-amber-600" />}
       </button>
 
-      {open && !isLoading && (
+      {open && !isLoading && totalCount === 0 && (
+        <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-amber-700 dark:text-amber-400">
+          لا توجد طلبات ستغلق في اليومين القادمين
+        </div>
+      )}
+
+      {open && !isLoading && totalCount > 0 && (
         <div className="border-t border-amber-200 dark:border-amber-800">
 
           {/* Tomorrow */}
