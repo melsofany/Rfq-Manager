@@ -5,25 +5,37 @@ import { Toaster as Sonner } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+
+// ── Shared pages (no module home) ─────────────────────────────────────────
 import NotFound from "@/pages/not-found";
-import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
-import RfqListPage from "@/pages/rfq/index";
-import NewRfqPage from "@/pages/rfq/new";
-import RfqDetailPage from "@/pages/rfq/detail";
-import SendRfqPage from "@/pages/rfq/send";
-import SuppliersPage from "@/pages/suppliers/index";
-import NewSupplierPage from "@/pages/suppliers/new";
-import SupplierDetailPage from "@/pages/suppliers/detail";
-import AnalyticsPage from "@/pages/analytics";
-import EmployeesPage from "@/pages/employees";
-import AuditPage from "@/pages/audit";
-import PricingPage from "@/pages/pricing";
-import WhatsAppPage from "@/pages/whatsapp";
-import ItemsPage from "@/pages/items";
-import PurchaseOrdersPage from "@/pages/purchase-orders/index";
-import NewPurchaseOrderPage from "@/pages/purchase-orders/new";
-import PurchaseOrderDetailPage from "@/pages/purchase-orders/detail";
+
+// ── Module: RFQ — طلبات عروض الأسعار ──────────────────────────────────────
+import RfqListPage from "@/modules/rfq/pages/index";
+import NewRfqPage from "@/modules/rfq/pages/new";
+import RfqDetailPage from "@/modules/rfq/pages/detail";
+import SendRfqPage from "@/modules/rfq/pages/send";
+
+// ── Module: PO — أوامر الشراء ──────────────────────────────────────────────
+import PurchaseOrdersPage from "@/modules/po/pages/index";
+import NewPurchaseOrderPage from "@/modules/po/pages/new";
+import PurchaseOrderDetailPage from "@/modules/po/pages/detail";
+
+// ── Module: Users — المستخدمون والموردون ──────────────────────────────────
+import LoginPage from "@/modules/users/pages/login";
+import EmployeesPage from "@/modules/users/pages/employees";
+import PricingPage from "@/modules/users/pages/pricing";
+import SuppliersPage from "@/modules/users/pages/suppliers/index";
+import NewSupplierPage from "@/modules/users/pages/suppliers/new";
+import SupplierDetailPage from "@/modules/users/pages/suppliers/detail";
+
+// ── Module: Reports — التقارير والتحليلات ─────────────────────────────────
+import AnalyticsPage from "@/modules/reports/pages/analytics";
+import AuditPage from "@/modules/reports/pages/audit";
+import ItemsPage from "@/modules/reports/pages/items";
+
+// ── Module: Communications — التواصل ──────────────────────────────────────
+import WhatsAppPage from "@/modules/communications/pages/index";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,78 +68,76 @@ function Router() {
 
   return (
     <Switch>
+      {/* ── Public ─────────────────────────────────────────────────────── */}
       <Route path="/login">
         {!isLoading && employee ? <Redirect to="/dashboard" /> : <LoginPage />}
       </Route>
 
+      {/* Supplier token-based pricing page — no auth required */}
       <Route path="/q/:token" component={PricingPage} />
 
       <Route path="/">
         <Redirect to="/dashboard" />
       </Route>
 
+      {/* ── Protected — Dashboard ──────────────────────────────────────── */}
       <Route path="/dashboard">
         <ProtectedRoute component={DashboardPage} />
       </Route>
 
+      {/* ── Module: RFQ ────────────────────────────────────────────────── */}
       <Route path="/rfq/new">
         <ProtectedRoute component={NewRfqPage} />
       </Route>
-
       <Route path="/rfq/:id/send">
         <ProtectedRoute component={SendRfqPage} />
       </Route>
-
       <Route path="/rfq/:id">
         <ProtectedRoute component={RfqDetailPage} />
       </Route>
-
       <Route path="/rfq">
         <ProtectedRoute component={RfqListPage} />
       </Route>
 
+      {/* ── Module: PO ─────────────────────────────────────────────────── */}
+      <Route path="/purchase-orders/new">
+        <ProtectedRoute component={NewPurchaseOrderPage} />
+      </Route>
+      <Route path="/purchase-orders/:id">
+        <ProtectedRoute component={PurchaseOrderDetailPage} />
+      </Route>
+      <Route path="/purchase-orders">
+        <ProtectedRoute component={PurchaseOrdersPage} />
+      </Route>
+
+      {/* ── Module: Users ──────────────────────────────────────────────── */}
       <Route path="/suppliers/new">
         <ProtectedRoute component={NewSupplierPage} />
       </Route>
-
       <Route path="/suppliers/:id">
         <ProtectedRoute component={SupplierDetailPage} />
       </Route>
-
       <Route path="/suppliers">
         <ProtectedRoute component={SuppliersPage} />
       </Route>
-
-      <Route path="/analytics">
-        <ProtectedRoute component={AnalyticsPage} />
-      </Route>
-
       <Route path="/employees">
         <ProtectedRoute component={EmployeesPage} />
       </Route>
 
+      {/* ── Module: Reports ────────────────────────────────────────────── */}
+      <Route path="/analytics">
+        <ProtectedRoute component={AnalyticsPage} />
+      </Route>
       <Route path="/audit">
         <ProtectedRoute component={AuditPage} />
       </Route>
-
-      <Route path="/whatsapp">
-        <ProtectedRoute component={WhatsAppPage} />
-      </Route>
-
       <Route path="/items">
         <ProtectedRoute component={ItemsPage} />
       </Route>
 
-      <Route path="/purchase-orders/new">
-        <ProtectedRoute component={NewPurchaseOrderPage} />
-      </Route>
-
-      <Route path="/purchase-orders/:id">
-        <ProtectedRoute component={PurchaseOrderDetailPage} />
-      </Route>
-
-      <Route path="/purchase-orders">
-        <ProtectedRoute component={PurchaseOrdersPage} />
+      {/* ── Module: Communications ─────────────────────────────────────── */}
+      <Route path="/whatsapp">
+        <ProtectedRoute component={WhatsAppPage} />
       </Route>
 
       <Route component={NotFound} />

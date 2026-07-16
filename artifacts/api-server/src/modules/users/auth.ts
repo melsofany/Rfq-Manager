@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db, employeesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { logger } from "../lib/logger";
+import { logger } from "../../shared/logger";
 
 const router = Router();
 

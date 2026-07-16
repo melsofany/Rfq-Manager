@@ -1,14 +1,14 @@
 import { Router } from "express";
 import { db, rfqTable, rfqItemsTable, sentLogTable, suppliersTable, employeesTable, offersTable, offerItemsTable, auditLogTable } from "@workspace/db";
 import { eq, and, ilike, or, count, inArray, sql } from "drizzle-orm";
-import { requireAuth } from "../middlewares/auth";
-import { generateToken } from "../lib/token";
-import { generateOffersPdf } from "../lib/offersPdf.js";
-import { generateDispatchReportPdf } from "../lib/dispatchReportPdf.js";
-import { sendRfqEmail } from "../lib/email";
-import { sendRfqWhatsApp } from "../lib/whatsapp";
+import { requireAuth } from "../../middlewares/auth";
+import { generateToken } from "../../shared/token";
+import { generateOffersPdf } from "./offers-pdf.js";
+import { generateDispatchReportPdf } from "../reports/dispatch-pdf.js";
+import { sendRfqEmail } from "../../shared/email";
+import { sendRfqWhatsApp } from "../communications/service";
 import { whatsappChatsTable } from "@workspace/db";
-import { lookupRfqFromSheet, listSheetRfqNumbers, listSheetTabs } from "../lib/googleSheets";
+import { lookupRfqFromSheet, listSheetRfqNumbers, listSheetTabs } from "../../shared/google-sheets";
 
 const router = Router();
 

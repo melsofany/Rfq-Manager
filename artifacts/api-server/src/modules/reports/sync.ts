@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middlewares/auth";
-import { runFullSync, getSyncStatus } from "../lib/sheetSync";
+import { requireAuth, requireRole } from "../../middlewares/auth";
+import { runFullSync, getSyncStatus } from "../../shared/sheet-sync";
 
 const router = Router();
 

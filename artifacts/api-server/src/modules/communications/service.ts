@@ -10,9 +10,9 @@ import {
   URLComponent,
   Document as WADocument,
 } from "whatsapp-api-js/messages";
-import { logger } from "./logger";
-import { generateRfqPdf } from "./rfqPdf";
-import { generatePoPdf } from "./poPdf";
+import { logger } from "../../shared/logger";
+import { generateRfqPdf } from "../rfq/rfq-pdf";
+import { generatePoPdf } from "../po/po-pdf";
 
 // ─── Official WhatsApp Business (Meta) Cloud API client ──────────────────────
 // This module is built on top of the open-source "whatsapp-api-js" library

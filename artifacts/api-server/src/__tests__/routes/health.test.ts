@@ -3,7 +3,7 @@ import express from "express";
 import request from "supertest";
 
 // ── Mock side-effectful modules before any import of the router ───────────
-vi.mock("../../lib/email", () => ({
+vi.mock("../../shared/email", () => ({
   verifyEmailConnection: vi.fn().mockResolvedValue({ ok: true }),
   sendRfqEmail: vi.fn().mockResolvedValue({ ok: true }),
   sendOfferConfirmation: vi.fn().mockResolvedValue({ ok: true }),
@@ -51,7 +51,7 @@ describe("GET /api/healthz/email", () => {
   });
 
   it("responds 500 when SMTP connection fails", async () => {
-    const { verifyEmailConnection } = await import("../../lib/email");
+    const { verifyEmailConnection } = await import("../../shared/email");
     vi.mocked(verifyEmailConnection).mockResolvedValueOnce({
       ok: false,
       error: "Connection refused",

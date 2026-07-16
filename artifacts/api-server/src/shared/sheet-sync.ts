@@ -1,6 +1,6 @@
 import { db, rfqTable, rfqItemsTable, suppliersTable, employeesTable, offersTable, offerItemsTable } from "@workspace/db";
 import { inArray, eq } from "drizzle-orm";
-import { pushToMirrorSheet, readMirrorSheetIds, type MirrorData } from "./googleSheets";
+import { pushToMirrorSheet, readMirrorSheetIds, type MirrorData } from "./google-sheets";
 import { logger } from "./logger";
 
 export interface SyncStatus {

@@ -10,7 +10,7 @@ import {
   offerItemsTable,
 } from "@workspace/db";
 import { eq, ilike, or, inArray, sql } from "drizzle-orm";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
 

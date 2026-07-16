@@ -1,32 +1,32 @@
+/**
+ * API Router — يجمع كل الـ modules في مكان واحد
+ *
+ * Module structure:
+ *   /api/healthz          → health (liveness probe)
+ *   /api/auth/*           → users  module (auth, suppliers, categories)
+ *   /api/rfq/*            → rfq    module (rfq, offers, pricing, items)
+ *   /api/purchase-orders  → po     module
+ *   /api/analytics        → reports module (analytics, audit, sync)
+ *   /api/whatsapp         → communications module
+ */
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
-import authRouter from "./auth";
-import suppliersRouter from "./suppliers";
-import rfqRouter from "./rfq";
-import pricingRouter from "./pricing";
-import analyticsRouter from "./analytics";
-import offersRouter from "./offers";
-import auditRouter from "./audit";
-import syncRouter from "./sync";
-import categoriesRouter from "./categories";
-import whatsappRouter from "./whatsapp";
-import itemsRouter from "./items";
-import poRouter from "./po";
+import rfqModule from "../modules/rfq/index";
+import poModule from "../modules/po/index";
+import usersModule from "../modules/users/index";
+import reportsModule from "../modules/reports/index";
+import communicationsModule from "../modules/communications/index";
 
 const router: IRouter = Router();
 
+// Infrastructure
 router.use(healthRouter);
-router.use(authRouter);
-router.use(suppliersRouter);
-router.use(rfqRouter);
-router.use(pricingRouter);
-router.use(analyticsRouter);
-router.use(offersRouter);
-router.use(auditRouter);
-router.use(syncRouter);
-router.use(categoriesRouter);
-router.use(whatsappRouter);
-router.use(itemsRouter);
-router.use(poRouter);
+
+// Business modules
+router.use(usersModule);          // auth · suppliers · categories
+router.use(rfqModule);            // rfq · offers · pricing · items
+router.use(poModule);             // purchase-orders
+router.use(reportsModule);        // analytics · audit · sync
+router.use(communicationsModule); // whatsapp
 
 export default router;

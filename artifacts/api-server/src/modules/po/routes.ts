@@ -13,11 +13,11 @@ import {
   rfqTable,
 } from "@workspace/db";
 import { eq, count, inArray, sql, and } from "drizzle-orm";
-import { requireAuth } from "../middlewares/auth";
-import { lookupPoFromSheet, listSheetPoNumbers } from "../lib/googleSheets";
-import { generatePoPdf } from "../lib/poPdf";
-import { sendPoWhatsApp, isWhatsAppConfigured } from "../lib/whatsapp";
-import { sendPoEmail } from "../lib/email";
+import { requireAuth } from "../../middlewares/auth";
+import { lookupPoFromSheet, listSheetPoNumbers } from "../../shared/google-sheets";
+import { generatePoPdf } from "./po-pdf";
+import { sendPoWhatsApp, isWhatsAppConfigured } from "../communications/service";
+import { sendPoEmail } from "../../shared/email";
 
 const router = Router();
 

@@ -5,7 +5,7 @@ import session from "express-session";
 import path from "path";
 import { existsSync } from "fs";
 import router from "./routes";
-import { logger } from "./lib/logger";
+import { logger } from "./shared/logger";
 
 const app: Express = express();
 
@@ -38,7 +38,7 @@ app.use(session({
 }));
 
 // Capture the raw request body for routes that need to verify Meta's
-// X-Hub-Signature-256 webhook signature (see routes/whatsapp.ts).
+// X-Hub-Signature-256 webhook signature (see modules/communications/routes.ts).
 app.use(express.json({
   verify: (req: Request & { rawBody?: string }, _res, buf) => {
     req.rawBody = buf.toString("utf8");

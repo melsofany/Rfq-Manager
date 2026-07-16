@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
   import { HealthCheckResponse } from "@workspace/api-zod";
-  import { verifyEmailConnection } from "../lib/email";
+  import { verifyEmailConnection } from "../shared/email";
   import { requireAuth } from "../middlewares/auth";
 
   const router: IRouter = Router();

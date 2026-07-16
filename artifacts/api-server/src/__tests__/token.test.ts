@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateToken } from "../lib/token";
+import { generateToken } from "../shared/token";
 
 describe("generateToken", () => {
   it("returns a non-empty string", () => {

@@ -3,9 +3,9 @@ import { setDefaultResultOrder } from "dns";
 setDefaultResultOrder("ipv4first");
 
 import app from "./app";
-import { logger } from "./lib/logger";
-import { runFullSync } from "./lib/sheetSync";
-import { initDb } from "./lib/initDb";
+import { logger } from "./shared/logger";
+import { runFullSync } from "./shared/sheet-sync";
+import { initDb } from "./shared/init-db";
 
 const rawPort = process.env["PORT"];
 

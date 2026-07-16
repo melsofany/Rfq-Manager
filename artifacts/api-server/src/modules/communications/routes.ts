@@ -7,9 +7,9 @@ import {
   WEBHOOK_VERIFY_TOKEN,
   isWhatsAppConfigured,
   sendWhatsAppText,
-} from "../lib/whatsapp";
-import { requireAuth } from "../middlewares/auth";
-import { logger } from "../lib/logger";
+} from "./service";
+import { requireAuth } from "../../middlewares/auth";
+import { logger } from "../../shared/logger";
 
 const router = Router();
 
