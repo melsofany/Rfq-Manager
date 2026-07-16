@@ -1468,6 +1468,63 @@ components:
           type: number
         avgResponseTimeHours:
           type: number
+        # Pricing & PO analytics
+        totalItems:
+          type: integer
+          description: Total RFQ line items across all RFQs
+        pricedItems:
+          type: integer
+          description: Items that received at least one offer price
+        unpricedItems:
+          type: integer
+          description: Items with no offers received
+        itemsWithPo:
+          type: integer
+          description: Items that appear in a purchase order
+        pricingRate:
+          type: number
+          description: Ratio of priced items to total items (0-100)
+        poRate:
+          type: number
+          description: Ratio of items with PO to total items (0-100)
+        totalPos:
+          type: integer
+          description: Total purchase orders created
+        rfqsWithPo:
+          type: integer
+          description: Number of RFQs that have a linked PO
+        rfqToPoRate:
+          type: number
+          description: Ratio of RFQs that converted to a PO (0-100)
+        supplierDeepStats:
+          type: array
+          description: Enhanced supplier analytics
+          items:
+            type: object
+            properties:
+              supplierId:
+                type: integer
+              supplierName:
+                type: string
+              category:
+                type: string
+              totalRfqsReceived:
+                type: integer
+              totalOffersSubmitted:
+                type: integer
+              responseRate:
+                type: number
+              totalItemsOffered:
+                type: integer
+              totalPoItems:
+                type: integer
+              poWinRate:
+                type: number
+                description: Ratio of items awarded PO out of offers submitted
+              avgPrice:
+                type: ["number", "null"]
+              avgDeliveryDays:
+                type: ["number", "null"]
 
     EmployeePerformance:
       type: object
