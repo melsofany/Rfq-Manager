@@ -543,6 +543,14 @@ router.get("/po/:id", requireAuth, async (req, res): Promise<void> => {
   const [{ cnt: itemCount }] = await db.select({ cnt: count() })
     .from(purchaseOrderItemsTable).where(eq(purchaseOrderItemsTable.poId, id));
 
+  // Fetch linked RFQ info if present
+  let linkedRfq: { id: number; internalRfqNo: string; status: string } | null = null;
+  if (row.po.rfqId) {
+    const [rfqRow] = await db.select({ id: rfqTable.id, internalRfqNo: rfqTable.internalRfqNo, status: rfqTable.status })
+      .from(rfqTable).where(eq(rfqTable.id, row.po.rfqId));
+    if (rfqRow) linkedRfq = rfqRow;
+  }
+
   res.json({
     id: row.po.id,
     internalPoNo: row.po.internalPoNo,
@@ -552,11 +560,45 @@ router.get("/po/:id", requireAuth, async (req, res): Promise<void> => {
     status: row.po.status,
     employeeId: row.po.employeeId,
     employeeName: row.employeeName,
+    rfqId: row.po.rfqId ?? null,
+    linkedRfq,
     notes: row.po.notes,
     itemCount,
     createdAt: row.po.createdAt.toISOString(),
     updatedAt: row.po.updatedAt.toISOString(),
   });
+});
+
+// PATCH /api/po/:id/link-rfq — link an existing PO to an RFQ and mark the RFQ as SUCCESS
+router.patch("/po/:id/link-rfq", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const poId = parseInt(raw, 10);
+  const { rfqId } = req.body as { rfqId: number | null };
+
+  const [po] = await db.select().from(purchaseOrdersTable).where(eq(purchaseOrdersTable.id, poId));
+  if (!po) { res.status(404).json({ error: "PO not found" }); return; }
+
+  if (rfqId != null) {
+    const [rfq] = await db.select().from(rfqTable).where(eq(rfqTable.id, rfqId));
+    if (!rfq) { res.status(404).json({ error: "RFQ not found" }); return; }
+
+    await db.transaction(async (tx) => {
+      await tx.update(purchaseOrdersTable).set({ rfqId }).where(eq(purchaseOrdersTable.id, poId));
+      await tx.update(rfqTable).set({ status: 'SUCCESS' }).where(eq(rfqTable.id, rfqId));
+      await tx.insert(auditLogTable).values({
+        action: 'po.linked_rfq',
+        entityType: 'po',
+        entityId: poId,
+        description: `PO ${po.internalPoNo} linked to RFQ ${rfq.internalRfqNo} — RFQ marked SUCCESS`,
+      });
+    });
+
+    res.json({ ok: true, rfqId, rfqStatus: 'SUCCESS' });
+  } else {
+    // Unlink: just clear rfqId (do NOT revert the RFQ status)
+    await db.update(purchaseOrdersTable).set({ rfqId: null }).where(eq(purchaseOrdersTable.id, poId));
+    res.json({ ok: true, rfqId: null });
+  }
 });
 
 router.get("/po/:id/items", requireAuth, async (req, res): Promise<void> => {
