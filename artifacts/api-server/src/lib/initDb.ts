@@ -43,7 +43,7 @@ export async function initDb(): Promise<void> {
         customer_rfq_no TEXT NOT NULL,
         customer_rfq_date TEXT,
         required_response_date TEXT,
-        status TEXT NOT NULL DEFAULT 'draft',
+        status TEXT NOT NULL DEFAULT 'DRAFT',
         employee_id INTEGER REFERENCES employees(id),
         notes TEXT,
         expires_at TIMESTAMPTZ,
@@ -142,6 +142,7 @@ export async function initDb(): Promise<void> {
         receiver_phone TEXT,
         status TEXT NOT NULL DEFAULT 'draft',
         employee_id INTEGER REFERENCES employees(id),
+        rfq_id INTEGER REFERENCES rfq(id),
         notes TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -173,6 +174,14 @@ export async function initDb(): Promise<void> {
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS media_type TEXT;
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS mime_type TEXT;
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS filename TEXT;
+      `);
+      // Migrate old RFQ status values to new unified status workflow (idempotent)
+      await client.query(`
+        UPDATE rfq SET status = 'DRAFT' WHERE status = 'draft';
+        UPDATE rfq SET status = 'SENT' WHERE status = 'sent';
+        UPDATE rfq SET status = 'QUOTED' WHERE status IN ('partial', 'completed');
+        UPDATE rfq SET status = 'FAILED' WHERE status IN ('closed', 'cancelled');
+        ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS rfq_id INTEGER REFERENCES rfq(id);
       `);
       logger.info("initDb: all tables created");
 

@@ -96,7 +96,7 @@ router.post("/rfq", requireAuth, async (req, res): Promise<void> => {
   const [rfq] = await db.insert(rfqTable).values({
     internalRfqNo,
     customerRfqNo,
-    status: "draft",
+    status: "DRAFT",
     employeeId: req.session.employeeId,
     notes,
     expiresAt: expiresAt ? new Date(expiresAt) : undefined,
@@ -248,11 +248,11 @@ router.patch("/rfq/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(raw, 10);
 
   // Only draft RFQs can be cancelled
-  if (req.body.status === "cancelled") {
+  if (req.body.status === "FAILED" || req.body.status === "cancelled") {
     const [existing] = await db.select().from(rfqTable).where(eq(rfqTable.id, id));
     if (!existing) { res.status(404).json({ error: "Not found" }); return; }
-    if (existing.status !== "draft") {
-      res.status(400).json({ error: "فقط طلبات التسعير المسودة يمكن إلغاؤها" });
+    if (existing.status === "SUCCESS" || existing.status === "completed") {
+      res.status(400).json({ error: "لا يمكن تغيير حالة الطلب في هذه المرحلة" });
       return;
     }
   }
@@ -264,13 +264,13 @@ router.patch("/rfq/:id", requireAuth, async (req, res): Promise<void> => {
   const [rfq] = await db.update(rfqTable).set(updates).where(eq(rfqTable.id, id)).returning();
   if (!rfq) { res.status(404).json({ error: "Not found" }); return; }
 
-  if (req.body.status === "cancelled") {
+  if (req.body.status === "FAILED" || req.body.status === "cancelled") {
     await db.insert(auditLogTable).values({
-      action: "rfq.cancelled",
+      action: "rfq.failed",
       entityType: "rfq",
       entityId: id,
       employeeId: req.session.employeeId,
-      description: `Cancelled RFQ ${rfq.internalRfqNo}`,
+      description: `Marked RFQ ${rfq.internalRfqNo} as FAILED`,
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
@@ -516,8 +516,8 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
   }
 
   // Update RFQ status to sent if it was draft
-  if (rfq.status === "draft" && sent > 0) {
-    await db.update(rfqTable).set({ status: "sent" }).where(eq(rfqTable.id, rfqId));
+  if (rfq.status === "DRAFT" && sent > 0) {
+    await db.update(rfqTable).set({ status: "SENT" }).where(eq(rfqTable.id, rfqId));
   }
 
   await db.insert(auditLogTable).values({

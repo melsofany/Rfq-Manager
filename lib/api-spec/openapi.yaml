@@ -1033,7 +1033,7 @@ components:
           type: ["string", "null"]
         status:
           type: string
-          enum: [draft, sent, partial, completed, closed, cancelled]
+          enum: [DRAFT, SENT, QUOTED, FAILED, SUCCESS]
         employeeId:
           type: integer
         employeeName:
@@ -1070,7 +1070,7 @@ components:
       properties:
         status:
           type: string
-          enum: [draft, sent, partial, completed, closed, cancelled]
+          enum: [DRAFT, SENT, QUOTED, FAILED, SUCCESS]
         notes:
           type: string
 
@@ -1215,7 +1215,6 @@ components:
           type: ["string", "null"]
         status:
           type: string
-          enum: [draft, sent, cancelled]
         employeeId:
           type: integer
         employeeName:

@@ -7,7 +7,7 @@ const router = Router();
 
 router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> => {
   const [totalRfqs] = await db.select({ cnt: count() }).from(rfqTable);
-  const [openRfqs] = await db.select({ cnt: count() }).from(rfqTable).where(sql`${rfqTable.status} IN ('draft','sent','partial')`);
+  const [openRfqs] = await db.select({ cnt: count() }).from(rfqTable).where(sql`${rfqTable.status} IN ('DRAFT','SENT','QUOTED')`);
   const [totalSuppliers] = await db.select({ cnt: count() }).from(suppliersTable).where(eq(suppliersTable.isActive, true));
   const [totalOffers] = await db.select({ cnt: count() }).from(offersTable);
 

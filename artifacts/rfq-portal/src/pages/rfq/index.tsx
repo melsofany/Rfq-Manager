@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, FileText } from "lucide-react";
 
-const STATUSES = ["all", "draft", "sent", "partial", "completed", "closed", "cancelled"];
+const STATUSES = ["all", "DRAFT", "SENT", "QUOTED", "FAILED", "SUCCESS"];
 
 export default function RfqListPage() {
   const [, navigate] = useLocation();
@@ -49,13 +49,13 @@ export default function RfqListPage() {
               <button
                 key={s}
                 onClick={() => setStatus(s)}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors capitalize flex-shrink-0 ${
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors flex-shrink-0 ${
                   status === s
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {s}
+                {s === "all" ? "الكل" : s === "DRAFT" ? "مسودة" : s === "SENT" ? "تم الإرسال" : s === "QUOTED" ? "عروض واردة" : s === "FAILED" ? "فشل" : s === "SUCCESS" ? "ناجح" : s}
               </button>
             ))}
           </div>

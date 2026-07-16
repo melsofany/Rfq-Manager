@@ -179,6 +179,11 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
   // Mark offer submitted in sent log
   await db.update(sentLogTable).set({ offerSubmitted: true }).where(eq(sentLogTable.token, token));
 
+  // Auto-transition RFQ to QUOTED on first offer (SENT → QUOTED)
+  if (log.rfq.status === 'SENT') {
+    await db.update(rfqTable).set({ status: 'QUOTED' }).where(eq(rfqTable.id, log.rfq.id));
+  }
+
   // Audit
   await db.insert(auditLogTable).values({
     action: "offer.submitted",

@@ -12,6 +12,7 @@ export const purchaseOrdersTable = pgTable("purchase_orders", {
   receiverPhone: text("receiver_phone"),
   status: text("status").notNull().default("draft"),
   employeeId: integer("employee_id").references(() => employeesTable.id),
+  rfqId: integer("rfq_id").references(() => rfqTable.id),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

@@ -10,10 +10,9 @@ export type RfqStatus = typeof RfqStatus[keyof typeof RfqStatus];
 
 
 export const RfqStatus = {
-  draft: 'draft',
-  sent: 'sent',
-  partial: 'partial',
-  completed: 'completed',
-  closed: 'closed',
-  cancelled: 'cancelled',
+  DRAFT: 'DRAFT',
+  SENT: 'SENT',
+  QUOTED: 'QUOTED',
+  FAILED: 'FAILED',
+  SUCCESS: 'SUCCESS',
 } as const;

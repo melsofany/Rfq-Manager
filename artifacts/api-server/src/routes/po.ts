@@ -10,6 +10,7 @@ import {
   offerItemsTable,
   rfqItemsTable,
   whatsappChatsTable,
+  rfqTable,
 } from "@workspace/db";
 import { eq, count, inArray, sql, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
@@ -100,11 +101,12 @@ router.get("/po", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/po", requireAuth, async (req, res): Promise<void> => {
-  const { sheetPoNo, receiverName, receiverPhone, notes, items } = req.body as {
+  const { sheetPoNo, receiverName, receiverPhone, notes, items, rfqId } = req.body as {
     sheetPoNo?: string;
     receiverName?: string;
     receiverPhone?: string;
     notes?: string;
+    rfqId?: number | null;
     items?: Array<{
       itemId?: string | null;
       lineItem?: string;
@@ -170,6 +172,20 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
         ipAddress: req.ip,
         userAgent: req.get("user-agent"),
       });
+
+      // If linked to an RFQ, mark it as SUCCESS
+      if (rfqId) {
+        await tx.update(rfqTable).set({ status: 'SUCCESS' }).where(eq(rfqTable.id, rfqId));
+        await tx.insert(auditLogTable).values({
+          action: 'rfq.success',
+          entityType: 'rfq',
+          entityId: rfqId,
+          employeeId: req.session.employeeId,
+          description: `RFQ marked SUCCESS — PO ${internalPoNo} created`,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        });
+      }
 
       return po;
     });

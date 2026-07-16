@@ -8,9 +8,15 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
 const STATUS_COLORS: Record<string, string> = {
+  DRAFT: "#6b7280",
+  SENT: "#3b82f6",
+  QUOTED: "#f97316",
+  FAILED: "#ef4444",
+  SUCCESS: "#22c55e",
+  // legacy
   draft: "#6b7280",
   sent: "#3b82f6",
-  partial: "#f59e0b",
+  partial: "#f97316",
   completed: "#22c55e",
   closed: "#64748b",
 };
@@ -167,7 +173,7 @@ export default function DashboardPage() {
   }
 
   const chartData = stats?.rfqsByStatus?.map((s) => ({
-    name: s.status.charAt(0).toUpperCase() + s.status.slice(1),
+    name: s.status === 'DRAFT' ? 'مسودة' : s.status === 'SENT' ? 'تم الإرسال' : s.status === 'QUOTED' ? 'عروض واردة' : s.status === 'FAILED' ? 'فشل' : s.status === 'SUCCESS' ? 'ناجح' : s.status.charAt(0).toUpperCase() + s.status.slice(1),
     value: s.count,
     fill: STATUS_COLORS[s.status] || "#6b7280",
   })) ?? [];

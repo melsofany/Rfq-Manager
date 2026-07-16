@@ -456,11 +456,11 @@ export default function RfqDetailPage() {
   const cancelMutation = useUpdateRfq({
     mutation: {
       onSuccess: () => {
-        toast.success("تم إلغاء طلب التسعير بنجاح");
+        toast.success("تم تحديد الطلب كـ FAILED");
         navigate("/rfq");
       },
       onError: () => {
-        toast.error("حدث خطأ أثناء إلغاء الطلب");
+        toast.error("حدث خطأ أثناء تحديث حالة الطلب");
         setShowCancelConfirm(false);
       },
     },
@@ -581,19 +581,19 @@ export default function RfqDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {rfq.status === "draft" && (
+            {(rfq.status === "DRAFT" || rfq.status === "SENT" || rfq.status === "QUOTED") && (
               showCancelConfirm ? (
                 <>
-                  <span className="text-xs text-muted-foreground">هل أنت متأكد من الإلغاء؟</span>
+                  <span className="text-xs text-muted-foreground">هل تريد تحديد الطلب كـ FAILED؟</span>
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => cancelMutation.mutate({ id: rfqId, data: { status: "cancelled" } })}
+                    onClick={() => cancelMutation.mutate({ id: rfqId, data: { status: "FAILED" } })}
                     disabled={cancelMutation.isPending}
                     className="gap-1.5"
                   >
                     <Trash2 size={14} />
-                    نعم، إلغاء
+                    نعم، FAILED
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setShowCancelConfirm(false)}>
                     لا
@@ -607,11 +607,11 @@ export default function RfqDetailPage() {
                   className="gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/10"
                 >
                   <Trash2 size={14} />
-                  إلغاء الطلب
+                  فشل الطلب
                 </Button>
               )
             )}
-            {rfq.status !== "closed" && rfq.status !== "cancelled" && (
+            {rfq.status !== "FAILED" && rfq.status !== "SUCCESS" && (
               <Button onClick={() => navigate(`/rfq/${rfqId}/send`)} size="sm" className="gap-1.5">
                 <Send size={14} />
                 Send to Suppliers
