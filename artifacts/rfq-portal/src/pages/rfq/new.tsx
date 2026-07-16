@@ -229,7 +229,9 @@ export default function NewRfqPage() {
       data: {
         customerRfqNo,
         notes,
-        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : undefined,
+        // Send expiresAt as end-of-day UTC so the full chosen day stays valid
+        // regardless of the user's timezone (avoids midnight-UTC bug).
+        expiresAt: expiresAt ? `${expiresAt}T23:59:59.999Z` : undefined,
         items: validItems.map((it) => ({
           lineItem: it.lineItem || undefined,
           partNo: it.partNo || undefined,
@@ -426,7 +428,7 @@ export default function NewRfqPage() {
               <div className="space-y-1.5">
                 <Label>Expiry Date <span className="text-muted-foreground font-normal text-xs">(blocks supplier pricing after this date)</span></Label>
                 <Input
-                  type="datetime-local"
+                  type="date"
                   value={expiresAt}
                   onChange={(e) => setExpiresAt(e.target.value)}
                 />
