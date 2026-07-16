@@ -630,6 +630,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
           priceWithVat,
           taxIncluded: oi.item.taxIncluded,
           deliveryDays: oi.item.deliveryDays,
+          notes: oi.item.notes ?? null,
           deviation: 0,
           isLowest: false,
           isAnomaly: false,

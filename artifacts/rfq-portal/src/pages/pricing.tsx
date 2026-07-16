@@ -66,13 +66,20 @@ export default function PricingPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const items = Object.values(prices).map((p) => ({
-      rfqItemId: p.rfqItemId,
-      price: parseFloat(p.price) || 0,
-      taxIncluded: p.taxIncluded,
-      deliveryDays: p.deliveryDays ? parseInt(p.deliveryDays, 10) : undefined,
-      notes: p.notes || undefined,
-    }));
+    // Only submit items where the supplier actually entered a price
+    const items = Object.values(prices)
+      .filter((p) => p.price.trim() !== "")
+      .map((p) => ({
+        rfqItemId: p.rfqItemId,
+        price: parseFloat(p.price) || 0,
+        taxIncluded: p.taxIncluded,
+        deliveryDays: p.deliveryDays ? parseInt(p.deliveryDays, 10) : undefined,
+        notes: p.notes || undefined,
+      }));
+    if (items.length === 0) {
+      alert("يرجى إدخال سعر بند واحد على الأقل");
+      return;
+    }
     submitMutation.mutate({ token, data: { items, generalNotes: generalNotes || undefined } });
   };
 
@@ -152,7 +159,7 @@ export default function PricingPage() {
 
       <div className="max-w-5xl mx-auto p-6">
         <p className="text-muted-foreground text-sm mb-5">
-          يرجى إدخال أفضل أسعاركم للبنود أدناه ثم إرسال العرض.
+          يرجى إدخال أفضل أسعاركم للبنود التي تستطيعون توريدها ثم إرسال العرض — يمكنكم تسعير بعض البنود فقط.
           هذا الرابط مخصص لشركتكم فقط — لا تشاركه مع أي جهة أخرى.
         </p>
 
@@ -168,7 +175,7 @@ export default function PricingPage() {
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الوصف</th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">الكمية</th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">الوحدة</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">سعر الوحدة (جنيه) *</th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">سعر الوحدة (جنيه)</th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">شامل الضريبة</th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">مدة التوريد (أيام)</th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">ملاحظات</th>
@@ -193,7 +200,6 @@ export default function PricingPage() {
                             onChange={(e) => updatePrice(item.id, "price", e.target.value)}
                             className="h-7 text-xs w-28 text-left"
                             placeholder="0.00"
-                            required
                             dir="ltr"
                           />
                         </td>

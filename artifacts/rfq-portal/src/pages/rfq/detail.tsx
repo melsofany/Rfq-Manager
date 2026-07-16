@@ -34,6 +34,7 @@ type OfferRow = {
   priceWithVat: number;
   taxIncluded: boolean;
   deliveryDays?: number | null;
+  notes?: string | null;
   deviation: number;
   isLowest: boolean;
   isAnomaly: boolean;
@@ -863,6 +864,7 @@ export default function RfqDetailPage() {
                     priceWithVat:
                       (o as OfferRow).priceWithVat ??
                       (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
+                    notes: (o as OfferRow).notes ?? null,
                   }));
 
                   return (
@@ -900,6 +902,9 @@ export default function RfqDetailPage() {
                               </th>
                               <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-center">
                                 مدة التسليم
+                              </th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                                ملاحظات البند
                               </th>
                               <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
                                 مقارنة بالمتوسط
@@ -945,6 +950,10 @@ export default function RfqDetailPage() {
                                   <td className="px-4 py-2.5 text-center text-xs text-muted-foreground">
                                     {o.deliveryDays != null ? `${o.deliveryDays} يوم` : "—"}
                                   </td>
+                                  {/* Item notes */}
+                                  <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[160px]">
+                                    {o.notes ?? "—"}
+                                  </td>
                                   {/* Deviation from average (VAT-adjusted) */}
                                   <td className={cn(
                                     "px-4 py-2.5 text-right text-xs font-medium",
@@ -982,6 +991,26 @@ export default function RfqDetailPage() {
                     </div>
                   );
                 })}
+              {/* General Notes per Supplier */}
+              {(() => {
+                const offersWithNotes = (offersData?.offers as Array<{supplierId: number; supplierName: string | null; generalNotes?: string | null}> | undefined)?.filter((o) => o.generalNotes);
+                if (!offersWithNotes?.length) return null;
+                return (
+                  <div className="bg-card border border-border rounded-lg overflow-hidden">
+                    <div className="px-5 py-3 border-b border-border bg-muted/20">
+                      <p className="font-medium text-foreground text-sm">الملاحظات العامة من الموردين</p>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {offersWithNotes.map((o) => (
+                        <div key={o.supplierId} className="px-5 py-3">
+                          <p className="text-xs font-semibold text-foreground mb-1">{o.supplierName ?? "مورد"}</p>
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{o.generalNotes}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               </>
             )}
           </div>
