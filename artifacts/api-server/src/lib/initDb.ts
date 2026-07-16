@@ -183,6 +183,22 @@ export async function initDb(): Promise<void> {
         UPDATE rfq SET status = 'FAILED' WHERE status IN ('closed', 'cancelled');
         ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS rfq_id INTEGER REFERENCES rfq(id);
       `);
+
+      // Backfill historical data: SENT RFQs that already have offers → QUOTED
+      await client.query(`
+        UPDATE rfq
+        SET status = 'QUOTED'
+        WHERE status = 'SENT'
+          AND id IN (SELECT DISTINCT rfq_id FROM offers);
+      `);
+
+      // Backfill historical data: SENT/QUOTED RFQs linked to a purchase order → SUCCESS
+      await client.query(`
+        UPDATE rfq
+        SET status = 'SUCCESS'
+        WHERE status IN ('SENT', 'QUOTED')
+          AND id IN (SELECT DISTINCT rfq_id FROM purchase_orders WHERE rfq_id IS NOT NULL);
+      `);
       logger.info("initDb: all tables created");
 
     const accounts = [
