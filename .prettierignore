@@ -1,0 +1,9 @@
+dist/
+node_modules/
+**/generated/**
+pnpm-lock.yaml
+*.ttf
+*.png
+*.jpg
+*.svg
+zipFile.zip
