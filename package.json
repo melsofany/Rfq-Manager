@@ -9,11 +9,16 @@
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
-  "dependencies": {
-    "@replit/connectors-sdk": "^0.4.1"
-  },
   "devDependencies": {
-    "prettier": "^3.9.5",
+    "prettier": "^3.8.3",
     "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/express-session": "^1.19.0",
+    "@types/nodemailer": "^8.0.0",
+    "bcrypt": "^6.0.0",
+    "express-session": "^1.19.0",
+    "nodemailer": "^8.0.7"
   }
 }

@@ -3,9 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { rm, mkdir, copyFile } from "node:fs/promises";
 
-// Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
@@ -13,6 +12,8 @@ const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
   await rm(distDir, { recursive: true, force: true });
+
+  await copyFonts(distDir);
 
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/index.ts")],
@@ -22,11 +23,6 @@ async function buildAll() {
     outdir: distDir,
     outExtension: { ".js": ".mjs" },
     logLevel: "info",
-    // Some packages may not be bundleable, so we externalize them, we can add more here as needed.
-    // Some of the packages below may not be imported or installed, but we're adding them in case they are in the future.
-    // Examples of unbundleable packages:
-    // - uses native modules and loads them dynamically (e.g. sharp)
-    // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
       "sharp",
@@ -34,7 +30,9 @@ async function buildAll() {
       "sqlite3",
       "canvas",
       "bcrypt",
+      "bcryptjs",
       "argon2",
+      "express-session",
       "fsevents",
       "re2",
       "farmhash",
@@ -100,13 +98,12 @@ async function buildAll() {
       "puppeteer",
       "puppeteer-core",
       "electron",
+      "pdfkit",
     ],
     sourcemap: "linked",
     plugins: [
-      // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
       esbuildPluginPino({ transports: ["pino-pretty"] })
     ],
-    // Make sure packages that are cjs only (e.g. express) but are bundled continue to work in our esm output file
     banner: {
       js: `import { createRequire as __bannerCrReq } from 'node:module';
 import __bannerPath from 'node:path';
@@ -118,6 +115,32 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+}
+
+async function copyFonts(distDir) {
+  const srcFonts = path.resolve(artifactDir, "src/assets/fonts");
+  const destFonts = path.resolve(distDir, "assets/fonts");
+  await mkdir(destFonts, { recursive: true });
+  const { readdir } = await import("node:fs/promises");
+  const files = await readdir(srcFonts).catch(() => []);
+  for (const file of files) {
+    await copyFile(path.join(srcFonts, file), path.join(destFonts, file));
+  }
+
+  // Copy root asset files (logo.png, etc.)
+  const srcAssets = path.resolve(artifactDir, "src/assets");
+  const destAssets = path.resolve(distDir, "assets");
+  await mkdir(destAssets, { recursive: true });
+  const assetFiles = await readdir(srcAssets).catch(() => []);
+  for (const file of assetFiles) {
+    // Only copy files (not sub-directories like fonts/)
+    const srcPath = path.join(srcAssets, file);
+    const { stat } = await import("node:fs/promises");
+    const s = await stat(srcPath).catch(() => null);
+    if (s && s.isFile()) {
+      await copyFile(srcPath, path.join(destAssets, file));
+    }
+  }
 }
 
 buildAll().catch((err) => {
