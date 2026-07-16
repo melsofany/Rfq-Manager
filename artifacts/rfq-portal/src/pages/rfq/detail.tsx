@@ -16,10 +16,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Send, Eye, CheckCircle2, XCircle,
-  AlertTriangle, FileSpreadsheet, FileText, ClipboardList, Trash2,
+  AlertTriangle, FileSpreadsheet, FileText, ClipboardList, Trash2, Copy, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 const VAT_RATE = 0.14;
 const VAT_LABEL = "14%";
@@ -419,6 +420,20 @@ export default function RfqDetailPage() {
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<Tab>("items");
   const [exporting, setExporting] = useState<"excel" | "pdf" | "dispatch" | null>(null);
+  const { employee } = useAuth();
+  const isAdmin = employee?.role === "admin";
+
+  const getPricingUrl = (token: string) =>
+    `${window.location.origin}/q/${token}`;
+
+  const copyPricingLink = async (token: string, supplierName: string) => {
+    try {
+      await navigator.clipboard.writeText(getPricingUrl(token));
+      toast.success(`تم نسخ رابط ${supplierName}`);
+    } catch {
+      toast.error("تعذّر نسخ الرابط");
+    }
+  };
 
   const { data: rfq, isLoading } = useGetRfq(rfqId, {
     query: { queryKey: getGetRfqQueryKey(rfqId), enabled: !!rfqId },
@@ -760,6 +775,9 @@ export default function RfqDetailPage() {
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Offer</th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Close Date</th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Sent</th>
+                    {isAdmin && (
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">رابط التسعير</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -786,6 +804,28 @@ export default function RfqDetailPage() {
                       <td className="px-4 py-3 text-xs text-muted-foreground">
                         {new Date(log.createdAt).toLocaleDateString()}
                       </td>
+                      {isAdmin && (
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => copyPricingLink(log.token, log.supplierName)}
+                              title="نسخ رابط التسعير"
+                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Copy size={13} />
+                            </button>
+                            <a
+                              href={getPricingUrl(log.token)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="فتح رابط التسعير"
+                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-blue-600 transition-colors"
+                            >
+                              <ExternalLink size={13} />
+                            </a>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
