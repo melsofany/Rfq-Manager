@@ -22,18 +22,30 @@ router.get("/pricing/:token", async (req, res): Promise<void> => {
   }
 
   const now = new Date();
-  // closeDate is stored as a plain date string (e.g. "2025-07-20").
-  // new Date("2025-07-20") parses as midnight UTC — which would mark the
-  // entire day as expired at 00:00 UTC even though the day isn't over yet.
-  // Fix: treat closeDate as expired only AFTER that day ends (i.e. add 1 day).
+
+  // closeDate is stored as a plain date string (e.g. "2026-07-20").
+  // new Date("2026-07-20") parses as midnight UTC — so the link would be
+  // marked expired at the very START of that day. Fix: add 1 day so the
+  // full close-date day stays valid.
   const closeDateExpired = log.log.closeDate != null && (() => {
     const d = new Date(log.log.closeDate!);
     d.setDate(d.getDate() + 1); // expire at the START of the next day
     return d <= now;
   })();
-  const isExpired =
-    (log.rfq.expiresAt != null && log.rfq.expiresAt < now) ||
-    closeDateExpired;
+
+  // expiresAt is a TIMESTAMP but was historically sent from the browser as
+  // local midnight (e.g. Egypt UTC+3), which stored as "2026-07-15T21:00Z"
+  // for a user who intended "July 16". Fix: add 1 day before comparing so
+  // the full intended day remains valid. New records are saved as
+  // end-of-day UTC (T23:59:59Z), so adding 1 day gives a one-day grace
+  // that is harmless for the use case.
+  const expiresAtExpired = log.rfq.expiresAt != null && (() => {
+    const d = new Date(log.rfq.expiresAt!);
+    d.setDate(d.getDate() + 1);
+    return d <= now;
+  })();
+
+  const isExpired = expiresAtExpired || closeDateExpired;
   const items = await db.select().from(rfqItemsTable).where(eq(rfqItemsTable.rfqId, log.rfq.id));
 
   // Check if already submitted
@@ -122,9 +134,12 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
     d.setDate(d.getDate() + 1);
     return d <= now2;
   })();
-  const isExpired =
-    (log.rfq.expiresAt != null && log.rfq.expiresAt < now2) ||
-    closeDateExpired2;
+  const expiresAtExpired2 = log.rfq.expiresAt != null && (() => {
+    const d = new Date(log.rfq.expiresAt!);
+    d.setDate(d.getDate() + 1);
+    return d <= now2;
+  })();
+  const isExpired = expiresAtExpired2 || closeDateExpired2;
   if (isExpired) {
     res.status(400).json({ error: "This link has expired" });
     return;
