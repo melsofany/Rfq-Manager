@@ -332,6 +332,174 @@ export const GetSupplierScoreResponse = zod.object({
 
 
 /**
+ * @summary قائمة تكاملات الـ ERP
+ */
+export const ListIntegrationsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string().describe('اسم التكامل (مثال: Odoo الإنتاج)'),
+  "type": zod.enum(['odoo', 'sap-b1', 'sap-s4hana', 'oracle', 'google-sheets']).describe('نوع نظام الـ ERP'),
+  "config": zod.record(zod.string(), zod.unknown()).optional().describe('إعدادات الاتصال (كلمات المرور مخفاة)'),
+  "isActive": zod.boolean(),
+  "lastSyncAt": zod.string().nullish(),
+  "lastSyncStatus": zod.union([zod.literal('success'),zod.literal('error'),zod.literal('partial'),zod.literal(null)]).nullish(),
+  "lastSyncError": zod.string().nullish(),
+  "lastSyncStats": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListIntegrationsResponse = zod.array(ListIntegrationsResponseItem)
+
+
+/**
+ * @summary إنشاء تكامل جديد
+ */
+export const CreateIntegrationBody = zod.object({
+  "name": zod.string(),
+  "type": zod.enum(['odoo', 'sap-b1', 'sap-s4hana', 'oracle', 'google-sheets']),
+  "config": zod.record(zod.string(), zod.unknown()).describe('إعدادات الاتصال حسب النوع:\n- odoo: { url, db, username, apiKey }\n- sap-b1: { url, username, password, companyDB }\n- sap-s4hana: { url, username, password }\n- oracle: { url, username, password, businessUnit? }\n- google-sheets: { serviceAccountBase64?, spreadsheetId, dataSheetName? }\n')
+})
+
+export const CreateIntegrationResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string().describe('اسم التكامل (مثال: Odoo الإنتاج)'),
+  "type": zod.enum(['odoo', 'sap-b1', 'sap-s4hana', 'oracle', 'google-sheets']).describe('نوع نظام الـ ERP'),
+  "config": zod.record(zod.string(), zod.unknown()).optional().describe('إعدادات الاتصال (كلمات المرور مخفاة)'),
+  "isActive": zod.boolean(),
+  "lastSyncAt": zod.string().nullish(),
+  "lastSyncStatus": zod.union([zod.literal('success'),zod.literal('error'),zod.literal('partial'),zod.literal(null)]).nullish(),
+  "lastSyncError": zod.string().nullish(),
+  "lastSyncStats": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary تفاصيل تكامل
+ */
+export const GetIntegrationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetIntegrationResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string().describe('اسم التكامل (مثال: Odoo الإنتاج)'),
+  "type": zod.enum(['odoo', 'sap-b1', 'sap-s4hana', 'oracle', 'google-sheets']).describe('نوع نظام الـ ERP'),
+  "config": zod.record(zod.string(), zod.unknown()).optional().describe('إعدادات الاتصال (كلمات المرور مخفاة)'),
+  "isActive": zod.boolean(),
+  "lastSyncAt": zod.string().nullish(),
+  "lastSyncStatus": zod.union([zod.literal('success'),zod.literal('error'),zod.literal('partial'),zod.literal(null)]).nullish(),
+  "lastSyncError": zod.string().nullish(),
+  "lastSyncStats": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary تعديل تكامل
+ */
+export const UpdateIntegrationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateIntegrationBody = zod.object({
+  "name": zod.string(),
+  "type": zod.enum(['odoo', 'sap-b1', 'sap-s4hana', 'oracle', 'google-sheets']),
+  "config": zod.record(zod.string(), zod.unknown()).describe('إعدادات الاتصال حسب النوع:\n- odoo: { url, db, username, apiKey }\n- sap-b1: { url, username, password, companyDB }\n- sap-s4hana: { url, username, password }\n- oracle: { url, username, password, businessUnit? }\n- google-sheets: { serviceAccountBase64?, spreadsheetId, dataSheetName? }\n')
+})
+
+export const UpdateIntegrationResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string().describe('اسم التكامل (مثال: Odoo الإنتاج)'),
+  "type": zod.enum(['odoo', 'sap-b1', 'sap-s4hana', 'oracle', 'google-sheets']).describe('نوع نظام الـ ERP'),
+  "config": zod.record(zod.string(), zod.unknown()).optional().describe('إعدادات الاتصال (كلمات المرور مخفاة)'),
+  "isActive": zod.boolean(),
+  "lastSyncAt": zod.string().nullish(),
+  "lastSyncStatus": zod.union([zod.literal('success'),zod.literal('error'),zod.literal('partial'),zod.literal(null)]).nullish(),
+  "lastSyncError": zod.string().nullish(),
+  "lastSyncStats": zod.record(zod.string(), zod.unknown()).nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary حذف تكامل
+ */
+export const DeleteIntegrationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteIntegrationResponse = zod.void()
+
+
+/**
+ * @summary اختبار الاتصال بالـ ERP
+ */
+export const TestIntegrationConnectionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const TestIntegrationConnectionResponse = zod.object({
+  "ok": zod.boolean(),
+  "version": zod.string().optional(),
+  "error": zod.string().nullish()
+})
+
+
+/**
+ * @summary تشغيل مزامنة كاملة (في الخلفية)
+ */
+export const SyncIntegrationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SyncIntegrationResponse = zod.object({
+  "message": zod.string().optional(),
+  "integrationId": zod.number().optional()
+})
+
+
+/**
+ * @summary استيراد الموردين من الـ ERP
+ */
+export const SyncIntegrationSuppliersParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SyncIntegrationSuppliersResponse = zod.object({
+  "success": zod.boolean().optional(),
+  "message": zod.string().optional(),
+  "suppliersImported": zod.number().optional(),
+  "suppliersUpdated": zod.number().optional(),
+  "suppliersSkipped": zod.number().optional(),
+  "rfqsExported": zod.number().optional(),
+  "posExported": zod.number().optional(),
+  "error": zod.string().nullish()
+})
+
+
+/**
+ * @summary تصدير البيانات للـ ERP
+ */
+export const ExportToIntegrationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ExportToIntegrationResponse = zod.object({
+  "success": zod.boolean().optional(),
+  "message": zod.string().optional(),
+  "suppliersImported": zod.number().optional(),
+  "suppliersUpdated": zod.number().optional(),
+  "suppliersSkipped": zod.number().optional(),
+  "rfqsExported": zod.number().optional(),
+  "posExported": zod.number().optional(),
+  "error": zod.string().nullish()
+})
+
+
+/**
  * @summary List all RFQs
  */
 export const ListRfqsQueryParams = zod.object({

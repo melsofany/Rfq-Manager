@@ -201,6 +201,23 @@ export async function initDb(): Promise<void> {
       `);
       logger.info("initDb: all tables created");
 
+    // ── ERP Integrations table ─────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS erp_integrations (
+        id               SERIAL PRIMARY KEY,
+        name             TEXT NOT NULL,
+        type             TEXT NOT NULL,
+        config           JSONB NOT NULL DEFAULT '{}',
+        is_active        BOOLEAN NOT NULL DEFAULT true,
+        last_sync_at     TIMESTAMPTZ,
+        last_sync_status TEXT,
+        last_sync_error  TEXT,
+        last_sync_stats  JSONB,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
     // Seed accounts — passwords read from env vars; MUST be changed after first login in production
     const accounts = [
       { name: "Admin",           email: "admin@cortoba-supplies.com",   password: process.env.SEED_ADMIN_PASS   ?? "Cortoba@Admin1",   role: "admin"      },

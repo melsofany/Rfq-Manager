@@ -610,6 +610,117 @@ export interface ItemHistory {
   suppliers: ItemSupplierResponse[];
 }
 
+/**
+ * نوع نظام الـ ERP
+ */
+export type ErpIntegrationType = typeof ErpIntegrationType[keyof typeof ErpIntegrationType];
+
+
+export const ErpIntegrationType = {
+  odoo: 'odoo',
+  'sap-b1': 'sap-b1',
+  'sap-s4hana': 'sap-s4hana',
+  oracle: 'oracle',
+  'google-sheets': 'google-sheets',
+} as const;
+
+/**
+ * إعدادات الاتصال (كلمات المرور مخفاة)
+ */
+export type ErpIntegrationConfig = { [key: string]: unknown };
+
+/**
+ * @nullable
+ */
+export type ErpIntegrationLastSyncStatus = typeof ErpIntegrationLastSyncStatus[keyof typeof ErpIntegrationLastSyncStatus] | null;
+
+
+export const ErpIntegrationLastSyncStatus = {
+  success: 'success',
+  error: 'error',
+  partial: 'partial',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ErpIntegrationLastSyncStats = { [key: string]: unknown } | null;
+
+export interface ErpIntegration {
+  id: number;
+  /** اسم التكامل (مثال: Odoo الإنتاج) */
+  name: string;
+  /** نوع نظام الـ ERP */
+  type: ErpIntegrationType;
+  /** إعدادات الاتصال (كلمات المرور مخفاة) */
+  config?: ErpIntegrationConfig;
+  isActive: boolean;
+  /** @nullable */
+  lastSyncAt?: string | null;
+  /** @nullable */
+  lastSyncStatus?: ErpIntegrationLastSyncStatus;
+  /** @nullable */
+  lastSyncError?: string | null;
+  /** @nullable */
+  lastSyncStats?: ErpIntegrationLastSyncStats;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ErpIntegrationInputType = typeof ErpIntegrationInputType[keyof typeof ErpIntegrationInputType];
+
+
+export const ErpIntegrationInputType = {
+  odoo: 'odoo',
+  'sap-b1': 'sap-b1',
+  'sap-s4hana': 'sap-s4hana',
+  oracle: 'oracle',
+  'google-sheets': 'google-sheets',
+} as const;
+
+/**
+ * إعدادات الاتصال حسب النوع:
+ * - odoo: { url, db, username, apiKey }
+ * - sap-b1: { url, username, password, companyDB }
+ * - sap-s4hana: { url, username, password }
+ * - oracle: { url, username, password, businessUnit? }
+ * - google-sheets: { serviceAccountBase64?, spreadsheetId, dataSheetName? }
+ */
+export type ErpIntegrationInputConfig = { [key: string]: unknown };
+
+export interface ErpIntegrationInput {
+  name: string;
+  type: ErpIntegrationInputType;
+  /**
+     * إعدادات الاتصال حسب النوع:
+     * - odoo: { url, db, username, apiKey }
+     * - sap-b1: { url, username, password, companyDB }
+     * - sap-s4hana: { url, username, password }
+     * - oracle: { url, username, password, businessUnit? }
+     * - google-sheets: { serviceAccountBase64?, spreadsheetId, dataSheetName? }
+     */
+  config: ErpIntegrationInputConfig;
+}
+
+export interface ErpConnectionTestResult {
+  ok: boolean;
+  version?: string;
+  /** @nullable */
+  error?: string | null;
+}
+
+export interface ErpSyncResult {
+  success?: boolean;
+  message?: string;
+  suppliersImported?: number;
+  suppliersUpdated?: number;
+  suppliersSkipped?: number;
+  rfqsExported?: number;
+  posExported?: number;
+  /** @nullable */
+  error?: string | null;
+}
+
 export interface AuditLog {
   id: number;
   action: string;
@@ -632,6 +743,11 @@ export interface AuditLog {
 export type ListSuppliersParams = {
 category?: string;
 search?: string;
+};
+
+export type SyncIntegration200 = {
+  message?: string;
+  integrationId?: number;
 };
 
 export type ListRfqsParams = {

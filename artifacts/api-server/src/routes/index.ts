@@ -16,6 +16,7 @@ import poModule from "../modules/po/index";
 import usersModule from "../modules/users/index";
 import reportsModule from "../modules/reports/index";
 import communicationsModule from "../modules/communications/index";
+import integrationsModule from "../modules/integrations/index";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(rfqModule);            // rfq · offers · pricing · items
 router.use(poModule);             // purchase-orders
 router.use(reportsModule);        // analytics · audit · sync
 router.use(communicationsModule); // whatsapp
+router.use(integrationsModule);   // ERP integrations (Odoo · SAP · Oracle · Google Sheets)
 
 export default router;

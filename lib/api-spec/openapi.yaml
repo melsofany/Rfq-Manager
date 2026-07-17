@@ -22,6 +22,8 @@ tags:
     description: Analytics and dashboards
   - name: audit
     description: Audit log
+  - name: integrations
+    description: "تكامل مع أنظمة ERP (Odoo · SAP · Oracle · Google Sheets)"
 
 paths:
   /healthz:
@@ -328,6 +330,174 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SupplierScore"
+
+  # ERP INTEGRATIONS
+  /integrations:
+    get:
+      operationId: listIntegrations
+      tags: [integrations]
+      summary: "قائمة تكاملات الـ ERP"
+      responses:
+        "200":
+          description: قائمة التكاملات
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ErpIntegration"
+    post:
+      operationId: createIntegration
+      tags: [integrations]
+      summary: "إنشاء تكامل جديد"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErpIntegrationInput"
+      responses:
+        "201":
+          description: تم الإنشاء
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpIntegration"
+
+  /integrations/{id}:
+    get:
+      operationId: getIntegration
+      tags: [integrations]
+      summary: "تفاصيل تكامل"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: التكامل
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpIntegration"
+    patch:
+      operationId: updateIntegration
+      tags: [integrations]
+      summary: "تعديل تكامل"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ErpIntegrationInput"
+      responses:
+        "200":
+          description: تم التعديل
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpIntegration"
+    delete:
+      operationId: deleteIntegration
+      tags: [integrations]
+      summary: "حذف تكامل"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: تم الحذف
+
+  /integrations/{id}/test:
+    post:
+      operationId: testIntegrationConnection
+      tags: [integrations]
+      summary: "اختبار الاتصال بالـ ERP"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: نتيجة الاختبار
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpConnectionTestResult"
+
+  /integrations/{id}/sync:
+    post:
+      operationId: syncIntegration
+      tags: [integrations]
+      summary: "تشغيل مزامنة كاملة (في الخلفية)"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: بدأت المزامنة
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  integrationId:
+                    type: integer
+
+  /integrations/{id}/sync-suppliers:
+    post:
+      operationId: syncIntegrationSuppliers
+      tags: [integrations]
+      summary: "استيراد الموردين من الـ ERP"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: نتيجة الاستيراد
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpSyncResult"
+
+  /integrations/{id}/export:
+    post:
+      operationId: exportToIntegration
+      tags: [integrations]
+      summary: "تصدير البيانات للـ ERP"
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: نتيجة التصدير
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErpSyncResult"
 
   # RFQ
   /rfq:
@@ -1731,6 +1901,92 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ItemSupplierResponse"
+
+    # ERP INTEGRATIONS
+    ErpIntegration:
+      type: object
+      required: [id, name, type, isActive, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          description: "اسم التكامل (مثال: Odoo الإنتاج)"
+        type:
+          type: string
+          enum: [odoo, sap-b1, sap-s4hana, oracle, google-sheets]
+          description: "نوع نظام الـ ERP"
+        config:
+          type: object
+          description: "إعدادات الاتصال (كلمات المرور مخفاة)"
+          additionalProperties: true
+        isActive:
+          type: boolean
+        lastSyncAt:
+          type: ["string", "null"]
+        lastSyncStatus:
+          type: ["string", "null"]
+          enum: [success, error, partial, null]
+        lastSyncError:
+          type: ["string", "null"]
+        lastSyncStats:
+          type: ["object", "null"]
+          additionalProperties: true
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    ErpIntegrationInput:
+      type: object
+      required: [name, type, config]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [odoo, sap-b1, sap-s4hana, oracle, google-sheets]
+        config:
+          type: object
+          additionalProperties: true
+          description: |
+            إعدادات الاتصال حسب النوع:
+            - odoo: { url, db, username, apiKey }
+            - sap-b1: { url, username, password, companyDB }
+            - sap-s4hana: { url, username, password }
+            - oracle: { url, username, password, businessUnit? }
+            - google-sheets: { serviceAccountBase64?, spreadsheetId, dataSheetName? }
+
+    ErpConnectionTestResult:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        version:
+          type: string
+        error:
+          type: ["string", "null"]
+
+    ErpSyncResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        suppliersImported:
+          type: integer
+        suppliersUpdated:
+          type: integer
+        suppliersSkipped:
+          type: integer
+        rfqsExported:
+          type: integer
+        posExported:
+          type: integer
+        error:
+          type: ["string", "null"]
 
     # AUDIT
     AuditLog:

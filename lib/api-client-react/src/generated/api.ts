@@ -29,6 +29,10 @@ import type {
   EmployeeInput,
   EmployeePerformance,
   EmployeeUpdate,
+  ErpConnectionTestResult,
+  ErpIntegration,
+  ErpIntegrationInput,
+  ErpSyncResult,
   HealthStatus,
   ItemHistory,
   ListAuditLogsParams,
@@ -60,7 +64,8 @@ import type {
   SupplierCategory,
   SupplierInput,
   SupplierScore,
-  SupplierUpdate
+  SupplierUpdate,
+  SyncIntegration200
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1354,6 +1359,658 @@ export function useGetSupplierScore<TData = Awaited<ReturnType<typeof getSupplie
 
 
 
+
+export const getListIntegrationsUrl = () => {
+
+
+
+
+  return `/api/integrations`
+}
+
+/**
+ * @summary قائمة تكاملات الـ ERP
+ */
+export const listIntegrations = async ( options?: RequestInit): Promise<ErpIntegration[]> => {
+
+  return customFetch<ErpIntegration[]>(getListIntegrationsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListIntegrationsQueryKey = () => {
+    return [
+    `/api/integrations`
+    ] as const;
+    }
+
+
+export const getListIntegrationsQueryOptions = <TData = Awaited<ReturnType<typeof listIntegrations>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listIntegrations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListIntegrationsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listIntegrations>>> = ({ signal }) => listIntegrations({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listIntegrations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListIntegrationsQueryResult = NonNullable<Awaited<ReturnType<typeof listIntegrations>>>
+export type ListIntegrationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary قائمة تكاملات الـ ERP
+ */
+
+export function useListIntegrations<TData = Awaited<ReturnType<typeof listIntegrations>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listIntegrations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListIntegrationsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateIntegrationUrl = () => {
+
+
+
+
+  return `/api/integrations`
+}
+
+/**
+ * @summary إنشاء تكامل جديد
+ */
+export const createIntegration = async (erpIntegrationInput: ErpIntegrationInput, options?: RequestInit): Promise<ErpIntegration> => {
+
+  return customFetch<ErpIntegration>(getCreateIntegrationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(erpIntegrationInput)
+  }
+);}
+
+
+
+
+
+export const getCreateIntegrationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createIntegration>>, TError,{data: BodyType<ErpIntegrationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createIntegration>>, TError,{data: BodyType<ErpIntegrationInput>}, TContext> => {
+
+const mutationKey = ['createIntegration'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createIntegration>>, {data: BodyType<ErpIntegrationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createIntegration(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateIntegrationMutationResult = NonNullable<Awaited<ReturnType<typeof createIntegration>>>
+    export type CreateIntegrationMutationBody = BodyType<ErpIntegrationInput>
+    export type CreateIntegrationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary إنشاء تكامل جديد
+ */
+export const useCreateIntegration = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createIntegration>>, TError,{data: BodyType<ErpIntegrationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createIntegration>>,
+        TError,
+        {data: BodyType<ErpIntegrationInput>},
+        TContext
+      > => {
+      return useMutation(getCreateIntegrationMutationOptions(options));
+    }
+
+export const getGetIntegrationUrl = (id: number,) => {
+
+
+
+
+  return `/api/integrations/${id}`
+}
+
+/**
+ * @summary تفاصيل تكامل
+ */
+export const getIntegration = async (id: number, options?: RequestInit): Promise<ErpIntegration> => {
+
+  return customFetch<ErpIntegration>(getGetIntegrationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetIntegrationQueryKey = (id: number,) => {
+    return [
+    `/api/integrations/${id}`
+    ] as const;
+    }
+
+
+export const getGetIntegrationQueryOptions = <TData = Awaited<ReturnType<typeof getIntegration>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIntegration>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetIntegrationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getIntegration>>> = ({ signal }) => getIntegration(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getIntegration>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetIntegrationQueryResult = NonNullable<Awaited<ReturnType<typeof getIntegration>>>
+export type GetIntegrationQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary تفاصيل تكامل
+ */
+
+export function useGetIntegration<TData = Awaited<ReturnType<typeof getIntegration>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getIntegration>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetIntegrationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateIntegrationUrl = (id: number,) => {
+
+
+
+
+  return `/api/integrations/${id}`
+}
+
+/**
+ * @summary تعديل تكامل
+ */
+export const updateIntegration = async (id: number,
+    erpIntegrationInput?: ErpIntegrationInput, options?: RequestInit): Promise<ErpIntegration> => {
+
+  return customFetch<ErpIntegration>(getUpdateIntegrationUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(erpIntegrationInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateIntegrationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateIntegration>>, TError,{id: number;data?: BodyType<ErpIntegrationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateIntegration>>, TError,{id: number;data?: BodyType<ErpIntegrationInput>}, TContext> => {
+
+const mutationKey = ['updateIntegration'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateIntegration>>, {id: number;data?: BodyType<ErpIntegrationInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateIntegration(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateIntegrationMutationResult = NonNullable<Awaited<ReturnType<typeof updateIntegration>>>
+    export type UpdateIntegrationMutationBody = BodyType<ErpIntegrationInput> | undefined
+    export type UpdateIntegrationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary تعديل تكامل
+ */
+export const useUpdateIntegration = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateIntegration>>, TError,{id: number;data?: BodyType<ErpIntegrationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateIntegration>>,
+        TError,
+        {id: number;data?: BodyType<ErpIntegrationInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateIntegrationMutationOptions(options));
+    }
+
+export const getDeleteIntegrationUrl = (id: number,) => {
+
+
+
+
+  return `/api/integrations/${id}`
+}
+
+/**
+ * @summary حذف تكامل
+ */
+export const deleteIntegration = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteIntegrationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteIntegrationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteIntegration>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteIntegration>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteIntegration'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteIntegration>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteIntegration(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteIntegrationMutationResult = NonNullable<Awaited<ReturnType<typeof deleteIntegration>>>
+
+    export type DeleteIntegrationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary حذف تكامل
+ */
+export const useDeleteIntegration = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteIntegration>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteIntegration>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteIntegrationMutationOptions(options));
+    }
+
+export const getTestIntegrationConnectionUrl = (id: number,) => {
+
+
+
+
+  return `/api/integrations/${id}/test`
+}
+
+/**
+ * @summary اختبار الاتصال بالـ ERP
+ */
+export const testIntegrationConnection = async (id: number, options?: RequestInit): Promise<ErpConnectionTestResult> => {
+
+  return customFetch<ErpConnectionTestResult>(getTestIntegrationConnectionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getTestIntegrationConnectionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testIntegrationConnection>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testIntegrationConnection>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['testIntegrationConnection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testIntegrationConnection>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  testIntegrationConnection(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestIntegrationConnectionMutationResult = NonNullable<Awaited<ReturnType<typeof testIntegrationConnection>>>
+
+    export type TestIntegrationConnectionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary اختبار الاتصال بالـ ERP
+ */
+export const useTestIntegrationConnection = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testIntegrationConnection>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof testIntegrationConnection>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getTestIntegrationConnectionMutationOptions(options));
+    }
+
+export const getSyncIntegrationUrl = (id: number,) => {
+
+
+
+
+  return `/api/integrations/${id}/sync`
+}
+
+/**
+ * @summary تشغيل مزامنة كاملة (في الخلفية)
+ */
+export const syncIntegration = async (id: number, options?: RequestInit): Promise<SyncIntegration200> => {
+
+  return customFetch<SyncIntegration200>(getSyncIntegrationUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSyncIntegrationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncIntegration>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncIntegration>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['syncIntegration'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncIntegration>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  syncIntegration(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncIntegrationMutationResult = NonNullable<Awaited<ReturnType<typeof syncIntegration>>>
+
+    export type SyncIntegrationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary تشغيل مزامنة كاملة (في الخلفية)
+ */
+export const useSyncIntegration = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncIntegration>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncIntegration>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getSyncIntegrationMutationOptions(options));
+    }
+
+export const getSyncIntegrationSuppliersUrl = (id: number,) => {
+
+
+
+
+  return `/api/integrations/${id}/sync-suppliers`
+}
+
+/**
+ * @summary استيراد الموردين من الـ ERP
+ */
+export const syncIntegrationSuppliers = async (id: number, options?: RequestInit): Promise<ErpSyncResult> => {
+
+  return customFetch<ErpSyncResult>(getSyncIntegrationSuppliersUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSyncIntegrationSuppliersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncIntegrationSuppliers>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncIntegrationSuppliers>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['syncIntegrationSuppliers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncIntegrationSuppliers>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  syncIntegrationSuppliers(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncIntegrationSuppliersMutationResult = NonNullable<Awaited<ReturnType<typeof syncIntegrationSuppliers>>>
+
+    export type SyncIntegrationSuppliersMutationError = ErrorType<unknown>
+
+    /**
+ * @summary استيراد الموردين من الـ ERP
+ */
+export const useSyncIntegrationSuppliers = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncIntegrationSuppliers>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncIntegrationSuppliers>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getSyncIntegrationSuppliersMutationOptions(options));
+    }
+
+export const getExportToIntegrationUrl = (id: number,) => {
+
+
+
+
+  return `/api/integrations/${id}/export`
+}
+
+/**
+ * @summary تصدير البيانات للـ ERP
+ */
+export const exportToIntegration = async (id: number, options?: RequestInit): Promise<ErpSyncResult> => {
+
+  return customFetch<ErpSyncResult>(getExportToIntegrationUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportToIntegrationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportToIntegration>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportToIntegration>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['exportToIntegration'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportToIntegration>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  exportToIntegration(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportToIntegrationMutationResult = NonNullable<Awaited<ReturnType<typeof exportToIntegration>>>
+
+    export type ExportToIntegrationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary تصدير البيانات للـ ERP
+ */
+export const useExportToIntegration = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportToIntegration>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof exportToIntegration>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getExportToIntegrationMutationOptions(options));
+    }
 
 export const getListRfqsUrl = (params?: ListRfqsParams,) => {
   const normalizedParams = new URLSearchParams();
