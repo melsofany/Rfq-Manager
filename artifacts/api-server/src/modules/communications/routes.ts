@@ -705,71 +705,71 @@ router.post("/whatsapp/forward", requireAuth, async (req, res): Promise<void> =>
 });
 
 // ─── POST /api/whatsapp/send-media (multipart/form-data via multer) ─────────
-    router.post("/whatsapp/send-media", requireAuth, _upload.single("file"), async (req, res): Promise<void> => {
-    const phone = (req.body as Record<string, string>).phone;
-    const supplierIdRaw = (req.body as Record<string, string>).supplierId;
-    const supplierId = supplierIdRaw ? parseInt(supplierIdRaw, 10) : undefined;
-    const file = req.file;
-    if (!phone || !file) {
-      res.status(400).json({ error: "phone and file are required" });
+router.post("/whatsapp/send-media", requireAuth, _upload.single("file"), async (req, res): Promise<void> => {
+  const phone = (req.body as Record<string, string>).phone;
+  const supplierIdRaw = (req.body as Record<string, string>).supplierId;
+  const supplierId = supplierIdRaw ? parseInt(supplierIdRaw, 10) : undefined;
+  const file = req.file;
+  if (!phone || !file) {
+    res.status(400).json({ error: "phone and file are required" });
+    return;
+  }
+  if (!isWhatsAppConfigured) {
+    res.status(500).json({ error: "WhatsApp not configured" });
+    return;
+  }
+  const fileMime = file.mimetype;
+  const fileFilename = file.originalname || "file";
+  try {
+    const blob = new Blob([new Uint8Array(file.buffer)], { type: fileMime });
+    const form = new FormData();
+    form.append("messaging_product", "whatsapp");
+    form.append("type", fileMime);
+    form.append("file", blob, fileFilename);
+    const uploadRes = await Whatsapp.$apiFetch$(
+      `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/media`,
+      { method: "POST", body: form },
+    );
+    const uploadData = (await uploadRes.json()) as { id?: string; error?: object };
+    if (!uploadRes.ok || !uploadData.id) {
+      logger.error({ uploadData }, "WhatsApp media upload failed");
+      res.status(500).json({ error: "فشل رفع الملف على WhatsApp" });
       return;
     }
-    if (!isWhatsAppConfigured) {
-      res.status(500).json({ error: "WhatsApp not configured" });
+    const mediaType = fileMime.startsWith("image/") ? "image"
+      : fileMime.startsWith("video/") ? "video"
+      : fileMime.startsWith("audio/") ? "audio"
+      : "document";
+    const { Image, Video, Audio, Document: WADocument } = await import("whatsapp-api-js/messages");
+    const message =
+      mediaType === "image" ? new Image(uploadData.id, true)
+      : mediaType === "video" ? new Video(uploadData.id, true)
+      : mediaType === "audio" ? new Audio(uploadData.id, true)
+      : new WADocument(uploadData.id, true, undefined, fileFilename);
+    const normalized = normalizePhone(phone);
+    const sendResult = await Whatsapp.sendMessage(WA_PHONE_ID, normalized, message);
+    if ("error" in sendResult && sendResult.error) {
+      logger.error({ sendResult }, "WhatsApp send media failed");
+      res.status(500).json({ error: "فشل إرسال الملف عبر WhatsApp" });
       return;
     }
-    const fileMime = file.mimetype;
-    const fileFilename = file.originalname || "file";
-    try {
-      const blob = new Blob([new Uint8Array(file.buffer)], { type: fileMime });
-      const form = new FormData();
-      form.append("messaging_product", "whatsapp");
-      form.append("type", fileMime);
-      form.append("file", blob, fileFilename);
-      const uploadRes = await Whatsapp.$apiFetch$(
-        `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/media`,
-        { method: "POST", body: form },
-      );
-      const uploadData = (await uploadRes.json()) as { id?: string; error?: object };
-      if (!uploadRes.ok || !uploadData.id) {
-        logger.error({ uploadData }, "WhatsApp media upload failed");
-        res.status(500).json({ error: "Failed to upload media to WhatsApp" });
-        return;
-      }
-      const mediaType = fileMime.startsWith("image/") ? "image"
-        : fileMime.startsWith("video/") ? "video"
-        : fileMime.startsWith("audio/") ? "audio"
-        : "document";
-      const { Image, Video, Audio, Document: WADocument } = await import("whatsapp-api-js/messages");
-      const message =
-        mediaType === "image" ? new Image(uploadData.id, true)
-        : mediaType === "video" ? new Video(uploadData.id, true)
-        : mediaType === "audio" ? new Audio(uploadData.id, true)
-        : new WADocument(uploadData.id, true, undefined, fileFilename);
-      const normalized = normalizePhone(phone);
-      const sendResult = await Whatsapp.sendMessage(WA_PHONE_ID, normalized, message);
-      if ("error" in sendResult && sendResult.error) {
-        logger.error({ sendResult }, "WhatsApp send media failed");
-        res.status(500).json({ error: "Failed to send media" });
-        return;
-      }
-      const outboundWaId = sendResult.messages?.[0]?.id ?? null;
-      const bodyText = mediaType === "image" ? `[صورة: ${fileFilename}]`
-        : mediaType === "video" ? `[فيديو: ${fileFilename}]`
-        : mediaType === "audio" ? `[صوت: ${fileFilename}]`
-        : `[مستند: ${fileFilename}]`;
-      await db.insert(whatsappChatsTable).values({
-        waMessageId: outboundWaId, direction: "outbound", phone: normalized,
-        supplierId: supplierId ?? null, body: bodyText, mediaId: uploadData.id,
-        mediaType, mimeType: fileMime, filename: fileFilename, isRead: true,
-      });
-      logger.info({ phone: normalized, mediaType, filename: fileFilename }, "WhatsApp media sent");
-      res.json({ ok: true });
-    } catch (err) {
-      logger.error({ err }, "Error in send-media");
-      res.status(500).json({ error: "Internal error sending media" });
-    }
+    const outboundWaId = sendResult.messages?.[0]?.id ?? null;
+    const bodyText = mediaType === "image" ? `[صورة: ${fileFilename}]`
+      : mediaType === "video" ? `[فيديو: ${fileFilename}]`
+      : mediaType === "audio" ? `[صوت: ${fileFilename}]`
+      : `[مستند: ${fileFilename}]`;
+    await db.insert(whatsappChatsTable).values({
+      waMessageId: outboundWaId, direction: "outbound", phone: normalized,
+      supplierId: supplierId ?? null, body: bodyText, mediaId: uploadData.id,
+      mediaType, mimeType: fileMime, filename: fileFilename, isRead: true,
     });
+    logger.info({ phone: normalized, mediaType, filename: fileFilename }, "WhatsApp media sent");
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "Error in send-media");
+    res.status(500).json({ error: "خطأ داخلي أثناء إرسال الملف" });
+  }
+});
 // ─── PATCH /api/whatsapp/messages/:id ────────────────────────────────────
 router.patch("/whatsapp/messages/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);

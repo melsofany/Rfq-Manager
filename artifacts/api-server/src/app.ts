@@ -49,12 +49,13 @@ app.use(
 // X-Hub-Signature-256 webhook signature (see modules/communications/routes.ts).
 app.use(
   express.json({
+    limit: "50mb",
     verify: (req: Request & { rawBody?: string }, _res, buf) => {
       req.rawBody = buf.toString("utf8");
     },
   }),
 );
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 app.use("/api", router);
 

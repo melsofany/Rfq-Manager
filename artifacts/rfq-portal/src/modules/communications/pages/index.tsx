@@ -539,16 +539,13 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     try {
       if (pendingFile) {
         setUploading(true);
+        const fd = new FormData();
+        fd.append("phone", selected);
+        if (selectedChat?.supplierId != null) fd.append("supplierId", String(selectedChat.supplierId));
+        fd.append("file", pendingFile.file, pendingFile.file.name);
         const r = await fetch("/api/whatsapp/send-media", {
           method: "POST", credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            phone: selected,
-            supplierId: selectedChat?.supplierId,
-            base64: pendingFile.base64,
-            mimeType: pendingFile.file.type,
-            filename: pendingFile.file.name,
-          }),
+          body: fd,
         });
         if (!r.ok) { const d = await r.json() as { error?: string }; showToast(d.error || "فشل رفع الملف", false); }
         else { showToast("تم إرسال الملف ✓", true); }
@@ -612,14 +609,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      const base64 = result.split(",")[1];
-      const preview = file.type.startsWith("image/") ? result : undefined;
-      setPendingFile({ file, base64, preview });
-    };
-    reader.readAsDataURL(file);
+    const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+    setPendingFile({ file, preview });
     e.target.value = "";
   }
 
