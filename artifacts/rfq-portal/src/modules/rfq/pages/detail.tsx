@@ -50,6 +50,7 @@ type OfferRow = {
   deviation: number;
   isLowest: boolean;
   isAnomaly: boolean;
+  notPriced?: boolean;
   attachments?: Array<{ id: number; originalName: string; sizeLabel?: string; downloadUrl?: string }>;
 };
 
@@ -78,12 +79,14 @@ function PriceCell({
   taxIncluded,
   isLowest,
   isAnomaly,
+  notPriced,
 }: {
   price: number;
   priceWithVat: number;
   taxIncluded: boolean;
   isLowest: boolean;
   isAnomaly: boolean;
+  notPriced?: boolean;
 }) {
   return (
     <div className="text-right leading-tight">
@@ -91,16 +94,20 @@ function PriceCell({
       <div
         className={cn(
           "font-mono text-xs font-semibold",
-          isLowest && "text-green-700",
-          isAnomaly && !isLowest && "text-amber-600",
-          !isLowest && !isAnomaly && "text-foreground",
+          !notPriced && isLowest && "text-green-700",
+          !notPriced && isAnomaly && !isLowest && "text-amber-600",
+          (notPriced || (!isLowest && !isAnomaly)) && "text-foreground",
         )}
       >
-        {priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
-        {isLowest && (
+        {notPriced ? (
+          <span className="text-xs text-muted-foreground italic">لم يسعّر</span>
+        ) : (
+          priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })
+        )}
+        {!notPriced && isLowest && (
           <span className="ml-1 text-[9px] bg-green-100 text-green-700 rounded px-1">أقل سعر</span>
         )}
-        {isAnomaly && !isLowest && (
+        {!notPriced && isAnomaly && !isLowest && (
           <AlertTriangle size={10} className="inline ml-1 text-amber-500" />
         )}
       </div>
@@ -123,6 +130,7 @@ function normalizeItems(offersData: OffersData): ItemAnalysis[] {
       priceWithVat:
         (o as OfferRow).priceWithVat ?? (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
       attachments: (o as OfferRow).attachments ?? [],
+      notPriced: (o as OfferRow).notPriced ?? false,
     })),
   }));
 }
@@ -1106,6 +1114,7 @@ export default function RfqDetailPage() {
                                         taxIncluded={o.taxIncluded}
                                         isLowest={o.isLowest}
                                         isAnomaly={o.isAnomaly}
+                                        notPriced={o.notPriced}
                                       />
                                     </td>
                                     {/* Delivery days */}
@@ -1120,11 +1129,10 @@ export default function RfqDetailPage() {
                                     <td
                                       className={cn(
                                         "px-4 py-2.5 text-right text-xs font-medium",
-                                        o.deviation < 0 ? "text-green-600" : "text-red-500",
+                                        !o.notPriced && o.deviation < 0 ? "text-green-600" : !o.notPriced ? "text-red-500" : "text-muted-foreground",
                                       )}
                                     >
-                                      {o.deviation > 0 ? "+" : ""}
-                                      {o.deviation.toFixed(1)}%
+                                      {o.notPriced ? "—" : (o.deviation > 0 ? "+" : "") + o.deviation.toFixed(1) + "%"}
                                     </td>
                                     {/* Supplier attachments */}
                                     <td className="px-4 py-2.5">

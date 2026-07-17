@@ -868,6 +868,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       deviation: number;
       isLowest: boolean;
       isAnomaly: boolean;
+      notPriced: boolean;
       attachments: Array<{ id: number; originalName: string; sizeLabel: string; downloadUrl: string }>;
     }> = [];
 
@@ -878,7 +879,8 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
         const price = parseFloat(oi.item.price);
         // Normalize: if supplier did NOT include tax, add 14% VAT for fair comparison
         const priceWithVat = oi.item.taxIncluded ? price : price * (1 + VAT_RATE);
-        vatPrices.push(priceWithVat);
+        const notPriced = price <= 0;
+        if (!notPriced) vatPrices.push(priceWithVat);
         offerDetails.push({
           supplierId: o.offer.supplierId,
           supplierName: o.supplierName || "",
@@ -890,6 +892,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
           deviation: 0,
           isLowest: false,
           isAnomaly: false,
+          notPriced,
           attachments: attachmentsByOffer[o.offer.id] ?? [],
         });
       }
@@ -902,6 +905,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       const fairPrice = avgPrice;
 
       for (const od of offerDetails) {
+        if (od.notPriced) continue;
         od.deviation = avgPrice > 0 ? ((od.priceWithVat - avgPrice) / avgPrice) * 100 : 0;
         od.isLowest = od.priceWithVat === minPrice;
         od.isAnomaly = Math.abs(od.deviation) > 50;
@@ -1132,7 +1136,8 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
         if (oi) {
           const price = parseFloat(oi.item.price);
           const priceWithVat = oi.item.taxIncluded ? price : price * (1 + PDF_VAT_RATE);
-          vatPrices.push(priceWithVat);
+          const notPriced = price <= 0;
+          if (!notPriced) vatPrices.push(priceWithVat);
           offerDetails.push({
             supplierName: o.supplierName || "",
             price,
@@ -1142,6 +1147,7 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
             deviation: 0,
             isLowest: false,
             isAnomaly: false,
+            notPriced,
           });
         }
       }
@@ -1151,6 +1157,7 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
         const avgPrice = vatPrices.reduce((a, b) => a + b, 0) / vatPrices.length;
         const maxPrice = Math.max(...vatPrices);
         for (const od of offerDetails) {
+          if (od.notPriced) continue;
           od.deviation = avgPrice > 0 ? ((od.priceWithVat - avgPrice) / avgPrice) * 100 : 0;
           od.isLowest = od.priceWithVat === minPrice;
           od.isAnomaly = Math.abs(od.deviation) > 50;
