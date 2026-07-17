@@ -85,7 +85,7 @@ function extractPricingToken(pricingUrl: string): string {
 // The library doesn't expose a typed multipart-form helper for uploadMedia, so
 // we use its authenticated `$$apiFetch$$` escape hatch — still the official,
 // token-authenticated client, just for an operation the wrapper leaves generic.
-async function uploadWhatsAppMedia(
+export async function uploadWhatsAppMedia(
   buffer: Buffer,
   filename: string,
   mimeType: string,
