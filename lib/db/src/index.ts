@@ -6,17 +6,15 @@ const { Pool } = pg;
 
 function getPool(): pg.Pool {
   if (!process.env.DATABASE_URL) {
-    throw new Error(
-      "DATABASE_URL must be set. Did you forget to provision a database?",
-    );
+    throw new Error("DATABASE_URL must be set. Did you forget to provision a database?");
   }
   return new Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: 5,
-      connectionTimeoutMillis: 10_000,  // fail fast if pool exhausted
-      idleTimeoutMillis: 30_000,
-      statement_timeout: 20_000,       // kill queries that run > 20s
-    });
+    connectionString: process.env.DATABASE_URL,
+    max: 5,
+    connectionTimeoutMillis: 10_000, // fail fast if pool exhausted
+    idleTimeoutMillis: 30_000,
+    statement_timeout: 20_000, // kill queries that run > 20s
+  });
 }
 
 let _pool: pg.Pool | undefined;

@@ -1855,7 +1855,20 @@ components:
 
     ItemHistory:
       type: object
-      required: [rfqItemId, description, rfqId, internalRfqNo, customerRfqNo, rfqStatus, rfqDate, sentCount, respondedCount, notRespondedCount, suppliers]
+      required:
+        [
+          rfqItemId,
+          description,
+          rfqId,
+          internalRfqNo,
+          customerRfqNo,
+          rfqStatus,
+          rfqDate,
+          sentCount,
+          respondedCount,
+          notRespondedCount,
+          suppliers,
+        ]
       properties:
         rfqItemId:
           type: integer

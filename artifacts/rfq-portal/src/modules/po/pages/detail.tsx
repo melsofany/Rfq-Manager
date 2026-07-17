@@ -5,7 +5,18 @@ import { getListPurchaseOrdersQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ArrowLeft, Download, Loader2, Send, CheckCircle2, XCircle, Mail, MessageCircle, Link2, Link2Off } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  Loader2,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Mail,
+  MessageCircle,
+  Link2,
+  Link2Off,
+} from "lucide-react";
 
 interface PoDetail {
   id: number;
@@ -97,8 +108,13 @@ function useRfqOptions() {
 }
 
 // Group items by supplier
-function groupBySupplier(items: PoItem[]): Map<string, { supplierId: number | null; supplierName: string | null; items: PoItem[] }> {
-  const map = new Map<string, { supplierId: number | null; supplierName: string | null; items: PoItem[] }>();
+function groupBySupplier(
+  items: PoItem[],
+): Map<string, { supplierId: number | null; supplierName: string | null; items: PoItem[] }> {
+  const map = new Map<
+    string,
+    { supplierId: number | null; supplierName: string | null; items: PoItem[] }
+  >();
   for (const item of items) {
     const key = item.supplierId != null ? `supplier-${item.supplierId}` : "no-supplier";
     if (!map.has(key)) {
@@ -132,7 +148,12 @@ export default function PurchaseOrderDetailPage() {
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
 
-  const grouped = items ? groupBySupplier(items) : new Map();
+  const grouped = items
+    ? groupBySupplier(items)
+    : new Map<
+        string,
+        { supplierId: number | null; supplierName: string | null; items: PoItem[] }
+      >();
   const suppliersWithId = [...grouped.values()].filter((g) => g.supplierId != null);
 
   const handleDispatch = async () => {
@@ -208,7 +229,9 @@ export default function PurchaseOrderDetailPage() {
   if (!po) {
     return (
       <Layout>
-        <div className="p-8 text-center text-muted-foreground text-sm">Purchase order not found.</div>
+        <div className="p-8 text-center text-muted-foreground text-sm">
+          Purchase order not found.
+        </div>
       </Layout>
     );
   }
@@ -216,18 +239,21 @@ export default function PurchaseOrderDetailPage() {
   return (
     <Layout>
       <div className="p-4 sm:p-6 max-w-5xl space-y-5">
-
         {/* Back + title */}
         <div className="flex items-center gap-3">
           <Link href="/purchase-orders">
-            <a className="text-muted-foreground hover:text-foreground"><ArrowLeft size={18} /></a>
+            <a className="text-muted-foreground hover:text-foreground">
+              <ArrowLeft size={18} />
+            </a>
           </Link>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-bold text-foreground font-mono">{po.internalPoNo}</h1>
               <StatusBadge status={po.status} />
             </div>
-            <p className="text-muted-foreground text-sm">Sheet PO: {po.sheetPoNo} · {new Date(po.createdAt).toLocaleDateString()}</p>
+            <p className="text-muted-foreground text-sm">
+              Sheet PO: {po.sheetPoNo} · {new Date(po.createdAt).toLocaleDateString()}
+            </p>
           </div>
           <Button
             onClick={handleDispatch}
@@ -249,7 +275,9 @@ export default function PurchaseOrderDetailPage() {
             <p className="text-xs text-muted-foreground mb-0.5">المستلم</p>
             <p className="font-medium">
               {po.receiverName ?? "—"}
-              {po.receiverPhone && <span className="text-muted-foreground ml-1">· {po.receiverPhone}</span>}
+              {po.receiverPhone && (
+                <span className="text-muted-foreground ml-1">· {po.receiverPhone}</span>
+              )}
             </p>
           </div>
           <div>
@@ -266,7 +294,9 @@ export default function PurchaseOrderDetailPage() {
               {po.linkedRfq ? (
                 <div className="flex items-center gap-2">
                   <Link href={`/rfq/${po.linkedRfq.id}`}>
-                    <a className="font-medium text-primary hover:underline font-mono">{po.linkedRfq.internalRfqNo}</a>
+                    <a className="font-medium text-primary hover:underline font-mono">
+                      {po.linkedRfq.internalRfqNo}
+                    </a>
                   </Link>
                   <StatusBadge status={po.linkedRfq.status} />
                 </div>
@@ -278,7 +308,11 @@ export default function PurchaseOrderDetailPage() {
               variant="outline"
               size="sm"
               className="gap-1.5 flex-shrink-0"
-              onClick={() => { setShowLinkPanel(!showLinkPanel); setLinkError(null); setSelectedRfqId(""); }}
+              onClick={() => {
+                setShowLinkPanel(!showLinkPanel);
+                setLinkError(null);
+                setSelectedRfqId("");
+              }}
             >
               {po.linkedRfq ? <Link2Off size={14} /> : <Link2 size={14} />}
               {po.linkedRfq ? "تغيير الربط" : "ربط بطلب تسعير"}
@@ -287,7 +321,10 @@ export default function PurchaseOrderDetailPage() {
 
           {showLinkPanel && (
             <div className="mt-4 pt-4 border-t border-border space-y-3">
-              <p className="text-xs text-muted-foreground">اختر طلب التسعير لربطه بهذا الأمر — سيتحول الطلب تلقائياً إلى حالة <strong>SUCCESS</strong></p>
+              <p className="text-xs text-muted-foreground">
+                اختر طلب التسعير لربطه بهذا الأمر — سيتحول الطلب تلقائياً إلى حالة{" "}
+                <strong>SUCCESS</strong>
+              </p>
               <div className="flex gap-2">
                 <select
                   className="flex-1 text-sm border border-border rounded-md px-3 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
@@ -310,7 +347,9 @@ export default function PurchaseOrderDetailPage() {
                   {linking ? <Loader2 size={13} className="animate-spin" /> : <Link2 size={13} />}
                   ربط
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setShowLinkPanel(false)}>إلغاء</Button>
+                <Button variant="ghost" size="sm" onClick={() => setShowLinkPanel(false)}>
+                  إلغاء
+                </Button>
               </div>
               {linkError && <p className="text-xs text-red-600">{linkError}</p>}
             </div>
@@ -334,18 +373,22 @@ export default function PurchaseOrderDetailPage() {
                   <span className="font-medium flex-1">{r.supplierName}</span>
                   <span className="flex items-center gap-1 text-xs">
                     <Mail size={12} />
-                    {r.emailSent
-                      ? <CheckCircle2 size={14} className="text-green-600" />
-                      : <XCircle size={14} className="text-red-500" />}
+                    {r.emailSent ? (
+                      <CheckCircle2 size={14} className="text-green-600" />
+                    ) : (
+                      <XCircle size={14} className="text-red-500" />
+                    )}
                     <span className={r.emailSent ? "text-green-700" : "text-red-600"}>
                       {r.emailSent ? "تم الإيميل" : (r.emailError ?? "لا يوجد إيميل")}
                     </span>
                   </span>
                   <span className="flex items-center gap-1 text-xs">
                     <MessageCircle size={12} />
-                    {r.whatsappSent
-                      ? <CheckCircle2 size={14} className="text-green-600" />
-                      : <XCircle size={14} className="text-red-500" />}
+                    {r.whatsappSent ? (
+                      <CheckCircle2 size={14} className="text-green-600" />
+                    ) : (
+                      <XCircle size={14} className="text-red-500" />
+                    )}
                     <span className={r.whatsappSent ? "text-green-700" : "text-red-600"}>
                       {r.whatsappSent ? "تم واتساب" : (r.whatsappError ?? "لا يوجد هاتف")}
                     </span>
@@ -362,9 +405,13 @@ export default function PurchaseOrderDetailPage() {
             <div className="px-4 py-2.5 border-b border-border bg-muted/20 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-foreground">
-                  {group.supplierName ?? <span className="text-muted-foreground italic">لم يتم تحديد المورد</span>}
+                  {group.supplierName ?? (
+                    <span className="text-muted-foreground italic">لم يتم تحديد المورد</span>
+                  )}
                 </span>
-                <span className="text-xs text-muted-foreground">({group.items.length} صنف{group.items.length !== 1 ? "" : ""})</span>
+                <span className="text-xs text-muted-foreground">
+                  ({group.items.length} صنف{group.items.length !== 1 ? "" : ""})
+                </span>
               </div>
               {group.supplierId != null && (
                 <button
@@ -384,20 +431,33 @@ export default function PurchaseOrderDetailPage() {
                     <th className="px-3 py-2 text-muted-foreground font-medium">#</th>
                     <th className="px-3 py-2 text-muted-foreground font-medium">رقم القطعة</th>
                     <th className="px-3 py-2 text-muted-foreground font-medium">الوصف</th>
-                    <th className="px-3 py-2 text-muted-foreground font-medium text-center">الكمية</th>
-                    <th className="px-3 py-2 text-muted-foreground font-medium text-center">الوحدة</th>
-                    <th className="px-3 py-2 text-muted-foreground font-medium text-right">سعر الوحدة</th>
+                    <th className="px-3 py-2 text-muted-foreground font-medium text-center">
+                      الكمية
+                    </th>
+                    <th className="px-3 py-2 text-muted-foreground font-medium text-center">
+                      الوحدة
+                    </th>
+                    <th className="px-3 py-2 text-muted-foreground font-medium text-right">
+                      سعر الوحدة
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {group.items.map((item, idx) => (
-                    <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/10">
-                      <td className="px-3 py-2 text-muted-foreground">{item.lineItem ?? idx + 1}</td>
+                    <tr
+                      key={item.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/10"
+                    >
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {item.lineItem ?? idx + 1}
+                      </td>
                       <td className="px-3 py-2">{item.partNo ?? "—"}</td>
                       <td className="px-3 py-2 max-w-[260px]">{item.description}</td>
                       <td className="px-3 py-2 text-center font-medium">{fmt(item.qty)}</td>
                       <td className="px-3 py-2 text-center">{item.uom ?? "—"}</td>
-                      <td className="px-3 py-2 text-right font-medium">{fmt(item.referencePrice)}</td>
+                      <td className="px-3 py-2 text-right font-medium">
+                        {fmt(item.referencePrice)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

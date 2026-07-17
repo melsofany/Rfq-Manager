@@ -1,15 +1,21 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import {
-  useCreateRfq,
-  getListRfqsQueryKey,
-} from "@workspace/api-client-react";
+import { useCreateRfq, getListRfqsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Search, Plus, Trash2, ChevronDown, CheckSquare, Square, ListChecks } from "lucide-react";
+import {
+  ArrowLeft,
+  Search,
+  Plus,
+  Trash2,
+  ChevronDown,
+  CheckSquare,
+  Square,
+  ListChecks,
+} from "lucide-react";
 import { Link } from "wouter";
 
 interface ItemRow {
@@ -57,7 +63,9 @@ function RfqNumberCombobox({
     ? suggestions.filter((s) => s.toLowerCase().includes(filter.toLowerCase())).slice(0, 50)
     : suggestions.slice(0, 50);
 
-  useEffect(() => { setFilter(value); }, [value]);
+  useEffect(() => {
+    setFilter(value);
+  }, [value]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -74,7 +82,11 @@ function RfqNumberCombobox({
       <div className="flex">
         <Input
           value={filter}
-          onChange={(e) => { setFilter(e.target.value); onChange(e.target.value); setOpen(true); }}
+          onChange={(e) => {
+            setFilter(e.target.value);
+            onChange(e.target.value);
+            setOpen(true);
+          }}
           onFocus={() => setOpen(true)}
           placeholder="e.g. 26R005452"
           required
@@ -94,7 +106,12 @@ function RfqNumberCombobox({
             <li
               key={num}
               className="px-3 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground"
-              onMouseDown={(e) => { e.preventDefault(); onChange(num); setFilter(num); setOpen(false); }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(num);
+                setFilter(num);
+                setOpen(false);
+              }}
             >
               {num}
             </li>
@@ -214,7 +231,10 @@ export default function NewRfqPage() {
   };
 
   const addItem = () =>
-    setItems((prev) => [...prev, { lineItem: "", partNo: "", description: "", uom: "", qty: "", referencePrice: "" }]);
+    setItems((prev) => [
+      ...prev,
+      { lineItem: "", partNo: "", description: "", uom: "", qty: "", referencePrice: "" },
+    ]);
 
   const removeItem = (i: number) => setItems((prev) => prev.filter((_, idx) => idx !== i));
 
@@ -273,7 +293,11 @@ export default function NewRfqPage() {
           <div className="flex gap-2 flex-wrap items-end">
             <div className="flex-1 min-w-[200px] space-y-1">
               <Label className="text-xs text-muted-foreground">Customer RFQ No.</Label>
-              <RfqNumberCombobox value={lookupQuery} onChange={setLookupQuery} suggestions={suggestions} />
+              <RfqNumberCombobox
+                value={lookupQuery}
+                onChange={setLookupQuery}
+                suggestions={suggestions}
+              />
             </div>
             <div className="w-32 space-y-1">
               <Label className="text-xs text-muted-foreground">Sheet tab (optional)</Label>
@@ -329,7 +353,11 @@ export default function NewRfqPage() {
                   <thead className="sticky top-0 bg-muted/60 border-b border-border z-10">
                     <tr>
                       <th className="px-3 py-2 w-8">
-                        <button type="button" onClick={toggleAll} className="text-muted-foreground hover:text-foreground">
+                        <button
+                          type="button"
+                          onClick={toggleAll}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
                           {allSelected ? (
                             <CheckSquare size={14} className="text-primary" />
                           ) : someSelected ? (
@@ -340,12 +368,20 @@ export default function NewRfqPage() {
                         </button>
                       </th>
                       <th className="px-3 py-2 text-left text-muted-foreground font-medium">#</th>
-                      <th className="px-3 py-2 text-left text-muted-foreground font-medium">Line Item</th>
-                      <th className="px-3 py-2 text-left text-muted-foreground font-medium">Part No</th>
-                      <th className="px-3 py-2 text-left text-muted-foreground font-medium min-w-[180px]">Description</th>
+                      <th className="px-3 py-2 text-left text-muted-foreground font-medium">
+                        Line Item
+                      </th>
+                      <th className="px-3 py-2 text-left text-muted-foreground font-medium">
+                        Part No
+                      </th>
+                      <th className="px-3 py-2 text-left text-muted-foreground font-medium min-w-[180px]">
+                        Description
+                      </th>
                       <th className="px-3 py-2 text-left text-muted-foreground font-medium">UOM</th>
                       <th className="px-3 py-2 text-left text-muted-foreground font-medium">QTY</th>
-                      <th className="px-3 py-2 text-left text-muted-foreground font-medium">Ref. Price</th>
+                      <th className="px-3 py-2 text-left text-muted-foreground font-medium">
+                        Ref. Price
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -383,7 +419,10 @@ export default function NewRfqPage() {
               <div className="flex items-center justify-between px-4 py-2.5 bg-muted/20 border-t border-border">
                 <button
                   type="button"
-                  onClick={() => { setShowPicker(false); setPendingItems([]); }}
+                  onClick={() => {
+                    setShowPicker(false);
+                    setPendingItems([]);
+                  }}
                   className="text-xs text-muted-foreground hover:text-foreground"
                 >
                   Cancel
@@ -426,7 +465,12 @@ export default function NewRfqPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Expiry Date <span className="text-muted-foreground font-normal text-xs">(blocks supplier pricing after this date)</span></Label>
+                <Label>
+                  Expiry Date{" "}
+                  <span className="text-muted-foreground font-normal text-xs">
+                    (blocks supplier pricing after this date)
+                  </span>
+                </Label>
                 <Input
                   type="date"
                   value={expiresAt}
@@ -442,7 +486,13 @@ export default function NewRfqPage() {
               <h2 className="font-semibold text-sm text-foreground">
                 Items <span className="text-muted-foreground font-normal">({items.length})</span>
               </h2>
-              <Button type="button" onClick={addItem} variant="ghost" size="sm" className="gap-1.5 h-7 text-xs">
+              <Button
+                type="button"
+                onClick={addItem}
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 h-7 text-xs"
+              >
                 <Plus size={13} /> Add Item
               </Button>
             </div>
@@ -451,40 +501,91 @@ export default function NewRfqPage() {
                 <thead>
                   <tr className="bg-muted/30 border-b border-border text-left">
                     <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-8">#</th>
-                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-36">Line Item</th>
-                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-28">Part No</th>
-                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium min-w-[200px]">Description *</th>
-                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-20">UOM</th>
-                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-20">QTY</th>
-                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-28">Ref. Price</th>
+                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-36">
+                      Line Item
+                    </th>
+                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-28">
+                      Part No
+                    </th>
+                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium min-w-[200px]">
+                      Description *
+                    </th>
+                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-20">
+                      UOM
+                    </th>
+                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-20">
+                      QTY
+                    </th>
+                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-28">
+                      Ref. Price
+                    </th>
                     <th className="px-3 py-2 w-8" />
                   </tr>
                 </thead>
                 <tbody>
                   {items.map((row, i) => (
                     <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/20">
-                      <td className="px-3 py-2 text-muted-foreground text-xs text-center">{i + 1}</td>
-                      <td className="px-2 py-1.5">
-                        <Input value={row.lineItem} onChange={(e) => updateItem(i, "lineItem", e.target.value)} className="h-7 text-xs" placeholder="Line item" />
+                      <td className="px-3 py-2 text-muted-foreground text-xs text-center">
+                        {i + 1}
                       </td>
                       <td className="px-2 py-1.5">
-                        <Input value={row.partNo} onChange={(e) => updateItem(i, "partNo", e.target.value)} className="h-7 text-xs" placeholder="Part number" />
+                        <Input
+                          value={row.lineItem}
+                          onChange={(e) => updateItem(i, "lineItem", e.target.value)}
+                          className="h-7 text-xs"
+                          placeholder="Line item"
+                        />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Input value={row.description} onChange={(e) => updateItem(i, "description", e.target.value)} className="h-7 text-xs" placeholder="Item description" required />
+                        <Input
+                          value={row.partNo}
+                          onChange={(e) => updateItem(i, "partNo", e.target.value)}
+                          className="h-7 text-xs"
+                          placeholder="Part number"
+                        />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Input value={row.uom} onChange={(e) => updateItem(i, "uom", e.target.value)} className="h-7 text-xs" placeholder="pc" />
+                        <Input
+                          value={row.description}
+                          onChange={(e) => updateItem(i, "description", e.target.value)}
+                          className="h-7 text-xs"
+                          placeholder="Item description"
+                          required
+                        />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Input value={row.qty} onChange={(e) => updateItem(i, "qty", e.target.value)} className="h-7 text-xs" type="number" placeholder="0" />
+                        <Input
+                          value={row.uom}
+                          onChange={(e) => updateItem(i, "uom", e.target.value)}
+                          className="h-7 text-xs"
+                          placeholder="pc"
+                        />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Input value={row.referencePrice} onChange={(e) => updateItem(i, "referencePrice", e.target.value)} className="h-7 text-xs" type="number" placeholder="0.00" />
+                        <Input
+                          value={row.qty}
+                          onChange={(e) => updateItem(i, "qty", e.target.value)}
+                          className="h-7 text-xs"
+                          type="number"
+                          placeholder="0"
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          value={row.referencePrice}
+                          onChange={(e) => updateItem(i, "referencePrice", e.target.value)}
+                          className="h-7 text-xs"
+                          type="number"
+                          placeholder="0.00"
+                        />
                       </td>
                       <td className="px-2 py-1.5 text-center">
                         {items.length > 1 && (
-                          <button type="button" onClick={() => removeItem(i)} className="text-muted-foreground hover:text-destructive">
+                          <button
+                            type="button"
+                            onClick={() => removeItem(i)}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
                             <Trash2 size={14} />
                           </button>
                         )}

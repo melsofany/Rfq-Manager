@@ -16,8 +16,19 @@ import { AttachmentsPanel } from "../components/Attachments";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft, Send, Eye, CheckCircle2, XCircle,
-  AlertTriangle, FileSpreadsheet, FileText, ClipboardList, Trash2, Copy, ExternalLink, Paperclip,
+  ArrowLeft,
+  Send,
+  Eye,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  FileSpreadsheet,
+  FileText,
+  ClipboardList,
+  Trash2,
+  Copy,
+  ExternalLink,
+  Paperclip,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -76,15 +87,21 @@ function PriceCell({
   return (
     <div className="text-right leading-tight">
       {/* VAT-inclusive price — primary comparison value */}
-      <div className={cn(
-        "font-mono text-xs font-semibold",
-        isLowest && "text-green-700",
-        isAnomaly && !isLowest && "text-amber-600",
-        !isLowest && !isAnomaly && "text-foreground",
-      )}>
+      <div
+        className={cn(
+          "font-mono text-xs font-semibold",
+          isLowest && "text-green-700",
+          isAnomaly && !isLowest && "text-amber-600",
+          !isLowest && !isAnomaly && "text-foreground",
+        )}
+      >
         {priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
-        {isLowest && <span className="ml-1 text-[9px] bg-green-100 text-green-700 rounded px-1">أقل سعر</span>}
-        {isAnomaly && !isLowest && <AlertTriangle size={10} className="inline ml-1 text-amber-500" />}
+        {isLowest && (
+          <span className="ml-1 text-[9px] bg-green-100 text-green-700 rounded px-1">أقل سعر</span>
+        )}
+        {isAnomaly && !isLowest && (
+          <AlertTriangle size={10} className="inline ml-1 text-amber-500" />
+        )}
       </div>
       {/* Original price — secondary, shown if tax was excluded */}
       {!taxIncluded && (
@@ -102,7 +119,8 @@ function normalizeItems(offersData: OffersData): ItemAnalysis[] {
     ...item,
     offers: (item.offers as OfferRow[]).map((o) => ({
       ...o,
-      priceWithVat: (o as OfferRow).priceWithVat ?? (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
+      priceWithVat:
+        (o as OfferRow).priceWithVat ?? (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
     })),
   }));
 }
@@ -120,9 +138,19 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
     [`Exported: ${new Date().toLocaleDateString("en-EG")}`, `VAT Rate: ${VAT_LABEL}`],
     [],
     [
-      "#", "Part No", "Description", "QTY", "UOM", "Ref. Price (EGP)",
-      "Supplier", "Original Price (EGP)", "Tax Inc.", "Price incl. VAT (EGP)",
-      "Lead (days)", "vs. Avg (VAT-adj) %", "Lowest?",
+      "#",
+      "Part No",
+      "Description",
+      "QTY",
+      "UOM",
+      "Ref. Price (EGP)",
+      "Supplier",
+      "Original Price (EGP)",
+      "Tax Inc.",
+      "Price incl. VAT (EGP)",
+      "Lead (days)",
+      "vs. Avg (VAT-adj) %",
+      "Lowest?",
     ],
   ];
 
@@ -130,8 +158,19 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
     const sorted = item.offers.slice().sort((a, b) => a.priceWithVat - b.priceWithVat);
     if (sorted.length === 0) {
       summaryRows.push([
-        idx + 1, item.partNo ?? "-", item.description, item.qty ?? "-", item.uom ?? "-",
-        item.referencePrice ?? "-", "No offers yet", "", "", "", "", "", "",
+        idx + 1,
+        item.partNo ?? "-",
+        item.description,
+        item.qty ?? "-",
+        item.uom ?? "-",
+        item.referencePrice ?? "-",
+        "No offers yet",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
       ]);
     } else {
       sorted.forEach((o, oi) => {
@@ -152,9 +191,19 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
         ]);
       });
       summaryRows.push([
-        "", "", "", "", "", "", "Summary (Incl. VAT)",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Summary (Incl. VAT)",
         `Min: ${item.minPrice?.toFixed(2) ?? "-"} | Avg: ${item.avgPrice?.toFixed(2) ?? "-"} | Max: ${item.maxPrice?.toFixed(2) ?? "-"}`,
-        "", "", "", "", "",
+        "",
+        "",
+        "",
+        "",
+        "",
       ]);
       summaryRows.push([]);
     }
@@ -162,8 +211,19 @@ async function exportToExcel(rfqNo: string, customerRfqNo: string, offersData: O
 
   const ws = utils.aoa_to_sheet(summaryRows);
   ws["!cols"] = [
-    { wch: 4 }, { wch: 14 }, { wch: 40 }, { wch: 8 }, { wch: 8 },
-    { wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 10 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 8 },
+    { wch: 4 },
+    { wch: 14 },
+    { wch: 40 },
+    { wch: 8 },
+    { wch: 8 },
+    { wch: 16 },
+    { wch: 28 },
+    { wch: 16 },
+    { wch: 10 },
+    { wch: 18 },
+    { wch: 12 },
+    { wch: 18 },
+    { wch: 8 },
   ];
   utils.book_append_sheet(wb, ws, "Price Comparison");
   writeFile(wb, `RFQ-Comparison-${rfqNo}.xlsx`);
@@ -187,9 +247,11 @@ async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void>
   if (!response.ok) {
     let detail = `خطأ ${response.status}`;
     try {
-      const errJson = await response.json() as { detail?: string; error?: string };
+      const errJson = (await response.json()) as { detail?: string; error?: string };
       detail = errJson.detail ?? errJson.error ?? detail;
-    } catch { /* keep default */ }
+    } catch {
+      /* keep default */
+    }
     throw new Error(detail);
   }
 
@@ -201,9 +263,9 @@ async function exportDispatchReport(rfqId: number, rfqNo: string): Promise<void>
 
   // 4. Trigger browser download
   const objectUrl = URL.createObjectURL(blob);
-  const anchor    = document.createElement("a");
-  anchor.href        = objectUrl;
-  anchor.download    = `Dispatch-Report-${rfqNo}.pdf`;
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = `Dispatch-Report-${rfqNo}.pdf`;
   anchor.style.display = "none";
   document.body.appendChild(anchor);
   anchor.click();
@@ -236,7 +298,9 @@ async function exportToPdf(
         closeDate = sl?.find((e) => e.closeDate)?.closeDate ?? null;
       }
     }
-  } catch { /* skip */ }
+  } catch {
+    /* skip */
+  }
 
   // Fetch logo as data URL
   let logoSrc = "";
@@ -250,39 +314,45 @@ async function exportToPdf(
         rd.readAsDataURL(blob);
       });
     }
-  } catch { /* skip */ }
+  } catch {
+    /* skip */
+  }
 
   const exportDate = new Date().toLocaleDateString("ar-EG", {
-    day: "2-digit", month: "2-digit", year: "numeric",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   });
   const allSuppliers = Array.from(
-    new Set(items.flatMap((i) => i.offers.map((o) => o.supplierName)))
+    new Set(items.flatMap((i) => i.offers.map((o) => o.supplierName))),
   );
 
   // Supplier header
-  const supHeaders = allSuppliers.map(
-    (s) => `<th colspan="2">${s}</th>`
-  ).join("");
-  const supSubHeaders = allSuppliers.map(
-    () => `<th class="s">السعر (ج.م)</th><th class="s v">شامل ض.ق.م ✱</th>`
-  ).join("");
+  const supHeaders = allSuppliers.map((s) => `<th colspan="2">${s}</th>`).join("");
+  const supSubHeaders = allSuppliers
+    .map(() => `<th class="s">السعر (ج.م)</th><th class="s v">شامل ض.ق.م ✱</th>`)
+    .join("");
 
   // Rows
-  const rows = items.map((item, idx) => {
-    const map = new Map<string, OfferRow>();
-    for (const o of item.offers) map.set(o.supplierName, o);
-    const cells = allSuppliers.map((s) => {
-      const o = map.get(s);
-      if (!o) return `<td>—</td><td>—</td>`;
-      const cls = o.isLowest ? ' class="low"' : o.isAnomaly ? ' class="hi"' : '';
-      return `<td>${o.price.toLocaleString("en-EG",{minimumFractionDigits:2})}</td>
-              <td${cls}>${o.priceWithVat.toLocaleString("en-EG",{minimumFractionDigits:2})}${o.isLowest?" ✓":""}</td>`;
-    }).join("");
-    const sum = item.minPrice != null
-      ? `أقل: ${item.minPrice.toFixed(2)}<br>متوسط: ${item.avgPrice?.toFixed(2)}<br>أعلى: ${item.maxPrice?.toFixed(2)}`
-      : "—";
-    const bg = idx % 2 === 0 ? "" : ' class="alt"';
-    return `<tr${bg}>
+  const rows = items
+    .map((item, idx) => {
+      const map = new Map<string, OfferRow>();
+      for (const o of item.offers) map.set(o.supplierName, o);
+      const cells = allSuppliers
+        .map((s) => {
+          const o = map.get(s);
+          if (!o) return `<td>—</td><td>—</td>`;
+          const cls = o.isLowest ? ' class="low"' : o.isAnomaly ? ' class="hi"' : "";
+          return `<td>${o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}</td>
+              <td${cls}>${o.priceWithVat.toLocaleString("en-EG", { minimumFractionDigits: 2 })}${o.isLowest ? " ✓" : ""}</td>`;
+        })
+        .join("");
+      const sum =
+        item.minPrice != null
+          ? `أقل: ${item.minPrice.toFixed(2)}<br>متوسط: ${item.avgPrice?.toFixed(2)}<br>أعلى: ${item.maxPrice?.toFixed(2)}`
+          : "—";
+      const bg = idx % 2 === 0 ? "" : ' class="alt"';
+      return `<tr${bg}>
       <td class="c">${idx + 1}</td>
       <td class="d">${item.description}</td>
       <td class="c ltr">${item.partNo ?? "—"}</td>
@@ -290,7 +360,8 @@ async function exportToPdf(
       ${cells}
       <td class="sm">${sum}</td>
     </tr>`;
-  }).join("");
+    })
+    .join("");
 
   const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -425,8 +496,7 @@ export default function RfqDetailPage() {
   const { employee } = useAuth();
   const isAdmin = employee?.role === "admin";
 
-  const getPricingUrl = (token: string) =>
-    `${window.location.origin}/q/${token}`;
+  const getPricingUrl = (token: string) => `${window.location.origin}/q/${token}`;
 
   const copyPricingLink = async (token: string, supplierName: string) => {
     try {
@@ -485,7 +555,9 @@ export default function RfqDetailPage() {
     try {
       await exportDispatchReport(rfqId, rfq.internalRfqNo);
     } catch (err) {
-      toast.error("Dispatch report failed: " + (err instanceof Error ? err.message : "Unknown error"));
+      toast.error(
+        "Dispatch report failed: " + (err instanceof Error ? err.message : "Unknown error"),
+      );
     } finally {
       setExporting(null);
     }
@@ -499,18 +571,16 @@ export default function RfqDetailPage() {
     const printWin = window.open(
       "",
       "_blank",
-      "width=1280,height=860,scrollbars=yes,resizable=yes"
+      "width=1280,height=860,scrollbars=yes,resizable=yes",
     );
     if (!printWin) {
-      toast.error(
-        "يرجى السماح بالنوافذ المنبثقة في المتصفح ثم أعد المحاولة"
-      );
+      toast.error("يرجى السماح بالنوافذ المنبثقة في المتصفح ثم أعد المحاولة");
       return;
     }
 
     // Show loading state immediately
     printWin.document.write(
-      '<html dir="rtl"><body style="font-family:Arial;text-align:center;padding:60px;font-size:16px;color:#1a3a5c">⏳ جاري إعداد التقرير...</body></html>'
+      '<html dir="rtl"><body style="font-family:Arial;text-align:center;padding:60px;font-size:16px;color:#1a3a5c">⏳ جاري إعداد التقرير...</body></html>',
     );
 
     setExporting("pdf");
@@ -523,7 +593,7 @@ export default function RfqDetailPage() {
           offersData as OffersData,
           rfq.employeeName,
           rfqId,
-          printWin
+          printWin,
         );
       } catch (err) {
         printWin.close();
@@ -582,10 +652,12 @@ export default function RfqDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {(rfq.status === "DRAFT" || rfq.status === "SENT" || rfq.status === "QUOTED") && (
-              showCancelConfirm ? (
+            {(rfq.status === "DRAFT" || rfq.status === "SENT" || rfq.status === "QUOTED") &&
+              (showCancelConfirm ? (
                 <>
-                  <span className="text-xs text-muted-foreground">هل تريد تحديد الطلب كـ FAILED؟</span>
+                  <span className="text-xs text-muted-foreground">
+                    هل تريد تحديد الطلب كـ FAILED؟
+                  </span>
                   <Button
                     variant="destructive"
                     size="sm"
@@ -610,8 +682,7 @@ export default function RfqDetailPage() {
                   <Trash2 size={14} />
                   فشل الطلب
                 </Button>
-              )
-            )}
+              ))}
             {rfq.status !== "FAILED" && rfq.status !== "SUCCESS" && (
               <Button onClick={() => navigate(`/rfq/${rfqId}/send`)} size="sm" className="gap-1.5">
                 <Send size={14} />
@@ -658,14 +729,17 @@ export default function RfqDetailPage() {
                   "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px capitalize transition-colors",
                   tab === t
                     ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
                 {t === "items" && `Items (${rfq.itemCount})`}
                 {t === "sent" && `Sent Log (${rfq.supplierCount})`}
                 {t === "offers" && `Offers & Analysis (${rfq.offerCount})`}
                 {t === "attachments" && (
-                  <span className="flex items-center gap-1"><Paperclip size={13} />المرفقات</span>
+                  <span className="flex items-center gap-1">
+                    <Paperclip size={13} />
+                    المرفقات
+                  </span>
                 )}
               </button>
             ))}
@@ -718,36 +792,62 @@ export default function RfqDetailPage() {
         {tab === "items" && (
           <div className="bg-card border border-border rounded-lg overflow-hidden">
             {!items?.length ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">No items on this RFQ yet.</div>
+              <div className="p-8 text-center text-muted-foreground text-sm">
+                No items on this RFQ yet.
+              </div>
             ) : (
-              <div className="overflow-x-auto"><table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/30 border-b border-border text-left">
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-10">#</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Part No</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Description</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">QTY</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">UOM</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">Ref. Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, i) => (
-                    <tr key={item.id} className="border-b border-border last:border-0">
-                      <td className="px-4 py-3 text-muted-foreground text-xs text-center">{i + 1}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{item.partNo ?? "-"}</td>
-                      <td className="px-4 py-3 text-foreground text-sm">{item.description}</td>
-                      <td className="px-4 py-3 text-center text-foreground text-sm">{item.qty ?? "-"}</td>
-                      <td className="px-4 py-3 text-center text-foreground text-xs">{item.uom ?? "-"}</td>
-                      <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
-                        {item.referencePrice != null
-                          ? item.referencePrice.toLocaleString("en-EG", { minimumFractionDigits: 2 })
-                          : "-"}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/30 border-b border-border text-left">
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-10">
+                        #
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Part No
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Description
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        QTY
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        UOM
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
+                        Ref. Price
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table></div>
+                  </thead>
+                  <tbody>
+                    {items.map((item, i) => (
+                      <tr key={item.id} className="border-b border-border last:border-0">
+                        <td className="px-4 py-3 text-muted-foreground text-xs text-center">
+                          {i + 1}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                          {item.partNo ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-foreground text-sm">{item.description}</td>
+                        <td className="px-4 py-3 text-center text-foreground text-sm">
+                          {item.qty ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-center text-foreground text-xs">
+                          {item.uom ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
+                          {item.referencePrice != null
+                            ? item.referencePrice.toLocaleString("en-EG", {
+                                minimumFractionDigits: 2,
+                              })
+                            : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
@@ -763,78 +863,116 @@ export default function RfqDetailPage() {
               <div className="p-8 text-center text-muted-foreground text-sm">
                 RFQ hasn't been sent to any suppliers yet.
                 <div className="mt-3">
-                  <Button onClick={() => navigate(`/rfq/${rfqId}/send`)} size="sm" className="gap-1.5">
+                  <Button
+                    onClick={() => navigate(`/rfq/${rfqId}/send`)}
+                    size="sm"
+                    className="gap-1.5"
+                  >
                     <Send size={14} /> Send Now
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="overflow-x-auto"><table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/30 border-b border-border text-left">
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Supplier</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Phone</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Email</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Link Opened</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Views</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Offer</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Close Date</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Sent</th>
-                    {isAdmin && (
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">رابط التسعير</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sentLog.map((log) => (
-                    <tr key={log.id} className="border-b border-border last:border-0">
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-foreground text-sm">{log.supplierName}</p>
-                        {log.contactPerson && <p className="text-muted-foreground text-xs">{log.contactPerson}</p>}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{log.phone ?? "-"}</td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{log.email ?? "-"}</td>
-                      <td className="px-4 py-3 text-center">
-                        {log.linkOpened
-                          ? <Eye size={15} className="inline text-blue-500" />
-                          : <span className="text-muted-foreground text-xs">-</span>}
-                      </td>
-                      <td className="px-4 py-3 text-center text-xs text-foreground">{log.openCount ?? 0}</td>
-                      <td className="px-4 py-3 text-center">
-                        {log.offerSubmitted
-                          ? <CheckCircle2 size={15} className="inline text-green-500" />
-                          : <XCircle size={15} className="inline text-muted-foreground" />}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{log.closeDate ?? "-"}</td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {new Date(log.createdAt).toLocaleDateString()}
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/30 border-b border-border text-left">
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Supplier
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Phone
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Email
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        Link Opened
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        Views
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        Offer
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Close Date
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Sent
+                      </th>
                       {isAdmin && (
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => copyPricingLink(log.token, log.supplierName)}
-                              title="نسخ رابط التسعير"
-                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              <Copy size={13} />
-                            </button>
-                            <a
-                              href={getPricingUrl(log.token)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="فتح رابط التسعير"
-                              className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-blue-600 transition-colors"
-                            >
-                              <ExternalLink size={13} />
-                            </a>
-                          </div>
-                        </td>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                          رابط التسعير
+                        </th>
                       )}
                     </tr>
-                  ))}
-                </tbody>
-              </table></div>
+                  </thead>
+                  <tbody>
+                    {sentLog.map((log) => (
+                      <tr key={log.id} className="border-b border-border last:border-0">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-foreground text-sm">{log.supplierName}</p>
+                          {log.contactPerson && (
+                            <p className="text-muted-foreground text-xs">{log.contactPerson}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs font-mono">
+                          {log.phone ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {log.email ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {log.linkOpened ? (
+                            <Eye size={15} className="inline text-blue-500" />
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center text-xs text-foreground">
+                          {log.openCount ?? 0}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {log.offerSubmitted ? (
+                            <CheckCircle2 size={15} className="inline text-green-500" />
+                          ) : (
+                            <XCircle size={15} className="inline text-muted-foreground" />
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {log.closeDate ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {new Date(log.createdAt).toLocaleDateString()}
+                        </td>
+                        {isAdmin && (
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => copyPricingLink(log.token, log.supplierName ?? "")}
+                                title="نسخ رابط التسعير"
+                                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                <Copy size={13} />
+                              </button>
+                              <a
+                                href={getPricingUrl(log.token)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="فتح رابط التسعير"
+                                className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-blue-600 transition-colors"
+                              >
+                                <ExternalLink size={13} />
+                              </a>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
@@ -848,9 +986,9 @@ export default function RfqDetailPage() {
                 <AlertTriangle size={14} className="text-amber-500 shrink-0" />
                 <span>
                   جميع مقارنات الأسعار تأخذ في الحسبان{" "}
-                  <strong>ضريبة القيمة المضافة {VAT_LABEL}</strong>.
-                  الأسعار التي لا تشمل الضريبة يُضاف إليها {VAT_RATE * 100}% للمقارنة العادلة.
-                  العمود <strong>"السعر شاملاً ض.ق.م"</strong> هو المرجع للمقارنة.
+                  <strong>ضريبة القيمة المضافة {VAT_LABEL}</strong>. الأسعار التي لا تشمل الضريبة
+                  يُضاف إليها {VAT_RATE * 100}% للمقارنة العادلة. العمود{" "}
+                  <strong>"السعر شاملاً ض.ق.م"</strong> هو المرجع للمقارنة.
                 </span>
               </div>
             )}
@@ -872,7 +1010,10 @@ export default function RfqDetailPage() {
                   }));
 
                   return (
-                    <div key={item.rfqItemId} className="bg-card border border-border rounded-lg overflow-hidden">
+                    <div
+                      key={item.rfqItemId}
+                      className="bg-card border border-border rounded-lg overflow-hidden"
+                    >
                       {/* Item header */}
                       <div className="px-5 py-3 border-b border-border bg-muted/20">
                         <p className="font-medium text-foreground text-sm">{item.description}</p>
@@ -882,139 +1023,184 @@ export default function RfqDetailPage() {
                           {item.referencePrice != null && (
                             <span className="ml-2">
                               Ref: EGP{" "}
-                              {item.referencePrice.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
+                              {item.referencePrice.toLocaleString("en-EG", {
+                                minimumFractionDigits: 2,
+                              })}
                             </span>
                           )}
                         </p>
                       </div>
 
                       {enrichedOffers.length === 0 ? (
-                        <div className="px-5 py-4 text-muted-foreground text-xs">No quotes for this item yet</div>
+                        <div className="px-5 py-4 text-muted-foreground text-xs">
+                          No quotes for this item yet
+                        </div>
                       ) : (
-                        <div className="overflow-x-auto"><table className="w-full text-sm">
-                          <thead>
-                            <tr className="bg-muted/10 border-b border-border text-left">
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">المورد</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
-                                السعر الأصلي (ج.م)
-                              </th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-center">
-                                يشمل الضريبة؟
-                              </th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
-                                السعر شاملاً ض.ق.م {VAT_LABEL}
-                              </th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-center">
-                                مدة التسليم
-                              </th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
-                                ملاحظات البند
-                              </th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
-                                مقارنة بالمتوسط
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {enrichedOffers
-                              .slice()
-                              .sort((a, b) => a.priceWithVat - b.priceWithVat)
-                              .map((o) => (
-                                <tr key={o.supplierId} className="border-b border-border last:border-0 hover:bg-muted/5">
-                                  <td className="px-4 py-2.5 text-foreground text-sm font-medium">
-                                    {o.supplierName}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="bg-muted/10 border-b border-border text-left">
+                                <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                                  المورد
+                                </th>
+                                <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
+                                  السعر الأصلي (ج.م)
+                                </th>
+                                <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-center">
+                                  يشمل الضريبة؟
+                                </th>
+                                <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
+                                  السعر شاملاً ض.ق.م {VAT_LABEL}
+                                </th>
+                                <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-center">
+                                  مدة التسليم
+                                </th>
+                                <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                                  ملاحظات البند
+                                </th>
+                                <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
+                                  مقارنة بالمتوسط
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {enrichedOffers
+                                .slice()
+                                .sort((a, b) => a.priceWithVat - b.priceWithVat)
+                                .map((o) => (
+                                  <tr
+                                    key={o.supplierId}
+                                    className="border-b border-border last:border-0 hover:bg-muted/5"
+                                  >
+                                    <td className="px-4 py-2.5 text-foreground text-sm font-medium">
+                                      {o.supplierName}
+                                    </td>
+                                    {/* Original price */}
+                                    <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
+                                      {o.price.toLocaleString("en-EG", {
+                                        minimumFractionDigits: 2,
+                                      })}
+                                    </td>
+                                    {/* Tax included indicator */}
+                                    <td className="px-4 py-2.5 text-center text-xs">
+                                      {o.taxIncluded ? (
+                                        <span className="inline-flex items-center gap-0.5 text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">
+                                          <CheckCircle2 size={10} /> نعم
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-0.5 text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                                          <XCircle size={10} /> لا
+                                        </span>
+                                      )}
+                                    </td>
+                                    {/* VAT-inclusive price (primary comparison) */}
+                                    <td className="px-4 py-2.5">
+                                      <PriceCell
+                                        price={o.price}
+                                        priceWithVat={o.priceWithVat}
+                                        taxIncluded={o.taxIncluded}
+                                        isLowest={o.isLowest}
+                                        isAnomaly={o.isAnomaly}
+                                      />
+                                    </td>
+                                    {/* Delivery days */}
+                                    <td className="px-4 py-2.5 text-center text-xs text-muted-foreground">
+                                      {o.deliveryDays != null ? `${o.deliveryDays} يوم` : "—"}
+                                    </td>
+                                    {/* Item notes */}
+                                    <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[160px]">
+                                      {o.notes ?? "—"}
+                                    </td>
+                                    {/* Deviation from average (VAT-adjusted) */}
+                                    <td
+                                      className={cn(
+                                        "px-4 py-2.5 text-right text-xs font-medium",
+                                        o.deviation < 0 ? "text-green-600" : "text-red-500",
+                                      )}
+                                    >
+                                      {o.deviation > 0 ? "+" : ""}
+                                      {o.deviation.toFixed(1)}%
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                            {item.minPrice != null && (
+                              <tfoot className="bg-muted/30 border-t border-border">
+                                <tr>
+                                  <td
+                                    className="px-4 py-2 text-xs text-muted-foreground font-semibold"
+                                    colSpan={3}
+                                  >
+                                    ملخص الأسعار شاملة ض.ق.م {VAT_LABEL}
                                   </td>
-                                  {/* Original price */}
-                                  <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground">
-                                    {o.price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
-                                  </td>
-                                  {/* Tax included indicator */}
-                                  <td className="px-4 py-2.5 text-center text-xs">
-                                    {o.taxIncluded ? (
-                                      <span className="inline-flex items-center gap-0.5 text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">
-                                        <CheckCircle2 size={10} /> نعم
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center gap-0.5 text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
-                                        <XCircle size={10} /> لا
-                                      </span>
-                                    )}
-                                  </td>
-                                  {/* VAT-inclusive price (primary comparison) */}
-                                  <td className="px-4 py-2.5">
-                                    <PriceCell
-                                      price={o.price}
-                                      priceWithVat={o.priceWithVat}
-                                      taxIncluded={o.taxIncluded}
-                                      isLowest={o.isLowest}
-                                      isAnomaly={o.isAnomaly}
-                                    />
-                                  </td>
-                                  {/* Delivery days */}
-                                  <td className="px-4 py-2.5 text-center text-xs text-muted-foreground">
-                                    {o.deliveryDays != null ? `${o.deliveryDays} يوم` : "—"}
-                                  </td>
-                                  {/* Item notes */}
-                                  <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[160px]">
-                                    {o.notes ?? "—"}
-                                  </td>
-                                  {/* Deviation from average (VAT-adjusted) */}
-                                  <td className={cn(
-                                    "px-4 py-2.5 text-right text-xs font-medium",
-                                    o.deviation < 0 ? "text-green-600" : "text-red-500"
-                                  )}>
-                                    {o.deviation > 0 ? "+" : ""}{o.deviation.toFixed(1)}%
+                                  <td
+                                    className="px-4 py-2 text-right text-xs text-foreground font-mono"
+                                    colSpan={3}
+                                  >
+                                    <span className="text-green-700 font-semibold">
+                                      أقل:{" "}
+                                      {item.minPrice.toLocaleString("en-EG", {
+                                        minimumFractionDigits: 2,
+                                      })}
+                                    </span>
+                                    <span className="mx-2 text-muted-foreground">|</span>
+                                    <span>
+                                      متوسط:{" "}
+                                      {item.avgPrice?.toLocaleString("en-EG", {
+                                        minimumFractionDigits: 2,
+                                      })}
+                                    </span>
+                                    <span className="mx-2 text-muted-foreground">|</span>
+                                    <span className="text-red-500">
+                                      أعلى:{" "}
+                                      {item.maxPrice?.toLocaleString("en-EG", {
+                                        minimumFractionDigits: 2,
+                                      })}
+                                    </span>
                                   </td>
                                 </tr>
-                              ))}
-                          </tbody>
-                          {item.minPrice != null && (
-                            <tfoot className="bg-muted/30 border-t border-border">
-                              <tr>
-                                <td className="px-4 py-2 text-xs text-muted-foreground font-semibold" colSpan={3}>
-                                  ملخص الأسعار شاملة ض.ق.م {VAT_LABEL}
-                                </td>
-                                <td className="px-4 py-2 text-right text-xs text-foreground font-mono" colSpan={3}>
-                                  <span className="text-green-700 font-semibold">
-                                    أقل: {item.minPrice.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
-                                  </span>
-                                  <span className="mx-2 text-muted-foreground">|</span>
-                                  <span>
-                                    متوسط: {item.avgPrice?.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
-                                  </span>
-                                  <span className="mx-2 text-muted-foreground">|</span>
-                                  <span className="text-red-500">
-                                    أعلى: {item.maxPrice?.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
-                                  </span>
-                                </td>
-                              </tr>
-                            </tfoot>
-                          )}
-                        </table></div>
+                              </tfoot>
+                            )}
+                          </table>
+                        </div>
                       )}
                     </div>
                   );
                 })}
-              {/* General Notes per Supplier */}
-              {(() => {
-                const offersWithNotes = (offersData?.offers as Array<{supplierId: number; supplierName: string | null; generalNotes?: string | null}> | undefined)?.filter((o) => o.generalNotes);
-                if (!offersWithNotes?.length) return null;
-                return (
-                  <div className="bg-card border border-border rounded-lg overflow-hidden">
-                    <div className="px-5 py-3 border-b border-border bg-muted/20">
-                      <p className="font-medium text-foreground text-sm">الملاحظات العامة من الموردين</p>
+                {/* General Notes per Supplier */}
+                {(() => {
+                  const offersWithNotes = (
+                    offersData?.offers as
+                      | Array<{
+                          supplierId: number;
+                          supplierName: string | null;
+                          generalNotes?: string | null;
+                        }>
+                      | undefined
+                  )?.filter((o) => o.generalNotes);
+                  if (!offersWithNotes?.length) return null;
+                  return (
+                    <div className="bg-card border border-border rounded-lg overflow-hidden">
+                      <div className="px-5 py-3 border-b border-border bg-muted/20">
+                        <p className="font-medium text-foreground text-sm">
+                          الملاحظات العامة من الموردين
+                        </p>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {offersWithNotes.map((o) => (
+                          <div key={o.supplierId} className="px-5 py-3">
+                            <p className="text-xs font-semibold text-foreground mb-1">
+                              {o.supplierName ?? "مورد"}
+                            </p>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                              {o.generalNotes}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="divide-y divide-border">
-                      {offersWithNotes.map((o) => (
-                        <div key={o.supplierId} className="px-5 py-3">
-                          <p className="text-xs font-semibold text-foreground mb-1">{o.supplierName ?? "مورد"}</p>
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{o.generalNotes}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
               </>
             )}
           </div>
@@ -1022,7 +1208,9 @@ export default function RfqDetailPage() {
         {/* ── Attachments tab ─────────────────────────────────────── */}
         {tab === "attachments" && (
           <div className="bg-card border border-border rounded-lg p-5">
-            <p className="text-sm font-medium text-foreground mb-4">المرفقات الفنية للطلب (مواصفات، رسومات، ملفات)</p>
+            <p className="text-sm font-medium text-foreground mb-4">
+              المرفقات الفنية للطلب (مواصفات، رسومات، ملفات)
+            </p>
             <AttachmentsPanel
               listUrl={`/api/rfq/${rfqId}/attachments`}
               uploadUrl={`/api/rfq/${rfqId}/attachments`}
@@ -1030,7 +1218,6 @@ export default function RfqDetailPage() {
             />
           </div>
         )}
-
       </div>
     </Layout>
   );

@@ -48,7 +48,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "employees.createEmployee": "Create Employee",
     "employees.saveChanges": "Save Changes",
     "employees.confirmDelete": "Confirm Delete",
-    "employees.deleteWarning": "Are you sure you want to delete this employee? This action cannot be undone.",
+    "employees.deleteWarning":
+      "Are you sure you want to delete this employee? This action cannot be undone.",
     "employees.deleting": "Deleting...",
     "employees.confirmDeleteBtn": "Yes, Delete",
     "employees.loading": "Loading...",
@@ -249,11 +250,13 @@ const translations: Record<Lang, Record<string, string>> = {
     // Pricing page (supplier-facing)
     "pricing.loading": "Loading quotation data...",
     "pricing.invalidLink": "Invalid Link",
-    "pricing.invalidLinkDesc": "This link is invalid or has expired. Please contact Cortoba Supplies for a new link.",
+    "pricing.invalidLinkDesc":
+      "This link is invalid or has expired. Please contact Cortoba Supplies for a new link.",
     "pricing.expired": "Quotation Period Ended",
     "pricing.expiredDesc": "The closing date for RFQ",
     "pricing.expiredDesc2": "has passed. No new offers can be submitted.",
-    "pricing.subtitle": "Please enter your best prices for items you can supply, then submit your offer — you can price some items only. This link is exclusive to your company — do not share it.",
+    "pricing.subtitle":
+      "Please enter your best prices for items you can supply, then submit your offer — you can price some items only. This link is exclusive to your company — do not share it.",
     "pricing.rfqNo": "RFQ No.:",
     "pricing.closeDate": "Close Date:",
     "pricing.supplier": "Supplier:",
@@ -546,11 +549,13 @@ const translations: Record<Lang, Record<string, string>> = {
     // Pricing page
     "pricing.loading": "جاري تحميل بيانات طلب العرض...",
     "pricing.invalidLink": "الرابط غير صالح",
-    "pricing.invalidLinkDesc": "هذا الرابط غير صالح أو انتهت صلاحيته. يرجى التواصل مع قرطبة للتوريدات للحصول على رابط جديد.",
+    "pricing.invalidLinkDesc":
+      "هذا الرابط غير صالح أو انتهت صلاحيته. يرجى التواصل مع قرطبة للتوريدات للحصول على رابط جديد.",
     "pricing.expired": "انتهى وقت تقديم العروض",
     "pricing.expiredDesc": "لقد انتهى تاريخ الإغلاق لطلب العرض",
     "pricing.expiredDesc2": "لم يعد بالإمكان تقديم عروض جديدة.",
-    "pricing.subtitle": "يرجى إدخال أفضل أسعاركم للبنود التي تستطيعون توريدها ثم إرسال العرض — يمكنكم تسعير بعض البنود فقط. هذا الرابط مخصص لشركتكم فقط — لا تشاركه مع أي جهة أخرى.",
+    "pricing.subtitle":
+      "يرجى إدخال أفضل أسعاركم للبنود التي تستطيعون توريدها ثم إرسال العرض — يمكنكم تسعير بعض البنود فقط. هذا الرابط مخصص لشركتكم فقط — لا تشاركه مع أي جهة أخرى.",
     "pricing.rfqNo": "رقم الطلب:",
     "pricing.closeDate": "تاريخ الإغلاق:",
     "pricing.supplier": "المورد:",

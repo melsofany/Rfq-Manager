@@ -169,14 +169,14 @@ export async function initDb(): Promise<void> {
     `);
 
     // Add media columns to whatsapp_chats (safe migration — skipped if already present)
-      await client.query(`
+    await client.query(`
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS media_id TEXT;
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS media_type TEXT;
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS mime_type TEXT;
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS filename TEXT;
       `);
-      // Migrate old RFQ status values to new unified status workflow (idempotent)
-      await client.query(`
+    // Migrate old RFQ status values to new unified status workflow (idempotent)
+    await client.query(`
         UPDATE rfq SET status = 'DRAFT' WHERE status = 'draft';
         UPDATE rfq SET status = 'SENT' WHERE status = 'sent';
         UPDATE rfq SET status = 'QUOTED' WHERE status IN ('partial', 'completed');
@@ -184,22 +184,22 @@ export async function initDb(): Promise<void> {
         ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS rfq_id INTEGER REFERENCES rfq(id);
       `);
 
-      // Backfill historical data: SENT RFQs that already have offers → QUOTED
-      await client.query(`
+    // Backfill historical data: SENT RFQs that already have offers → QUOTED
+    await client.query(`
         UPDATE rfq
         SET status = 'QUOTED'
         WHERE status = 'SENT'
           AND id IN (SELECT DISTINCT rfq_id FROM offers);
       `);
 
-      // Backfill historical data: SENT/QUOTED RFQs linked to a purchase order → SUCCESS
-      await client.query(`
+    // Backfill historical data: SENT/QUOTED RFQs linked to a purchase order → SUCCESS
+    await client.query(`
         UPDATE rfq
         SET status = 'SUCCESS'
         WHERE status IN ('SENT', 'QUOTED')
           AND id IN (SELECT DISTINCT rfq_id FROM purchase_orders WHERE rfq_id IS NOT NULL);
       `);
-      logger.info("initDb: all tables created");
+    logger.info("initDb: all tables created");
 
     // ── ERP Integrations table ─────────────────────────────────────────────
     await client.query(`
@@ -220,9 +220,24 @@ export async function initDb(): Promise<void> {
 
     // Seed accounts — passwords read from env vars; MUST be changed after first login in production
     const accounts = [
-      { name: "Admin",           email: "admin@cortoba-supplies.com",   password: process.env.SEED_ADMIN_PASS   ?? "Cortoba@Admin1",   role: "admin"      },
-      { name: "Khalid Al-Manager", email: "khalid@cortoba-supplies.com", password: process.env.SEED_MANAGER_PASS ?? "Cortoba@Mgr1",     role: "manager"    },
-      { name: "Sara",            email: "sara@cortoba-supplies.com",    password: process.env.SEED_STAFF_PASS   ?? "Cortoba@Staff1",   role: "purchasing" },
+      {
+        name: "Admin",
+        email: "admin@cortoba-supplies.com",
+        password: process.env.SEED_ADMIN_PASS ?? "Cortoba@Admin1",
+        role: "admin",
+      },
+      {
+        name: "Khalid Al-Manager",
+        email: "khalid@cortoba-supplies.com",
+        password: process.env.SEED_MANAGER_PASS ?? "Cortoba@Mgr1",
+        role: "manager",
+      },
+      {
+        name: "Sara",
+        email: "sara@cortoba-supplies.com",
+        password: process.env.SEED_STAFF_PASS ?? "Cortoba@Staff1",
+        role: "purchasing",
+      },
     ];
     for (const acc of accounts) {
       const hash = await bcrypt.hash(acc.password, 10);
@@ -230,37 +245,107 @@ export async function initDb(): Promise<void> {
         `INSERT INTO employees (name, email, password_hash, role, is_active)
          VALUES ($1, $2, $3, $4, true)
          ON CONFLICT (email) DO UPDATE SET role = $4`,
-        [acc.name, acc.email, hash, acc.role]
+        [acc.name, acc.email, hash, acc.role],
       );
     }
     // ── Seed supplier categories ──────────────────────────────────────────────
-    const categories = ['الميكانيكا', 'معدات البترول'];
+    const categories = ["الميكانيكا", "معدات البترول"];
     for (const cat of categories) {
       await client.query(
         `INSERT INTO supplier_categories (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
-        [cat]
+        [cat],
       );
     }
 
     // ── Seed suppliers ────────────────────────────────────────────────────────
     const suppliers = [
-      { name: 'DK-LOK Egypt',               contact: 'م. إبراهيم حسونة', email: 'dklokegypt@andalos-group.com',   phone: '01066033398', address: '9أ شارع رفاعة، مصر الجديدة، القاهرة',                        category: 'الميكانيكا'    },
-      { name: 'الفتح للهيدروليك',            contact: null,                email: 'info@elfath-egypt.com',          phone: '01091893963', address: '71 عمارات السعودية، السواح، حدائق القبة، القاهرة',            category: 'الميكانيكا'    },
-      { name: 'إيتا للهندسة (ETA)',          contact: null,                email: 'info@eta-egypt.com',             phone: '01000829882', address: '7 شارع الجزائر، المعادي الجديدة، القاهرة',                   category: 'الميكانيكا'    },
-      { name: 'أدماسكو (Admasco)',           contact: null,                email: 'admasco@admasco-eg.com',         phone: '0227025224',  address: '28 ش 270، الشطر الرابع، المعادي الجديدة، القاهرة',            category: 'معدات البترول' },
-      { name: 'بتروتك (Petrotech)',          contact: null,                email: 'info@petrotechegypt.com',        phone: '01001650215', address: '19 شارع أحمد كامل، المعادي الجديدة، القاهرة',                 category: 'معدات البترول' },
-      { name: 'الدلتا للهيدروليك',           contact: 'م. مجدي سعيد',     email: 'info@deltahydrauliceng.net',     phone: '01223456395', address: '100 شارع السبتية (فرع جسر السويس)، القاهرة',                  category: 'الميكانيكا'    },
-      { name: 'النيل للمعدات البترولية',     contact: null,                email: 'sales1@nile-trade.com',          phone: '01000829882', address: '2 أبراج أغاخان، كورنيش النيل، المظلات، القاهرة',              category: 'معدات البترول' },
-      { name: 'هانز هيدروليك',              contact: null,                email: 'hans_hydraulic@yahoo.com',       phone: '01017851376', address: '129 شارع السبتية، أمام سوق العصر، القاهرة',                   category: 'الميكانيكا'    },
-      { name: 'الهندسية للتوريدات',          contact: null,                email: 'info@engineeringco-eg.com',      phone: '01100170007', address: '100 شارع السبتية، وسط البلد، القاهرة',                        category: 'الميكانيكا'    },
-      { name: 'الدولية للهيدروليك',          contact: 'م. عليوة أبو غرام', email: 'info@eldawlya-hydraulic.com',  phone: '01016888666', address: 'شارع فتحي مرعي، مدينة السلام، القاهرة',                       category: 'الميكانيكا'    },
+      {
+        name: "DK-LOK Egypt",
+        contact: "م. إبراهيم حسونة",
+        email: "dklokegypt@andalos-group.com",
+        phone: "01066033398",
+        address: "9أ شارع رفاعة، مصر الجديدة، القاهرة",
+        category: "الميكانيكا",
+      },
+      {
+        name: "الفتح للهيدروليك",
+        contact: null,
+        email: "info@elfath-egypt.com",
+        phone: "01091893963",
+        address: "71 عمارات السعودية، السواح، حدائق القبة، القاهرة",
+        category: "الميكانيكا",
+      },
+      {
+        name: "إيتا للهندسة (ETA)",
+        contact: null,
+        email: "info@eta-egypt.com",
+        phone: "01000829882",
+        address: "7 شارع الجزائر، المعادي الجديدة، القاهرة",
+        category: "الميكانيكا",
+      },
+      {
+        name: "أدماسكو (Admasco)",
+        contact: null,
+        email: "admasco@admasco-eg.com",
+        phone: "0227025224",
+        address: "28 ش 270، الشطر الرابع، المعادي الجديدة، القاهرة",
+        category: "معدات البترول",
+      },
+      {
+        name: "بتروتك (Petrotech)",
+        contact: null,
+        email: "info@petrotechegypt.com",
+        phone: "01001650215",
+        address: "19 شارع أحمد كامل، المعادي الجديدة، القاهرة",
+        category: "معدات البترول",
+      },
+      {
+        name: "الدلتا للهيدروليك",
+        contact: "م. مجدي سعيد",
+        email: "info@deltahydrauliceng.net",
+        phone: "01223456395",
+        address: "100 شارع السبتية (فرع جسر السويس)، القاهرة",
+        category: "الميكانيكا",
+      },
+      {
+        name: "النيل للمعدات البترولية",
+        contact: null,
+        email: "sales1@nile-trade.com",
+        phone: "01000829882",
+        address: "2 أبراج أغاخان، كورنيش النيل، المظلات، القاهرة",
+        category: "معدات البترول",
+      },
+      {
+        name: "هانز هيدروليك",
+        contact: null,
+        email: "hans_hydraulic@yahoo.com",
+        phone: "01017851376",
+        address: "129 شارع السبتية، أمام سوق العصر، القاهرة",
+        category: "الميكانيكا",
+      },
+      {
+        name: "الهندسية للتوريدات",
+        contact: null,
+        email: "info@engineeringco-eg.com",
+        phone: "01100170007",
+        address: "100 شارع السبتية، وسط البلد، القاهرة",
+        category: "الميكانيكا",
+      },
+      {
+        name: "الدولية للهيدروليك",
+        contact: "م. عليوة أبو غرام",
+        email: "info@eldawlya-hydraulic.com",
+        phone: "01016888666",
+        address: "شارع فتحي مرعي، مدينة السلام، القاهرة",
+        category: "الميكانيكا",
+      },
     ];
     for (const s of suppliers) {
       await client.query(
         `INSERT INTO suppliers (name, contact_person, email, phone, address, category, is_active)
          SELECT $1, $2, $3, $4, $5, $6, true
          WHERE NOT EXISTS (SELECT 1 FROM suppliers WHERE name = $1)`,
-        [s.name, s.contact, s.email, s.phone, s.address, s.category]
+        [s.name, s.contact, s.email, s.phone, s.address, s.category],
       );
     }
 

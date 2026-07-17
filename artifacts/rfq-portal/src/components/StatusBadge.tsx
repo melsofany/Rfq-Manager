@@ -20,7 +20,9 @@ export function StatusBadge({ status }: { status: string }) {
   const className = statusStyles[status] ?? "bg-gray-100 text-gray-600";
   const label = t(`status.${status}`) === `status.${status}` ? status : t(`status.${status}`);
   return (
-    <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium", className)}>
+    <span
+      className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium", className)}
+    >
       {label}
     </span>
   );

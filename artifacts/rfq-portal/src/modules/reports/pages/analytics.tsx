@@ -1,11 +1,32 @@
 import { useGetDashboardStats, getGetDashboardStatsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, RadarChart, PolarGrid, PolarAngleAxis, Radar,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  Radar,
 } from "recharts";
 import { useState } from "react";
-import { TrendingUp, Package, ShoppingCart, Users, FileText, CheckCircle, AlertCircle, Clock } from "lucide-react";
+import {
+  TrendingUp,
+  Package,
+  ShoppingCart,
+  Users,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+} from "lucide-react";
 
 // ────────────────── helpers ──────────────────
 function RateRing({ value, label, color }: { value: number; label: string; color: string }) {
@@ -17,23 +38,49 @@ function RateRing({ value, label, color }: { value: number; label: string; color
       <svg width={104} height={104} viewBox="0 0 104 104">
         <circle cx={52} cy={52} r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth={10} />
         <circle
-          cx={52} cy={52} r={r} fill="none" stroke={color} strokeWidth={10}
-          strokeDasharray={circ} strokeDashoffset={offset}
-          strokeLinecap="round" style={{ transform: "rotate(-90deg)", transformOrigin: "52px 52px" }}
+          cx={52}
+          cy={52}
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth={10}
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          style={{ transform: "rotate(-90deg)", transformOrigin: "52px 52px" }}
         />
-        <text x={52} y={56} textAnchor="middle" fontSize={18} fontWeight={700} fill="hsl(var(--foreground))">{value}%</text>
+        <text
+          x={52}
+          y={56}
+          textAnchor="middle"
+          fontSize={18}
+          fontWeight={700}
+          fill="hsl(var(--foreground))"
+        >
+          {value}%
+        </text>
       </svg>
       <p className="text-xs text-muted-foreground text-center leading-tight">{label}</p>
     </div>
   );
 }
 
-function KpiChip({ label, value, icon: Icon, accent }: {
-  label: string; value: number | string; icon: React.ComponentType<{ size?: number; className?: string }>; accent: string;
+function KpiChip({
+  label,
+  value,
+  icon: Icon,
+  accent,
+}: {
+  label: string;
+  value: number | string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  accent: string;
 }) {
   return (
     <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-3">
-      <div className={`p-2 rounded-lg ${accent}`}><Icon size={18} /></div>
+      <div className={`p-2 rounded-lg ${accent}`}>
+        <Icon size={18} />
+      </div>
       <div>
         <p className="text-xl font-bold text-foreground leading-tight">{value}</p>
         <p className="text-muted-foreground text-xs">{label}</p>
@@ -43,10 +90,27 @@ function KpiChip({ label, value, icon: Icon, accent }: {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "#6b7280", SENT: "#3b82f6", QUOTED: "#f97316", FAILED: "#ef4444", SUCCESS: "#22c55e",
-  draft: "#6b7280", sent: "#3b82f6", partial: "#f97316", completed: "#22c55e", closed: "#64748b",
+  DRAFT: "#6b7280",
+  SENT: "#3b82f6",
+  QUOTED: "#f97316",
+  FAILED: "#ef4444",
+  SUCCESS: "#22c55e",
+  draft: "#6b7280",
+  sent: "#3b82f6",
+  partial: "#f97316",
+  completed: "#22c55e",
+  closed: "#64748b",
 };
-const DEEP_COLORS = ["#1e3a5f", "#0ea5e9", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899", "#f97316", "#14b8a6"];
+const DEEP_COLORS = [
+  "#1e3a5f",
+  "#0ea5e9",
+  "#f59e0b",
+  "#10b981",
+  "#8b5cf6",
+  "#ec4899",
+  "#f97316",
+  "#14b8a6",
+];
 
 // ────────────────── page ──────────────────
 export default function AnalyticsPage() {
@@ -54,18 +118,21 @@ export default function AnalyticsPage() {
     query: { queryKey: getGetDashboardStatsQueryKey() },
   });
 
-  const [supplierTab, setSupplierTab] = useState<"response" | "po" | "price" | "delivery">("response");
+  const [supplierTab, setSupplierTab] = useState<"response" | "po" | "price" | "delivery">(
+    "response",
+  );
 
   // ── derived data ──
-  const statusData = stats?.rfqsByStatus?.map(s => ({
-    name: s.status ?? "",
-    count: s.count ?? 0,
-  })) ?? [];
+  const statusData =
+    stats?.rfqsByStatus?.map((s) => ({
+      name: s.status ?? "",
+      count: s.count ?? 0,
+    })) ?? [];
 
   const itemsPieData = [
     { name: "مسعّرة", value: stats?.pricedItems ?? 0, color: "#10b981" },
     { name: "غير مسعّرة", value: stats?.unpricedItems ?? 0, color: "#ef4444" },
-  ].filter(d => d.value > 0);
+  ].filter((d) => d.value > 0);
 
   const rfqVsPoData = [
     { name: "طلبات تسعير", value: stats?.totalRfqs ?? 0, fill: "#1e3a5f" },
@@ -75,15 +142,18 @@ export default function AnalyticsPage() {
 
   const deepSuppliers = stats?.supplierDeepStats ?? [];
 
-  const supplierChartData = deepSuppliers.map(s => ({
-    name: s.supplierName.length > 16 ? s.supplierName.slice(0, 16) + "…" : s.supplierName,
-    responseRate: s.responseRate,
-    poWinRate: s.poWinRate,
-    avgPrice: s.avgPrice ?? 0,
-    avgDelivery: s.avgDeliveryDays ?? 0,
-    offers: s.totalOffersSubmitted,
-    poItems: s.totalPoItems,
-  }));
+  const supplierChartData = deepSuppliers.map((s) => {
+    const sName = s.supplierName ?? "";
+    return {
+      name: sName.length > 16 ? sName.slice(0, 16) + "…" : sName,
+      responseRate: s.responseRate,
+      poWinRate: s.poWinRate,
+      avgPrice: s.avgPrice ?? 0,
+      avgDelivery: s.avgDeliveryDays ?? 0,
+      offers: s.totalOffersSubmitted,
+      poItems: s.totalPoItems,
+    };
+  });
 
   const loading = isLoading;
 
@@ -98,56 +168,106 @@ export default function AnalyticsPage() {
 
         {loading ? (
           <div className="space-y-4">
-            {[1, 2, 3].map(i => <div key={i} className="h-48 bg-muted rounded-lg animate-pulse" />)}
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-48 bg-muted rounded-lg animate-pulse" />
+            ))}
           </div>
         ) : (
           <div className="space-y-6">
-
             {/* ── Row 1: Core KPIs ── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <KpiChip label="إجمالي طلبات التسعير" value={stats?.totalRfqs ?? 0} icon={FileText} accent="bg-blue-100 text-blue-700" />
-              <KpiChip label="طلبات مفتوحة" value={stats?.openRfqs ?? 0} icon={Clock} accent="bg-amber-100 text-amber-700" />
-              <KpiChip label="الموردون النشطون" value={stats?.totalSuppliers ?? 0} icon={Users} accent="bg-purple-100 text-purple-700" />
-              <KpiChip label="العروض المستلمة" value={stats?.totalOffers ?? 0} icon={TrendingUp} accent="bg-teal-100 text-teal-700" />
-              <KpiChip label="أوامر الشراء" value={stats?.totalPos ?? 0} icon={ShoppingCart} accent="bg-green-100 text-green-700" />
-              <KpiChip label="البنود الكلية" value={stats?.totalItems ?? 0} icon={Package} accent="bg-slate-100 text-slate-700" />
+              <KpiChip
+                label="إجمالي طلبات التسعير"
+                value={stats?.totalRfqs ?? 0}
+                icon={FileText}
+                accent="bg-blue-100 text-blue-700"
+              />
+              <KpiChip
+                label="طلبات مفتوحة"
+                value={stats?.openRfqs ?? 0}
+                icon={Clock}
+                accent="bg-amber-100 text-amber-700"
+              />
+              <KpiChip
+                label="الموردون النشطون"
+                value={stats?.totalSuppliers ?? 0}
+                icon={Users}
+                accent="bg-purple-100 text-purple-700"
+              />
+              <KpiChip
+                label="العروض المستلمة"
+                value={stats?.totalOffers ?? 0}
+                icon={TrendingUp}
+                accent="bg-teal-100 text-teal-700"
+              />
+              <KpiChip
+                label="أوامر الشراء"
+                value={stats?.totalPos ?? 0}
+                icon={ShoppingCart}
+                accent="bg-green-100 text-green-700"
+              />
+              <KpiChip
+                label="البنود الكلية"
+                value={stats?.totalItems ?? 0}
+                icon={Package}
+                accent="bg-slate-100 text-slate-700"
+              />
             </div>
 
             {/* ── Row 2: Rate rings + RFQ→PO funnel ── */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
               {/* Rate rings */}
               <div className="bg-card border border-border rounded-lg p-5">
                 <h2 className="font-semibold text-sm text-foreground mb-5">نسب الأداء الرئيسية</h2>
                 <div className="flex flex-wrap justify-around gap-6">
                   <RateRing value={stats?.pricingRate ?? 0} label="نسبة التسعير" color="#0ea5e9" />
                   <RateRing value={stats?.poRate ?? 0} label="نسبة البنود بـ PO" color="#10b981" />
-                  <RateRing value={stats?.rfqToPoRate ?? 0} label="تحويل RFQ → PO" color="#f59e0b" />
-                  <RateRing value={stats?.responseRateThisMonth ?? 0} label="معدل استجابة الموردين" color="#8b5cf6" />
+                  <RateRing
+                    value={stats?.rfqToPoRate ?? 0}
+                    label="تحويل RFQ → PO"
+                    color="#f59e0b"
+                  />
+                  <RateRing
+                    value={stats?.responseRateThisMonth ?? 0}
+                    label="معدل استجابة الموردين"
+                    color="#8b5cf6"
+                  />
                 </div>
               </div>
 
               {/* Items pricing donut */}
               <div className="bg-card border border-border rounded-lg p-5">
-                <h2 className="font-semibold text-sm text-foreground mb-1">البنود المسعّرة مقابل الغير مسعّرة</h2>
+                <h2 className="font-semibold text-sm text-foreground mb-1">
+                  البنود المسعّرة مقابل الغير مسعّرة
+                </h2>
                 <p className="text-xs text-muted-foreground mb-4">
-                  {stats?.pricedItems ?? 0} مسعّرة · {stats?.unpricedItems ?? 0} غير مسعّرة · {stats?.itemsWithPo ?? 0} صدر لها PO
+                  {stats?.pricedItems ?? 0} مسعّرة · {stats?.unpricedItems ?? 0} غير مسعّرة ·{" "}
+                  {stats?.itemsWithPo ?? 0} صدر لها PO
                 </p>
                 {itemsPieData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
                       <Pie
-                        data={itemsPieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85}
-                        dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        data={itemsPieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={85}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                         labelLine={false}
                       >
-                        {itemsPieData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                        {itemsPieData.map((d, i) => (
+                          <Cell key={i} fill={d.color} />
+                        ))}
                       </Pie>
                       <Tooltip formatter={(v) => [v, "بنود"]} />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">لا توجد بيانات</div>
+                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                    لا توجد بيانات
+                  </div>
                 )}
               </div>
             </div>
@@ -155,7 +275,9 @@ export default function AnalyticsPage() {
             {/* ── Row 3: RFQ Status + RFQ vs PO bar ── */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-card border border-border rounded-lg p-5">
-                <h2 className="font-semibold text-sm text-foreground mb-4">توزيع طلبات التسعير حسب الحالة</h2>
+                <h2 className="font-semibold text-sm text-foreground mb-4">
+                  توزيع طلبات التسعير حسب الحالة
+                </h2>
                 {statusData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={statusData} barCategoryGap="30%">
@@ -164,20 +286,28 @@ export default function AnalyticsPage() {
                       <Tooltip />
                       <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                         {statusData.map((d, i) => (
-                          <Cell key={i} fill={STATUS_COLORS[d.name] ?? DEEP_COLORS[i % DEEP_COLORS.length]} />
+                          <Cell
+                            key={i}
+                            fill={STATUS_COLORS[d.name] ?? DEEP_COLORS[i % DEEP_COLORS.length]}
+                          />
                         ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">لا توجد بيانات</div>
+                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                    لا توجد بيانات
+                  </div>
                 )}
               </div>
 
               <div className="bg-card border border-border rounded-lg p-5">
-                <h2 className="font-semibold text-sm text-foreground mb-1">العلاقة بين طلبات التسعير والـ PO</h2>
+                <h2 className="font-semibold text-sm text-foreground mb-1">
+                  العلاقة بين طلبات التسعير والـ PO
+                </h2>
                 <p className="text-xs text-muted-foreground mb-4">
-                  {stats?.rfqsWithPo ?? 0} من أصل {stats?.totalRfqs ?? 0} طلب تسعير تحول إلى أمر شراء
+                  {stats?.rfqsWithPo ?? 0} من أصل {stats?.totalRfqs ?? 0} طلب تسعير تحول إلى أمر
+                  شراء
                 </p>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={rfqVsPoData} barCategoryGap="35%">
@@ -185,7 +315,9 @@ export default function AnalyticsPage() {
                     <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                     <Tooltip />
                     <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                      {rfqVsPoData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                      {rfqVsPoData.map((d, i) => (
+                        <Cell key={i} fill={d.fill} />
+                      ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -197,16 +329,24 @@ export default function AnalyticsPage() {
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <div>
                   <h2 className="font-semibold text-sm text-foreground">تحليل الموردين المتعمق</h2>
-                  <p className="text-xs text-muted-foreground">معدل الاستجابة · نسبة الفوز بـ PO · متوسط السعر · أيام التسليم</p>
+                  <p className="text-xs text-muted-foreground">
+                    معدل الاستجابة · نسبة الفوز بـ PO · متوسط السعر · أيام التسليم
+                  </p>
                 </div>
                 <div className="flex gap-1 bg-muted rounded-lg p-1 text-xs">
-                  {(["response", "po", "price", "delivery"] as const).map(tab => (
+                  {(["response", "po", "price", "delivery"] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setSupplierTab(tab)}
                       className={`px-3 py-1 rounded-md transition-colors ${supplierTab === tab ? "bg-card text-foreground shadow-sm font-medium" : "text-muted-foreground hover:text-foreground"}`}
                     >
-                      {tab === "response" ? "الاستجابة" : tab === "po" ? "PO فوز" : tab === "price" ? "السعر" : "التسليم"}
+                      {tab === "response"
+                        ? "الاستجابة"
+                        : tab === "po"
+                          ? "PO فوز"
+                          : tab === "price"
+                            ? "السعر"
+                            : "التسليم"}
                     </button>
                   ))}
                 </div>
@@ -218,26 +358,63 @@ export default function AnalyticsPage() {
                     <XAxis
                       type="number"
                       tick={{ fontSize: 10 }}
-                      domain={supplierTab === "response" || supplierTab === "po" ? [0, 100] : undefined}
-                      tickFormatter={supplierTab === "response" || supplierTab === "po" ? (v) => `${v}%` : undefined}
+                      domain={
+                        supplierTab === "response" || supplierTab === "po" ? [0, 100] : undefined
+                      }
+                      tickFormatter={
+                        supplierTab === "response" || supplierTab === "po"
+                          ? (v) => `${v}%`
+                          : undefined
+                      }
                     />
                     <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={120} />
                     <Tooltip
                       formatter={(v, name) => {
-                        if (name === "responseRate" || name === "poWinRate") return [`${v}%`, name === "responseRate" ? "معدل الاستجابة" : "نسبة PO"];
+                        if (name === "responseRate" || name === "poWinRate")
+                          return [`${v}%`, name === "responseRate" ? "معدل الاستجابة" : "نسبة PO"];
                         if (name === "avgPrice") return [Number(v).toLocaleString(), "متوسط السعر"];
                         if (name === "avgDelivery") return [`${v} يوم`, "متوسط التسليم"];
                         return [v, name];
                       }}
                     />
-                    {supplierTab === "response" && <Bar dataKey="responseRate" fill="#0ea5e9" radius={[0, 4, 4, 0]} name="responseRate" />}
-                    {supplierTab === "po" && <Bar dataKey="poWinRate" fill="#10b981" radius={[0, 4, 4, 0]} name="poWinRate" />}
-                    {supplierTab === "price" && <Bar dataKey="avgPrice" fill="#f59e0b" radius={[0, 4, 4, 0]} name="avgPrice" />}
-                    {supplierTab === "delivery" && <Bar dataKey="avgDelivery" fill="#8b5cf6" radius={[0, 4, 4, 0]} name="avgDelivery" />}
+                    {supplierTab === "response" && (
+                      <Bar
+                        dataKey="responseRate"
+                        fill="#0ea5e9"
+                        radius={[0, 4, 4, 0]}
+                        name="responseRate"
+                      />
+                    )}
+                    {supplierTab === "po" && (
+                      <Bar
+                        dataKey="poWinRate"
+                        fill="#10b981"
+                        radius={[0, 4, 4, 0]}
+                        name="poWinRate"
+                      />
+                    )}
+                    {supplierTab === "price" && (
+                      <Bar
+                        dataKey="avgPrice"
+                        fill="#f59e0b"
+                        radius={[0, 4, 4, 0]}
+                        name="avgPrice"
+                      />
+                    )}
+                    {supplierTab === "delivery" && (
+                      <Bar
+                        dataKey="avgDelivery"
+                        fill="#8b5cf6"
+                        radius={[0, 4, 4, 0]}
+                        name="avgDelivery"
+                      />
+                    )}
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">لا توجد بيانات موردين</div>
+                <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                  لا توجد بيانات موردين
+                </div>
               )}
             </div>
 
@@ -248,25 +425,52 @@ export default function AnalyticsPage() {
                 <table className="w-full text-xs min-w-[640px]">
                   <thead>
                     <tr className="border-b border-border text-left">
-                      {["#", "المورد", "الفئة", "RFQs استلم", "عروض أرسل", "استجابة %", "بنود عُرضت", "بنود PO", "PO فوز %", "متوسط السعر", "تسليم (يوم)"].map(h => (
-                        <th key={h} className="pb-2 text-muted-foreground font-medium whitespace-nowrap pr-4">{h}</th>
+                      {[
+                        "#",
+                        "المورد",
+                        "الفئة",
+                        "RFQs استلم",
+                        "عروض أرسل",
+                        "استجابة %",
+                        "بنود عُرضت",
+                        "بنود PO",
+                        "PO فوز %",
+                        "متوسط السعر",
+                        "تسليم (يوم)",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className="pb-2 text-muted-foreground font-medium whitespace-nowrap pr-4"
+                        >
+                          {h}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {deepSuppliers.map((s, i) => (
-                      <tr key={s.supplierId} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <tr
+                        key={s.supplierId}
+                        className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                      >
                         <td className="py-2.5 text-muted-foreground pr-4">{i + 1}</td>
-                        <td className="py-2.5 font-medium text-foreground pr-4 whitespace-nowrap">{s.supplierName}</td>
+                        <td className="py-2.5 font-medium text-foreground pr-4 whitespace-nowrap">
+                          {s.supplierName}
+                        </td>
                         <td className="py-2.5 text-muted-foreground pr-4">{s.category || "—"}</td>
                         <td className="py-2.5 text-center pr-4">{s.totalRfqsReceived}</td>
                         <td className="py-2.5 text-center pr-4">{s.totalOffersSubmitted}</td>
                         <td className="py-2.5 pr-4">
                           <div className="flex items-center gap-1.5">
                             <div className="w-12 bg-muted rounded-full h-1.5 shrink-0">
-                              <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, s.responseRate ?? 0)}%` }} />
+                              <div
+                                className="bg-blue-500 h-1.5 rounded-full"
+                                style={{ width: `${Math.min(100, s.responseRate ?? 0)}%` }}
+                              />
                             </div>
-                            <span className={`font-medium ${(s.responseRate ?? 0) >= 70 ? "text-green-600" : (s.responseRate ?? 0) >= 40 ? "text-amber-600" : "text-red-500"}`}>
+                            <span
+                              className={`font-medium ${(s.responseRate ?? 0) >= 70 ? "text-green-600" : (s.responseRate ?? 0) >= 40 ? "text-amber-600" : "text-red-500"}`}
+                            >
                               {s.responseRate ?? 0}%
                             </span>
                           </div>
@@ -276,15 +480,24 @@ export default function AnalyticsPage() {
                         <td className="py-2.5 pr-4">
                           <div className="flex items-center gap-1.5">
                             <div className="w-12 bg-muted rounded-full h-1.5 shrink-0">
-                              <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, s.poWinRate ?? 0)}%` }} />
+                              <div
+                                className="bg-green-500 h-1.5 rounded-full"
+                                style={{ width: `${Math.min(100, s.poWinRate ?? 0)}%` }}
+                              />
                             </div>
-                            <span className={`font-medium ${(s.poWinRate ?? 0) >= 40 ? "text-green-600" : (s.poWinRate ?? 0) >= 20 ? "text-amber-600" : "text-muted-foreground"}`}>
+                            <span
+                              className={`font-medium ${(s.poWinRate ?? 0) >= 40 ? "text-green-600" : (s.poWinRate ?? 0) >= 20 ? "text-amber-600" : "text-muted-foreground"}`}
+                            >
                               {s.poWinRate ?? 0}%
                             </span>
                           </div>
                         </td>
                         <td className="py-2.5 text-center pr-4">
-                          {s.avgPrice != null ? Number(s.avgPrice).toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
+                          {s.avgPrice != null
+                            ? Number(s.avgPrice).toLocaleString(undefined, {
+                                maximumFractionDigits: 2,
+                              })
+                            : "—"}
                         </td>
                         <td className="py-2.5 text-center pr-4">
                           {s.avgDeliveryDays != null ? s.avgDeliveryDays : "—"}
@@ -294,20 +507,24 @@ export default function AnalyticsPage() {
                   </tbody>
                 </table>
               ) : (
-                <div className="py-10 text-center text-muted-foreground text-sm">لا توجد بيانات موردين بعد</div>
+                <div className="py-10 text-center text-muted-foreground text-sm">
+                  لا توجد بيانات موردين بعد
+                </div>
               )}
             </div>
 
             {/* ── Row 6: Supplier Radar (top 6) ── */}
             {supplierChartData.length >= 2 && (
               <div className="bg-card border border-border rounded-lg p-5">
-                <h2 className="font-semibold text-sm text-foreground mb-4">مقارنة راداريّة لأفضل الموردين</h2>
+                <h2 className="font-semibold text-sm text-foreground mb-4">
+                  مقارنة راداريّة لأفضل الموردين
+                </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {supplierChartData.slice(0, 6).map((s, i) => {
                     const radarData = [
                       { subject: "استجابة", value: s.responseRate },
                       { subject: "PO فوز", value: s.poWinRate },
-                      { subject: "عروض", value: Math.min(100, s.offers * 5) },
+                      { subject: "عروض", value: Math.min(100, (s.offers ?? 0) * 5) },
                     ];
                     return (
                       <div key={i} className="text-center">
@@ -316,7 +533,13 @@ export default function AnalyticsPage() {
                           <RadarChart data={radarData}>
                             <PolarGrid />
                             <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10 }} />
-                            <Radar name={s.name} dataKey="value" stroke={DEEP_COLORS[i % DEEP_COLORS.length]} fill={DEEP_COLORS[i % DEEP_COLORS.length]} fillOpacity={0.3} />
+                            <Radar
+                              name={s.name}
+                              dataKey="value"
+                              stroke={DEEP_COLORS[i % DEEP_COLORS.length]}
+                              fill={DEEP_COLORS[i % DEEP_COLORS.length]}
+                              fillOpacity={0.3}
+                            />
                           </RadarChart>
                         </ResponsiveContainer>
                       </div>
@@ -325,7 +548,6 @@ export default function AnalyticsPage() {
                 </div>
               </div>
             )}
-
           </div>
         )}
       </div>

@@ -40,8 +40,17 @@ function useClosingSoon() {
   });
 }
 
-function ClosingSoonRow({ rfq, navigate }: { rfq: ClosingSoonRfq; navigate: (path: string) => void }) {
-  const time = new Date(rfq.expiresAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+function ClosingSoonRow({
+  rfq,
+  navigate,
+}: {
+  rfq: ClosingSoonRfq;
+  navigate: (path: string) => void;
+}) {
+  const time = new Date(rfq.expiresAt).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   return (
     <tr
       className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer text-xs"
@@ -50,7 +59,9 @@ function ClosingSoonRow({ rfq, navigate }: { rfq: ClosingSoonRfq; navigate: (pat
       <td className="px-3 py-2 font-mono font-medium text-primary">{rfq.internalRfqNo}</td>
       <td className="px-3 py-2 font-mono text-muted-foreground">{rfq.customerRfqNo}</td>
       <td className="px-3 py-2 text-muted-foreground">{rfq.employeeName ?? "—"}</td>
-      <td className="px-3 py-2"><StatusBadge status={rfq.status} /></td>
+      <td className="px-3 py-2">
+        <StatusBadge status={rfq.status} />
+      </td>
       <td className="px-3 py-2 text-center font-medium text-foreground">{rfq.supplierCount}</td>
       <td className="px-3 py-2 text-center font-medium text-green-700">{rfq.offerCount}</td>
       <td className="px-3 py-2 text-center tabular-nums text-muted-foreground">{time}</td>
@@ -68,13 +79,27 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
   const tableHead = (
     <thead>
       <tr className="bg-muted/20 border-b border-border text-left">
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">{t("rfq.closingSoon.rfqNo")}</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">{t("rfq.closingSoon.customerRfq")}</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">{t("rfq.closingSoon.employee")}</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">{t("rfq.closingSoon.status")}</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">{t("rfq.closingSoon.suppliers")}</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">{t("rfq.closingSoon.offers")}</th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">{t("rfq.closingSoon.closeTime")}</th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
+          {t("rfq.closingSoon.rfqNo")}
+        </th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
+          {t("rfq.closingSoon.customerRfq")}
+        </th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
+          {t("rfq.closingSoon.employee")}
+        </th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
+          {t("rfq.closingSoon.status")}
+        </th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">
+          {t("rfq.closingSoon.suppliers")}
+        </th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">
+          {t("rfq.closingSoon.offers")}
+        </th>
+        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">
+          {t("rfq.closingSoon.closeTime")}
+        </th>
       </tr>
     </thead>
   );
@@ -84,7 +109,7 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
       {/* Header */}
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-amber-100/60 dark:hover:bg-amber-900/20 transition-colors"
       >
         <AlertTriangle size={15} className="text-amber-600 flex-shrink-0" />
@@ -92,13 +117,19 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
           {t("rfq.closingSoon.title")}
         </span>
         {isLoading ? (
-          <span className="text-xs text-amber-600 animate-pulse">{t("rfq.closingSoon.loading")}</span>
+          <span className="text-xs text-amber-600 animate-pulse">
+            {t("rfq.closingSoon.loading")}
+          </span>
         ) : (
           <span className="text-xs font-medium bg-amber-600 text-white rounded-full px-2 py-0.5">
             {totalCount} {t("rfq.requests")}
           </span>
         )}
-        {open ? <ChevronUp size={14} className="text-amber-600" /> : <ChevronDown size={14} className="text-amber-600" />}
+        {open ? (
+          <ChevronUp size={14} className="text-amber-600" />
+        ) : (
+          <ChevronDown size={14} className="text-amber-600" />
+        )}
       </button>
 
       {open && !isLoading && totalCount === 0 && (
@@ -109,7 +140,6 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
 
       {open && !isLoading && totalCount > 0 && (
         <div className="border-t border-amber-200 dark:border-amber-800">
-
           {/* Tomorrow */}
           {data && data.tomorrow.length > 0 && (
             <div>
@@ -123,7 +153,7 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
                 <table className="w-full">
                   {tableHead}
                   <tbody>
-                    {data.tomorrow.map(rfq => (
+                    {data.tomorrow.map((rfq) => (
                       <ClosingSoonRow key={rfq.id} rfq={rfq} navigate={navigate} />
                     ))}
                   </tbody>
@@ -134,18 +164,23 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
 
           {/* Day after tomorrow */}
           {data && data.dayAfterTomorrow.length > 0 && (
-            <div className={data.tomorrow.length > 0 ? "border-t border-amber-200 dark:border-amber-800" : ""}>
+            <div
+              className={
+                data.tomorrow.length > 0 ? "border-t border-amber-200 dark:border-amber-800" : ""
+              }
+            >
               <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800">
                 <Clock size={13} className="text-amber-500" />
                 <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  {t("rfq.closingSoon.dayAfter")} ({data.dayAfterTomorrow.length} {t("rfq.requests")})
+                  {t("rfq.closingSoon.dayAfter")} ({data.dayAfterTomorrow.length}{" "}
+                  {t("rfq.requests")})
                 </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   {tableHead}
                   <tbody>
-                    {data.dayAfterTomorrow.map(rfq => (
+                    {data.dayAfterTomorrow.map((rfq) => (
                       <ClosingSoonRow key={rfq.id} rfq={rfq} navigate={navigate} />
                     ))}
                   </tbody>
@@ -153,7 +188,6 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
               </div>
             </div>
           )}
-
         </div>
       )}
     </div>
@@ -168,7 +202,14 @@ export default function RfqListPage() {
 
   const { data: rfqs, isLoading } = useListRfqs(
     { status: status !== "all" ? status : undefined, search: search || undefined },
-    { query: { queryKey: getListRfqsQueryKey({ status: status !== "all" ? status : undefined, search: search || undefined }) } }
+    {
+      query: {
+        queryKey: getListRfqsQueryKey({
+          status: status !== "all" ? status : undefined,
+          search: search || undefined,
+        }),
+      },
+    },
   );
 
   const statusLabel = (s: string) => {
@@ -189,7 +230,11 @@ export default function RfqListPage() {
             <h1 className="text-xl font-bold text-foreground">{t("rfq.title")}</h1>
             <p className="text-muted-foreground text-sm">{t("rfq.subtitle")}</p>
           </div>
-          <Button onClick={() => navigate("/rfq/new")} size="sm" className="gap-1.5 self-start sm:self-auto">
+          <Button
+            onClick={() => navigate("/rfq/new")}
+            size="sm"
+            className="gap-1.5 self-start sm:self-auto"
+          >
             <Plus size={15} />
             {t("rfq.new")}
           </Button>
@@ -201,7 +246,10 @@ export default function RfqListPage() {
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search
+              size={15}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -239,54 +287,76 @@ export default function RfqListPage() {
               </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto"><table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30 text-left">
-                  <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Internal No.</th>
-                  <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Customer RFQ</th>
-                  <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Employee</th>
-                  <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Status</th>
-                  <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">Items</th>
-                  <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">Suppliers</th>
-                  <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">Offers</th>
-                  <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rfqs?.map((rfq) => (
-                  <tr
-                    key={rfq.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
-                    onClick={() => navigate(`/rfq/${rfq.id}`)}
-                  >
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-primary font-medium">{rfq.internalRfqNo}</span>
-                    </td>
-                    <td className="px-4 py-3 text-foreground font-mono text-xs">{rfq.customerRfqNo}</td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">{rfq.employeeName ?? "-"}</td>
-                    <td className="px-4 py-3"><StatusBadge status={rfq.status} /></td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-xs font-medium text-foreground">
-                        {rfq.itemCount}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-6 h-6 bg-blue-50 text-blue-700 rounded text-xs font-medium">
-                        {rfq.supplierCount}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-6 h-6 bg-green-50 text-green-700 rounded text-xs font-medium">
-                        {rfq.offerCount}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">
-                      {new Date(rfq.createdAt).toLocaleDateString()}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30 text-left">
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      Internal No.
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      Customer RFQ
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      Employee
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Status</th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
+                      Items
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
+                      Suppliers
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
+                      Offers
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Created</th>
                   </tr>
-                ))}
-              </tbody>
-            </table></div>
+                </thead>
+                <tbody>
+                  {rfqs?.map((rfq) => (
+                    <tr
+                      key={rfq.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
+                      onClick={() => navigate(`/rfq/${rfq.id}`)}
+                    >
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-primary font-medium">
+                          {rfq.internalRfqNo}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-foreground font-mono text-xs">
+                        {rfq.customerRfqNo}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {rfq.employeeName ?? "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={rfq.status} />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-xs font-medium text-foreground">
+                          {rfq.itemCount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center justify-center w-6 h-6 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+                          {rfq.supplierCount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center justify-center w-6 h-6 bg-green-50 text-green-700 rounded text-xs font-medium">
+                          {rfq.offerCount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {new Date(rfq.createdAt).toLocaleDateString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

@@ -20,7 +20,10 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
-  const [employee] = await db.select().from(employeesTable).where(eq(employeesTable.email, email.toLowerCase()));
+  const [employee] = await db
+    .select()
+    .from(employeesTable)
+    .where(eq(employeesTable.email, email.toLowerCase()));
   if (!employee || !employee.isActive) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
@@ -63,7 +66,10 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     return;
   }
 
-  const [employee] = await db.select().from(employeesTable).where(eq(employeesTable.id, req.session.employeeId));
+  const [employee] = await db
+    .select()
+    .from(employeesTable)
+    .where(eq(employeesTable.id, req.session.employeeId));
   if (!employee) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -86,10 +92,17 @@ router.get("/employees", async (req, res): Promise<void> => {
     return;
   }
   const employees = await db.select().from(employeesTable).orderBy(employeesTable.createdAt);
-  res.json(employees.map(e => ({
-    id: e.id, name: e.name, email: e.email, role: e.role,
-    phone: e.phone, isActive: e.isActive, createdAt: e.createdAt.toISOString(),
-  })));
+  res.json(
+    employees.map((e) => ({
+      id: e.id,
+      name: e.name,
+      email: e.email,
+      role: e.role,
+      phone: e.phone,
+      isActive: e.isActive,
+      createdAt: e.createdAt.toISOString(),
+    })),
+  );
 });
 
 router.post("/employees", async (req, res): Promise<void> => {
@@ -98,38 +111,55 @@ router.post("/employees", async (req, res): Promise<void> => {
     return;
   }
   const { name, email, password, role, phone } = req.body as Record<string, string>;
-    if (!name || !email || !password || !role) {
-      res.status(400).json({ error: "Missing required fields" });
+  if (!name || !email || !password || !role) {
+    res.status(400).json({ error: "Missing required fields" });
+    return;
+  }
+
+  // Reject duplicate email
+  const [existingEmail] = await db
+    .select({ id: employeesTable.id })
+    .from(employeesTable)
+    .where(eq(employeesTable.email, email.toLowerCase()))
+    .limit(1);
+  if (existingEmail) {
+    res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل من قِبَل موظف آخر" });
+    return;
+  }
+
+  // Reject duplicate phone (if provided)
+  if (phone && phone.trim()) {
+    const [existingPhone] = await db
+      .select({ id: employeesTable.id })
+      .from(employeesTable)
+      .where(eq(employeesTable.phone, phone.trim()))
+      .limit(1);
+    if (existingPhone) {
+      res.status(409).json({ error: "رقم الهاتف مستخدم بالفعل من قِبَل موظف آخر" });
       return;
     }
+  }
 
-    // Reject duplicate email
-    const [existingEmail] = await db.select({ id: employeesTable.id })
-      .from(employeesTable).where(eq(employeesTable.email, email.toLowerCase())).limit(1);
-    if (existingEmail) {
-      res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل من قِبَل موظف آخر" });
-      return;
-    }
-
-    // Reject duplicate phone (if provided)
-    if (phone && phone.trim()) {
-      const [existingPhone] = await db.select({ id: employeesTable.id })
-        .from(employeesTable).where(eq(employeesTable.phone, phone.trim())).limit(1);
-      if (existingPhone) {
-        res.status(409).json({ error: "رقم الهاتف مستخدم بالفعل من قِبَل موظف آخر" });
-        return;
-      }
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const [employee] = await db.insert(employeesTable).values({
-      name, email: email.toLowerCase(), passwordHash, role, phone: phone?.trim() || null,
-    }).returning();
+  const passwordHash = await bcrypt.hash(password, 10);
+  const [employee] = await db
+    .insert(employeesTable)
+    .values({
+      name,
+      email: email.toLowerCase(),
+      passwordHash,
+      role,
+      phone: phone?.trim() || null,
+    })
+    .returning();
 
   logger.info({ employeeId: employee.id }, "Employee created");
   res.status(201).json({
-    id: employee.id, name: employee.name, email: employee.email,
-    role: employee.role, phone: employee.phone, isActive: employee.isActive,
+    id: employee.id,
+    name: employee.name,
+    email: employee.email,
+    role: employee.role,
+    phone: employee.phone,
+    isActive: employee.isActive,
     createdAt: employee.createdAt.toISOString(),
   });
 });
@@ -141,7 +171,10 @@ router.patch("/employees/:id", async (req, res): Promise<void> => {
   }
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
-  const { name, email, role, phone, isActive, password } = req.body as Record<string, string | boolean>;
+  const { name, email, role, phone, isActive, password } = req.body as Record<
+    string,
+    string | boolean
+  >;
 
   const updates: Record<string, unknown> = {};
   if (name) updates.name = name;
@@ -151,29 +184,45 @@ router.patch("/employees/:id", async (req, res): Promise<void> => {
   if (isActive !== undefined) updates.isActive = isActive;
   if (password) updates.passwordHash = await bcrypt.hash(password as string, 10);
 
-  const [employee] = await db.update(employeesTable).set(updates).where(eq(employeesTable.id, id)).returning();
-  if (!employee) { res.status(404).json({ error: "Not found" }); return; }
+  const [employee] = await db
+    .update(employeesTable)
+    .set(updates)
+    .where(eq(employeesTable.id, id))
+    .returning();
+  if (!employee) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
 
   res.json({
-    id: employee.id, name: employee.name, email: employee.email,
-    role: employee.role, phone: employee.phone, isActive: employee.isActive,
+    id: employee.id,
+    name: employee.name,
+    email: employee.email,
+    role: employee.role,
+    phone: employee.phone,
+    isActive: employee.isActive,
     createdAt: employee.createdAt.toISOString(),
   });
 });
 
-  // ─── DELETE /api/employees/:id ─────────────────────────────────────────────
-  router.delete("/employees/:id", async (req, res): Promise<void> => {
-    if (!req.session.employeeId || req.session.role !== "admin") {
-      res.status(403).json({ error: "Forbidden" }); return;
-    }
-    const id = parseInt(req.params.id as string, 10);
-    if (id === req.session.employeeId) {
-      res.status(400).json({ error: "لا يمكنك حذف حسابك أثناء تسجيل الدخول" }); return;
-    }
-    const [deleted] = await db.delete(employeesTable).where(eq(employeesTable.id, id)).returning();
-    if (!deleted) { res.status(404).json({ error: "الموظف غير موجود" }); return; }
-    logger.info({ employeeId: id }, "Employee deleted");
-    res.json({ ok: true });
-  });
-  
+// ─── DELETE /api/employees/:id ─────────────────────────────────────────────
+router.delete("/employees/:id", async (req, res): Promise<void> => {
+  if (!req.session.employeeId || req.session.role !== "admin") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const id = parseInt(req.params.id as string, 10);
+  if (id === req.session.employeeId) {
+    res.status(400).json({ error: "لا يمكنك حذف حسابك أثناء تسجيل الدخول" });
+    return;
+  }
+  const [deleted] = await db.delete(employeesTable).where(eq(employeesTable.id, id)).returning();
+  if (!deleted) {
+    res.status(404).json({ error: "الموظف غير موجود" });
+    return;
+  }
+  logger.info({ employeeId: id }, "Employee deleted");
+  res.json({ ok: true });
+});
+
 export default router;

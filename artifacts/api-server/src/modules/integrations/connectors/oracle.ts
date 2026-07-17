@@ -8,9 +8,9 @@
  */
 
 export interface OracleConfig {
-  url: string;        // https://efgh-dev1.fa.em2.oraclecloud.com
-  username: string;   // اسم المستخدم
-  password: string;   // كلمة المرور
+  url: string; // https://efgh-dev1.fa.em2.oraclecloud.com
+  username: string; // اسم المستخدم
+  password: string; // كلمة المرور
   businessUnit?: string; // وحدة الأعمال الافتراضية
 }
 
@@ -43,7 +43,11 @@ function headers(cfg: OracleConfig): Record<string, string> {
   };
 }
 
-async function oraGet(cfg: OracleConfig, path: string, params: Record<string, string> = {}): Promise<unknown> {
+async function oraGet(
+  cfg: OracleConfig,
+  path: string,
+  params: Record<string, string> = {},
+): Promise<unknown> {
   const qs = new URLSearchParams({ limit: "100", ...params }).toString();
   const res = await fetch(`${cfg.url}${BASE}/${path}?${qs}`, { headers: headers(cfg) });
   if (!res.ok) {
@@ -68,7 +72,9 @@ async function oraPost(cfg: OracleConfig, path: string, body: unknown): Promise<
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
-export async function testConnection(cfg: OracleConfig): Promise<{ ok: boolean; version?: string; error?: string }> {
+export async function testConnection(
+  cfg: OracleConfig,
+): Promise<{ ok: boolean; version?: string; error?: string }> {
   try {
     // نستخدم endpoint بسيط للتحقق
     await oraGet(cfg, "supplyChainFinancialOrchestrationSuppliers", { limit: "1" });
@@ -86,7 +92,10 @@ export async function testConnection(cfg: OracleConfig): Promise<{ ok: boolean; 
 
 export async function importSuppliers(cfg: OracleConfig): Promise<ErpSupplier[]> {
   // Oracle Supplier REST Resource
-  const data = await oraGet(cfg, "supplierParties", { limit: "500", fields: "PartyId,SupplierName,EmailAddress,PhoneNumber,AddressLine1,City,Category" }) as { items?: Record<string, unknown>[] };
+  const data = (await oraGet(cfg, "supplierParties", {
+    limit: "500",
+    fields: "PartyId,SupplierName,EmailAddress,PhoneNumber,AddressLine1,City,Category",
+  })) as { items?: Record<string, unknown>[] };
   const items = data.items ?? [];
   return items.map((r) => ({
     externalId: `oracle-${r.PartyId}`,
@@ -98,9 +107,14 @@ export async function importSuppliers(cfg: OracleConfig): Promise<ErpSupplier[]>
   }));
 }
 
-export async function importSupplierContacts(cfg: OracleConfig, partyId: string): Promise<{ name?: string; email?: string; phone?: string } | null> {
+export async function importSupplierContacts(
+  cfg: OracleConfig,
+  partyId: string,
+): Promise<{ name?: string; email?: string; phone?: string } | null> {
   try {
-    const data = await oraGet(cfg, `supplierParties/${partyId}/child/supplierContacts`, { limit: "1" }) as { items?: Record<string, unknown>[] };
+    const data = (await oraGet(cfg, `supplierParties/${partyId}/child/supplierContacts`, {
+      limit: "1",
+    })) as { items?: Record<string, unknown>[] };
     const c = data.items?.[0];
     if (!c) return null;
     return {
@@ -113,14 +127,17 @@ export async function importSupplierContacts(cfg: OracleConfig, partyId: string)
   }
 }
 
-export async function exportPurchaseOrder(cfg: OracleConfig, po: {
-  internalPoNo: string;
-  supplierPartyId?: string;
-  supplierName?: string;
-  businessUnit?: string;
-  notes?: string;
-  lines: { description: string; qty: number; price: number; uom?: string }[];
-}): Promise<string> {
+export async function exportPurchaseOrder(
+  cfg: OracleConfig,
+  po: {
+    internalPoNo: string;
+    supplierPartyId?: string;
+    supplierName?: string;
+    businessUnit?: string;
+    notes?: string;
+    lines: { description: string; qty: number; price: number; uom?: string }[];
+  },
+): Promise<string> {
   const body = {
     POHeaderId: null,
     OrderType: "STANDARD",
@@ -135,15 +152,18 @@ export async function exportPurchaseOrder(cfg: OracleConfig, po: {
       UOMCode: l.uom ?? "Ea",
     })),
   };
-  const result = await oraPost(cfg, "purchasingDocumentHeaders", body) as { POHeaderId?: string; OrderNumber?: string };
+  const result = (await oraPost(cfg, "purchasingDocumentHeaders", body)) as {
+    POHeaderId?: string;
+    OrderNumber?: string;
+  };
   return String(result.OrderNumber ?? result.POHeaderId ?? "created");
 }
 
 export async function importPurchaseOrders(cfg: OracleConfig): Promise<ErpPurchaseOrder[]> {
-  const data = await oraGet(cfg, "purchasingDocumentHeaders", {
+  const data = (await oraGet(cfg, "purchasingDocumentHeaders", {
     limit: "100",
     fields: "OrderNumber,Supplier,Status,Description",
-  }) as { items?: Record<string, unknown>[] };
+  })) as { items?: Record<string, unknown>[] };
   return (data.items ?? []).map((r) => ({
     externalId: `oracle-po-${r.OrderNumber}`,
     name: String(r.OrderNumber ?? ""),

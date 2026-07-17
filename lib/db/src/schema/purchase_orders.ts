@@ -16,12 +16,17 @@ export const purchaseOrdersTable = pgTable("purchase_orders", {
   rfqId: integer("rfq_id").references(() => rfqTable.id),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 
 export const purchaseOrderItemsTable = pgTable("purchase_order_items", {
   id: serial("id").primaryKey(),
-  poId: integer("po_id").notNull().references(() => purchaseOrdersTable.id, { onDelete: "cascade" }),
+  poId: integer("po_id")
+    .notNull()
+    .references(() => purchaseOrdersTable.id, { onDelete: "cascade" }),
   supplierId: integer("supplier_id").references(() => suppliersTable.id),
   itemId: text("item_id"),
   lineItem: text("line_item"),
@@ -34,10 +39,17 @@ export const purchaseOrderItemsTable = pgTable("purchase_order_items", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrdersTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPurchaseOrderSchema = createInsertSchema(purchaseOrdersTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 export type InsertPurchaseOrder = z.infer<typeof insertPurchaseOrderSchema>;
 export type PurchaseOrder = typeof purchaseOrdersTable.$inferSelect;
 
-export const insertPurchaseOrderItemSchema = createInsertSchema(purchaseOrderItemsTable).omit({ id: true, createdAt: true });
+export const insertPurchaseOrderItemSchema = createInsertSchema(purchaseOrderItemsTable).omit({
+  id: true,
+  createdAt: true,
+});
 export type InsertPurchaseOrderItem = z.infer<typeof insertPurchaseOrderItemSchema>;
 export type PurchaseOrderItem = typeof purchaseOrderItemsTable.$inferSelect;

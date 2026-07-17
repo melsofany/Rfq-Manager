@@ -123,7 +123,12 @@ console.log("All tables created");
 
 const accounts = [
   { name: "Admin", email: "admin@cortoba-supplies.com", password: "admin123", role: "admin" },
-  { name: "Khalid Al-Manager", email: "khalid@cortoba-supplies.com", password: "manager123", role: "manager" },
+  {
+    name: "Khalid Al-Manager",
+    email: "khalid@cortoba-supplies.com",
+    password: "manager123",
+    role: "manager",
+  },
   { name: "Sara", email: "sara@cortoba-supplies.com", password: "staff123", role: "purchasing" },
 ];
 
@@ -133,7 +138,7 @@ for (const acc of accounts) {
     `INSERT INTO employees (name, email, password_hash, role, is_active)
      VALUES ($1, $2, $3, $4, true)
      ON CONFLICT (email) DO UPDATE SET password_hash = $3, role = $4`,
-    [acc.name, acc.email, hash, acc.role]
+    [acc.name, acc.email, hash, acc.role],
   );
   console.log("Seeded: " + acc.email);
 }

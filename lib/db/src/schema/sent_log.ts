@@ -7,8 +7,12 @@ import { employeesTable } from "./employees";
 
 export const sentLogTable = pgTable("sent_log", {
   id: serial("id").primaryKey(),
-  rfqId: integer("rfq_id").notNull().references(() => rfqTable.id, { onDelete: "cascade" }),
-  supplierId: integer("supplier_id").notNull().references(() => suppliersTable.id),
+  rfqId: integer("rfq_id")
+    .notNull()
+    .references(() => rfqTable.id, { onDelete: "cascade" }),
+  supplierId: integer("supplier_id")
+    .notNull()
+    .references(() => suppliersTable.id),
   employeeId: integer("employee_id").references(() => employeesTable.id),
   token: text("token").notNull().unique(),
   closeDate: text("close_date"),
@@ -20,6 +24,9 @@ export const sentLogTable = pgTable("sent_log", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const insertSentLogSchema = createInsertSchema(sentLogTable).omit({ id: true, createdAt: true });
+export const insertSentLogSchema = createInsertSchema(sentLogTable).omit({
+  id: true,
+  createdAt: true,
+});
 export type InsertSentLog = z.infer<typeof insertSentLogSchema>;
 export type SentLog = typeof sentLogTable.$inferSelect;

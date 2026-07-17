@@ -42,7 +42,7 @@ export interface SheetRfqItem {
  */
 export async function lookupRfqFromSheet(
   customerRfqNo: string,
-  sheetName = "DATA"
+  sheetName = "DATA",
 ): Promise<SheetRfqItem[]> {
   const sheetId = process.env.GOOGLE_SHEET_ID;
   if (!sheetId) throw new Error("GOOGLE_SHEET_ID not set");
@@ -125,10 +125,7 @@ export interface SheetPoItem {
  *
  * Rows where column K matches poNo are returned.
  */
-export async function lookupPoFromSheet(
-  poNo: string,
-  sheetName = "DATA"
-): Promise<SheetPoItem[]> {
+export async function lookupPoFromSheet(poNo: string, sheetName = "DATA"): Promise<SheetPoItem[]> {
   const sheetId = process.env.GOOGLE_SHEET_ID;
   if (!sheetId) throw new Error("GOOGLE_SHEET_ID not set");
 
@@ -210,12 +207,64 @@ const TAB_ITEMS = "Items";
 const TAB_SUPPLIERS = "Suppliers";
 const TAB_OFFERS = "Supplier Offers";
 
-const RFQS_HEADER = ["ID", "Internal RFQ No", "Customer RFQ No", "Customer RFQ Date", "Required Response Date", "Status", "Notes", "Expires At", "Created At"];
-const ITEMS_HEADER = ["ID", "RFQ ID", "Internal RFQ No", "Line Item", "Part No", "Description", "QTY", "UOM", "Reference Price", "Created At"];
-const SUPPLIERS_HEADER = ["ID", "Supplier ID", "Name", "Contact Person", "Email", "Phone", "Category", "Active", "Created At"];
-const OFFERS_HEADER = ["ID", "Offer ID", "RFQ ID", "Internal RFQ No", "Customer RFQ No", "Supplier Name", "Line Item", "Part No", "Description", "QTY", "UOM", "Unit Price", "Tax Included", "Delivery Days", "Notes", "Submitted At"];
+const RFQS_HEADER = [
+  "ID",
+  "Internal RFQ No",
+  "Customer RFQ No",
+  "Customer RFQ Date",
+  "Required Response Date",
+  "Status",
+  "Notes",
+  "Expires At",
+  "Created At",
+];
+const ITEMS_HEADER = [
+  "ID",
+  "RFQ ID",
+  "Internal RFQ No",
+  "Line Item",
+  "Part No",
+  "Description",
+  "QTY",
+  "UOM",
+  "Reference Price",
+  "Created At",
+];
+const SUPPLIERS_HEADER = [
+  "ID",
+  "Supplier ID",
+  "Name",
+  "Contact Person",
+  "Email",
+  "Phone",
+  "Category",
+  "Active",
+  "Created At",
+];
+const OFFERS_HEADER = [
+  "ID",
+  "Offer ID",
+  "RFQ ID",
+  "Internal RFQ No",
+  "Customer RFQ No",
+  "Supplier Name",
+  "Line Item",
+  "Part No",
+  "Description",
+  "QTY",
+  "UOM",
+  "Unit Price",
+  "Tax Included",
+  "Delivery Days",
+  "Notes",
+  "Submitted At",
+];
 
-async function ensureTab(sheets: ReturnType<typeof google.sheets>, spreadsheetId: string, title: string): Promise<void> {
+async function ensureTab(
+  sheets: ReturnType<typeof google.sheets>,
+  spreadsheetId: string,
+  title: string,
+): Promise<void> {
   const meta = await sheets.spreadsheets.get({ spreadsheetId });
   const exists = meta.data.sheets?.some((s) => s.properties?.title === title);
   if (!exists) {
@@ -233,7 +282,7 @@ async function clearAndWriteTab(
   spreadsheetId: string,
   tabName: string,
   header: string[],
-  rows: (string | number | boolean | null)[][]
+  rows: (string | number | boolean | null)[][],
 ): Promise<void> {
   await ensureTab(sheets, spreadsheetId, tabName);
   await sheets.spreadsheets.values.clear({ spreadsheetId, range: tabName });
@@ -248,24 +297,56 @@ async function clearAndWriteTab(
 
 export interface MirrorData {
   rfqs: Array<{
-    id: number; internalRfqNo: string; customerRfqNo: string;
-    customerRfqDate: string | null; requiredResponseDate: string | null;
-    status: string; notes: string | null; expiresAt: Date | null; createdAt: Date;
+    id: number;
+    internalRfqNo: string;
+    customerRfqNo: string;
+    customerRfqDate: string | null;
+    requiredResponseDate: string | null;
+    status: string;
+    notes: string | null;
+    expiresAt: Date | null;
+    createdAt: Date;
   }>;
   items: Array<{
-    id: number; rfqId: number; internalRfqNo: string;
-    lineItem: string | null; partNo: string | null; description: string;
-    qty: string | null; uom: string | null; referencePrice: string | null; createdAt: Date;
+    id: number;
+    rfqId: number;
+    internalRfqNo: string;
+    lineItem: string | null;
+    partNo: string | null;
+    description: string;
+    qty: string | null;
+    uom: string | null;
+    referencePrice: string | null;
+    createdAt: Date;
   }>;
   suppliers: Array<{
-    id: number; supplierId: string | null; name: string; contactPerson: string | null;
-    email: string | null; phone: string | null; category: string; isActive: boolean; createdAt: Date;
+    id: number;
+    supplierId: string | null;
+    name: string;
+    contactPerson: string | null;
+    email: string | null;
+    phone: string | null;
+    category: string;
+    isActive: boolean;
+    createdAt: Date;
   }>;
   offerItems: Array<{
-    id: number; offerId: number; rfqId: number; internalRfqNo: string; customerRfqNo: string;
-    supplierName: string; lineItem: string | null; partNo: string | null; description: string;
-    qty: string | null; uom: string | null; price: string;
-    taxIncluded: boolean; deliveryDays: number | null; notes: string | null; submittedAt: Date;
+    id: number;
+    offerId: number;
+    rfqId: number;
+    internalRfqNo: string;
+    customerRfqNo: string;
+    supplierName: string;
+    lineItem: string | null;
+    partNo: string | null;
+    description: string;
+    qty: string | null;
+    uom: string | null;
+    price: string;
+    taxIncluded: boolean;
+    deliveryDays: number | null;
+    notes: string | null;
+    submittedAt: Date;
   }>;
 }
 
@@ -276,33 +357,58 @@ export async function pushToMirrorSheet(data: MirrorData): Promise<void> {
   const sheets = google.sheets({ version: "v4", auth });
 
   const rfqRows = data.rfqs.map((r) => [
-    r.id, r.internalRfqNo, r.customerRfqNo,
-    r.customerRfqDate ?? "", r.requiredResponseDate ?? "",
-    r.status, r.notes ?? "",
+    r.id,
+    r.internalRfqNo,
+    r.customerRfqNo,
+    r.customerRfqDate ?? "",
+    r.requiredResponseDate ?? "",
+    r.status,
+    r.notes ?? "",
     r.expiresAt ? r.expiresAt.toISOString() : "",
     r.createdAt.toISOString(),
   ]);
 
   const itemRows = data.items.map((i) => [
-    i.id, i.rfqId, i.internalRfqNo,
-    i.lineItem ?? "", i.partNo ?? "", i.description,
-    i.qty ?? "", i.uom ?? "", i.referencePrice ?? "",
+    i.id,
+    i.rfqId,
+    i.internalRfqNo,
+    i.lineItem ?? "",
+    i.partNo ?? "",
+    i.description,
+    i.qty ?? "",
+    i.uom ?? "",
+    i.referencePrice ?? "",
     i.createdAt.toISOString(),
   ]);
 
   const supplierRows = data.suppliers.map((s) => [
-    s.id, s.supplierId ?? "", s.name, s.contactPerson ?? "",
-    s.email ?? "", s.phone ?? "", s.category,
+    s.id,
+    s.supplierId ?? "",
+    s.name,
+    s.contactPerson ?? "",
+    s.email ?? "",
+    s.phone ?? "",
+    s.category,
     s.isActive ? "Yes" : "No",
     s.createdAt.toISOString(),
   ]);
 
   const offerItemRows = data.offerItems.map((o) => [
-    o.id, o.offerId, o.rfqId, o.internalRfqNo, o.customerRfqNo,
-    o.supplierName, o.lineItem ?? "", o.partNo ?? "", o.description,
-    o.qty ?? "", o.uom ?? "", o.price,
+    o.id,
+    o.offerId,
+    o.rfqId,
+    o.internalRfqNo,
+    o.customerRfqNo,
+    o.supplierName,
+    o.lineItem ?? "",
+    o.partNo ?? "",
+    o.description,
+    o.qty ?? "",
+    o.uom ?? "",
+    o.price,
     o.taxIncluded ? "Yes" : "No",
-    o.deliveryDays ?? "", o.notes ?? "",
+    o.deliveryDays ?? "",
+    o.notes ?? "",
     o.submittedAt.toISOString(),
   ]);
 
@@ -312,8 +418,13 @@ export async function pushToMirrorSheet(data: MirrorData): Promise<void> {
   await clearAndWriteTab(sheets, spreadsheetId, TAB_OFFERS, OFFERS_HEADER, offerItemRows);
 
   logger.info(
-    { rfqs: rfqRows.length, items: itemRows.length, suppliers: supplierRows.length, offerItems: offerItemRows.length },
-    "Mirror sheet updated"
+    {
+      rfqs: rfqRows.length,
+      items: itemRows.length,
+      suppliers: supplierRows.length,
+      offerItems: offerItemRows.length,
+    },
+    "Mirror sheet updated",
   );
 }
 

@@ -178,7 +178,11 @@ Cortoba Supplies — ش.الاسكندرية - برج نجمة مطروح الد
   }
 }
 
-export async function verifyEmailConnection(): Promise<{ ok: boolean; resolvedHost?: string; error?: string }> {
+export async function verifyEmailConnection(): Promise<{
+  ok: boolean;
+  resolvedHost?: string;
+  error?: string;
+}> {
   const rawHost = process.env.SMTP_HOST || "smtp.gmail.com";
   try {
     const addrs = await dns.resolve4(rawHost);
@@ -195,7 +199,13 @@ export async function sendRfqEmail(opts: {
   to: string;
   toName: string;
   rfqNo: string;
-  items: Array<{ lineItem?: string | null; partNo?: string | null; description: string; qty?: string | null; uom?: string | null }>;
+  items: Array<{
+    lineItem?: string | null;
+    partNo?: string | null;
+    description: string;
+    qty?: string | null;
+    uom?: string | null;
+  }>;
   pricingUrl: string;
   closeDate: string;
   employeeName: string;
@@ -280,7 +290,7 @@ export async function sendRfqEmail(opts: {
 
   const itemsText = opts.items
     .map((item, i) =>
-      `  ${item.lineItem || i + 1}. ${item.description}${item.partNo ? " [" + item.partNo + "]" : ""} — QTY: ${item.qty || "-"} ${item.uom || ""}`.trim()
+      `  ${item.lineItem || i + 1}. ${item.description}${item.partNo ? " [" + item.partNo + "]" : ""} — QTY: ${item.qty || "-"} ${item.uom || ""}`.trim(),
     )
     .join("\n");
 

@@ -5,10 +5,10 @@
  */
 
 export interface OdooConfig {
-  url: string;       // https://mycompany.odoo.com
-  db: string;        // اسم قاعدة البيانات في Odoo
-  username: string;  // البريد الإلكتروني
-  apiKey: string;    // API Key من إعدادات المستخدم
+  url: string; // https://mycompany.odoo.com
+  db: string; // اسم قاعدة البيانات في Odoo
+  username: string; // البريد الإلكتروني
+  apiKey: string; // API Key من إعدادات المستخدم
 }
 
 // ─── XML-RPC Client بسيط بدون مكتبات خارجية ───────────────────────────────
@@ -16,9 +16,10 @@ export interface OdooConfig {
 function xmlValue(val: unknown): string {
   if (val === null || val === undefined) return `<value><boolean>0</boolean></value>`;
   if (typeof val === "boolean") return `<value><boolean>${val ? 1 : 0}</boolean></value>`;
-  if (typeof val === "number") return Number.isInteger(val)
-    ? `<value><int>${val}</int></value>`
-    : `<value><double>${val}</double></value>`;
+  if (typeof val === "number")
+    return Number.isInteger(val)
+      ? `<value><int>${val}</int></value>`
+      : `<value><double>${val}</double></value>`;
   if (typeof val === "string") return `<value><string>${escXml(val)}</string></value>`;
   if (Array.isArray(val)) {
     return `<value><array><data>${val.map(xmlValue).join("")}</data></array></value>`;
@@ -33,26 +34,35 @@ function xmlValue(val: unknown): string {
 }
 
 function escXml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 function buildCall(method: string, params: unknown[]): string {
-  return `<?xml version="1.0"?><methodCall><methodName>${method}</methodName><params>${
-    params.map((p) => `<param>${xmlValue(p)}</param>`).join("")
-  }</params></methodCall>`;
+  return `<?xml version="1.0"?><methodCall><methodName>${method}</methodName><params>${params
+    .map((p) => `<param>${xmlValue(p)}</param>`)
+    .join("")}</params></methodCall>`;
 }
 
 function parseXmlValue(node: string): unknown {
-  const inner = node.replace(/^\s*<value>\s*/, "").replace(/\s*<\/value>\s*$/, "").trim();
+  const inner = node
+    .replace(/^\s*<value>\s*/, "")
+    .replace(/\s*<\/value>\s*$/, "")
+    .trim();
   if (inner.startsWith("<int>") || inner.startsWith("<i4>"))
     return parseInt(inner.replace(/<\/?(?:int|i4)>/g, ""), 10);
-  if (inner.startsWith("<double>"))
-    return parseFloat(inner.replace(/<\/?double>/g, ""));
-  if (inner.startsWith("<boolean>"))
-    return inner.includes("1");
+  if (inner.startsWith("<double>")) return parseFloat(inner.replace(/<\/?double>/g, ""));
+  if (inner.startsWith("<boolean>")) return inner.includes("1");
   if (inner.startsWith("<string>"))
-    return inner.replace(/<\/?string>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+    return inner
+      .replace(/<\/?string>/g, "")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">");
   if (inner.startsWith("<array>")) {
     const matches = inner.match(/<value>[\s\S]*?<\/value>/g) ?? [];
     return matches.map(parseXmlValue);
@@ -92,16 +102,34 @@ async function xmlRpcCall(url: string, method: string, params: unknown[]): Promi
 // ─── Odoo Client ────────────────────────────────────────────────────────────
 
 async function authenticate(cfg: OdooConfig): Promise<number> {
-  const uid = await xmlRpcCall(`${cfg.url}/xmlrpc/2/common`, "authenticate",
-    [cfg.db, cfg.username, cfg.apiKey, {}]);
+  const uid = await xmlRpcCall(`${cfg.url}/xmlrpc/2/common`, "authenticate", [
+    cfg.db,
+    cfg.username,
+    cfg.apiKey,
+    {},
+  ]);
   if (typeof uid !== "number" || uid === 0)
     throw new Error("Odoo authentication failed — تحقق من الـ URL والـ API Key");
   return uid;
 }
 
-async function callObject(cfg: OdooConfig, uid: number, model: string, method: string, args: unknown[], kwargs: Record<string, unknown> = {}): Promise<unknown> {
-  return xmlRpcCall(`${cfg.url}/xmlrpc/2/object`, "execute_kw",
-    [cfg.db, uid, cfg.apiKey, model, method, args, kwargs]);
+async function callObject(
+  cfg: OdooConfig,
+  uid: number,
+  model: string,
+  method: string,
+  args: unknown[],
+  kwargs: Record<string, unknown> = {},
+): Promise<unknown> {
+  return xmlRpcCall(`${cfg.url}/xmlrpc/2/object`, "execute_kw", [
+    cfg.db,
+    uid,
+    cfg.apiKey,
+    model,
+    method,
+    args,
+    kwargs,
+  ]);
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -125,9 +153,14 @@ export interface ErpPurchaseOrder {
 }
 
 /** اختبار الاتصال */
-export async function testConnection(cfg: OdooConfig): Promise<{ ok: boolean; version?: string; error?: string }> {
+export async function testConnection(
+  cfg: OdooConfig,
+): Promise<{ ok: boolean; version?: string; error?: string }> {
   try {
-    const info = await xmlRpcCall(`${cfg.url}/xmlrpc/2/common`, "version", []) as Record<string, unknown>;
+    const info = (await xmlRpcCall(`${cfg.url}/xmlrpc/2/common`, "version", [])) as Record<
+      string,
+      unknown
+    >;
     await authenticate(cfg);
     return { ok: true, version: String(info.server_version ?? "") };
   } catch (e) {
@@ -139,13 +172,25 @@ export async function testConnection(cfg: OdooConfig): Promise<{ ok: boolean; ve
 export async function importSuppliers(cfg: OdooConfig): Promise<ErpSupplier[]> {
   const uid = await authenticate(cfg);
   // فلترة على الشركاء الموردين فقط (supplier_rank > 0)
-  const ids = await callObject(cfg, uid, "res.partner", "search",
-    [[["supplier_rank", ">", 0], ["active", "=", true]]], { limit: 500 }) as number[];
+  const ids = (await callObject(
+    cfg,
+    uid,
+    "res.partner",
+    "search",
+    [
+      [
+        ["supplier_rank", ">", 0],
+        ["active", "=", true],
+      ],
+    ],
+    { limit: 500 },
+  )) as number[];
 
   if (!ids.length) return [];
 
-  const records = await callObject(cfg, uid, "res.partner", "read",
-    [ids], { fields: ["id", "name", "email", "phone", "street", "city", "category_id", "child_ids"] }) as Record<string, unknown>[];
+  const records = (await callObject(cfg, uid, "res.partner", "read", [ids], {
+    fields: ["id", "name", "email", "phone", "street", "city", "category_id", "child_ids"],
+  })) as Record<string, unknown>[];
 
   return records.map((r) => ({
     externalId: `odoo-${r.id}`,
@@ -153,47 +198,68 @@ export async function importSuppliers(cfg: OdooConfig): Promise<ErpSupplier[]> {
     email: r.email ? String(r.email) : undefined,
     phone: r.phone ? String(r.phone) : undefined,
     address: [r.street, r.city].filter(Boolean).join(", ") || undefined,
-    category: Array.isArray(r.category_id) && r.category_id.length > 1 ? String(r.category_id[1]) : undefined,
+    category:
+      Array.isArray(r.category_id) && r.category_id.length > 1
+        ? String(r.category_id[1])
+        : undefined,
   }));
 }
 
 /** تصدير RFQ كـ Purchase Request إلى Odoo */
-export async function exportRfq(cfg: OdooConfig, rfq: {
-  name: string;
-  notes?: string;
-  lines: { description: string; qty?: number; uom?: string; price?: number }[];
-  supplierOdooId?: number;
-}): Promise<string> {
+export async function exportRfq(
+  cfg: OdooConfig,
+  rfq: {
+    name: string;
+    notes?: string;
+    lines: { description: string; qty?: number; uom?: string; price?: number }[];
+    supplierOdooId?: number;
+  },
+): Promise<string> {
   const uid = await authenticate(cfg);
   // في Odoo، نُنشئ Purchase Order بحالة draft
-  const poId = await callObject(cfg, uid, "purchase.order", "create", [{
-    partner_id: rfq.supplierOdooId ?? 1,
-    notes: rfq.notes ?? `RFQ: ${rfq.name}`,
-    order_line: rfq.lines.map((l) => [0, 0, {
-      name: l.description,
-      product_qty: l.qty ?? 1,
-      price_unit: l.price ?? 0,
-    }]),
-  }]) as number;
+  const poId = (await callObject(cfg, uid, "purchase.order", "create", [
+    {
+      partner_id: rfq.supplierOdooId ?? 1,
+      notes: rfq.notes ?? `RFQ: ${rfq.name}`,
+      order_line: rfq.lines.map((l) => [
+        0,
+        0,
+        {
+          name: l.description,
+          product_qty: l.qty ?? 1,
+          price_unit: l.price ?? 0,
+        },
+      ]),
+    },
+  ])) as number;
   return String(poId);
 }
 
 /** تصدير أمر شراء إلى Odoo */
-export async function exportPurchaseOrder(cfg: OdooConfig, po: {
-  name: string;
-  supplierOdooId?: number;
-  lines: { description: string; qty?: number; price?: number }[];
-}): Promise<string> {
+export async function exportPurchaseOrder(
+  cfg: OdooConfig,
+  po: {
+    name: string;
+    supplierOdooId?: number;
+    lines: { description: string; qty?: number; price?: number }[];
+  },
+): Promise<string> {
   const uid = await authenticate(cfg);
-  const poId = await callObject(cfg, uid, "purchase.order", "create", [{
-    partner_id: po.supplierOdooId ?? 1,
-    state: "purchase",
-    order_line: po.lines.map((l) => [0, 0, {
-      name: l.description,
-      product_qty: l.qty ?? 1,
-      price_unit: l.price ?? 0,
-    }]),
-  }]) as number;
+  const poId = (await callObject(cfg, uid, "purchase.order", "create", [
+    {
+      partner_id: po.supplierOdooId ?? 1,
+      state: "purchase",
+      order_line: po.lines.map((l) => [
+        0,
+        0,
+        {
+          name: l.description,
+          product_qty: l.qty ?? 1,
+          price_unit: l.price ?? 0,
+        },
+      ]),
+    },
+  ])) as number;
   // تأكيد الأمر
   await callObject(cfg, uid, "purchase.order", "button_confirm", [[poId]]);
   return String(poId);
@@ -202,11 +268,18 @@ export async function exportPurchaseOrder(cfg: OdooConfig, po: {
 /** استيراد أوامر الشراء من Odoo */
 export async function importPurchaseOrders(cfg: OdooConfig): Promise<ErpPurchaseOrder[]> {
   const uid = await authenticate(cfg);
-  const ids = await callObject(cfg, uid, "purchase.order", "search",
-    [[["state", "in", ["draft", "sent", "purchase"]]]], { limit: 200 }) as number[];
+  const ids = (await callObject(
+    cfg,
+    uid,
+    "purchase.order",
+    "search",
+    [[["state", "in", ["draft", "sent", "purchase"]]]],
+    { limit: 200 },
+  )) as number[];
   if (!ids.length) return [];
-  const records = await callObject(cfg, uid, "purchase.order", "read",
-    [ids], { fields: ["id", "name", "partner_id", "state", "order_line"] }) as Record<string, unknown>[];
+  const records = (await callObject(cfg, uid, "purchase.order", "read", [ids], {
+    fields: ["id", "name", "partner_id", "state", "order_line"],
+  })) as Record<string, unknown>[];
   return records.map((r) => ({
     externalId: `odoo-po-${r.id}`,
     name: String(r.name ?? ""),

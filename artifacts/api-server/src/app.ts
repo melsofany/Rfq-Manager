@@ -15,35 +15,45 @@ const app: Express = express();
 // the internal Node↔proxy connection is plain HTTP.
 app.set("trust proxy", 1);
 
-app.use(pinoHttp({
-  logger,
-  serializers: {
-    req(req) { return { id: req.id, method: req.method, url: req.url?.split("?")[0] }; },
-    res(res) { return { statusCode: res.statusCode }; },
-  },
-}));
+app.use(
+  pinoHttp({
+    logger,
+    serializers: {
+      req(req) {
+        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
+      },
+      res(res) {
+        return { statusCode: res.statusCode };
+      },
+    },
+  }),
+);
 
 app.use(cors({ origin: true, credentials: true }));
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || "rfq-dev-secret-change-in-prod",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  },
-}));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "rfq-dev-secret-change-in-prod",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    },
+  }),
+);
 
 // Capture the raw request body for routes that need to verify Meta's
 // X-Hub-Signature-256 webhook signature (see modules/communications/routes.ts).
-app.use(express.json({
-  verify: (req: Request & { rawBody?: string }, _res, buf) => {
-    req.rawBody = buf.toString("utf8");
-  },
-}));
+app.use(
+  express.json({
+    verify: (req: Request & { rawBody?: string }, _res, buf) => {
+      req.rawBody = buf.toString("utf8");
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
@@ -60,9 +70,12 @@ if (process.env.NODE_ENV === "production") {
 
 app.use((err: Error & { cause?: unknown }, _req: Request, res: Response, _next: NextFunction) => {
   logger.error({ err }, "Unhandled error");
-  const cause = err.cause instanceof Error
-    ? { message: err.cause.message, code: (err.cause as NodeJS.ErrnoException).code }
-    : err.cause ? String(err.cause) : undefined;
+  const cause =
+    err.cause instanceof Error
+      ? { message: err.cause.message, code: (err.cause as NodeJS.ErrnoException).code }
+      : err.cause
+        ? String(err.cause)
+        : undefined;
   res.status(500).json({ error: err.message, cause });
 });
 

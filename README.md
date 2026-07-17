@@ -10,13 +10,13 @@ pnpm install
 
 ### Environment variables
 
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `SESSION_SECRET` | Express session signing key |
-| `SMTP_HOST` | SMTP host (default: smtp.gmail.com) |
-| `SMTP_USER` | SMTP username |
-| `SMTP_PASS` | SMTP password / app password |
+| Variable         | Description                         |
+| ---------------- | ----------------------------------- |
+| `DATABASE_URL`   | PostgreSQL connection string        |
+| `SESSION_SECRET` | Express session signing key         |
+| `SMTP_HOST`      | SMTP host (default: smtp.gmail.com) |
+| `SMTP_USER`      | SMTP username                       |
+| `SMTP_PASS`      | SMTP password / app password        |
 
 ## Development
 
@@ -39,14 +39,14 @@ pnpm --filter @workspace/db run push   # Push DB schema (dev only)
 
 ## Stack
 
-| Layer | Tech |
-|---|---|
-| API | Express 5, express-session, bcryptjs, nodemailer |
-| DB | PostgreSQL, Drizzle ORM |
-| Frontend | React 19, Vite, TailwindCSS v4, shadcn/ui, Wouter |
-| Validation | Zod, drizzle-zod |
-| Tests | Vitest, Testing Library |
-| Build | pnpm workspaces, TypeScript 5.9, esbuild |
+| Layer      | Tech                                              |
+| ---------- | ------------------------------------------------- |
+| API        | Express 5, express-session, bcryptjs, nodemailer  |
+| DB         | PostgreSQL, Drizzle ORM                           |
+| Frontend   | React 19, Vite, TailwindCSS v4, shadcn/ui, Wouter |
+| Validation | Zod, drizzle-zod                                  |
+| Tests      | Vitest, Testing Library                           |
+| Build      | pnpm workspaces, TypeScript 5.9, esbuild          |
 
 ## Project Structure
 
@@ -73,5 +73,6 @@ lib/api-zod/              # Auto-generated Zod schemas
 ## Deployment
 
 The app is deployed on [Render](https://render.com). CI/CD runs via GitHub Actions:
+
 - **CI** — typecheck + tests on every push / pull request
 - **Deploy** — auto-deploy to Render on push to `main` after CI passes

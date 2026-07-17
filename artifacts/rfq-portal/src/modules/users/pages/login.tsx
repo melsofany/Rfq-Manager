@@ -48,7 +48,11 @@ export default function LoginPage() {
           </button>
         </div>
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="Cortoba Supplies" className="h-20 w-20 object-contain mx-auto mb-3" />
+          <img
+            src="/logo.png"
+            alt="Cortoba Supplies"
+            className="h-20 w-20 object-contain mx-auto mb-3"
+          />
           <h1 className="text-2xl font-bold text-foreground">{t("login.title")}</h1>
           <p className="text-muted-foreground text-sm mt-1">{t("login.subtitle")}</p>
           <p className="text-muted-foreground text-xs mt-1">{t("login.address")}</p>
@@ -89,11 +93,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loginMutation.isPending}
-            >
+            <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
               {loginMutation.isPending ? t("login.signingIn") : t("login.button")}
             </Button>
           </form>

@@ -1,4 +1,12 @@
-import { db, rfqTable, rfqItemsTable, suppliersTable, employeesTable, offersTable, offerItemsTable } from "@workspace/db";
+import {
+  db,
+  rfqTable,
+  rfqItemsTable,
+  suppliersTable,
+  employeesTable,
+  offersTable,
+  offerItemsTable,
+} from "@workspace/db";
 import { inArray, eq } from "drizzle-orm";
 import { pushToMirrorSheet, readMirrorSheetIds, type MirrorData } from "./google-sheets";
 import { logger } from "./logger";
@@ -39,10 +47,11 @@ async function buildMirrorData(): Promise<MirrorData> {
       : Promise.resolve([]),
     db.select().from(suppliersTable),
     rfqIds.length > 0
-      ? db.select({
-          oi: offerItemsTable,
-          offer: offersTable,
-        })
+      ? db
+          .select({
+            oi: offerItemsTable,
+            offer: offersTable,
+          })
           .from(offerItemsTable)
           .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
           .where(inArray(offersTable.rfqId, rfqIds))
@@ -60,7 +69,7 @@ async function buildMirrorData(): Promise<MirrorData> {
   const supplierNameMap: Record<number, string> = {};
   for (const s of supplierRows) supplierNameMap[s.id] = s.name;
 
-  const rfqItemMap: Record<number, typeof itemRows[0]> = {};
+  const rfqItemMap: Record<number, (typeof itemRows)[0]> = {};
   for (const i of itemRows) rfqItemMap[i.id] = i;
 
   return {
@@ -170,7 +179,9 @@ export async function runFullSync(): Promise<SyncStatus> {
     }
 
     if (sheetIds.supplierIds.length > 0) {
-      const toDelete = data.suppliers.map((s) => s.id).filter((id) => !sheetIds.supplierIds.includes(id));
+      const toDelete = data.suppliers
+        .map((s) => s.id)
+        .filter((id) => !sheetIds.supplierIds.includes(id));
       if (toDelete.length > 0) {
         await db.delete(suppliersTable).where(inArray(suppliersTable.id, toDelete));
         deleted.suppliers = toDelete.length;

@@ -1,5 +1,14 @@
 import { Router } from "express";
-import { db, sentLogTable, rfqTable, rfqItemsTable, suppliersTable, offersTable, offerItemsTable, auditLogTable } from "@workspace/db";
+import {
+  db,
+  sentLogTable,
+  rfqTable,
+  rfqItemsTable,
+  suppliersTable,
+  offersTable,
+  offerItemsTable,
+  auditLogTable,
+} from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
 
 const router = Router();
@@ -7,11 +16,13 @@ const router = Router();
 router.get("/pricing/:token", async (req, res): Promise<void> => {
   const { token } = req.params;
 
-  const [log] = await db.select({
-    log: sentLogTable,
-    rfq: rfqTable,
-    supplier: suppliersTable,
-  }).from(sentLogTable)
+  const [log] = await db
+    .select({
+      log: sentLogTable,
+      rfq: rfqTable,
+      supplier: suppliersTable,
+    })
+    .from(sentLogTable)
     .leftJoin(rfqTable, eq(sentLogTable.rfqId, rfqTable.id))
     .leftJoin(suppliersTable, eq(sentLogTable.supplierId, suppliersTable.id))
     .where(eq(sentLogTable.token, token));
@@ -27,11 +38,13 @@ router.get("/pricing/:token", async (req, res): Promise<void> => {
   // new Date("2026-07-20") parses as midnight UTC — so the link would be
   // marked expired at the very START of that day. Fix: add 1 day so the
   // full close-date day stays valid.
-  const closeDateExpired = log.log.closeDate != null && (() => {
-    const d = new Date(log.log.closeDate!);
-    d.setDate(d.getDate() + 1); // expire at the START of the next day
-    return d <= now;
-  })();
+  const closeDateExpired =
+    log.log.closeDate != null &&
+    (() => {
+      const d = new Date(log.log.closeDate!);
+      d.setDate(d.getDate() + 1); // expire at the START of the next day
+      return d <= now;
+    })();
 
   // expiresAt is a TIMESTAMP but was historically sent from the browser as
   // local midnight (e.g. Egypt UTC+3), which stored as "2026-07-15T21:00Z"
@@ -39,22 +52,27 @@ router.get("/pricing/:token", async (req, res): Promise<void> => {
   // the full intended day remains valid. New records are saved as
   // end-of-day UTC (T23:59:59Z), so adding 1 day gives a one-day grace
   // that is harmless for the use case.
-  const expiresAtExpired = log.rfq.expiresAt != null && (() => {
-    const d = new Date(log.rfq.expiresAt!);
-    d.setDate(d.getDate() + 1);
-    return d <= now;
-  })();
+  const expiresAtExpired =
+    log.rfq.expiresAt != null &&
+    (() => {
+      const d = new Date(log.rfq.expiresAt!);
+      d.setDate(d.getDate() + 1);
+      return d <= now;
+    })();
 
   const isExpired = expiresAtExpired || closeDateExpired;
   const items = await db.select().from(rfqItemsTable).where(eq(rfqItemsTable.rfqId, log.rfq.id));
 
   // Check if already submitted
-  const [existingOffer] = await db.select().from(offersTable)
+  const [existingOffer] = await db
+    .select()
+    .from(offersTable)
     .where(and(eq(offersTable.rfqId, log.rfq.id), eq(offersTable.supplierId, log.log.supplierId)));
 
   let existingOfferOut = undefined;
   if (existingOffer) {
-    const offerItems = await db.select({ item: offerItemsTable, rfqItem: rfqItemsTable })
+    const offerItems = await db
+      .select({ item: offerItemsTable, rfqItem: rfqItemsTable })
       .from(offerItemsTable)
       .leftJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
       .where(eq(offerItemsTable.offerId, existingOffer.id));
@@ -69,13 +87,18 @@ router.get("/pricing/:token", async (req, res): Promise<void> => {
       totalPrice: existingOffer.totalPrice ? parseFloat(existingOffer.totalPrice) : null,
       generalNotes: existingOffer.generalNotes,
       createdAt: existingOffer.createdAt.toISOString(),
-      items: offerItems.map(oi => ({
-        id: oi.item.id, offerId: oi.item.offerId, rfqItemId: oi.item.rfqItemId,
-        partNo: oi.rfqItem?.partNo ?? null, description: oi.rfqItem?.description ?? null,
+      items: offerItems.map((oi) => ({
+        id: oi.item.id,
+        offerId: oi.item.offerId,
+        rfqItemId: oi.item.rfqItemId,
+        partNo: oi.rfqItem?.partNo ?? null,
+        description: oi.rfqItem?.description ?? null,
         qty: oi.rfqItem?.qty ? parseFloat(oi.rfqItem.qty) : null,
         uom: oi.rfqItem?.uom ?? null,
-        price: parseFloat(oi.item.price), taxIncluded: oi.item.taxIncluded,
-        deliveryDays: oi.item.deliveryDays, notes: oi.item.notes,
+        price: parseFloat(oi.item.price),
+        taxIncluded: oi.item.taxIncluded,
+        deliveryDays: oi.item.deliveryDays,
+        notes: oi.item.notes,
       })),
     };
   }
@@ -84,9 +107,14 @@ router.get("/pricing/:token", async (req, res): Promise<void> => {
     rfqNo: log.rfq.internalRfqNo,
     supplierName: log.supplier?.name ?? "",
     contactPerson: log.supplier?.contactPerson ?? null,
-    items: items.map(i => ({
-      id: i.id, rfqId: i.rfqId, itemId: i.itemId, lineItem: i.lineItem,
-      partNo: i.partNo, description: i.description, uom: i.uom,
+    items: items.map((i) => ({
+      id: i.id,
+      rfqId: i.rfqId,
+      itemId: i.itemId,
+      lineItem: i.lineItem,
+      partNo: i.partNo,
+      description: i.description,
+      uom: i.uom,
       qty: i.qty ? parseFloat(i.qty) : null,
       referencePrice: i.referencePrice ? parseFloat(i.referencePrice) : null,
     })),
@@ -100,15 +128,21 @@ router.get("/pricing/:token", async (req, res): Promise<void> => {
 router.post("/pricing/:token/track", async (req, res): Promise<void> => {
   const { token } = req.params;
   const [log] = await db.select().from(sentLogTable).where(eq(sentLogTable.token, token));
-  if (!log) { res.json({ success: false }); return; }
+  if (!log) {
+    res.json({ success: false });
+    return;
+  }
 
   const now = new Date();
-  await db.update(sentLogTable).set({
-    linkOpened: true,
-    openCount: log.openCount + 1,
-    firstOpenedAt: log.firstOpenedAt || now,
-    lastOpenedAt: now,
-  }).where(eq(sentLogTable.token, token));
+  await db
+    .update(sentLogTable)
+    .set({
+      linkOpened: true,
+      openCount: log.openCount + 1,
+      firstOpenedAt: log.firstOpenedAt || now,
+      lastOpenedAt: now,
+    })
+    .where(eq(sentLogTable.token, token));
 
   res.json({ success: true });
 });
@@ -116,10 +150,12 @@ router.post("/pricing/:token/track", async (req, res): Promise<void> => {
 router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
   const { token } = req.params;
 
-  const [log] = await db.select({
-    log: sentLogTable,
-    rfq: rfqTable,
-  }).from(sentLogTable)
+  const [log] = await db
+    .select({
+      log: sentLogTable,
+      rfq: rfqTable,
+    })
+    .from(sentLogTable)
     .leftJoin(rfqTable, eq(sentLogTable.rfqId, rfqTable.id))
     .where(eq(sentLogTable.token, token));
 
@@ -129,16 +165,20 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
   }
 
   const now2 = new Date();
-  const closeDateExpired2 = log.log.closeDate != null && (() => {
-    const d = new Date(log.log.closeDate!);
-    d.setDate(d.getDate() + 1);
-    return d <= now2;
-  })();
-  const expiresAtExpired2 = log.rfq.expiresAt != null && (() => {
-    const d = new Date(log.rfq.expiresAt!);
-    d.setDate(d.getDate() + 1);
-    return d <= now2;
-  })();
+  const closeDateExpired2 =
+    log.log.closeDate != null &&
+    (() => {
+      const d = new Date(log.log.closeDate!);
+      d.setDate(d.getDate() + 1);
+      return d <= now2;
+    })();
+  const expiresAtExpired2 =
+    log.rfq.expiresAt != null &&
+    (() => {
+      const d = new Date(log.rfq.expiresAt!);
+      d.setDate(d.getDate() + 1);
+      return d <= now2;
+    })();
   const isExpired = expiresAtExpired2 || closeDateExpired2;
   if (isExpired) {
     res.status(400).json({ error: "This link has expired" });
@@ -146,7 +186,13 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
   }
 
   const { items, generalNotes } = req.body as {
-    items: Array<{ rfqItemId: number; price: number; taxIncluded?: boolean; deliveryDays?: number; notes?: string }>;
+    items: Array<{
+      rfqItemId: number;
+      price: number;
+      taxIncluded?: boolean;
+      deliveryDays?: number;
+      notes?: string;
+    }>;
     generalNotes?: string;
   };
 
@@ -157,13 +203,16 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
 
   const totalPrice = items.reduce((sum, i) => sum + (i.price || 0), 0);
 
-  const [offer] = await db.insert(offersTable).values({
-    rfqId: log.rfq.id,
-    supplierId: log.log.supplierId,
-    sentLogId: log.log.id,
-    totalPrice: String(totalPrice),
-    generalNotes,
-  }).returning();
+  const [offer] = await db
+    .insert(offersTable)
+    .values({
+      rfqId: log.rfq.id,
+      supplierId: log.log.supplierId,
+      sentLogId: log.log.id,
+      totalPrice: String(totalPrice),
+      generalNotes,
+    })
+    .returning();
 
   for (const item of items) {
     await db.insert(offerItemsTable).values({
@@ -180,8 +229,8 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
   await db.update(sentLogTable).set({ offerSubmitted: true }).where(eq(sentLogTable.token, token));
 
   // Auto-transition RFQ to QUOTED on first offer (SENT → QUOTED)
-  if (log.rfq.status === 'SENT') {
-    await db.update(rfqTable).set({ status: 'QUOTED' }).where(eq(rfqTable.id, log.rfq.id));
+  if (log.rfq.status === "SENT") {
+    await db.update(rfqTable).set({ status: "QUOTED" }).where(eq(rfqTable.id, log.rfq.id));
   }
 
   // Audit
@@ -195,10 +244,16 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
   });
 
   res.status(201).json({
-    id: offer.id, rfqId: offer.rfqId, supplierId: offer.supplierId,
-    supplierName: null, sentLogId: offer.sentLogId, employeeId: offer.employeeId,
+    id: offer.id,
+    rfqId: offer.rfqId,
+    supplierId: offer.supplierId,
+    supplierName: null,
+    sentLogId: offer.sentLogId,
+    employeeId: offer.employeeId,
     totalPrice: parseFloat(offer.totalPrice!),
-    generalNotes: offer.generalNotes, createdAt: offer.createdAt.toISOString(), items: [],
+    generalNotes: offer.generalNotes,
+    createdAt: offer.createdAt.toISOString(),
+    items: [],
   });
 });
 

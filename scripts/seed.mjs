@@ -10,15 +10,32 @@ await client.connect();
 function requirePass(envVar, label) {
   const val = process.env[envVar];
   if (!val) {
-    throw new Error(`Missing env var ${envVar} — set it before seeding (e.g. ${envVar}=ChangeMe!123)`);
+    throw new Error(
+      `Missing env var ${envVar} — set it before seeding (e.g. ${envVar}=ChangeMe!123)`,
+    );
   }
   return val;
 }
 
 const accounts = [
-  { name: "Admin", email: "admin@cortoba-supplies.com", password: requirePass("SEED_ADMIN_PASS", "admin"), role: "admin" },
-  { name: "Khalid Al-Manager", email: "khalid@cortoba-supplies.com", password: requirePass("SEED_MANAGER_PASS", "manager"), role: "manager" },
-  { name: "Sara", email: "sara@cortoba-supplies.com", password: requirePass("SEED_STAFF_PASS", "staff"), role: "purchasing" },
+  {
+    name: "Admin",
+    email: "admin@cortoba-supplies.com",
+    password: requirePass("SEED_ADMIN_PASS", "admin"),
+    role: "admin",
+  },
+  {
+    name: "Khalid Al-Manager",
+    email: "khalid@cortoba-supplies.com",
+    password: requirePass("SEED_MANAGER_PASS", "manager"),
+    role: "manager",
+  },
+  {
+    name: "Sara",
+    email: "sara@cortoba-supplies.com",
+    password: requirePass("SEED_STAFF_PASS", "staff"),
+    role: "purchasing",
+  },
 ];
 
 for (const acc of accounts) {
@@ -27,7 +44,7 @@ for (const acc of accounts) {
     `INSERT INTO employees (name, email, password_hash, role, is_active)
      VALUES ($1, $2, $3, $4, true)
      ON CONFLICT (email) DO UPDATE SET password_hash = $3, role = $4`,
-    [acc.name, acc.email, hash, acc.role]
+    [acc.name, acc.email, hash, acc.role],
   );
   console.log("Seeded: " + acc.email);
 }

@@ -5,7 +5,9 @@ import { employeesTable } from "./employees";
 
 export const rfqAttachmentsTable = pgTable("rfq_attachments", {
   id: serial("id").primaryKey(),
-  rfqId: integer("rfq_id").notNull().references(() => rfqTable.id, { onDelete: "cascade" }),
+  rfqId: integer("rfq_id")
+    .notNull()
+    .references(() => rfqTable.id, { onDelete: "cascade" }),
   originalName: text("original_name").notNull(),
   mimeType: text("mime_type").notNull(),
   size: integer("size").notNull(),
@@ -16,7 +18,9 @@ export const rfqAttachmentsTable = pgTable("rfq_attachments", {
 
 export const offerAttachmentsTable = pgTable("offer_attachments", {
   id: serial("id").primaryKey(),
-  offerId: integer("offer_id").notNull().references(() => offersTable.id, { onDelete: "cascade" }),
+  offerId: integer("offer_id")
+    .notNull()
+    .references(() => offersTable.id, { onDelete: "cascade" }),
   originalName: text("original_name").notNull(),
   mimeType: text("mime_type").notNull(),
   size: integer("size").notNull(),

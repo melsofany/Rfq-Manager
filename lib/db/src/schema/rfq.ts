@@ -14,12 +14,17 @@ export const rfqTable = pgTable("rfq", {
   notes: text("notes"),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
 });
 
 export const rfqItemsTable = pgTable("rfq_items", {
   id: serial("id").primaryKey(),
-  rfqId: integer("rfq_id").notNull().references(() => rfqTable.id, { onDelete: "cascade" }),
+  rfqId: integer("rfq_id")
+    .notNull()
+    .references(() => rfqTable.id, { onDelete: "cascade" }),
   itemId: text("item_id"),
   lineItem: text("line_item"),
   partNo: text("part_no"),
@@ -30,10 +35,17 @@ export const rfqItemsTable = pgTable("rfq_items", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const insertRfqSchema = createInsertSchema(rfqTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertRfqSchema = createInsertSchema(rfqTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 export type InsertRfq = z.infer<typeof insertRfqSchema>;
 export type Rfq = typeof rfqTable.$inferSelect;
 
-export const insertRfqItemSchema = createInsertSchema(rfqItemsTable).omit({ id: true, createdAt: true });
+export const insertRfqItemSchema = createInsertSchema(rfqItemsTable).omit({
+  id: true,
+  createdAt: true,
+});
 export type InsertRfqItem = z.infer<typeof insertRfqItemSchema>;
 export type RfqItem = typeof rfqItemsTable.$inferSelect;

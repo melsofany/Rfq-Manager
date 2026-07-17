@@ -13,11 +13,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "json", "html"],
       include: ["src/**/*.{ts,tsx}"],
-      exclude: [
-        "src/__tests__/**",
-        "src/main.tsx",
-        "src/components/ui/**",
-      ],
+      exclude: ["src/__tests__/**", "src/main.tsx", "src/components/ui/**"],
     },
   },
   resolve: {
@@ -26,4 +22,3 @@ export default defineConfig({
     },
   },
 });
-

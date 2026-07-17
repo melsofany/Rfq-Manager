@@ -9,8 +9,8 @@ import { logger } from "../../../shared/logger";
 
 export interface GoogleSheetsErpConfig {
   serviceAccountBase64: string; // GOOGLE_ACCOUNT_BASE_64
-  spreadsheetId: string;        // GOOGLE_SHEET_ID أو Mirror Sheet
-  dataSheetName?: string;       // اسم تاب البيانات (افتراضي: DATA)
+  spreadsheetId: string; // GOOGLE_SHEET_ID أو Mirror Sheet
+  dataSheetName?: string; // اسم تاب البيانات (افتراضي: DATA)
 }
 
 export interface ErpSupplier {
@@ -32,12 +32,17 @@ function getAuth(cfg: GoogleSheetsErpConfig) {
   });
 }
 
-export async function testConnection(cfg: GoogleSheetsErpConfig): Promise<{ ok: boolean; version?: string; error?: string }> {
+export async function testConnection(
+  cfg: GoogleSheetsErpConfig,
+): Promise<{ ok: boolean; version?: string; error?: string }> {
   try {
     const auth = getAuth(cfg);
     const sheets = google.sheets({ version: "v4", auth });
     const res = await sheets.spreadsheets.get({ spreadsheetId: cfg.spreadsheetId });
-    return { ok: true, version: `Google Sheets: ${res.data.properties?.title ?? cfg.spreadsheetId}` };
+    return {
+      ok: true,
+      version: `Google Sheets: ${res.data.properties?.title ?? cfg.spreadsheetId}`,
+    };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
@@ -71,9 +76,17 @@ export async function importSuppliers(cfg: GoogleSheetsErpConfig): Promise<ErpSu
 }
 
 /** كتابة الموردين في Sheet */
-export async function exportSuppliers(cfg: GoogleSheetsErpConfig, suppliers: {
-  name: string; email?: string; phone?: string; address?: string; category?: string; rating?: number;
-}[]): Promise<void> {
+export async function exportSuppliers(
+  cfg: GoogleSheetsErpConfig,
+  suppliers: {
+    name: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    category?: string;
+    rating?: number;
+  }[],
+): Promise<void> {
   const sheetName = "ERP_Suppliers";
   const auth = getAuth(cfg);
   const sheets = google.sheets({ version: "v4", auth });
@@ -92,12 +105,20 @@ export async function exportSuppliers(cfg: GoogleSheetsErpConfig, suppliers: {
   const rows: (string | number)[][] = [
     ["اسم المورد", "البريد الإلكتروني", "الهاتف", "العنوان", "الفئة", "التقييم", "آخر تحديث"],
     ...suppliers.map((s) => [
-      s.name, s.email ?? "", s.phone ?? "", s.address ?? "",
-      s.category ?? "", s.rating ?? "", new Date().toISOString().split("T")[0],
+      s.name,
+      s.email ?? "",
+      s.phone ?? "",
+      s.address ?? "",
+      s.category ?? "",
+      s.rating ?? "",
+      new Date().toISOString().split("T")[0],
     ]),
   ];
 
-  await sheets.spreadsheets.values.clear({ spreadsheetId: cfg.spreadsheetId, range: `${sheetName}!A:G` });
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId: cfg.spreadsheetId,
+    range: `${sheetName}!A:G`,
+  });
   await sheets.spreadsheets.values.update({
     spreadsheetId: cfg.spreadsheetId,
     range: `${sheetName}!A1`,
@@ -105,14 +126,24 @@ export async function exportSuppliers(cfg: GoogleSheetsErpConfig, suppliers: {
     requestBody: { values: rows },
   });
 
-  logger.info({ count: suppliers.length, tab: sheetName }, "ERP Suppliers exported to Google Sheets");
+  logger.info(
+    { count: suppliers.length, tab: sheetName },
+    "ERP Suppliers exported to Google Sheets",
+  );
 }
 
 /** تصدير طلبات عروض الأسعار للـ Sheet */
-export async function exportRfqs(cfg: GoogleSheetsErpConfig, rfqs: {
-  internalRfqNo: string; customerRfqNo: string; status: string;
-  supplierCount: number; offerCount: number; createdAt: string;
-}[]): Promise<void> {
+export async function exportRfqs(
+  cfg: GoogleSheetsErpConfig,
+  rfqs: {
+    internalRfqNo: string;
+    customerRfqNo: string;
+    status: string;
+    supplierCount: number;
+    offerCount: number;
+    createdAt: string;
+  }[],
+): Promise<void> {
   const sheetName = "ERP_RFQs";
   const auth = getAuth(cfg);
   const sheets = google.sheets({ version: "v4", auth });
@@ -128,10 +159,20 @@ export async function exportRfqs(cfg: GoogleSheetsErpConfig, rfqs: {
 
   const rows = [
     ["رقم الطلب الداخلي", "رقم طلب العميل", "الحالة", "الموردون", "العروض", "تاريخ الإنشاء"],
-    ...rfqs.map((r) => [r.internalRfqNo, r.customerRfqNo, r.status, r.supplierCount, r.offerCount, r.createdAt]),
+    ...rfqs.map((r) => [
+      r.internalRfqNo,
+      r.customerRfqNo,
+      r.status,
+      r.supplierCount,
+      r.offerCount,
+      r.createdAt,
+    ]),
   ];
 
-  await sheets.spreadsheets.values.clear({ spreadsheetId: cfg.spreadsheetId, range: `${sheetName}!A:F` });
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId: cfg.spreadsheetId,
+    range: `${sheetName}!A:F`,
+  });
   await sheets.spreadsheets.values.update({
     spreadsheetId: cfg.spreadsheetId,
     range: `${sheetName}!A1`,
@@ -141,10 +182,17 @@ export async function exportRfqs(cfg: GoogleSheetsErpConfig, rfqs: {
 }
 
 /** تصدير أوامر الشراء */
-export async function exportPurchaseOrders(cfg: GoogleSheetsErpConfig, pos: {
-  internalPoNo: string; sheetPoNo: string; supplierName?: string; status: string;
-  itemCount: number; createdAt: string;
-}[]): Promise<void> {
+export async function exportPurchaseOrders(
+  cfg: GoogleSheetsErpConfig,
+  pos: {
+    internalPoNo: string;
+    sheetPoNo: string;
+    supplierName?: string;
+    status: string;
+    itemCount: number;
+    createdAt: string;
+  }[],
+): Promise<void> {
   const sheetName = "ERP_PurchaseOrders";
   const auth = getAuth(cfg);
   const sheets = google.sheets({ version: "v4", auth });
@@ -160,10 +208,20 @@ export async function exportPurchaseOrders(cfg: GoogleSheetsErpConfig, pos: {
 
   const rows = [
     ["رقم الأمر الداخلي", "رقم أمر الشراء", "المورد", "الحالة", "عدد البنود", "تاريخ الإنشاء"],
-    ...pos.map((p) => [p.internalPoNo, p.sheetPoNo, p.supplierName ?? "", p.status, p.itemCount, p.createdAt]),
+    ...pos.map((p) => [
+      p.internalPoNo,
+      p.sheetPoNo,
+      p.supplierName ?? "",
+      p.status,
+      p.itemCount,
+      p.createdAt,
+    ]),
   ];
 
-  await sheets.spreadsheets.values.clear({ spreadsheetId: cfg.spreadsheetId, range: `${sheetName}!A:F` });
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId: cfg.spreadsheetId,
+    range: `${sheetName}!A:F`,
+  });
   await sheets.spreadsheets.values.update({
     spreadsheetId: cfg.spreadsheetId,
     range: `${sheetName}!A1`,

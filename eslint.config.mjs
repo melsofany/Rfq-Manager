@@ -63,10 +63,7 @@ export default tseslint.config(
       "react-hooks/static-components": "warn",
       "react-hooks/purity": "warn",
       "react-hooks/refs": "warn",
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
     },
   },
 

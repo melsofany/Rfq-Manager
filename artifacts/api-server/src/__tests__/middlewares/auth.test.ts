@@ -27,7 +27,7 @@ describe("requireAuth", () => {
     const res = makeRes();
     const next = vi.fn() as NextFunction;
     requireAuth(makeReq(undefined), res, next);
-    expect((res.status as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(401);
+    expect(res.status as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(401);
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -35,14 +35,14 @@ describe("requireAuth", () => {
     const res = makeRes();
     const next = vi.fn() as NextFunction;
     requireAuth(makeReq({ employeeId: 0 }), res, next);
-    expect((res.status as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(401);
+    expect(res.status as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(401);
   });
 
   it("returns 401 when employeeId is null", () => {
     const res = makeRes();
     const next = vi.fn() as NextFunction;
     requireAuth(makeReq({ employeeId: null }), res, next);
-    expect((res.status as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(401);
+    expect(res.status as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(401);
   });
 
   it("does not call next() when returning 401", () => {
@@ -74,7 +74,7 @@ describe("requireRole", () => {
     const res = makeRes();
     const next = vi.fn() as NextFunction;
     requireRole("admin")(makeReq({ employeeId: 1, role: "viewer" }), res, next);
-    expect((res.status as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(403);
+    expect(res.status as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(403);
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -82,14 +82,14 @@ describe("requireRole", () => {
     const res = makeRes();
     const next = vi.fn() as NextFunction;
     requireRole("admin")(makeReq({ employeeId: 1 }), res, next);
-    expect((res.status as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(403);
+    expect(res.status as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(403);
   });
 
   it("returns 401 when not authenticated at all", () => {
     const res = makeRes();
     const next = vi.fn() as NextFunction;
     requireRole("admin")(makeReq(undefined), res, next);
-    expect((res.status as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(401);
+    expect(res.status as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(401);
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -97,7 +97,6 @@ describe("requireRole", () => {
     const res = makeRes();
     const next = vi.fn() as NextFunction;
     requireRole("Viewer")(makeReq({ employeeId: 1, role: "viewer" }), res, next);
-    expect((res.status as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(403);
+    expect(res.status as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(403);
   });
 });
-

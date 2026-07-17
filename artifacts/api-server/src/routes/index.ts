@@ -24,11 +24,11 @@ const router: IRouter = Router();
 router.use(healthRouter);
 
 // Business modules
-router.use(usersModule);          // auth · suppliers · categories
-router.use(rfqModule);            // rfq · offers · pricing · items
-router.use(poModule);             // purchase-orders
-router.use(reportsModule);        // analytics · audit · sync
+router.use(usersModule); // auth · suppliers · categories
+router.use(rfqModule); // rfq · offers · pricing · items
+router.use(poModule); // purchase-orders
+router.use(reportsModule); // analytics · audit · sync
 router.use(communicationsModule); // whatsapp
-router.use(integrationsModule);   // ERP integrations (Odoo · SAP · Oracle · Google Sheets)
+router.use(integrationsModule); // ERP integrations (Odoo · SAP · Oracle · Google Sheets)
 
 export default router;

@@ -52,7 +52,7 @@ function useSheetPoNumbers() {
 async function fetchSupplierPrice(
   supplierId: number,
   description: string,
-  partNo: string | null
+  partNo: string | null,
 ): Promise<number | null> {
   const params = new URLSearchParams({ supplierId: String(supplierId), description });
   if (partNo) params.append("partNo", partNo);
@@ -83,7 +83,9 @@ function PoNumberCombobox({
     ? suggestions.filter((s) => s.toLowerCase().includes(filter.toLowerCase())).slice(0, 50)
     : suggestions.slice(0, 50);
 
-  useEffect(() => { setFilter(value); }, [value]);
+  useEffect(() => {
+    setFilter(value);
+  }, [value]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -100,7 +102,11 @@ function PoNumberCombobox({
       <div className="flex">
         <Input
           value={filter}
-          onChange={(e) => { setFilter(e.target.value); onChange(e.target.value); setOpen(true); }}
+          onChange={(e) => {
+            setFilter(e.target.value);
+            onChange(e.target.value);
+            setOpen(true);
+          }}
           onFocus={() => setOpen(true)}
           placeholder="e.g. PO-10023"
           required
@@ -120,7 +126,12 @@ function PoNumberCombobox({
             <li
               key={num}
               className="px-3 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground"
-              onMouseDown={(e) => { e.preventDefault(); onChange(num); setFilter(num); setOpen(false); }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(num);
+                setFilter(num);
+                setOpen(false);
+              }}
             >
               {num}
             </li>
@@ -164,8 +175,16 @@ function SupplierCombobox({
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  const handleSelect = (id: number) => { onChange(String(id)); setQuery(""); setOpen(false); };
-  const handleClear  = () => { onChange(""); setQuery(""); setOpen(false); };
+  const handleSelect = (id: number) => {
+    onChange(String(id));
+    setQuery("");
+    setOpen(false);
+  };
+  const handleClear = () => {
+    onChange("");
+    setQuery("");
+    setOpen(false);
+  };
 
   return (
     <div ref={containerRef} className="relative">
@@ -173,8 +192,14 @@ function SupplierCombobox({
         <input
           type="text"
           value={displayValue}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => { setQuery(""); setOpen(true); }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            setQuery("");
+            setOpen(true);
+          }}
           disabled={disabled}
           placeholder="Type to search..."
           className="h-7 w-full flex-1 min-w-0 text-xs rounded-l border border-border bg-background px-1.5 disabled:opacity-50 outline-none focus:ring-1 focus:ring-ring"
@@ -208,7 +233,10 @@ function SupplierCombobox({
             filtered.map((s) => (
               <li
                 key={s.id}
-                onMouseDown={(e) => { e.preventDefault(); handleSelect(s.id); }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelect(s.id);
+                }}
                 className={`px-3 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground ${String(s.id) === value ? "font-medium bg-accent/50" : ""}`}
               >
                 {s.name}
@@ -243,7 +271,7 @@ export default function NewPurchaseOrderPage() {
 
   const { data: suppliers } = useListSuppliers(
     {},
-    { query: { queryKey: getListSuppliersQueryKey({}) } }
+    { query: { queryKey: getListSuppliersQueryKey({}) } },
   );
   const activeSuppliers = (suppliers ?? []).filter((s) => s.isActive);
 
@@ -305,15 +333,24 @@ export default function NewPurchaseOrderPage() {
   const toggleOne = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
   const removeItem = (id: string) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
-    setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
-    setPriceLoadingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setPriceLoadingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   const updateUnitPrice = (id: string, unitPrice: string) =>
@@ -332,12 +369,16 @@ export default function NewPurchaseOrderPage() {
           .then((price) => {
             setItems((prev) =>
               prev.map((i) =>
-                i.id === id ? { ...i, unitPrice: price != null ? String(price) : "" } : i
-              )
+                i.id === id ? { ...i, unitPrice: price != null ? String(price) : "" } : i,
+              ),
             );
           })
           .finally(() => {
-            setPriceLoadingIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+            setPriceLoadingIds((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
           });
       }
     }
@@ -346,13 +387,13 @@ export default function NewPurchaseOrderPage() {
   // Live totals summary
   const selectedItems = items.filter((i) => selectedIds.has(i.id));
   const grandTotal = selectedItems.reduce((sum, i) => {
-    const qty   = parseFloat(i.qty)       || 0;
+    const qty = parseFloat(i.qty) || 0;
     const price = parseFloat(i.unitPrice) || 0;
     return sum + qty * price;
   }, 0);
   const vatTotal = selectedItems.reduce((sum, i) => {
     if (!i.taxIncluded) return sum;
-    const qty   = parseFloat(i.qty)       || 0;
+    const qty = parseFloat(i.qty) || 0;
     const price = parseFloat(i.unitPrice) || 0;
     const lineTotal = qty * price;
     return sum + (lineTotal - lineTotal / 1.14);
@@ -387,7 +428,7 @@ export default function NewPurchaseOrderPage() {
     });
   };
 
-  const allSelected   = items.length > 0 && selectedIds.size === items.length;
+  const allSelected = items.length > 0 && selectedIds.size === items.length;
   const selectedCount = selectedIds.size;
 
   return (
@@ -401,7 +442,9 @@ export default function NewPurchaseOrderPage() {
           </Link>
           <div>
             <h1 className="text-xl font-bold text-foreground">New Purchase Order</h1>
-            <p className="text-muted-foreground text-sm">Create a purchase order from a PO number</p>
+            <p className="text-muted-foreground text-sm">
+              Create a purchase order from a PO number
+            </p>
           </div>
         </div>
 
@@ -410,7 +453,11 @@ export default function NewPurchaseOrderPage() {
             <Label>Purchase order number (sheet column K)</Label>
             <div className="flex gap-2">
               <div className="flex-1">
-                <PoNumberCombobox value={lookupQuery} onChange={setLookupQuery} suggestions={suggestions} />
+                <PoNumberCombobox
+                  value={lookupQuery}
+                  onChange={setLookupQuery}
+                  suggestions={suggestions}
+                />
               </div>
               <Button type="button" onClick={handleLookup} disabled={isLookingUp || !lookupQuery}>
                 {isLookingUp ? "Searching..." : "Fetch items"}
@@ -427,16 +474,39 @@ export default function NewPurchaseOrderPage() {
                     <thead>
                       <tr className="bg-muted/30 border-b border-border text-left">
                         <th className="px-3 py-2.5">
-                          <input type="checkbox" checked={allSelected} readOnly className="cursor-pointer" onClick={toggleAll} />
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            readOnly
+                            className="cursor-pointer"
+                            onClick={toggleAll}
+                          />
                         </th>
-                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">Line item</th>
-                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">Part no.</th>
-                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">Description</th>
-                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">UOM</th>
-                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">Qty (PO)</th>
-                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[160px]">Supplier</th>
-                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[120px]">Unit price</th>
-                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium text-center" title="السعر شامل ضريبة القيمة المضافة 14%">
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">
+                          Line item
+                        </th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">
+                          Part no.
+                        </th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">
+                          Description
+                        </th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">
+                          UOM
+                        </th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">
+                          Qty (PO)
+                        </th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[160px]">
+                          Supplier
+                        </th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[120px]">
+                          Unit price
+                        </th>
+                        <th
+                          className="px-2 py-2.5 text-muted-foreground text-xs font-medium text-center"
+                          title="السعر شامل ضريبة القيمة المضافة 14%"
+                        >
                           شامل ض.ق.م
                         </th>
                         <th className="px-2 py-2.5" />
@@ -444,7 +514,10 @@ export default function NewPurchaseOrderPage() {
                     </thead>
                     <tbody>
                       {items.map((row) => (
-                        <tr key={row.id} className={`border-b border-border last:border-0 hover:bg-muted/20 ${row.taxIncluded && selectedIds.has(row.id) ? "bg-green-50/40 dark:bg-green-950/20" : ""}`}>
+                        <tr
+                          key={row.id}
+                          className={`border-b border-border last:border-0 hover:bg-muted/20 ${row.taxIncluded && selectedIds.has(row.id) ? "bg-green-50/40 dark:bg-green-950/20" : ""}`}
+                        >
                           <td className="px-3 py-2 text-center">
                             <input
                               type="checkbox"
@@ -497,7 +570,11 @@ export default function NewPurchaseOrderPage() {
                             />
                           </td>
                           <td className="px-2 py-1.5 text-center">
-                            <button type="button" onClick={() => removeItem(row.id)} className="text-muted-foreground hover:text-destructive">
+                            <button
+                              type="button"
+                              onClick={() => removeItem(row.id)}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
                               <Trash2 size={14} />
                             </button>
                           </td>
@@ -515,13 +592,20 @@ export default function NewPurchaseOrderPage() {
                         <div className="flex gap-6 text-muted-foreground text-xs">
                           <span>الإجمالي قبل الضريبة</span>
                           <span className="font-medium text-foreground tabular-nums">
-                            {preTaxTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {preTaxTotal.toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </span>
                         </div>
                         <div className="flex gap-6 text-muted-foreground text-xs">
                           <span>ضريبة القيمة المضافة (14%)</span>
                           <span className="font-medium text-green-700 tabular-nums">
-                            + {vatTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            +{" "}
+                            {vatTotal.toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </span>
                         </div>
                       </>
@@ -529,29 +613,45 @@ export default function NewPurchaseOrderPage() {
                     <div className="flex gap-6 text-sm font-semibold">
                       <span>{hasTaxItems ? "الإجمالي الكلي" : "الإجمالي"}</span>
                       <span className="tabular-nums">
-                        {grandTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {grandTotal.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </span>
                     </div>
                   </div>
                 )}
 
                 <div className="px-4 py-2 border-t border-border bg-muted/5 text-xs text-muted-foreground">
-                  Unit prices auto-filled from supplier's latest offer. Check <strong>شامل ض.ق.م</strong> if the price already includes 14% VAT.
+                  Unit prices auto-filled from supplier's latest offer. Check{" "}
+                  <strong>شامل ض.ق.م</strong> if the price already includes 14% VAT.
                 </div>
               </div>
 
               <div className="bg-card border border-border rounded-lg p-4 grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Receiver representative name</Label>
-                  <Input value={receiverName} onChange={(e) => setReceiverName(e.target.value)} placeholder="Name of the receiving representative" />
+                  <Input
+                    value={receiverName}
+                    onChange={(e) => setReceiverName(e.target.value)}
+                    placeholder="Name of the receiving representative"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Receiver representative phone</Label>
-                  <Input value={receiverPhone} onChange={(e) => setReceiverPhone(e.target.value)} placeholder="Phone number" />
+                  <Input
+                    value={receiverPhone}
+                    onChange={(e) => setReceiverPhone(e.target.value)}
+                    placeholder="Phone number"
+                  />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>Notes</Label>
-                  <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional notes" />
+                  <Input
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Optional notes"
+                  />
                 </div>
               </div>
 
@@ -564,7 +664,10 @@ export default function NewPurchaseOrderPage() {
                     Cancel
                   </a>
                 </Link>
-                <Button type="submit" disabled={createMutation.isPending || !sheetPoNo || selectedCount === 0}>
+                <Button
+                  type="submit"
+                  disabled={createMutation.isPending || !sheetPoNo || selectedCount === 0}
+                >
                   {createMutation.isPending ? "Creating..." : "Create purchase order"}
                 </Button>
               </div>

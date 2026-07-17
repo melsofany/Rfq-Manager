@@ -45,11 +45,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   // Close mobile drawer on route change
-  useEffect(() => { setMobileOpen(false); }, [location]);
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location]);
 
   // Close mobile drawer on Escape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMobileOpen(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
@@ -57,7 +61,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   // Prevent body scroll when mobile drawer is open
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [mobileOpen]);
 
   useEffect(() => {
@@ -69,7 +75,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           const total = chats.reduce((sum, c) => sum + Number(c.unread ?? 0), 0);
           setWaUnread(total);
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
     fetchUnread();
     const interval = setInterval(fetchUnread, 12000);
@@ -83,10 +91,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-sidebar-border min-h-[57px]">
           {(sidebarOpen || mobile) && (
             <div className="flex items-center gap-2.5 overflow-hidden">
-              <img src="/logo.png" alt="Cortoba Supplies" className="h-9 w-9 object-contain flex-shrink-0" />
+              <img
+                src="/logo.png"
+                alt="Cortoba Supplies"
+                className="h-9 w-9 object-contain flex-shrink-0"
+              />
               <div className="overflow-hidden">
-                <p className="text-sidebar-foreground font-bold text-sm leading-tight truncate">Cortoba Supplies</p>
-                <p className="text-sidebar-foreground/50 text-xs leading-tight truncate">{t("app.subtitle")}</p>
+                <p className="text-sidebar-foreground font-bold text-sm leading-tight truncate">
+                  Cortoba Supplies
+                </p>
+                <p className="text-sidebar-foreground/50 text-xs leading-tight truncate">
+                  {t("app.subtitle")}
+                </p>
               </div>
             </div>
           )}
@@ -121,7 +137,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     "flex items-center gap-3 px-2 py-2.5 rounded text-sm font-medium transition-colors",
                     active
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
                   )}
                 >
                   <div className="relative flex-shrink-0">
@@ -146,7 +162,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {employee?.role === "admin" && (
             <>
               {(sidebarOpen || mobile) && (
-                <p className="text-sidebar-foreground/30 text-xs px-2 pt-3 pb-1 uppercase tracking-wider">{t("nav.admin")}</p>
+                <p className="text-sidebar-foreground/30 text-xs px-2 pt-3 pb-1 uppercase tracking-wider">
+                  {t("nav.admin")}
+                </p>
               )}
               {adminItems.map((item) => {
                 const active = location === item.href || location.startsWith(item.href + "/");
@@ -157,7 +175,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         "flex items-center gap-3 px-2 py-2.5 rounded text-sm font-medium transition-colors",
                         active
                           ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                          : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
                       )}
                     >
                       <item.icon size={18} className="flex-shrink-0" />
@@ -193,18 +211,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </button>
           )}
           {/* User info */}
-          <div className={cn("flex items-center", (sidebarOpen || mobile) ? "gap-2" : "justify-center")}>
+          <div
+            className={cn("flex items-center", sidebarOpen || mobile ? "gap-2" : "justify-center")}
+          >
             <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
               {employee?.name?.[0]?.toUpperCase() ?? "?"}
             </div>
             {(sidebarOpen || mobile) && (
               <div className="flex-1 min-w-0">
-                <p className="text-sidebar-foreground text-xs font-medium truncate">{employee?.name}</p>
-                <p className="text-sidebar-foreground/40 text-xs truncate capitalize">{employee?.role}</p>
+                <p className="text-sidebar-foreground text-xs font-medium truncate">
+                  {employee?.name}
+                </p>
+                <p className="text-sidebar-foreground/40 text-xs truncate capitalize">
+                  {employee?.role}
+                </p>
               </div>
             )}
             {(sidebarOpen || mobile) && (
-              <button onClick={logout} className="text-sidebar-foreground/40 hover:text-sidebar-foreground p-1">
+              <button
+                onClick={logout}
+                className="text-sidebar-foreground/40 hover:text-sidebar-foreground p-1"
+              >
                 <LogOut size={15} />
               </button>
             )}
@@ -216,7 +243,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-
       {/* ── Mobile top header bar ──────────────────────────────────────── */}
       <header className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-sidebar border-b border-sidebar-border flex items-center px-4 gap-3 flex-shrink-0">
         <button
@@ -259,7 +285,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <aside
         className={cn(
           "md:hidden fixed inset-y-0 left-0 z-50 w-72 flex flex-col bg-sidebar border-r border-sidebar-border transition-transform duration-250",
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <SidebarContent mobile />
@@ -269,16 +295,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <aside
         className={cn(
           "hidden md:flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-200 flex-shrink-0",
-          sidebarOpen ? "w-60" : "w-16"
+          sidebarOpen ? "w-60" : "w-16",
         )}
       >
         <SidebarContent />
       </aside>
 
       {/* ── Main content ──────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto pt-14 md:pt-0">
-        {children}
-      </main>
+      <main className="flex-1 overflow-y-auto pt-14 md:pt-0">{children}</main>
     </div>
   );
 }

@@ -31,4 +31,3 @@ jobs:
           echo "Deploy triggered successfully!"
           DEPLOY_ID=$(echo "$BODY" | node -e "let d=''; process.stdin.on('data',c=>d+=c); process.stdin.on('end',()=>{try{console.log(JSON.parse(d).id||'')}catch{console.log('')}}")
           echo "Deploy ID: $DEPLOY_ID"
-

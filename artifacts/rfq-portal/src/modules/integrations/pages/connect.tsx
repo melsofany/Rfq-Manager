@@ -6,7 +6,7 @@
  * عند النجاح: ترسل postMessage للنافذة الأم ثم تُغلق نفسها.
  */
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, FormEvent, type ReactElement } from "react";
 import { Loader2, CheckCircle2, ShieldCheck, Lock, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ type Step = "login" | "authorizing" | "permission" | "success" | "error";
 
 interface ErpBrand {
   name: string;
-  logo: JSX.Element;
+  logo: ReactElement;
   headerBg: string;
   headerText: string;
   accentColor: string;
@@ -32,42 +32,49 @@ interface ErpBrand {
 function OdooLogo() {
   return (
     <svg viewBox="0 0 60 60" className="w-10 h-10" fill="none">
-      <circle cx="30" cy="30" r="30" fill="#714B67"/>
-      <circle cx="30" cy="30" r="14" fill="white"/>
-      <circle cx="30" cy="30" r="6" fill="#714B67"/>
+      <circle cx="30" cy="30" r="30" fill="#714B67" />
+      <circle cx="30" cy="30" r="14" fill="white" />
+      <circle cx="30" cy="30" r="6" fill="#714B67" />
     </svg>
   );
 }
 function SapLogo() {
   return (
     <svg viewBox="0 0 80 30" className="h-8 w-auto" fill="none">
-      <rect width="80" height="30" rx="4" fill="#0070F2"/>
-      <text x="8" y="22" fontSize="18" fontWeight="bold" fill="white" fontFamily="Arial">SAP</text>
+      <rect width="80" height="30" rx="4" fill="#0070F2" />
+      <text x="8" y="22" fontSize="18" fontWeight="bold" fill="white" fontFamily="Arial">
+        SAP
+      </text>
     </svg>
   );
 }
 function OracleLogo() {
   return (
     <svg viewBox="0 0 90 30" className="h-8 w-auto" fill="none">
-      <rect width="90" height="30" rx="4" fill="#C74634"/>
-      <text x="6" y="22" fontSize="14" fontWeight="bold" fill="white" fontFamily="Arial">ORACLE</text>
+      <rect width="90" height="30" rx="4" fill="#C74634" />
+      <text x="6" y="22" fontSize="14" fontWeight="bold" fill="white" fontFamily="Arial">
+        ORACLE
+      </text>
     </svg>
   );
 }
 function GoogleSheetsLogo() {
   return (
     <svg viewBox="0 0 40 48" className="w-10 h-12" fill="none">
-      <path d="M24 0H6C2.7 0 0 2.7 0 6v36c0 3.3 2.7 6 6 6h28c3.3 0 6-2.7 6-6V16L24 0z" fill="#0F9D58"/>
-      <path d="M24 0v16h16L24 0z" fill="#057642"/>
-      <rect x="8" y="22" width="24" height="3" rx="1" fill="white"/>
-      <rect x="8" y="28" width="24" height="3" rx="1" fill="white"/>
-      <rect x="8" y="34" width="16" height="3" rx="1" fill="white"/>
+      <path
+        d="M24 0H6C2.7 0 0 2.7 0 6v36c0 3.3 2.7 6 6 6h28c3.3 0 6-2.7 6-6V16L24 0z"
+        fill="#0F9D58"
+      />
+      <path d="M24 0v16h16L24 0z" fill="#057642" />
+      <rect x="8" y="22" width="24" height="3" rx="1" fill="white" />
+      <rect x="8" y="28" width="24" height="3" rx="1" fill="white" />
+      <rect x="8" y="34" width="16" height="3" rx="1" fill="white" />
     </svg>
   );
 }
 
 const ERP_BRANDS: Record<ErpType, ErpBrand> = {
-  "odoo": {
+  odoo: {
     name: "Odoo",
     logo: <OdooLogo />,
     headerBg: "bg-[#714B67]",
@@ -94,7 +101,7 @@ const ERP_BRANDS: Record<ErpType, ErpBrand> = {
     buttonClass: "bg-[#0070F2] hover:bg-[#005ccc] text-white",
     description: "تسجيل الدخول إلى SAP S/4HANA",
   },
-  "oracle": {
+  oracle: {
     name: "Oracle ERP Cloud",
     logo: <OracleLogo />,
     headerBg: "bg-[#C74634]",
@@ -126,34 +133,130 @@ interface FieldDef {
 }
 
 const ERP_FIELDS: Record<ErpType, FieldDef[]> = {
-  "odoo": [
-    { key: "url",      label: "رابط خادم Odoo",    placeholder: "https://mycompany.odoo.com", type: "url",      required: true },
-    { key: "db",       label: "قاعدة البيانات",     placeholder: "mycompany",                  type: "text",     required: true },
-    { key: "username", label: "البريد الإلكتروني",  placeholder: "admin@company.com",          type: "email",    required: true },
-    { key: "apiKey",   label: "مفتاح API",           placeholder: "من الإعدادات ← مفاتيح API", type: "password", required: true,
-      hint: "الإعدادات → المستخدمون → اسمك → مفاتيح API" },
+  odoo: [
+    {
+      key: "url",
+      label: "رابط خادم Odoo",
+      placeholder: "https://mycompany.odoo.com",
+      type: "url",
+      required: true,
+    },
+    { key: "db", label: "قاعدة البيانات", placeholder: "mycompany", type: "text", required: true },
+    {
+      key: "username",
+      label: "البريد الإلكتروني",
+      placeholder: "admin@company.com",
+      type: "email",
+      required: true,
+    },
+    {
+      key: "apiKey",
+      label: "مفتاح API",
+      placeholder: "من الإعدادات ← مفاتيح API",
+      type: "password",
+      required: true,
+      hint: "الإعدادات → المستخدمون → اسمك → مفاتيح API",
+    },
   ],
   "sap-b1": [
-    { key: "url",       label: "رابط الخادم",            placeholder: "https://sap-server:50000", type: "url",      required: true },
-    { key: "companyDB", label: "قاعدة بيانات الشركة",    placeholder: "MYCOMPANY",               type: "text",     required: true },
-    { key: "username",  label: "اسم المستخدم",            placeholder: "manager",                 type: "text",     required: true },
-    { key: "password",  label: "كلمة المرور",              placeholder: "••••••••",               type: "password", required: true },
+    {
+      key: "url",
+      label: "رابط الخادم",
+      placeholder: "https://sap-server:50000",
+      type: "url",
+      required: true,
+    },
+    {
+      key: "companyDB",
+      label: "قاعدة بيانات الشركة",
+      placeholder: "MYCOMPANY",
+      type: "text",
+      required: true,
+    },
+    {
+      key: "username",
+      label: "اسم المستخدم",
+      placeholder: "manager",
+      type: "text",
+      required: true,
+    },
+    {
+      key: "password",
+      label: "كلمة المرور",
+      placeholder: "••••••••",
+      type: "password",
+      required: true,
+    },
   ],
   "sap-s4hana": [
-    { key: "url",      label: "رابط النظام",    placeholder: "https://myXXXXXX.s4hana.ondemand.com", type: "url",      required: true },
-    { key: "username", label: "اسم المستخدم",   placeholder: "S4H_USER",                             type: "text",     required: true },
-    { key: "password", label: "كلمة المرور",    placeholder: "••••••••",                            type: "password", required: true },
+    {
+      key: "url",
+      label: "رابط النظام",
+      placeholder: "https://myXXXXXX.s4hana.ondemand.com",
+      type: "url",
+      required: true,
+    },
+    {
+      key: "username",
+      label: "اسم المستخدم",
+      placeholder: "S4H_USER",
+      type: "text",
+      required: true,
+    },
+    {
+      key: "password",
+      label: "كلمة المرور",
+      placeholder: "••••••••",
+      type: "password",
+      required: true,
+    },
   ],
-  "oracle": [
-    { key: "url",          label: "رابط خادم Oracle", placeholder: "https://xxx.fa.em2.oraclecloud.com", type: "url",      required: true },
-    { key: "username",     label: "اسم المستخدم",     placeholder: "oracle_user",                        type: "text",     required: true },
-    { key: "password",     label: "كلمة المرور",      placeholder: "••••••••",                          type: "password", required: true },
-    { key: "businessUnit", label: "وحدة الأعمال",     placeholder: "US1 Business Unit (اختياري)",       type: "text",     required: false },
+  oracle: [
+    {
+      key: "url",
+      label: "رابط خادم Oracle",
+      placeholder: "https://xxx.fa.em2.oraclecloud.com",
+      type: "url",
+      required: true,
+    },
+    {
+      key: "username",
+      label: "اسم المستخدم",
+      placeholder: "oracle_user",
+      type: "text",
+      required: true,
+    },
+    {
+      key: "password",
+      label: "كلمة المرور",
+      placeholder: "••••••••",
+      type: "password",
+      required: true,
+    },
+    {
+      key: "businessUnit",
+      label: "وحدة الأعمال",
+      placeholder: "US1 Business Unit (اختياري)",
+      type: "text",
+      required: false,
+    },
   ],
   "google-sheets": [
-    { key: "spreadsheetId", label: "معرّف جدول البيانات", placeholder: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms", type: "text", required: true,
-      hint: "من رابط الـ Sheet: /spreadsheets/d/{ID}/" },
-    { key: "dataSheetName", label: "اسم تاب الموردين", placeholder: "Suppliers (اختياري)", type: "text", required: false },
+    {
+      key: "spreadsheetId",
+      label: "معرّف جدول البيانات",
+      placeholder: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms",
+      type: "text",
+      required: true,
+      hint: "من رابط الـ Sheet: /spreadsheets/d/{ID}/",
+    },
+    {
+      key: "dataSheetName",
+      label: "اسم تاب الموردين",
+      placeholder: "Suppliers (اختياري)",
+      type: "text",
+      required: false,
+    },
   ],
 };
 
@@ -186,7 +289,7 @@ export default function ConnectPopupPage() {
   const [step, setStep] = useState<Step>("login");
   const [connectionName, setConnectionName] = useState(initialName || brand.name);
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fields.map((f) => [f.key, ""]))
+    Object.fromEntries(fields.map((f) => [f.key, ""])),
   );
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ ok: boolean; version?: string } | null>(null);
@@ -201,7 +304,9 @@ export default function ConnectPopupPage() {
     setStep("authorizing");
 
     const config: Record<string, string> = {};
-    fields.forEach((f) => { if (values[f.key]?.trim()) config[f.key] = values[f.key].trim(); });
+    fields.forEach((f) => {
+      if (values[f.key]?.trim()) config[f.key] = values[f.key].trim();
+    });
 
     try {
       // إنشاء التكامل أولاً
@@ -249,7 +354,10 @@ export default function ConnectPopupPage() {
       setStep("success");
       // إبلاغ النافذة الأم بالنجاح
       if (window.opener) {
-        window.opener.postMessage({ type: "ERP_CONNECTED", integrationId: createdId, erpType: type }, "*");
+        window.opener.postMessage(
+          { type: "ERP_CONNECTED", integrationId: createdId, erpType: type },
+          "*",
+        );
       }
       // إغلاق الـ popup بعد لحظة
       setTimeout(() => window.close(), 2200);
@@ -274,7 +382,6 @@ export default function ConnectPopupPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col" dir="rtl">
-
       {/* ── Header بهوية الـ ERP ──────────────────────────────────────────── */}
       <div className={`${brand.headerBg} px-6 py-4 flex items-center gap-3 shadow-sm`}>
         {brand.logo}
@@ -292,7 +399,6 @@ export default function ConnectPopupPage() {
 
       {/* ── Content ──────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col items-center justify-center px-5 py-8">
-
         {/* STEP: login ───────────────────────────────────────────────────── */}
         {step === "login" && (
           <form onSubmit={handleLogin} className="w-full max-w-sm space-y-5">
@@ -359,7 +465,11 @@ export default function ConnectPopupPage() {
               <div className="w-16 h-16 rounded-full border-4 border-gray-100 flex items-center justify-center mx-auto">
                 {brand.logo}
               </div>
-              <Loader2 size={64} className="absolute inset-0 animate-spin text-gray-200 -m-0" style={{ color: brand.accentColor, opacity: 0.3 }} />
+              <Loader2
+                size={64}
+                className="absolute inset-0 animate-spin text-gray-200 -m-0"
+                style={{ color: brand.accentColor, opacity: 0.3 }}
+              />
             </div>
             <p className="font-semibold text-gray-700">جاري التحقق من بيانات الدخول...</p>
             <p className="text-sm text-gray-400">يتم الاتصال بـ {brand.name}</p>
@@ -381,13 +491,9 @@ export default function ConnectPopupPage() {
                   <span className="w-2 h-2 bg-gray-300 rounded-full" />
                   <span className="w-2 h-2 bg-gray-300 rounded-full" />
                 </div>
-                <div className="w-12 h-12 flex items-center justify-center">
-                  {brand.logo}
-                </div>
+                <div className="w-12 h-12 flex items-center justify-center">{brand.logo}</div>
               </div>
-              <h2 className="text-lg font-bold text-gray-900">
-                Cortoba يطلب الإذن
-              </h2>
+              <h2 className="text-lg font-bold text-gray-900">Cortoba يطلب الإذن</h2>
               <p className="text-sm text-gray-500">
                 هل تسمح لـ <strong>Cortoba Supplies</strong> بالاتصال بحسابك على{" "}
                 <strong>{brand.name}</strong>؟
@@ -407,7 +513,10 @@ export default function ConnectPopupPage() {
                 { icon: "📦", text: "استيراد أوامر الشراء" },
                 { icon: "🔄", text: "مزامنة البيانات تلقائياً" },
               ].map((p) => (
-                <div key={p.text} className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700">
+                <div
+                  key={p.text}
+                  className="flex items-center gap-3 px-4 py-3 text-sm text-gray-700"
+                >
                   <span>{p.icon}</span>
                   <span>{p.text}</span>
                   <CheckCircle2 size={14} className="mr-auto text-green-500 flex-shrink-0" />
@@ -430,9 +539,17 @@ export default function ConnectPopupPage() {
                 onClick={handleAllow}
                 disabled={saving}
               >
-                {saving
-                  ? <><Loader2 size={14} className="animate-spin ml-2" />جاري التفعيل...</>
-                  : <><ShieldCheck size={15} className="ml-2" />السماح بالاتصال</>}
+                {saving ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin ml-2" />
+                    جاري التفعيل...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck size={15} className="ml-2" />
+                    السماح بالاتصال
+                  </>
+                )}
               </Button>
             </div>
 
@@ -457,7 +574,9 @@ export default function ConnectPopupPage() {
                 <p className="text-xs text-gray-400 mt-0.5">{testResult.version}</p>
               )}
             </div>
-            <p className="text-xs text-gray-400 animate-pulse">سيتم إغلاق هذه النافذة تلقائياً...</p>
+            <p className="text-xs text-gray-400 animate-pulse">
+              سيتم إغلاق هذه النافذة تلقائياً...
+            </p>
           </div>
         )}
 

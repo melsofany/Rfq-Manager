@@ -5,7 +5,7 @@ import { existsSync } from "fs";
 
 export interface RfqPdfOptions {
   rfqNo: string;
-  customerRfqNo: string;   // kept in interface for backward-compat but NOT shown in PDF
+  customerRfqNo: string; // kept in interface for backward-compat but NOT shown in PDF
   rfqDate?: string | null;
   closeDate: string;
   supplierName: string;
@@ -45,9 +45,9 @@ const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\
 function rtl(text: string): string {
   if (!text) return text;
   const trimmed = text.trim();
-  if (!ARABIC_RE.test(trimmed)) return trimmed;   // no Arabic → leave as-is
+  if (!ARABIC_RE.test(trimmed)) return trimmed; // no Arabic → leave as-is
   const words = trimmed.split(/\s+/);
-  if (words.length <= 1) return trimmed;           // single token → no reversal
+  if (words.length <= 1) return trimmed; // single token → no reversal
   return words.reverse().join(" ");
 }
 
@@ -93,7 +93,7 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
     try {
       const fontPath = getFontPath();
       const logoPath = getLogoPath();
-      const hasLogo  = existsSync(logoPath);
+      const hasLogo = existsSync(logoPath);
 
       const doc = new PDFDocument({
         size: "A4",
@@ -105,23 +105,26 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       const chunks: Buffer[] = [];
       let settled = false;
       const settle = (fn: () => void) => {
-        if (!settled) { settled = true; fn(); }
+        if (!settled) {
+          settled = true;
+          fn();
+        }
       };
-      doc.on("data",  (c: Buffer) => chunks.push(c));
-      doc.on("end",   () => settle(() => resolvePromise(Buffer.concat(chunks))));
+      doc.on("data", (c: Buffer) => chunks.push(c));
+      doc.on("end", () => settle(() => resolvePromise(Buffer.concat(chunks))));
       doc.on("error", (e: Error) => settle(() => reject(e)));
 
       doc.registerFont("Amiri", fontPath);
 
-      const PAGE_W = doc.page.width;   // 595.28 pt (A4)
-      const M      = 28;               // horizontal margin
-      const CW     = PAGE_W - M * 2;  // content width
-      const BLUE   = "#1a3a5c";
-      const GOLD   = "#c8a84b";
-      const LGREY  = "#eef2f7";
+      const PAGE_W = doc.page.width; // 595.28 pt (A4)
+      const M = 28; // horizontal margin
+      const CW = PAGE_W - M * 2; // content width
+      const BLUE = "#1a3a5c";
+      const GOLD = "#c8a84b";
+      const LGREY = "#eef2f7";
 
       // ── Format dates ─────────────────────────────────────────────────────
-      const rfqDate   = opts.rfqDate
+      const rfqDate = opts.rfqDate
         ? formatDate(opts.rfqDate)
         : formatDate(new Date().toISOString());
       const closeDate = formatDate(opts.closeDate);
@@ -138,84 +141,115 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       const TITLE_X = PAGE_W / 2;
       const TITLE_W = PAGE_W / 2 - M;
 
-      doc.font("Amiri").fontSize(24).fillColor("#ffffff")
-        .text(rtl("طلب عرض سعر"), TITLE_X, 14, {
-          width: TITLE_W, align: "right", lineBreak: false,
-        });
-      doc.font("Amiri").fontSize(9).fillColor(GOLD)
-        .text("REQUEST FOR QUOTATION", TITLE_X, 48, {
-          width: TITLE_W, align: "right", lineBreak: false,
-        });
-      doc.font("Amiri").fontSize(8).fillColor("#aaccee")
-        .text(`رقم: ${opts.rfqNo}`, TITLE_X, 63, {
-          width: TITLE_W, align: "right", lineBreak: false,
-        });
+      doc.font("Amiri").fontSize(24).fillColor("#ffffff").text(rtl("طلب عرض سعر"), TITLE_X, 14, {
+        width: TITLE_W,
+        align: "right",
+        lineBreak: false,
+      });
+      doc.font("Amiri").fontSize(9).fillColor(GOLD).text("REQUEST FOR QUOTATION", TITLE_X, 48, {
+        width: TITLE_W,
+        align: "right",
+        lineBreak: false,
+      });
+      doc.font("Amiri").fontSize(8).fillColor("#aaccee").text(`رقم: ${opts.rfqNo}`, TITLE_X, 63, {
+        width: TITLE_W,
+        align: "right",
+        lineBreak: false,
+      });
 
       // ── LEFT block: logo + company info ──────────────────────────────
       const LOGO_SIZE = 52;
-      const LOGO_X    = M;
-      const LOGO_Y    = (HDR_H - LOGO_SIZE) / 2;
+      const LOGO_X = M;
+      const LOGO_Y = (HDR_H - LOGO_SIZE) / 2;
       const CO_TEXT_X = M + LOGO_SIZE + 8;
       const CO_TEXT_W = PAGE_W / 2 - LOGO_SIZE - M - 16;
 
       if (hasLogo) {
         // Use the actual company logo image
         doc.image(logoPath, LOGO_X, LOGO_Y, {
-          width:  LOGO_SIZE,
+          width: LOGO_SIZE,
           height: LOGO_SIZE,
-          fit:    [LOGO_SIZE, LOGO_SIZE],
+          fit: [LOGO_SIZE, LOGO_SIZE],
         });
       } else {
         // Fallback: vector monogram (no external image dependency)
         doc.roundedRect(LOGO_X, LOGO_Y, LOGO_SIZE, LOGO_SIZE, 6).fill(GOLD);
-        doc.font("Amiri").fontSize(22).fillColor(BLUE)
+        doc
+          .font("Amiri")
+          .fontSize(22)
+          .fillColor(BLUE)
           .text("ق", LOGO_X, LOGO_Y + LOGO_SIZE / 2 - 14, {
-            width: LOGO_SIZE, align: "center", lineBreak: false,
+            width: LOGO_SIZE,
+            align: "center",
+            lineBreak: false,
           });
       }
 
-      doc.font("Amiri").fontSize(11).fillColor(GOLD)
-        .text(rtl("قرطبة للتوريدات"), CO_TEXT_X, 12, {
-          width: CO_TEXT_W, align: "left", lineBreak: false,
-        });
-      doc.font("Amiri").fontSize(8).fillColor("#c0d8f0")
-        .text("CORTOBA SUPPLIES", CO_TEXT_X, 30, {
-          width: CO_TEXT_W, align: "left", lineBreak: false,
-        });
-      doc.font("Amiri").fontSize(7).fillColor("#8aaec8")
+      doc.font("Amiri").fontSize(11).fillColor(GOLD).text(rtl("قرطبة للتوريدات"), CO_TEXT_X, 12, {
+        width: CO_TEXT_W,
+        align: "left",
+        lineBreak: false,
+      });
+      doc.font("Amiri").fontSize(8).fillColor("#c0d8f0").text("CORTOBA SUPPLIES", CO_TEXT_X, 30, {
+        width: CO_TEXT_W,
+        align: "left",
+        lineBreak: false,
+      });
+      doc
+        .font("Amiri")
+        .fontSize(7)
+        .fillColor("#8aaec8")
         .text(rtl("ش.الإسكندرية - برج نجمة مطروح، الدور الرابع"), CO_TEXT_X, 46, {
-          width: CO_TEXT_W, align: "left", lineBreak: false,
+          width: CO_TEXT_W,
+          align: "left",
+          lineBreak: false,
         });
-      doc.font("Amiri").fontSize(7).fillColor("#8aaec8")
+      doc
+        .font("Amiri")
+        .fontSize(7)
+        .fillColor("#8aaec8")
         .text(rtl("مرسي مطروح  |  ت: 432-972-587"), CO_TEXT_X, 59, {
-          width: CO_TEXT_W, align: "left", lineBreak: false,
+          width: CO_TEXT_W,
+          align: "left",
+          lineBreak: false,
         });
-      doc.font("Amiri").fontSize(7).fillColor("#8aaec8")
+      doc
+        .font("Amiri")
+        .fontSize(7)
+        .fillColor("#8aaec8")
         .text("INFO@CORTOBA-SUPPLIES.COM", CO_TEXT_X, 72, {
-          width: CO_TEXT_W, align: "left", lineBreak: false,
+          width: CO_TEXT_W,
+          align: "left",
+          lineBreak: false,
         });
 
       // ═══════════════════════════════════════════════════════════════════
       // INFO BAND  — 3 cells (customerRfqNo removed per requirement)
       // RTL order (right → left): رقم الطلب | تاريخ الإصدار | آخر موعد للرد
       // ═══════════════════════════════════════════════════════════════════
-      const IY  = HDR_H;
-      const IH  = 50;
+      const IY = HDR_H;
+      const IH = 50;
       doc.rect(0, IY, PAGE_W, IH).fill(LGREY);
 
       const infoCells = [
         { label: rtl("رقم الطلب الداخلي"), value: opts.rfqNo },
-        { label: rtl("تاريخ الإصدار"),     value: rfqDate },
-        { label: rtl("آخر موعد للرد"),     value: closeDate },
+        { label: rtl("تاريخ الإصدار"), value: rfqDate },
+        { label: rtl("آخر موعد للرد"), value: closeDate },
       ];
       const cellW = CW / infoCells.length;
 
       // i=0 → rightmost cell (RTL start)
       infoCells.forEach((cell, i) => {
         const cx = M + (infoCells.length - 1 - i) * cellW;
-        doc.font("Amiri").fontSize(7.5).fillColor("#7a90a8")
+        doc
+          .font("Amiri")
+          .fontSize(7.5)
+          .fillColor("#7a90a8")
           .text(cell.label, cx, IY + 7, { width: cellW, align: "center", lineBreak: false });
-        doc.font("Amiri").fontSize(12).fillColor(BLUE)
+        doc
+          .font("Amiri")
+          .fontSize(12)
+          .fillColor(BLUE)
           .text(cell.value, cx, IY + 24, { width: cellW, align: "center", lineBreak: false });
       });
 
@@ -229,18 +263,31 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
         ? `${opts.supplierName} — ${opts.contactPerson}`
         : opts.supplierName;
 
-      doc.font("Amiri").fontSize(8.5).fillColor("#8899aa")
+      doc
+        .font("Amiri")
+        .fontSize(8.5)
+        .fillColor("#8899aa")
         .text(rtl("إلى المورّد:"), M, y, { width: CW, align: "right", lineBreak: false });
       y += 15;
 
-      doc.font("Amiri").fontSize(14).fillColor(BLUE)
+      doc
+        .font("Amiri")
+        .fontSize(14)
+        .fillColor(BLUE)
         .text(rtl(supplierLine), M, y, { width: CW, align: "right", lineBreak: false });
       y += 24;
 
-      doc.font("Amiri").fontSize(9.5).fillColor("#555555")
+      doc
+        .font("Amiri")
+        .fontSize(9.5)
+        .fillColor("#555555")
         .text(
-          rtl("يسرنا الاستفسار عن أسعار الأصناف التالية، ونرجو التفضل بتزويدنا بعروض الأسعار قبل التاريخ المحدد أعلاه."),
-          M, y, { width: CW, align: "right" },
+          rtl(
+            "يسرنا الاستفسار عن أسعار الأصناف التالية، ونرجو التفضل بتزويدنا بعروض الأسعار قبل التاريخ المحدد أعلاه.",
+          ),
+          M,
+          y,
+          { width: CW, align: "right" },
         );
       y += 26;
 
@@ -254,10 +301,10 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       //   #  |  رقم القطعة  |  الوصف  |  الكمية  |  الوحدة
       // ═══════════════════════════════════════════════════════════════════
 
-      const C_NUM  = 34;
+      const C_NUM = 34;
       const C_PART = 100;
-      const C_QTY  = 60;
-      const C_UOM  = 54;
+      const C_QTY = 60;
+      const C_UOM = 54;
       const C_DESC = CW - C_NUM - C_PART - C_QTY - C_UOM;
 
       const colWArr = [C_NUM, C_PART, C_DESC, C_QTY, C_UOM];
@@ -270,23 +317,28 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
         return x;
       }
 
-      const ROW_H     = 22;   // minimum row height (pt)
-      const ROW_PAD_V = 6;    // vertical padding (top + bottom inside each row)
+      const ROW_H = 22; // minimum row height (pt)
+      const ROW_PAD_V = 6; // vertical padding (top + bottom inside each row)
       const FONT_SIZE = 9.5;
 
       // Header row
       doc.rect(M, y, CW, ROW_H).fill(BLUE);
       colLbls.forEach((lbl, i) => {
-        doc.font("Amiri").fontSize(FONT_SIZE).fillColor("#ffffff")
+        doc
+          .font("Amiri")
+          .fontSize(FONT_SIZE)
+          .fillColor("#ffffff")
           .text(lbl, colX(i) + 2, y + 5, {
-            width: colWArr[i] - 4, align: "center", lineBreak: false,
+            width: colWArr[i] - 4,
+            align: "center",
+            lineBreak: false,
           });
       });
       y += ROW_H;
 
       // Data rows — height is dynamic so long descriptions don't overflow
       opts.items.forEach((item, idx) => {
-        const descText  = rtl(item.description);
+        const descText = rtl(item.description);
         const descWidth = colWArr[2] - 6;
 
         // Measure how tall the description text will be when word-wrapped
@@ -308,15 +360,16 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
         vals.forEach((v, i) => {
           const isDesc = i === 2;
           // Vertically center non-description columns; top-align description
-          const cellY = isDesc
-            ? y + ROW_PAD_V
-            : y + (rowH - FONT_SIZE) / 2 - 1;
+          const cellY = isDesc ? y + ROW_PAD_V : y + (rowH - FONT_SIZE) / 2 - 1;
 
-          doc.font("Amiri").fontSize(FONT_SIZE).fillColor("#2c3e50")
+          doc
+            .font("Amiri")
+            .fontSize(FONT_SIZE)
+            .fillColor("#2c3e50")
             .text(v, colX(i) + 3, cellY, {
-              width:     colWArr[i] - 6,
-              align:     isDesc ? "right" : "center",
-              lineBreak: isDesc,          // wrap only the description column
+              width: colWArr[i] - 6,
+              align: isDesc ? "right" : "center",
+              lineBreak: isDesc, // wrap only the description column
             });
         });
         y += rowH;
@@ -331,13 +384,23 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
         doc.rect(M, y, CW, NH).fill("#f0f5fa");
         // Accent bar on the RIGHT edge (RTL start of the block)
         doc.rect(M + CW - 4, y, 4, NH).fill(BLUE);
-        doc.font("Amiri").fontSize(8.5).fillColor("#7a90a8")
+        doc
+          .font("Amiri")
+          .fontSize(8.5)
+          .fillColor("#7a90a8")
           .text(rtl("ملاحظات:"), M + 6, y + 7, {
-            width: CW - 18, align: "right", lineBreak: false,
+            width: CW - 18,
+            align: "right",
+            lineBreak: false,
           });
-        doc.font("Amiri").fontSize(10.5).fillColor("#2c3e50")
+        doc
+          .font("Amiri")
+          .fontSize(10.5)
+          .fillColor("#2c3e50")
           .text(rtl(opts.notes.trim()), M + 6, y + 24, {
-            width: CW - 18, align: "right", lineBreak: false,
+            width: CW - 18,
+            align: "right",
+            lineBreak: false,
           });
         y += NH;
       }
@@ -356,20 +419,32 @@ export function generateRfqPdf(opts: RfqPdfOptions): Promise<Buffer> {
       ].filter(Boolean);
       const contact = contactParts.join("   |   ");
 
-      doc.font("Amiri").fontSize(9.5).fillColor("#555555")
+      doc
+        .font("Amiri")
+        .fontSize(9.5)
+        .fillColor("#555555")
         .text(contact, M, FY + 8, { width: CW, align: "center", lineBreak: false });
 
-      doc.font("Amiri").fontSize(7.5).fillColor("#999999")
+      doc
+        .font("Amiri")
+        .fontSize(7.5)
+        .fillColor("#999999")
         .text(
           rtl("ش.الإسكندرية - برج نجمة مطروح، الدور الرابع - مرسي مطروح") +
-          "   |   ت: 432-972-587   |   س-ت: 21618",
-          M, FY + 24,
+            "   |   ت: 432-972-587   |   س-ت: 21618",
+          M,
+          FY + 24,
           { width: CW, align: "center", lineBreak: false },
         );
 
-      doc.font("Amiri").fontSize(7).fillColor("#aaaaaa")
+      doc
+        .font("Amiri")
+        .fontSize(7)
+        .fillColor("#aaaaaa")
         .text(rtl("قرطبة للتوريدات") + " — CORTOBA SUPPLIES", M, FY + 38, {
-          width: CW, align: "center", lineBreak: false,
+          width: CW,
+          align: "center",
+          lineBreak: false,
         });
 
       doc.end();

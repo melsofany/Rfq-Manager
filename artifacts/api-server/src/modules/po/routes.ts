@@ -40,7 +40,7 @@ const PO_LOCK_KEY = 7_391_042;
  * Uses MAX of existing numbers (not COUNT) so deletions never cause collisions.
  */
 async function generateInternalPoNoInTx(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0]
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
 ): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `PO-${year}-`;
@@ -62,42 +62,52 @@ async function generateInternalPoNoInTx(
 router.get("/po", requireAuth, async (req, res): Promise<void> => {
   const { status, search } = req.query as Record<string, string>;
 
-  const rows = await db.select({
-    po: purchaseOrdersTable,
-    employeeName: employeesTable.name,
-  }).from(purchaseOrdersTable)
+  const rows = await db
+    .select({
+      po: purchaseOrdersTable,
+      employeeName: employeesTable.name,
+    })
+    .from(purchaseOrdersTable)
     .leftJoin(employeesTable, eq(purchaseOrdersTable.employeeId, employeesTable.id))
     .orderBy(sql`${purchaseOrdersTable.createdAt} DESC`);
 
   let filtered = rows;
-  if (status) filtered = filtered.filter(r => r.po.status === status);
+  if (status) filtered = filtered.filter((r) => r.po.status === status);
   if (search) {
     const s = search.toLowerCase();
-    filtered = filtered.filter(r =>
-      r.po.internalPoNo.toLowerCase().includes(s) ||
-      r.po.sheetPoNo.toLowerCase().includes(s)
+    filtered = filtered.filter(
+      (r) =>
+        r.po.internalPoNo.toLowerCase().includes(s) || r.po.sheetPoNo.toLowerCase().includes(s),
     );
   }
 
-  const poIds = filtered.map(r => r.po.id);
-  const itemCounts = poIds.length > 0 ? await db.select({ poId: purchaseOrderItemsTable.poId, cnt: count() })
-    .from(purchaseOrderItemsTable).where(inArray(purchaseOrderItemsTable.poId, poIds)).groupBy(purchaseOrderItemsTable.poId) : [];
-  const itemMap = Object.fromEntries(itemCounts.map(r => [r.poId, r.cnt]));
+  const poIds = filtered.map((r) => r.po.id);
+  const itemCounts =
+    poIds.length > 0
+      ? await db
+          .select({ poId: purchaseOrderItemsTable.poId, cnt: count() })
+          .from(purchaseOrderItemsTable)
+          .where(inArray(purchaseOrderItemsTable.poId, poIds))
+          .groupBy(purchaseOrderItemsTable.poId)
+      : [];
+  const itemMap = Object.fromEntries(itemCounts.map((r) => [r.poId, r.cnt]));
 
-  res.json(filtered.map(r => ({
-    id: r.po.id,
-    internalPoNo: r.po.internalPoNo,
-    sheetPoNo: r.po.sheetPoNo,
-    receiverName: r.po.receiverName,
-    receiverPhone: r.po.receiverPhone,
-    status: r.po.status,
-    employeeId: r.po.employeeId,
-    employeeName: r.employeeName,
-    notes: r.po.notes,
-    itemCount: itemMap[r.po.id] ?? 0,
-    createdAt: r.po.createdAt.toISOString(),
-    updatedAt: r.po.updatedAt.toISOString(),
-  })));
+  res.json(
+    filtered.map((r) => ({
+      id: r.po.id,
+      internalPoNo: r.po.internalPoNo,
+      sheetPoNo: r.po.sheetPoNo,
+      receiverName: r.po.receiverName,
+      receiverPhone: r.po.receiverPhone,
+      status: r.po.status,
+      employeeId: r.po.employeeId,
+      employeeName: r.employeeName,
+      notes: r.po.notes,
+      itemCount: itemMap[r.po.id] ?? 0,
+      createdAt: r.po.createdAt.toISOString(),
+      updatedAt: r.po.updatedAt.toISOString(),
+    })),
+  );
 });
 
 router.post("/po", requireAuth, async (req, res): Promise<void> => {
@@ -138,15 +148,18 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
 
       const internalPoNo = await generateInternalPoNoInTx(tx);
 
-      const [po] = await tx.insert(purchaseOrdersTable).values({
-        internalPoNo,
-        sheetPoNo,
-        receiverName: receiverName || null,
-        receiverPhone: receiverPhone || null,
-        status: "draft",
-        employeeId: req.session.employeeId,
-        notes: notes || null,
-      }).returning();
+      const [po] = await tx
+        .insert(purchaseOrdersTable)
+        .values({
+          internalPoNo,
+          sheetPoNo,
+          receiverName: receiverName || null,
+          receiverPhone: receiverPhone || null,
+          status: "draft",
+          employeeId: req.session.employeeId,
+          notes: notes || null,
+        })
+        .returning();
 
       await tx.insert(purchaseOrderItemsTable).values(
         validItems.map((it) => ({
@@ -157,10 +170,13 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
           description: it.description.trim(),
           uom: it.uom || null,
           qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
-          referencePrice: it.referencePrice != null && it.referencePrice !== "" ? String(it.referencePrice) : null,
+          referencePrice:
+            it.referencePrice != null && it.referencePrice !== ""
+              ? String(it.referencePrice)
+              : null,
           supplierId: it.supplierId ?? null,
           taxIncluded: it.taxIncluded ?? false,
-        }))
+        })),
       );
 
       await tx.insert(auditLogTable).values({
@@ -175,15 +191,15 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
 
       // If linked to an RFQ, mark it as SUCCESS
       if (rfqId) {
-        await tx.update(rfqTable).set({ status: 'SUCCESS' }).where(eq(rfqTable.id, rfqId));
+        await tx.update(rfqTable).set({ status: "SUCCESS" }).where(eq(rfqTable.id, rfqId));
         await tx.insert(auditLogTable).values({
-          action: 'rfq.success',
-          entityType: 'rfq',
+          action: "rfq.success",
+          entityType: "rfq",
           entityId: rfqId,
           employeeId: req.session.employeeId,
           description: `RFQ marked SUCCESS — PO ${internalPoNo} created`,
           ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
+          userAgent: req.get("user-agent"),
         });
       }
 
@@ -221,7 +237,9 @@ router.get("/po/lookup/:poNo", requireAuth, async (req, res): Promise<void> => {
     res.json(sheetItems);
   } catch (err) {
     req.log.error({ err, poNo }, "Google Sheets PO lookup failed");
-    res.status(500).json({ error: "Failed to fetch from Google Sheets", details: (err as Error).message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch from Google Sheets", details: (err as Error).message });
   }
 });
 
@@ -233,7 +251,9 @@ router.get("/po/sheets/po-numbers", requireAuth, async (req, res): Promise<void>
     res.json({ poNumbers: numbers });
   } catch (err) {
     req.log.error({ err }, "Failed to list PO numbers from sheet");
-    res.status(500).json({ error: "Failed to connect to Google Sheets", details: (err as Error).message });
+    res
+      .status(500)
+      .json({ error: "Failed to connect to Google Sheets", details: (err as Error).message });
   }
 });
 
@@ -264,8 +284,8 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
     .where(
       and(
         eq(offersTable.supplierId, supplierIdInt),
-        sql`lower(${rfqItemsTable.description}) = ${descNorm}`
-      )
+        sql`lower(${rfqItemsTable.description}) = ${descNorm}`,
+      ),
     )
     .orderBy(sql`${offersTable.createdAt} DESC`)
     .limit(1);
@@ -283,10 +303,7 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
       .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
       .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
       .where(
-        and(
-          eq(offersTable.supplierId, supplierIdInt),
-          eq(rfqItemsTable.partNo, partNo.trim())
-        )
+        and(eq(offersTable.supplierId, supplierIdInt), eq(rfqItemsTable.partNo, partNo.trim())),
       )
       .orderBy(sql`${offersTable.createdAt} DESC`)
       .limit(1);
@@ -306,7 +323,12 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
   const id = parseInt(raw, 10);
 
   // Fetch PO + employee
-  const [poRow] = await db.select({ po: purchaseOrdersTable, employeeName: employeesTable.name, employeePhone: employeesTable.phone })
+  const [poRow] = await db
+    .select({
+      po: purchaseOrdersTable,
+      employeeName: employeesTable.name,
+      employeePhone: employeesTable.phone,
+    })
     .from(purchaseOrdersTable)
     .leftJoin(employeesTable, eq(purchaseOrdersTable.employeeId, employeesTable.id))
     .where(eq(purchaseOrdersTable.id, id));
@@ -317,13 +339,17 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
   }
 
   // Fetch all items with supplier info
-  const itemRows = await db.select({ item: purchaseOrderItemsTable, supplier: suppliersTable })
+  const itemRows = await db
+    .select({ item: purchaseOrderItemsTable, supplier: suppliersTable })
     .from(purchaseOrderItemsTable)
     .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
     .where(eq(purchaseOrderItemsTable.poId, id));
 
   // Group items by supplierId (skip items without a supplier)
-  const bySupplier = new Map<number, { supplier: typeof suppliersTable.$inferSelect; items: typeof itemRows }>();
+  const bySupplier = new Map<
+    number,
+    { supplier: typeof suppliersTable.$inferSelect; items: typeof itemRows }
+  >();
   for (const row of itemRows) {
     if (!row.item.supplierId || !row.supplier) continue;
     const sid = row.item.supplierId;
@@ -381,7 +407,14 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      results.push({ supplierId, supplierName: supplier.name, emailSent: false, emailError: `PDF error: ${msg}`, whatsappSent: false, whatsappError: `PDF error: ${msg}` });
+      results.push({
+        supplierId,
+        supplierName: supplier.name,
+        emailSent: false,
+        emailError: `PDF error: ${msg}`,
+        whatsappSent: false,
+        whatsappError: `PDF error: ${msg}`,
+      });
       continue;
     }
 
@@ -433,18 +466,24 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
 
         // Save to whatsapp_chats so the message appears in the chat history
         const chatPhone = normalizePhone(supplier.phone.trim());
-        await db.insert(whatsappChatsTable).values({
-          waMessageId: wamid ?? null,
-          direction: "outbound",
-          phone: chatPhone,
-          supplierId,
-          body: `[أمر شراء PDF: ${poNo}]`,
-          mediaType: "document",
-          filename: `PO-${poNo}.pdf`,
-          isRead: true,
-        }).catch((saveErr) => {
-          req.log.error({ err: saveErr, supplierId, poNo }, "PO dispatch: failed to save WhatsApp chat record");
-        });
+        await db
+          .insert(whatsappChatsTable)
+          .values({
+            waMessageId: wamid ?? null,
+            direction: "outbound",
+            phone: chatPhone,
+            supplierId,
+            body: `[أمر شراء PDF: ${poNo}]`,
+            mediaType: "document",
+            filename: `PO-${poNo}.pdf`,
+            isRead: true,
+          })
+          .catch((saveErr) => {
+            req.log.error(
+              { err: saveErr, supplierId, poNo },
+              "PO dispatch: failed to save WhatsApp chat record",
+            );
+          });
       } catch (err) {
         whatsappError = err instanceof Error ? err.message : String(err);
         req.log.error({ err, supplierId, phone: supplier.phone }, "PO dispatch: WhatsApp failed");
@@ -455,13 +494,21 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
       whatsappError = "No phone number";
     }
 
-    results.push({ supplierId, supplierName: supplier.name, emailSent, emailError, whatsappSent, whatsappError });
+    results.push({
+      supplierId,
+      supplierName: supplier.name,
+      emailSent,
+      emailError,
+      whatsappSent,
+      whatsappError,
+    });
   }
 
   // Update PO status to "sent" if at least one message went through
   const anySent = results.some((r) => r.emailSent || r.whatsappSent);
   if (anySent) {
-    await db.update(purchaseOrdersTable)
+    await db
+      .update(purchaseOrdersTable)
       .set({ status: "sent", updatedAt: new Date() })
       .where(eq(purchaseOrdersTable.id, id));
 
@@ -484,19 +531,39 @@ router.get("/po/:id/pdf/:supplierId", requireAuth, async (req, res): Promise<voi
   const poId = parseInt(req.params.id, 10);
   const supplierId = parseInt(req.params.supplierId, 10);
 
-  const [poRow] = await db.select({ po: purchaseOrdersTable, employeeName: employeesTable.name, employeePhone: employeesTable.phone })
+  const [poRow] = await db
+    .select({
+      po: purchaseOrdersTable,
+      employeeName: employeesTable.name,
+      employeePhone: employeesTable.phone,
+    })
     .from(purchaseOrdersTable)
     .leftJoin(employeesTable, eq(purchaseOrdersTable.employeeId, employeesTable.id))
     .where(eq(purchaseOrdersTable.id, poId));
 
-  if (!poRow) { res.status(404).json({ error: "PO not found" }); return; }
+  if (!poRow) {
+    res.status(404).json({ error: "PO not found" });
+    return;
+  }
 
-  const [supplierRow] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, supplierId));
-  if (!supplierRow) { res.status(404).json({ error: "Supplier not found" }); return; }
+  const [supplierRow] = await db
+    .select()
+    .from(suppliersTable)
+    .where(eq(suppliersTable.id, supplierId));
+  if (!supplierRow) {
+    res.status(404).json({ error: "Supplier not found" });
+    return;
+  }
 
-  const items = await db.select({ item: purchaseOrderItemsTable })
+  const items = await db
+    .select({ item: purchaseOrderItemsTable })
     .from(purchaseOrderItemsTable)
-    .where(and(eq(purchaseOrderItemsTable.poId, poId), eq(purchaseOrderItemsTable.supplierId, supplierId)));
+    .where(
+      and(
+        eq(purchaseOrderItemsTable.poId, poId),
+        eq(purchaseOrderItemsTable.supplierId, supplierId),
+      ),
+    );
 
   const pdfBuffer = await generatePoPdf({
     poNo: poRow.po.internalPoNo,
@@ -520,7 +587,10 @@ router.get("/po/:id/pdf/:supplierId", requireAuth, async (req, res): Promise<voi
   });
 
   res.setHeader("Content-Type", "application/pdf");
-  res.setHeader("Content-Disposition", `attachment; filename="PO-${poRow.po.internalPoNo}-${supplierRow.name}.pdf"`);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="PO-${poRow.po.internalPoNo}-${supplierRow.name}.pdf"`,
+  );
   res.send(pdfBuffer);
 });
 
@@ -528,10 +598,12 @@ router.get("/po/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
-  const [row] = await db.select({
-    po: purchaseOrdersTable,
-    employeeName: employeesTable.name,
-  }).from(purchaseOrdersTable)
+  const [row] = await db
+    .select({
+      po: purchaseOrdersTable,
+      employeeName: employeesTable.name,
+    })
+    .from(purchaseOrdersTable)
     .leftJoin(employeesTable, eq(purchaseOrdersTable.employeeId, employeesTable.id))
     .where(eq(purchaseOrdersTable.id, id));
 
@@ -540,14 +612,18 @@ router.get("/po/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [{ cnt: itemCount }] = await db.select({ cnt: count() })
-    .from(purchaseOrderItemsTable).where(eq(purchaseOrderItemsTable.poId, id));
+  const [{ cnt: itemCount }] = await db
+    .select({ cnt: count() })
+    .from(purchaseOrderItemsTable)
+    .where(eq(purchaseOrderItemsTable.poId, id));
 
   // Fetch linked RFQ info if present
   let linkedRfq: { id: number; internalRfqNo: string; status: string } | null = null;
   if (row.po.rfqId) {
-    const [rfqRow] = await db.select({ id: rfqTable.id, internalRfqNo: rfqTable.internalRfqNo, status: rfqTable.status })
-      .from(rfqTable).where(eq(rfqTable.id, row.po.rfqId));
+    const [rfqRow] = await db
+      .select({ id: rfqTable.id, internalRfqNo: rfqTable.internalRfqNo, status: rfqTable.status })
+      .from(rfqTable)
+      .where(eq(rfqTable.id, row.po.rfqId));
     if (rfqRow) linkedRfq = rfqRow;
   }
 
@@ -576,27 +652,36 @@ router.patch("/po/:id/link-rfq", requireAuth, async (req, res): Promise<void> =>
   const { rfqId } = req.body as { rfqId: number | null };
 
   const [po] = await db.select().from(purchaseOrdersTable).where(eq(purchaseOrdersTable.id, poId));
-  if (!po) { res.status(404).json({ error: "PO not found" }); return; }
+  if (!po) {
+    res.status(404).json({ error: "PO not found" });
+    return;
+  }
 
   if (rfqId != null) {
     const [rfq] = await db.select().from(rfqTable).where(eq(rfqTable.id, rfqId));
-    if (!rfq) { res.status(404).json({ error: "RFQ not found" }); return; }
+    if (!rfq) {
+      res.status(404).json({ error: "RFQ not found" });
+      return;
+    }
 
     await db.transaction(async (tx) => {
       await tx.update(purchaseOrdersTable).set({ rfqId }).where(eq(purchaseOrdersTable.id, poId));
-      await tx.update(rfqTable).set({ status: 'SUCCESS' }).where(eq(rfqTable.id, rfqId));
+      await tx.update(rfqTable).set({ status: "SUCCESS" }).where(eq(rfqTable.id, rfqId));
       await tx.insert(auditLogTable).values({
-        action: 'po.linked_rfq',
-        entityType: 'po',
+        action: "po.linked_rfq",
+        entityType: "po",
         entityId: poId,
         description: `PO ${po.internalPoNo} linked to RFQ ${rfq.internalRfqNo} — RFQ marked SUCCESS`,
       });
     });
 
-    res.json({ ok: true, rfqId, rfqStatus: 'SUCCESS' });
+    res.json({ ok: true, rfqId, rfqStatus: "SUCCESS" });
   } else {
     // Unlink: just clear rfqId (do NOT revert the RFQ status)
-    await db.update(purchaseOrdersTable).set({ rfqId: null }).where(eq(purchaseOrdersTable.id, poId));
+    await db
+      .update(purchaseOrdersTable)
+      .set({ rfqId: null })
+      .where(eq(purchaseOrdersTable.id, poId));
     res.json({ ok: true, rfqId: null });
   }
 });
@@ -605,27 +690,31 @@ router.get("/po/:id/items", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
-  const rows = await db.select({
-    item: purchaseOrderItemsTable,
-    supplierName: suppliersTable.name,
-  }).from(purchaseOrderItemsTable)
+  const rows = await db
+    .select({
+      item: purchaseOrderItemsTable,
+      supplierName: suppliersTable.name,
+    })
+    .from(purchaseOrderItemsTable)
     .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
     .where(eq(purchaseOrderItemsTable.poId, id));
 
-  res.json(rows.map((r) => ({
-    id: r.item.id,
-    poId: r.item.poId,
-    supplierId: r.item.supplierId,
-    supplierName: r.supplierName,
-    itemId: r.item.itemId,
-    lineItem: r.item.lineItem,
-    partNo: r.item.partNo,
-    description: r.item.description,
-    uom: r.item.uom,
-    qty: r.item.qty ? parseFloat(r.item.qty) : null,
-    referencePrice: r.item.referencePrice ? parseFloat(r.item.referencePrice) : null,
-    taxIncluded: r.item.taxIncluded ?? false,
-  })));
+  res.json(
+    rows.map((r) => ({
+      id: r.item.id,
+      poId: r.item.poId,
+      supplierId: r.item.supplierId,
+      supplierName: r.supplierName,
+      itemId: r.item.itemId,
+      lineItem: r.item.lineItem,
+      partNo: r.item.partNo,
+      description: r.item.description,
+      uom: r.item.uom,
+      qty: r.item.qty ? parseFloat(r.item.qty) : null,
+      referencePrice: r.item.referencePrice ? parseFloat(r.item.referencePrice) : null,
+      taxIncluded: r.item.taxIncluded ?? false,
+    })),
+  );
 });
 
 export default router;

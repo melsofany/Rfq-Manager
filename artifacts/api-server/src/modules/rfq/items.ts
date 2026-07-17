@@ -55,30 +55,32 @@ router.get("/items/search", requireAuth, async (req, res): Promise<void> => {
   const rfqItemIds = matchingItems.map((r) => r.item.id);
 
   // 2. Get sent_log (all suppliers sent this RFQ) with supplier names
-  const sentLogs = rfqIds.length > 0
-    ? await db
-        .select({
-          sentLog: sentLogTable,
-          supplierName: suppliersTable.name,
-        })
-        .from(sentLogTable)
-        .innerJoin(suppliersTable, eq(sentLogTable.supplierId, suppliersTable.id))
-        .where(inArray(sentLogTable.rfqId, rfqIds))
-    : [];
+  const sentLogs =
+    rfqIds.length > 0
+      ? await db
+          .select({
+            sentLog: sentLogTable,
+            supplierName: suppliersTable.name,
+          })
+          .from(sentLogTable)
+          .innerJoin(suppliersTable, eq(sentLogTable.supplierId, suppliersTable.id))
+          .where(inArray(sentLogTable.rfqId, rfqIds))
+      : [];
 
   // 3. Get offer_items with their parent offer (supplier + date)
-  const offerItems = rfqItemIds.length > 0
-    ? await db
-        .select({
-          offerItem: offerItemsTable,
-          offer: offersTable,
-          supplierName: suppliersTable.name,
-        })
-        .from(offerItemsTable)
-        .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
-        .innerJoin(suppliersTable, eq(offersTable.supplierId, suppliersTable.id))
-        .where(inArray(offerItemsTable.rfqItemId, rfqItemIds))
-    : [];
+  const offerItems =
+    rfqItemIds.length > 0
+      ? await db
+          .select({
+            offerItem: offerItemsTable,
+            offer: offersTable,
+            supplierName: suppliersTable.name,
+          })
+          .from(offerItemsTable)
+          .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+          .innerJoin(suppliersTable, eq(offersTable.supplierId, suppliersTable.id))
+          .where(inArray(offerItemsTable.rfqItemId, rfqItemIds))
+      : [];
 
   // Build lookup maps
   // sentLogByRfqId: rfqId -> sentLog[]

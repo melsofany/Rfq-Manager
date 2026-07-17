@@ -18,7 +18,10 @@ import { useAuth } from "@/contexts/AuthContext";
 
 function parseCategories(cat: string | null | undefined): string[] {
   if (!cat) return [];
-  return cat.split(",").map((s) => s.trim()).filter(Boolean);
+  return cat
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
@@ -119,11 +122,19 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
             <div className="flex gap-2">
               <Input
                 value={newName}
-                onChange={(e) => { setNewName(e.target.value); setAddError(null); }}
+                onChange={(e) => {
+                  setNewName(e.target.value);
+                  setAddError(null);
+                }}
                 placeholder="New category name..."
                 className="h-8 text-sm"
               />
-              <Button type="submit" size="sm" disabled={createMutation.isPending || !newName.trim()} className="gap-1.5">
+              <Button
+                type="submit"
+                size="sm"
+                disabled={createMutation.isPending || !newName.trim()}
+                className="gap-1.5"
+              >
                 <Plus size={14} /> Add
               </Button>
             </div>
@@ -148,7 +159,10 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
                       <>
                         <Input
                           value={editName}
-                          onChange={(e) => { setEditName(e.target.value); setEditError(null); }}
+                          onChange={(e) => {
+                            setEditName(e.target.value);
+                            setEditError(null);
+                          }}
                           className="h-7 text-sm flex-1"
                           autoFocus
                           onKeyDown={(e) => {
@@ -163,19 +177,34 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
                         >
                           <Check size={15} />
                         </button>
-                        <button onClick={() => { setEditingId(null); setEditError(null); }} className="text-muted-foreground hover:text-foreground p-0.5">
+                        <button
+                          onClick={() => {
+                            setEditingId(null);
+                            setEditError(null);
+                          }}
+                          className="text-muted-foreground hover:text-foreground p-0.5"
+                        >
                           <X size={15} />
                         </button>
                       </>
                     ) : (
                       <>
-                        <span className="flex-1 text-sm text-foreground capitalize">{cat.name}</span>
-                        <button onClick={() => startEdit(cat.id, cat.name)} className="text-muted-foreground hover:text-foreground p-0.5">
+                        <span className="flex-1 text-sm text-foreground capitalize">
+                          {cat.name}
+                        </span>
+                        <button
+                          onClick={() => startEdit(cat.id, cat.name)}
+                          className="text-muted-foreground hover:text-foreground p-0.5"
+                        >
                           <Pencil size={13} />
                         </button>
                         <button
                           onClick={() => {
-                            setDeleteErrors((prev) => { const next = { ...prev }; delete next[cat.id]; return next; });
+                            setDeleteErrors((prev) => {
+                              const next = { ...prev };
+                              delete next[cat.id];
+                              return next;
+                            });
                             deleteMutation.mutate({ id: cat.id });
                           }}
                           className="text-muted-foreground hover:text-destructive p-0.5"
@@ -205,7 +234,9 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="px-5 py-3 border-t border-border flex justify-end">
-          <Button variant="outline" size="sm" onClick={onClose}>Done</Button>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Done
+          </Button>
         </div>
       </div>
     </div>
@@ -226,7 +257,14 @@ export default function SuppliersPage() {
 
   const { data: suppliers, isLoading } = useListSuppliers(
     { category: category !== "all" ? category : undefined, search: search || undefined },
-    { query: { queryKey: getListSuppliersQueryKey({ category: category !== "all" ? category : undefined, search: search || undefined }) } }
+    {
+      query: {
+        queryKey: getListSuppliersQueryKey({
+          category: category !== "all" ? category : undefined,
+          search: search || undefined,
+        }),
+      },
+    },
   );
 
   return (
@@ -241,7 +279,12 @@ export default function SuppliersPage() {
           </div>
           <div className="flex items-center gap-2">
             {isAdmin && (
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowManage(true)}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShowManage(true)}
+              >
                 <Settings size={14} /> Manage Categories
               </Button>
             )}
@@ -253,7 +296,10 @@ export default function SuppliersPage() {
 
         <div className="flex gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Search
+              size={15}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -300,54 +346,81 @@ export default function SuppliersPage() {
               </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto"><table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/30 border-b border-border text-left">
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Supplier</th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Contact</th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Email</th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Phone</th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Categories</th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {suppliers.map((s) => {
-                  const cats = parseCategories(s.category);
-                  return (
-                    <tr
-                      key={s.id}
-                      className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
-                      onClick={() => navigate(`/suppliers/${s.id}`)}
-                    >
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-foreground">{s.name}</p>
-                        {s.supplierId && <p className="text-muted-foreground text-xs font-mono">{s.supplierId}</p>}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{s.contactPerson ?? "-"}</td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{s.email ?? "-"}</td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{s.phone ?? "-"}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {cats.map((cat) => (
-                            <span key={cat} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground capitalize">
-                              {cat}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                          s.isActive ? "bg-green-50 text-green-700" : "bg-muted text-muted-foreground"
-                        }`}>
-                          {s.isActive ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table></div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/30 border-b border-border text-left">
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                      Supplier
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                      Contact
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Email</th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Phone</th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                      Categories
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {suppliers.map((s) => {
+                    const cats = parseCategories(s.category);
+                    return (
+                      <tr
+                        key={s.id}
+                        className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
+                        onClick={() => navigate(`/suppliers/${s.id}`)}
+                      >
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-foreground">{s.name}</p>
+                          {s.supplierId && (
+                            <p className="text-muted-foreground text-xs font-mono">
+                              {s.supplierId}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {s.contactPerson ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {s.email ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">
+                          {s.phone ?? "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {cats.map((cat) => (
+                              <span
+                                key={cat}
+                                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground capitalize"
+                              >
+                                {cat}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              s.isActive
+                                ? "bg-green-50 text-green-700"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {s.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

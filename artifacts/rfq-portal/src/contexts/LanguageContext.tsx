@@ -28,7 +28,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const setLang = (l: Lang) => {
     setLangState(l);
-    try { localStorage.setItem("rfq-lang", l); } catch {}
+    try {
+      localStorage.setItem("rfq-lang", l);
+    } catch {}
   };
 
   const dir: "ltr" | "rtl" = lang === "ar" ? "rtl" : "ltr";

@@ -15,20 +15,28 @@ export interface AttachmentItem {
 }
 
 function FileIcon({ mimeType, name }: { mimeType: string; name: string }) {
-  if (mimeType.startsWith("image/")) return <Image size={16} className="text-blue-500 flex-shrink-0" />;
-  if (mimeType === "application/pdf" || name.endsWith(".pdf")) return <FileText size={16} className="text-red-500 flex-shrink-0" />;
+  if (mimeType.startsWith("image/"))
+    return <Image size={16} className="text-blue-500 flex-shrink-0" />;
+  if (mimeType === "application/pdf" || name.endsWith(".pdf"))
+    return <FileText size={16} className="text-red-500 flex-shrink-0" />;
   return <File size={16} className="text-muted-foreground flex-shrink-0" />;
 }
 
 interface Props {
-  uploadUrl: string;       // POST endpoint
-  listUrl: string;         // GET endpoint to fetch list
-  deleteUrlBase: string;   // DELETE /api/rfq/attachments/:id or /api/offer/attachments/:id
+  uploadUrl: string; // POST endpoint
+  listUrl: string; // GET endpoint to fetch list
+  deleteUrlBase: string; // DELETE /api/rfq/attachments/:id or /api/offer/attachments/:id
   readOnly?: boolean;
   label?: string;
 }
 
-export function AttachmentsPanel({ uploadUrl, listUrl, deleteUrlBase, readOnly = false, label = "المرفقات" }: Props) {
+export function AttachmentsPanel({
+  uploadUrl,
+  listUrl,
+  deleteUrlBase,
+  readOnly = false,
+  label = "المرفقات",
+}: Props) {
   const [attachments, setAttachments] = useState<AttachmentItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -40,9 +48,15 @@ export function AttachmentsPanel({ uploadUrl, listUrl, deleteUrlBase, readOnly =
   if (attachments === null && !loading) {
     setLoading(true);
     fetch(listUrl, { credentials: "include" })
-      .then(r => r.ok ? r.json() : [])
-      .then((data: AttachmentItem[]) => { setAttachments(data); setLoading(false); })
-      .catch(() => { setAttachments([]); setLoading(false); });
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: AttachmentItem[]) => {
+        setAttachments(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setAttachments([]);
+        setLoading(false);
+      });
   }
 
   async function uploadFile(file: File) {
@@ -56,12 +70,12 @@ export function AttachmentsPanel({ uploadUrl, listUrl, deleteUrlBase, readOnly =
     try {
       const r = await fetch(uploadUrl, { method: "POST", credentials: "include", body: fd });
       if (!r.ok) {
-        const err = await r.json().catch(() => ({})) as { error?: string };
+        const err = (await r.json().catch(() => ({}))) as { error?: string };
         toast.error(err.error ?? "فشل رفع الملف");
         return;
       }
-      const att = await r.json() as AttachmentItem;
-      setAttachments(prev => [...(prev ?? []), att]);
+      const att = (await r.json()) as AttachmentItem;
+      setAttachments((prev) => [...(prev ?? []), att]);
       toast.success(`تم رفع "${att.originalName}" بنجاح`);
     } catch {
       toast.error("خطأ في الاتصال بالخادم");
@@ -75,8 +89,11 @@ export function AttachmentsPanel({ uploadUrl, listUrl, deleteUrlBase, readOnly =
     setDeleting(id);
     try {
       const r = await fetch(`${deleteUrlBase}/${id}`, { method: "DELETE", credentials: "include" });
-      if (!r.ok && r.status !== 204) { toast.error("فشل حذف الملف"); return; }
-      setAttachments(prev => (prev ?? []).filter(a => a.id !== id));
+      if (!r.ok && r.status !== 204) {
+        toast.error("فشل حذف الملف");
+        return;
+      }
+      setAttachments((prev) => (prev ?? []).filter((a) => a.id !== id));
       toast.success(`تم حذف "${name}"`);
     } catch {
       toast.error("خطأ في الاتصال بالخادم");
@@ -101,13 +118,18 @@ export function AttachmentsPanel({ uploadUrl, listUrl, deleteUrlBase, readOnly =
         <div
           className={cn(
             "border-2 border-dashed rounded-lg px-6 py-8 text-center transition-colors cursor-pointer",
-            dragOver ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/30",
+            dragOver
+              ? "border-primary bg-primary/5"
+              : "border-border hover:border-primary/50 hover:bg-muted/30",
             uploading && "opacity-60 pointer-events-none",
           )}
           onClick={() => inputRef.current?.click()}
-          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
           onDragLeave={() => setDragOver(false)}
-          onDrop={e => {
+          onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
             const file = e.dataTransfer.files[0];
@@ -126,7 +148,10 @@ export function AttachmentsPanel({ uploadUrl, listUrl, deleteUrlBase, readOnly =
             type="file"
             className="hidden"
             accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.xlsx,.xls,.docx,.doc,.dwg,.dxf,.step,.stp,.iges,.igs,.svg"
-            onChange={e => { const f = e.target.files?.[0]; if (f) uploadFile(f); }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadFile(f);
+            }}
           />
         </div>
       )}
@@ -141,8 +166,11 @@ export function AttachmentsPanel({ uploadUrl, listUrl, deleteUrlBase, readOnly =
         </div>
       ) : (
         <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
-          {list.map(att => (
-            <div key={att.id} className="flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/20 transition-colors">
+          {list.map((att) => (
+            <div
+              key={att.id}
+              className="flex items-center gap-3 px-4 py-3 bg-card hover:bg-muted/20 transition-colors"
+            >
               <FileIcon mimeType={att.mimeType} name={att.originalName} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{att.originalName}</p>

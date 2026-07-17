@@ -68,14 +68,11 @@ function SupplierRow({
   supplier: ItemSupplierResponse;
   minPrice: number | null;
 }) {
-  const isLowest =
-    minPrice !== null && supplier.price !== null && supplier.price === minPrice;
+  const isLowest = minPrice !== null && supplier.price !== null && supplier.price === minPrice;
 
   return (
     <tr className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">
-      <td className="py-2.5 px-3 text-sm font-medium text-foreground">
-        {supplier.supplierName}
-      </td>
+      <td className="py-2.5 px-3 text-sm font-medium text-foreground">{supplier.supplierName}</td>
       <td className="py-2.5 px-3 text-center">
         {supplier.offerSubmitted ? (
           <span className="inline-flex items-center gap-1 text-green-600 text-xs font-medium">
@@ -154,9 +151,7 @@ function ItemCard({ item }: { item: ItemHistory }) {
               </span>
             )}
           </div>
-          <p className="text-sm font-semibold text-foreground leading-snug">
-            {item.description}
-          </p>
+          <p className="text-sm font-semibold text-foreground leading-snug">{item.description}</p>
           <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-muted-foreground">
             {item.qty && (
               <span>
@@ -166,7 +161,8 @@ function ItemCard({ item }: { item: ItemHistory }) {
             )}
             {item.referencePrice && (
               <span>
-                Ref: <span className="font-medium text-foreground">{fmtPrice(item.referencePrice)}</span>
+                Ref:{" "}
+                <span className="font-medium text-foreground">{fmtPrice(item.referencePrice)}</span>
               </span>
             )}
           </div>
@@ -279,10 +275,18 @@ function ItemCard({ item }: { item: ItemHistory }) {
             <thead>
               <tr className="bg-muted/30 text-left">
                 <th className="py-2 px-3 text-xs font-medium text-muted-foreground">Supplier</th>
-                <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-center">Status</th>
-                <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-right">Price</th>
-                <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-center">Tax</th>
-                <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-center">Delivery</th>
+                <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-center">
+                  Status
+                </th>
+                <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-right">
+                  Price
+                </th>
+                <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-center">
+                  Tax
+                </th>
+                <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-center">
+                  Delivery
+                </th>
                 <th className="py-2 px-3 text-xs font-medium text-muted-foreground">Notes</th>
                 <th className="py-2 px-3 text-xs font-medium text-muted-foreground">Offer Date</th>
               </tr>
@@ -306,7 +310,12 @@ export default function ItemsPage() {
   const [submitted, setSubmitted] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data: results, isLoading, isFetching, isError } = useSearchItems(
+  const {
+    data: results,
+    isLoading,
+    isFetching,
+    isError,
+  } = useSearchItems(
     { q: submitted },
     {
       query: {
@@ -322,7 +331,8 @@ export default function ItemsPage() {
     if (q.length >= 2) setSubmitted(q);
   };
 
-  const noResults = submitted.length >= 2 && !isLoading && !isError && (!results || results.length === 0);
+  const noResults =
+    submitted.length >= 2 && !isLoading && !isError && (!results || results.length === 0);
 
   return (
     <Layout>
@@ -334,7 +344,8 @@ export default function ItemsPage() {
             Items
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Search for any item by description, part number, or line item — see the full RFQ history and all supplier responses.
+            Search for any item by description, part number, or line item — see the full RFQ history
+            and all supplier responses.
           </p>
         </div>
 
@@ -364,9 +375,8 @@ export default function ItemsPage() {
             {/* Summary */}
             {results && results.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                Found{" "}
-                <span className="font-semibold text-foreground">{results.length}</span>{" "}
-                result{results.length !== 1 ? "s" : ""} for{" "}
+                Found <span className="font-semibold text-foreground">{results.length}</span> result
+                {results.length !== 1 ? "s" : ""} for{" "}
                 <span className="font-semibold text-foreground">"{submitted}"</span>
               </p>
             )}
@@ -402,9 +412,7 @@ export default function ItemsPage() {
 
             {/* Item cards */}
             {!isLoading &&
-              results?.map((item) => (
-                <ItemCard key={`${item.rfqItemId}`} item={item} />
-              ))}
+              results?.map((item) => <ItemCard key={`${item.rfqItemId}`} item={item} />)}
           </div>
         )}
 

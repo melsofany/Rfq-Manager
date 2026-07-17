@@ -37,11 +37,21 @@ export default function PricingPage() {
   const [submittedRows, setSubmittedRows] = useState<SubmittedRow[]>([]);
   const [submittedGeneralNotes, setSubmittedGeneralNotes] = useState("");
   const [generalNotes, setGeneralNotes] = useState("");
-  const [rfqAttachments, setRfqAttachments] = useState<Array<{ id: number; originalName: string; mimeType: string; sizeLabel: string; downloadUrl: string }>>([]);
+  const [rfqAttachments, setRfqAttachments] = useState<
+    Array<{
+      id: number;
+      originalName: string;
+      mimeType: string;
+      sizeLabel: string;
+      downloadUrl: string;
+    }>
+  >([]);
   const [rfqAttachmentsLoaded, setRfqAttachmentsLoaded] = useState(false);
   const [offerFiles, setOfferFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadedOfferAtts, setUploadedOfferAtts] = useState<Array<{ id: number; originalName: string; sizeLabel: string }>>([]);
+  const [uploadedOfferAtts, setUploadedOfferAtts] = useState<
+    Array<{ id: number; originalName: string; sizeLabel: string }>
+  >([]);
   const [prices, setPrices] = useState<Record<number, ItemPrice>>({});
 
   const { data, isLoading, error } = useGetPricingPage(token, {
@@ -61,8 +71,14 @@ export default function PricingPage() {
             try {
               const fd = new FormData();
               fd.append("file", file);
-              const r = await fetch(`/api/pricing/${token}/offer-attachments`, { method: "POST", body: fd });
-              if (r.ok) { const d = await r.json(); uploaded.push(d); }
+              const r = await fetch(`/api/pricing/${token}/offer-attachments`, {
+                method: "POST",
+                body: fd,
+              });
+              if (r.ok) {
+                const d = await r.json();
+                uploaded.push(d);
+              }
             } catch {}
           }
           setUploadedOfferAtts(uploaded);
@@ -82,7 +98,7 @@ export default function PricingPage() {
     if (token && data && !rfqAttachmentsLoaded) {
       setRfqAttachmentsLoaded(true);
       fetch(`/api/pricing/${token}/rfq-attachments`)
-        .then(r => r.ok ? r.json() : [])
+        .then((r) => (r.ok ? r.json() : []))
         .then(setRfqAttachments)
         .catch(() => {});
     }
@@ -161,7 +177,8 @@ export default function PricingPage() {
           <AlertTriangle size={40} className="mx-auto text-amber-500 mb-3" />
           <h2 className="text-lg font-bold text-foreground">الرابط غير صالح</h2>
           <p className="text-muted-foreground text-sm mt-2">
-            هذا الرابط غير صالح أو انتهت صلاحيته. يرجى التواصل مع قرطبة للتوريدات للحصول على رابط جديد.
+            هذا الرابط غير صالح أو انتهت صلاحيته. يرجى التواصل مع قرطبة للتوريدات للحصول على رابط
+            جديد.
           </p>
         </div>
       </div>
@@ -175,7 +192,8 @@ export default function PricingPage() {
           <Clock size={40} className="mx-auto text-muted-foreground mb-3" />
           <h2 className="text-lg font-bold text-foreground">انتهى وقت تقديم العروض</h2>
           <p className="text-muted-foreground text-sm mt-2">
-            لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>. لم يعد بالإمكان تقديم عروض جديدة.
+            لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>. لم يعد بالإمكان تقديم
+            عروض جديدة.
           </p>
         </div>
       </div>
@@ -187,32 +205,49 @@ export default function PricingPage() {
     const displayRows: SubmittedRow[] =
       submittedRows.length > 0
         ? submittedRows
-        : ((data as unknown as { existingOffer?: { items: SubmittedRow[]; generalNotes?: string | null } })
-            .existingOffer?.items ?? []);
+        : ((
+            data as unknown as {
+              existingOffer?: { items: SubmittedRow[]; generalNotes?: string | null };
+            }
+          ).existingOffer?.items ?? []);
     const displayGeneralNotes =
       submittedRows.length > 0
         ? submittedGeneralNotes
-        : ((data as unknown as { existingOffer?: { generalNotes?: string | null } })
-            .existingOffer?.generalNotes ?? "");
+        : ((data as unknown as { existingOffer?: { generalNotes?: string | null } }).existingOffer
+            ?.generalNotes ?? "");
 
     return (
       <div className="min-h-screen bg-background" dir="rtl">
         {/* Same header */}
         <div className="bg-[hsl(221,83%,20%)] text-white px-6 py-5 shadow-sm">
           <div className="max-w-5xl mx-auto flex items-center gap-4">
-            <img src="/logo.png" alt="Cortoba Supplies" className="h-14 w-14 object-contain flex-shrink-0 rounded-md" />
+            <img
+              src="/logo.png"
+              alt="Cortoba Supplies"
+              className="h-14 w-14 object-contain flex-shrink-0 rounded-md"
+            />
             <div>
               <h1 className="text-lg font-bold">Cortoba Supplies</h1>
               <p className="text-white/70 text-sm">قرطبة للتوريدات</p>
               <p className="text-white/40 text-[11px] mt-0.5">
-                ش.الاسكندرية - برج نجمة مطروح الدور الرابع - مرسي مطروح
-                &nbsp;|&nbsp; ب-ض: 432-972-587 &nbsp;|&nbsp; س-ت: 21618
+                ش.الاسكندرية - برج نجمة مطروح الدور الرابع - مرسي مطروح &nbsp;|&nbsp; ب-ض:
+                432-972-587 &nbsp;|&nbsp; س-ت: 21618
               </p>
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
-                <span>رقم الطلب: <strong className="font-mono">{data.rfqNo}</strong></span>
-                <span>تاريخ الإغلاق: <strong>{data.closeDate}</strong></span>
-                <span>المورد: <strong>{data.supplierName}</strong></span>
-                {data.contactPerson && <span>الشخص المسؤول: <strong>{data.contactPerson}</strong></span>}
+                <span>
+                  رقم الطلب: <strong className="font-mono">{data.rfqNo}</strong>
+                </span>
+                <span>
+                  تاريخ الإغلاق: <strong>{data.closeDate}</strong>
+                </span>
+                <span>
+                  المورد: <strong>{data.supplierName}</strong>
+                </span>
+                {data.contactPerson && (
+                  <span>
+                    الشخص المسؤول: <strong>{data.contactPerson}</strong>
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -225,8 +260,8 @@ export default function PricingPage() {
             <div>
               <p className="font-semibold text-green-800 text-sm">تم استلام عرض السعر بنجاح</p>
               <p className="text-green-700 text-xs mt-0.5">
-                شكراً لكم. تم استلام عرض سعركم لطلب العرض <strong>{data.rfqNo}</strong>.
-                سيتم التواصل معكم في حال الاختيار.
+                شكراً لكم. تم استلام عرض سعركم لطلب العرض <strong>{data.rfqNo}</strong>. سيتم
+                التواصل معكم في حال الاختيار.
               </p>
             </div>
           </div>
@@ -235,10 +270,15 @@ export default function PricingPage() {
           {/* Uploaded offer attachments */}
           {uploadedOfferAtts.length > 0 && (
             <div className="bg-card border border-border rounded-lg p-4">
-              <p className="text-sm font-semibold text-foreground mb-2">📎 الملفات المُرفقة مع عرضك</p>
+              <p className="text-sm font-semibold text-foreground mb-2">
+                📎 الملفات المُرفقة مع عرضك
+              </p>
               <ul className="space-y-1">
-                {uploadedOfferAtts.map(a => (
-                  <li key={a.id} className="text-xs text-foreground flex items-center gap-2 bg-muted/30 rounded px-3 py-1.5">
+                {uploadedOfferAtts.map((a) => (
+                  <li
+                    key={a.id}
+                    className="text-xs text-foreground flex items-center gap-2 bg-muted/30 rounded px-3 py-1.5"
+                  >
                     <span className="flex-1 truncate">{a.originalName}</span>
                     <span className="text-muted-foreground">{a.sizeLabel}</span>
                     <span className="text-green-600 font-medium">✓ تم الرفع</span>
@@ -248,7 +288,9 @@ export default function PricingPage() {
             </div>
           )}
           {uploading && (
-            <div className="text-sm text-muted-foreground text-center py-2">جاري رفع المرفقات...</div>
+            <div className="text-sm text-muted-foreground text-center py-2">
+              جاري رفع المرفقات...
+            </div>
           )}
 
           {displayRows.length > 0 && (
@@ -260,26 +302,57 @@ export default function PricingPage() {
                 <table className="w-full text-sm" style={{ direction: "rtl" }}>
                   <thead>
                     <tr className="bg-muted/30 border-b border-border text-right">
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-8">#</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">رقم القطعة</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الوصف</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">الكمية</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">الوحدة</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-left">سعر الوحدة (جنيه)</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">شامل الضريبة</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">مدة التوريد</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">ملاحظات</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-8">
+                        #
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        رقم القطعة
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        الوصف
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        الكمية
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        الوحدة
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-left">
+                        سعر الوحدة (جنيه)
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        شامل الضريبة
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        مدة التوريد
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        ملاحظات
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {displayRows.map((row, i) => (
                       <tr key={row.rfqItemId} className="border-b border-border last:border-0">
-                        <td className="px-4 py-3 text-muted-foreground text-xs text-center">{i + 1}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{row.partNo ?? "-"}</td>
-                        <td className="px-4 py-3 text-foreground text-sm max-w-[200px]">{row.description ?? "-"}</td>
-                        <td className="px-4 py-3 text-center text-xs text-foreground">{row.qty ?? "-"}</td>
-                        <td className="px-4 py-3 text-center text-xs text-foreground">{row.uom ?? "-"}</td>
-                        <td className="px-4 py-3 text-left font-mono text-sm font-semibold text-foreground" dir="ltr">
+                        <td className="px-4 py-3 text-muted-foreground text-xs text-center">
+                          {i + 1}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                          {row.partNo ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-foreground text-sm max-w-[200px]">
+                          {row.description ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-center text-xs text-foreground">
+                          {row.qty ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-center text-xs text-foreground">
+                          {row.uom ?? "-"}
+                        </td>
+                        <td
+                          className="px-4 py-3 text-left font-mono text-sm font-semibold text-foreground"
+                          dir="ltr"
+                        >
                           {row.price.toLocaleString("en-EG", { minimumFractionDigits: 2 })}
                         </td>
                         <td className="px-4 py-3 text-center text-xs">
@@ -294,7 +367,9 @@ export default function PricingPage() {
                         <td className="px-4 py-3 text-center text-xs text-foreground">
                           {row.deliveryDays != null ? `${row.deliveryDays} يوم` : "-"}
                         </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground">{row.notes ?? "-"}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {row.notes ?? "-"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -307,7 +382,9 @@ export default function PricingPage() {
           {displayGeneralNotes && (
             <div className="bg-card border border-border rounded-lg p-4">
               <p className="text-sm font-medium text-foreground mb-1">ملاحظات عامة</p>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">{displayGeneralNotes}</p>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {displayGeneralNotes}
+              </p>
             </div>
           )}
         </div>
@@ -320,28 +397,42 @@ export default function PricingPage() {
       {/* Header */}
       <div className="bg-[hsl(221,83%,20%)] text-white px-6 py-5 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center gap-4">
-          <img src="/logo.png" alt="Cortoba Supplies" className="h-14 w-14 object-contain flex-shrink-0 rounded-md" />
+          <img
+            src="/logo.png"
+            alt="Cortoba Supplies"
+            className="h-14 w-14 object-contain flex-shrink-0 rounded-md"
+          />
           <div>
-          <h1 className="text-lg font-bold">Cortoba Supplies</h1>
-          <p className="text-white/70 text-sm">قرطبة للتوريدات</p>
-          <p className="text-white/40 text-[11px] mt-0.5">
-            ش.الاسكندرية - برج نجمة مطروح الدور الرابع - مرسي مطروح
-            &nbsp;|&nbsp; ب-ض: 432-972-587 &nbsp;|&nbsp; س-ت: 21618
-          </p>
-          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
-            <span>رقم الطلب: <strong className="font-mono">{data.rfqNo}</strong></span>
-            <span>تاريخ الإغلاق: <strong>{data.closeDate}</strong></span>
-            <span>المورد: <strong>{data.supplierName}</strong></span>
-            {data.contactPerson && <span>الشخص المسؤول: <strong>{data.contactPerson}</strong></span>}
-          </div>
+            <h1 className="text-lg font-bold">Cortoba Supplies</h1>
+            <p className="text-white/70 text-sm">قرطبة للتوريدات</p>
+            <p className="text-white/40 text-[11px] mt-0.5">
+              ش.الاسكندرية - برج نجمة مطروح الدور الرابع - مرسي مطروح &nbsp;|&nbsp; ب-ض: 432-972-587
+              &nbsp;|&nbsp; س-ت: 21618
+            </p>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+              <span>
+                رقم الطلب: <strong className="font-mono">{data.rfqNo}</strong>
+              </span>
+              <span>
+                تاريخ الإغلاق: <strong>{data.closeDate}</strong>
+              </span>
+              <span>
+                المورد: <strong>{data.supplierName}</strong>
+              </span>
+              {data.contactPerson && (
+                <span>
+                  الشخص المسؤول: <strong>{data.contactPerson}</strong>
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-5xl mx-auto p-6">
         <p className="text-muted-foreground text-sm mb-5">
-          يرجى إدخال أفضل أسعاركم للبنود التي تستطيعون توريدها ثم إرسال العرض — يمكنكم تسعير بعض البنود فقط.
-          هذا الرابط مخصص لشركتكم فقط — لا تشاركه مع أي جهة أخرى.
+          يرجى إدخال أفضل أسعاركم للبنود التي تستطيعون توريدها ثم إرسال العرض — يمكنكم تسعير بعض
+          البنود فقط. هذا الرابط مخصص لشركتكم فقط — لا تشاركه مع أي جهة أخرى.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -352,26 +443,55 @@ export default function PricingPage() {
                 <thead>
                   <tr className="bg-muted/30 border-b border-border text-right">
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-8">#</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">رقم القطعة</th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                      رقم القطعة
+                    </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الوصف</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">الكمية</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">الوحدة</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">سعر الوحدة (جنيه)</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">شامل الضريبة</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">مدة التوريد (أيام)</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">ملاحظات</th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      الكمية
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      الوحدة
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      سعر الوحدة (جنيه)
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      شامل الضريبة
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      مدة التوريد (أيام)
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                      ملاحظات
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.items.map((item, i) => {
-                    const row = prices[item.id] ?? { price: "", taxIncluded: false, deliveryDays: "", notes: "" };
+                    const row = prices[item.id] ?? {
+                      price: "",
+                      taxIncluded: false,
+                      deliveryDays: "",
+                      notes: "",
+                    };
                     return (
                       <tr key={item.id} className="border-b border-border last:border-0">
-                        <td className="px-4 py-3 text-muted-foreground text-xs text-center">{i + 1}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{item.partNo ?? "-"}</td>
-                        <td className="px-4 py-3 text-foreground text-sm max-w-[200px]">{item.description}</td>
-                        <td className="px-4 py-3 text-center text-xs text-foreground">{item.qty ?? "-"}</td>
-                        <td className="px-4 py-3 text-center text-xs text-foreground">{item.uom ?? "-"}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs text-center">
+                          {i + 1}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                          {item.partNo ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-foreground text-sm max-w-[200px]">
+                          {item.description}
+                        </td>
+                        <td className="px-4 py-3 text-center text-xs text-foreground">
+                          {item.qty ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-center text-xs text-foreground">
+                          {item.uom ?? "-"}
+                        </td>
                         <td className="px-4 py-3">
                           <Input
                             type="number"
@@ -437,8 +557,11 @@ export default function PricingPage() {
                 📎 المرفقات الفنية من المشتري
               </p>
               <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
-                {rfqAttachments.map(att => (
-                  <div key={att.id} className="flex items-center gap-3 px-4 py-2.5 bg-background hover:bg-muted/20">
+                {rfqAttachments.map((att) => (
+                  <div
+                    key={att.id}
+                    className="flex items-center gap-3 px-4 py-2.5 bg-background hover:bg-muted/20"
+                  >
                     <span className="text-sm flex-1 truncate">{att.originalName}</span>
                     <span className="text-xs text-muted-foreground">{att.sizeLabel}</span>
                     <a
@@ -459,14 +582,16 @@ export default function PricingPage() {
             <label className="text-sm font-medium text-foreground flex items-center gap-2">
               📎 إرفاق ملفات مع عرضك (اختياري)
             </label>
-            <p className="text-xs text-muted-foreground">يمكنك إرفاق كتالوجات، شهادات، مواصفات فنية، أو أي وثائق ذات صلة</p>
+            <p className="text-xs text-muted-foreground">
+              يمكنك إرفاق كتالوجات، شهادات، مواصفات فنية، أو أي وثائق ذات صلة
+            </p>
             <input
               type="file"
               multiple
               accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.xlsx,.xls,.docx,.doc,.dwg,.dxf,.svg"
-              onChange={e => {
+              onChange={(e) => {
                 const files = Array.from(e.target.files ?? []);
-                setOfferFiles(prev => [...prev, ...files].slice(0, 5));
+                setOfferFiles((prev) => [...prev, ...files].slice(0, 5));
                 e.target.value = "";
               }}
               className="block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-border file:text-xs file:bg-muted file:text-foreground hover:file:bg-muted/70 cursor-pointer"
@@ -474,14 +599,19 @@ export default function PricingPage() {
             {offerFiles.length > 0 && (
               <ul className="space-y-1 mt-2">
                 {offerFiles.map((f, i) => (
-                  <li key={i} className="flex items-center gap-2 text-xs text-foreground bg-muted/30 rounded px-3 py-1.5">
+                  <li
+                    key={i}
+                    className="flex items-center gap-2 text-xs text-foreground bg-muted/30 rounded px-3 py-1.5"
+                  >
                     <span className="flex-1 truncate">{f.name}</span>
                     <span className="text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</span>
                     <button
                       type="button"
-                      onClick={() => setOfferFiles(prev => prev.filter((_, j) => j !== i))}
+                      onClick={() => setOfferFiles((prev) => prev.filter((_, j) => j !== i))}
                       className="text-destructive hover:text-destructive/80 font-medium"
-                    >✕</button>
+                    >
+                      ✕
+                    </button>
                   </li>
                 ))}
               </ul>
