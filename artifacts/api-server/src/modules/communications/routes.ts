@@ -632,55 +632,26 @@ router.post("/whatsapp/forward", requireAuth, async (req, res): Promise<void> =>
   let outboundWaId: string | null = null;
   try {
     if (msg.mediaId && msg.mediaType) {
-      // Helper: upload a buffer to Meta and send it as media to normalizedTo
+      // Helper: given a buffer+mimeType, upload to Meta then send as typed media message.
+      // Uses uploadWhatsAppMedia (proven in service.ts) + Whatsapp.sendMessage (proven in send-media route).
       const uploadAndSend = async (buffer: Buffer, mimeType: string): Promise<string | null> => {
         const filename = msg.filename || "file";
-        const blob = new Blob([buffer], { type: mimeType });
-        const form = new FormData();
-        form.append("messaging_product", "whatsapp");
-        form.append("type", mimeType);
-        form.append("file", blob, filename);
-        const uploadRes = await Whatsapp.$apiFetch$(
-          `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/media`,
-          { method: "POST", body: form },
-        );
-        const uploadData = (await uploadRes.json()) as { id?: string; error?: object };
-        if (!uploadRes.ok || !uploadData.id) {
-          logger.warn({ uploadData }, "Forward: media re-upload to Meta failed");
+        const newMediaId = await uploadWhatsAppMedia(buffer, filename, mimeType);
+        const { Image, Video, Audio, Document: WADocument } = await import("whatsapp-api-js/messages");
+        const waMessage =
+          msg.mediaType === "image" ? new Image(newMediaId, true)
+          : msg.mediaType === "video" ? new Video(newMediaId, true)
+          : msg.mediaType === "audio" ? new Audio(newMediaId, true)
+          : new WADocument(newMediaId, true, undefined, filename);
+        const result = await Whatsapp.sendMessage(WA_PHONE_ID, normalizedTo, waMessage);
+        if ("error" in result && result.error) {
+          logger.warn({ error: result.error }, "Forward: Whatsapp.sendMessage returned error");
           return null;
         }
-        const msgType =
-          msg.mediaType === "image" ? "image"
-          : msg.mediaType === "audio" ? "audio"
-          : msg.mediaType === "video" ? "video"
-          : "document";
-        const msgPayload: Record<string, unknown> = {
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: normalizedTo,
-          type: msgType,
-          [msgType]: { id: uploadData.id, ...(msg.filename ? { filename: msg.filename } : {}) },
-        };
-        const sendRes = await Whatsapp.$apiFetch$(
-          `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/messages`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(msgPayload),
-          },
-        );
-        const sendData = (await sendRes.json()) as {
-          messages?: Array<{ id: string }>;
-          error?: unknown;
-        };
-        if (!sendRes.ok || !sendData.messages?.[0]?.id) {
-          logger.warn({ sendData }, "Forward: Meta send-media failed");
-          return null;
-        }
-        return sendData.messages[0].id;
+        return result.messages?.[0]?.id ?? null;
       };
 
-      // Step 1: try DB cache
+      // Step 1: try DB cache first
       const [cached] = await db
         .select()
         .from(whatsappMediaTable)
@@ -692,9 +663,9 @@ router.post("/whatsapp/forward", requireAuth, async (req, res): Promise<void> =>
         outboundWaId = await uploadAndSend(Buffer.from(cached.data), cached.mimeType);
       }
 
-      // Step 2: not in cache (or upload failed) — download fresh from Meta
+      // Step 2: not in cache (or send failed) — download fresh from Meta
       if (!outboundWaId) {
-        logger.info({ mediaId: msg.mediaId }, "Forward: cache miss, fetching fresh from Meta");
+        logger.info({ mediaId: msg.mediaId }, "Forward: cache miss — fetching fresh from Meta");
         try {
           const metaRes = await Whatsapp.$apiFetch$(
             `https://graph.facebook.com/${WA_API_VERSION}/${msg.mediaId}`,
@@ -706,7 +677,7 @@ router.post("/whatsapp/forward", requireAuth, async (req, res): Promise<void> =>
               if (mediaRes.ok) {
                 const buffer = Buffer.from(await mediaRes.arrayBuffer());
                 const mimeType = metaData.mime_type || msg.mimeType || "application/octet-stream";
-                // Cache it for future use
+                // Store in cache for future forwards (fire-and-forget)
                 void db.insert(whatsappMediaTable)
                   .values({ waMediaId: msg.mediaId, data: buffer, mimeType, filename: msg.filename ?? undefined })
                   .onConflictDoNothing()
@@ -720,9 +691,9 @@ router.post("/whatsapp/forward", requireAuth, async (req, res): Promise<void> =>
         }
       }
 
-      // Step 3: last resort — plain text
+      // Step 3: last resort — plain text (e.g. Meta media link expired after 30 days)
       if (!outboundWaId) {
-        logger.warn({ mediaId: msg.mediaId }, "Forward: falling back to text (media unavailable)");
+        logger.warn({ mediaId: msg.mediaId }, "Forward: all media attempts failed — sending text fallback");
         outboundWaId = await sendWhatsAppText(toPhone, `↩️ مُعاد توجيهه:\n${msg.body}`);
       }
     } else {
