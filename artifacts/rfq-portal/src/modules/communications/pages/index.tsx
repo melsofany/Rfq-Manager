@@ -345,7 +345,7 @@ export default function WhatsAppPage() {
             )}
           </div>
           {/* Tabs */}
-          <div className="flex gap-0 mt-3">
+          <div className="flex gap-0 mt-3 overflow-x-auto scrollbar-none">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -661,7 +661,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   return (
     <div className="flex h-full overflow-hidden" style={{ direction: "ltr" }}>
       {/* ── LEFT: Conversation List ────────────────────────────────────── */}
-      <div className="flex flex-col bg-white border-r border-border flex-shrink-0 overflow-hidden" style={{ width: 320 }}>
+      <div className={cn("flex flex-col bg-white border-r border-border flex-shrink-0 overflow-hidden", selected ? "hidden md:flex md:w-80" : "flex w-full md:w-80")}>
         {/* Sidebar header */}
         <div className="p-3 border-b border-border flex-shrink-0" style={{ direction: "rtl" }}>
           <div className="flex items-center gap-2 mb-2.5">
