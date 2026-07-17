@@ -526,7 +526,7 @@ export default function RfqDetailPage() {
   const { data: sentLog, isLoading: sentLogLoading } = useGetRfqSentLog(rfqId, {
     query: { queryKey: getGetRfqSentLogQueryKey(rfqId), enabled: tab === "sent" && !!rfqId },
   });
-  const { data: offersData } = useGetRfqOffers(rfqId, {
+  const { data: offersData, isLoading: offersLoading } = useGetRfqOffers(rfqId, {
     query: {
       queryKey: getGetRfqOffersQueryKey(rfqId),
       enabled: (tab === "offers" || exporting != null) && !!rfqId,
@@ -1003,9 +1003,17 @@ export default function RfqDetailPage() {
               </div>
             )}
 
-            {!hasOffers ? (
+            {offersLoading ? (
+              <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
+                <svg className="animate-spin h-4 w-4 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                جار تحميل العروض...
+              </div>
+            ) : !hasOffers ? (
               <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm">
-                No offers received yet.
+                لا توجد عروض حتى الآن.
               </div>
             ) : (
               <>

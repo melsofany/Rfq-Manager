@@ -824,8 +824,12 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
   }
 
   // Fetch offer attachments uploaded by suppliers via the pricing page
-  const offerAttachmentRows = offerIds.length > 0
-    ? await db
+  // Wrapped in try/catch: if the table doesn't exist yet in production this
+  // should not break the entire offers endpoint — just return no attachments.
+  let offerAttachmentRows: { id: number; offerId: number; originalName: string; size: number }[] = [];
+  try {
+    if (offerIds.length > 0) {
+      offerAttachmentRows = await db
         .select({
           id: offerAttachmentsTable.id,
           offerId: offerAttachmentsTable.offerId,
@@ -833,8 +837,12 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
           size: offerAttachmentsTable.size,
         })
         .from(offerAttachmentsTable)
-        .where(inArray(offerAttachmentsTable.offerId, offerIds))
-    : [];
+        .where(inArray(offerAttachmentsTable.offerId, offerIds));
+    }
+  } catch (_e) {
+    // table may not exist in older deployments — gracefully skip attachments
+    offerAttachmentRows = [];
+  }
 
   const _fmtAttSize = (bytes) => {
     if (bytes < 1024) return bytes + ' B';
