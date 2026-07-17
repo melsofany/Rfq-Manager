@@ -1,1 +1,0 @@
-- [RFQ Manager project](rfq-project.md) — Full procurement app for قرطبة للتوريدات; GitHub repo melsofany/Rfq-Manager imported here.
