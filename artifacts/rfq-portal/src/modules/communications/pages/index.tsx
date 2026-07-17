@@ -66,6 +66,7 @@ interface Message {
   mediaType: string | null;
   mimeType: string | null;
   filename: string | null;
+  replyToMessageId: string | null;
   isRead: boolean;
   createdAt: string;
   reactions?: Reaction[];
@@ -384,10 +385,11 @@ export default function WhatsAppPage() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// CHATS TAB
+// CHATS TAB — powered by @chatscope/chat-ui-kit-react
 // ══════════════════════════════════════════════════════════════════════════
 function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   const { t } = useLanguage();
+  // ── State ───────────────────────────────────────────────────────────────
   const [chats, setChats] = useState<Chat[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "suppliers">("all");
@@ -399,16 +401,14 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   const [refreshing, setRefreshing] = useState(false);
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [forwardingMsg, setForwardingMsg] = useState<Message | null>(null);
+  const [hoveredMsgId, setHoveredMsgId] = useState<number | null>(null);
   const [emojiPickerForMsg, setEmojiPickerForMsg] = useState<string | null>(null);
-  const [editBody, setEditBody] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newPhone, setNewPhone] = useState("");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean; phone?: string } | null>(null);
   const [contacts, setContacts] = useState<Supplier[]>([]);
-  const [contactsOpen, setContactsOpen] = useState(false);
 
   const messagesEnd = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -418,155 +418,113 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
 
   function showToast(msg: string, ok: boolean, phone?: string) {
     setToast({ msg, ok, phone });
-    setTimeout(() => setToast(null), 4000);
+    setTimeout(() => setToast(null), 4500);
   }
 
+  // ── Data loading ────────────────────────────────────────────────────────
   const loadChats = useCallback(async (): Promise<Chat[] | null> => {
     try {
       const r = await fetch("/api/whatsapp/chats", { credentials: "include" });
       if (!r.ok) return null;
       const data: Chat[] = await r.json();
       setChats(data);
-      // Refresh stats
       fetch("/api/whatsapp/stats", { credentials: "include" })
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => {
-          if (d) onStatsChange(d);
-        })
+        .then((d) => { if (d) onStatsChange(d as Stats); })
         .catch(() => {});
       return data;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }, [onStatsChange]);
 
-  const loadMessages = useCallback(
-    async (phone: string) => {
-      setLoading(true);
-      try {
-        const r = await fetch(`/api/whatsapp/chats/${encodeURIComponent(phone)}`, {
-          credentials: "include",
-        });
-        if (r.ok) {
-          setMessages(await r.json());
-          await loadChats();
-        }
-      } finally {
-        setLoading(false);
+  const loadMessages = useCallback(async (phone: string) => {
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/whatsapp/chats/${encodeURIComponent(phone)}`, { credentials: "include" });
+      if (r.ok) {
+        setMessages(await r.json() as Message[]);
+        await loadChats();
       }
-    },
-    [loadChats],
-  );
+    } finally { setLoading(false); }
+  }, [loadChats]);
 
-  // Close emoji picker on outside click
   useEffect(() => {
-    if (!emojiPickerForMsg) return;
-    function close() {
-      setEmojiPickerForMsg(null);
-    }
-    document.addEventListener("click", close);
-    return () => document.removeEventListener("click", close);
-  }, [emojiPickerForMsg]);
+    loadChats();
+    fetch("/api/whatsapp/contacts", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => setContacts(d as Supplier[]))
+      .catch(() => {});
+  }, [loadChats]);
 
-  // SSE
+  // ── SSE real-time ────────────────────────────────────────────────────────
   useEffect(() => {
     let es: EventSource | null = null;
-    async function requestNotif() {
-      if (!("Notification" in window) || Notification.permission !== "default") return;
-      await Notification.requestPermission();
-    }
-    requestNotif();
-
     function connect() {
       es = new EventSource("/api/whatsapp/events", { withCredentials: true });
       es.onmessage = async (e) => {
         if (!e.data || e.data.startsWith(":")) return;
         try {
-          const ev = JSON.parse(e.data);
+          const ev = JSON.parse(e.data) as {
+            type: string; phone?: string; senderName?: string;
+            waMessageId?: string; reactorPhone?: string; emoji?: string; reason?: string;
+          };
           if (ev.type === "new_message") {
             playNotifSound();
             if ("Notification" in window && Notification.permission === "granted") {
               new Notification(t("whatsapp.newMessage"), {
-                body: ev.senderName
-                  ? `${t("whatsapp.from")} ${ev.senderName}`
-                  : `${t("whatsapp.from")} ${ev.phone}`,
-                icon: "/logo.png",
-                tag: "wa",
-                ...({ renotify: true } as Record<string, unknown>),
+                body: ev.senderName ? `${t("whatsapp.from")} ${ev.senderName}` : `${t("whatsapp.from")} ${ev.phone}`,
+                icon: "/logo.png", tag: "wa", ...({ renotify: true } as Record<string, unknown>),
               });
             }
             const fresh = await loadChats();
             if (ev.phone && ev.phone === selectedRef.current) {
-              const r = await fetch(`/api/whatsapp/chats/${encodeURIComponent(ev.phone)}`, {
-                credentials: "include",
-              });
-              if (r.ok) setMessages(await r.json());
+              const r = await fetch(`/api/whatsapp/chats/${encodeURIComponent(ev.phone)}`, { credentials: "include" });
+              if (r.ok) setMessages(await r.json() as Message[]);
             } else {
               const chat = fresh?.find((c) => c.phone === ev.phone);
-              const name = chat?.supplierName || ev.senderName || ev.phone;
-              showToast(
-                `${t("whatsapp.newMessage").replace("WhatsApp ", "")}: ${name}`,
-                true,
-                ev.phone,
-              );
+              if (chat) showToast(`📩 ${chat.supplierName || ev.phone}: ${chat.lastMessage?.substring(0, 40)}`, false, ev.phone);
             }
           } else if (ev.type === "reaction") {
-            // Real-time reaction from another device / inbound contact
-            const { waMessageId, reactorPhone, emoji } = ev as {
-              waMessageId: string;
-              reactorPhone: string;
-              emoji: string;
-            };
-            setMessages((prev) =>
-              prev.map((m) => {
-                if (m.waMessageId !== waMessageId) return m;
-                const reactions = (m.reactions ?? []).filter(
-                  (r) => r.reactorPhone !== reactorPhone,
-                );
-                return {
-                  ...m,
-                  reactions: emoji ? [...reactions, { reactorPhone, emoji }] : reactions,
-                };
-              }),
-            );
+            setMessages((prev) => prev.map((m) => {
+              if (m.waMessageId !== ev.waMessageId) return m;
+              const reactions = (m.reactions ?? []).filter((r) => r.reactorPhone !== ev.reactorPhone);
+              return { ...m, reactions: ev.emoji ? [...reactions, { reactorPhone: ev.reactorPhone!, emoji: ev.emoji! }] : reactions };
+            }));
           } else if (ev.type === "delivery_failed") {
-            showToast(ev.reason || t("whatsapp.deliveryFailed"), false);
-            await loadChats();
+            showToast(`❌ ${ev.reason || "فشل تسليم رسالة"}`, false);
           }
-        } catch {
-          /* ignore */
-        }
+        } catch { /* ignore */ }
       };
-      es.onerror = () => {
-        es?.close();
-        setTimeout(connect, 5000);
-      };
+      es.onerror = () => { es?.close(); setTimeout(connect, 5000); };
     }
+    async function requestNotif() {
+      if (!("Notification" in window) || Notification.permission !== "default") return;
+      await Notification.requestPermission();
+    }
+    requestNotif();
     connect();
-    return () => {
-      es?.close();
-    };
-  }, [loadChats]);
+    return () => { es?.close(); };
+  }, [loadChats, t]);
 
+  // Auto-scroll
   useEffect(() => {
-    loadChats();
-  }, [loadChats]);
-  useEffect(() => {
-    messagesEnd.current?.scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => messagesEnd.current?.scrollIntoView({ behavior: "smooth" }), 80);
   }, [messages]);
 
-  // Load contacts for new chat picker
+  // Close emoji picker on outside click
   useEffect(() => {
-    fetch("/api/whatsapp/contacts", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setContacts)
-      .catch(() => {});
-  }, []);
+    if (!emojiPickerForMsg) return;
+    const close = () => setEmojiPickerForMsg(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [emojiPickerForMsg]);
 
+  // ── Actions ──────────────────────────────────────────────────────────────
   async function handleSelect(phone: string) {
     setSelected(phone);
+    setReplyingTo(null);
+    setPendingFile(null);
+    setDraft("");
     await loadMessages(phone);
-    if (window.innerWidth < 768) setSidebarCollapsed(true);
   }
 
   async function handleRefresh() {
@@ -576,71 +534,80 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     setRefreshing(false);
   }
 
-  async function handleSend(e?: React.FormEvent) {
-    e?.preventDefault();
-    if (!selected || sending) return;
-    if (pendingFile) {
-      await handleSendFile();
-      return;
-    }
-    const body = draft.trim();
-    if (!body) return;
-    setDraft("");
+  async function handleSend() {
+    if (!selected || (!draft.trim() && !pendingFile)) return;
     setSending(true);
     try {
-      const chat = chats.find((c) => c.phone === selected);
-      const r = await fetch("/api/whatsapp/send", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: selected, message: body, supplierId: chat?.supplierId }),
-      });
-      if (r.ok) {
-        await loadMessages(selected);
+      if (pendingFile) {
+        setUploading(true);
+        const r = await fetch("/api/whatsapp/send-media", {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone: selected,
+            supplierId: selectedChat?.supplierId,
+            base64: pendingFile.base64,
+            mimeType: pendingFile.file.type,
+            filename: pendingFile.file.name,
+          }),
+        });
+        if (!r.ok) { const d = await r.json() as { error?: string }; showToast(d.error || "فشل رفع الملف", false); }
+        else { showToast("تم إرسال الملف ✓", true); }
+        setPendingFile(null);
+        setUploading(false);
       } else {
-        const e2 = await r.json();
-        showToast(t("whatsapp.sendFailed") + ": " + (e2.error || ""), false);
-        setDraft(body);
+        const body: Record<string, unknown> = {
+          phone: selected,
+          message: draft.trim(),
+          supplierId: selectedChat?.supplierId,
+        };
+        if (replyingTo?.waMessageId) body.replyToWaMessageId = replyingTo.waMessageId;
+        const r = await fetch("/api/whatsapp/send", {
+          method: "POST", credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) { const d = await r.json() as { error?: string }; showToast(d.error || "فشل الإرسال", false); return; }
+        setReplyingTo(null);
       }
-    } catch {
-      showToast(t("whatsapp.sendFailed"), false);
-      setDraft(body);
-    } finally {
-      setSending(false);
-    }
+      setDraft("");
+      await loadMessages(selected);
+    } finally { setSending(false); }
   }
 
-  async function handleSendFile() {
-    if (!pendingFile || !selected) return;
-    const chat = chats.find((c) => c.phone === selected);
-    setUploading(true);
-    setSending(true);
-    try {
-      const r = await fetch("/api/whatsapp/send-media", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: selected,
-          supplierId: chat?.supplierId,
-          base64: pendingFile.base64,
-          mimeType: pendingFile.file.type,
-          filename: pendingFile.file.name,
-        }),
-      });
-      if (r.ok) {
-        setPendingFile(null);
-        await loadMessages(selected);
-      } else {
-        const e2 = await r.json();
-        showToast(t("whatsapp.sendFailed") + ": " + (e2.error || ""), false);
-      }
-    } catch {
-      showToast(t("whatsapp.sendFailed"), false);
-    } finally {
-      setUploading(false);
-      setSending(false);
-    }
+  async function handleForwardTo(toPhone: string) {
+    if (!forwardingMsg) return;
+    const r = await fetch("/api/whatsapp/forward", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messageId: forwardingMsg.id, toPhone }),
+    });
+    if (r.ok) showToast("تم إعادة التوجيه ✓", true);
+    else showToast("فشل إعادة التوجيه", false);
+    setForwardingMsg(null);
+    await loadChats();
+  }
+
+  async function handleDeleteMsg(id: number) {
+    if (!confirm(t("whatsapp.deleteConfirm"))) return;
+    await fetch(`/api/whatsapp/messages/${id}`, { method: "DELETE", credentials: "include" });
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+  }
+
+  async function handleReact(waMessageId: string, emoji: string) {
+    const msg = messages.find((m) => m.waMessageId === waMessageId);
+    if (!msg) return;
+    const isRemoving = (msg.reactions ?? []).some((r) => r.reactorPhone === "me" && r.emoji === emoji);
+    setMessages((prev) => prev.map((m) => {
+      if (m.waMessageId !== waMessageId) return m;
+      const reactions = (m.reactions ?? []).filter((r) => r.reactorPhone !== "me");
+      return { ...m, reactions: isRemoving ? reactions : [...reactions, { reactorPhone: "me", emoji }] };
+    }));
+    await fetch("/api/whatsapp/react", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ waMessageId, toPhone: msg.phone, emoji: isRemoving ? "" : emoji }),
+    });
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -657,51 +624,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     e.target.value = "";
   }
 
-  async function handleDeleteMsg(id: number) {
-    if (!confirm(t("whatsapp.deleteConfirm"))) return;
-    await fetch(`/api/whatsapp/messages/${id}`, { method: "DELETE", credentials: "include" });
-    setMessages((prev) => prev.filter((m) => m.id !== id));
-  }
-
-  async function handleReact(waMessageId: string, emoji: string) {
-    // Find the phone for this message
-    const msg = messages.find((m) => m.waMessageId === waMessageId);
-    if (!msg) return;
-    // Optimistic update: toggle own reaction
-    const isRemoving = (msg.reactions ?? []).some(
-      (r) => r.reactorPhone === "me" && r.emoji === emoji,
-    );
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (m.waMessageId !== waMessageId) return m;
-        const reactions = (m.reactions ?? []).filter((r) => r.reactorPhone !== "me");
-        return {
-          ...m,
-          reactions: isRemoving ? reactions : [...reactions, { reactorPhone: "me", emoji }],
-        };
-      }),
-    );
-    await fetch("/api/whatsapp/react", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ waMessageId, toPhone: msg.phone, emoji: isRemoving ? "" : emoji }),
-    });
-  }
-
-  async function handleEditSave(id: number) {
-    if (!editBody.trim()) return;
-    const r = await fetch(`/api/whatsapp/messages/${id}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: editBody }),
-    });
-    if (r.ok) {
-      const updated = await r.json();
-      setMessages((prev) => prev.map((m) => (m.id === id ? updated : m)));
-    }
-    setEditingId(null);
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(); }
   }
 
   async function handleStartNewChat() {
@@ -709,22 +633,15 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     if (!phone) return;
     setNewChatOpen(false);
     setNewPhone("");
-    const existing = chats.find((c) => c.phone === phone);
-    if (existing) {
-      handleSelect(phone);
-      return;
-    }
-    // Create a placeholder chat by sending an empty load
     await handleSelect(phone);
   }
 
-  // Filtered chats
+  // ── Derived state ────────────────────────────────────────────────────────
   const filteredChats = chats.filter((c) => {
-    const matchSearch =
-      !search ||
+    const matchSearch = !search ||
       c.supplierName?.toLowerCase().includes(search.toLowerCase()) ||
       c.phone.includes(search) ||
-      c.lastMessage.toLowerCase().includes(search.toLowerCase());
+      c.lastMessage?.toLowerCase().includes(search.toLowerCase());
     const matchFilter =
       filter === "all" ||
       (filter === "unread" && c.unread > 0) ||
@@ -735,23 +652,21 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   const selectedChat = chats.find((c) => c.phone === selected);
   const displayName = selectedChat?.supplierName || selected || "";
 
+  function getReplyBody(waMessageId: string): string {
+    const msg = messages.find((m) => m.waMessageId === waMessageId);
+    return msg?.body ?? "(رسالة غير موجودة)";
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-full">
-      {/* ─── Chat List Sidebar ─────────────────────────────────────── */}
-      <div
-        className={cn(
-          "flex flex-col bg-white border-l border-border transition-all duration-200",
-          sidebarCollapsed ? "w-0 overflow-hidden" : "w-[320px] flex-shrink-0",
-        )}
-      >
-        {/* Sidebar Header */}
-        <div className="p-3 border-b border-border flex-shrink-0">
+    <div className="flex h-full overflow-hidden" style={{ direction: "ltr" }}>
+      {/* ── LEFT: Conversation List ────────────────────────────────────── */}
+      <div className="flex flex-col bg-white border-r border-border flex-shrink-0 overflow-hidden" style={{ width: 320 }}>
+        {/* Sidebar header */}
+        <div className="p-3 border-b border-border flex-shrink-0" style={{ direction: "rtl" }}>
           <div className="flex items-center gap-2 mb-2.5">
             <div className="relative flex-1">
-              <Search
-                size={14}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-              />
+              <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -761,21 +676,18 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               />
             </div>
             <button
-              onClick={() => setNewChatOpen(true)}
+              onClick={() => setNewChatOpen((v) => !v)}
               className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
               title={t("whatsapp.newChat")}
             >
               <Plus size={16} className="text-muted-foreground" />
             </button>
             <button
-              onClick={handleRefresh}
+              onClick={() => void handleRefresh()}
               disabled={refreshing}
               className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
             >
-              <RefreshCw
-                size={15}
-                className={cn("text-muted-foreground", refreshing && "animate-spin")}
-              />
+              <RefreshCw size={15} className={cn("text-muted-foreground", refreshing && "animate-spin")} />
             </button>
           </div>
           {/* Filter chips */}
@@ -790,564 +702,506 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                 )}
                 style={filter === f ? { background: WA_GREEN } : {}}
               >
-                {f === "all"
-                  ? t("whatsapp.filter.all")
-                  : f === "unread"
-                    ? t("whatsapp.filter.unread")
-                    : t("whatsapp.filter.suppliers")}
+                {f === "all" ? t("whatsapp.filter.all") : f === "unread" ? t("whatsapp.filter.unread") : t("whatsapp.filter.suppliers")}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Chat List */}
+        {/* New chat dialog */}
+        {newChatOpen && (
+          <div className="p-3 border-b border-border bg-green-50 flex-shrink-0" style={{ direction: "rtl" }}>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setNewChatOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X size={16} />
+              </button>
+              <input
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="+20 1xxxxxxxxx"
+                className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
+                dir="ltr"
+                onKeyDown={(e) => { if (e.key === "Enter") void handleStartNewChat(); }}
+                autoFocus
+              />
+              <button
+                onClick={() => void handleStartNewChat()}
+                disabled={!newPhone.trim()}
+                className="px-3 py-1.5 rounded-lg text-white text-sm font-medium disabled:opacity-40"
+                style={{ background: WA_GREEN }}
+              >
+                فتح
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Conversation list */}
         <div className="flex-1 overflow-y-auto">
           {filteredChats.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 text-muted-foreground text-sm gap-2">
-              <MessageSquare size={24} className="opacity-30" />
-              <span>{search ? t("whatsapp.noResults") : t("whatsapp.noChats")}</span>
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+              <MessageSquare size={24} className="opacity-20" />
+              <p className="text-xs">{search ? "لا توجد نتائج" : t("whatsapp.noChats")}</p>
             </div>
           ) : (
-            filteredChats.map((chat) => (
-              <button
-                key={chat.phone}
-                onClick={() => handleSelect(chat.phone)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2.5 hover:bg-[#f0f2f5] transition-colors text-right border-b border-border/40",
-                  selected === chat.phone && "bg-[#f0f2f5]",
-                )}
-              >
-                <Avatar name={chat.supplierName || chat.phone} phone={chat.phone} size={46} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-sm font-semibold text-foreground truncate">
-                      {chat.supplierName || chat.phone}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                      {formatTime(chat.lastAt)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-1 mt-0.5">
-                    <span className="text-xs text-muted-foreground truncate">
-                      {chat.lastMessage}
-                    </span>
-                    {chat.unread > 0 && (
+            filteredChats.map((chat) => {
+              const isActive = selected === chat.phone;
+              const name = chat.supplierName || chat.phone;
+              const lastTime = chat.lastAt
+                ? new Date(chat.lastAt).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })
+                : "";
+              return (
+                <div
+                  key={chat.phone}
+                  onClick={() => void handleSelect(chat.phone)}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-3 cursor-pointer transition-colors hover:bg-[#f5f5f5] border-b border-[#f0f2f5]",
+                    isActive && "bg-[#e8f5e9]",
+                  )}
+                  style={{ direction: "rtl" }}
+                >
+                  <div className="relative flex-shrink-0">
+                    <Avatar name={name} phone={chat.phone} size={44} />
+                    {(chat.unread || 0) > 0 && (
                       <span
-                        className="min-w-[18px] h-[18px] rounded-full text-[10px] flex items-center justify-center text-white font-bold flex-shrink-0"
+                        className="absolute -top-1 -left-1 min-w-[18px] h-[18px] rounded-full text-[10px] flex items-center justify-center text-white font-bold"
                         style={{ background: WA_GREEN }}
                       >
                         {chat.unread > 99 ? "99+" : chat.unread}
                       </span>
                     )}
                   </div>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-
-        {/* New Chat Modal */}
-        {newChatOpen && (
-          <div
-            className="absolute inset-0 bg-black/40 z-50 flex items-center justify-center"
-            onClick={() => setNewChatOpen(false)}
-          >
-            <div
-              className="bg-white rounded-2xl shadow-2xl p-5 w-80"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-base font-bold mb-3 text-right">{t("whatsapp.newChatTitle")}</h3>
-              {/* Quick contacts */}
-              {contacts.length > 0 && (
-                <div className="mb-3">
-                  <p className="text-xs text-muted-foreground mb-2 text-right">
-                    {t("whatsapp.selectSupplier")}
-                  </p>
-                  <div className="max-h-40 overflow-y-auto space-y-1">
-                    {contacts.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          setNewPhone(s.phone || "");
-                          setNewChatOpen(false);
-                          if (s.phone) handleSelect(normalizePhoneFE(s.phone));
-                        }}
-                        className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-muted text-right"
-                      >
-                        <Avatar name={s.name} phone={s.phone || s.name} size={32} />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{s.name}</div>
-                          <div className="text-xs text-muted-foreground">{s.phone}</div>
-                        </div>
-                      </button>
-                    ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-baseline gap-1">
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0">{lastTime}</span>
+                      <span className="font-semibold text-sm text-foreground truncate">{name}</span>
+                    </div>
+                    <div className="flex justify-end mt-0.5">
+                      <p className="text-xs text-muted-foreground truncate max-w-full">{chat.lastMessage}</p>
+                    </div>
                   </div>
                 </div>
-              )}
-              <p className="text-xs text-muted-foreground mb-1.5 text-right">
-                {t("whatsapp.orEnterPhone")}
-              </p>
-              <input
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-                placeholder="+20 1xx xxx xxxx"
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 mb-3"
-                dir="ltr"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleStartNewChat();
-                }}
-              />
-              <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => setNewChatOpen(false)}
-                  className="px-4 py-1.5 text-sm rounded-lg hover:bg-muted transition-colors"
-                >
-                  {t("whatsapp.cancel")}
-                </button>
-                <button
-                  onClick={handleStartNewChat}
-                  className="px-4 py-1.5 text-sm rounded-lg text-white transition-colors"
-                  style={{ background: WA_GREEN }}
-                  disabled={!newPhone.trim()}
-                >
-                  {t("whatsapp.start")}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+              );
+            })
+          )}
+        </div>
       </div>
 
-      {/* ─── Messages Panel ────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {!selected ? (
-          /* Empty state */
-          <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] gap-4">
-            <div
-              className="w-24 h-24 rounded-full flex items-center justify-center opacity-20"
-              style={{ background: WA_GREEN }}
-            >
-              <MessageSquare size={48} className="text-white" />
-            </div>
-            <div className="text-center">
-              <p className="text-xl font-semibold text-muted-foreground">WhatsApp Business</p>
-              <p className="text-sm text-muted-foreground mt-1">{t("whatsapp.selectChat")}</p>
+      {/* ── RIGHT: Chat Window ─────────────────────────────────────────── */}
+      {selected ? (
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Chat header */}
+          <div
+            className="h-16 bg-[#f0f2f5] px-4 flex items-center gap-3 border-b border-border flex-shrink-0"
+            style={{ direction: "rtl" }}
+          >
+            <Avatar name={displayName} phone={selected} size={40} />
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-sm leading-tight">{displayName}</div>
+              <div className="text-xs text-muted-foreground leading-tight" dir="ltr">{selected}</div>
             </div>
             <button
-              onClick={() => setSidebarCollapsed(false)}
-              className="px-5 py-2 rounded-full text-white text-sm font-medium transition-colors"
-              style={{ background: WA_GREEN }}
+              onClick={() => void handleRefresh()}
+              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors"
             >
-              {t("whatsapp.viewChats")}
+              <RefreshCw size={15} className={cn("text-muted-foreground", refreshing && "animate-spin")} />
             </button>
           </div>
-        ) : (
-          <>
-            {/* Chat Header */}
-            <div className="bg-[#f0f2f5] px-4 py-2.5 flex items-center gap-3 border-b border-border flex-shrink-0">
-              {sidebarCollapsed && (
-                <button
-                  onClick={() => {
-                    setSidebarCollapsed(false);
-                    setSelected(null);
-                  }}
-                  className="p-1 rounded hover:bg-black/10 transition-colors"
-                >
-                  <ArrowLeft size={18} className="text-muted-foreground" />
-                </button>
-              )}
-              <Avatar name={displayName} phone={selected} size={38} />
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm text-foreground truncate">{displayName}</div>
-                <div className="text-xs text-muted-foreground">{selected}</div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setInfoOpen(!infoOpen)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors"
-                  title={t("whatsapp.info")}
-                >
-                  <Info size={16} className="text-muted-foreground" />
-                </button>
-                <button
-                  onClick={handleRefresh}
-                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors"
-                >
-                  <RefreshCw
-                    size={15}
-                    className={cn("text-muted-foreground", refreshing && "animate-spin")}
-                  />
-                </button>
-              </div>
-            </div>
 
-            {/* Messages + Info panel */}
-            <div className="flex flex-1 min-h-0">
-              {/* Messages */}
-              <div className="flex-1 flex flex-col min-w-0">
-                <div
-                  className="flex-1 overflow-y-auto p-4 space-y-1"
-                  style={{
-                    background:
-                      "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300000008'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\") #e5ddd5",
-                  }}
-                >
-                  {loading ? (
-                    <div className="flex justify-center py-8">
-                      <Loader2 size={24} className="animate-spin text-muted-foreground" />
-                    </div>
-                  ) : messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
-                      <MessageSquare size={32} className="opacity-20" />
-                      <p className="text-sm">{t("whatsapp.noMessages")}</p>
-                      <p className="text-xs">{t("whatsapp.startChat")}</p>
-                    </div>
-                  ) : (
-                    messages.map((msg, idx) => {
-                      const isOut = msg.direction === "outbound";
-                      const prevMsg = messages[idx - 1];
-                      const showDate =
-                        !prevMsg ||
-                        new Date(msg.createdAt).toDateString() !==
-                          new Date(prevMsg.createdAt).toDateString();
-                      return (
-                        <div key={msg.id}>
-                          {showDate && (
-                            <div className="flex justify-center my-2">
-                              <span className="text-xs bg-white/80 text-muted-foreground px-3 py-1 rounded-full shadow-sm">
-                                {new Date(msg.createdAt).toLocaleDateString("ar-EG", {
-                                  weekday: "long",
-                                  day: "numeric",
-                                  month: "long",
-                                })}
-                              </span>
-                            </div>
-                          )}
+          {/* Messages area */}
+          <div
+            className="flex-1 overflow-y-auto p-4"
+            style={{
+              background: "#e5ddd5",
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300000006'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            }}
+          >
+            {loading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 size={28} className="animate-spin text-muted-foreground" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3 py-16">
+                <div className="w-16 h-16 rounded-full bg-white/70 flex items-center justify-center shadow-sm">
+                  <MessageSquare size={28} className="opacity-30" />
+                </div>
+                <p className="text-sm text-muted-foreground">{t("whatsapp.noMessages")}</p>
+                <p className="text-xs text-muted-foreground">{t("whatsapp.startChat")}</p>
+              </div>
+            ) : (
+              <div className="space-y-0.5">
+                {messages.map((msg, idx) => {
+                  const isOut = msg.direction === "outbound";
+                  const prevMsg = messages[idx - 1];
+                  const showDate =
+                    !prevMsg ||
+                    new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
+                  const timeStr = new Date(msg.createdAt).toLocaleTimeString("ar-EG", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+
+                  return (
+                    <div key={msg.id}>
+                      {/* Date separator */}
+                      {showDate && (
+                        <div className="flex justify-center my-4">
+                          <span className="text-xs bg-white/80 text-muted-foreground px-3 py-1 rounded-full shadow-sm">
+                            {new Date(msg.createdAt).toLocaleDateString("ar-EG", {
+                              weekday: "long",
+                              day: "numeric",
+                              month: "long",
+                            })}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Message row */}
+                      <div
+                        className={cn("flex gap-1.5 group mb-1", isOut ? "justify-end" : "justify-start")}
+                        style={{ direction: "ltr" }}
+                        onMouseEnter={() => setHoveredMsgId(msg.id)}
+                        onMouseLeave={() => { setHoveredMsgId(null); setEmojiPickerForMsg(null); }}
+                      >
+                        {!isOut && <Avatar name={displayName} phone={selected} size={28} />}
+
+                        <div className="relative" style={{ maxWidth: "65%" }}>
+                          {/* Hover action buttons */}
                           <div
                             className={cn(
-                              "flex gap-1 group",
-                              isOut ? "justify-end" : "justify-start",
+                              "absolute top-0 z-10 flex items-center gap-0.5 transition-opacity",
+                              hoveredMsgId === msg.id ? "opacity-100" : "opacity-0 pointer-events-none",
+                              isOut ? "right-full mr-1.5" : "left-full ml-1.5",
                             )}
                           >
-                            {!isOut && (
-                              <Avatar
-                                name={selectedChat?.supplierName || selected || ""}
-                                phone={selected || ""}
-                                size={28}
-                              />
-                            )}
-                            <div
-                              className={cn(
-                                "relative max-w-[65%] rounded-2xl px-3 py-2 shadow-sm",
-                                isOut
-                                  ? "rounded-tr-sm text-white"
-                                  : "rounded-tl-sm bg-white text-foreground",
-                              )}
-                              style={isOut ? { background: "#DCF8C6", color: "#111" } : {}}
+                            {/* Reply */}
+                            <button
+                              onClick={() => { setReplyingTo(msg); setHoveredMsgId(null); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                              className="w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors"
+                              title="رد"
                             >
-                              {editingId === msg.id ? (
-                                <div className="flex gap-1">
-                                  <input
-                                    value={editBody}
-                                    onChange={(e) => setEditBody(e.target.value)}
-                                    className="flex-1 text-sm border rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-400 min-w-0"
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") handleEditSave(msg.id);
-                                      if (e.key === "Escape") setEditingId(null);
-                                    }}
-                                  />
-                                  <button
-                                    onClick={() => handleEditSave(msg.id)}
-                                    className="text-green-600 text-xs font-medium"
-                                  >
-                                    {t("whatsapp.save")}
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingId(null)}
-                                    className="text-muted-foreground text-xs"
-                                  >
-                                    {t("whatsapp.cancel")}
-                                  </button>
-                                </div>
-                              ) : msg.mediaId ? (
-                                <MediaMessage msg={msg} />
-                              ) : (
-                                <p className="text-sm whitespace-pre-wrap break-words">
-                                  {msg.body}
-                                </p>
-                              )}
-                              <div
-                                className={cn(
-                                  "flex items-center gap-1 mt-0.5",
-                                  isOut ? "justify-end" : "justify-start",
-                                )}
-                              >
-                                <span className="text-[10px] text-muted-foreground">
-                                  {formatFullTime(msg.createdAt)}
-                                </span>
-                                {isOut &&
-                                  (msg.isRead ? (
-                                    <CheckCheck size={12} className="text-blue-500" />
-                                  ) : (
-                                    <Check size={12} className="text-muted-foreground" />
-                                  ))}
-                              </div>
-                              {/* Actions */}
-                              <div
-                                className={cn(
-                                  "absolute top-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5",
-                                  isOut
-                                    ? "left-0 -translate-x-full pl-1"
-                                    : "right-0 translate-x-full pr-1",
-                                )}
-                              >
-                                {/* Reaction button */}
-                                {msg.waMessageId && (
-                                  <div className="relative">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEmojiPickerForMsg(
-                                          emojiPickerForMsg === msg.waMessageId
-                                            ? null
-                                            : msg.waMessageId!,
-                                        );
-                                      }}
-                                      className="w-6 h-6 rounded-full bg-white shadow flex items-center justify-center hover:bg-muted"
-                                      title="تفاعل"
-                                    >
-                                      <Smile size={10} className="text-muted-foreground" />
-                                    </button>
-                                    {emojiPickerForMsg === msg.waMessageId && (
-                                      <div
-                                        onClick={(e) => e.stopPropagation()}
-                                        className={cn(
-                                          "absolute bottom-7 z-50 flex gap-0.5 bg-white rounded-full shadow-xl border border-border/30 p-1",
-                                          isOut ? "right-0" : "left-0",
-                                        )}
-                                      >
-                                        {QUICK_EMOJIS.map((emoji) => (
-                                          <button
-                                            key={emoji}
-                                            onClick={() => {
-                                              handleReact(msg.waMessageId!, emoji);
-                                              setEmojiPickerForMsg(null);
-                                            }}
-                                            className="w-8 h-8 flex items-center justify-center text-base hover:bg-muted rounded-full transition-colors"
-                                          >
-                                            {emoji}
-                                          </button>
-                                        ))}
-                                      </div>
+                              <ArrowLeft size={13} className="text-muted-foreground" />
+                            </button>
+                            {/* Forward */}
+                            <button
+                              onClick={() => { setForwardingMsg(msg); setHoveredMsgId(null); }}
+                              className="w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors"
+                              title="إعادة توجيه"
+                            >
+                              <ChevronRight size={13} className="text-muted-foreground" />
+                            </button>
+                            {/* Emoji reaction */}
+                            {msg.waMessageId && (
+                              <div className="relative">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEmojiPickerForMsg(emojiPickerForMsg === msg.waMessageId ? null : (msg.waMessageId ?? null));
+                                  }}
+                                  className="w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors"
+                                  title="تفاعل"
+                                >
+                                  <Smile size={13} className="text-muted-foreground" />
+                                </button>
+                                {emojiPickerForMsg === msg.waMessageId && (
+                                  <div
+                                    className={cn(
+                                      "absolute bottom-9 bg-white rounded-2xl shadow-xl border border-border/50 p-1.5 flex gap-0.5 z-30",
+                                      isOut ? "right-0" : "left-0",
                                     )}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {QUICK_EMOJIS.map((em) => (
+                                      <button
+                                        key={em}
+                                        onClick={() => { void handleReact(msg.waMessageId!, em); setEmojiPickerForMsg(null); }}
+                                        className="w-8 h-8 text-lg hover:bg-muted rounded-xl transition-colors flex items-center justify-center"
+                                      >
+                                        {em}
+                                      </button>
+                                    ))}
                                   </div>
                                 )}
-                                {isOut && !msg.mediaId && (
-                                  <button
-                                    onClick={() => {
-                                      setEditingId(msg.id);
-                                      setEditBody(msg.body);
-                                    }}
-                                    className="w-6 h-6 rounded-full bg-white shadow flex items-center justify-center hover:bg-muted"
-                                    title="تعديل"
-                                  >
-                                    <Check size={10} className="text-muted-foreground" />
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleDeleteMsg(msg.id)}
-                                  className="w-6 h-6 rounded-full bg-white shadow flex items-center justify-center hover:bg-red-50"
-                                  title="حذف"
-                                >
-                                  <Trash2 size={10} className="text-red-400" />
-                                </button>
                               </div>
-                              {/* Reactions display */}
-                              {(msg.reactions ?? []).length > 0 && (
-                                <div
-                                  className={cn(
-                                    "flex gap-1 mt-1 flex-wrap",
-                                    isOut ? "justify-end" : "justify-start",
-                                  )}
-                                >
-                                  {Array.from(
-                                    (msg.reactions ?? []).reduce((acc, r) => {
-                                      const list = acc.get(r.emoji) ?? [];
-                                      list.push(r.reactorPhone);
-                                      acc.set(r.emoji, list);
-                                      return acc;
-                                    }, new Map<string, string[]>()),
-                                  ).map(([emoji, reactors]) => (
-                                    <button
-                                      key={emoji}
-                                      onClick={() =>
-                                        msg.waMessageId && handleReact(msg.waMessageId, emoji)
-                                      }
-                                      className={cn(
-                                        "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs shadow-sm border transition-colors",
-                                        reactors.includes("me")
-                                          ? "bg-green-100 border-green-300 hover:bg-green-200"
-                                          : "bg-white/90 border-border/40 hover:bg-white",
-                                      )}
-                                    >
-                                      <span>{emoji}</span>
-                                      {reactors.length > 1 && (
-                                        <span className="text-muted-foreground text-[10px] ml-0.5">
-                                          {reactors.length}
-                                        </span>
-                                      )}
-                                    </button>
-                                  ))}
-                                </div>
+                            )}
+                            {/* Delete */}
+                            <button
+                              onClick={() => void handleDeleteMsg(msg.id)}
+                              className="w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-red-50 transition-colors"
+                              title="حذف"
+                            >
+                              <Trash2 size={13} className="text-red-400" />
+                            </button>
+                          </div>
+
+                          {/* Message bubble */}
+                          <div
+                            className={cn(
+                              "rounded-2xl px-3 py-2 shadow-sm cursor-default select-text",
+                              isOut ? "rounded-tr-md" : "rounded-tl-md bg-white",
+                            )}
+                            style={isOut ? { background: "#DCF8C6" } : {}}
+                            onDoubleClick={() => { setReplyingTo(msg); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                          >
+                            {/* Reply quote */}
+                            {msg.replyToMessageId && (
+                              <div
+                                className={cn(
+                                  "mb-2 border-r-[3px] pr-2.5 py-1 rounded-sm text-right",
+                                  isOut ? "border-green-600 bg-green-50/60" : "border-green-500 bg-gray-50",
+                                )}
+                              >
+                                <p className="text-[10px] font-bold text-green-700 mb-0.5">ردًا على رسالة</p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {getReplyBody(msg.replyToMessageId)}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Content */}
+                            {msg.mediaId ? (
+                              <MediaMessage msg={msg} />
+                            ) : (
+                              <p className="text-sm whitespace-pre-wrap break-words" dir="auto">
+                                {msg.body}
+                              </p>
+                            )}
+
+                            {/* Reactions */}
+                            {(msg.reactions?.length || 0) > 0 && (
+                              <div className="flex gap-0.5 mt-1.5 flex-wrap">
+                                {msg.reactions!.map((r, i) => (
+                                  <span key={i} className="text-base leading-none" title={r.reactorPhone}>
+                                    {r.emoji}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Timestamp + tick */}
+                            <div
+                              className={cn(
+                                "flex items-center gap-1 mt-1",
+                                isOut ? "justify-end" : "justify-start",
                               )}
+                            >
+                              <span className="text-[10px] text-gray-400">{timeStr}</span>
+                              {isOut && <CheckCheck size={12} className="text-blue-400" />}
                             </div>
                           </div>
                         </div>
-                      );
-                    })
-                  )}
-                  <div ref={messagesEnd} />
-                </div>
 
-                {/* Input Area */}
-                <div className="bg-[#f0f2f5] px-3 py-2.5 border-t border-border flex-shrink-0">
-                  {pendingFile?.preview && (
-                    <div className="mb-2 relative inline-block">
-                      <img
-                        src={pendingFile.preview}
-                        alt="معاينة"
-                        className="h-20 rounded-lg object-cover"
-                      />
-                      <button
-                        onClick={() => setPendingFile(null)}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 flex items-center justify-center"
-                      >
-                        <X size={10} className="text-white" />
-                      </button>
-                    </div>
-                  )}
-                  <form onSubmit={handleSend} className="flex items-end gap-2">
-                    <input
-                      ref={fileRef}
-                      type="file"
-                      accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx"
-                      className="hidden"
-                      onChange={handleFileChange}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => fileRef.current?.click()}
-                      className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors flex-shrink-0"
-                      title={t("whatsapp.attach")}
-                    >
-                      <Paperclip size={18} className="text-muted-foreground" />
-                    </button>
-                    {pendingFile && !pendingFile.preview ? (
-                      <div className="flex-1 rounded-2xl border border-green-300 bg-green-50 px-3.5 py-2.5 text-sm text-green-700 flex items-center gap-2 min-h-[42px]">
-                        <FileText size={16} className="flex-shrink-0" />
-                        <span className="truncate">{pendingFile.file.name}</span>
-                        {uploading && (
-                          <RefreshCw size={12} className="animate-spin flex-shrink-0" />
-                        )}
+                        {isOut && <Avatar name="أنا" phone="me" size={28} />}
                       </div>
-                    ) : (
-                      <textarea
-                        ref={textareaRef}
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSend();
-                          }
-                        }}
-                        placeholder={t("whatsapp.typeMessage")}
-                        rows={1}
-                        className="flex-1 resize-none rounded-2xl border border-border bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400/30 focus:border-green-400/60 transition-all min-h-[42px] max-h-28"
-                        style={{ direction: "rtl" }}
-                        disabled={sending}
-                      />
-                    )}
-                    <button
-                      type="submit"
-                      disabled={(!draft.trim() && !pendingFile) || sending}
-                      className="w-10 h-10 rounded-full flex items-center justify-center transition-all flex-shrink-0 shadow-sm hover:shadow-md active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-                      style={{ background: WA_GREEN }}
-                    >
-                      {uploading || sending ? (
-                        <RefreshCw size={16} className="text-white animate-spin" />
-                      ) : (
-                        <Send size={16} className="text-white" />
-                      )}
-                    </button>
-                  </form>
-                </div>
+                    </div>
+                  );
+                })}
+                <div ref={messagesEnd} />
               </div>
+            )}
+          </div>
 
-              {/* Info Panel */}
-              {infoOpen && selectedChat && (
-                <div className="w-64 bg-white border-r border-border flex flex-col flex-shrink-0">
-                  <div className="p-4 border-b border-border flex items-center justify-between">
-                    <button onClick={() => setInfoOpen(false)}>
-                      <X size={16} className="text-muted-foreground" />
-                    </button>
-                    <span className="font-semibold text-sm">{t("whatsapp.supplierInfo")}</span>
+          {/* Reply strip */}
+          {replyingTo && (
+            <div
+              className="bg-white border-t-2 border-green-300 px-4 py-2 flex items-center gap-3 flex-shrink-0"
+              style={{ direction: "rtl" }}
+            >
+              <button
+                onClick={() => setReplyingTo(null)}
+                className="text-muted-foreground hover:text-foreground flex-shrink-0 transition-colors"
+              >
+                <X size={16} />
+              </button>
+              <div className="flex-1 border-r-4 border-green-500 pr-3 min-w-0">
+                <p className="text-xs font-bold text-green-600 mb-0.5">ردًا على</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {replyingTo.mediaId ? `📎 ${replyingTo.body}` : replyingTo.body}
+                </p>
+              </div>
+              <ArrowLeft size={16} className="text-green-500 flex-shrink-0" />
+            </div>
+          )}
+
+          {/* File preview strip */}
+          {pendingFile && (
+            <div
+              className="bg-white border-t border-border px-4 py-2.5 flex items-center gap-3 flex-shrink-0"
+              style={{ direction: "rtl" }}
+            >
+              <button
+                onClick={() => setPendingFile(null)}
+                className="text-muted-foreground hover:text-foreground flex-shrink-0"
+              >
+                <X size={16} />
+              </button>
+              {pendingFile.preview ? (
+                <img
+                  src={pendingFile.preview}
+                  alt="preview"
+                  className="h-16 w-16 object-cover rounded-lg border border-border shadow-sm"
+                />
+              ) : (
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <FileText size={20} className="text-blue-500" />
                   </div>
-                  <div className="p-4 flex flex-col items-center gap-3 border-b border-border">
-                    <Avatar name={displayName} phone={selected || ""} size={64} />
-                    <div className="text-center">
-                      <div className="font-bold text-base">{displayName}</div>
-                      <div className="text-sm text-muted-foreground">{selected}</div>
-                    </div>
-                  </div>
-                  <div className="p-4 space-y-3 text-sm">
-                    {selectedChat.supplierId && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">{selectedChat.supplierId}</span>
-                        <span className="font-medium">{t("whatsapp.supplierId")}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">
-                        {formatTime(selectedChat.lastAt)}
-                      </span>
-                      <span className="font-medium">{t("whatsapp.lastMessage")}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{messages.length}</span>
-                      <span className="font-medium text-muted-foreground">
-                        {t("whatsapp.messageCount")}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="p-3 mt-auto border-t border-border">
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(selected || "");
-                      }}
-                      className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground py-1.5 rounded-lg hover:bg-muted transition-colors"
-                    >
-                      <Copy size={12} />
-                      {t("whatsapp.copyNumber")}
-                    </button>
+                  <div>
+                    <p className="font-medium truncate max-w-[200px]">{pendingFile.file.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(pendingFile.file.size / 1024).toFixed(0)} KB
+                    </p>
                   </div>
                 </div>
               )}
+              <div className="flex-1" />
+              <span className="text-xs text-muted-foreground">جاهز للإرسال</span>
             </div>
-          </>
-        )}
-      </div>
+          )}
 
-      {/* Toast */}
+          {/* Input bar */}
+          <div
+            className="bg-[#f0f2f5] px-3 py-2.5 flex items-end gap-2 flex-shrink-0 border-t border-border/40"
+            style={{ direction: "ltr" }}
+          >
+            <button
+              onClick={() => void handleSend()}
+              disabled={(!draft.trim() && !pendingFile) || sending}
+              className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-40 shadow-sm"
+              style={{ background: WA_GREEN }}
+            >
+              {sending || uploading ? (
+                <Loader2 size={18} className="animate-spin text-white" />
+              ) : (
+                <Send size={18} className="text-white" />
+              )}
+            </button>
+            <div className="flex-1 bg-white rounded-2xl px-3 py-2 flex items-end gap-2 border border-border/30 shadow-sm">
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="text-muted-foreground hover:text-green-600 transition-colors flex-shrink-0 mb-0.5"
+                title="إرفاق ملف أو صورة"
+              >
+                <Paperclip size={20} />
+              </button>
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  e.target.style.height = "auto";
+                  e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder={t("whatsapp.typeMessage") || "اكتب رسالة..."}
+                className="flex-1 resize-none text-sm focus:outline-none bg-transparent min-h-[24px] max-h-[120px] leading-relaxed"
+                rows={1}
+                dir="auto"
+              />
+            </div>
+          </div>
+
+          {/* Hidden file input */}
+          <input
+            ref={fileRef}
+            type="file"
+            hidden
+            onChange={handleFileChange}
+            accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,.csv"
+          />
+        </div>
+      ) : (
+        /* Empty state: no chat selected */
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-[#f0f2f5]">
+          <div className="w-24 h-24 rounded-full bg-white/70 flex items-center justify-center shadow-sm">
+            <MessageSquare size={40} className="opacity-25" style={{ color: WA_GREEN }} />
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-semibold text-foreground/60">{t("whatsapp.selectChat")}</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {t("whatsapp.selectChatSub") || "اختر محادثة من القائمة للبدء"}
+            </p>
+          </div>
+          <button
+            onClick={() => setNewChatOpen(true)}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-white text-sm font-medium shadow-md transition-transform hover:scale-105"
+            style={{ background: WA_GREEN }}
+          >
+            <Plus size={16} />
+            {t("whatsapp.newChat") || "محادثة جديدة"}
+          </button>
+        </div>
+      )}
+
+      {/* ── Forward Modal ──────────────────────────────────────────────── */}
+      {forwardingMsg && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setForwardingMsg(null)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <div
+              className="p-4 border-b flex items-center justify-between"
+              style={{ direction: "rtl" }}
+            >
+              <button
+                onClick={() => setForwardingMsg(null)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X size={18} />
+              </button>
+              <div className="text-center flex-1">
+                <h3 className="font-bold text-base">إعادة توجيه الرسالة</h3>
+                <p className="text-xs text-muted-foreground truncate max-w-[240px] mx-auto">
+                  {forwardingMsg.body.substring(0, 60)}{forwardingMsg.body.length > 60 ? "…" : ""}
+                </p>
+              </div>
+              <ChevronRight size={18} className="text-green-600" />
+            </div>
+
+            {/* Contact list */}
+            <div className="max-h-80 overflow-y-auto">
+              {[
+                ...filteredChats,
+                ...contacts.filter(
+                  (c) => c.phone && !filteredChats.find((ch) => ch.phone === c.phone),
+                ),
+              ].map((item) => {
+                const isChat = "lastAt" in item;
+                const phone = isChat ? (item as Chat).phone : (item as Supplier).phone ?? "";
+                const name = isChat
+                  ? ((item as Chat).supplierName ?? phone)
+                  : ((item as Supplier).name ?? phone);
+                if (!phone) return null;
+                return (
+                  <div
+                    key={phone}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 cursor-pointer border-b border-border/30 transition-colors"
+                    style={{ direction: "rtl" }}
+                    onClick={() => void handleForwardTo(phone)}
+                  >
+                    <Avatar name={name} phone={phone} size={40} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{name}</p>
+                      <p className="text-xs text-muted-foreground" dir="ltr">{phone}</p>
+                    </div>
+                    <ChevronRight size={14} className="text-muted-foreground flex-shrink-0" />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast ─────────────────────────────────────────────────────── */}
       {toast && (
         <div
-          onClick={() => {
-            if (toast.phone) {
-              handleSelect(toast.phone);
-              setActiveTabExternal?.("chats");
-            }
-            setToast(null);
-          }}
+          onClick={() => { if (toast.phone) void handleSelect(toast.phone); setToast(null); }}
           className={cn(
             "fixed bottom-6 left-6 z-50 px-4 py-3 rounded-xl shadow-xl text-sm font-medium flex items-center gap-2.5 cursor-pointer max-w-xs",
             "transition-all animate-in slide-in-from-bottom-2 duration-200",
@@ -1355,8 +1209,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
           )}
           style={toast.ok ? { background: WA_GREEN } : {}}
         >
-          {toast.ok ? <Bell size={14} /> : <AlertCircle size={14} />}
-          <span className="flex-1">{toast.msg}</span>
+          {toast.ok ? <Check size={14} /> : <AlertCircle size={14} />}
+          <span className="flex-1" dir="rtl">{toast.msg}</span>
           {toast.phone && <ChevronRight size={14} className="opacity-70 flex-shrink-0" />}
         </div>
       )}

@@ -178,6 +178,7 @@ interface ServerMessage {
   audio?: { id?: string; mime_type?: string };
   video?: { id?: string; caption?: string; mime_type?: string };
   reaction?: { message_id: string; emoji: string };
+  context?: { id: string; from?: string }; // message being replied to
 }
 
 async function handleInboundMessage(
@@ -245,6 +246,7 @@ async function handleInboundMessage(
     mediaType,
     mimeType,
     filename,
+    replyToMessageId: msg.context?.id ?? null,
     isRead: false,
   });
 
@@ -547,10 +549,11 @@ router.post("/whatsapp/react", requireAuth, async (req, res): Promise<void> => {
 
 // ─── POST /api/whatsapp/send ──────────────────────────────────────────────
 router.post("/whatsapp/send", requireAuth, async (req, res): Promise<void> => {
-  const { phone, message, supplierId } = req.body as {
+  const { phone, message, supplierId, replyToWaMessageId } = req.body as {
     phone: string;
     message: string;
     supplierId?: number;
+    replyToWaMessageId?: string;
   };
   if (!phone || !message) {
     res.status(400).json({ error: "phone and message are required" });
@@ -559,7 +562,26 @@ router.post("/whatsapp/send", requireAuth, async (req, res): Promise<void> => {
   const normalized = normalizePhone(phone);
   let outboundWaId: string | null = null;
   try {
-    outboundWaId = await sendWhatsAppText(phone, message);
+    if (replyToWaMessageId && isWhatsAppConfigured) {
+      // Send with reply context using Meta API directly
+      const apiBody = JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalized,
+        context: { message_id: replyToWaMessageId },
+        type: "text",
+        text: { body: message, preview_url: false },
+      });
+      const r = await Whatsapp.$apiFetch$(
+        `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/messages`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: apiBody },
+      );
+      const data = (await r.json()) as { messages?: Array<{ id: string }>; error?: unknown };
+      if (!r.ok) throw new Error(`WhatsApp API error: ${JSON.stringify(data.error)}`);
+      outboundWaId = data.messages?.[0]?.id ?? null;
+    } else {
+      outboundWaId = await sendWhatsAppText(phone, message);
+    }
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     logger.error({ err, phone: normalized }, "WhatsApp send failed");
@@ -577,8 +599,106 @@ router.post("/whatsapp/send", requireAuth, async (req, res): Promise<void> => {
     phone: normalized,
     supplierId: supplierId ?? null,
     body: message,
+    replyToMessageId: replyToWaMessageId ?? null,
     isRead: true,
   });
+  res.json({ ok: true });
+});
+
+// ─── POST /api/whatsapp/forward ──────────────────────────────────────────
+router.post("/whatsapp/forward", requireAuth, async (req, res): Promise<void> => {
+  const { messageId, toPhone } = req.body as { messageId: number; toPhone: string };
+  if (!messageId || !toPhone) {
+    res.status(400).json({ error: "messageId and toPhone are required" });
+    return;
+  }
+  if (!isWhatsAppConfigured) {
+    res.status(503).json({ error: "WhatsApp not configured" });
+    return;
+  }
+  const [msg] = await db
+    .select()
+    .from(whatsappChatsTable)
+    .where(eq(whatsappChatsTable.id, messageId))
+    .limit(1);
+  if (!msg) {
+    res.status(404).json({ error: "Message not found" });
+    return;
+  }
+  const normalizedTo = normalizePhone(toPhone);
+  let outboundWaId: string | null = null;
+  try {
+    if (msg.mediaId && msg.mediaType) {
+      // Try to forward using cached media
+      const [cached] = await db
+        .select()
+        .from(whatsappMediaTable)
+        .where(eq(whatsappMediaTable.waMediaId, msg.mediaId))
+        .limit(1);
+      if (cached) {
+        const blob = new Blob([cached.data], { type: cached.mimeType });
+        const form = new FormData();
+        form.append("messaging_product", "whatsapp");
+        form.append("type", cached.mimeType);
+        form.append("file", blob, msg.filename || "file");
+        const uploadRes = await Whatsapp.$apiFetch$(
+          `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/media`,
+          { method: "POST", body: form },
+        );
+        const uploadData = (await uploadRes.json()) as { id?: string; error?: object };
+        if (uploadRes.ok && uploadData.id) {
+          const msgType =
+            msg.mediaType === "image"
+              ? "image"
+              : msg.mediaType === "audio"
+                ? "audio"
+                : msg.mediaType === "video"
+                  ? "video"
+                  : "document";
+          const msgPayload: Record<string, unknown> = {
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: normalizedTo,
+            type: msgType,
+            [msgType]: { id: uploadData.id, ...(msg.filename ? { filename: msg.filename } : {}) },
+          };
+          const sendRes = await Whatsapp.$apiFetch$(
+            `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/messages`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(msgPayload),
+            },
+          );
+          const sendData = (await sendRes.json()) as {
+            messages?: Array<{ id: string }>;
+            error?: unknown;
+          };
+          outboundWaId = sendData.messages?.[0]?.id ?? null;
+        } else {
+          outboundWaId = await sendWhatsAppText(toPhone, `↩️ مُعاد توجيهه:\n${msg.body}`);
+        }
+      } else {
+        outboundWaId = await sendWhatsAppText(toPhone, `↩️ مُعاد توجيهه:\n${msg.body}`);
+      }
+    } else {
+      outboundWaId = await sendWhatsAppText(toPhone, `↩️ مُعاد توجيهه:\n${msg.body}`);
+    }
+  } catch (err) {
+    logger.error({ err, messageId, toPhone }, "WhatsApp forward failed");
+    res.status(500).json({ error: "فشل إعادة التوجيه" });
+    return;
+  }
+  await db.insert(whatsappChatsTable).values({
+    waMessageId: outboundWaId,
+    direction: "outbound",
+    phone: normalizedTo,
+    body: msg.mediaId ? `[مُعاد توجيهه] ${msg.body}` : `↩️ مُعاد توجيهه:\n${msg.body}`,
+    mediaId: null,
+    mediaType: null,
+    isRead: true,
+  });
+  broadcastWaEvent({ type: "new_message", phone: normalizedTo });
   res.json({ ok: true });
 });
 

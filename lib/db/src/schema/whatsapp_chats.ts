@@ -12,6 +12,7 @@ export const whatsappChatsTable = pgTable("whatsapp_chats", {
   mediaType: text("media_type"), // "image" | "document" | "audio" | "video"
   mimeType: text("mime_type"), // e.g. "image/jpeg"
   filename: text("filename"), // for documents
+  replyToMessageId: text("reply_to_message_id"), // WA message ID of the replied-to message (nullable)
   isRead: boolean("is_read").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
