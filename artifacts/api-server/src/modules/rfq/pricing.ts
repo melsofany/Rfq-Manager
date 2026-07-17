@@ -34,33 +34,30 @@ router.get("/pricing/:token", async (req, res): Promise<void> => {
 
   const now = new Date();
 
-  // closeDate is stored as a plain date string (e.g. "2026-07-20").
-  // new Date("2026-07-20") parses as midnight UTC — so the link would be
-  // marked expired at the very START of that day. Fix: add 1 day so the
-  // full close-date day stays valid.
-  const closeDateExpired =
-    log.log.closeDate != null &&
-    (() => {
-      const d = new Date(log.log.closeDate!);
-      d.setDate(d.getDate() + 1); // expire at the START of the next day
-      return d <= now;
-    })();
+  // Helper: is a plain date string ("YYYY-MM-DD") expired?
+  // Adds 1 day because new Date("2026-07-20") = midnight UTC, which would
+  // expire the link at the START of that day rather than the END.
+  const isDateStringExpired = (ds: string) => {
+    const d = new Date(ds);
+    d.setDate(d.getDate() + 1);
+    return d <= now;
+  };
 
-  // expiresAt is a TIMESTAMP but was historically sent from the browser as
-  // local midnight (e.g. Egypt UTC+3), which stored as "2026-07-15T21:00Z"
-  // for a user who intended "July 16". Fix: add 1 day before comparing so
-  // the full intended day remains valid. New records are saved as
-  // end-of-day UTC (T23:59:59Z), so adding 1 day gives a one-day grace
-  // that is harmless for the use case.
-  const expiresAtExpired =
-    log.rfq.expiresAt != null &&
-    (() => {
-      const d = new Date(log.rfq.expiresAt!);
-      d.setDate(d.getDate() + 1);
-      return d <= now;
-    })();
+  // Helper: is an expiresAt timestamp expired?
+  // Adds 1 day to handle old records saved as local midnight (UTC+3 = T21:00Z)
+  // so the full intended day stays valid.
+  const isTimestampExpired = (ts: Date | string) => {
+    const d = new Date(ts);
+    d.setDate(d.getDate() + 1);
+    return d <= now;
+  };
 
-  const isExpired = expiresAtExpired || closeDateExpired;
+  // Priority: closeDate on sentLog is the supplier-specific deadline set by
+  // the employee. If present, it is the sole authority. We only fall back to
+  // rfq.expiresAt when no per-supplier closeDate was recorded (legacy links).
+  const isExpired = log.log.closeDate != null
+    ? isDateStringExpired(log.log.closeDate)
+    : log.rfq.expiresAt != null && isTimestampExpired(log.rfq.expiresAt);
   const items = await db.select().from(rfqItemsTable).where(eq(rfqItemsTable.rfqId, log.rfq.id));
 
   // Check if already submitted
@@ -165,21 +162,11 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
   }
 
   const now2 = new Date();
-  const closeDateExpired2 =
-    log.log.closeDate != null &&
-    (() => {
-      const d = new Date(log.log.closeDate!);
-      d.setDate(d.getDate() + 1);
-      return d <= now2;
-    })();
-  const expiresAtExpired2 =
-    log.rfq.expiresAt != null &&
-    (() => {
-      const d = new Date(log.rfq.expiresAt!);
-      d.setDate(d.getDate() + 1);
-      return d <= now2;
-    })();
-  const isExpired = expiresAtExpired2 || closeDateExpired2;
+  const isDateExp2 = (ds: string) => { const d = new Date(ds); d.setDate(d.getDate() + 1); return d <= now2; };
+  const isTsExp2 = (ts: Date | string) => { const d = new Date(ts); d.setDate(d.getDate() + 1); return d <= now2; };
+  const isExpired = log.log.closeDate != null
+    ? isDateExp2(log.log.closeDate)
+    : log.rfq.expiresAt != null && isTsExp2(log.rfq.expiresAt);
   if (isExpired) {
     res.status(400).json({ error: "This link has expired" });
     return;
