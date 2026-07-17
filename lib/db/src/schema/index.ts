@@ -10,3 +10,4 @@ export * from "./whatsapp_reactions";
 export * from "./whatsapp_media";
 export * from "./purchase_orders";
 export * from "./erp_integrations";
+export * from "./attachments";

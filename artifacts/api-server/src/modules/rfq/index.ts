@@ -16,6 +16,7 @@ import rfqRouter from "./routes";
 import offersRouter from "./offers";
 import pricingRouter from "./pricing";
 import itemsRouter from "./items";
+import attachmentsRouter from "./attachments";
 
 const router: IRouter = Router();
 
@@ -23,5 +24,6 @@ router.use(rfqRouter);
 router.use(offersRouter);
 router.use(pricingRouter);
 router.use(itemsRouter);
+router.use(attachmentsRouter);
 
 export default router;

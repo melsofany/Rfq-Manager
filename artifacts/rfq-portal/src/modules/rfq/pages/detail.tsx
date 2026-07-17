@@ -12,11 +12,12 @@ import {
   getGetRfqOffersQueryKey,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
+import { AttachmentsPanel } from "../components/Attachments";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Send, Eye, CheckCircle2, XCircle,
-  AlertTriangle, FileSpreadsheet, FileText, ClipboardList, Trash2, Copy, ExternalLink,
+  AlertTriangle, FileSpreadsheet, FileText, ClipboardList, Trash2, Copy, ExternalLink, Paperclip,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -25,7 +26,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const VAT_RATE = 0.14;
 const VAT_LABEL = "14%";
 
-type Tab = "items" | "sent" | "offers";
+type Tab = "items" | "sent" | "offers" | "attachments";
 
 type OfferRow = {
   supplierId: number;
@@ -649,7 +650,7 @@ export default function RfqDetailPage() {
         {/* Tabs */}
         <div className="border-b border-border flex items-center justify-between">
           <div className="flex gap-0">
-            {(["items", "sent", "offers"] as Tab[]).map((t) => (
+            {(["items", "sent", "offers", "attachments"] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -663,6 +664,9 @@ export default function RfqDetailPage() {
                 {t === "items" && `Items (${rfq.itemCount})`}
                 {t === "sent" && `Sent Log (${rfq.supplierCount})`}
                 {t === "offers" && `Offers & Analysis (${rfq.offerCount})`}
+                {t === "attachments" && (
+                  <span className="flex items-center gap-1"><Paperclip size={13} />المرفقات</span>
+                )}
               </button>
             ))}
           </div>
@@ -1015,6 +1019,18 @@ export default function RfqDetailPage() {
             )}
           </div>
         )}
+        {/* ── Attachments tab ─────────────────────────────────────── */}
+        {tab === "attachments" && (
+          <div className="bg-card border border-border rounded-lg p-5">
+            <p className="text-sm font-medium text-foreground mb-4">المرفقات الفنية للطلب (مواصفات، رسومات، ملفات)</p>
+            <AttachmentsPanel
+              listUrl={`/api/rfq/${rfqId}/attachments`}
+              uploadUrl={`/api/rfq/${rfqId}/attachments`}
+              deleteUrlBase="/api/rfq/attachments"
+            />
+          </div>
+        )}
+
       </div>
     </Layout>
   );

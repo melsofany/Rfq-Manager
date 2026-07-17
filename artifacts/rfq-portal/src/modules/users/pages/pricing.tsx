@@ -37,6 +37,11 @@ export default function PricingPage() {
   const [submittedRows, setSubmittedRows] = useState<SubmittedRow[]>([]);
   const [submittedGeneralNotes, setSubmittedGeneralNotes] = useState("");
   const [generalNotes, setGeneralNotes] = useState("");
+  const [rfqAttachments, setRfqAttachments] = useState<Array<{ id: number; originalName: string; mimeType: string; sizeLabel: string; downloadUrl: string }>>([]);
+  const [rfqAttachmentsLoaded, setRfqAttachmentsLoaded] = useState(false);
+  const [offerFiles, setOfferFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedOfferAtts, setUploadedOfferAtts] = useState<Array<{ id: number; originalName: string; sizeLabel: string }>>([]);
   const [prices, setPrices] = useState<Record<number, ItemPrice>>({});
 
   const { data, isLoading, error } = useGetPricingPage(token, {
@@ -46,7 +51,24 @@ export default function PricingPage() {
   const trackMutation = useTrackLinkOpen();
   const submitMutation = useSubmitOffer({
     mutation: {
-      onSuccess: () => setSubmitted(true),
+      onSuccess: async () => {
+        setSubmitted(true);
+        // Upload offer attachments if any
+        if (offerFiles.length > 0) {
+          setUploading(true);
+          const uploaded: Array<{ id: number; originalName: string; sizeLabel: string }> = [];
+          for (const file of offerFiles) {
+            try {
+              const fd = new FormData();
+              fd.append("file", file);
+              const r = await fetch(`/api/pricing/${token}/offer-attachments`, { method: "POST", body: fd });
+              if (r.ok) { const d = await r.json(); uploaded.push(d); }
+            } catch {}
+          }
+          setUploadedOfferAtts(uploaded);
+          setUploading(false);
+        }
+      },
     },
   });
 
@@ -55,6 +77,16 @@ export default function PricingPage() {
       trackMutation.mutate({ token });
     }
   }, [token, data?.rfqNo]);
+
+  useEffect(() => {
+    if (token && data && !rfqAttachmentsLoaded) {
+      setRfqAttachmentsLoaded(true);
+      fetch(`/api/pricing/${token}/rfq-attachments`)
+        .then(r => r.ok ? r.json() : [])
+        .then(setRfqAttachments)
+        .catch(() => {});
+    }
+  }, [token, data]);
 
   useEffect(() => {
     if (data?.items) {
@@ -200,6 +232,25 @@ export default function PricingPage() {
           </div>
 
           {/* Read-only prices table */}
+          {/* Uploaded offer attachments */}
+          {uploadedOfferAtts.length > 0 && (
+            <div className="bg-card border border-border rounded-lg p-4">
+              <p className="text-sm font-semibold text-foreground mb-2">📎 الملفات المُرفقة مع عرضك</p>
+              <ul className="space-y-1">
+                {uploadedOfferAtts.map(a => (
+                  <li key={a.id} className="text-xs text-foreground flex items-center gap-2 bg-muted/30 rounded px-3 py-1.5">
+                    <span className="flex-1 truncate">{a.originalName}</span>
+                    <span className="text-muted-foreground">{a.sizeLabel}</span>
+                    <span className="text-green-600 font-medium">✓ تم الرفع</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {uploading && (
+            <div className="text-sm text-muted-foreground text-center py-2">جاري رفع المرفقات...</div>
+          )}
+
           {displayRows.length > 0 && (
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="px-5 py-3 border-b border-border bg-muted/20">
@@ -377,6 +428,64 @@ export default function PricingPage() {
               className="w-full h-20 px-3 py-2 text-sm border border-input rounded bg-background text-foreground resize-none"
               placeholder="شروط الدفع، ظروف التسليم، مدة صلاحية العرض، إلخ."
             />
+          </div>
+
+          {/* ── RFQ Attachments (specs/drawings from buyer) ─────── */}
+          {rfqAttachments.length > 0 && (
+            <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+              <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                📎 المرفقات الفنية من المشتري
+              </p>
+              <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
+                {rfqAttachments.map(att => (
+                  <div key={att.id} className="flex items-center gap-3 px-4 py-2.5 bg-background hover:bg-muted/20">
+                    <span className="text-sm flex-1 truncate">{att.originalName}</span>
+                    <span className="text-xs text-muted-foreground">{att.sizeLabel}</span>
+                    <a
+                      href={att.downloadUrl}
+                      download={att.originalName}
+                      className="text-xs text-primary underline underline-offset-2 hover:no-underline"
+                    >
+                      تحميل
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Offer Attachments (supplier uploads) ─────────────── */}
+          <div className="bg-card border border-border rounded-lg p-4 space-y-2">
+            <label className="text-sm font-medium text-foreground flex items-center gap-2">
+              📎 إرفاق ملفات مع عرضك (اختياري)
+            </label>
+            <p className="text-xs text-muted-foreground">يمكنك إرفاق كتالوجات، شهادات، مواصفات فنية، أو أي وثائق ذات صلة</p>
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.xlsx,.xls,.docx,.doc,.dwg,.dxf,.svg"
+              onChange={e => {
+                const files = Array.from(e.target.files ?? []);
+                setOfferFiles(prev => [...prev, ...files].slice(0, 5));
+                e.target.value = "";
+              }}
+              className="block w-full text-sm text-muted-foreground file:mr-3 file:py-1.5 file:px-3 file:rounded file:border file:border-border file:text-xs file:bg-muted file:text-foreground hover:file:bg-muted/70 cursor-pointer"
+            />
+            {offerFiles.length > 0 && (
+              <ul className="space-y-1 mt-2">
+                {offerFiles.map((f, i) => (
+                  <li key={i} className="flex items-center gap-2 text-xs text-foreground bg-muted/30 rounded px-3 py-1.5">
+                    <span className="flex-1 truncate">{f.name}</span>
+                    <span className="text-muted-foreground">{(f.size / 1024).toFixed(0)} KB</span>
+                    <button
+                      type="button"
+                      onClick={() => setOfferFiles(prev => prev.filter((_, j) => j !== i))}
+                      className="text-destructive hover:text-destructive/80 font-medium"
+                    >✕</button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {submitMutation.isError && (
