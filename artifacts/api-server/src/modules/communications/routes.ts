@@ -632,56 +632,97 @@ router.post("/whatsapp/forward", requireAuth, async (req, res): Promise<void> =>
   let outboundWaId: string | null = null;
   try {
     if (msg.mediaId && msg.mediaType) {
-      // Try to forward using cached media
-      const [cached] = await db
-        .select()
-        .from(whatsappMediaTable)
-        .where(eq(whatsappMediaTable.waMediaId, msg.mediaId))
-        .limit(1);
-      if (cached) {
-        const blob = new Blob([cached.data], { type: cached.mimeType });
+      // Helper: upload a buffer to Meta and send it as media to normalizedTo
+      const uploadAndSend = async (buffer: Buffer, mimeType: string): Promise<string | null> => {
+        const filename = msg.filename || "file";
+        const blob = new Blob([buffer], { type: mimeType });
         const form = new FormData();
         form.append("messaging_product", "whatsapp");
-        form.append("type", cached.mimeType);
-        form.append("file", blob, msg.filename || "file");
+        form.append("type", mimeType);
+        form.append("file", blob, filename);
         const uploadRes = await Whatsapp.$apiFetch$(
           `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/media`,
           { method: "POST", body: form },
         );
         const uploadData = (await uploadRes.json()) as { id?: string; error?: object };
-        if (uploadRes.ok && uploadData.id) {
-          const msgType =
-            msg.mediaType === "image"
-              ? "image"
-              : msg.mediaType === "audio"
-                ? "audio"
-                : msg.mediaType === "video"
-                  ? "video"
-                  : "document";
-          const msgPayload: Record<string, unknown> = {
-            messaging_product: "whatsapp",
-            recipient_type: "individual",
-            to: normalizedTo,
-            type: msgType,
-            [msgType]: { id: uploadData.id, ...(msg.filename ? { filename: msg.filename } : {}) },
-          };
-          const sendRes = await Whatsapp.$apiFetch$(
-            `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/messages`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(msgPayload),
-            },
-          );
-          const sendData = (await sendRes.json()) as {
-            messages?: Array<{ id: string }>;
-            error?: unknown;
-          };
-          outboundWaId = sendData.messages?.[0]?.id ?? null;
-        } else {
-          outboundWaId = await sendWhatsAppText(toPhone, `↩️ مُعاد توجيهه:\n${msg.body}`);
+        if (!uploadRes.ok || !uploadData.id) {
+          logger.warn({ uploadData }, "Forward: media re-upload to Meta failed");
+          return null;
         }
-      } else {
+        const msgType =
+          msg.mediaType === "image" ? "image"
+          : msg.mediaType === "audio" ? "audio"
+          : msg.mediaType === "video" ? "video"
+          : "document";
+        const msgPayload: Record<string, unknown> = {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: normalizedTo,
+          type: msgType,
+          [msgType]: { id: uploadData.id, ...(msg.filename ? { filename: msg.filename } : {}) },
+        };
+        const sendRes = await Whatsapp.$apiFetch$(
+          `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/messages`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(msgPayload),
+          },
+        );
+        const sendData = (await sendRes.json()) as {
+          messages?: Array<{ id: string }>;
+          error?: unknown;
+        };
+        if (!sendRes.ok || !sendData.messages?.[0]?.id) {
+          logger.warn({ sendData }, "Forward: Meta send-media failed");
+          return null;
+        }
+        return sendData.messages[0].id;
+      };
+
+      // Step 1: try DB cache
+      const [cached] = await db
+        .select()
+        .from(whatsappMediaTable)
+        .where(eq(whatsappMediaTable.waMediaId, msg.mediaId))
+        .limit(1);
+
+      if (cached) {
+        logger.info({ mediaId: msg.mediaId }, "Forward: using DB-cached media");
+        outboundWaId = await uploadAndSend(Buffer.from(cached.data), cached.mimeType);
+      }
+
+      // Step 2: not in cache (or upload failed) — download fresh from Meta
+      if (!outboundWaId) {
+        logger.info({ mediaId: msg.mediaId }, "Forward: cache miss, fetching fresh from Meta");
+        try {
+          const metaRes = await Whatsapp.$apiFetch$(
+            `https://graph.facebook.com/${WA_API_VERSION}/${msg.mediaId}`,
+          );
+          if (metaRes.ok) {
+            const metaData = (await metaRes.json()) as { url?: string; mime_type?: string };
+            if (metaData.url) {
+              const mediaRes = await Whatsapp.$apiFetch$(metaData.url);
+              if (mediaRes.ok) {
+                const buffer = Buffer.from(await mediaRes.arrayBuffer());
+                const mimeType = metaData.mime_type || msg.mimeType || "application/octet-stream";
+                // Cache it for future use
+                void db.insert(whatsappMediaTable)
+                  .values({ waMediaId: msg.mediaId, data: buffer, mimeType, filename: msg.filename ?? undefined })
+                  .onConflictDoNothing()
+                  .catch(() => {/* non-critical */});
+                outboundWaId = await uploadAndSend(buffer, mimeType);
+              }
+            }
+          }
+        } catch (fetchErr) {
+          logger.warn({ err: fetchErr, mediaId: msg.mediaId }, "Forward: fresh Meta fetch failed");
+        }
+      }
+
+      // Step 3: last resort — plain text
+      if (!outboundWaId) {
+        logger.warn({ mediaId: msg.mediaId }, "Forward: falling back to text (media unavailable)");
         outboundWaId = await sendWhatsAppText(toPhone, `↩️ مُعاد توجيهه:\n${msg.body}`);
       }
     } else {
