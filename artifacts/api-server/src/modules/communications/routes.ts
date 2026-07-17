@@ -341,7 +341,7 @@ async function handleReactionWebhook(from: string, msg: ServerMessage): Promise<
 
 // ─── GET /api/whatsapp/media/:mediaId ────────────────────────────────────
 router.get("/whatsapp/media/:mediaId", requireAuth, async (req, res): Promise<void> => {
-  const { mediaId } = req.params;
+  const mediaId = req.params.mediaId as string;
   if (!isWhatsAppConfigured) {
     res.status(503).json({ error: "WhatsApp not configured" });
     return;
@@ -394,7 +394,7 @@ router.get("/whatsapp/media/:mediaId", requireAuth, async (req, res): Promise<vo
 
 // ─── GET /api/whatsapp/profile-picture/:phone ─────────────────────────────
 router.get("/whatsapp/profile-picture/:phone", requireAuth, async (req, res): Promise<void> => {
-  const phone = req.params.phone;
+  const phone = req.params.phone as string;
   if (!isWhatsAppConfigured) {
     res.status(404).json({ error: "Not configured" });
     return;
@@ -447,7 +447,7 @@ router.get("/whatsapp/chats", requireAuth, async (req, res): Promise<void> => {
 
 // ─── GET /api/whatsapp/chats/:phone ──────────────────────────────────────
 router.get("/whatsapp/chats/:phone", requireAuth, async (req, res): Promise<void> => {
-  const phone = req.params.phone;
+  const phone = req.params.phone as string;
   const messages = await db
     .select()
     .from(whatsappChatsTable)
@@ -681,7 +681,7 @@ router.post("/whatsapp/send-media", requireAuth, async (req, res): Promise<void>
 
 // ─── PATCH /api/whatsapp/messages/:id ────────────────────────────────────
 router.patch("/whatsapp/messages/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   const { body } = req.body as { body: string };
   if (!body?.trim()) {
     res.status(400).json({ error: "body is required" });
@@ -701,7 +701,7 @@ router.patch("/whatsapp/messages/:id", requireAuth, async (req, res): Promise<vo
 
 // ─── DELETE /api/whatsapp/messages/:id ───────────────────────────────────
 router.delete("/whatsapp/messages/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   const [msg] = await db
     .select()
     .from(whatsappChatsTable)

@@ -35,7 +35,7 @@ router.post("/categories", requireRole("admin"), async (req, res): Promise<void>
 });
 
 router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   const { name } = req.body as { name?: string };
   if (!name?.trim()) {
     res.status(400).json({ error: "Name required" });
@@ -64,7 +64,7 @@ router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<
 });
 
 router.delete("/categories/:id", requireRole("admin"), async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
 
   const [category] = await db
     .select()

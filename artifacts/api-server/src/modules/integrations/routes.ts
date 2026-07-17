@@ -18,7 +18,7 @@ router.get("/integrations", requireAuth, async (_req, res): Promise<void> => {
 
 /** GET /integrations/:id — تفاصيل تكامل واحد */
 router.get("/integrations/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   const integration = await svc.getIntegration(id);
   if (!integration) {
     res.status(404).json({ error: "التكامل غير موجود" });
@@ -52,7 +52,7 @@ router.patch(
   "/integrations/:id",
   requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     const updated = await svc.updateIntegration(id, req.body);
     if (!updated) {
       res.status(404).json({ error: "التكامل غير موجود" });
@@ -67,7 +67,7 @@ router.delete(
   "/integrations/:id",
   requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     const deleted = await svc.deleteIntegration(id);
     if (!deleted) {
       res.status(404).json({ error: "التكامل غير موجود" });
@@ -82,7 +82,7 @@ router.post(
   "/integrations/:id/test",
   requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     const integration = await svc.getIntegration(id);
     if (!integration) {
       res.status(404).json({ error: "التكامل غير موجود" });
@@ -98,7 +98,7 @@ router.post(
   "/integrations/:id/sync",
   requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     const integration = await svc.getIntegration(id);
     if (!integration) {
       res.status(404).json({ error: "التكامل غير موجود" });
@@ -123,7 +123,7 @@ router.post(
   "/integrations/:id/sync-suppliers",
   requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     const integration = await svc.getIntegration(id);
     if (!integration) {
       res.status(404).json({ error: "التكامل غير موجود" });
@@ -143,7 +143,7 @@ router.post(
   "/integrations/:id/export",
   requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     const integration = await svc.getIntegration(id);
     if (!integration) {
       res.status(404).json({ error: "التكامل غير موجود" });

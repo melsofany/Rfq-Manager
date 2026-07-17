@@ -528,8 +528,8 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
 
 // GET /api/po/:id/pdf/:supplierId — download PO PDF for a specific supplier
 router.get("/po/:id/pdf/:supplierId", requireAuth, async (req, res): Promise<void> => {
-  const poId = parseInt(req.params.id, 10);
-  const supplierId = parseInt(req.params.supplierId, 10);
+  const poId = parseInt(req.params.id as string, 10);
+  const supplierId = parseInt(req.params.supplierId as string, 10);
 
   const [poRow] = await db
     .select({

@@ -138,7 +138,7 @@ export async function testConnection(
   try {
     switch (integration.type) {
       case "odoo":
-        return await OdooConnector.testConnection(cfg as OdooConnector.OdooConfig);
+        return await OdooConnector.testConnection(cfg as unknown as OdooConnector.OdooConfig);
       case "sap-b1":
         return await SapConnector.testConnection({
           ...cfg,
@@ -150,7 +150,7 @@ export async function testConnection(
           variant: "sap-s4hana",
         } as SapConnector.SapConfig);
       case "oracle":
-        return await OracleConnector.testConnection(cfg as OracleConnector.OracleConfig);
+        return await OracleConnector.testConnection(cfg as unknown as OracleConnector.OracleConfig);
       case "google-sheets":
         return await GoogleSheetsErp.testConnection({
           serviceAccountBase64: String(
@@ -176,7 +176,9 @@ export async function syncSuppliers(
 
   switch (integration.type) {
     case "odoo":
-      erpSuppliers = await OdooConnector.importSuppliers(cfg as OdooConnector.OdooConfig);
+      erpSuppliers = await OdooConnector.importSuppliers(
+        cfg as unknown as OdooConnector.OdooConfig,
+      );
       break;
     case "sap-b1":
       erpSuppliers = await SapConnector.importSuppliers({
@@ -191,7 +193,9 @@ export async function syncSuppliers(
       } as SapConnector.SapConfig);
       break;
     case "oracle":
-      erpSuppliers = await OracleConnector.importSuppliers(cfg as OracleConnector.OracleConfig);
+      erpSuppliers = await OracleConnector.importSuppliers(
+        cfg as unknown as OracleConnector.OracleConfig,
+      );
       break;
     case "google-sheets":
       erpSuppliers = await GoogleSheetsErp.importSuppliers({

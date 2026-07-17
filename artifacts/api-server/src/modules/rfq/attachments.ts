@@ -56,7 +56,7 @@ function formatSize(bytes: number): string {
 
 /** GET /rfq/:id/attachments — list */
 router.get("/rfq/:id/attachments", requireAuth, async (req, res): Promise<void> => {
-  const rfqId = parseInt(req.params.id, 10);
+  const rfqId = parseInt(req.params.id as string, 10);
   if (isNaN(rfqId)) {
     res.status(400).json({ error: "Invalid rfqId" });
     return;
@@ -90,7 +90,7 @@ router.post(
   requireAuth,
   upload.single("file"),
   async (req: Request & { session?: { employeeId?: number } }, res): Promise<void> => {
-    const rfqId = parseInt(req.params.id, 10);
+    const rfqId = parseInt(req.params.id as string, 10);
     if (isNaN(rfqId)) {
       res.status(400).json({ error: "Invalid rfqId" });
       return;
@@ -139,7 +139,7 @@ router.post(
 
 /** GET /rfq/attachments/:id/download — serve file to employee */
 router.get("/rfq/attachments/:id/download", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -163,7 +163,7 @@ router.get("/rfq/attachments/:id/download", requireAuth, async (req, res): Promi
 
 /** DELETE /rfq/attachments/:id — delete */
 router.delete("/rfq/attachments/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -179,7 +179,7 @@ router.delete("/rfq/attachments/:id", requireAuth, async (req, res): Promise<voi
 
 /** GET /offers/:id/attachments */
 router.get("/offers/:id/attachments", requireAuth, async (req, res): Promise<void> => {
-  const offerId = parseInt(req.params.id, 10);
+  const offerId = parseInt(req.params.id as string, 10);
   if (isNaN(offerId)) {
     res.status(400).json({ error: "Invalid offerId" });
     return;
@@ -208,7 +208,7 @@ router.get("/offers/:id/attachments", requireAuth, async (req, res): Promise<voi
 
 /** GET /offer/attachments/:id/download */
 router.get("/offer/attachments/:id/download", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -235,7 +235,7 @@ router.get("/offer/attachments/:id/download", requireAuth, async (req, res): Pro
 
 /** DELETE /offer/attachments/:id */
 router.delete("/offer/attachments/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(req.params.id as string, 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -254,7 +254,7 @@ router.get("/pricing/:token/rfq-attachments", async (req, res): Promise<void> =>
   const [log] = await db
     .select({ rfqId: sentLogTable.rfqId })
     .from(sentLogTable)
-    .where(eq(sentLogTable.token, req.params.token));
+    .where(eq(sentLogTable.token, req.params.token as string));
   if (!log) {
     res.status(404).json({ error: "Token not found" });
     return;
@@ -286,13 +286,13 @@ router.get("/pricing/:token/rfq-attachments/:attId/download", async (req, res): 
   const [log] = await db
     .select({ rfqId: sentLogTable.rfqId })
     .from(sentLogTable)
-    .where(eq(sentLogTable.token, req.params.token));
+    .where(eq(sentLogTable.token, req.params.token as string));
   if (!log) {
     res.status(404).json({ error: "Token not found" });
     return;
   }
 
-  const id = parseInt(req.params.attId, 10);
+  const id = parseInt(req.params.attId as string, 10);
   const [att] = await db
     .select()
     .from(rfqAttachmentsTable)
@@ -320,7 +320,7 @@ router.post(
     const [log] = await db
       .select({ rfqId: sentLogTable.rfqId, supplierId: sentLogTable.supplierId })
       .from(sentLogTable)
-      .where(eq(sentLogTable.token, req.params.token));
+      .where(eq(sentLogTable.token, req.params.token as string));
     if (!log) {
       res.status(404).json({ error: "Token not found" });
       return;
