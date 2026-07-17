@@ -121,7 +121,6 @@ interface DiagnoseResult {
 }
 interface PendingFile {
   file: File;
-  base64: string;
   preview?: string;
 }
 type Tab = "chats" | "templates" | "broadcast" | "settings";
