@@ -129,15 +129,11 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
         .fontSize(9)
         .fillColor(GOLD)
         .text("PURCHASE ORDER", TITLE_X, 48, { width: TITLE_W, align: "right", lineBreak: false });
-      doc
-        .font("Amiri")
-        .fontSize(8)
-        .fillColor("#aaccee")
-        .text(`رقم: ${opts.poNo}`, TITLE_X, 63, {
-          width: TITLE_W,
-          align: "right",
-          lineBreak: false,
-        });
+      doc.font("Amiri").fontSize(8).fillColor("#aaccee").text(`رقم: ${opts.poNo}`, TITLE_X, 63, {
+        width: TITLE_W,
+        align: "right",
+        lineBreak: false,
+      });
 
       const LOGO_SIZE = 52;
       const LOGO_X = M;
@@ -164,24 +160,16 @@ export function generatePoPdf(opts: PoPdfOptions): Promise<Buffer> {
           });
       }
 
-      doc
-        .font("Amiri")
-        .fontSize(11)
-        .fillColor(GOLD)
-        .text(rtl("قرطبة للتوريدات"), CO_TEXT_X, 12, {
-          width: CO_TEXT_W,
-          align: "left",
-          lineBreak: false,
-        });
-      doc
-        .font("Amiri")
-        .fontSize(8)
-        .fillColor("#c0d8f0")
-        .text("CORTOBA SUPPLIES", CO_TEXT_X, 30, {
-          width: CO_TEXT_W,
-          align: "left",
-          lineBreak: false,
-        });
+      doc.font("Amiri").fontSize(11).fillColor(GOLD).text(rtl("قرطبة للتوريدات"), CO_TEXT_X, 12, {
+        width: CO_TEXT_W,
+        align: "left",
+        lineBreak: false,
+      });
+      doc.font("Amiri").fontSize(8).fillColor("#c0d8f0").text("CORTOBA SUPPLIES", CO_TEXT_X, 30, {
+        width: CO_TEXT_W,
+        align: "left",
+        lineBreak: false,
+      });
       doc
         .font("Amiri")
         .fontSize(7)

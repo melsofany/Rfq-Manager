@@ -449,12 +449,10 @@ router.delete(
     } catch (err: unknown) {
       const msg = (err as { message?: string })?.message ?? "";
       if (msg.includes("violates foreign key constraint")) {
-        res
-          .status(409)
-          .json({
-            error:
-              "لا يمكن حذف هذا المورد لوجود طلبات عروض أسعار أو عروض سعر مرتبطة به. يمكنك تعطيله بدلاً من حذفه.",
-          });
+        res.status(409).json({
+          error:
+            "لا يمكن حذف هذا المورد لوجود طلبات عروض أسعار أو عروض سعر مرتبطة به. يمكنك تعطيله بدلاً من حذفه.",
+        });
         return;
       }
       throw err;

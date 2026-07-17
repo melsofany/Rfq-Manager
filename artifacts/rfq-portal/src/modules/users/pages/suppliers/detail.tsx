@@ -117,7 +117,7 @@ export default function SupplierDetailPage() {
       email: supplier.email ?? "",
       phone: supplier.phone ?? "",
       address: supplier.address ?? "",
-      isActive: supplier.isActive,
+      isActive: supplier.isActive ?? false,
     });
     setSelectedCats(new Set(parseCategories(supplier.category)));
     setServerError(null);
@@ -447,10 +447,10 @@ export default function SupplierDetailPage() {
             </div>
             {score ? (
               <div className="space-y-3">
-                <ScoreBar label="Response Rate" value={score.responseRateScore} />
-                <ScoreBar label="Price Competitiveness" value={score.priceScore} />
-                <ScoreBar label="On-Time Delivery" value={score.onTimeScore} />
-                <ScoreBar label="Quality" value={score.qualityScore} />
+                <ScoreBar label="Response Rate" value={score.responseRateScore ?? 0} />
+                <ScoreBar label="Price Competitiveness" value={score.priceScore ?? 0} />
+                <ScoreBar label="On-Time Delivery" value={score.onTimeScore ?? 0} />
+                <ScoreBar label="Quality" value={score.qualityScore ?? 0} />
                 <div className="pt-2 border-t border-border grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <p className="text-muted-foreground">RFQs Received</p>

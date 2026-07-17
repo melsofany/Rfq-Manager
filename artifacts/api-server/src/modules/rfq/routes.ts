@@ -1036,12 +1036,10 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
   // Guarantee client gets a response within 22 s regardless of DB/PDF hang
   const routeTimer = setTimeout(() => {
     if (!res.headersSent) {
-      res
-        .status(504)
-        .json({
-          error: "Request timed out",
-          detail: "PDF generation exceeded 22 s — DB or font issue",
-        });
+      res.status(504).json({
+        error: "Request timed out",
+        detail: "PDF generation exceeded 22 s — DB or font issue",
+      });
     }
   }, 22_000);
   try {
@@ -1181,12 +1179,10 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
   } catch (err) {
     req.log.error({ err }, "Failed to generate offers PDF");
     if (!res.headersSent) {
-      res
-        .status(500)
-        .json({
-          error: "PDF generation failed",
-          detail: err instanceof Error ? err.message : String(err),
-        });
+      res.status(500).json({
+        error: "PDF generation failed",
+        detail: err instanceof Error ? err.message : String(err),
+      });
     }
   } finally {
     clearTimeout(routeTimer);
