@@ -8,6 +8,7 @@ import {
   employeesTable,
   offersTable,
   offerItemsTable,
+  offerAttachmentsTable,
   auditLogTable,
 } from "@workspace/db";
 import { eq, and, ilike, or, count, inArray, sql } from "drizzle-orm";
@@ -822,6 +823,36 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
     itemsByOffer[oi.item.offerId].push(oi);
   }
 
+  // Fetch offer attachments uploaded by suppliers via the pricing page
+  const offerAttachmentRows = offerIds.length > 0
+    ? await db
+        .select({
+          id: offerAttachmentsTable.id,
+          offerId: offerAttachmentsTable.offerId,
+          originalName: offerAttachmentsTable.originalName,
+          size: offerAttachmentsTable.size,
+        })
+        .from(offerAttachmentsTable)
+        .where(inArray(offerAttachmentsTable.offerId, offerIds))
+    : [];
+
+  const _fmtAttSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const attachmentsByOffer = {};
+  for (const a of offerAttachmentRows) {
+    if (!attachmentsByOffer[a.offerId]) attachmentsByOffer[a.offerId] = [];
+    attachmentsByOffer[a.offerId].push({
+      id: a.id,
+      originalName: a.originalName,
+      sizeLabel: _fmtAttSize(a.size),
+      downloadUrl: '/api/offer/attachments/' + a.id + '/download',
+    });
+  }
+
   // Price analysis per rfq item — all min/avg/max calculations use VAT-inclusive prices
   const rfqItems = await db.select().from(rfqItemsTable).where(eq(rfqItemsTable.rfqId, rfqId));
   const itemAnalysis = rfqItems.map((rfqItem) => {
@@ -837,6 +868,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       deviation: number;
       isLowest: boolean;
       isAnomaly: boolean;
+      attachments: Array<{ id: number; originalName: string; sizeLabel: string; downloadUrl: string }>;
     }> = [];
 
     for (const o of offers) {
@@ -858,6 +890,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
           deviation: 0,
           isLowest: false,
           isAnomaly: false,
+          attachments: attachmentsByOffer[o.offer.id] ?? [],
         });
       }
     }
@@ -914,6 +947,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
     totalPrice: o.offer.totalPrice ? parseFloat(o.offer.totalPrice) : null,
     generalNotes: o.offer.generalNotes,
     createdAt: o.offer.createdAt.toISOString(),
+    attachments: attachmentsByOffer[o.offer.id] ?? [],
     items: (itemsByOffer[o.offer.id] || []).map((oi) => ({
       id: oi.item.id,
       offerId: oi.item.offerId,

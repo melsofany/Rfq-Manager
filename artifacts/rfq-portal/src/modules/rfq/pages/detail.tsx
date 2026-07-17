@@ -50,6 +50,7 @@ type OfferRow = {
   deviation: number;
   isLowest: boolean;
   isAnomaly: boolean;
+  attachments?: Array<{ id: number; originalName: string; sizeLabel?: string; downloadUrl?: string }>;
 };
 
 type ItemAnalysis = {
@@ -121,6 +122,7 @@ function normalizeItems(offersData: OffersData): ItemAnalysis[] {
       ...o,
       priceWithVat:
         (o as OfferRow).priceWithVat ?? (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
+      attachments: (o as OfferRow).attachments ?? [],
     })),
   }));
 }
@@ -1061,6 +1063,9 @@ export default function RfqDetailPage() {
                                 <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
                                   مقارنة بالمتوسط
                                 </th>
+                                <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                                  مرفقات المورد
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1121,6 +1126,31 @@ export default function RfqDetailPage() {
                                       {o.deviation > 0 ? "+" : ""}
                                       {o.deviation.toFixed(1)}%
                                     </td>
+                                    {/* Supplier attachments */}
+                                    <td className="px-4 py-2.5">
+                                      {o.attachments && o.attachments.length > 0 ? (
+                                        <div className="flex flex-col gap-1">
+                                          {o.attachments.map((att) => (
+                                            <a
+                                              key={att.id}
+                                              href={att.downloadUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline max-w-[150px]"
+                                              title={att.originalName}
+                                            >
+                                              <Paperclip size={11} className="shrink-0" />
+                                              <span className="truncate">{att.originalName}</span>
+                                              {att.sizeLabel && (
+                                                <span className="text-muted-foreground shrink-0">({att.sizeLabel})</span>
+                                              )}
+                                            </a>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground">—</span>
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                             </tbody>
@@ -1135,7 +1165,7 @@ export default function RfqDetailPage() {
                                   </td>
                                   <td
                                     className="px-4 py-2 text-right text-xs text-foreground font-mono"
-                                    colSpan={3}
+                                    colSpan={4}
                                   >
                                     <span className="text-green-700 font-semibold">
                                       أقل:{" "}
@@ -1195,6 +1225,46 @@ export default function RfqDetailPage() {
                             <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                               {o.generalNotes}
                             </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Supplier Attachments Summary */}
+                {(() => {
+                  const offersWithAtts = (offersData?.offers as Array<{
+                    supplierId: number;
+                    supplierName: string | null;
+                    attachments?: Array<{ id: number; originalName: string; sizeLabel?: string; downloadUrl?: string }>;
+                  }> | undefined)?.filter((o) => o.attachments && o.attachments.length > 0);
+                  if (!offersWithAtts?.length) return null;
+                  return (
+                    <div className="bg-card border border-border rounded-lg overflow-hidden">
+                      <div className="px-5 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
+                        <Paperclip size={14} className="text-muted-foreground" />
+                        <p className="font-medium text-foreground text-sm">مرفقات الموردين</p>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {offersWithAtts.map((o) => (
+                          <div key={o.supplierId} className="px-5 py-3">
+                            <p className="text-xs font-semibold text-foreground mb-2">{o.supplierName ?? "مورد"}</p>
+                            <div className="flex flex-wrap gap-2">
+                              {o.attachments!.map((att) => (
+                                <a
+                                  key={att.id}
+                                  href={att.downloadUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-xs bg-muted/50 border border-border rounded px-2.5 py-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 transition-colors"
+                                >
+                                  <Paperclip size={11} className="shrink-0" />
+                                  <span className="max-w-[200px] truncate">{att.originalName}</span>
+                                  {att.sizeLabel && <span className="text-muted-foreground">({att.sizeLabel})</span>}
+                                </a>
+                              ))}
+                            </div>
                           </div>
                         ))}
                       </div>
