@@ -769,7 +769,7 @@ router.post("/whatsapp/forward", requireAuth, async (req, res): Promise<void> =>
       logger.error({ err }, "Error in send-media");
       res.status(500).json({ error: "Internal error sending media" });
     }
-    }
+    });
 // ─── PATCH /api/whatsapp/messages/:id ────────────────────────────────────
 router.patch("/whatsapp/messages/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
