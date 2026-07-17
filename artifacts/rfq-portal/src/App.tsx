@@ -39,6 +39,7 @@ import WhatsAppPage from "@/modules/communications/pages/index";
 
 // ── Module: Integrations — تكاملات ERP ────────────────────────────────────
 import IntegrationsPage from "@/modules/integrations/pages/index";
+import ConnectPopupPage from "@/modules/integrations/pages/connect";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -147,6 +148,9 @@ function Router() {
       <Route path="/integrations">
         <ProtectedRoute component={IntegrationsPage} />
       </Route>
+
+      {/* Popup page — standalone, no Layout, no auth guard (auth via API) */}
+      <Route path="/integrations/connect" component={ConnectPopupPage} />
 
       <Route component={NotFound} />
     </Switch>
