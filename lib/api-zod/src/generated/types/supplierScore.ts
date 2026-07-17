@@ -9,13 +9,42 @@
 export interface SupplierScore {
   supplierId: number;
   supplierName?: string;
+  /** الدرجة الإجمالية (0-100) */
   totalScore: number;
-  onTimeScore?: number;
+  /** التقييم بالنجوم (0-5) */
+  rating: number;
+  /** سرعة الرد (0-100) */
+  responseSpeedScore?: number;
+  /** الالتزام — نسبة الاستجابة (0-100) */
+  commitmentScore?: number;
+  /** السعر — مقارنةً بمتوسط السوق (0-100) */
   priceScore?: number;
-  responseRateScore?: number;
+  /** جودة المنتج — نسبة الفوز (0-100) */
   qualityScore?: number;
+  /** مدة التوريد (0-100) */
+  deliveryScore?: number;
+  /** إجمالي طلبات عروض الأسعار المستلمة */
   totalRfqsReceived?: number;
+  /** إجمالي العروض المقدمة */
   totalOffersSubmitted?: number;
+  /** نسبة الاستجابة (%) */
   responseRate?: number;
+  /**
+     * متوسط ساعات الرد على الطلب
+     * @nullable
+     */
+  avgResponseHours?: number | null;
+  /** عدد مرات الفوز (بنود أوامر الشراء) */
+  wins?: number;
+  /** عدد مرات الرفض (قدّم عرضاً ولم يُختر) */
+  rejections?: number;
+  /**
+     * متوسط مدة التوريد بالأيام
+     * @nullable
+     */
+  avgDeliveryDays?: number | null;
+  /** متوسط انحراف السعر عن متوسط السوق (%) */
   avgPriceDelta?: number;
+  responseRateScore?: number;
+  onTimeScore?: number;
 }

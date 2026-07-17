@@ -1,6 +1,6 @@
 import { Router } from "express";
-  import { db, suppliersTable, sentLogTable, offersTable } from "@workspace/db";
-  import { eq, ilike, or, and, ne, count, sql } from "drizzle-orm";
+  import { db, suppliersTable, sentLogTable, offersTable, offerItemsTable, purchaseOrderItemsTable } from "@workspace/db";
+  import { eq, ilike, or, and, ne, count, sql, avg } from "drizzle-orm";
   import { requireAuth, requireRole } from "../../middlewares/auth";
 
   const router = Router();
@@ -14,6 +14,182 @@ import { Router } from "express";
     if (Array.isArray(cats)) return cats.map((s) => s.trim()).filter(Boolean).join(",");
     return String(cats).trim();
   }
+
+  // ─── حساب تقييم المورد ─────────────────────────────────────────────────────
+  async function computeSupplierScore(supplierId: number) {
+    // ── 1. سرعة الرد ───────────────────────────────────────────────────────────
+    // متوسط الساعات من إرسال الطلب حتى تقديم العرض
+    const responseTimeRows = await db.execute(sql`
+      SELECT EXTRACT(EPOCH FROM (o.created_at - sl.created_at)) / 3600 AS hours
+      FROM offers o
+      JOIN sent_log sl ON o.sent_log_id = sl.id
+      WHERE o.supplier_id = ${supplierId}
+        AND sl.created_at IS NOT NULL
+        AND o.sent_log_id IS NOT NULL
+    `);
+    const responseTimes = (responseTimeRows.rows as { hours: string }[])
+      .map(r => parseFloat(r.hours))
+      .filter(h => h >= 0 && h < 8760); // استثناء القيم الشاذة (> سنة)
+
+    const avgResponseHours = responseTimes.length > 0
+      ? Math.round((responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length) * 10) / 10
+      : null;
+
+    // تحويل سرعة الرد إلى score (0-100) — كلما كان أسرع كان أفضل
+    let responseSpeedScore = 50; // افتراضي لو مفيش بيانات
+    if (avgResponseHours !== null) {
+      if (avgResponseHours < 4)        responseSpeedScore = 100;
+      else if (avgResponseHours < 8)   responseSpeedScore = 90;
+      else if (avgResponseHours < 24)  responseSpeedScore = 75;
+      else if (avgResponseHours < 48)  responseSpeedScore = 60;
+      else if (avgResponseHours < 72)  responseSpeedScore = 45;
+      else if (avgResponseHours < 168) responseSpeedScore = 30;
+      else                             responseSpeedScore = 15;
+    }
+
+    // ── 2. الالتزام (نسبة الاستجابة) ────────────────────────────────────────────
+    const [sentStats] = await db.select({ total: count() })
+      .from(sentLogTable).where(eq(sentLogTable.supplierId, supplierId));
+    const [offerStats] = await db.select({ total: count() })
+      .from(offersTable).where(eq(offersTable.supplierId, supplierId));
+
+    const totalRfqsReceived = Number(sentStats?.total ?? 0);
+    const totalOffersSubmitted = Number(offerStats?.total ?? 0);
+    const responseRate = totalRfqsReceived > 0
+      ? Math.round((totalOffersSubmitted / totalRfqsReceived) * 1000) / 10
+      : 0;
+    const commitmentScore = Math.min(Math.round(responseRate), 100);
+
+    // ── 3. السعر (مقارنة بمتوسط السوق) ─────────────────────────────────────────
+    // لكل بند قدّم عليه المورد عرض، نقارن سعره بمتوسط سعر كل الموردين على نفس البند
+    const priceDeviationRows = await db.execute(sql`
+      SELECT
+        AVG(
+          CASE WHEN market.avg_price > 0
+               THEN (oi.price::numeric - market.avg_price) / market.avg_price * 100
+               ELSE 0
+          END
+        ) AS avg_delta
+      FROM offer_items oi
+      JOIN offers o ON oi.offer_id = o.id
+      JOIN (
+        SELECT oi2.rfq_item_id,
+               AVG(oi2.price::numeric) AS avg_price
+        FROM offer_items oi2
+        JOIN offers o2 ON oi2.offer_id = o2.id
+        GROUP BY oi2.rfq_item_id
+      ) market ON market.rfq_item_id = oi.rfq_item_id
+      WHERE o.supplier_id = ${supplierId}
+    `);
+    const avgPriceDelta = priceDeviationRows.rows[0]
+      ? (parseFloat((priceDeviationRows.rows[0] as { avg_delta: string }).avg_delta ?? "0") || 0)
+      : 0;
+    const roundedDelta = Math.round(avgPriceDelta * 10) / 10;
+
+    // تحويل الفارق السعري إلى score (كلما كان أرخص كان أفضل)
+    // -20% أو أقل = 100، 0% = 70، +20% أو أكثر = 40
+    let priceScore: number;
+    if (roundedDelta <= -20)      priceScore = 100;
+    else if (roundedDelta <= 0)   priceScore = Math.round(70 + (Math.abs(roundedDelta) / 20) * 30);
+    else if (roundedDelta <= 20)  priceScore = Math.round(70 - (roundedDelta / 20) * 30);
+    else                          priceScore = 40;
+    priceScore = Math.max(0, Math.min(100, priceScore));
+
+    // ── 4. عدد مرات الفوز والرفض ────────────────────────────────────────────────
+    // الفوز: عدد بنود أوامر الشراء المرتبطة بهذا المورد
+    const [winsRow] = await db.select({ cnt: count() })
+      .from(purchaseOrderItemsTable)
+      .where(eq(purchaseOrderItemsTable.supplierId, supplierId));
+    const wins = Number(winsRow?.cnt ?? 0);
+
+    // الرفض: عدد الـ RFQs اللي قدّم فيها عرض بس ما اتاخدش منه أي بند في PO
+    const rejectionRows = await db.execute(sql`
+      SELECT COUNT(DISTINCT o.rfq_id) AS rejections
+      FROM offers o
+      WHERE o.supplier_id = ${supplierId}
+        AND o.rfq_id IN (
+          SELECT DISTINCT poi.po_id
+          FROM purchase_order_items poi
+          WHERE poi.supplier_id IS NOT NULL
+        )
+        AND o.rfq_id NOT IN (
+          SELECT DISTINCT poi2.po_id
+          FROM purchase_order_items poi2
+          WHERE poi2.supplier_id = ${supplierId}
+        )
+    `);
+    const rejections = parseInt(String((rejectionRows.rows[0] as { rejections: string })?.rejections ?? "0"), 10);
+
+    // ── 5. جودة المنتج (نسبة الفوز من العروض المقدمة) ──────────────────────────
+    // نسبة البنود الفائزة من إجمالي البنود المعروضة
+    const [itemsOfferedRow] = await db
+      .select({ cnt: count() })
+      .from(offerItemsTable)
+      .leftJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+      .where(eq(offersTable.supplierId, supplierId));
+    const totalItemsOffered = Number(itemsOfferedRow?.cnt ?? 0);
+
+    const qualityScore = totalItemsOffered > 0
+      ? Math.min(100, Math.round((wins / totalItemsOffered) * 100 * 1.5)) // تضخيم خفيف لأن win rate عادةً منخفض
+      : 50;
+
+    // ── 6. متوسط مدة التوريد ────────────────────────────────────────────────────
+    const [deliveryRow] = await db
+      .select({ avg: avg(offerItemsTable.deliveryDays) })
+      .from(offerItemsTable)
+      .leftJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+      .where(eq(offersTable.supplierId, supplierId));
+    const avgDeliveryDays = deliveryRow?.avg
+      ? Math.round(parseFloat(String(deliveryRow.avg)))
+      : null;
+
+    // نسبة التأخير: لا يوجد تاريخ فعلي للتسليم، نستخدم متوسط أيام التوريد كمؤشر
+    // (كلما كانت أيام التوريد أقل، كانت النسبة أفضل)
+    let deliveryScore = 70; // افتراضي
+    if (avgDeliveryDays !== null) {
+      if (avgDeliveryDays <= 7)        deliveryScore = 100;
+      else if (avgDeliveryDays <= 14)  deliveryScore = 85;
+      else if (avgDeliveryDays <= 30)  deliveryScore = 70;
+      else if (avgDeliveryDays <= 60)  deliveryScore = 55;
+      else                             deliveryScore = 35;
+    }
+
+    // ── 7. الدرجة الإجمالية والتقييم بالنجوم ───────────────────────────────────
+    // الأوزان: سرعة الرد 20% | الالتزام 25% | السعر 25% | الجودة 15% | مدة التوريد 15%
+    const totalScore = Math.round(
+      responseSpeedScore * 0.20 +
+      commitmentScore    * 0.25 +
+      priceScore         * 0.25 +
+      qualityScore       * 0.15 +
+      deliveryScore      * 0.15
+    );
+
+    // تحويل إلى تقييم 5 نجوم (مع ضمان حد أدنى 1.0 لو عنده أي نشاط)
+    const rawRating = (totalScore / 100) * 5;
+    const rating = totalRfqsReceived > 0
+      ? Math.round(Math.max(1.0, rawRating) * 10) / 10
+      : 0;
+
+    return {
+      totalRfqsReceived,
+      totalOffersSubmitted,
+      responseRate,
+      avgResponseHours,
+      responseSpeedScore,
+      commitmentScore,
+      priceScore,
+      qualityScore,
+      avgPriceDelta: roundedDelta,
+      wins,
+      rejections,
+      avgDeliveryDays,
+      deliveryScore,
+      totalScore,
+      rating,
+    };
+  }
+
+  // ─── Routes ────────────────────────────────────────────────────────────────
 
   router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
     const { category, search } = req.query as Record<string, string>;
@@ -44,6 +220,22 @@ import { Router } from "express";
       address: s.address, category: s.category, categories: toArray(s.category),
       isActive: s.isActive, createdAt: s.createdAt.toISOString(),
     })));
+  });
+
+  // قائمة تقييمات جميع الموردين دفعة واحدة
+  router.get("/suppliers/scores", requireAuth, async (req, res): Promise<void> => {
+    const suppliers = await db.select().from(suppliersTable)
+      .where(eq(suppliersTable.isActive, true))
+      .orderBy(suppliersTable.name);
+
+    const scores = await Promise.all(suppliers.map(async (s) => {
+      const score = await computeSupplierScore(s.id);
+      return { supplierId: s.id, supplierName: s.name, ...score };
+    }));
+
+    // ترتيب حسب التقييم تنازلياً
+    scores.sort((a, b) => b.rating - a.rating);
+    res.json(scores);
   });
 
   // Any authenticated employee can add a supplier
@@ -168,35 +360,13 @@ import { Router } from "express";
     const [supplier] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, supplierId));
     if (!supplier) { res.status(404).json({ error: "Not found" }); return; }
 
-    const [sentStats] = await db.select({ total: count() })
-      .from(sentLogTable).where(eq(sentLogTable.supplierId, supplierId));
-
-    const [offerStats] = await db.select({ total: count() })
-      .from(offersTable).where(eq(offersTable.supplierId, supplierId));
-
-    const totalSent = sentStats?.total ?? 0;
-    const totalOffers = offerStats?.total ?? 0;
-    const responseRate = totalSent > 0 ? (totalOffers / totalSent) * 100 : 0;
-    const responseRateScore = Math.min(responseRate, 100);
-    const priceScore = 70;
-    const onTimeScore = 80;
-    const qualityScore = 75;
-    const totalScore = (responseRateScore * 0.3 + priceScore * 0.4 + onTimeScore * 0.2 + qualityScore * 0.1);
+    const score = await computeSupplierScore(supplierId);
 
     res.json({
       supplierId,
       supplierName: supplier.name,
-      totalScore: Math.round(totalScore),
-      onTimeScore,
-      priceScore,
-      responseRateScore: Math.round(responseRateScore),
-      qualityScore,
-      totalRfqsReceived: totalSent,
-      totalOffersSubmitted: totalOffers,
-      responseRate: Math.round(responseRate * 10) / 10,
-      avgPriceDelta: 0,
+      ...score,
     });
   });
 
   export default router;
-  

@@ -275,6 +275,33 @@ export const UpdateSupplierResponse = zod.object({
 
 
 /**
+ * @summary تقييمات جميع الموردين مرتبةً تنازلياً
+ */
+export const ListSupplierScoresResponseItem = zod.object({
+  "supplierId": zod.number(),
+  "supplierName": zod.string().optional(),
+  "totalScore": zod.number().describe('الدرجة الإجمالية (0-100)'),
+  "rating": zod.number().describe('التقييم بالنجوم (0-5)'),
+  "responseSpeedScore": zod.number().optional().describe('سرعة الرد (0-100)'),
+  "commitmentScore": zod.number().optional().describe('الالتزام — نسبة الاستجابة (0-100)'),
+  "priceScore": zod.number().optional().describe('السعر — مقارنةً بمتوسط السوق (0-100)'),
+  "qualityScore": zod.number().optional().describe('جودة المنتج — نسبة الفوز (0-100)'),
+  "deliveryScore": zod.number().optional().describe('مدة التوريد (0-100)'),
+  "totalRfqsReceived": zod.number().optional().describe('إجمالي طلبات عروض الأسعار المستلمة'),
+  "totalOffersSubmitted": zod.number().optional().describe('إجمالي العروض المقدمة'),
+  "responseRate": zod.number().optional().describe('نسبة الاستجابة (%)'),
+  "avgResponseHours": zod.number().nullish().describe('متوسط ساعات الرد على الطلب'),
+  "wins": zod.number().optional().describe('عدد مرات الفوز (بنود أوامر الشراء)'),
+  "rejections": zod.number().optional().describe('عدد مرات الرفض (قدّم عرضاً ولم يُختر)'),
+  "avgDeliveryDays": zod.number().nullish().describe('متوسط مدة التوريد بالأيام'),
+  "avgPriceDelta": zod.number().optional().describe('متوسط انحراف السعر عن متوسط السوق (%)'),
+  "responseRateScore": zod.number().optional(),
+  "onTimeScore": zod.number().optional()
+})
+export const ListSupplierScoresResponse = zod.array(ListSupplierScoresResponseItem)
+
+
+/**
  * @summary Get supplier performance score
  */
 export const GetSupplierScoreParams = zod.object({
@@ -284,15 +311,23 @@ export const GetSupplierScoreParams = zod.object({
 export const GetSupplierScoreResponse = zod.object({
   "supplierId": zod.number(),
   "supplierName": zod.string().optional(),
-  "totalScore": zod.number(),
-  "onTimeScore": zod.number().optional(),
-  "priceScore": zod.number().optional(),
+  "totalScore": zod.number().describe('الدرجة الإجمالية (0-100)'),
+  "rating": zod.number().describe('التقييم بالنجوم (0-5)'),
+  "responseSpeedScore": zod.number().optional().describe('سرعة الرد (0-100)'),
+  "commitmentScore": zod.number().optional().describe('الالتزام — نسبة الاستجابة (0-100)'),
+  "priceScore": zod.number().optional().describe('السعر — مقارنةً بمتوسط السوق (0-100)'),
+  "qualityScore": zod.number().optional().describe('جودة المنتج — نسبة الفوز (0-100)'),
+  "deliveryScore": zod.number().optional().describe('مدة التوريد (0-100)'),
+  "totalRfqsReceived": zod.number().optional().describe('إجمالي طلبات عروض الأسعار المستلمة'),
+  "totalOffersSubmitted": zod.number().optional().describe('إجمالي العروض المقدمة'),
+  "responseRate": zod.number().optional().describe('نسبة الاستجابة (%)'),
+  "avgResponseHours": zod.number().nullish().describe('متوسط ساعات الرد على الطلب'),
+  "wins": zod.number().optional().describe('عدد مرات الفوز (بنود أوامر الشراء)'),
+  "rejections": zod.number().optional().describe('عدد مرات الرفض (قدّم عرضاً ولم يُختر)'),
+  "avgDeliveryDays": zod.number().nullish().describe('متوسط مدة التوريد بالأيام'),
+  "avgPriceDelta": zod.number().optional().describe('متوسط انحراف السعر عن متوسط السوق (%)'),
   "responseRateScore": zod.number().optional(),
-  "qualityScore": zod.number().optional(),
-  "totalRfqsReceived": zod.number().optional(),
-  "totalOffersSubmitted": zod.number().optional(),
-  "responseRate": zod.number().optional(),
-  "avgPriceDelta": zod.number().optional()
+  "onTimeScore": zod.number().optional()
 })
 
 
@@ -946,15 +981,23 @@ export const GetDashboardStatsResponse = zod.object({
   "topSuppliers": zod.array(zod.object({
   "supplierId": zod.number(),
   "supplierName": zod.string().optional(),
-  "totalScore": zod.number(),
-  "onTimeScore": zod.number().optional(),
-  "priceScore": zod.number().optional(),
+  "totalScore": zod.number().describe('الدرجة الإجمالية (0-100)'),
+  "rating": zod.number().describe('التقييم بالنجوم (0-5)'),
+  "responseSpeedScore": zod.number().optional().describe('سرعة الرد (0-100)'),
+  "commitmentScore": zod.number().optional().describe('الالتزام — نسبة الاستجابة (0-100)'),
+  "priceScore": zod.number().optional().describe('السعر — مقارنةً بمتوسط السوق (0-100)'),
+  "qualityScore": zod.number().optional().describe('جودة المنتج — نسبة الفوز (0-100)'),
+  "deliveryScore": zod.number().optional().describe('مدة التوريد (0-100)'),
+  "totalRfqsReceived": zod.number().optional().describe('إجمالي طلبات عروض الأسعار المستلمة'),
+  "totalOffersSubmitted": zod.number().optional().describe('إجمالي العروض المقدمة'),
+  "responseRate": zod.number().optional().describe('نسبة الاستجابة (%)'),
+  "avgResponseHours": zod.number().nullish().describe('متوسط ساعات الرد على الطلب'),
+  "wins": zod.number().optional().describe('عدد مرات الفوز (بنود أوامر الشراء)'),
+  "rejections": zod.number().optional().describe('عدد مرات الرفض (قدّم عرضاً ولم يُختر)'),
+  "avgDeliveryDays": zod.number().nullish().describe('متوسط مدة التوريد بالأيام'),
+  "avgPriceDelta": zod.number().optional().describe('متوسط انحراف السعر عن متوسط السوق (%)'),
   "responseRateScore": zod.number().optional(),
-  "qualityScore": zod.number().optional(),
-  "totalRfqsReceived": zod.number().optional(),
-  "totalOffersSubmitted": zod.number().optional(),
-  "responseRate": zod.number().optional(),
-  "avgPriceDelta": zod.number().optional()
+  "onTimeScore": zod.number().optional()
 })).optional(),
   "responseRateThisMonth": zod.number().optional(),
   "avgResponseTimeHours": zod.number().optional(),

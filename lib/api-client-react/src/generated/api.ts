@@ -1201,6 +1201,83 @@ export const useUpdateSupplier = <TError = ErrorType<unknown>,
       return useMutation(getUpdateSupplierMutationOptions(options));
     }
 
+export const getListSupplierScoresUrl = () => {
+
+
+
+
+  return `/api/suppliers/scores`
+}
+
+/**
+ * @summary تقييمات جميع الموردين مرتبةً تنازلياً
+ */
+export const listSupplierScores = async ( options?: RequestInit): Promise<SupplierScore[]> => {
+
+  return customFetch<SupplierScore[]>(getListSupplierScoresUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSupplierScoresQueryKey = () => {
+    return [
+    `/api/suppliers/scores`
+    ] as const;
+    }
+
+
+export const getListSupplierScoresQueryOptions = <TData = Awaited<ReturnType<typeof listSupplierScores>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierScores>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSupplierScoresQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSupplierScores>>> = ({ signal }) => listSupplierScores({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSupplierScores>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSupplierScoresQueryResult = NonNullable<Awaited<ReturnType<typeof listSupplierScores>>>
+export type ListSupplierScoresQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary تقييمات جميع الموردين مرتبةً تنازلياً
+ */
+
+export function useListSupplierScores<TData = Awaited<ReturnType<typeof listSupplierScores>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSupplierScores>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSupplierScoresQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetSupplierScoreUrl = (id: number,) => {
 
 

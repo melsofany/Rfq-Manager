@@ -295,6 +295,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Supplier"
 
+  /suppliers/scores:
+    get:
+      operationId: listSupplierScores
+      tags: [suppliers]
+      summary: "تقييمات جميع الموردين مرتبةً تنازلياً"
+      responses:
+        "200":
+          description: قائمة تقييمات الموردين
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SupplierScore"
+
   /suppliers/{id}/score:
     get:
       operationId: getSupplierScore
@@ -991,29 +1006,64 @@ components:
 
     SupplierScore:
       type: object
-      required: [supplierId, totalScore]
+      required: [supplierId, totalScore, rating]
       properties:
         supplierId:
           type: integer
         supplierName:
           type: string
+        # الدرجة الإجمالية والتقييم
         totalScore:
           type: number
-        onTimeScore:
+          description: "الدرجة الإجمالية (0-100)"
+        rating:
           type: number
+          description: "التقييم بالنجوم (0-5)"
+        # درجات المعاملات الفردية (0-100 لكل منها)
+        responseSpeedScore:
+          type: number
+          description: "سرعة الرد (0-100)"
+        commitmentScore:
+          type: number
+          description: "الالتزام — نسبة الاستجابة (0-100)"
         priceScore:
           type: number
-        responseRateScore:
-          type: number
+          description: "السعر — مقارنةً بمتوسط السوق (0-100)"
         qualityScore:
           type: number
+          description: "جودة المنتج — نسبة الفوز (0-100)"
+        deliveryScore:
+          type: number
+          description: "مدة التوريد (0-100)"
+        # إحصاءات مفصّلة
         totalRfqsReceived:
           type: integer
+          description: "إجمالي طلبات عروض الأسعار المستلمة"
         totalOffersSubmitted:
           type: integer
+          description: "إجمالي العروض المقدمة"
         responseRate:
           type: number
+          description: "نسبة الاستجابة (%)"
+        avgResponseHours:
+          type: ["number", "null"]
+          description: "متوسط ساعات الرد على الطلب"
+        wins:
+          type: integer
+          description: "عدد مرات الفوز (بنود أوامر الشراء)"
+        rejections:
+          type: integer
+          description: "عدد مرات الرفض (قدّم عرضاً ولم يُختر)"
+        avgDeliveryDays:
+          type: ["integer", "null"]
+          description: "متوسط مدة التوريد بالأيام"
         avgPriceDelta:
+          type: number
+          description: "متوسط انحراف السعر عن متوسط السوق (%)"
+        # للتوافق مع الحقول القديمة
+        responseRateScore:
+          type: number
+        onTimeScore:
           type: number
 
     # RFQ
