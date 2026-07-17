@@ -174,6 +174,7 @@ export async function initDb(): Promise<void> {
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS media_type TEXT;
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS mime_type TEXT;
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS filename TEXT;
+        ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS reply_to_message_id TEXT;
       `);
     // Migrate old RFQ status values to new unified status workflow (idempotent)
     await client.query(`
