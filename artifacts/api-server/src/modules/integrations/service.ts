@@ -1,9 +1,17 @@
 /**
  * خدمة التكامل مع أنظمة ERP
- * تدير الإعدادات وتنفّذ عمليات المزامنة
+ * تستخدم Drizzle ORM بدلاً من raw SQL
  */
 
-import { pool } from "@workspace/db";
+import { eq, or, sql } from "drizzle-orm";
+import {
+  getDb,
+  erpIntegrationsTable,
+  suppliersTable,
+  rfqTable,
+  purchaseOrdersTable,
+  type ErpIntegration as DbErpIntegration,
+} from "@workspace/db";
 import { logger } from "../../shared/logger";
 import * as OdooConnector from "./connectors/odoo";
 import * as SapConnector from "./connectors/sap";
@@ -26,105 +34,104 @@ export interface ErpIntegration {
   updatedAt: string;
 }
 
-// ─── DB helpers ──────────────────────────────────────────────────────────────
+// ─── Row → DTO ────────────────────────────────────────────────────────────────
+
+function toDto(row: DbErpIntegration): ErpIntegration {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type as ErpType,
+    config: (row.config as Record<string, unknown>) ?? {},
+    isActive: row.isActive,
+    lastSyncAt:     row.lastSyncAt     ? row.lastSyncAt.toISOString()  : null,
+    lastSyncStatus: row.lastSyncStatus as "success" | "error" | "partial" | null,
+    lastSyncError:  row.lastSyncError  ?? null,
+    lastSyncStats:  row.lastSyncStats  as Record<string, number> | null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+// ─── CRUD ────────────────────────────────────────────────────────────────────
 
 export async function listIntegrations(): Promise<ErpIntegration[]> {
-  const client = await pool.connect();
-  try {
-    const { rows } = await client.query(
-      `SELECT id, name, type, config, is_active, last_sync_at, last_sync_status,
-              last_sync_error, last_sync_stats, created_at, updated_at
-       FROM erp_integrations ORDER BY id`
-    );
-    return rows.map(mapRow);
-  } finally { client.release(); }
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(erpIntegrationsTable)
+    .orderBy(erpIntegrationsTable.id);
+  return rows.map(toDto);
 }
 
 export async function getIntegration(id: number): Promise<ErpIntegration | null> {
-  const client = await pool.connect();
-  try {
-    const { rows } = await client.query(
-      `SELECT * FROM erp_integrations WHERE id = $1`, [id]
-    );
-    return rows.length ? mapRow(rows[0]) : null;
-  } finally { client.release(); }
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(erpIntegrationsTable)
+    .where(eq(erpIntegrationsTable.id, id))
+    .limit(1);
+  return rows.length ? toDto(rows[0]) : null;
 }
 
 export async function createIntegration(data: {
-  name: string; type: ErpType; config: Record<string, unknown>;
+  name: string;
+  type: ErpType;
+  config: Record<string, unknown>;
 }): Promise<ErpIntegration> {
-  const client = await pool.connect();
-  try {
-    const { rows } = await client.query(
-      `INSERT INTO erp_integrations (name, type, config) VALUES ($1, $2, $3) RETURNING *`,
-      [data.name, data.type, JSON.stringify(data.config)]
-    );
-    return mapRow(rows[0]);
-  } finally { client.release(); }
+  const db = getDb();
+  const rows = await db
+    .insert(erpIntegrationsTable)
+    .values({ name: data.name, type: data.type, config: data.config })
+    .returning();
+  return toDto(rows[0]);
 }
 
-export async function updateIntegration(id: number, data: Partial<{
-  name: string; type: ErpType; config: Record<string, unknown>; isActive: boolean;
-}>): Promise<ErpIntegration | null> {
-  const client = await pool.connect();
-  try {
-    const sets: string[] = [];
-    const vals: unknown[] = [];
-    let i = 1;
-    if (data.name !== undefined) { sets.push(`name = $${i++}`); vals.push(data.name); }
-    if (data.type !== undefined) { sets.push(`type = $${i++}`); vals.push(data.type); }
-    if (data.config !== undefined) { sets.push(`config = $${i++}`); vals.push(JSON.stringify(data.config)); }
-    if (data.isActive !== undefined) { sets.push(`is_active = $${i++}`); vals.push(data.isActive); }
-    if (!sets.length) return getIntegration(id);
-    sets.push(`updated_at = NOW()`);
-    vals.push(id);
-    const { rows } = await client.query(
-      `UPDATE erp_integrations SET ${sets.join(", ")} WHERE id = $${i} RETURNING *`, vals
-    );
-    return rows.length ? mapRow(rows[0]) : null;
-  } finally { client.release(); }
+export async function updateIntegration(
+  id: number,
+  data: Partial<{ name: string; type: ErpType; config: Record<string, unknown>; isActive: boolean }>,
+): Promise<ErpIntegration | null> {
+  const db = getDb();
+  const rows = await db
+    .update(erpIntegrationsTable)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(erpIntegrationsTable.id, id))
+    .returning();
+  return rows.length ? toDto(rows[0]) : null;
 }
 
 export async function deleteIntegration(id: number): Promise<boolean> {
-  const client = await pool.connect();
-  try {
-    const { rowCount } = await client.query(`DELETE FROM erp_integrations WHERE id = $1`, [id]);
-    return (rowCount ?? 0) > 0;
-  } finally { client.release(); }
+  const db = getDb();
+  const rows = await db
+    .delete(erpIntegrationsTable)
+    .where(eq(erpIntegrationsTable.id, id))
+    .returning({ id: erpIntegrationsTable.id });
+  return rows.length > 0;
 }
 
-async function updateSyncResult(id: number, status: "success" | "error" | "partial", stats?: Record<string, number>, error?: string) {
-  const client = await pool.connect();
-  try {
-    await client.query(
-      `UPDATE erp_integrations SET
-         last_sync_at = NOW(), last_sync_status = $2,
-         last_sync_stats = $3, last_sync_error = $4, updated_at = NOW()
-       WHERE id = $1`,
-      [id, status, stats ? JSON.stringify(stats) : null, error ?? null]
-    );
-  } finally { client.release(); }
-}
-
-function mapRow(r: Record<string, unknown>): ErpIntegration {
-  return {
-    id: Number(r.id),
-    name: String(r.name ?? ""),
-    type: String(r.type ?? "") as ErpType,
-    config: (typeof r.config === "object" ? r.config : {}) as Record<string, unknown>,
-    isActive: Boolean(r.is_active),
-    lastSyncAt: r.last_sync_at ? String(r.last_sync_at) : null,
-    lastSyncStatus: (r.last_sync_status as "success" | "error" | "partial" | null) ?? null,
-    lastSyncError: r.last_sync_error ? String(r.last_sync_error) : null,
-    lastSyncStats: (r.last_sync_stats as Record<string, number> | null) ?? null,
-    createdAt: String(r.created_at ?? ""),
-    updatedAt: String(r.updated_at ?? ""),
-  };
+async function updateSyncResult(
+  id: number,
+  status: "success" | "error" | "partial",
+  stats?: Record<string, number>,
+  error?: string,
+) {
+  const db = getDb();
+  await db
+    .update(erpIntegrationsTable)
+    .set({
+      lastSyncAt:     new Date(),
+      lastSyncStatus: status,
+      lastSyncStats:  stats ?? null,
+      lastSyncError:  error ?? null,
+      updatedAt:      new Date(),
+    })
+    .where(eq(erpIntegrationsTable.id, id));
 }
 
 // ─── Test Connection ──────────────────────────────────────────────────────────
 
-export async function testConnection(integration: ErpIntegration): Promise<{ ok: boolean; version?: string; error?: string }> {
+export async function testConnection(
+  integration: ErpIntegration,
+): Promise<{ ok: boolean; version?: string; error?: string }> {
   const cfg = integration.config;
   try {
     switch (integration.type) {
@@ -139,7 +146,7 @@ export async function testConnection(integration: ErpIntegration): Promise<{ ok:
       case "google-sheets":
         return await GoogleSheetsErp.testConnection({
           serviceAccountBase64: String(cfg.serviceAccountBase64 ?? process.env.GOOGLE_ACCOUNT_BASE_64 ?? ""),
-          spreadsheetId: String(cfg.spreadsheetId ?? process.env.GOOGLE_MIRROR_SHEET_ID ?? ""),
+          spreadsheetId:        String(cfg.spreadsheetId        ?? process.env.GOOGLE_MIRROR_SHEET_ID ?? ""),
         });
       default:
         return { ok: false, error: "نوع التكامل غير مدعوم" };
@@ -151,7 +158,9 @@ export async function testConnection(integration: ErpIntegration): Promise<{ ok:
 
 // ─── Import Suppliers from ERP ───────────────────────────────────────────────
 
-export async function syncSuppliers(integration: ErpIntegration): Promise<{ imported: number; updated: number; skipped: number }> {
+export async function syncSuppliers(
+  integration: ErpIntegration,
+): Promise<{ imported: number; updated: number; skipped: number }> {
   const cfg = integration.config;
   let erpSuppliers: OdooConnector.ErpSupplier[] = [];
 
@@ -171,153 +180,185 @@ export async function syncSuppliers(integration: ErpIntegration): Promise<{ impo
     case "google-sheets":
       erpSuppliers = await GoogleSheetsErp.importSuppliers({
         serviceAccountBase64: String(cfg.serviceAccountBase64 ?? process.env.GOOGLE_ACCOUNT_BASE_64 ?? ""),
-        spreadsheetId: String(cfg.spreadsheetId ?? process.env.GOOGLE_MIRROR_SHEET_ID ?? ""),
-        dataSheetName: String(cfg.dataSheetName ?? "Suppliers"),
+        spreadsheetId:        String(cfg.spreadsheetId        ?? process.env.GOOGLE_MIRROR_SHEET_ID ?? ""),
+        dataSheetName:        String(cfg.dataSheetName        ?? "Suppliers"),
       });
       break;
     default:
       throw new Error("نوع التكامل غير مدعوم");
   }
 
-  const client = await pool.connect();
+  const db = getDb();
   let imported = 0, updated = 0, skipped = 0;
 
-  try {
-    for (const s of erpSuppliers) {
-      if (!s.name?.trim()) { skipped++; continue; }
+  for (const s of erpSuppliers) {
+    if (!s.name?.trim()) { skipped++; continue; }
 
-      // البحث عن مورد موجود بنفس الاسم أو الإيميل
-      const existing = await client.query(
-        `SELECT id FROM suppliers WHERE
-           (LOWER(name) = LOWER($1))
-           OR (email IS NOT NULL AND email != '' AND LOWER(email) = LOWER($2))
-         LIMIT 1`,
-        [s.name.trim(), s.email?.trim() ?? ""]
-      );
+    // ابحث عن مورد موجود بنفس الاسم (case-insensitive) أو الإيميل
+    const existing = await db
+      .select({ id: suppliersTable.id })
+      .from(suppliersTable)
+      .where(
+        or(
+          sql`LOWER(${suppliersTable.name}) = LOWER(${s.name.trim()})`,
+          s.email?.trim()
+            ? sql`(${suppliersTable.email} IS NOT NULL AND ${suppliersTable.email} != '' AND LOWER(${suppliersTable.email}) = LOWER(${s.email.trim()}))`
+            : sql`false`,
+        ),
+      )
+      .limit(1);
 
-      if (existing.rows.length > 0) {
-        // تحديث البيانات المفقودة فقط
-        await client.query(
-          `UPDATE suppliers SET
-             contact_person = COALESCE(NULLIF(contact_person, ''), $2),
-             email  = COALESCE(NULLIF(email,  ''), $3),
-             phone  = COALESCE(NULLIF(phone,  ''), $4),
-             address = COALESCE(NULLIF(address, ''), $5),
-             updated_at = NOW()
-           WHERE id = $1`,
-          [existing.rows[0].id, s.contactPerson ?? null, s.email ?? null, s.phone ?? null, s.address ?? null]
-        );
-        updated++;
-      } else {
-        await client.query(
-          `INSERT INTO suppliers (name, contact_person, email, phone, address, category, is_active)
-           VALUES ($1, $2, $3, $4, $5, $6, true)`,
-          [s.name.trim(), s.contactPerson ?? null, s.email ?? null, s.phone ?? null, s.address ?? null, s.category ?? "general"]
-        );
-        imported++;
-      }
+    if (existing.length > 0) {
+      // حدّث فقط الحقول الفارغة
+      await db
+        .update(suppliersTable)
+        .set({
+          contactPerson: sql`COALESCE(NULLIF(${suppliersTable.contactPerson}, ''), ${s.contactPerson ?? null})`,
+          email:         sql`COALESCE(NULLIF(${suppliersTable.email},         ''), ${s.email         ?? null})`,
+          phone:         sql`COALESCE(NULLIF(${suppliersTable.phone},         ''), ${s.phone         ?? null})`,
+          address:       sql`COALESCE(NULLIF(${suppliersTable.address},       ''), ${s.address       ?? null})`,
+          updatedAt:     new Date(),
+        })
+        .where(eq(suppliersTable.id, existing[0].id));
+      updated++;
+    } else {
+      await db.insert(suppliersTable).values({
+        name:          s.name.trim(),
+        contactPerson: s.contactPerson ?? null,
+        email:         s.email         ?? null,
+        phone:         s.phone         ?? null,
+        address:       s.address       ?? null,
+        category:      s.category      ?? "general",
+        isActive:      true,
+      });
+      imported++;
     }
-  } finally { client.release(); }
+  }
 
   logger.info({ integration: integration.name, imported, updated, skipped }, "ERP supplier sync done");
   return { imported, updated, skipped };
 }
 
-// ─── Export to ERP ────────────────────────────────────────────────────────────
+// ─── Export to Google Sheets ──────────────────────────────────────────────────
 
-export async function syncToErp(integration: ErpIntegration): Promise<{ rfqs: number; pos: number; suppliers: number }> {
+export async function syncToErp(
+  integration: ErpIntegration,
+): Promise<{ rfqs: number; pos: number; suppliers: number }> {
   const cfg = integration.config;
-  const client = await pool.connect();
-  let rfqs = 0, pos = 0, suppliers = 0;
+  let rfqsCount = 0, posCount = 0, suppliersCount = 0;
 
-  try {
-    if (integration.type === "google-sheets") {
-      const gCfg: GoogleSheetsErp.GoogleSheetsErpConfig = {
-        serviceAccountBase64: String(cfg.serviceAccountBase64 ?? process.env.GOOGLE_ACCOUNT_BASE_64 ?? ""),
-        spreadsheetId: String(cfg.spreadsheetId ?? process.env.GOOGLE_MIRROR_SHEET_ID ?? ""),
-      };
+  if (integration.type !== "google-sheets") {
+    return { rfqs: 0, pos: 0, suppliers: 0 };
+  }
 
-      // تصدير الموردين
-      const supplierRows = await client.query(`SELECT name, email, phone, address, category FROM suppliers WHERE is_active = true ORDER BY name`);
-      // جلب التقييم لكل مورد
-      const suppliersData = supplierRows.rows.map((s: Record<string, unknown>) => ({
-        name: String(s.name), email: s.email ? String(s.email) : undefined,
-        phone: s.phone ? String(s.phone) : undefined, address: s.address ? String(s.address) : undefined,
-        category: s.category ? String(s.category) : undefined,
-      }));
-      await GoogleSheetsErp.exportSuppliers(gCfg, suppliersData);
-      suppliers = suppliersData.length;
+  const gCfg: GoogleSheetsErp.GoogleSheetsErpConfig = {
+    serviceAccountBase64: String(cfg.serviceAccountBase64 ?? process.env.GOOGLE_ACCOUNT_BASE_64 ?? ""),
+    spreadsheetId:        String(cfg.spreadsheetId        ?? process.env.GOOGLE_MIRROR_SHEET_ID ?? ""),
+  };
 
-      // تصدير الـ RFQs
-      const rfqRows = await client.query(
-        `SELECT r.internal_rfq_no, r.customer_rfq_no, r.status, r.created_at,
-                (SELECT COUNT(*) FROM sent_log sl WHERE sl.rfq_id = r.id) AS supplier_count,
-                (SELECT COUNT(*) FROM offers o WHERE o.rfq_id = r.id) AS offer_count
-         FROM rfq r ORDER BY r.created_at DESC LIMIT 500`
-      );
-      await GoogleSheetsErp.exportRfqs(gCfg, rfqRows.rows.map((r: Record<string, unknown>) => ({
-        internalRfqNo: String(r.internal_rfq_no),
-        customerRfqNo: String(r.customer_rfq_no),
-        status: String(r.status),
-        supplierCount: Number(r.supplier_count),
-        offerCount: Number(r.offer_count),
-        createdAt: String(r.created_at).split("T")[0],
-      })));
-      rfqs = rfqRows.rows.length;
+  const db = getDb();
 
-      // تصدير أوامر الشراء
-      const poRows = await client.query(
-        `SELECT po.internal_po_no, po.sheet_po_no, po.status, po.created_at,
-                (SELECT COUNT(*) FROM purchase_order_items poi WHERE poi.po_id = po.id) AS item_count,
-                s.name AS supplier_name
-         FROM purchase_orders po
-         LEFT JOIN (
-           SELECT DISTINCT ON (poi2.po_id) poi2.po_id, sup.name
-           FROM purchase_order_items poi2
-           JOIN suppliers sup ON poi2.supplier_id = sup.id
-         ) s ON s.po_id = po.id
-         ORDER BY po.created_at DESC LIMIT 200`
-      );
-      await GoogleSheetsErp.exportPurchaseOrders(gCfg, poRows.rows.map((p: Record<string, unknown>) => ({
-        internalPoNo: String(p.internal_po_no),
-        sheetPoNo: String(p.sheet_po_no),
-        supplierName: p.supplier_name ? String(p.supplier_name) : undefined,
-        status: String(p.status),
-        itemCount: Number(p.item_count),
-        createdAt: String(p.created_at).split("T")[0],
-      })));
-      pos = poRows.rows.length;
-    }
-    // لـ Odoo/SAP/Oracle: تُنفَّذ العمليات حسب الطلب من الـ routes
-  } finally { client.release(); }
+  // ── 1. تصدير الموردين ────────────────────────────────────────────────────
+  const supplierRows = await db
+    .select({
+      name:     suppliersTable.name,
+      email:    suppliersTable.email,
+      phone:    suppliersTable.phone,
+      address:  suppliersTable.address,
+      category: suppliersTable.category,
+    })
+    .from(suppliersTable)
+    .where(eq(suppliersTable.isActive, true))
+    .orderBy(suppliersTable.name);
 
-  return { rfqs, pos, suppliers };
+  await GoogleSheetsErp.exportSuppliers(gCfg, supplierRows.map((s) => ({
+    name:     s.name,
+    email:    s.email    ?? undefined,
+    phone:    s.phone    ?? undefined,
+    address:  s.address  ?? undefined,
+    category: s.category ?? undefined,
+  })));
+  suppliersCount = supplierRows.length;
+
+  // ── 2. تصدير الـ RFQs ────────────────────────────────────────────────────
+  const rfqRows = await db
+    .select({
+      internalRfqNo: rfqTable.internalRfqNo,
+      customerRfqNo: rfqTable.customerRfqNo,
+      status:        rfqTable.status,
+      createdAt:     rfqTable.createdAt,
+      supplierCount: sql<number>`(SELECT COUNT(*) FROM sent_log sl WHERE sl.rfq_id = ${rfqTable.id})`,
+      offerCount:    sql<number>`(SELECT COUNT(*) FROM offers o   WHERE o.rfq_id  = ${rfqTable.id})`,
+    })
+    .from(rfqTable)
+    .orderBy(sql`${rfqTable.createdAt} DESC`)
+    .limit(500);
+
+  await GoogleSheetsErp.exportRfqs(gCfg, rfqRows.map((r) => ({
+    internalRfqNo: r.internalRfqNo,
+    customerRfqNo: r.customerRfqNo,
+    status:        r.status,
+    supplierCount: Number(r.supplierCount),
+    offerCount:    Number(r.offerCount),
+    createdAt:     r.createdAt.toISOString().split("T")[0],
+  })));
+  rfqsCount = rfqRows.length;
+
+  // ── 3. تصدير أوامر الشراء ────────────────────────────────────────────────
+  const poRows = await db
+    .select({
+      internalPoNo: purchaseOrdersTable.internalPoNo,
+      sheetPoNo:    purchaseOrdersTable.sheetPoNo,
+      status:       purchaseOrdersTable.status,
+      createdAt:    purchaseOrdersTable.createdAt,
+      itemCount:    sql<number>`(SELECT COUNT(*) FROM purchase_order_items poi WHERE poi.po_id = ${purchaseOrdersTable.id})`,
+      supplierName: sql<string | null>`(
+        SELECT s.name FROM purchase_order_items poi2
+        JOIN suppliers s ON s.id = poi2.supplier_id
+        WHERE poi2.po_id = ${purchaseOrdersTable.id}
+        LIMIT 1
+      )`,
+    })
+    .from(purchaseOrdersTable)
+    .orderBy(sql`${purchaseOrdersTable.createdAt} DESC`)
+    .limit(200);
+
+  await GoogleSheetsErp.exportPurchaseOrders(gCfg, poRows.map((p) => ({
+    internalPoNo: p.internalPoNo,
+    sheetPoNo:    p.sheetPoNo,
+    supplierName: p.supplierName ?? undefined,
+    status:       p.status,
+    itemCount:    Number(p.itemCount),
+    createdAt:    p.createdAt.toISOString().split("T")[0],
+  })));
+  posCount = poRows.length;
+
+  return { rfqs: rfqsCount, pos: posCount, suppliers: suppliersCount };
 }
 
 // ─── Full Sync ────────────────────────────────────────────────────────────────
 
-export async function runSync(id: number): Promise<{ success: boolean; stats?: Record<string, number>; error?: string }> {
+export async function runSync(
+  id: number,
+): Promise<{ success: boolean; stats?: Record<string, number>; error?: string }> {
   const integration = await getIntegration(id);
-  if (!integration) return { success: false, error: "التكامل غير موجود" };
+  if (!integration)          return { success: false, error: "التكامل غير موجود" };
   if (!integration.isActive) return { success: false, error: "التكامل غير مفعّل" };
 
   try {
     logger.info({ id, type: integration.type }, "ERP sync started");
 
-    // 1. استيراد الموردين
     const supplierStats = await syncSuppliers(integration);
-
-    // 2. تصدير البيانات (Google Sheets فقط حالياً)
-    const exportStats = integration.type === "google-sheets"
+    const exportStats   = integration.type === "google-sheets"
       ? await syncToErp(integration)
       : { rfqs: 0, pos: 0, suppliers: 0 };
 
     const stats = {
       suppliersImported: supplierStats.imported,
-      suppliersUpdated: supplierStats.updated,
-      suppliersSkipped: supplierStats.skipped,
-      rfqsExported: exportStats.rfqs,
-      posExported: exportStats.pos,
+      suppliersUpdated:  supplierStats.updated,
+      suppliersSkipped:  supplierStats.skipped,
+      rfqsExported:      exportStats.rfqs,
+      posExported:       exportStats.pos,
     };
 
     await updateSyncResult(id, "success", stats);
