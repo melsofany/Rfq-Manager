@@ -15,6 +15,7 @@ import {
   Package,
   ShoppingCart,
   Languages,
+  Plug,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const adminItems = [
     { href: "/employees", label: t("nav.employees"), icon: UserCog },
     { href: "/audit", label: t("nav.auditLog"), icon: ClipboardList },
+    { href: "/integrations", label: t("nav.integrations"), icon: Plug },
   ];
 
   // Close mobile drawer on route change

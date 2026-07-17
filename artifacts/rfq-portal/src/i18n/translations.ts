@@ -13,6 +13,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.whatsapp": "WhatsApp",
     "nav.employees": "Employees",
     "nav.auditLog": "Audit Log",
+    "nav.integrations": "ERP Integrations",
     "nav.admin": "Admin",
     "lang.toggle": "عربي",
 
@@ -309,6 +310,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.whatsapp": "واتساب",
     "nav.employees": "الموظفون",
     "nav.auditLog": "سجل المراجعة",
+    "nav.integrations": "تكاملات ERP",
     "nav.admin": "المدير",
     "lang.toggle": "English",
 

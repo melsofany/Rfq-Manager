@@ -37,6 +37,9 @@ import ItemsPage from "@/modules/reports/pages/items";
 // ── Module: Communications — التواصل ──────────────────────────────────────
 import WhatsAppPage from "@/modules/communications/pages/index";
 
+// ── Module: Integrations — تكاملات ERP ────────────────────────────────────
+import IntegrationsPage from "@/modules/integrations/pages/index";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -138,6 +141,11 @@ function Router() {
       {/* ── Module: Communications ─────────────────────────────────────── */}
       <Route path="/whatsapp">
         <ProtectedRoute component={WhatsAppPage} />
+      </Route>
+
+      {/* ── Module: Integrations ────────────────────────────────────────── */}
+      <Route path="/integrations">
+        <ProtectedRoute component={IntegrationsPage} />
       </Route>
 
       <Route component={NotFound} />
