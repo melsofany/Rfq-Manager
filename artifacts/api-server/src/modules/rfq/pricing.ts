@@ -55,9 +55,10 @@ router.get("/pricing/:token", async (req, res): Promise<void> => {
   // Priority: closeDate on sentLog is the supplier-specific deadline set by
   // the employee. If present, it is the sole authority. We only fall back to
   // rfq.expiresAt when no per-supplier closeDate was recorded (legacy links).
-  const isExpired = log.log.closeDate != null
-    ? isDateStringExpired(log.log.closeDate)
-    : log.rfq.expiresAt != null && isTimestampExpired(log.rfq.expiresAt);
+  const isExpired =
+    log.log.closeDate != null
+      ? isDateStringExpired(log.log.closeDate)
+      : log.rfq.expiresAt != null && isTimestampExpired(log.rfq.expiresAt);
   const items = await db.select().from(rfqItemsTable).where(eq(rfqItemsTable.rfqId, log.rfq.id));
 
   // Check if already submitted
@@ -162,11 +163,20 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
   }
 
   const now2 = new Date();
-  const isDateExp2 = (ds: string) => { const d = new Date(ds); d.setDate(d.getDate() + 1); return d <= now2; };
-  const isTsExp2 = (ts: Date | string) => { const d = new Date(ts); d.setDate(d.getDate() + 1); return d <= now2; };
-  const isExpired = log.log.closeDate != null
-    ? isDateExp2(log.log.closeDate)
-    : log.rfq.expiresAt != null && isTsExp2(log.rfq.expiresAt);
+  const isDateExp2 = (ds: string) => {
+    const d = new Date(ds);
+    d.setDate(d.getDate() + 1);
+    return d <= now2;
+  };
+  const isTsExp2 = (ts: Date | string) => {
+    const d = new Date(ts);
+    d.setDate(d.getDate() + 1);
+    return d <= now2;
+  };
+  const isExpired =
+    log.log.closeDate != null
+      ? isDateExp2(log.log.closeDate)
+      : log.rfq.expiresAt != null && isTsExp2(log.rfq.expiresAt);
   if (isExpired) {
     res.status(400).json({ error: "This link has expired" });
     return;
