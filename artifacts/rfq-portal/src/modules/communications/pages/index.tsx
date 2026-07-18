@@ -26,11 +26,13 @@ import {
   AlertCircle,
   User,
   ArrowLeft,
+  ArrowRight,
   MessageSquare,
   Zap,
   Users,
   BarChart2,
   ChevronRight,
+  ChevronLeft,
   Eye,
   Copy,
   CheckCircle,
@@ -785,6 +787,14 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
             className="h-16 bg-[#f0f2f5] px-4 flex items-center gap-3 border-b border-border flex-shrink-0"
             style={{ direction: "rtl" }}
           >
+            {/* Back button — mobile only */}
+            <button
+              onClick={() => setSelected(null)}
+              className="md:hidden text-muted-foreground hover:text-foreground flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors"
+              title="رجوع"
+            >
+              <ChevronRight size={22} />
+            </button>
             <Avatar name={displayName} phone={selected} size={40} />
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-sm leading-tight">{displayName}</div>
@@ -805,6 +815,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               background: "#e5ddd5",
               backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300000006'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
             }}
+            onTouchStart={() => { setHoveredMsgId(null); setEmojiPickerForMsg(null); }}
           >
             {loading ? (
               <div className="flex justify-center py-12">
@@ -852,6 +863,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                         style={{ direction: "ltr" }}
                         onMouseEnter={() => setHoveredMsgId(msg.id)}
                         onMouseLeave={() => { setHoveredMsgId(null); setEmojiPickerForMsg(null); }}
+                        onTouchStart={(e) => { e.stopPropagation(); setHoveredMsgId(msg.id); setEmojiPickerForMsg(null); }}
                       >
                         {!isOut && <Avatar name={displayName} phone={selected} size={28} />}
 
@@ -1156,9 +1168,9 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
             {/* Contact list */}
             <div className="max-h-80 overflow-y-auto">
               {[
-                ...filteredChats,
+                ...chats,
                 ...contacts.filter(
-                  (c) => c.phone && !filteredChats.find((ch) => ch.phone === c.phone),
+                  (c) => c.phone && !chats.find((ch) => ch.phone === c.phone),
                 ),
               ].map((item) => {
                 const isChat = "lastAt" in item;
