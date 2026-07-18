@@ -61,21 +61,29 @@ export default function PricingPage() {
 
   const trackMutation = useTrackLinkOpen();
   const enterEditMode = () => {
+    // data.existingOffer is only populated when the page was loaded with an already-submitted offer.
+    // For first-time submitters, it is undefined — in that case fall back to submittedRows which
+    // holds the values the supplier just typed in the current session.
     const existingOffer = (data as unknown as { existingOffer?: { items: SubmittedRow[]; generalNotes?: string | null } }).existingOffer;
     if (data?.items) {
       const prefilled: Record<number, ItemPrice> = {};
       for (const item of data.items) {
         const ei = existingOffer?.items?.find((x) => x.rfqItemId === item.id);
+        const sr = submittedRows.find((x) => x.rfqItemId === item.id);
+        const price = ei?.price ?? sr?.price;
+        const taxIncluded = ei?.taxIncluded ?? sr?.taxIncluded ?? false;
+        const deliveryDays = ei?.deliveryDays ?? sr?.deliveryDays;
+        const notes = ei?.notes ?? sr?.notes ?? "";
         prefilled[item.id] = {
           rfqItemId: item.id,
-          price: ei?.price != null ? String(ei.price) : "",
-          taxIncluded: ei?.taxIncluded ?? false,
-          deliveryDays: ei?.deliveryDays != null ? String(ei.deliveryDays) : "",
-          notes: ei?.notes ?? "",
+          price: price != null ? String(price) : "",
+          taxIncluded,
+          deliveryDays: deliveryDays != null ? String(deliveryDays) : "",
+          notes,
         };
       }
       setPrices(prefilled);
-      setGeneralNotes(existingOffer?.generalNotes ?? "");
+      setGeneralNotes(existingOffer?.generalNotes ?? submittedGeneralNotes ?? "");
     }
     setSubmitted(false);
     setIsEditing(true);
