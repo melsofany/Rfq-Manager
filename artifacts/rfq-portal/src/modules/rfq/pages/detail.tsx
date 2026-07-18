@@ -343,7 +343,11 @@ async function exportToPdf(
     .map(() => `<th class="s">السعر (ج.م)</th><th class="s v">شامل ض.ق.م ✱</th>`)
     .join("");
 
-  // Rows
+  // HTML-escape helper
+  const esc = (s: string) =>
+    s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+  // Rows (with per-item notes sub-rows)
   const rows = items
     .map((item, idx) => {
       const map = new Map<string, OfferRow>();
@@ -362,7 +366,7 @@ async function exportToPdf(
           ? `أقل: ${item.minPrice.toFixed(2)}<br>متوسط: ${item.avgPrice?.toFixed(2)}<br>أعلى: ${item.maxPrice?.toFixed(2)}`
           : "—";
       const bg = idx % 2 === 0 ? "" : ' class="alt"';
-      return `<tr${bg}>
+      const mainRow = `<tr${bg}>
       <td class="c">${idx + 1}</td>
       <td class="d">${item.description}</td>
       <td class="c ltr">${item.partNo ?? "—"}</td>
@@ -370,8 +374,55 @@ async function exportToPdf(
       ${cells}
       <td class="sm">${sum}</td>
     </tr>`;
+      // Notes sub-row — only shown if at least one supplier left a note
+      const noteCells = allSuppliers
+        .map((s) => {
+          const note = map.get(s)?.notes;
+          return `<td colspan="2" class="ntd">${note ? esc(note) : ""}</td>`;
+        })
+        .join("");
+      const hasNotes = allSuppliers.some((s) => map.get(s)?.notes);
+      const noteRow = hasNotes
+        ? `<tr class="nrow"><td></td><td class="nlbl">ملاحظات</td><td colspan="2"></td>${noteCells}<td></td></tr>`
+        : "";
+      return mainRow + noteRow;
     })
     .join("");
+
+  // ── Build supplier general notes + attachments HTML ─────────────────────────
+  type _RawOffer = { supplierId?: number; supplierName?: string | null; generalNotes?: string | null; attachments?: Array<{originalName:string}> };
+  const _rawOffers = ((offersData as {offers?: _RawOffer[]}).offers ?? []) as _RawOffer[];
+  const _withNotes = _rawOffers.filter(o => o.generalNotes);
+  const _attBySupplier: Record<string, string[]> = {};
+  for (const item of items) {
+    for (const o of item.offers) {
+      if (o.attachments?.length && !_attBySupplier[o.supplierName]) {
+        _attBySupplier[o.supplierName] = o.attachments.map(a => a.originalName);
+      }
+    }
+  }
+  const _suppliersWithAtt = Object.keys(_attBySupplier).filter(s => _attBySupplier[s].length > 0);
+  let supplierSummaryHtml = "";
+  if (_withNotes.length || _suppliersWithAtt.length) {
+    supplierSummaryHtml += '<div class="sn-section">';
+    supplierSummaryHtml += '<div class="sn-hdr">ملاحظات ومرفقات الموردين &nbsp;|&nbsp; Supplier Notes &amp; Attachments</div>';
+    if (_withNotes.length) {
+      supplierSummaryHtml += '<div class="sn-sub">الملاحظات العامة لكل مورد &nbsp;|&nbsp; General Notes per Supplier</div>';
+      for (const o of _withNotes) {
+        supplierSummaryHtml += `<div class="sn-row"><div class="sn-name">${esc(o.supplierName ?? "—")}</div><div class="sn-val">${esc(o.generalNotes ?? "")}</div></div>`;
+      }
+    }
+    if (_suppliersWithAtt.length) {
+      supplierSummaryHtml += '<div class="sn-sub">المرفقات &nbsp;|&nbsp; Attachments</div>';
+      let _idx = 0;
+      for (const sup of _suppliersWithAtt) {
+        for (const fname of _attBySupplier[sup]) {
+          supplierSummaryHtml += `<div class="att-row"><span class="att-num">${++_idx}</span><span class="att-badge">${esc(sup)}</span><span class="att-fname">📎 ${esc(fname)}</span></div>`;
+        }
+      }
+    }
+    supplierSummaryHtml += '</div>';
+  }
 
   const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -425,6 +476,21 @@ async function exportToPdf(
   /* ── Footer ── */
   .ftr{background:#1a3a5c;color:#c8a84b;text-align:center;font-size:9px;padding:6px;border-radius:0 0 6px 6px;margin-top:6px}
 
+  /* ── Notes row ── */
+  tr.nrow td{background:#fffbeb;border-color:#f6e9c0;font-size:9px;color:#78350f;padding:3px 5px}
+  td.nlbl{color:#92400e;font-weight:600;text-align:center;font-size:9px}
+  td.ntd{font-style:italic}
+  /* ── Supplier notes & attachments section ── */
+  .sn-section{margin-top:8px;border:1px solid #d0dbe8;border-radius:6px;overflow:hidden}
+  .sn-hdr{background:#1a3a5c;color:#c8a84b;padding:7px 12px;font-size:11px;font-weight:700}
+  .sn-sub{background:#e8f0f8;padding:5px 10px;font-size:10px;color:#1a3a5c;font-weight:600;border-bottom:1px solid #d0dbe8;border-top:1px solid #d0dbe8;margin-top:4px}
+  .sn-row{display:flex;border-bottom:1px solid #eef2f8;align-items:stretch}
+  .sn-name{background:#dce8f5;color:#1a3a5c;font-weight:600;font-size:10px;padding:5px 8px;width:160px;min-width:160px;display:flex;align-items:center}
+  .sn-val{padding:5px 10px;font-size:10px;flex:1;white-space:pre-wrap}
+  .att-row{display:flex;align-items:center;padding:4px 10px;border-bottom:1px solid #eef2f8}
+  .att-num{color:#aaa;font-size:9px;width:20px;text-align:center;margin-left:4px}
+  .att-badge{background:#dce8f5;color:#1a3a5c;font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;margin:0 8px;white-space:nowrap}
+  .att-fname{font-size:10px;color:#1a3a5c}
   /* ── Print button ── */
   .nop{text-align:center;padding:16px;background:#f0f4f8}
   .nop button{background:#1a3a5c;color:#fff;border:none;padding:10px 32px;font-family:Cairo,sans-serif;font-size:14px;font-weight:600;cursor:pointer;border-radius:6px;margin:4px}
@@ -470,6 +536,7 @@ async function exportToPdf(
   <tbody>${rows}</tbody>
 </table>
 
+${supplierSummaryHtml}
 <div class="ftr">
   قرطبة للتوريدات &nbsp;|&nbsp; INFO@CORTOBA-SUPPLIES.COM
   ${closeDate ? `&nbsp;|&nbsp; تاريخ الإغلاق: ${closeDate}` : ""}
