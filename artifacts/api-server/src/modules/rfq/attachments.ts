@@ -36,7 +36,6 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024, files: 5 }, // 20 MB per file, 5 files max
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_MIMES.has(file.mimetype) || ALLOWED_EXTS.test(file.originalname)) {
-      cb(null, false); // will do the actual accept below — multer quirk: false = reject
       cb(null, true);
     } else {
       cb(new Error("نوع الملف غير مدعوم. الأنواع المقبولة: PDF، صور، Excel، Word، DWG"));
