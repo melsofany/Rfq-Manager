@@ -390,38 +390,86 @@ async function exportToPdf(
     .join("");
 
   // ── Build supplier general notes + attachments HTML ─────────────────────────
-  type _RawOffer = { supplierId?: number; supplierName?: string | null; generalNotes?: string | null; attachments?: Array<{originalName:string}> };
+  type _AttInfo = { originalName: string; downloadUrl?: string; mimeType?: string };
+  type _RawOffer = { supplierId?: number; supplierName?: string | null; generalNotes?: string | null; attachments?: Array<{originalName:string; downloadUrl?:string; mimeType?:string}> };
   const _rawOffers = ((offersData as {offers?: _RawOffer[]}).offers ?? []) as _RawOffer[];
   const _withNotes = _rawOffers.filter(o => o.generalNotes);
-  const _attBySupplier: Record<string, string[]> = {};
+
+  // Collect attachments per supplier (from item-level offers which carry the attachment list)
+  const _attBySupplier: Record<string, _AttInfo[]> = {};
   for (const item of items) {
     for (const o of item.offers) {
       if (o.attachments?.length && !_attBySupplier[o.supplierName]) {
-        _attBySupplier[o.supplierName] = o.attachments.map(a => a.originalName);
+        _attBySupplier[o.supplierName] = (o.attachments as _AttInfo[]).map(a => ({
+          originalName: a.originalName,
+          downloadUrl: a.downloadUrl,
+          mimeType: a.mimeType,
+        }));
       }
     }
   }
   const _suppliersWithAtt = Object.keys(_attBySupplier).filter(s => _attBySupplier[s].length > 0);
-  let supplierSummaryHtml = "";
-  if (_withNotes.length || _suppliersWithAtt.length) {
-    supplierSummaryHtml += '<div class="sn-section">';
-    supplierSummaryHtml += '<div class="sn-hdr">ملاحظات ومرفقات الموردين &nbsp;|&nbsp; Supplier Notes &amp; Attachments</div>';
-    if (_withNotes.length) {
-      supplierSummaryHtml += '<div class="sn-sub">الملاحظات العامة لكل مورد &nbsp;|&nbsp; General Notes per Supplier</div>';
-      for (const o of _withNotes) {
-        supplierSummaryHtml += `<div class="sn-row"><div class="sn-name">${esc(o.supplierName ?? "—")}</div><div class="sn-val">${esc(o.generalNotes ?? "")}</div></div>`;
+
+  // Pre-fetch images as base64 data-URLs so they embed in the print window
+  const _IMG_MIMES = new Set(["image/png","image/jpeg","image/jpg","image/gif","image/webp","image/bmp"]);
+  const _imgDataUrls: Record<string, string> = {};
+  for (const sup of _suppliersWithAtt) {
+    for (const att of _attBySupplier[sup]) {
+      if (att.downloadUrl && _IMG_MIMES.has((att.mimeType ?? "").toLowerCase())) {
+        try {
+          const r = await fetch(att.downloadUrl, { credentials: "include" });
+          if (r.ok) {
+            const blob = await r.blob();
+            const dataUrl = await new Promise<string>((res) => {
+              const rd = new FileReader();
+              rd.onload = () => res(rd.result as string);
+              rd.readAsDataURL(blob);
+            });
+            _imgDataUrls[att.downloadUrl] = dataUrl;
+          }
+        } catch { /* skip — will fall back to filename */ }
       }
     }
-    if (_suppliersWithAtt.length) {
-      supplierSummaryHtml += '<div class="sn-sub">المرفقات &nbsp;|&nbsp; Attachments</div>';
-      let _idx = 0;
-      for (const sup of _suppliersWithAtt) {
-        for (const fname of _attBySupplier[sup]) {
-          supplierSummaryHtml += `<div class="att-row"><span class="att-num">${++_idx}</span><span class="att-badge">${esc(sup)}</span><span class="att-fname">📎 ${esc(fname)}</span></div>`;
-        }
-      }
+  }
+
+  // Notes section (same page as table)
+  let supplierSummaryHtml = "";
+  if (_withNotes.length) {
+    supplierSummaryHtml += '<div class="sn-section">';
+    supplierSummaryHtml += '<div class="sn-hdr">ملاحظات الموردين &nbsp;|&nbsp; Supplier Notes</div>';
+    supplierSummaryHtml += '<div class="sn-sub">الملاحظات العامة لكل مورد &nbsp;|&nbsp; General Notes per Supplier</div>';
+    for (const o of _withNotes) {
+      supplierSummaryHtml += `<div class="sn-row"><div class="sn-name">${esc(o.supplierName ?? "—")}</div><div class="sn-val">${esc(o.generalNotes ?? "")}</div></div>`;
     }
     supplierSummaryHtml += '</div>';
+  }
+
+  // Attachment pages — each image gets its own full printed page
+  let attachmentPagesHtml = "";
+  if (_suppliersWithAtt.length) {
+    for (const sup of _suppliersWithAtt) {
+      for (const att of _attBySupplier[sup]) {
+        const isImage = _IMG_MIMES.has((att.mimeType ?? "").toLowerCase());
+        const dataUrl = att.downloadUrl ? _imgDataUrls[att.downloadUrl] : undefined;
+        attachmentPagesHtml += `<div class="att-page">
+  <div class="att-page-hdr">
+    <span class="att-page-sup">${esc(sup)}</span>
+    <span class="att-page-fn">&#128206; ${esc(att.originalName)}</span>
+    <span class="att-page-rfq">${esc(rfqNo)}</span>
+  </div>
+  <div class="att-page-body">`;
+        if (isImage && dataUrl) {
+          attachmentPagesHtml += `<img src="${dataUrl}" class="att-img" alt="${esc(att.originalName)}">`;
+        } else {
+          attachmentPagesHtml += `<div class="att-noimg">
+      <div style="font-size:48px;margin-bottom:12px">&#128196;</div>
+      <div style="font-size:14px;font-weight:600;color:#1a3a5c">${esc(att.originalName)}</div>
+      <div style="font-size:10px;color:#888;margin-top:6px">هذا النوع من الملفات لا يمكن تضمينه في PDF</div>
+    </div>`;
+        }
+        attachmentPagesHtml += `</div></div>`;
+      }
+    }
   }
 
   const html = `<!DOCTYPE html>
@@ -496,6 +544,18 @@ async function exportToPdf(
   .nop button{background:#1a3a5c;color:#fff;border:none;padding:10px 32px;font-family:Cairo,sans-serif;font-size:14px;font-weight:600;cursor:pointer;border-radius:6px;margin:4px}
   .nop button:hover{background:#245a82}
   .nop .sec{background:#64748b}
+  /* ── Attachment full pages ── */
+  .att-page{page-break-before:always;padding:6mm 0}
+  @media print{.att-page{padding:0}}
+  .att-page-hdr{background:#1a3a5c;color:#fff;padding:8px 14px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .att-page-sup{color:#c8a84b;font-weight:700;font-size:12px}
+  .att-page-fn{font-size:10px;color:#9bb8d4;flex:1}
+  .att-page-rfq{font-size:9px;color:#aaccee;white-space:nowrap}
+  .att-page-body{border:1px solid #d0dbe8;border-top:none;border-radius:0 0 6px 6px;background:#fafbfc;display:flex;align-items:center;justify-content:center;min-height:160mm;padding:8px}
+  @media print{.att-page-body{min-height:185mm}}
+  .att-img{max-width:100%;max-height:180mm;object-fit:contain;display:block;margin:auto}
+  @media print{.att-img{max-height:200mm}}
+  .att-noimg{text-align:center;padding:40px;color:#666}
 </style>
 </head>
 <body>
@@ -542,6 +602,8 @@ ${supplierSummaryHtml}
   ${closeDate ? `&nbsp;|&nbsp; تاريخ الإغلاق: ${closeDate}` : ""}
   &nbsp;|&nbsp; ض.ق.م ${VAT_LABEL} &nbsp;|&nbsp; ${exportDate}
 </div>
+
+${attachmentPagesHtml}
 
 <div class="nop">
   <button onclick="window.print()">🖨️ &nbsp; طباعة / حفظ PDF</button>
