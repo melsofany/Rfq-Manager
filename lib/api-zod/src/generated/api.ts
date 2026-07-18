@@ -1265,6 +1265,59 @@ export const GetPriceAnalysisResponse = zod.object({
 
 
 /**
+ * @summary تقارير شاملة مع فلترة بالتاريخ
+ */
+export const GetReportsQueryParams = zod.object({
+  "from": zod.date().optional().describe('تاريخ البداية (YYYY-MM-DD)'),
+  "to": zod.date().optional().describe('تاريخ النهاية (YYYY-MM-DD)')
+})
+
+export const GetReportsResponse = zod.object({
+  "period": zod.object({
+  "from": zod.string().nullish(),
+  "to": zod.string().nullish()
+}).optional(),
+  "summary": zod.object({
+  "totalRfqs": zod.number().optional(),
+  "totalPos": zod.number().optional(),
+  "totalItems": zod.number().optional(),
+  "conversionRate": zod.number().optional()
+}).optional(),
+  "employeeStats": zod.array(zod.object({
+  "employeeId": zod.number().optional(),
+  "employeeName": zod.string().optional(),
+  "role": zod.string().optional(),
+  "totalRfqs": zod.number().optional(),
+  "totalOffers": zod.number().optional(),
+  "totalPos": zod.number().optional(),
+  "successRfqs": zod.number().optional(),
+  "conversionRate": zod.number().optional()
+})).optional(),
+  "topItems": zod.array(zod.object({
+  "description": zod.string().optional(),
+  "partNo": zod.string().nullish(),
+  "lineItem": zod.string().nullish(),
+  "count": zod.number().optional(),
+  "totalQty": zod.number().optional()
+})).optional(),
+  "lineItemStats": zod.array(zod.object({
+  "lineItem": zod.string().optional(),
+  "count": zod.number().optional(),
+  "distinctRfqs": zod.number().optional()
+})).optional(),
+  "monthlyTrend": zod.array(zod.object({
+  "month": zod.string().optional(),
+  "rfqs": zod.number().optional(),
+  "pos": zod.number().optional()
+})).optional(),
+  "statusFunnel": zod.array(zod.object({
+  "status": zod.string().optional(),
+  "count": zod.number().optional()
+})).optional()
+})
+
+
+/**
  * @summary List audit log entries
  */
 export const ListAuditLogsQueryParams = zod.object({

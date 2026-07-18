@@ -984,6 +984,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/PriceAnalysis"
 
+
+  /analytics/reports:
+    get:
+      operationId: getReports
+      tags: [analytics]
+      summary: 'تقارير شاملة مع فلترة بالتاريخ'
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: 'تاريخ البداية (YYYY-MM-DD)'
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: 'تاريخ النهاية (YYYY-MM-DD)'
+      responses:
+        '200':
+          description: تقارير تفصيلية
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportsData'
+
   # AUDIT LOG
   /audit:
     get:
@@ -2032,3 +2059,93 @@ components:
           type: ["string", "null"]
         createdAt:
           type: string
+
+    # REPORTS
+    ReportsData:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            from:
+              type: ["string", "null"]
+            to:
+              type: ["string", "null"]
+        summary:
+          type: object
+          properties:
+            totalRfqs:
+              type: integer
+            totalPos:
+              type: integer
+            totalItems:
+              type: integer
+            conversionRate:
+              type: number
+        employeeStats:
+          type: array
+          items:
+            type: object
+            properties:
+              employeeId:
+                type: integer
+              employeeName:
+                type: string
+              role:
+                type: string
+              totalRfqs:
+                type: integer
+              totalOffers:
+                type: integer
+              totalPos:
+                type: integer
+              successRfqs:
+                type: integer
+              conversionRate:
+                type: number
+        topItems:
+          type: array
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+              partNo:
+                type: ["string", "null"]
+              lineItem:
+                type: ["string", "null"]
+              count:
+                type: integer
+              totalQty:
+                type: number
+        lineItemStats:
+          type: array
+          items:
+            type: object
+            properties:
+              lineItem:
+                type: string
+              count:
+                type: integer
+              distinctRfqs:
+                type: integer
+        monthlyTrend:
+          type: array
+          items:
+            type: object
+            properties:
+              month:
+                type: string
+              rfqs:
+                type: integer
+              pos:
+                type: integer
+        statusFunnel:
+          type: array
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+              count:
+                type: integer

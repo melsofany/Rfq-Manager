@@ -744,6 +744,68 @@ export interface AuditLog {
   createdAt: string;
 }
 
+export type ReportsDataPeriod = {
+  /** @nullable */
+  from?: string | null;
+  /** @nullable */
+  to?: string | null;
+};
+
+export type ReportsDataSummary = {
+  totalRfqs?: number;
+  totalPos?: number;
+  totalItems?: number;
+  conversionRate?: number;
+};
+
+export type ReportsDataEmployeeStatsItem = {
+  employeeId?: number;
+  employeeName?: string;
+  role?: string;
+  totalRfqs?: number;
+  totalOffers?: number;
+  totalPos?: number;
+  successRfqs?: number;
+  conversionRate?: number;
+};
+
+export type ReportsDataTopItemsItem = {
+  description?: string;
+  /** @nullable */
+  partNo?: string | null;
+  /** @nullable */
+  lineItem?: string | null;
+  count?: number;
+  totalQty?: number;
+};
+
+export type ReportsDataLineItemStatsItem = {
+  lineItem?: string;
+  count?: number;
+  distinctRfqs?: number;
+};
+
+export type ReportsDataMonthlyTrendItem = {
+  month?: string;
+  rfqs?: number;
+  pos?: number;
+};
+
+export type ReportsDataStatusFunnelItem = {
+  status?: string;
+  count?: number;
+};
+
+export interface ReportsData {
+  period?: ReportsDataPeriod;
+  summary?: ReportsDataSummary;
+  employeeStats?: ReportsDataEmployeeStatsItem[];
+  topItems?: ReportsDataTopItemsItem[];
+  lineItemStats?: ReportsDataLineItemStatsItem[];
+  monthlyTrend?: ReportsDataMonthlyTrendItem[];
+  statusFunnel?: ReportsDataStatusFunnelItem[];
+}
+
 export type ListSuppliersParams = {
 category?: string;
 search?: string;
@@ -780,6 +842,17 @@ q: string;
 export type ListOffersParams = {
 rfqId?: number;
 supplierId?: number;
+};
+
+export type GetReportsParams = {
+/**
+ * تاريخ البداية (YYYY-MM-DD)
+ */
+from?: string;
+/**
+ * تاريخ النهاية (YYYY-MM-DD)
+ */
+to?: string;
 };
 
 export type ListAuditLogsParams = {

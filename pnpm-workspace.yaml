@@ -117,3 +117,8 @@ overrides:
   "rollup>@rollup/rollup-win32-x64-msvc": "-"
   # drizzle-kit uses an older esbuild internally; override it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
+
+allowBuilds:
+  bcrypt: set this to true or false
+  core-js: set this to true or false
+  esbuild: set this to true or false
