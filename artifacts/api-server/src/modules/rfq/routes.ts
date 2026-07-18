@@ -1242,6 +1242,14 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
       }))
       .filter((s) => s.generalNotes || s.attachments.length > 0);
 
+    req.log.info({
+      debug_supplierSummaries: supplierSummaries,
+      debug_itemNoteSample: itemAnalysis.slice(0,3).map(ia => ({
+        desc: ia.description,
+        offers: ia.offers.map(o => ({ sup: o.supplierName, notes: o.notes }))
+      })),
+      debug_pdfAttRows: pdfAttRows.length,
+    }, 'PDF debug data');
     const pdfBuffer = await generateOffersPdf({
       rfqNo: rfqRow.rfq.internalRfqNo,
       customerRfqNo: rfqRow.rfq.customerRfqNo,
