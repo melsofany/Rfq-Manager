@@ -134,6 +134,25 @@ export async function initDb(): Promise<void> {
         filename TEXT,
         stored_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS rfq_attachments (
+        id SERIAL PRIMARY KEY,
+        rfq_id INTEGER NOT NULL REFERENCES rfq(id) ON DELETE CASCADE,
+        original_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        uploaded_by INTEGER REFERENCES employees(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS offer_attachments (
+        id SERIAL PRIMARY KEY,
+        offer_id INTEGER NOT NULL REFERENCES offers(id) ON DELETE CASCADE,
+        original_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
       CREATE TABLE IF NOT EXISTS purchase_orders (
         id SERIAL PRIMARY KEY,
         internal_po_no TEXT NOT NULL UNIQUE,
