@@ -34,6 +34,7 @@ interface ItemPrice {
 export default function PricingPage() {
   const { token } = useParams<{ token: string }>();
   const [submitted, setSubmitted] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [submittedRows, setSubmittedRows] = useState<SubmittedRow[]>([]);
   const [submittedGeneralNotes, setSubmittedGeneralNotes] = useState("");
   const [generalNotes, setGeneralNotes] = useState("");
@@ -59,9 +60,31 @@ export default function PricingPage() {
   });
 
   const trackMutation = useTrackLinkOpen();
+  const enterEditMode = () => {
+    const existingOffer = (data as unknown as { existingOffer?: { items: SubmittedRow[]; generalNotes?: string | null } }).existingOffer;
+    if (data?.items) {
+      const prefilled: Record<number, ItemPrice> = {};
+      for (const item of data.items) {
+        const ei = existingOffer?.items?.find((x) => x.rfqItemId === item.id);
+        prefilled[item.id] = {
+          rfqItemId: item.id,
+          price: ei?.price != null ? String(ei.price) : "",
+          taxIncluded: ei?.taxIncluded ?? false,
+          deliveryDays: ei?.deliveryDays != null ? String(ei.deliveryDays) : "",
+          notes: ei?.notes ?? "",
+        };
+      }
+      setPrices(prefilled);
+      setGeneralNotes(existingOffer?.generalNotes ?? "");
+    }
+    setSubmitted(false);
+    setIsEditing(true);
+  };
+
   const submitMutation = useSubmitOffer({
     mutation: {
       onSuccess: async () => {
+        setIsEditing(false);
         setSubmitted(true);
         // Upload offer attachments if any
         if (offerFiles.length > 0) {
@@ -200,7 +223,7 @@ export default function PricingPage() {
     );
   }
 
-  if (submitted || data.alreadySubmitted) {
+  if ((submitted || data.alreadySubmitted) && !isEditing) {
     // Build display rows: prefer captured state, fall back to existingOffer from API
     const displayRows: SubmittedRow[] =
       submittedRows.length > 0
@@ -257,13 +280,21 @@ export default function PricingPage() {
           {/* Success banner */}
           <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg px-5 py-4">
             <CheckCircle2 size={22} className="text-green-600 flex-shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <p className="font-semibold text-green-800 text-sm">تم استلام عرض السعر بنجاح</p>
               <p className="text-green-700 text-xs mt-0.5">
                 شكراً لكم. تم استلام عرض سعركم لطلب العرض <strong>{data.rfqNo}</strong>. سيتم
                 التواصل معكم في حال الاختيار.
               </p>
             </div>
+            {!data.isExpired && (
+              <button
+                onClick={enterEditMode}
+                className="text-xs text-blue-700 border border-blue-300 bg-blue-50 hover:bg-blue-100 rounded px-3 py-1.5 flex-shrink-0 font-medium"
+              >
+                تعديل العرض
+              </button>
+            )}
           </div>
 
           {/* Read-only prices table */}

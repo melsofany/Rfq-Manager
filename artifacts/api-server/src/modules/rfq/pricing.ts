@@ -9,7 +9,7 @@ import {
   offerItemsTable,
   auditLogTable,
 } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, desc } from "drizzle-orm";
 
 const router = Router();
 
@@ -200,20 +200,45 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
 
   const totalPrice = items.reduce((sum, i) => sum + (i.price || 0), 0);
 
-  const [offer] = await db
-    .insert(offersTable)
-    .values({
-      rfqId: log.rfq.id,
-      supplierId: log.log.supplierId,
-      sentLogId: log.log.id,
-      totalPrice: String(totalPrice),
-      generalNotes,
-    })
-    .returning();
+  // Check if this supplier already submitted an offer for this RFQ
+  const [existingOffer] = await db
+    .select()
+    .from(offersTable)
+    .where(and(eq(offersTable.rfqId, log.rfq.id), eq(offersTable.supplierId, log.log.supplierId!)))
+    .orderBy(desc(offersTable.id))
+    .limit(1);
+
+  let offerId: number;
+  const isUpdate = !!existingOffer;
+
+  if (existingOffer) {
+    // UPDATE existing offer (supplier is revising their submission)
+    await db
+      .update(offersTable)
+      .set({ totalPrice: String(totalPrice), generalNotes })
+      .where(eq(offersTable.id, existingOffer.id));
+
+    // Replace all offer items
+    await db.delete(offerItemsTable).where(eq(offerItemsTable.offerId, existingOffer.id));
+    offerId = existingOffer.id;
+  } else {
+    // INSERT new offer
+    const [newOffer] = await db
+      .insert(offersTable)
+      .values({
+        rfqId: log.rfq.id,
+        supplierId: log.log.supplierId,
+        sentLogId: log.log.id,
+        totalPrice: String(totalPrice),
+        generalNotes,
+      })
+      .returning();
+    offerId = newOffer.id;
+  }
 
   for (const item of items) {
     await db.insert(offerItemsTable).values({
-      offerId: offer.id,
+      offerId,
       rfqItemId: item.rfqItemId,
       price: String(item.price),
       taxIncluded: item.taxIncluded ?? false,
@@ -232,24 +257,26 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
 
   // Audit
   await db.insert(auditLogTable).values({
-    action: "offer.submitted",
+    action: isUpdate ? "offer.updated" : "offer.submitted",
     entityType: "offer",
-    entityId: offer.id,
-    description: `Supplier submitted offer for RFQ ${log.rfq.internalRfqNo} via pricing link`,
+    entityId: offerId,
+    description: isUpdate
+      ? `Supplier revised offer for RFQ ${log.rfq.internalRfqNo} via pricing link`
+      : `Supplier submitted offer for RFQ ${log.rfq.internalRfqNo} via pricing link`,
     ipAddress: req.ip,
     userAgent: req.get("user-agent"),
   });
 
   res.status(201).json({
-    id: offer.id,
-    rfqId: offer.rfqId,
-    supplierId: offer.supplierId,
+    id: offerId,
+    rfqId: log.rfq.id,
+    supplierId: log.log.supplierId,
     supplierName: null,
-    sentLogId: offer.sentLogId,
-    employeeId: offer.employeeId,
-    totalPrice: parseFloat(offer.totalPrice!),
-    generalNotes: offer.generalNotes,
-    createdAt: offer.createdAt.toISOString(),
+    sentLogId: log.log.id,
+    employeeId: null,
+    totalPrice,
+    generalNotes: generalNotes ?? null,
+    createdAt: new Date().toISOString(),
     items: [],
   });
 });
