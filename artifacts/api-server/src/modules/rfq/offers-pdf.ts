@@ -37,7 +37,7 @@ export interface OffersPdfOptions {
   supplierSummaries?: Array<{
     supplierName: string;
     generalNotes?: string | null;
-    attachments?: Array<{ fileName: string }>;
+    attachments?: Array<{ fileName: string; mimeType?: string; content?: string }>;
   }>;
 }
 
@@ -641,84 +641,132 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
           sy += 12;
         }
 
-        // ── Attachments ────────────────────────────────────────────────────
+        // ── Attachments — each attachment gets its own full page ──────────
         if (hasAttachments) {
-          if (sy + 40 > PAGE_H - MARGIN - 10) {
-            doc.addPage({
-              size: "A4",
-              layout: "landscape",
-              margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
-            });
-            sy = MARGIN;
-          }
+          const IMAGE_MIMES = new Set([
+            "image/png", "image/jpeg", "image/jpg",
+            "image/gif", "image/webp", "image/bmp",
+          ]);
 
-          // Sub-header
-          doc.rect(MARGIN, sy, CONTENT_W, 18).fill("#e8f0f8");
-          doc.rect(MARGIN, sy, 4, 18).fill(GOLD);
-          doc
-            .font(FONT_BOLD)
-            .fontSize(9)
-            .fillColor(BLUE)
-            .text(
-              "\u0627\u0644\u0645\u0631\u0641\u0642\u0627\u062a  |  Attachments",
-              MARGIN + 10,
-              sy + 4,
-              { lineBreak: false },
-            );
-          sy += 22;
-
-          let attIdx = 0;
           for (const s of opts.supplierSummaries ?? []) {
             if (!s.attachments?.length) continue;
             for (const att of s.attachments) {
-              if (sy + 16 > PAGE_H - MARGIN - 10) {
-                doc.addPage({
-                  size: "A4",
-                  layout: "landscape",
-                  margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
-                });
-                sy = MARGIN;
-              }
-              const rowBg = attIdx % 2 === 0 ? "#ffffff" : "#f4f8fc";
-              doc.rect(MARGIN, sy, CONTENT_W, 16).fill(rowBg);
-              doc.rect(MARGIN, sy, CONTENT_W, 16).stroke(BORDER);
+              // Every attachment gets a dedicated landscape A4 page
+              doc.addPage({
+                size: "A4",
+                layout: "landscape",
+                margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+              });
 
-              // Row number
-              doc
-                .font(FONT)
-                .fontSize(7)
-                .fillColor("#888")
-                .text(String(attIdx + 1), MARGIN + 4, sy + 4, {
-                  width: 20,
-                  align: "center",
-                  lineBreak: false,
-                });
-
-              // Supplier name badge
-              doc.rect(MARGIN + 26, sy + 2, 160, 12).fill("#dce8f5").stroke("#c0d4ea");
+              // ── Page header bar ──────────────────────────────────────
+              doc.rect(MARGIN, MARGIN, CONTENT_W, 28).fill(BLUE);
               doc
                 .font(FONT_BOLD)
-                .fontSize(7.5)
-                .fillColor(BLUE)
-                .text(s.supplierName, MARGIN + 30, sy + 4, {
-                  width: 152,
-                  lineBreak: false,
-                  ellipsis: true,
-                });
-
-              // File name with paperclip symbol
+                .fontSize(11)
+                .fillColor(GOLD)
+                .text(
+                  "\u0645\u0631\u0641\u0642\u0627\u062a \u0627\u0644\u0645\u0648\u0631\u062f\u064a\u0646  |  Supplier Attachments",
+                  MARGIN + 12,
+                  MARGIN + 6,
+                  { lineBreak: false },
+                );
               doc
                 .font(FONT)
                 .fontSize(8)
-                .fillColor("#1a3a5c")
-                .text("\u{1F4CE} " + att.fileName, MARGIN + 196, sy + 4, {
-                  width: CONTENT_W - 200,
+                .fillColor("#ffffff")
+                .text(opts.rfqNo, MARGIN + CONTENT_W - 120, MARGIN + 10, {
+                  width: 110,
+                  align: "right",
+                  lineBreak: false,
+                });
+
+              // ── Supplier + filename info strip ───────────────────────
+              const stripY = MARGIN + 34;
+              doc.rect(MARGIN, stripY, CONTENT_W, 22).fill("#e8f0f8");
+              doc.rect(MARGIN, stripY, 4, 22).fill(GOLD);
+
+              doc
+                .font(FONT_BOLD)
+                .fontSize(8)
+                .fillColor(BLUE)
+                .text(s.supplierName, MARGIN + 10, stripY + 4, {
+                  width: 200,
+                  lineBreak: false,
+                  ellipsis: true,
+                });
+              doc
+                .font(FONT)
+                .fontSize(7.5)
+                .fillColor("#555")
+                .text("\uD83D\uDCCE " + att.fileName, MARGIN + 220, stripY + 6, {
+                  width: CONTENT_W - 224,
                   lineBreak: false,
                   ellipsis: true,
                 });
 
-              sy += 16;
-              attIdx++;
+              // ── Image area ──────────────────────────────────────────
+              const imgAreaY = stripY + 28;
+              const imgAreaH = doc.page.height - imgAreaY - MARGIN - 10;
+              const imgAreaW = CONTENT_W;
+
+              const isImage = IMAGE_MIMES.has((att.mimeType ?? "").toLowerCase());
+              if (isImage && att.content) {
+                try {
+                  const imgBuf = Buffer.from(att.content, "base64");
+                  // Fit the image inside the available area while keeping aspect ratio
+                  doc.image(imgBuf, MARGIN, imgAreaY, {
+                    width: imgAreaW,
+                    height: imgAreaH,
+                    fit: [imgAreaW, imgAreaH],
+                    align: "center",
+                    valign: "top",
+                  });
+                } catch {
+                  // If the image can't be decoded, fall back to a text placeholder
+                  doc
+                    .font(FONT)
+                    .fontSize(10)
+                    .fillColor("#888")
+                    .text(
+                      "\u2022 \u062a\u0639\u0630\u0651\u0631 \u0639\u0631\u0636 \u0627\u0644\u0635\u0648\u0631\u0629 | Could not render image",
+                      MARGIN,
+                      imgAreaY + imgAreaH / 2,
+                      { width: imgAreaW, align: "center", lineBreak: false },
+                    );
+                }
+              } else {
+                // Non-image file (PDF, Excel, Word…) — show descriptive placeholder
+                doc.rect(MARGIN, imgAreaY, imgAreaW, imgAreaH).fill("#f9fafb").stroke(BORDER);
+                doc
+                  .font(FONT_BOLD)
+                  .fontSize(36)
+                  .fillColor("#d0dbe8")
+                  .text("\uD83D\uDCC4", MARGIN, imgAreaY + imgAreaH / 2 - 50, {
+                    width: imgAreaW,
+                    align: "center",
+                    lineBreak: false,
+                  });
+                doc
+                  .font(FONT)
+                  .fontSize(11)
+                  .fillColor("#666")
+                  .text(att.fileName, MARGIN, imgAreaY + imgAreaH / 2 + 10, {
+                    width: imgAreaW,
+                    align: "center",
+                    lineBreak: false,
+                    ellipsis: true,
+                  });
+                doc
+                  .font(FONT)
+                  .fontSize(8)
+                  .fillColor("#999")
+                  .text(
+                    "\u0647\u0630\u0627 \u0627\u0644\u0645\u0644\u0641 \u0644\u0627 \u064a\u0645\u0643\u0646 \u0639\u0631\u0636\u0647 \u0645\u0628\u0627\u0634\u0631\u0629\u064b \u0641\u064a PDF \u2014 This file type cannot be embedded in PDF",
+                    MARGIN,
+                    imgAreaY + imgAreaH / 2 + 30,
+                    { width: imgAreaW, align: "center", lineBreak: false },
+                  );
+              }
             }
           }
         }

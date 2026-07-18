@@ -1212,14 +1212,16 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
       .where(eq(sentLogTable.rfqId, rfqId));
     const closeDate = sentLogRows.find((r) => r.closeDate)?.closeDate ?? null;
 
-    // Fetch offer attachments for PDF (graceful fallback if table missing)
-    let pdfAttRows: { offerId: number; originalName: string }[] = [];
+    // Fetch offer attachments for PDF — including file content so images can be embedded
+    let pdfAttRows: { offerId: number; originalName: string; mimeType: string; content: string }[] = [];
     if (offerIds.length > 0) {
       try {
         pdfAttRows = await db
           .select({
             offerId: offerAttachmentsTable.offerId,
             originalName: offerAttachmentsTable.originalName,
+            mimeType: offerAttachmentsTable.mimeType,
+            content: offerAttachmentsTable.content,
           })
           .from(offerAttachmentsTable)
           .where(inArray(offerAttachmentsTable.offerId, offerIds));
@@ -1227,10 +1229,14 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
         // table may not exist in older deployments
       }
     }
-    const pdfAttByOffer: Record<number, string[]> = {};
+    const pdfAttByOffer: Record<number, { fileName: string; mimeType: string; content: string }[]> = {};
     for (const a of pdfAttRows) {
       if (!pdfAttByOffer[a.offerId]) pdfAttByOffer[a.offerId] = [];
-      pdfAttByOffer[a.offerId].push(a.originalName);
+      pdfAttByOffer[a.offerId].push({
+        fileName: a.originalName,
+        mimeType: a.mimeType,
+        content: a.content,
+      });
     }
 
     // Build per-supplier summary (general notes + attachments) for PDF
@@ -1238,7 +1244,7 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
       .map((o) => ({
         supplierName: o.supplierName || "",
         generalNotes: o.offer.generalNotes ?? null,
-        attachments: (pdfAttByOffer[o.offer.id] ?? []).map((fileName) => ({ fileName })),
+        attachments: pdfAttByOffer[o.offer.id] ?? [],
       }))
       .filter((s) => s.generalNotes || s.attachments.length > 0);
 
