@@ -575,7 +575,7 @@ router.post("/whatsapp/send", requireAuth, async (req, res): Promise<void> => {
         type: "text",
         text: { body: message, preview_url: false },
       });
-      const r = await Whatsapp.$apiFetch$(
+      const r = await Whatsapp.$$apiFetch$$(
         `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/messages`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: apiBody },
       );
@@ -667,13 +667,13 @@ router.post("/whatsapp/forward", requireAuth, async (req, res): Promise<void> =>
       if (!outboundWaId) {
         logger.info({ mediaId: msg.mediaId }, "Forward: cache miss — fetching fresh from Meta");
         try {
-          const metaRes = await Whatsapp.$apiFetch$(
+          const metaRes = await Whatsapp.$$apiFetch$$(
             `https://graph.facebook.com/${WA_API_VERSION}/${msg.mediaId}`,
           );
           if (metaRes.ok) {
             const metaData = (await metaRes.json()) as { url?: string; mime_type?: string };
             if (metaData.url) {
-              const mediaRes = await Whatsapp.$apiFetch$(metaData.url);
+              const mediaRes = await Whatsapp.$$apiFetch$$(metaData.url);
               if (mediaRes.ok) {
                 const buffer = Buffer.from(await mediaRes.arrayBuffer());
                 const mimeType = metaData.mime_type || msg.mimeType || "application/octet-stream";
@@ -763,6 +763,12 @@ router.post("/whatsapp/send-media", requireAuth, _upload.single("file"), async (
       supplierId: supplierId ?? null, body: bodyText, mediaId,
       mediaType, mimeType: fileMime, filename: fileFilename, isRead: true,
     });
+    // Cache the binary so this outbound file can be forwarded later.
+    // Meta does not allow re-downloading uploaded media, so we must store it ourselves.
+    void db.insert(whatsappMediaTable)
+      .values({ waMediaId: mediaId, data: file.buffer, mimeType: fileMime, filename: fileFilename })
+      .onConflictDoNothing()
+      .catch((cacheErr) => logger.warn({ cacheErr, mediaId }, "send-media: failed to cache binary"));
     logger.info({ phone: normalized, mediaType, filename: fileFilename }, "WhatsApp media sent");
     res.json({ ok: true });
   } catch (err) {
