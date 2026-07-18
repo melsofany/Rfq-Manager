@@ -501,37 +501,47 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
 
         y += ROW_H;
 
-        // ── ITEM NOTES ROW ────────────────────────────────────────────────
-        const itemHasNotes = allSuppliers.some((s) => bySupplier[s]?.notes);
-        if (itemHasNotes) {
-          if (y + NOTES_ROW_H > PAGE_H - MARGIN - 20) {
+        // ── ITEM DETAILS ROW (delivery days + notes) ─────────────────────
+        const DETAILS_ROW_H = 20;
+        const itemHasDetails = allSuppliers.some(
+          (s) => bySupplier[s]?.notes || bySupplier[s]?.deliveryDays != null,
+        );
+        if (itemHasDetails) {
+          if (y + DETAILS_ROW_H > PAGE_H - MARGIN - 20) {
             y = addContinuationPage();
             y = drawHeader(y);
           }
-          doc.rect(tableX, y, totalTableW, NOTES_ROW_H).fill("#fffbeb");
-          doc.rect(tableX, y, totalTableW, NOTES_ROW_H).stroke("#f6e9c0");
+          doc.rect(tableX, y, totalTableW, DETAILS_ROW_H).fill("#fef3c7");
+          doc.rect(tableX, y, totalTableW, DETAILS_ROW_H).stroke("#fcd34d");
 
-          // Label
+          // Label column
           doc
             .font(FONT_BOLD)
-            .fontSize(6)
+            .fontSize(7)
             .fillColor("#92400e")
             .text(
-              "\u0645\u0644\u0627\u062d\u0638\u0627\u062a:",
+              "مدة / ملاحظات",
               tableX + 2,
-              y + 4,
+              y + 5,
               { width: mainW - 4, align: "center", lineBreak: false },
             );
 
           let nx = tableX + mainW;
           allSuppliers.forEach((s) => {
-            const note = bySupplier[s]?.notes;
-            if (note) {
+            const entry = bySupplier[s];
+            const parts: string[] = [];
+            if (entry?.deliveryDays != null) {
+              parts.push("مدة: " + entry.deliveryDays + " يوم");
+            }
+            if (entry?.notes) {
+              parts.push(entry.notes);
+            }
+            if (parts.length > 0) {
               doc
                 .font(FONT)
-                .fontSize(6)
+                .fontSize(7.5)
                 .fillColor("#78350f")
-                .text(note, nx + 3, y + 4, {
+                .text(parts.join(" | "), nx + 3, y + 5, {
                   width: supGroupW - 6,
                   lineBreak: false,
                   ellipsis: true,
@@ -540,10 +550,9 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
             nx += supGroupW;
           });
 
-          y += NOTES_ROW_H;
+          y += DETAILS_ROW_H;
         }
       });
-
       // ── GENERAL NOTES & ATTACHMENTS SECTION ───────────────────────────────
       const hasGeneralNotes = opts.supplierSummaries?.some((s) => s.generalNotes);
       const hasAttachments = opts.supplierSummaries?.some((s) => s.attachments?.length);

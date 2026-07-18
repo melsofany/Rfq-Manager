@@ -187,6 +187,12 @@ export async function initDb(): Promise<void> {
         ADD COLUMN IF NOT EXISTS tax_included BOOLEAN NOT NULL DEFAULT false;
     `);
 
+    // Add delivery_days and notes to offer_items (safe migration — skipped if already present)
+    await client.query(`
+      ALTER TABLE offer_items ADD COLUMN IF NOT EXISTS delivery_days INTEGER;
+      ALTER TABLE offer_items ADD COLUMN IF NOT EXISTS notes TEXT;
+    `);
+
     // Add media columns to whatsapp_chats (safe migration — skipped if already present)
     await client.query(`
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS media_id TEXT;
