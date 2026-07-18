@@ -375,15 +375,18 @@ async function exportToPdf(
       <td class="sm">${sum}</td>
     </tr>`;
       // Notes sub-row — only shown if at least one supplier left a note
-      const noteCells = allSuppliers
+      const detailCells = allSuppliers
         .map((s) => {
-          const note = map.get(s)?.notes;
-          return `<td colspan="2" class="ntd">${note ? esc(note) : ""}</td>`;
+          const o = map.get(s);
+          const parts: string[] = [];
+          if (o?.deliveryDays != null) parts.push(`مدة التوريد: ${o.deliveryDays} يوم`);
+          if (o?.notes) parts.push(esc(o.notes));
+          return `<td colspan="2" class="ntd">${parts.join(" | ")}</td>`;
         })
         .join("");
-      const hasNotes = allSuppliers.some((s) => map.get(s)?.notes);
-      const noteRow = hasNotes
-        ? `<tr class="nrow"><td></td><td class="nlbl">ملاحظات</td><td colspan="2"></td>${noteCells}<td></td></tr>`
+      const hasDetails = allSuppliers.some((s) => map.get(s)?.notes || map.get(s)?.deliveryDays != null);
+      const noteRow = hasDetails
+        ? `<tr class="nrow"><td></td><td class="nlbl">مدة / ملاحظات</td><td colspan="2"></td>${detailCells}<td></td></tr>`
         : "";
       return mainRow + noteRow;
     })
