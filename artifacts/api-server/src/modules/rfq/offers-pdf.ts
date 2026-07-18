@@ -433,6 +433,7 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
             isLowest: boolean;
             isAnomaly: boolean;
             notes?: string | null;
+            deliveryDays?: number | null;
           }
         > = {};
         for (const o of item.offers) {
@@ -442,6 +443,7 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
             isLowest: o.isLowest,
             isAnomaly: o.isAnomaly,
             notes: o.notes,
+            deliveryDays: o.deliveryDays,
           };
         }
 
