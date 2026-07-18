@@ -1,5 +1,15 @@
+/**
+ * init-db.mjs — one-time database bootstrap script.
+ *
+ * Creates all tables (safe to re-run; uses IF NOT EXISTS).
+ * Does NOT insert or overwrite any user records.
+ * To create the initial admin account run seed.mjs with env vars set.
+ *
+ * Usage:
+ *   DATABASE_URL=... node scripts/init-db.mjs
+ */
+
 import pg from "pg";
-import bcrypt from "bcryptjs";
 
 const { Client } = pg;
 const client = new Client({
@@ -119,29 +129,7 @@ await client.query(`
   );
 `);
 
-console.log("All tables created");
-
-const accounts = [
-  { name: "Admin", email: "admin@cortoba-supplies.com", password: "admin123", role: "admin" },
-  {
-    name: "Khalid Al-Manager",
-    email: "khalid@cortoba-supplies.com",
-    password: "manager123",
-    role: "manager",
-  },
-  { name: "Sara", email: "sara@cortoba-supplies.com", password: "staff123", role: "purchasing" },
-];
-
-for (const acc of accounts) {
-  const hash = await bcrypt.hash(acc.password, 10);
-  await client.query(
-    `INSERT INTO employees (name, email, password_hash, role, is_active)
-     VALUES ($1, $2, $3, $4, true)
-     ON CONFLICT (email) DO UPDATE SET password_hash = $3, role = $4`,
-    [acc.name, acc.email, hash, acc.role],
-  );
-  console.log("Seeded: " + acc.email);
-}
+console.log("All tables created (no user records inserted).");
+console.log("Run seed.mjs with SEED_ADMIN_PASS / SEED_MANAGER_PASS / SEED_STAFF_PASS to create initial accounts.");
 
 await client.end();
-console.log("DB init complete");
