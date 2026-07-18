@@ -1826,6 +1826,12 @@ components:
                       type: boolean
                     isAnomaly:
                       type: boolean
+                    notes:
+                      type: ["string", "null"]
+                    priceWithVat:
+                      type: number
+                    notPriced:
+                      type: boolean
 
     # ITEM HISTORY (search result)
     ItemSupplierResponse:

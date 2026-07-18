@@ -16,4 +16,8 @@ export type PriceAnalysisItemAnalysisItemOffersItem = {
   deviation?: number;
   isLowest?: boolean;
   isAnomaly?: boolean;
+  /** @nullable */
+  notes?: string | null;
+  priceWithVat?: number;
+  notPriced?: boolean;
 };

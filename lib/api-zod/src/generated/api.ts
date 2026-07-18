@@ -759,7 +759,10 @@ export const GetRfqOffersResponse = zod.object({
   "deliveryDays": zod.number().nullish(),
   "deviation": zod.number().optional(),
   "isLowest": zod.boolean().optional(),
-  "isAnomaly": zod.boolean().optional()
+  "isAnomaly": zod.boolean().optional(),
+  "notes": zod.string().nullish(),
+  "priceWithVat": zod.number().optional(),
+  "notPriced": zod.boolean().optional()
 })).optional()
 })).optional()
 })
@@ -1252,7 +1255,10 @@ export const GetPriceAnalysisResponse = zod.object({
   "deliveryDays": zod.number().nullish(),
   "deviation": zod.number().optional(),
   "isLowest": zod.boolean().optional(),
-  "isAnomaly": zod.boolean().optional()
+  "isAnomaly": zod.boolean().optional(),
+  "notes": zod.string().nullish(),
+  "priceWithVat": zod.number().optional(),
+  "notPriced": zod.boolean().optional()
 })).optional()
 })).optional()
 })

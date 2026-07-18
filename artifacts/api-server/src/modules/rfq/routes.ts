@@ -1135,9 +1135,11 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
         priceWithVat: number;
         taxIncluded: boolean;
         deliveryDays: number | null;
+        notes: string | null;
         deviation: number;
         isLowest: boolean;
         isAnomaly: boolean;
+        notPriced: boolean;
       }> = [];
 
       for (const o of offers) {
