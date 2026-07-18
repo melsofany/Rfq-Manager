@@ -249,35 +249,34 @@ export async function initDb(): Promise<void> {
       );
     `);
 
-    // Seed accounts — passwords read from env vars; MUST be changed after first login in production
-    const accounts = [
-      {
-        name: "Admin",
-        email: "admin@cortoba-supplies.com",
-        password: process.env.SEED_ADMIN_PASS ?? "Cortoba@Admin1",
-        role: "admin",
-      },
-      {
-        name: "Khalid Al-Manager",
-        email: "khalid@cortoba-supplies.com",
-        password: process.env.SEED_MANAGER_PASS ?? "Cortoba@Mgr1",
-        role: "manager",
-      },
-      {
-        name: "Sara",
-        email: "sara@cortoba-supplies.com",
-        password: process.env.SEED_STAFF_PASS ?? "Cortoba@Staff1",
-        role: "purchasing",
-      },
-    ];
-    for (const acc of accounts) {
-      const hash = await bcrypt.hash(acc.password, 10);
-      await client.query(
-        `INSERT INTO employees (name, email, password_hash, role, is_active)
-         VALUES ($1, $2, $3, $4, true)
-         ON CONFLICT (email) DO UPDATE SET role = $4`,
-        [acc.name, acc.email, hash, acc.role],
-      );
+    // Seed initial accounts ONLY if the employees table is empty.
+    // Passwords are read exclusively from env vars — no fallback defaults.
+    // ON CONFLICT DO NOTHING guarantees existing records (and passwords) are
+    // never overwritten on restart or redeploy.
+    const existingCount = await client.query('SELECT COUNT(*) FROM employees');
+    const isEmpty = parseInt(existingCount.rows[0].count, 10) === 0;
+    if (isEmpty) {
+      const seedAccounts = [
+        { name: "Admin",           email: "admin@cortoba-supplies.com",   pass: process.env.SEED_ADMIN_PASS,   role: "admin" },
+        { name: "Khalid Al-Manager",email: "khalid@cortoba-supplies.com",  pass: process.env.SEED_MANAGER_PASS, role: "manager" },
+        { name: "Sara",             email: "sara@cortoba-supplies.com",    pass: process.env.SEED_STAFF_PASS,   role: "purchasing" },
+      ];
+      for (const acc of seedAccounts) {
+        if (!acc.pass) {
+          logger.warn({ email: acc.email }, "initDb: env var for seed password not set — skipping account");
+          continue;
+        }
+        const hash = await bcrypt.hash(acc.pass, 12);
+        await client.query(
+          `INSERT INTO employees (name, email, password_hash, role, is_active)
+           VALUES ($1, $2, $3, $4, true)
+           ON CONFLICT (email) DO NOTHING`,
+          [acc.name, acc.email, hash, acc.role],
+        );
+        logger.info({ email: acc.email }, "initDb: seeded initial account");
+      }
+    } else {
+      logger.info("initDb: employees table not empty — skipping user seed");
     }
     // ── Seed supplier categories ──────────────────────────────────────────────
     const categories = ["الميكانيكا", "معدات البترول"];
