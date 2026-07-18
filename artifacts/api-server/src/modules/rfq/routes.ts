@@ -1152,6 +1152,7 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
             priceWithVat,
             taxIncluded: oi.item.taxIncluded,
             deliveryDays: oi.item.deliveryDays,
+            notes: oi.item.notes ?? null,
             deviation: 0,
             isLowest: false,
             isAnomaly: false,
@@ -1211,6 +1212,36 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
       .where(eq(sentLogTable.rfqId, rfqId));
     const closeDate = sentLogRows.find((r) => r.closeDate)?.closeDate ?? null;
 
+    // Fetch offer attachments for PDF (graceful fallback if table missing)
+    let pdfAttRows: { offerId: number; originalName: string }[] = [];
+    if (offerIds.length > 0) {
+      try {
+        pdfAttRows = await db
+          .select({
+            offerId: offerAttachmentsTable.offerId,
+            originalName: offerAttachmentsTable.originalName,
+          })
+          .from(offerAttachmentsTable)
+          .where(inArray(offerAttachmentsTable.offerId, offerIds));
+      } catch {
+        // table may not exist in older deployments
+      }
+    }
+    const pdfAttByOffer: Record<number, string[]> = {};
+    for (const a of pdfAttRows) {
+      if (!pdfAttByOffer[a.offerId]) pdfAttByOffer[a.offerId] = [];
+      pdfAttByOffer[a.offerId].push(a.originalName);
+    }
+
+    // Build per-supplier summary (general notes + attachments) for PDF
+    const supplierSummaries = offers
+      .map((o) => ({
+        supplierName: o.supplierName || "",
+        generalNotes: o.offer.generalNotes ?? null,
+        attachments: (pdfAttByOffer[o.offer.id] ?? []).map((fileName) => ({ fileName })),
+      }))
+      .filter((s) => s.generalNotes || s.attachments.length > 0);
+
     const pdfBuffer = await generateOffersPdf({
       rfqNo: rfqRow.rfq.internalRfqNo,
       customerRfqNo: rfqRow.rfq.customerRfqNo,
@@ -1218,6 +1249,7 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
       employeeName: rfqRow.employeeName ?? null,
       closeDate,
       itemAnalysis,
+      supplierSummaries,
     });
 
     res.setHeader("Content-Type", "application/pdf");
