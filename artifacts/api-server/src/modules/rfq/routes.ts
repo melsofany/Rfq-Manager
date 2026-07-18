@@ -826,7 +826,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
   // Fetch offer attachments uploaded by suppliers via the pricing page
   // Wrapped in try/catch: if the table doesn't exist yet in production this
   // should not break the entire offers endpoint — just return no attachments.
-  let offerAttachmentRows: { id: number; offerId: number; originalName: string; size: number }[] = [];
+  let offerAttachmentRows: { id: number; offerId: number; originalName: string; mimeType: string; size: number }[] = [];
   try {
     if (offerIds.length > 0) {
       offerAttachmentRows = await db
@@ -834,6 +834,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
           id: offerAttachmentsTable.id,
           offerId: offerAttachmentsTable.offerId,
           originalName: offerAttachmentsTable.originalName,
+          mimeType: offerAttachmentsTable.mimeType,
           size: offerAttachmentsTable.size,
         })
         .from(offerAttachmentsTable)
@@ -856,6 +857,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
     attachmentsByOffer[a.offerId].push({
       id: a.id,
       originalName: a.originalName,
+      mimeType: a.mimeType,
       sizeLabel: _fmtAttSize(a.size),
       downloadUrl: '/api/offer/attachments/' + a.id + '/download',
     });

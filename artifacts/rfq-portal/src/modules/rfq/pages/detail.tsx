@@ -51,7 +51,7 @@ type OfferRow = {
   isLowest: boolean;
   isAnomaly: boolean;
   notPriced?: boolean;
-  attachments?: Array<{ id: number; originalName: string; sizeLabel?: string; downloadUrl?: string }>;
+  attachments?: Array<{ id: number; originalName: string; mimeType?: string; sizeLabel?: string; downloadUrl?: string }>;
 };
 
 type ItemAnalysis = {
@@ -1382,7 +1382,7 @@ export default function RfqDetailPage() {
                   const offersWithAtts = (offersData?.offers as Array<{
                     supplierId: number;
                     supplierName: string | null;
-                    attachments?: Array<{ id: number; originalName: string; sizeLabel?: string; downloadUrl?: string }>;
+                    attachments?: Array<{ id: number; originalName: string; mimeType?: string; sizeLabel?: string; downloadUrl?: string }>;
                   }> | undefined)?.filter((o) => o.attachments && o.attachments.length > 0);
                   if (!offersWithAtts?.length) return null;
                   return (
