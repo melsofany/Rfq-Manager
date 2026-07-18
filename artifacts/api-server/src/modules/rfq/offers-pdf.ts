@@ -27,15 +27,22 @@ export interface OffersPdfOptions {
       priceWithVat: number;
       taxIncluded: boolean;
       deliveryDays?: number | null;
+      notes?: string | null;
       deviation: number;
       isLowest: boolean;
       isAnomaly: boolean;
+      notPriced?: boolean;
     }>;
+  }>;
+  supplierSummaries?: Array<{
+    supplierName: string;
+    generalNotes?: string | null;
+    attachments?: Array<{ fileName: string }>;
   }>;
 }
 
 const LOGO_BASE64 =
-  "data:image/png;base64,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";
+  "data:image/png;base64,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";
 
 function getLogoBuffer(): Buffer {
   const base64 = LOGO_BASE64.replace("data:image/png;base64,", "");
@@ -108,18 +115,15 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
       const BORDER = "#d0dbe8";
 
       // ── HEADER ────────────────────────────────────────────────────────────
-      // Taller header to include company name and logo
       const HEADER_H = 72;
       doc.rect(MARGIN, MARGIN, CONTENT_W, HEADER_H).fill(BLUE);
 
-      // Logo on right side
       try {
         doc.image(getLogoBuffer(), MARGIN + CONTENT_W - 68, MARGIN + 6, { height: 58 });
       } catch {
         /* skip */
       }
 
-      // Company name (Arabic) - large
       doc
         .font(FONT)
         .fontSize(15)
@@ -130,20 +134,16 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
           MARGIN + 8,
           { lineBreak: false },
         );
-      // Company name (English) - smaller
       doc
         .font(FONT)
         .fontSize(9)
         .fillColor("#aaccee")
         .text("Cortoba Supplies", MARGIN + 14, MARGIN + 30, { lineBreak: false });
-
-      // Report title
       doc
         .font(FONT)
         .fontSize(11)
         .fillColor("#ffffff")
         .text("RFQ PRICE COMPARISON REPORT", MARGIN + 14, MARGIN + 48, { lineBreak: false });
-      // Arabic subtitle
       doc
         .font(FONT)
         .fontSize(8)
@@ -160,7 +160,6 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
       doc.rect(MARGIN, infoY, CONTENT_W, 42).fill(GREY);
       doc.rect(MARGIN, infoY + 40, CONTENT_W, 2).fill(GOLD);
 
-      // Build info cells dynamically — include employee name and close date if present
       const infoCells: Array<{ label: string; labelAr: string; value: string }> = [
         {
           label: "Internal RFQ",
@@ -203,7 +202,6 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
       const cellW = CONTENT_W / infoCells.length;
       infoCells.forEach((c, i) => {
         const cx = MARGIN + i * cellW;
-        // Arabic label
         doc
           .font(FONT)
           .fontSize(6)
@@ -213,7 +211,6 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
             align: "center",
             lineBreak: false,
           });
-        // English label
         doc
           .font(FONT)
           .fontSize(5.5)
@@ -223,7 +220,6 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
             align: "center",
             lineBreak: false,
           });
-        // Value
         doc
           .font(FONT_BOLD)
           .fontSize(9)
@@ -271,7 +267,25 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
       const totalTableW = mainW + supGroupW * allSuppliers.length + SUMMARY_W;
       const tableX = MARGIN + Math.max(0, (CONTENT_W - totalTableW) / 2);
       const ROW_H = 22;
+      const NOTES_ROW_H = 14;
       const PAGE_H = doc.page.height;
+
+      const addContinuationPage = (): number => {
+        doc.addPage({
+          size: "A4",
+          layout: "landscape",
+          margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+        });
+        doc.rect(MARGIN, MARGIN, CONTENT_W, 22).fill(BLUE);
+        doc
+          .font(FONT_BOLD)
+          .fontSize(9)
+          .fillColor(GOLD)
+          .text(`\u062a\u0627\u0628\u0639 - ${opts.rfqNo}`, MARGIN + 8, MARGIN + 6, {
+            lineBreak: false,
+          });
+        return MARGIN + 28;
+      };
 
       const drawHeader = (hy: number): number => {
         doc.rect(tableX, hy, totalTableW, ROW_H).fill(BLUE);
@@ -348,21 +362,9 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
       y = drawHeader(y);
 
       opts.itemAnalysis.forEach((item, idx) => {
+        // ── check space for item row + potential notes row ────────────────
         if (y + ROW_H > PAGE_H - MARGIN - 20) {
-          doc.addPage({
-            size: "A4",
-            layout: "landscape",
-            margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
-          });
-          doc.rect(MARGIN, MARGIN, CONTENT_W, 22).fill(BLUE);
-          doc
-            .font(FONT_BOLD)
-            .fontSize(9)
-            .fillColor(GOLD)
-            .text(`\u062a\u0627\u0628\u0639 - ${opts.rfqNo}`, MARGIN + 8, MARGIN + 6, {
-              lineBreak: false,
-            });
-          y = MARGIN + 28;
+          y = addContinuationPage();
           y = drawHeader(y);
         }
 
@@ -425,7 +427,13 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
 
         const bySupplier: Record<
           string,
-          { price: number; priceWithVat: number; isLowest: boolean; isAnomaly: boolean }
+          {
+            price: number;
+            priceWithVat: number;
+            isLowest: boolean;
+            isAnomaly: boolean;
+            notes?: string | null;
+          }
         > = {};
         for (const o of item.offers) {
           bySupplier[o.supplierName] = {
@@ -433,6 +441,7 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
             priceWithVat: o.priceWithVat,
             isLowest: o.isLowest,
             isAnomaly: o.isAnomaly,
+            notes: o.notes,
           };
         }
 
@@ -491,9 +500,231 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
           });
 
         y += ROW_H;
+
+        // ── ITEM NOTES ROW ────────────────────────────────────────────────
+        const itemHasNotes = allSuppliers.some((s) => bySupplier[s]?.notes);
+        if (itemHasNotes) {
+          if (y + NOTES_ROW_H > PAGE_H - MARGIN - 20) {
+            y = addContinuationPage();
+            y = drawHeader(y);
+          }
+          doc.rect(tableX, y, totalTableW, NOTES_ROW_H).fill("#fffbeb");
+          doc.rect(tableX, y, totalTableW, NOTES_ROW_H).stroke("#f6e9c0");
+
+          // Label
+          doc
+            .font(FONT_BOLD)
+            .fontSize(6)
+            .fillColor("#92400e")
+            .text(
+              "\u0645\u0644\u0627\u062d\u0638\u0627\u062a:",
+              tableX + 2,
+              y + 4,
+              { width: mainW - 4, align: "center", lineBreak: false },
+            );
+
+          let nx = tableX + mainW;
+          allSuppliers.forEach((s) => {
+            const note = bySupplier[s]?.notes;
+            if (note) {
+              doc
+                .font(FONT)
+                .fontSize(6)
+                .fillColor("#78350f")
+                .text(note, nx + 3, y + 4, {
+                  width: supGroupW - 6,
+                  lineBreak: false,
+                  ellipsis: true,
+                });
+            }
+            nx += supGroupW;
+          });
+
+          y += NOTES_ROW_H;
+        }
       });
 
-      // ── FOOTER ────────────────────────────────────────────────────────────
+      // ── GENERAL NOTES & ATTACHMENTS SECTION ───────────────────────────────
+      const hasGeneralNotes = opts.supplierSummaries?.some((s) => s.generalNotes);
+      const hasAttachments = opts.supplierSummaries?.some((s) => s.attachments?.length);
+
+      if (hasGeneralNotes || hasAttachments) {
+        // Start a new page for notes/attachments
+        doc.addPage({
+          size: "A4",
+          layout: "landscape",
+          margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+        });
+        let sy = MARGIN;
+
+        // Section header bar
+        doc.rect(MARGIN, sy, CONTENT_W, 28).fill(BLUE);
+        doc
+          .font(FONT_BOLD)
+          .fontSize(12)
+          .fillColor(GOLD)
+          .text(
+            "\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0648\u0645\u0631\u0641\u0642\u0627\u062a \u0627\u0644\u0645\u0648\u0631\u062f\u064a\u0646",
+            MARGIN + 12,
+            sy + 6,
+            { lineBreak: false },
+          );
+        doc
+          .font(FONT)
+          .fontSize(8)
+          .fillColor("#aaccee")
+          .text("Supplier Notes & Attachments", MARGIN + 12, sy + 19, { lineBreak: false });
+        // RFQ reference on right
+        doc
+          .font(FONT)
+          .fontSize(8)
+          .fillColor("#ffffff")
+          .text(opts.rfqNo, MARGIN + CONTENT_W - 120, sy + 10, {
+            width: 110,
+            align: "right",
+            lineBreak: false,
+          });
+        sy += 36;
+
+        // ── General Notes ──────────────────────────────────────────────────
+        if (hasGeneralNotes) {
+          // Sub-header
+          doc.rect(MARGIN, sy, CONTENT_W, 18).fill("#e8f0f8");
+          doc.rect(MARGIN, sy, 4, 18).fill(BLUE);
+          doc
+            .font(FONT_BOLD)
+            .fontSize(9)
+            .fillColor(BLUE)
+            .text(
+              "\u0627\u0644\u0645\u0644\u0627\u062d\u0638\u0627\u062a \u0627\u0644\u0639\u0627\u0645\u0629 \u0644\u0643\u0644 \u0645\u0648\u0631\u062f  |  General Notes per Supplier",
+              MARGIN + 10,
+              sy + 4,
+              { lineBreak: false },
+            );
+          sy += 22;
+
+          for (const s of opts.supplierSummaries ?? []) {
+            if (!s.generalNotes) continue;
+            if (sy + 20 > PAGE_H - MARGIN - 10) {
+              doc.addPage({
+                size: "A4",
+                layout: "landscape",
+                margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+              });
+              sy = MARGIN;
+            }
+            // Supplier name column
+            doc.rect(MARGIN, sy, 160, 18).fill("#dce8f5");
+            doc
+              .font(FONT_BOLD)
+              .fontSize(8)
+              .fillColor(BLUE)
+              .text(s.supplierName, MARGIN + 6, sy + 4, {
+                width: 148,
+                lineBreak: false,
+                ellipsis: true,
+              });
+            // Notes column
+            doc.rect(MARGIN + 160, sy, CONTENT_W - 160, 18).fill("#fafcff");
+            doc.rect(MARGIN, sy, CONTENT_W, 18).stroke(BORDER);
+            doc
+              .font(FONT)
+              .fontSize(8)
+              .fillColor("#1a1a1a")
+              .text(s.generalNotes, MARGIN + 168, sy + 4, {
+                width: CONTENT_W - 176,
+                lineBreak: false,
+                ellipsis: true,
+              });
+            sy += 18;
+          }
+          sy += 12;
+        }
+
+        // ── Attachments ────────────────────────────────────────────────────
+        if (hasAttachments) {
+          if (sy + 40 > PAGE_H - MARGIN - 10) {
+            doc.addPage({
+              size: "A4",
+              layout: "landscape",
+              margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+            });
+            sy = MARGIN;
+          }
+
+          // Sub-header
+          doc.rect(MARGIN, sy, CONTENT_W, 18).fill("#e8f0f8");
+          doc.rect(MARGIN, sy, 4, 18).fill(GOLD);
+          doc
+            .font(FONT_BOLD)
+            .fontSize(9)
+            .fillColor(BLUE)
+            .text(
+              "\u0627\u0644\u0645\u0631\u0641\u0642\u0627\u062a  |  Attachments",
+              MARGIN + 10,
+              sy + 4,
+              { lineBreak: false },
+            );
+          sy += 22;
+
+          let attIdx = 0;
+          for (const s of opts.supplierSummaries ?? []) {
+            if (!s.attachments?.length) continue;
+            for (const att of s.attachments) {
+              if (sy + 16 > PAGE_H - MARGIN - 10) {
+                doc.addPage({
+                  size: "A4",
+                  layout: "landscape",
+                  margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN },
+                });
+                sy = MARGIN;
+              }
+              const rowBg = attIdx % 2 === 0 ? "#ffffff" : "#f4f8fc";
+              doc.rect(MARGIN, sy, CONTENT_W, 16).fill(rowBg);
+              doc.rect(MARGIN, sy, CONTENT_W, 16).stroke(BORDER);
+
+              // Row number
+              doc
+                .font(FONT)
+                .fontSize(7)
+                .fillColor("#888")
+                .text(String(attIdx + 1), MARGIN + 4, sy + 4, {
+                  width: 20,
+                  align: "center",
+                  lineBreak: false,
+                });
+
+              // Supplier name badge
+              doc.rect(MARGIN + 26, sy + 2, 160, 12).fill("#dce8f5").stroke("#c0d4ea");
+              doc
+                .font(FONT_BOLD)
+                .fontSize(7.5)
+                .fillColor(BLUE)
+                .text(s.supplierName, MARGIN + 30, sy + 4, {
+                  width: 152,
+                  lineBreak: false,
+                  ellipsis: true,
+                });
+
+              // File name with paperclip symbol
+              doc
+                .font(FONT)
+                .fontSize(8)
+                .fillColor("#1a3a5c")
+                .text("\u{1F4CE} " + att.fileName, MARGIN + 196, sy + 4, {
+                  width: CONTENT_W - 200,
+                  lineBreak: false,
+                  ellipsis: true,
+                });
+
+              sy += 16;
+              attIdx++;
+            }
+          }
+        }
+      }
+
+      // ── FOOTER (last page) ────────────────────────────────────────────────
       const footerY = doc.page.height - MARGIN + 4;
       doc.rect(MARGIN, footerY - 6, CONTENT_W, 22).fill(BLUE);
       doc
