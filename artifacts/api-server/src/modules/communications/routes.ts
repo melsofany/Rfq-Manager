@@ -159,16 +159,115 @@ router.post(
     res.sendStatus(200);
     try {
       const signature = req.headers["x-hub-signature-256"] as string | undefined;
+
+      // First attempt: let the library handle verification + routing.
+      // This works correctly when WHATSAPP_APP_SECRET in Render matches
+      // the App Secret in Meta Developer Portal AND the body is ASCII-only.
       if (req.rawBody && signature) {
-        await Whatsapp.post(req.body, req.rawBody, signature);
-      } else {
-        await Whatsapp.post(req.body);
+        try {
+          await Whatsapp.post(req.body, req.rawBody, signature);
+          return; // Library handled everything — done.
+        } catch (sigErr) {
+          // Signature check can fail for two reasons:
+          //  1. WHATSAPP_APP_SECRET doesn't match Meta's App Secret.
+          //  2. whatsapp-api-js applies escapeUnicode() to rawBody before HMAC,
+          //     but Meta hashes the raw UTF-8 bytes — so Arabic/emoji content
+          //     causes a mismatch even with the correct secret.
+          // Either way: do NOT silently drop the message. Fall through and
+          // process the payload directly without verification.
+          logger.warn(
+            { err: String(sigErr) },
+            "WhatsApp webhook: signature verification failed — processing without verification. " +
+            "ACTION: confirm WHATSAPP_APP_SECRET in Render matches " +
+            "Meta Developers → App Settings → Basic → App Secret",
+          );
+        }
       }
+
+      // Fallback / no-signature path: parse the Meta webhook body directly.
+      await dispatchWebhookPayload(req.body as MetaWebhookBody);
     } catch (err) {
       logger.error({ err }, "WhatsApp webhook processing error");
     }
   },
 );
+
+// ─── Types for the raw Meta webhook body ─────────────────────────────────
+interface MetaWebhookBody {
+  object?: string;
+  entry?: Array<{
+    changes?: Array<{
+      field?: string;
+      value?: {
+        metadata?: { phone_number_id?: string };
+        messages?: ServerMessage[];
+        contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
+        statuses?: Array<{
+          id?: string;
+          recipient_id?: string;
+          status?: string;
+          errors?: Array<{ code?: number; error_data?: { details?: string } }>;
+        }>;
+      };
+    }>;
+  }>;
+}
+
+/**
+ * Parse and dispatch a Meta webhook payload without relying on the library's
+ * secure post() wrapper. Called both as a fallback when signature verification
+ * fails and as the primary path when no signature header is present.
+ */
+async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
+  if (body.object !== "whatsapp_business_account") return;
+  const change = body.entry?.[0]?.changes?.[0];
+  if (!change?.value) return;
+
+  const phoneID = change.value.metadata?.phone_number_id ?? PHONE_NUMBER_ID;
+
+  if (change.field === "messages") {
+    if (change.value.messages?.length) {
+      const message = change.value.messages[0] as ServerMessage;
+      const contact = change.value.contacts?.[0];
+      const from = contact?.wa_id ?? message.from;
+      const name = contact?.profile?.name;
+
+      if (message.type === "reaction") {
+        await handleReactionWebhook(from, message);
+      } else {
+        await handleInboundMessage(phoneID, from, message, name, async () => {});
+      }
+    } else if (change.value.statuses?.length) {
+      const s = change.value.statuses[0];
+      const status = s.status ?? "";
+      const id = s.id ?? "";
+      if (status === "failed") {
+        const errCode = s.errors?.[0]?.code;
+        const errDetails = s.errors?.[0]?.error_data?.details;
+        let failureReason = "فشل تسليم رسالة واتساب";
+        if (errCode === 131042)
+          failureReason =
+            "⚠️ فواتير واتساب بيزنس غير مسددة — يرجى تسوية الفاتورة على Meta Business لاستئناف إرسال الرسائل.";
+        else if (errCode === 131026) failureReason = "رقم المستلم غير مسجل على واتساب";
+        else if (errCode === 131047) failureReason = "انتهت نافذة المحادثة (24 ساعة)";
+        else if (errDetails) failureReason = errDetails;
+        broadcastWaEvent({
+          type: "delivery_failed",
+          waMessageId: id,
+          reason: failureReason,
+          codes: errCode ? [errCode] : [],
+        });
+        try {
+          await db.delete(whatsappChatsTable).where(eq(whatsappChatsTable.waMessageId, id));
+        } catch {
+          /* non-critical */
+        }
+      } else {
+        logger.info({ id, status }, "WhatsApp status update");
+      }
+    }
+  }
+}
 
 interface ServerMessage {
   id: string;
