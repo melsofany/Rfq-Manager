@@ -469,9 +469,8 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
 
         // Save to whatsapp_chats so the message appears in the chat history
         const chatPhone = normalizePhone(supplier.phone.trim());
-        await db
-          .insert(whatsappChatsTable)
-          .values({
+        try {
+          await db.insert(whatsappChatsTable).values({
             waMessageId: wamid ?? null,
             direction: "outbound",
             phone: chatPhone,
@@ -480,13 +479,13 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
             mediaType: "document",
             filename: `PO-${poNo}.pdf`,
             isRead: true,
-          })
-          .catch((saveErr) => {
-            req.log.error(
-              { err: saveErr, supplierId, poNo },
-              "PO dispatch: failed to save WhatsApp chat record",
-            );
           });
+        } catch (saveErr) {
+          req.log.error(
+            { err: saveErr, supplierId, poNo, chatPhone, wamid },
+            "PO dispatch: failed to save WhatsApp chat record",
+          );
+        }
       } catch (err) {
         whatsappError = err instanceof Error ? err.message : String(err);
         req.log.error({ err, supplierId, phone: supplier.phone }, "PO dispatch: WhatsApp failed");
