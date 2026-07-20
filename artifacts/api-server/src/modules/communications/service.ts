@@ -69,7 +69,10 @@ function requireConfigured(): void {
 }
 
 function normalizePhone(phone: string): string {
-  let cleaned = phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
+  // Strip invisible Unicode directional/formatting marks that paste in from WhatsApp/browsers
+  // eslint-disable-next-line no-control-regex
+  let cleaned = phone.replace(/[\u2066\u2067\u2068\u2069\u200e\u200f\u202a\u202b\u202c\u202d\u202e]/g, "");
+  cleaned = cleaned.replace(/[\s\-()]/g, "").replace(/\+/g, "");
   if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
   if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
   if (cleaned.length === 10 && cleaned.startsWith("1")) cleaned = "20" + cleaned;
