@@ -1387,18 +1387,24 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
   }
 
   // ── Source A: rfqTable.expiresAt (precise timestamp) ──────────────────────
-  const rfqByExpiresAt = await db
-    .select({ rfq: rfqTable, employeeName: employeesTable.name })
-    .from(rfqTable)
-    .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
-    .where(
-      and(
-        sql`${rfqTable.status} IN ('SENT', 'QUOTED')`,
-        sql`${rfqTable.expiresAt} IS NOT NULL`,
-        sql`${rfqTable.expiresAt} >= ${windowStart.toISOString()}::timestamptz`,
-        sql`${rfqTable.expiresAt} <= ${windowEnd.toISOString()}::timestamptz`,
-      ),
-    );
+  // Guard: expires_at column may not exist in older prod DBs — degrade gracefully
+  let rfqByExpiresAt: { rfq: typeof rfqTable.$inferSelect; employeeName: string | null }[] = [];
+  try {
+    rfqByExpiresAt = await db
+      .select({ rfq: rfqTable, employeeName: employeesTable.name })
+      .from(rfqTable)
+      .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
+      .where(
+        and(
+          sql`${rfqTable.status} IN ('SENT', 'QUOTED')`,
+          sql`${rfqTable.expiresAt} IS NOT NULL`,
+          sql`${rfqTable.expiresAt} >= ${windowStart.toISOString()}::timestamptz`,
+          sql`${rfqTable.expiresAt} <= ${windowEnd.toISOString()}::timestamptz`,
+        ),
+      );
+  } catch (errA) {
+    req.log.warn({ err: errA }, 'closing-soon: Source A (expiresAt) query failed — expires_at column may be missing in prod DB');
+  }
 
   // ── Source B: sentLogTable.closeDate (text YYYY-MM-DD) ────────────────────
   const matchingLogs = await db
@@ -1417,12 +1423,26 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
 
   // ── Source C: rfqTable.requiredResponseDate (free-text from sheet) ─────────
   // Fetch all SENT/QUOTED RFQs without expiresAt and check requiredResponseDate
-  const rfqsWithoutExpiresAt = await db
-    .select({ rfq: rfqTable, employeeName: employeesTable.name })
-    .from(rfqTable)
-    .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
-    .where(and(sql`${rfqTable.status} IN ('SENT', 'QUOTED')`, sql`${rfqTable.expiresAt} IS NULL`));
-
+  let rfqsWithoutExpiresAt: { rfq: typeof rfqTable.$inferSelect; employeeName: string | null }[] = [];
+  try {
+    rfqsWithoutExpiresAt = await db
+      .select({ rfq: rfqTable, employeeName: employeesTable.name })
+      .from(rfqTable)
+      .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
+      .where(and(sql`${rfqTable.status} IN ('SENT', 'QUOTED')`, sql`${rfqTable.expiresAt} IS NULL`));
+  } catch (errC) {
+    // expires_at column missing — fall back: fetch all SENT/QUOTED without the IS NULL filter
+    try {
+      rfqsWithoutExpiresAt = await db
+        .select({ rfq: rfqTable, employeeName: employeesTable.name })
+        .from(rfqTable)
+        .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
+        .where(sql`${rfqTable.status} IN ('SENT', 'QUOTED')`);
+      req.log.warn({ err: errC }, 'closing-soon: Source C used fallback query (expiresAt IS NULL failed)');
+    } catch (errC2) {
+      req.log.warn({ err: errC2 }, 'closing-soon: Source C fallback also failed — skipping');
+    }
+  }
   const coveredByA = new Set(rfqByExpiresAt.map((r) => r.rfq.id));
   const rfqByRequiredDate: typeof rfqsWithoutExpiresAt = [];
   const requiredDateMap: Record<number, string> = {};
