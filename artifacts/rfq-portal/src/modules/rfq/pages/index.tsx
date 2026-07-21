@@ -11,6 +11,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 
 const STATUSES = ["all", "DRAFT", "SENT", "QUOTED", "FAILED", "SUCCESS"];
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
 interface ClosingSoonRfq {
   id: number;
   internalRfqNo: string;
@@ -28,18 +32,43 @@ interface ClosingSoonData {
   dayAfterTomorrow: ClosingSoonRfq[];
 }
 
+// ---------------------------------------------------------------------------
+// Data hook
+// ---------------------------------------------------------------------------
+
 function useClosingSoon() {
   return useQuery<ClosingSoonData>({
     queryKey: ["rfq-closing-soon"],
     queryFn: async () => {
       const res = await fetch("/api/rfq/closing-soon", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch closing-soon RFQs");
-      return res.json();
+      if (!res.ok) throw new Error("closing-soon fetch failed");
+      return res.json() as Promise<ClosingSoonData>;
     },
     refetchInterval: 5 * 60 * 1000,
     staleTime: 2 * 60 * 1000,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+const TABLE_HEAD = (
+  <thead>
+    <tr className="bg-muted/20 border-b border-border text-left">
+      {["RFQ No.", "Customer RFQ", "Employee", "Status", "Suppliers", "Offers", "Closes At"].map(
+        (h, i) => (
+          <th
+            key={i}
+            className={`px-3 py-2 text-muted-foreground text-xs font-medium${i >= 4 ? " text-center" : ""}`}
+          >
+            {h}
+          </th>
+        ),
+      )}
+    </tr>
+  </thead>
+);
 
 function ClosingSoonRow({
   rfq,
@@ -48,10 +77,10 @@ function ClosingSoonRow({
   rfq: ClosingSoonRfq;
   navigate: (path: string) => void;
 }) {
-  const time = new Date(rfq.expiresAt).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const time = rfq.expiresAt
+    ? new Date(rfq.expiresAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+    : "—";
+
   return (
     <tr
       className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer text-xs"
@@ -70,45 +99,130 @@ function ClosingSoonRow({
   );
 }
 
+function SectionHeader({
+  icon,
+  label,
+  count,
+  bg,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+  bg: string;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-2 px-4 py-2 border-b border-amber-200 dark:border-amber-800 ${bg}`}
+    >
+      {icon}
+      <span className="text-xs font-semibold">
+        {label} ({count})
+      </span>
+    </div>
+  );
+}
+
+function ClosingSoonTable({
+  rows,
+  navigate,
+}: {
+  rows: ClosingSoonRfq[];
+  navigate: (path: string) => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        {TABLE_HEAD}
+        <tbody>
+          {rows.map((rfq) => (
+            <ClosingSoonRow key={rfq.id} rfq={rfq} navigate={navigate} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Panel
+// ---------------------------------------------------------------------------
+
 function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
-  const { t } = useLanguage();
-  const { data, isLoading, isError } = useClosingSoon();
+  const { isLoading, isError, data } = useClosingSoon();
   const [open, setOpen] = useState(true);
 
-  const totalCount =
-    (data?.today.length ?? 0) + (data?.tomorrow.length ?? 0) + (data?.dayAfterTomorrow.length ?? 0);
+  const today = data?.today ?? [];
+  const tomorrow = data?.tomorrow ?? [];
+  const dayAfter = data?.dayAfterTomorrow ?? [];
+  const totalCount = today.length + tomorrow.length + dayAfter.length;
 
-  const tableHead = (
-    <thead>
-      <tr className="bg-muted/20 border-b border-border text-left">
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
-          {t("rfq.closingSoon.rfqNo")}
-        </th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
-          {t("rfq.closingSoon.customerRfq")}
-        </th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
-          {t("rfq.closingSoon.employee")}
-        </th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
-          {t("rfq.closingSoon.status")}
-        </th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">
-          {t("rfq.closingSoon.suppliers")}
-        </th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">
-          {t("rfq.closingSoon.offers")}
-        </th>
-        <th className="px-3 py-2 text-muted-foreground text-xs font-medium text-center">
-          {t("rfq.closingSoon.closeTime")}
-        </th>
-      </tr>
-    </thead>
-  );
+  // One function — exactly one branch runs
+  function renderContent() {
+    if (isLoading) {
+      return (
+        <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-amber-600 animate-pulse">
+          جارٍ التحميل…
+        </div>
+      );
+    }
+
+    if (isError) {
+      return (
+        <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-red-600 dark:text-red-400">
+          تعذّر تحميل الطلبات — يرجى تحديث الصفحة
+        </div>
+      );
+    }
+
+    if (totalCount === 0) {
+      return (
+        <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-amber-700 dark:text-amber-400">
+          لا توجد طلبات تغلق خلال الثلاثة أيام القادمة
+        </div>
+      );
+    }
+
+    return (
+      <div className="border-t border-amber-200 dark:border-amber-800 divide-y divide-amber-200 dark:divide-amber-800">
+        {today.length > 0 && (
+          <div>
+            <SectionHeader
+              icon={<AlertTriangle size={13} className="text-red-600" />}
+              label="اليوم"
+              count={today.length}
+              bg="bg-red-100 dark:bg-red-950/50 text-red-800 dark:text-red-300"
+            />
+            <ClosingSoonTable rows={today} navigate={navigate} />
+          </div>
+        )}
+        {tomorrow.length > 0 && (
+          <div>
+            <SectionHeader
+              icon={<Clock size={13} className="text-red-500" />}
+              label="غداً"
+              count={tomorrow.length}
+              bg="bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400"
+            />
+            <ClosingSoonTable rows={tomorrow} navigate={navigate} />
+          </div>
+        )}
+        {dayAfter.length > 0 && (
+          <div>
+            <SectionHeader
+              icon={<Clock size={13} className="text-amber-500" />}
+              label="بعد غد"
+              count={dayAfter.length}
+              bg="bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400"
+            />
+            <ClosingSoonTable rows={dayAfter} navigate={navigate} />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 overflow-hidden">
-      {/* Header */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -116,15 +230,11 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
       >
         <AlertTriangle size={15} className="text-amber-600 flex-shrink-0" />
         <span className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex-1">
-          {t("rfq.closingSoon.title")}
+          طلبات تغلق قريباً
         </span>
-        {isLoading ? (
-          <span className="text-xs text-amber-600 animate-pulse">
-            {t("rfq.closingSoon.loading")}
-          </span>
-        ) : (
+        {!isLoading && !isError && (
           <span className="text-xs font-medium bg-amber-600 text-white rounded-full px-2 py-0.5">
-            {totalCount} {t("rfq.requests")}
+            {totalCount}
           </span>
         )}
         {open ? (
@@ -134,103 +244,14 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
         )}
       </button>
 
-      {open && !isLoading && !isError && totalCount === 0 && (
-        <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-amber-700 dark:text-amber-400">
-          {t("rfq.closingSoon.noItems")}
-        </div>
-      )}
-
-      {open && isError && (
-        <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-red-600 dark:text-red-400">
-          تعذّر تحميل الطلبات — يرجى تحديث الصفحة
-        </div>
-      )}
-
-      {open && !isLoading && totalCount > 0 && (
-        <div className="border-t border-amber-200 dark:border-amber-800">
-          {/* Today */}
-          {data && data.today.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-red-100 dark:bg-red-950/50 border-b border-amber-200 dark:border-amber-800">
-                <AlertTriangle size={13} className="text-red-600" />
-                <span className="text-xs font-semibold text-red-800 dark:text-red-300">
-                  {t("rfq.closingSoon.today")} ({data.today.length} {t("rfq.requests")})
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  {tableHead}
-                  <tbody>
-                    {data.today.map((rfq) => (
-                      <ClosingSoonRow key={rfq.id} rfq={rfq} navigate={navigate} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Tomorrow */}
-          {data && data.tomorrow.length > 0 && (
-            <div
-              className={
-                (data.today.length ?? 0) > 0
-                  ? "border-t border-amber-200 dark:border-amber-800"
-                  : ""
-              }
-            >
-              <div className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950/30 border-b border-amber-200 dark:border-amber-800">
-                <Clock size={13} className="text-red-500" />
-                <span className="text-xs font-semibold text-red-700 dark:text-red-400">
-                  {t("rfq.closingSoon.tomorrow")} ({data.tomorrow.length} {t("rfq.requests")})
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  {tableHead}
-                  <tbody>
-                    {data.tomorrow.map((rfq) => (
-                      <ClosingSoonRow key={rfq.id} rfq={rfq} navigate={navigate} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Day after tomorrow */}
-          {data && data.dayAfterTomorrow.length > 0 && (
-            <div
-              className={
-                (data.today.length ?? 0) > 0 || data.tomorrow.length > 0
-                  ? "border-t border-amber-200 dark:border-amber-800"
-                  : ""
-              }
-            >
-              <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800">
-                <Clock size={13} className="text-amber-500" />
-                <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  {t("rfq.closingSoon.dayAfter")} ({data.dayAfterTomorrow.length}{" "}
-                  {t("rfq.requests")})
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  {tableHead}
-                  <tbody>
-                    {data.dayAfterTomorrow.map((rfq) => (
-                      <ClosingSoonRow key={rfq.id} rfq={rfq} navigate={navigate} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      {open && renderContent()}
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 export default function RfqListPage() {
   const [, navigate] = useLocation();
@@ -278,7 +299,7 @@ export default function RfqListPage() {
           </Button>
         </div>
 
-        {/* Closing Soon Report */}
+        {/* Closing Soon Panel */}
         <ClosingSoonPanel navigate={navigate} />
 
         {/* Filters */}
@@ -312,7 +333,7 @@ export default function RfqListPage() {
           </div>
         </div>
 
-        {/* Table */}
+        {/* RFQ Table */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>
