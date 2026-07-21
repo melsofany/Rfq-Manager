@@ -1293,137 +1293,93 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
   }
 });
 
-// GET /api/rfq/closing-soon — RFQs expiring tomorrow or the day after (active statuses only)
+// GET /api/rfq/closing-soon — RFQs whose supplier close_date is tomorrow or the day after
 router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => {
   const now = new Date();
 
-  // Build day boundaries in UTC
-  const startOfTomorrow = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0),
-  );
-  const endOfTomorrow = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 23, 59, 59, 999),
-  );
-  const startOfDayAfter = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2, 0, 0, 0, 0),
-  );
-  const endOfDayAfter = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2, 23, 59, 59, 999),
-  );
+  // Date strings for tomorrow and day-after in UTC (YYYY-MM-DD)
+  const tomorrowStr = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+    .toISOString()
+    .split("T")[0]!;
+  const dayAfterStr = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2))
+    .toISOString()
+    .split("T")[0]!;
 
-  // 1) RFQs where expiresAt is already set and falls in the window
-  const rows = await db
-    .select({
-      rfq: rfqTable,
-      employeeName: employeesTable.name,
-    })
-    .from(rfqTable)
-    .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
+  // Step 1: find distinct rfq_ids where ANY sent_log row has close_date == tomorrow or day-after
+  // close_date is stored as YYYY-MM-DD text from the HTML date input
+  const matchingLogs = await db
+    .selectDistinct({ rfqId: sentLogTable.rfqId, closeDate: sentLogTable.closeDate })
+    .from(sentLogTable)
     .where(
-      and(
-        sql`${rfqTable.status} IN ('SENT', 'QUOTED')`,
-        sql`${rfqTable.expiresAt} IS NOT NULL`,
-        sql`${rfqTable.expiresAt} BETWEEN ${startOfTomorrow.toISOString()}::timestamptz AND ${endOfDayAfter.toISOString()}::timestamptz`,
-      ),
+      sql`${sentLogTable.closeDate} IN (${tomorrowStr}, ${dayAfterStr})`,
     );
 
-  // 2) Fallback: RFQs where expiresAt is NULL but sent_log.close_date falls in the window
-  //    (handles data sent before this fix was deployed)
-  const tomorrowDate = startOfTomorrow.toISOString().split("T")[0];
-  const dayAfterDate = startOfDayAfter.toISOString().split("T")[0];
-  const fallbackRows = await db
-    .select({
-      rfq: rfqTable,
-      employeeName: employeesTable.name,
-    })
-    .from(rfqTable)
-    .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
-    .where(
-      and(
-        sql`${rfqTable.status} IN ('SENT', 'QUOTED')`,
-        sql`${rfqTable.expiresAt} IS NULL`,
-        sql`${rfqTable.id} IN (
-          SELECT rfq_id FROM sent_log
-          WHERE close_date ~ E'^\\d{4}-\\d{2}-\\d{2}'
-          AND close_date::date BETWEEN ${tomorrowDate}::date AND ${dayAfterDate}::date
-        )`,
-      ),
-    );
-
-  // Deduplicate by id (rows should have no overlap since one requires IS NOT NULL and other IS NULL)
-  const seenIds = new Set(rows.map((r) => r.rfq.id));
-  const allRows = [
-    ...rows,
-    ...fallbackRows.filter((r) => !seenIds.has(r.rfq.id)),
-  ];
-
-  // For fallback rows with null expiresAt, resolve effective date from sent_log.close_date
-  const fallbackIds = fallbackRows.map((r) => r.rfq.id);
-  const fallbackCloseDates =
-    fallbackIds.length > 0
-      ? await db
-          .select({ rfqId: sentLogTable.rfqId, closeDate: sentLogTable.closeDate })
-          .from(sentLogTable)
-          .where(
-            and(
-              inArray(sentLogTable.rfqId, fallbackIds),
-              sql`${sentLogTable.closeDate} ~ E'^\\d{4}-\\d{2}-\\d{2}'`,
-            ),
-          )
-      : [];
-  // Keep the earliest close_date per rfqId
-  const fallbackDateMap: Record<number, string> = {};
-  for (const row of fallbackCloseDates) {
-    if (row.closeDate) {
-      const existing = fallbackDateMap[row.rfqId];
-      if (!existing || row.closeDate < existing) {
-        fallbackDateMap[row.rfqId] = row.closeDate;
-      }
-    }
-  }
-
-  if (allRows.length === 0) {
+  if (matchingLogs.length === 0) {
     res.json({ tomorrow: [], dayAfterTomorrow: [] });
     return;
   }
 
-  const rfqIds = allRows.map((r) => r.rfq.id);
+  // Step 2: keep earliest close_date per rfq (in case multiple suppliers have different dates)
+  const closeDateByRfq: Record<number, string> = {};
+  for (const row of matchingLogs) {
+    if (!row.closeDate) continue;
+    const existing = closeDateByRfq[row.rfqId];
+    if (!existing || row.closeDate < existing) {
+      closeDateByRfq[row.rfqId] = row.closeDate;
+    }
+  }
+  const rfqIds = Object.keys(closeDateByRfq).map(Number);
+
+  // Step 3: fetch RFQ details for those ids (only SENT or QUOTED)
+  const rfqRows = await db
+    .select({ rfq: rfqTable, employeeName: employeesTable.name })
+    .from(rfqTable)
+    .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
+    .where(
+      and(
+        inArray(rfqTable.id, rfqIds),
+        sql`${rfqTable.status} IN ('SENT', 'QUOTED')`,
+      ),
+    );
+
+  if (rfqRows.length === 0) {
+    res.json({ tomorrow: [], dayAfterTomorrow: [] });
+    return;
+  }
+
+  // Step 4: offer + sent-log counts
+  const activeIds = rfqRows.map((r) => r.rfq.id);
   const [offerCounts, sentCounts] = await Promise.all([
     db
       .select({ rfqId: offersTable.rfqId, cnt: count() })
       .from(offersTable)
-      .where(inArray(offersTable.rfqId, rfqIds))
+      .where(inArray(offersTable.rfqId, activeIds))
       .groupBy(offersTable.rfqId),
     db
       .select({ rfqId: sentLogTable.rfqId, cnt: count() })
       .from(sentLogTable)
-      .where(inArray(sentLogTable.rfqId, rfqIds))
+      .where(inArray(sentLogTable.rfqId, activeIds))
       .groupBy(sentLogTable.rfqId),
   ]);
 
   const offerMap = Object.fromEntries(offerCounts.map((r) => [r.rfqId, r.cnt]));
-  const sentMap = Object.fromEntries(sentCounts.map((r) => [r.rfqId, r.cnt]));
+  const sentMap  = Object.fromEntries(sentCounts.map((r) => [r.rfqId, r.cnt]));
 
-  const shaped = allRows.map((r) => {
-    // Prefer stored expiresAt; fall back to sent_log close_date for legacy rows
-    const effectiveExpiry =
-      r.rfq.expiresAt?.toISOString() ??
-      (fallbackDateMap[r.rfq.id] ? new Date(fallbackDateMap[r.rfq.id]!).toISOString() : null);
+  const shaped = rfqRows.map((r) => ({
+    id:             r.rfq.id,
+    internalRfqNo:  r.rfq.internalRfqNo,
+    customerRfqNo:  r.rfq.customerRfqNo,
+    status:         r.rfq.status,
+    // Return close_date as a UTC midnight ISO string so the frontend can compare correctly
+    expiresAt:      new Date(closeDateByRfq[r.rfq.id]! + "T00:00:00Z").toISOString(),
+    employeeName:   r.employeeName ?? null,
+    supplierCount:  sentMap[r.rfq.id]  ?? 0,
+    offerCount:     offerMap[r.rfq.id] ?? 0,
+  }));
 
-    return {
-      id: r.rfq.id,
-      internalRfqNo: r.rfq.internalRfqNo,
-      customerRfqNo: r.rfq.customerRfqNo,
-      status: r.rfq.status,
-      expiresAt: effectiveExpiry!,
-      employeeName: r.employeeName ?? null,
-      supplierCount: sentMap[r.rfq.id] ?? 0,
-      offerCount: offerMap[r.rfq.id] ?? 0,
-    };
-  });
-
-  const tomorrow = shaped.filter((r) => new Date(r.expiresAt) <= endOfTomorrow);
-  const dayAfterTomorrow = shaped.filter((r) => new Date(r.expiresAt) > endOfTomorrow);
+  const tomorrowCutoff = new Date(tomorrowStr + "T23:59:59Z");
+  const tomorrow        = shaped.filter((r) => new Date(r.expiresAt) <= tomorrowCutoff);
+  const dayAfterTomorrow = shaped.filter((r) => new Date(r.expiresAt) > tomorrowCutoff);
 
   res.json({ tomorrow, dayAfterTomorrow });
 });
