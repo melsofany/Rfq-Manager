@@ -1293,7 +1293,8 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
   }
 });
 
-// GET /api/rfq/closing-soon — RFQs whose supplier close_date is today, tomorrow, or the day after
+// GET /api/rfq/closing-soon — RFQs closing today, tomorrow, or the day after
+// Checks BOTH rfqTable.expiresAt AND sentLogTable.closeDate so no RFQs are missed.
 router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => {
   const now = new Date();
 
@@ -1305,18 +1306,30 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
   const dayAfterStr = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2))
     .toISOString().split("T")[0]!;
 
-  // Step 1: find distinct rfq_ids where ANY sent_log row has close_date in the 3-day window
+  const windowStart = new Date(todayStr + "T00:00:00Z");
+  const windowEnd   = new Date(dayAfterStr + "T23:59:59.999Z");
+
+  // --- Approach A: RFQs with expiresAt inside the window (canonical date on the RFQ) ---
+  const rfqByExpiresAt = await db
+    .select({ rfq: rfqTable, employeeName: employeesTable.name })
+    .from(rfqTable)
+    .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
+    .where(
+      and(
+        sql`${rfqTable.status} IN ('SENT', 'QUOTED')`,
+        sql`${rfqTable.expiresAt} IS NOT NULL`,
+        sql`${rfqTable.expiresAt} >= ${windowStart.toISOString()}::timestamptz`,
+        sql`${rfqTable.expiresAt} <= ${windowEnd.toISOString()}::timestamptz`,
+      ),
+    );
+
+  // --- Approach B: RFQs where ANY sentLog.closeDate is in the window ---
   const matchingLogs = await db
     .selectDistinct({ rfqId: sentLogTable.rfqId, closeDate: sentLogTable.closeDate })
     .from(sentLogTable)
     .where(inArray(sentLogTable.closeDate, [todayStr, tomorrowStr, dayAfterStr]));
 
-  if (matchingLogs.length === 0) {
-    res.json({ today: [], tomorrow: [], dayAfterTomorrow: [] });
-    return;
-  }
-
-  // Step 2: keep earliest close_date per rfq
+  // Build earliest closeDate per rfq from sentLog
   const closeDateByRfq: Record<number, string> = {};
   for (const row of matchingLogs) {
     if (!row.closeDate) continue;
@@ -1325,27 +1338,36 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
       closeDateByRfq[row.rfqId] = row.closeDate;
     }
   }
-  const rfqIds = Object.keys(closeDateByRfq).map(Number);
 
-  // Step 3: fetch RFQ details (only SENT or QUOTED)
-  const rfqRows = await db
-    .select({ rfq: rfqTable, employeeName: employeesTable.name })
-    .from(rfqTable)
-    .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
-    .where(
-      and(
-        inArray(rfqTable.id, rfqIds),
-        sql`${rfqTable.status} IN ('SENT', 'QUOTED')`,
-      ),
-    );
+  // Fetch RFQ details for sentLog matches not already covered by expiresAt query
+  const alreadyCoveredIds = new Set(rfqByExpiresAt.map((r) => r.rfq.id));
+  const sentLogOnlyIds = Object.keys(closeDateByRfq)
+    .map(Number)
+    .filter((id) => !alreadyCoveredIds.has(id));
 
-  if (rfqRows.length === 0) {
+  const rfqBySentLog =
+    sentLogOnlyIds.length > 0
+      ? await db
+          .select({ rfq: rfqTable, employeeName: employeesTable.name })
+          .from(rfqTable)
+          .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
+          .where(
+            and(
+              inArray(rfqTable.id, sentLogOnlyIds),
+              sql`${rfqTable.status} IN ('SENT', 'QUOTED')`,
+            ),
+          )
+      : [];
+
+  const allRfqRows = [...rfqByExpiresAt, ...rfqBySentLog];
+
+  if (allRfqRows.length === 0) {
     res.json({ today: [], tomorrow: [], dayAfterTomorrow: [] });
     return;
   }
 
-  // Step 4: offer + sent-log counts
-  const activeIds = rfqRows.map((r) => r.rfq.id);
+  // Step 3: offer + sent-log counts
+  const activeIds = allRfqRows.map((r) => r.rfq.id);
   const [offerCounts, sentCounts] = await Promise.all([
     db
       .select({ rfqId: offersTable.rfqId, cnt: count() })
@@ -1362,23 +1384,34 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
   const offerMap = Object.fromEntries(offerCounts.map((r) => [r.rfqId, r.cnt]));
   const sentMap  = Object.fromEntries(sentCounts.map((r) => [r.rfqId, r.cnt]));
 
-  const shaped = rfqRows.map((r) => ({
-    id:            r.rfq.id,
-    internalRfqNo: r.rfq.internalRfqNo,
-    customerRfqNo: r.rfq.customerRfqNo,
-    status:        r.rfq.status,
-    expiresAt:     new Date(closeDateByRfq[r.rfq.id]! + "T00:00:00Z").toISOString(),
-    employeeName:  r.employeeName ?? null,
-    supplierCount: sentMap[r.rfq.id]  ?? 0,
-    offerCount:    offerMap[r.rfq.id] ?? 0,
-  }));
+  const shaped = allRfqRows.map((r) => {
+    // Prefer rfqTable.expiresAt (precise timestamp); fall back to sentLog closeDate
+    let expiresAtStr: string;
+    if (r.rfq.expiresAt) {
+      expiresAtStr = r.rfq.expiresAt.toISOString();
+    } else if (closeDateByRfq[r.rfq.id]) {
+      expiresAtStr = new Date(closeDateByRfq[r.rfq.id]! + "T00:00:00Z").toISOString();
+    } else {
+      expiresAtStr = new Date(todayStr + "T23:59:59Z").toISOString();
+    }
+    return {
+      id:            r.rfq.id,
+      internalRfqNo: r.rfq.internalRfqNo,
+      customerRfqNo: r.rfq.customerRfqNo,
+      status:        r.rfq.status,
+      expiresAt:     expiresAtStr,
+      employeeName:  r.employeeName ?? null,
+      supplierCount: sentMap[r.rfq.id]  ?? 0,
+      offerCount:    offerMap[r.rfq.id] ?? 0,
+    };
+  });
 
   const todayCutoff    = new Date(todayStr    + "T23:59:59Z");
   const tomorrowCutoff = new Date(tomorrowStr + "T23:59:59Z");
 
-  const today          = shaped.filter((r) => new Date(r.expiresAt) <= todayCutoff);
-  const tomorrow       = shaped.filter((r) => new Date(r.expiresAt) > todayCutoff && new Date(r.expiresAt) <= tomorrowCutoff);
-  const dayAfterTomorrow = shaped.filter((r) => new Date(r.expiresAt) > tomorrowCutoff);
+  const today             = shaped.filter((r) => new Date(r.expiresAt) <= todayCutoff);
+  const tomorrow          = shaped.filter((r) => new Date(r.expiresAt) > todayCutoff && new Date(r.expiresAt) <= tomorrowCutoff);
+  const dayAfterTomorrow  = shaped.filter((r) => new Date(r.expiresAt) > tomorrowCutoff);
 
   res.json({ today, tomorrow, dayAfterTomorrow });
 });
