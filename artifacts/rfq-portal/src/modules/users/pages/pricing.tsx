@@ -213,22 +213,6 @@ export default function PricingPage() {
     );
   }
 
-  /* ── Expired ──────────────────────────────────────────────────────────── */
-  if (isClientExpired) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4" dir="rtl">
-        <div className="text-center max-w-sm">
-          <Lock size={44} className="mx-auto text-muted-foreground/50 mb-4" />
-          <h2 className="text-lg font-bold text-foreground">انتهى وقت تقديم العروض</h2>
-          <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
-            لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>.<br />
-            لم يعد بالإمكان تقديم عروض جديدة أو تعديل العروض المُرسلة.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   /* ── Shared header component ──────────────────────────────────────────── */
   const PageHeader = () => (
     <div className="bg-[hsl(221,83%,20%)] text-white px-4 sm:px-6 py-4 sm:py-5 shadow-sm">
@@ -266,7 +250,26 @@ export default function PricingPage() {
     </div>
   );
 
-  /* ── Already Submitted (read-only view — no editing allowed) ─────────── */
+  /* ── Expired with NO submission — nothing to show ────────────────────── */
+  if (isClientExpired && !data.alreadySubmitted && !submitted) {
+    return (
+      <div className="min-h-screen bg-background" dir="rtl">
+        <PageHeader />
+        <div className="flex items-center justify-center p-8 min-h-[60vh]">
+          <div className="text-center max-w-sm">
+            <Lock size={44} className="mx-auto text-muted-foreground/50 mb-4" />
+            <h2 className="text-lg font-bold text-foreground">انتهى وقت تقديم العروض</h2>
+            <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
+              لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>.<br />
+              لم يُسجَّل أي عرض سعر من شركتكم لهذا الطلب.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Submitted (read-only — with or without expiry) ──────────────────── */
   if (submitted || data.alreadySubmitted) {
     const displayRows: SubmittedRow[] =
       submittedRows.length > 0
@@ -287,21 +290,39 @@ export default function PricingPage() {
         <PageHeader />
 
         <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
-          {/* Success banner — read-only, no edit allowed */}
-          <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg px-4 sm:px-5 py-3 sm:py-4">
-            <CheckCircle2 size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-green-800 text-sm">تم استلام عرض السعر بنجاح</p>
-              <p className="text-green-700 text-xs mt-0.5">
-                شكراً لكم. تم استلام عرض سعركم لطلب العرض <strong>{data.rfqNo}</strong>. سيتم
-                التواصل معكم في حال الاختيار.
-              </p>
-              <p className="text-green-600/70 text-xs mt-1 flex items-center gap-1">
-                <Lock size={10} />
-                العرض نهائي ولا يمكن تعديله بعد الإرسال.
-              </p>
+
+          {/* ── Banner: changes based on expired or not ── */}
+          {isClientExpired ? (
+            /* Expired + submitted → locked read-only notice */
+            <div className="flex items-start gap-3 bg-muted border border-border rounded-lg px-4 sm:px-5 py-3 sm:py-4">
+              <Lock size={18} className="text-muted-foreground flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-foreground text-sm">
+                  انتهت مدة الطلب — العرض مقفل للقراءة فقط
+                </p>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>. يمكنك مراجعة
+                  العرض الذي أرسلته أدناه — لا يمكن إجراء أي تعديل.
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            /* Not expired + submitted → success notice */
+            <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg px-4 sm:px-5 py-3 sm:py-4">
+              <CheckCircle2 size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-green-800 text-sm">تم استلام عرض السعر بنجاح</p>
+                <p className="text-green-700 text-xs mt-0.5">
+                  شكراً لكم. تم استلام عرض سعركم لطلب العرض <strong>{data.rfqNo}</strong>. سيتم
+                  التواصل معكم في حال الاختيار.
+                </p>
+                <p className="text-green-600/70 text-xs mt-1 flex items-center gap-1">
+                  <Lock size={10} />
+                  العرض نهائي ولا يمكن تعديله بعد الإرسال.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Uploaded offer attachments */}
           {uploadedOfferAtts.length > 0 && (
