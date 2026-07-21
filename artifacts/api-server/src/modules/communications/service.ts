@@ -392,29 +392,19 @@ export async function sendPoWhatsApp(opts: SendPoOpts): Promise<string | null> {
     logger.info({ to, poNo: opts.poNo, waId }, "PO sent via po_pdf_ar template");
     return waId || null;
   } catch (templateErr) {
-    logger.warn(
+    const msg = templateErr instanceof Error ? templateErr.message : String(templateErr);
+    logger.error(
       { err: templateErr, to, poNo: opts.poNo },
-      "po_pdf_ar template failed — falling back to direct document send",
+      "po_pdf_ar template failed — message NOT sent",
     );
+    // NOTE: We intentionally do NOT fall back to a direct document send.
+    // Direct document messages are silently accepted by the WhatsApp API
+    // (returns a wamid) but are NEVER delivered to recipients who haven't
+    // had an active conversation in the last 24 hours.
+    // This creates a false "✓ أُرسل" in the UI while the supplier receives nothing.
+    // Instead we throw so the UI correctly shows "✗ فشل" with the real error.
+    throw new Error(`فشل إرسال واتساب — قالب ${TEMPLATE_PO_PDF} فشل: ${msg}`);
   }
-
-  // Fallback: direct document message (requires active 24h conversation window)
-  const result = await Whatsapp.sendMessage(
-    PHONE_NUMBER_ID,
-    to,
-    new WADocument(
-      mediaId,
-      true,
-      sanitizeWaParam(`أمر الشراء رقم ${opts.poNo} — ${opts.supplierName}`),
-      filename,
-    ),
-  );
-  if ("error" in result && result.error) {
-    throw new Error(`WhatsApp API error: ${JSON.stringify(result.error)}`);
-  }
-  const wamid = result.messages?.[0]?.id ?? null;
-  logger.info({ to, poNo: opts.poNo, wamid }, "PO PDF sent via direct document (fallback)");
-  return wamid;
 }
 
 // Returns the WhatsApp message ID (wamid) so callers can store it for later deletion.
