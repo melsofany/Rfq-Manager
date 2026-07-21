@@ -1309,7 +1309,7 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
   const matchingLogs = await db
     .selectDistinct({ rfqId: sentLogTable.rfqId, closeDate: sentLogTable.closeDate })
     .from(sentLogTable)
-    .where(sql`${sentLogTable.closeDate} IN (${todayStr}, ${tomorrowStr}, ${dayAfterStr})`);
+    .where(inArray(sentLogTable.closeDate, [todayStr, tomorrowStr, dayAfterStr]));
 
   if (matchingLogs.length === 0) {
     res.json({ today: [], tomorrow: [], dayAfterTomorrow: [] });
