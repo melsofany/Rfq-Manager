@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams } from "wouter";
 import {
   useGetPricingPage,
@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Clock, AlertTriangle, Lock } from "lucide-react";
 
 /** Row shown in the read-only submitted view */
 interface SubmittedRow {
@@ -34,7 +34,6 @@ interface ItemPrice {
 export default function PricingPage() {
   const { token } = useParams<{ token: string }>();
   const [submitted, setSubmitted] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [submittedRows, setSubmittedRows] = useState<SubmittedRow[]>([]);
   const [submittedGeneralNotes, setSubmittedGeneralNotes] = useState("");
   const [generalNotes, setGeneralNotes] = useState("");
@@ -54,44 +53,31 @@ export default function PricingPage() {
     Array<{ id: number; originalName: string; sizeLabel: string }>
   >([]);
   const [prices, setPrices] = useState<Record<number, ItemPrice>>({});
+  // Tracks whether the server rejected submission because the link expired
+  const [expiredOnSubmit, setExpiredOnSubmit] = useState(false);
 
   const { data, isLoading, error } = useGetPricingPage(token, {
     query: { queryKey: getGetPricingPageQueryKey(token), enabled: !!token },
   });
 
+  // Client-side expiry guard — re-evaluated every render.
+  // closeDate comes back as "YYYY-MM-DD"; we treat end-of-that-day as the cutoff.
+  const isClientExpired = useMemo(() => {
+    if (!data) return false;
+    if (data.isExpired) return true;
+    const cd = (data as unknown as { closeDate?: string }).closeDate;
+    if (!cd || cd === "N/A") return false;
+    const cutoff = new Date(cd);
+    cutoff.setDate(cutoff.getDate() + 1); // midnight after close-day (same logic as backend)
+    return cutoff <= new Date();
+  }, [data]);
+
   const trackMutation = useTrackLinkOpen();
-  const enterEditMode = () => {
-    const existingOffer = (
-      data as unknown as { existingOffer?: { items: SubmittedRow[]; generalNotes?: string | null } }
-    ).existingOffer;
-    if (data?.items) {
-      const prefilled: Record<number, ItemPrice> = {};
-      for (const item of data.items) {
-        const ei = existingOffer?.items?.find((x) => x.rfqItemId === item.id);
-        const sr = submittedRows.find((x) => x.rfqItemId === item.id);
-        const price = ei?.price ?? sr?.price;
-        const taxIncluded = ei?.taxIncluded ?? sr?.taxIncluded ?? false;
-        const deliveryDays = ei?.deliveryDays ?? sr?.deliveryDays;
-        const notes = ei?.notes ?? sr?.notes ?? "";
-        prefilled[item.id] = {
-          rfqItemId: item.id,
-          price: price != null ? String(price) : "",
-          taxIncluded,
-          deliveryDays: deliveryDays != null ? String(deliveryDays) : "",
-          notes,
-        };
-      }
-      setPrices(prefilled);
-      setGeneralNotes(existingOffer?.generalNotes ?? submittedGeneralNotes ?? "");
-    }
-    setSubmitted(false);
-    setIsEditing(true);
-  };
 
   const submitMutation = useSubmitOffer({
     mutation: {
       onSuccess: async () => {
-        setIsEditing(false);
+        setExpiredOnSubmit(false);
         setSubmitted(true);
         if (offerFiles.length > 0) {
           setUploading(true);
@@ -112,6 +98,14 @@ export default function PricingPage() {
           }
           setUploadedOfferAtts(uploaded);
           setUploading(false);
+        }
+      },
+      onError: (err: unknown) => {
+        // Detect 400 "expired" rejection from the server
+        const msg =
+          err instanceof Error ? err.message : typeof err === "string" ? err : "";
+        if (msg.toLowerCase().includes("expired") || msg.includes("400")) {
+          setExpiredOnSubmit(true);
         }
       },
     },
@@ -158,6 +152,11 @@ export default function PricingPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Client-side expiry guard — backend also enforces this, but we fail fast
+    if (isClientExpired) {
+      setExpiredOnSubmit(true);
+      return;
+    }
     const pricedEntries = Object.values(prices).filter((p) => p.price.trim() !== "");
     const items = pricedEntries.map((p) => ({
       rfqItemId: p.rfqItemId,
@@ -215,15 +214,15 @@ export default function PricingPage() {
   }
 
   /* ── Expired ──────────────────────────────────────────────────────────── */
-  if (data.isExpired) {
+  if (isClientExpired) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4" dir="rtl">
         <div className="text-center max-w-sm">
-          <Clock size={40} className="mx-auto text-muted-foreground mb-3" />
+          <Lock size={44} className="mx-auto text-muted-foreground/50 mb-4" />
           <h2 className="text-lg font-bold text-foreground">انتهى وقت تقديم العروض</h2>
-          <p className="text-muted-foreground text-sm mt-2">
-            لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>. لم يعد بالإمكان تقديم
-            عروض جديدة.
+          <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
+            لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>.<br />
+            لم يعد بالإمكان تقديم عروض جديدة أو تعديل العروض المُرسلة.
           </p>
         </div>
       </div>
@@ -267,8 +266,8 @@ export default function PricingPage() {
     </div>
   );
 
-  /* ── Already Submitted (read-only view) ───────────────────────────────── */
-  if ((submitted || data.alreadySubmitted) && !isEditing) {
+  /* ── Already Submitted (read-only view — no editing allowed) ─────────── */
+  if (submitted || data.alreadySubmitted) {
     const displayRows: SubmittedRow[] =
       submittedRows.length > 0
         ? submittedRows
@@ -288,7 +287,7 @@ export default function PricingPage() {
         <PageHeader />
 
         <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
-          {/* Success banner */}
+          {/* Success banner — read-only, no edit allowed */}
           <div className="flex items-start gap-3 bg-green-50 border border-green-200 rounded-lg px-4 sm:px-5 py-3 sm:py-4">
             <CheckCircle2 size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
@@ -297,15 +296,11 @@ export default function PricingPage() {
                 شكراً لكم. تم استلام عرض سعركم لطلب العرض <strong>{data.rfqNo}</strong>. سيتم
                 التواصل معكم في حال الاختيار.
               </p>
+              <p className="text-green-600/70 text-xs mt-1 flex items-center gap-1">
+                <Lock size={10} />
+                العرض نهائي ولا يمكن تعديله بعد الإرسال.
+              </p>
             </div>
-            {!data.isExpired && (
-              <button
-                onClick={enterEditMode}
-                className="text-xs text-blue-700 border border-blue-300 bg-blue-50 hover:bg-blue-100 rounded px-2.5 sm:px-3 py-1.5 flex-shrink-0 font-medium whitespace-nowrap"
-              >
-                تعديل العرض
-              </button>
-            )}
           </div>
 
           {/* Uploaded offer attachments */}
@@ -792,7 +787,21 @@ export default function PricingPage() {
             )}
           </div>
 
-          {submitMutation.isError && (
+          {/* Expired error — shown when server (or client guard) blocks submission */}
+          {expiredOnSubmit && (
+            <div className="flex items-start gap-3 bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
+              <Lock size={16} className="flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">انتهى وقت تقديم العروض</p>
+                <p className="text-xs mt-0.5 text-destructive/80">
+                  لقد انتهت المدة المحددة لهذا الطلب. لم يتم قبول عرض السعر.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Generic server error (non-expiry) */}
+          {submitMutation.isError && !expiredOnSubmit && (
             <div className="bg-destructive/10 border border-destructive/20 rounded p-3 text-sm text-destructive">
               حدث خطأ أثناء الإرسال. يرجى المحاولة مرة أخرى.
             </div>
@@ -801,8 +810,8 @@ export default function PricingPage() {
           <div className="flex justify-start pb-6">
             <Button
               type="submit"
-              disabled={submitMutation.isPending}
-              className="w-full sm:w-auto px-8 h-11 sm:h-9 text-base sm:text-sm"
+              disabled={submitMutation.isPending || isClientExpired}
+              className="w-full sm:w-auto px-8 h-11 sm:h-9 text-base sm:text-sm disabled:opacity-60"
             >
               {submitMutation.isPending ? "جاري الإرسال..." : "إرسال عرض السعر"}
             </Button>
