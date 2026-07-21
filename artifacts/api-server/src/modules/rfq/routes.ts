@@ -1403,7 +1403,10 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
         ),
       );
   } catch (errA) {
-    req.log.warn({ err: errA }, 'closing-soon: Source A (expiresAt) query failed — expires_at column may be missing in prod DB');
+    req.log.warn(
+      { err: errA },
+      "closing-soon: Source A (expiresAt) query failed — expires_at column may be missing in prod DB",
+    );
   }
 
   // ── Source B: sentLogTable.closeDate (text YYYY-MM-DD) ────────────────────
@@ -1423,13 +1426,16 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
 
   // ── Source C: rfqTable.requiredResponseDate (free-text from sheet) ─────────
   // Fetch all SENT/QUOTED RFQs without expiresAt and check requiredResponseDate
-  let rfqsWithoutExpiresAt: { rfq: typeof rfqTable.$inferSelect; employeeName: string | null }[] = [];
+  let rfqsWithoutExpiresAt: { rfq: typeof rfqTable.$inferSelect; employeeName: string | null }[] =
+    [];
   try {
     rfqsWithoutExpiresAt = await db
       .select({ rfq: rfqTable, employeeName: employeesTable.name })
       .from(rfqTable)
       .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
-      .where(and(sql`${rfqTable.status} IN ('SENT', 'QUOTED')`, sql`${rfqTable.expiresAt} IS NULL`));
+      .where(
+        and(sql`${rfqTable.status} IN ('SENT', 'QUOTED')`, sql`${rfqTable.expiresAt} IS NULL`),
+      );
   } catch (errC) {
     // expires_at column missing — fall back: fetch all SENT/QUOTED without the IS NULL filter
     try {
@@ -1438,9 +1444,12 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
         .from(rfqTable)
         .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
         .where(sql`${rfqTable.status} IN ('SENT', 'QUOTED')`);
-      req.log.warn({ err: errC }, 'closing-soon: Source C used fallback query (expiresAt IS NULL failed)');
+      req.log.warn(
+        { err: errC },
+        "closing-soon: Source C used fallback query (expiresAt IS NULL failed)",
+      );
     } catch (errC2) {
-      req.log.warn({ err: errC2 }, 'closing-soon: Source C fallback also failed — skipping');
+      req.log.warn({ err: errC2 }, "closing-soon: Source C fallback also failed — skipping");
     }
   }
   const coveredByA = new Set(rfqByExpiresAt.map((r) => r.rfq.id));
