@@ -1293,33 +1293,30 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
   }
 });
 
-// GET /api/rfq/closing-soon — RFQs whose supplier close_date is tomorrow or the day after
+// GET /api/rfq/closing-soon — RFQs whose supplier close_date is today, tomorrow, or the day after
 router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => {
   const now = new Date();
 
-  // Date strings for tomorrow and day-after in UTC (YYYY-MM-DD)
+  // Date strings in UTC (YYYY-MM-DD)
+  const todayStr = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    .toISOString().split("T")[0]!;
   const tomorrowStr = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
-    .toISOString()
-    .split("T")[0]!;
+    .toISOString().split("T")[0]!;
   const dayAfterStr = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2))
-    .toISOString()
-    .split("T")[0]!;
+    .toISOString().split("T")[0]!;
 
-  // Step 1: find distinct rfq_ids where ANY sent_log row has close_date == tomorrow or day-after
-  // close_date is stored as YYYY-MM-DD text from the HTML date input
+  // Step 1: find distinct rfq_ids where ANY sent_log row has close_date in the 3-day window
   const matchingLogs = await db
     .selectDistinct({ rfqId: sentLogTable.rfqId, closeDate: sentLogTable.closeDate })
     .from(sentLogTable)
-    .where(
-      sql`${sentLogTable.closeDate} IN (${tomorrowStr}, ${dayAfterStr})`,
-    );
+    .where(sql`${sentLogTable.closeDate} IN (${todayStr}, ${tomorrowStr}, ${dayAfterStr})`);
 
   if (matchingLogs.length === 0) {
-    res.json({ tomorrow: [], dayAfterTomorrow: [] });
+    res.json({ today: [], tomorrow: [], dayAfterTomorrow: [] });
     return;
   }
 
-  // Step 2: keep earliest close_date per rfq (in case multiple suppliers have different dates)
+  // Step 2: keep earliest close_date per rfq
   const closeDateByRfq: Record<number, string> = {};
   for (const row of matchingLogs) {
     if (!row.closeDate) continue;
@@ -1330,7 +1327,7 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
   }
   const rfqIds = Object.keys(closeDateByRfq).map(Number);
 
-  // Step 3: fetch RFQ details for those ids (only SENT or QUOTED)
+  // Step 3: fetch RFQ details (only SENT or QUOTED)
   const rfqRows = await db
     .select({ rfq: rfqTable, employeeName: employeesTable.name })
     .from(rfqTable)
@@ -1343,7 +1340,7 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
     );
 
   if (rfqRows.length === 0) {
-    res.json({ tomorrow: [], dayAfterTomorrow: [] });
+    res.json({ today: [], tomorrow: [], dayAfterTomorrow: [] });
     return;
   }
 
@@ -1366,22 +1363,24 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
   const sentMap  = Object.fromEntries(sentCounts.map((r) => [r.rfqId, r.cnt]));
 
   const shaped = rfqRows.map((r) => ({
-    id:             r.rfq.id,
-    internalRfqNo:  r.rfq.internalRfqNo,
-    customerRfqNo:  r.rfq.customerRfqNo,
-    status:         r.rfq.status,
-    // Return close_date as a UTC midnight ISO string so the frontend can compare correctly
-    expiresAt:      new Date(closeDateByRfq[r.rfq.id]! + "T00:00:00Z").toISOString(),
-    employeeName:   r.employeeName ?? null,
-    supplierCount:  sentMap[r.rfq.id]  ?? 0,
-    offerCount:     offerMap[r.rfq.id] ?? 0,
+    id:            r.rfq.id,
+    internalRfqNo: r.rfq.internalRfqNo,
+    customerRfqNo: r.rfq.customerRfqNo,
+    status:        r.rfq.status,
+    expiresAt:     new Date(closeDateByRfq[r.rfq.id]! + "T00:00:00Z").toISOString(),
+    employeeName:  r.employeeName ?? null,
+    supplierCount: sentMap[r.rfq.id]  ?? 0,
+    offerCount:    offerMap[r.rfq.id] ?? 0,
   }));
 
+  const todayCutoff    = new Date(todayStr    + "T23:59:59Z");
   const tomorrowCutoff = new Date(tomorrowStr + "T23:59:59Z");
-  const tomorrow        = shaped.filter((r) => new Date(r.expiresAt) <= tomorrowCutoff);
+
+  const today          = shaped.filter((r) => new Date(r.expiresAt) <= todayCutoff);
+  const tomorrow       = shaped.filter((r) => new Date(r.expiresAt) > todayCutoff && new Date(r.expiresAt) <= tomorrowCutoff);
   const dayAfterTomorrow = shaped.filter((r) => new Date(r.expiresAt) > tomorrowCutoff);
 
-  res.json({ tomorrow, dayAfterTomorrow });
+  res.json({ today, tomorrow, dayAfterTomorrow });
 });
 
 export default router;

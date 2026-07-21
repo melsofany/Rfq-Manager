@@ -23,6 +23,7 @@ interface ClosingSoonRfq {
 }
 
 interface ClosingSoonData {
+  today: ClosingSoonRfq[];
   tomorrow: ClosingSoonRfq[];
   dayAfterTomorrow: ClosingSoonRfq[];
 }
@@ -74,7 +75,7 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
   const { data, isLoading } = useClosingSoon();
   const [open, setOpen] = useState(true);
 
-  const totalCount = (data?.tomorrow.length ?? 0) + (data?.dayAfterTomorrow.length ?? 0);
+  const totalCount = (data?.today.length ?? 0) + (data?.tomorrow.length ?? 0) + (data?.dayAfterTomorrow.length ?? 0);
 
   const tableHead = (
     <thead>
@@ -140,9 +141,35 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
 
       {open && !isLoading && totalCount > 0 && (
         <div className="border-t border-amber-200 dark:border-amber-800">
+          {/* Today */}
+          {data && data.today.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 px-4 py-2 bg-red-100 dark:bg-red-950/50 border-b border-amber-200 dark:border-amber-800">
+                <AlertTriangle size={13} className="text-red-600" />
+                <span className="text-xs font-semibold text-red-800 dark:text-red-300">
+                  {t("rfq.closingSoon.today")} ({data.today.length} {t("rfq.requests")})
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  {tableHead}
+                  <tbody>
+                    {data.today.map((rfq) => (
+                      <ClosingSoonRow key={rfq.id} rfq={rfq} navigate={navigate} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Tomorrow */}
           {data && data.tomorrow.length > 0 && (
-            <div>
+            <div
+              className={
+                (data.today.length ?? 0) > 0 ? "border-t border-amber-200 dark:border-amber-800" : ""
+              }
+            >
               <div className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950/30 border-b border-amber-200 dark:border-amber-800">
                 <Clock size={13} className="text-red-500" />
                 <span className="text-xs font-semibold text-red-700 dark:text-red-400">
@@ -166,7 +193,9 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
           {data && data.dayAfterTomorrow.length > 0 && (
             <div
               className={
-                data.tomorrow.length > 0 ? "border-t border-amber-200 dark:border-amber-800" : ""
+                (data.today.length ?? 0) > 0 || data.tomorrow.length > 0
+                  ? "border-t border-amber-200 dark:border-amber-800"
+                  : ""
               }
             >
               <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800">
