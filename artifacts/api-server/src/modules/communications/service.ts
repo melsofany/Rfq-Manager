@@ -377,15 +377,17 @@ export async function sendPoWhatsApp(opts: SendPoOpts): Promise<string | null> {
   const toName = sanitizeWaParam(opts.contactPerson ?? opts.supplierName);
 
   // Primary: po_pdf_ar approved template (works outside 24h window)
+  // Template body has exactly 2 parameters:
+  //   {{1}} = supplier / contact name
+  //   {{2}} = PO number
   try {
     const template = new Template(
       TEMPLATE_PO_PDF,
       new Language(TEMPLATE_LANG),
       new HeaderComponent(new HeaderParameter(new WADocument(mediaId, true, undefined, filename))),
       new BodyComponent(
-        new BodyParameter(toName), // {{1}} supplier / contact name
+        new BodyParameter(toName),   // {{1}} supplier / contact name
         new BodyParameter(opts.poNo), // {{2}} PO number
-        new BodyParameter(buildPoContactText(opts)), // {{3}} employee contact
       ),
     );
     const waId = await sendTemplate(to, template);
