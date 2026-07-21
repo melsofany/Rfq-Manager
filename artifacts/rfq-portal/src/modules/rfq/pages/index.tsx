@@ -6,8 +6,9 @@ import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, FileText, Clock, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Search, FileText, Clock, AlertTriangle, ChevronDown, ChevronUp, Timer } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { cn } from "@/lib/utils";
 
 const STATUSES = ["all", "DRAFT", "SENT", "QUOTED", "FAILED", "SUCCESS"];
 
@@ -53,92 +54,165 @@ function useClosingSoon() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-const TABLE_HEAD = (
-  <thead>
-    <tr className="bg-muted/20 border-b border-border text-left">
-      {["RFQ No.", "Customer RFQ", "Employee", "Status", "Suppliers", "Offers", "Closes At"].map(
-        (h, i) => (
-          <th
-            key={i}
-            className={`px-3 py-2 text-muted-foreground text-xs font-medium${i >= 4 ? " text-center" : ""}`}
-          >
-            {h}
-          </th>
-        ),
-      )}
-    </tr>
-  </thead>
-);
+// ---------------------------------------------------------------------------
+// SAP Fiori-style urgency config per bucket
+// ---------------------------------------------------------------------------
+
+const URGENCY = {
+  today: {
+    label: "اليوم",
+    borderColor: "border-l-red-500",
+    badgeBg: "bg-red-600",
+    sectionBg: "bg-red-50 dark:bg-red-950/30",
+    sectionText: "text-red-700 dark:text-red-400",
+    sectionBorder: "border-b border-border",
+    dot: "bg-red-500",
+    icon: <AlertTriangle size={12} className="text-red-600" />,
+  },
+  tomorrow: {
+    label: "غداً",
+    borderColor: "border-l-orange-400",
+    badgeBg: "bg-orange-500",
+    sectionBg: "bg-orange-50 dark:bg-orange-950/20",
+    sectionText: "text-orange-700 dark:text-orange-400",
+    sectionBorder: "border-b border-border",
+    dot: "bg-orange-400",
+    icon: <Clock size={12} className="text-orange-500" />,
+  },
+  dayAfter: {
+    label: "بعد غد",
+    borderColor: "border-l-yellow-400",
+    badgeBg: "bg-yellow-500",
+    sectionBg: "bg-yellow-50/60 dark:bg-yellow-950/10",
+    sectionText: "text-yellow-700 dark:text-yellow-400",
+    sectionBorder: "border-b border-border",
+    dot: "bg-yellow-400",
+    icon: <Timer size={12} className="text-yellow-600" />,
+  },
+} as const;
+
+type UrgencyKey = keyof typeof URGENCY;
+
+// ---------------------------------------------------------------------------
+// Row
+// ---------------------------------------------------------------------------
 
 function ClosingSoonRow({
   rfq,
+  urgency,
   navigate,
 }: {
   rfq: ClosingSoonRfq;
+  urgency: UrgencyKey;
   navigate: (path: string) => void;
 }) {
+  const { borderColor } = URGENCY[urgency];
   const time = rfq.expiresAt
     ? new Date(rfq.expiresAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
     : "—";
 
   return (
     <tr
-      className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer text-xs"
+      className={cn(
+        "border-b border-border last:border-0 hover:bg-muted/30 cursor-pointer text-xs transition-colors",
+        "border-l-2",
+        borderColor,
+      )}
       onClick={() => navigate(`/rfq/${rfq.id}`)}
     >
-      <td className="px-3 py-2 font-mono font-medium text-primary">{rfq.internalRfqNo}</td>
-      <td className="px-3 py-2 font-mono text-muted-foreground">{rfq.customerRfqNo}</td>
-      <td className="px-3 py-2 text-muted-foreground">{rfq.employeeName ?? "—"}</td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-2.5 font-mono font-semibold text-primary">{rfq.internalRfqNo}</td>
+      <td className="px-3 py-2.5 font-mono text-muted-foreground">{rfq.customerRfqNo}</td>
+      <td className="px-3 py-2.5 text-muted-foreground">{rfq.employeeName ?? "—"}</td>
+      <td className="px-3 py-2.5">
         <StatusBadge status={rfq.status} />
       </td>
-      <td className="px-3 py-2 text-center font-medium text-foreground">{rfq.supplierCount}</td>
-      <td className="px-3 py-2 text-center font-medium text-green-700">{rfq.offerCount}</td>
-      <td className="px-3 py-2 text-center tabular-nums text-muted-foreground">{time}</td>
+      <td className="px-3 py-2.5 text-center">
+        <span className="inline-flex items-center justify-center w-6 h-6 bg-blue-50 text-blue-700 rounded text-xs font-medium">
+          {rfq.supplierCount}
+        </span>
+      </td>
+      <td className="px-3 py-2.5 text-center">
+        <span className="inline-flex items-center justify-center w-6 h-6 bg-green-50 text-green-700 rounded text-xs font-medium">
+          {rfq.offerCount}
+        </span>
+      </td>
+      <td className="px-3 py-2.5 text-center tabular-nums font-medium text-foreground">{time}</td>
     </tr>
   );
 }
 
-function SectionHeader({
-  icon,
-  label,
-  count,
-  bg,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  count: number;
-  bg: string;
-}) {
-  return (
-    <div
-      className={`flex items-center gap-2 px-4 py-2 border-b border-amber-200 dark:border-amber-800 ${bg}`}
-    >
-      {icon}
-      <span className="text-xs font-semibold">
-        {label} ({count})
-      </span>
-    </div>
-  );
-}
+// ---------------------------------------------------------------------------
+// Section (one bucket: today / tomorrow / dayAfter)
+// ---------------------------------------------------------------------------
 
-function ClosingSoonTable({
+function ClosingSoonSection({
   rows,
+  urgency,
   navigate,
 }: {
   rows: ClosingSoonRfq[];
+  urgency: UrgencyKey;
   navigate: (path: string) => void;
 }) {
+  const cfg = URGENCY[urgency];
+
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        {TABLE_HEAD}
-        <tbody>
-          {rows.map((rfq) => (
-            <ClosingSoonRow key={rfq.id} rfq={rfq} navigate={navigate} />
-          ))}
-        </tbody>
-      </table>
+    <div>
+      {/* SAP-style group header */}
+      <div
+        className={cn(
+          "flex items-center gap-2 px-4 py-1.5",
+          cfg.sectionBg,
+          cfg.sectionBorder,
+        )}
+      >
+        {cfg.icon}
+        <span className={cn("text-xs font-semibold", cfg.sectionText)}>
+          {cfg.label}
+        </span>
+        <span
+          className={cn(
+            "ml-1 text-[10px] font-bold text-white rounded-full px-1.5 py-0.5 leading-none",
+            cfg.badgeBg,
+          )}
+        >
+          {rows.length}
+        </span>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-muted/20 border-b border-border text-left">
+              {[
+                { label: "رقم الطلب الداخلي", center: false },
+                { label: "رقم طلب العميل", center: false },
+                { label: "الموظف", center: false },
+                { label: "الحالة", center: false },
+                { label: "موردون", center: true },
+                { label: "عروض", center: true },
+                { label: "يغلق الساعة", center: true },
+              ].map((h, i) => (
+                <th
+                  key={i}
+                  className={cn(
+                    "px-3 py-1.5 text-muted-foreground text-[11px] font-medium uppercase tracking-wide",
+                    h.center && "text-center",
+                  )}
+                >
+                  {h.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((rfq) => (
+              <ClosingSoonRow key={rfq.id} rfq={rfq} urgency={urgency} navigate={navigate} />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -156,11 +230,10 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
   const dayAfter = data?.dayAfterTomorrow ?? [];
   const totalCount = today.length + tomorrow.length + dayAfter.length;
 
-  // One function — exactly one branch runs
-  function renderContent() {
+  function renderBody() {
     if (isLoading) {
       return (
-        <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-amber-600 animate-pulse">
+        <div className="px-4 py-6 text-center text-sm text-muted-foreground animate-pulse">
           جارٍ التحميل…
         </div>
       );
@@ -168,83 +241,91 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
 
     if (isError) {
       return (
-        <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-red-600 dark:text-red-400">
-          تعذّر تحميل الطلبات — يرجى تحديث الصفحة
+        <div className="px-4 py-6 text-center text-sm text-destructive">
+          تعذّر تحميل البيانات — يرجى تحديث الصفحة
         </div>
       );
     }
 
     if (totalCount === 0) {
       return (
-        <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-amber-700 dark:text-amber-400">
-          لا توجد طلبات تغلق خلال الثلاثة أيام القادمة
+        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+          لا توجد طلبات تغلق خلال الأيام الثلاثة القادمة
         </div>
       );
     }
 
     return (
-      <div className="border-t border-amber-200 dark:border-amber-800 divide-y divide-amber-200 dark:divide-amber-800">
+      <div className="divide-y divide-border">
         {today.length > 0 && (
-          <div>
-            <SectionHeader
-              icon={<AlertTriangle size={13} className="text-red-600" />}
-              label="اليوم"
-              count={today.length}
-              bg="bg-red-100 dark:bg-red-950/50 text-red-800 dark:text-red-300"
-            />
-            <ClosingSoonTable rows={today} navigate={navigate} />
-          </div>
+          <ClosingSoonSection rows={today} urgency="today" navigate={navigate} />
         )}
         {tomorrow.length > 0 && (
-          <div>
-            <SectionHeader
-              icon={<Clock size={13} className="text-red-500" />}
-              label="غداً"
-              count={tomorrow.length}
-              bg="bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400"
-            />
-            <ClosingSoonTable rows={tomorrow} navigate={navigate} />
-          </div>
+          <ClosingSoonSection rows={tomorrow} urgency="tomorrow" navigate={navigate} />
         )}
         {dayAfter.length > 0 && (
-          <div>
-            <SectionHeader
-              icon={<Clock size={13} className="text-amber-500" />}
-              label="بعد غد"
-              count={dayAfter.length}
-              bg="bg-amber-50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-400"
-            />
-            <ClosingSoonTable rows={dayAfter} navigate={navigate} />
-          </div>
+          <ClosingSoonSection rows={dayAfter} urgency="dayAfter" navigate={navigate} />
         )}
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 overflow-hidden">
+    <div className="rounded-lg border border-border bg-card overflow-hidden shadow-sm">
+      {/* ── Panel header — SAP Fiori analytical panel style ── */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-amber-100/60 dark:hover:bg-amber-900/20 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3 text-left bg-primary hover:bg-primary/90 transition-colors"
       >
-        <AlertTriangle size={15} className="text-amber-600 flex-shrink-0" />
-        <span className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex-1">
-          طلبات تغلق قريباً
+        <AlertTriangle size={15} className="text-primary-foreground/80 flex-shrink-0" />
+        <span className="text-sm font-semibold text-primary-foreground flex-1">
+          طلبات عروض تغلق قريباً
         </span>
-        {!isLoading && !isError && (
-          <span className="text-xs font-medium bg-amber-600 text-white rounded-full px-2 py-0.5">
-            {totalCount}
+
+        {/* Total badge */}
+        {!isLoading && !isError && totalCount > 0 && (
+          <span className="text-xs font-bold bg-white/20 text-primary-foreground rounded px-2 py-0.5 border border-white/20">
+            {totalCount} طلب
           </span>
         )}
+
+        {/* Urgency indicators */}
+        {!isLoading && !isError && totalCount > 0 && (
+          <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-primary-foreground/70">
+            {today.length > 0 && (
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />
+                {today.length} اليوم
+              </span>
+            )}
+            {tomorrow.length > 0 && (
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-orange-300 inline-block" />
+                {tomorrow.length} غداً
+              </span>
+            )}
+            {dayAfter.length > 0 && (
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-yellow-300 inline-block" />
+                {dayAfter.length} بعد غد
+              </span>
+            )}
+          </div>
+        )}
+
         {open ? (
-          <ChevronUp size={14} className="text-amber-600" />
+          <ChevronUp size={14} className="text-primary-foreground/70 flex-shrink-0" />
         ) : (
-          <ChevronDown size={14} className="text-amber-600" />
+          <ChevronDown size={14} className="text-primary-foreground/70 flex-shrink-0" />
         )}
       </button>
 
-      {open && renderContent()}
+      {open && (
+        <div className="border-t border-border">
+          {renderBody()}
+        </div>
+      )}
     </div>
   );
 }
