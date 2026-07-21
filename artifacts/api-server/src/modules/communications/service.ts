@@ -374,7 +374,8 @@ export async function sendPoWhatsApp(opts: SendPoOpts): Promise<string | null> {
   const filename = `PO-${opts.poNo}.pdf`;
   const mediaId = await uploadWhatsAppMedia(pdfBuffer, filename, "application/pdf");
 
-  const toName = sanitizeWaParam(opts.contactPerson ?? opts.supplierName);
+  // Use || (not ??) so empty strings fall through to supplierName
+  const toName = sanitizeWaParam(opts.contactPerson?.trim() || opts.supplierName);
 
   // Primary: po_pdf_ar approved template (works outside 24h window)
   // Template body has exactly 2 parameters:
