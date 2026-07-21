@@ -253,6 +253,18 @@ export async function initDb(): Promise<void> {
     // Passwords are read exclusively from env vars — no fallback defaults.
     // ON CONFLICT DO NOTHING guarantees existing records (and passwords) are
     // never overwritten on restart or redeploy.
+    // ── Idempotent column additions (safe on existing DBs) ──────────────────
+    await client.query(`
+      ALTER TABLE rfq        ADD COLUMN IF NOT EXISTS expires_at   TIMESTAMPTZ;
+      ALTER TABLE sent_log   ADD COLUMN IF NOT EXISTS close_date   TEXT;
+      ALTER TABLE rfq_items  ADD COLUMN IF NOT EXISTS item_id      TEXT;
+      ALTER TABLE rfq_items  ADD COLUMN IF NOT EXISTS line_item    TEXT;
+      ALTER TABLE rfq_items  ADD COLUMN IF NOT EXISTS part_no      TEXT;
+      ALTER TABLE rfq_items  ADD COLUMN IF NOT EXISTS uom          TEXT;
+      ALTER TABLE rfq_items  ADD COLUMN IF NOT EXISTS qty          NUMERIC(15,4);
+      ALTER TABLE rfq_items  ADD COLUMN IF NOT EXISTS reference_price NUMERIC(15,4);
+    `);
+
     const existingCount = await client.query("SELECT COUNT(*) FROM employees");
     const isEmpty = parseInt(existingCount.rows[0].count, 10) === 0;
     if (isEmpty) {
