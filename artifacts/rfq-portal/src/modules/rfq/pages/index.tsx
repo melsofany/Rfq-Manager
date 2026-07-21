@@ -72,7 +72,7 @@ function ClosingSoonRow({
 
 function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
   const { t } = useLanguage();
-  const { data, isLoading } = useClosingSoon();
+  const { data, isLoading, isError } = useClosingSoon();
   const [open, setOpen] = useState(true);
 
   const totalCount =
@@ -118,7 +118,7 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
         <span className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex-1">
           {t("rfq.closingSoon.title")}
         </span>
-        {isLoading ? (
+        {isLoading && !isError ? (
           <span className="text-xs text-amber-600 animate-pulse">
             {t("rfq.closingSoon.loading")}
           </span>
@@ -137,6 +137,12 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
       {open && !isLoading && totalCount === 0 && (
         <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-amber-700 dark:text-amber-400">
           {t("rfq.closingSoon.noItems")}
+        </div>
+      )}
+
+      {open && isError && (
+        <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-red-600 dark:text-red-400">
+          تعذّر تحميل الطلبات — يرجى تحديث الصفحة
         </div>
       )}
 
@@ -308,7 +314,7 @@ export default function RfqListPage() {
 
         {/* Table */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
-          {isLoading ? (
+          {isLoading && !isError ? (
             <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>
           ) : rfqs?.length === 0 ? (
             <div className="p-12 text-center">
