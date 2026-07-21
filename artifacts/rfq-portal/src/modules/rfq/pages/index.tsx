@@ -134,7 +134,7 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
         )}
       </button>
 
-      {open && !isLoading && totalCount === 0 && (
+      {open && !isLoading && !isError && totalCount === 0 && (
         <div className="border-t border-amber-200 dark:border-amber-800 px-4 py-5 text-center text-sm text-amber-700 dark:text-amber-400">
           {t("rfq.closingSoon.noItems")}
         </div>
@@ -401,3 +401,4 @@ export default function RfqListPage() {
     </Layout>
   );
 }
+
