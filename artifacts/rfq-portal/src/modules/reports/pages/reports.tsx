@@ -3,40 +3,90 @@
 
 import { useGetReports, getGetReportsQueryKey } from "@workspace/api-client-react";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  Cell, LineChart, Line, CartesianGrid, Legend,
-  PieChart, Pie,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+  LineChart,
+  Line,
+  CartesianGrid,
+  Legend,
+  PieChart,
+  Pie,
 } from "recharts";
 import { useState, useMemo } from "react";
 import {
-  Calendar, Users, Package, ShoppingCart, FileText,
-  TrendingUp, Award, BarChart2, Filter, Download, RefreshCw,
+  Calendar,
+  Users,
+  Package,
+  ShoppingCart,
+  FileText,
+  TrendingUp,
+  Award,
+  BarChart2,
+  Filter,
+  Download,
+  RefreshCw,
 } from "lucide-react";
 
 const DEEP_COLORS = [
-  "#1e3a5f", "#0ea5e9", "#f59e0b", "#10b981", "#8b5cf6",
-  "#ec4899", "#f97316", "#14b8a6", "#64748b", "#ef4444",
+  "#1e3a5f",
+  "#0ea5e9",
+  "#f59e0b",
+  "#10b981",
+  "#8b5cf6",
+  "#ec4899",
+  "#f97316",
+  "#14b8a6",
+  "#64748b",
+  "#ef4444",
 ];
 
 const STATUS_AR: Record<string, string> = {
-  DRAFT: "مسودة", SENT: "مرسل", QUOTED: "مسعّر",
-  FAILED: "فشل", SUCCESS: "ناجح", draft: "مسودة",
-  sent: "مرسل", partial: "جزئي", completed: "مكتمل", closed: "مغلق",
+  DRAFT: "مسودة",
+  SENT: "مرسل",
+  QUOTED: "مسعّر",
+  FAILED: "فشل",
+  SUCCESS: "ناجح",
+  draft: "مسودة",
+  sent: "مرسل",
+  partial: "جزئي",
+  completed: "مكتمل",
+  closed: "مغلق",
 };
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "#6b7280", SENT: "#3b82f6", QUOTED: "#f97316",
-  FAILED: "#ef4444", SUCCESS: "#22c55e", draft: "#6b7280",
-  sent: "#3b82f6", partial: "#f97316", completed: "#22c55e", closed: "#64748b",
+  DRAFT: "#6b7280",
+  SENT: "#3b82f6",
+  QUOTED: "#f97316",
+  FAILED: "#ef4444",
+  SUCCESS: "#22c55e",
+  draft: "#6b7280",
+  sent: "#3b82f6",
+  partial: "#f97316",
+  completed: "#22c55e",
+  closed: "#64748b",
 };
 
 // Quick summary KPI
-function SummaryKpi({ label, value, icon: Icon, color }: {
-  label: string; value: number | string;
-  icon: React.ComponentType<{ size?: number; className?: string }>; color: string;
+function SummaryKpi({
+  label,
+  value,
+  icon: Icon,
+  color,
+}: {
+  label: string;
+  value: number | string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  color: string;
 }) {
   return (
     <div className="bg-card border border-border rounded-lg p-4 flex items-center gap-3">
-      <div className={`p-2.5 rounded-lg ${color}`}><Icon size={18} /></div>
+      <div className={`p-2.5 rounded-lg ${color}`}>
+        <Icon size={18} />
+      </div>
       <div>
         <p className="text-2xl font-bold text-foreground leading-tight">{value}</p>
         <p className="text-muted-foreground text-xs mt-0.5">{label}</p>
@@ -66,7 +116,7 @@ export default function ReportsTab() {
 
   const { data, isLoading, refetch } = useGetReports(
     { from: appliedFrom, to: appliedTo },
-    { query: { queryKey: getGetReportsQueryKey({ from: appliedFrom, to: appliedTo }) } }
+    { query: { queryKey: getGetReportsQueryKey({ from: appliedFrom, to: appliedTo }) } },
   );
 
   function applyFilter() {
@@ -82,18 +132,33 @@ export default function ReportsTab() {
   const statusFunnel = data?.statusFunnel ?? [];
 
   // Month display helper
-  function fmtMonth(m: string) {
+  function fmtMonth(m: string | undefined) {
+    if (!m) return "";
     const [y, mo] = m.split("-");
-    const months = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+    const months = [
+      "يناير",
+      "فبراير",
+      "مارس",
+      "أبريل",
+      "مايو",
+      "يونيو",
+      "يوليو",
+      "أغسطس",
+      "سبتمبر",
+      "أكتوبر",
+      "نوفمبر",
+      "ديسمبر",
+    ];
     return `${months[parseInt(mo) - 1]} ${y}`;
   }
 
   // Print helper
   function printReport() {
-    const title = REPORT_TYPES.find(r => r.id === activeReport)?.label ?? "تقرير";
+    const title = REPORT_TYPES.find((r) => r.id === activeReport)?.label ?? "تقرير";
     const win = window.open("", "_blank", "width=1100,height=800,scrollbars=yes");
     if (!win) return;
-    win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${title}</title>
+    win.document
+      .write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8"><title>${title}</title>
       <style>body{font-family:Arial,sans-serif;padding:24px;direction:rtl}
       table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px;text-align:right}
       th{background:#1e3a5f;color:white}tr:nth-child(even){background:#f9f9f9}
@@ -109,16 +174,21 @@ export default function ReportsTab() {
         <div class="kpi"><div class="val">${summary?.totalItems ?? 0}</div><div class="lbl">إجمالي البنود</div></div>
         <div class="kpi"><div class="val">${summary?.conversionRate ?? 0}%</div><div class="lbl">معدل التحويل</div></div>
       </div>
-      ${activeReport === "employees" ? `<h2>أداء الموظفين</h2>
+      ${
+        activeReport === "employees"
+          ? `<h2>أداء الموظفين</h2>
         <table><thead><tr><th>#</th><th>الموظف</th><th>الدور</th><th>RFQs</th><th>عروض الأسعار</th><th>أوامر الشراء</th><th>معدل التحويل</th></tr></thead>
-        <tbody>${employeeStats.map((e,i) => `<tr><td>${i+1}</td><td>${e.employeeName}</td><td>${e.role}</td><td>${e.totalRfqs}</td><td>${e.totalOffers}</td><td>${e.totalPos}</td><td>${e.conversionRate}%</td></tr>`).join("")}</tbody></table>`
-      : activeReport === "items" ? `<h2>أكثر البنود طلباً</h2>
+        <tbody>${employeeStats.map((e, i) => `<tr><td>${i + 1}</td><td>${e.employeeName}</td><td>${e.role}</td><td>${e.totalRfqs}</td><td>${e.totalOffers}</td><td>${e.totalPos}</td><td>${e.conversionRate}%</td></tr>`).join("")}</tbody></table>`
+          : activeReport === "items"
+            ? `<h2>أكثر البنود طلباً</h2>
         <table><thead><tr><th>#</th><th>الصنف</th><th>Part No</th><th>عدد المرات</th><th>إجمالي الكمية</th></tr></thead>
-        <tbody>${topItems.map((t,i) => `<tr><td>${i+1}</td><td>${t.description}</td><td>${t.partNo ?? "—"}</td><td>${t.count}</td><td>${t.totalQty?.toFixed(2) ?? 0}</td></tr>`).join("")}</tbody></table>`
-      : activeReport === "lineitems" ? `<h2>إحصائيات البنود</h2>
+        <tbody>${topItems.map((t, i) => `<tr><td>${i + 1}</td><td>${t.description}</td><td>${t.partNo ?? "—"}</td><td>${t.count}</td><td>${t.totalQty?.toFixed(2) ?? 0}</td></tr>`).join("")}</tbody></table>`
+            : activeReport === "lineitems"
+              ? `<h2>إحصائيات البنود</h2>
         <table><thead><tr><th>#</th><th>رقم البند</th><th>إجمالي التكرار</th><th>عدد RFQs المختلفة</th></tr></thead>
-        <tbody>${lineItemStats.map((l,i) => `<tr><td>${i+1}</td><td>${l.lineItem}</td><td>${l.count}</td><td>${l.distinctRfqs}</td></tr>`).join("")}</tbody></table>`
-      : ""}
+        <tbody>${lineItemStats.map((l, i) => `<tr><td>${i + 1}</td><td>${l.lineItem}</td><td>${l.count}</td><td>${l.distinctRfqs}</td></tr>`).join("")}</tbody></table>`
+              : ""
+      }
     </body></html>`);
     win.document.close();
     win.document.fonts.ready.then(() => setTimeout(() => win.print(), 600));
@@ -132,23 +202,31 @@ export default function ReportsTab() {
           <div>
             <label className="text-xs text-muted-foreground font-medium block mb-1">من تاريخ</label>
             <div className="relative">
-              <Calendar size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Calendar
+                size={14}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              />
               <input
                 type="date"
                 value={from}
-                onChange={e => setFrom(e.target.value)}
+                onChange={(e) => setFrom(e.target.value)}
                 className="pr-8 pl-3 py-1.5 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground font-medium block mb-1">إلى تاريخ</label>
+            <label className="text-xs text-muted-foreground font-medium block mb-1">
+              إلى تاريخ
+            </label>
             <div className="relative">
-              <Calendar size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Calendar
+                size={14}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              />
               <input
                 type="date"
                 value={to}
-                onChange={e => setTo(e.target.value)}
+                onChange={(e) => setTo(e.target.value)}
                 className="pr-8 pl-3 py-1.5 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
@@ -157,14 +235,47 @@ export default function ReportsTab() {
           {/* Quick presets */}
           <div className="flex gap-1.5 flex-wrap">
             {[
-              { label: "هذا الشهر", fn: () => { const n = new Date(); setFrom(`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-01`); setTo(n.toISOString().substring(0,10)); } },
-              { label: "آخر 3 أشهر", fn: () => { const n = new Date(); const f = new Date(n); f.setMonth(n.getMonth()-3); setFrom(f.toISOString().substring(0,10)); setTo(n.toISOString().substring(0,10)); } },
-              { label: "هذا العام", fn: () => { const y = new Date().getFullYear(); setFrom(`${y}-01-01`); setTo(`${y}-12-31`); } },
-              { label: "كل الفترات", fn: () => { setFrom("2020-01-01"); setTo(new Date().toISOString().substring(0,10)); } },
-            ].map(p => (
-              <button key={p.label} onClick={p.fn}
+              {
+                label: "هذا الشهر",
+                fn: () => {
+                  const n = new Date();
+                  setFrom(`${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-01`);
+                  setTo(n.toISOString().substring(0, 10));
+                },
+              },
+              {
+                label: "آخر 3 أشهر",
+                fn: () => {
+                  const n = new Date();
+                  const f = new Date(n);
+                  f.setMonth(n.getMonth() - 3);
+                  setFrom(f.toISOString().substring(0, 10));
+                  setTo(n.toISOString().substring(0, 10));
+                },
+              },
+              {
+                label: "هذا العام",
+                fn: () => {
+                  const y = new Date().getFullYear();
+                  setFrom(`${y}-01-01`);
+                  setTo(`${y}-12-31`);
+                },
+              },
+              {
+                label: "كل الفترات",
+                fn: () => {
+                  setFrom("2020-01-01");
+                  setTo(new Date().toISOString().substring(0, 10));
+                },
+              },
+            ].map((p) => (
+              <button
+                key={p.label}
+                onClick={p.fn}
                 className="text-xs px-3 py-1.5 rounded-md border border-border hover:bg-muted text-foreground transition-colors"
-              >{p.label}</button>
+              >
+                {p.label}
+              </button>
             ))}
           </div>
 
@@ -194,15 +305,35 @@ export default function ReportsTab() {
         <>
           {/* ── Summary KPIs ──────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <SummaryKpi label="إجمالي RFQs" value={summary?.totalRfqs ?? 0} icon={FileText} color="bg-blue-100 text-blue-700" />
-            <SummaryKpi label="أوامر الشراء" value={summary?.totalPos ?? 0} icon={ShoppingCart} color="bg-green-100 text-green-700" />
-            <SummaryKpi label="إجمالي البنود" value={summary?.totalItems ?? 0} icon={Package} color="bg-amber-100 text-amber-700" />
-            <SummaryKpi label="معدل التحويل" value={`${summary?.conversionRate ?? 0}%`} icon={TrendingUp} color="bg-purple-100 text-purple-700" />
+            <SummaryKpi
+              label="إجمالي RFQs"
+              value={summary?.totalRfqs ?? 0}
+              icon={FileText}
+              color="bg-blue-100 text-blue-700"
+            />
+            <SummaryKpi
+              label="أوامر الشراء"
+              value={summary?.totalPos ?? 0}
+              icon={ShoppingCart}
+              color="bg-green-100 text-green-700"
+            />
+            <SummaryKpi
+              label="إجمالي البنود"
+              value={summary?.totalItems ?? 0}
+              icon={Package}
+              color="bg-amber-100 text-amber-700"
+            />
+            <SummaryKpi
+              label="معدل التحويل"
+              value={`${summary?.conversionRate ?? 0}%`}
+              icon={TrendingUp}
+              color="bg-purple-100 text-purple-700"
+            />
           </div>
 
           {/* ── Report type tabs ──────────────────────────────── */}
           <div className="flex gap-1 flex-wrap border-b border-border">
-            {REPORT_TYPES.map(rt => (
+            {REPORT_TYPES.map((rt) => (
               <button
                 key={rt.id}
                 onClick={() => setActiveReport(rt.id)}
@@ -222,7 +353,9 @@ export default function ReportsTab() {
           {activeReport === "employees" && (
             <div className="space-y-5">
               {employeeStats.length === 0 ? (
-                <p className="text-center text-muted-foreground py-10 text-sm">لا توجد بيانات للفترة المحددة</p>
+                <p className="text-center text-muted-foreground py-10 text-sm">
+                  لا توجد بيانات للفترة المحددة
+                </p>
               ) : (
                 <>
                   {/* Bar chart */}
@@ -234,13 +367,33 @@ export default function ReportsTab() {
                     <ResponsiveContainer width="100%" height={260}>
                       <BarChart data={employeeStats} margin={{ right: 0, left: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="employeeName" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                        <XAxis
+                          dataKey="employeeName"
+                          tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                        />
                         <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                        <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                        <Tooltip
+                          contentStyle={{
+                            background: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
+                        />
                         <Legend />
-                        <Bar dataKey="totalRfqs" name="RFQs" fill="#1e3a5f" radius={[3,3,0,0]} />
-                        <Bar dataKey="totalOffers" name="عروض الأسعار" fill="#0ea5e9" radius={[3,3,0,0]} />
-                        <Bar dataKey="totalPos" name="أوامر الشراء" fill="#10b981" radius={[3,3,0,0]} />
+                        <Bar dataKey="totalRfqs" name="RFQs" fill="#1e3a5f" radius={[3, 3, 0, 0]} />
+                        <Bar
+                          dataKey="totalOffers"
+                          name="عروض الأسعار"
+                          fill="#0ea5e9"
+                          radius={[3, 3, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="totalPos"
+                          name="أوامر الشراء"
+                          fill="#10b981"
+                          radius={[3, 3, 0, 0]}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -254,37 +407,69 @@ export default function ReportsTab() {
                     <table className="w-full text-xs min-w-[600px]">
                       <thead>
                         <tr className="border-b border-border">
-                          {["#", "الموظف", "الدور", "RFQs أنشأ", "عروض أسعار", "أوامر شراء", "RFQs ناجحة", "معدل التحويل"].map(h => (
-                            <th key={h} className="pb-2.5 text-right text-muted-foreground font-medium pr-4 whitespace-nowrap">{h}</th>
+                          {[
+                            "#",
+                            "الموظف",
+                            "الدور",
+                            "RFQs أنشأ",
+                            "عروض أسعار",
+                            "أوامر شراء",
+                            "RFQs ناجحة",
+                            "معدل التحويل",
+                          ].map((h) => (
+                            <th
+                              key={h}
+                              className="pb-2.5 text-right text-muted-foreground font-medium pr-4 whitespace-nowrap"
+                            >
+                              {h}
+                            </th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {employeeStats.sort((a,b) => b.totalRfqs - a.totalRfqs).map((e, i) => (
-                          <tr key={e.employeeId} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                            <td className="py-2.5 text-muted-foreground pr-4">{i + 1}</td>
-                            <td className="py-2.5 font-semibold pr-4 whitespace-nowrap">{e.employeeName}</td>
-                            <td className="py-2.5 pr-4">
-                              <span className="px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary">
-                                {e.role === "admin" ? "مدير" : e.role === "manager" ? "مشرف" : "مشتريات"}
-                              </span>
-                            </td>
-                            <td className="py-2.5 text-center pr-4 font-medium">{e.totalRfqs}</td>
-                            <td className="py-2.5 text-center pr-4">{e.totalOffers}</td>
-                            <td className="py-2.5 text-center pr-4 font-medium text-green-600">{e.totalPos}</td>
-                            <td className="py-2.5 text-center pr-4">{e.successRfqs}</td>
-                            <td className="py-2.5 pr-4">
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 bg-muted rounded-full h-1.5 min-w-[60px]">
-                                  <div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(e.conversionRate, 100)}%` }} />
-                                </div>
-                                <span className={`font-semibold text-xs ${e.conversionRate >= 50 ? "text-green-600" : e.conversionRate >= 25 ? "text-amber-600" : "text-muted-foreground"}`}>
-                                  {e.conversionRate}%
+                        {employeeStats
+                          .sort((a, b) => (b.totalRfqs ?? 0) - (a.totalRfqs ?? 0))
+                          .map((e, i) => (
+                            <tr
+                              key={e.employeeId}
+                              className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                            >
+                              <td className="py-2.5 text-muted-foreground pr-4">{i + 1}</td>
+                              <td className="py-2.5 font-semibold pr-4 whitespace-nowrap">
+                                {e.employeeName}
+                              </td>
+                              <td className="py-2.5 pr-4">
+                                <span className="px-2 py-0.5 rounded-full text-xs bg-primary/10 text-primary">
+                                  {e.role === "admin"
+                                    ? "مدير"
+                                    : e.role === "manager"
+                                      ? "مشرف"
+                                      : "مشتريات"}
                                 </span>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="py-2.5 text-center pr-4 font-medium">{e.totalRfqs}</td>
+                              <td className="py-2.5 text-center pr-4">{e.totalOffers}</td>
+                              <td className="py-2.5 text-center pr-4 font-medium text-green-600">
+                                {e.totalPos}
+                              </td>
+                              <td className="py-2.5 text-center pr-4">{e.successRfqs}</td>
+                              <td className="py-2.5 pr-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 bg-muted rounded-full h-1.5 min-w-[60px]">
+                                    <div
+                                      className="h-1.5 rounded-full bg-primary"
+                                      style={{ width: `${Math.min(e.conversionRate ?? 0, 100)}%` }}
+                                    />
+                                  </div>
+                                  <span
+                                    className={`font-semibold text-xs ${(e.conversionRate ?? 0) >= 50 ? "text-green-600" : (e.conversionRate ?? 0) >= 25 ? "text-amber-600" : "text-muted-foreground"}`}
+                                  >
+                                    {e.conversionRate ?? 0}%
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>
@@ -297,7 +482,9 @@ export default function ReportsTab() {
           {activeReport === "items" && (
             <div className="space-y-5">
               {topItems.length === 0 ? (
-                <p className="text-center text-muted-foreground py-10 text-sm">لا توجد بيانات للفترة المحددة</p>
+                <p className="text-center text-muted-foreground py-10 text-sm">
+                  لا توجد بيانات للفترة المحددة
+                </p>
               ) : (
                 <>
                   {/* Horizontal bar chart */}
@@ -306,19 +493,42 @@ export default function ReportsTab() {
                       <span className="w-1.5 h-4 bg-[#f59e0b] rounded-full" />
                       أكثر 10 بنود طلباً (حسب أوامر الشراء)
                     </h3>
-                    <ResponsiveContainer width="100%" height={Math.max(300, topItems.slice(0,10).length * 42)}>
-                      <BarChart data={topItems.slice(0,10)} layout="vertical" margin={{ left: 8, right: 32 }}>
+                    <ResponsiveContainer
+                      width="100%"
+                      height={Math.max(300, topItems.slice(0, 10).length * 42)}
+                    >
+                      <BarChart
+                        data={topItems.slice(0, 10)}
+                        layout="vertical"
+                        margin={{ left: 8, right: 32 }}
+                      >
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis type="number" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                        <YAxis type="category" dataKey="description" width={160}
-                          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                          tickFormatter={(v: string) => v.length > 22 ? v.substring(0,22) + "…" : v}
+                        <XAxis
+                          type="number"
+                          tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                         />
-                        <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                        <YAxis
+                          type="category"
+                          dataKey="description"
+                          width={160}
+                          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                          tickFormatter={(v: string) =>
+                            v.length > 22 ? v.substring(0, 22) + "…" : v
+                          }
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
                           formatter={(v: number) => [`${v} مرة`, "عدد الطلبات"]}
                         />
-                        <Bar dataKey="count" name="عدد الطلبات" radius={[0,4,4,0]}>
-                          {topItems.slice(0,10).map((_, idx) => <Cell key={idx} fill={DEEP_COLORS[idx % DEEP_COLORS.length]} />)}
+                        <Bar dataKey="count" name="عدد الطلبات" radius={[0, 4, 4, 0]}>
+                          {topItems.slice(0, 10).map((_, idx) => (
+                            <Cell key={idx} fill={DEEP_COLORS[idx % DEEP_COLORS.length]} />
+                          ))}
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
@@ -333,21 +543,41 @@ export default function ReportsTab() {
                     <table className="w-full text-xs min-w-[500px]">
                       <thead>
                         <tr className="border-b border-border">
-                          {["#", "وصف الصنف", "Part No", "عدد مرات الطلب", "إجمالي الكمية المطلوبة"].map(h => (
-                            <th key={h} className="pb-2.5 text-right text-muted-foreground font-medium pr-4">{h}</th>
+                          {[
+                            "#",
+                            "وصف الصنف",
+                            "Part No",
+                            "عدد مرات الطلب",
+                            "إجمالي الكمية المطلوبة",
+                          ].map((h) => (
+                            <th
+                              key={h}
+                              className="pb-2.5 text-right text-muted-foreground font-medium pr-4"
+                            >
+                              {h}
+                            </th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {topItems.map((item, i) => (
-                          <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                          <tr
+                            key={i}
+                            className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                          >
                             <td className="py-2.5 pr-4 text-muted-foreground">{i + 1}</td>
                             <td className="py-2.5 pr-4 font-medium max-w-xs">{item.description}</td>
-                            <td className="py-2.5 pr-4 text-muted-foreground font-mono text-xs">{item.partNo ?? "—"}</td>
-                            <td className="py-2.5 pr-4 text-center">
-                              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">{item.count}</span>
+                            <td className="py-2.5 pr-4 text-muted-foreground font-mono text-xs">
+                              {item.partNo ?? "—"}
                             </td>
-                            <td className="py-2.5 pr-4 text-center font-medium">{item.totalQty?.toFixed(2) ?? "—"}</td>
+                            <td className="py-2.5 pr-4 text-center">
+                              <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">
+                                {item.count}
+                              </span>
+                            </td>
+                            <td className="py-2.5 pr-4 text-center font-medium">
+                              {item.totalQty?.toFixed(2) ?? "—"}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -362,7 +592,9 @@ export default function ReportsTab() {
           {activeReport === "lineitems" && (
             <div className="space-y-5">
               {lineItemStats.length === 0 ? (
-                <p className="text-center text-muted-foreground py-10 text-sm">لا توجد بيانات للفترة المحددة</p>
+                <p className="text-center text-muted-foreground py-10 text-sm">
+                  لا توجد بيانات للفترة المحددة
+                </p>
               ) : (
                 <>
                   <div className="bg-card border border-border rounded-lg p-5">
@@ -371,16 +603,33 @@ export default function ReportsTab() {
                       توزيع البنود حسب رقم السطر (Line Item)
                     </h3>
                     <ResponsiveContainer width="100%" height={260}>
-                      <BarChart data={lineItemStats.slice(0,15)} margin={{ right: 0, left: 0 }}>
+                      <BarChart data={lineItemStats.slice(0, 15)} margin={{ right: 0, left: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="lineItem" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                        <XAxis
+                          dataKey="lineItem"
+                          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+                        />
                         <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                        <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                        <Tooltip
+                          contentStyle={{
+                            background: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
+                        />
                         <Legend />
-                        <Bar dataKey="count" name="عدد البنود" fill="#8b5cf6" radius={[3,3,0,0]}>
-                          {lineItemStats.slice(0,15).map((_, idx) => <Cell key={idx} fill={DEEP_COLORS[idx % DEEP_COLORS.length]} />)}
+                        <Bar dataKey="count" name="عدد البنود" fill="#8b5cf6" radius={[3, 3, 0, 0]}>
+                          {lineItemStats.slice(0, 15).map((_, idx) => (
+                            <Cell key={idx} fill={DEEP_COLORS[idx % DEEP_COLORS.length]} />
+                          ))}
                         </Bar>
-                        <Bar dataKey="distinctRfqs" name="RFQs مختلفة" fill="#0ea5e9" radius={[3,3,0,0]} />
+                        <Bar
+                          dataKey="distinctRfqs"
+                          name="RFQs مختلفة"
+                          fill="#0ea5e9"
+                          radius={[3, 3, 0, 0]}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -393,20 +642,39 @@ export default function ReportsTab() {
                     <table className="w-full text-xs min-w-[400px]">
                       <thead>
                         <tr className="border-b border-border">
-                          {["#", "رقم البند (Line Item)", "إجمالي تكرار البند", "عدد RFQs المختلفة"].map(h => (
-                            <th key={h} className="pb-2.5 text-right text-muted-foreground font-medium pr-4">{h}</th>
+                          {[
+                            "#",
+                            "رقم البند (Line Item)",
+                            "إجمالي تكرار البند",
+                            "عدد RFQs المختلفة",
+                          ].map((h) => (
+                            <th
+                              key={h}
+                              className="pb-2.5 text-right text-muted-foreground font-medium pr-4"
+                            >
+                              {h}
+                            </th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {lineItemStats.map((li, i) => (
-                          <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                          <tr
+                            key={i}
+                            className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                          >
                             <td className="py-2.5 pr-4 text-muted-foreground">{i + 1}</td>
-                            <td className="py-2.5 pr-4 font-mono font-medium text-primary">{li.lineItem}</td>
-                            <td className="py-2.5 pr-4 text-center">
-                              <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold">{li.count}</span>
+                            <td className="py-2.5 pr-4 font-mono font-medium text-primary">
+                              {li.lineItem}
                             </td>
-                            <td className="py-2.5 pr-4 text-center font-medium">{li.distinctRfqs}</td>
+                            <td className="py-2.5 pr-4 text-center">
+                              <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold">
+                                {li.count}
+                              </span>
+                            </td>
+                            <td className="py-2.5 pr-4 text-center font-medium">
+                              {li.distinctRfqs}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -425,19 +693,47 @@ export default function ReportsTab() {
                 الاتجاه الشهري — RFQs وأوامر الشراء
               </h3>
               {monthlyTrend.length === 0 ? (
-                <p className="text-center text-muted-foreground py-10 text-sm">لا توجد بيانات للفترة المحددة</p>
+                <p className="text-center text-muted-foreground py-10 text-sm">
+                  لا توجد بيانات للفترة المحددة
+                </p>
               ) : (
                 <ResponsiveContainer width="100%" height={320}>
-                  <LineChart data={monthlyTrend.map(m => ({ ...m, month: fmtMonth(m.month) }))}>
+                  <LineChart
+                    data={monthlyTrend.map((m) => ({ ...m, month: fmtMonth(m.month ?? "") }))}
+                  >
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    />
                     <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                    <Tooltip
+                      contentStyle={{
+                        background: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
+                    />
                     <Legend />
-                    <Line type="monotone" dataKey="rfqs" name="RFQs" stroke="#1e3a5f" strokeWidth={2.5}
-                      dot={{ r: 4, fill: "#1e3a5f" }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="pos" name="أوامر الشراء" stroke="#10b981" strokeWidth={2.5}
-                      dot={{ r: 4, fill: "#10b981" }} activeDot={{ r: 6 }} />
+                    <Line
+                      type="monotone"
+                      dataKey="rfqs"
+                      name="RFQs"
+                      stroke="#1e3a5f"
+                      strokeWidth={2.5}
+                      dot={{ r: 4, fill: "#1e3a5f" }}
+                      activeDot={{ r: 6 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="pos"
+                      name="أوامر الشراء"
+                      stroke="#10b981"
+                      strokeWidth={2.5}
+                      dot={{ r: 4, fill: "#10b981" }}
+                      activeDot={{ r: 6 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -458,15 +754,37 @@ export default function ReportsTab() {
                 ) : (
                   <ResponsiveContainer width="100%" height={280}>
                     <PieChart>
-                      <Pie data={statusFunnel} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={100}
-                        label={({ status, percent }) => `${STATUS_AR[status] ?? status} (${(percent * 100).toFixed(0)}%)`}
+                      <Pie
+                        data={statusFunnel}
+                        dataKey="count"
+                        nameKey="status"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={({ status, percent }) =>
+                          `${STATUS_AR[status] ?? status} (${(percent * 100).toFixed(0)}%)`
+                        }
                         labelLine={false}
                       >
                         {statusFunnel.map((entry, idx) => (
-                          <Cell key={idx} fill={STATUS_COLORS[entry.status] ?? DEEP_COLORS[idx % DEEP_COLORS.length]} />
+                          <Cell
+                            key={idx}
+                            fill={
+                              STATUS_COLORS[entry.status ?? ""] ??
+                              DEEP_COLORS[idx % DEEP_COLORS.length]
+                            }
+                          />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v, n) => [v, STATUS_AR[n as string] ?? n]} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                      <Tooltip
+                        formatter={(v, n) => [v, STATUS_AR[n as string] ?? n]}
+                        contentStyle={{
+                          background: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: 8,
+                          fontSize: 12,
+                        }}
+                      />
                       <Legend formatter={(v) => STATUS_AR[v] ?? v} />
                     </PieChart>
                   </ResponsiveContainer>
@@ -484,43 +802,70 @@ export default function ReportsTab() {
                 ) : (
                   <div className="space-y-3">
                     {(() => {
-                      const total = statusFunnel.reduce((a,b) => a + b.count, 0);
-                      return statusFunnel.sort((a,b) => b.count - a.count).map(sf => (
-                        <div key={sf.status} className="space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-medium" style={{ color: STATUS_COLORS[sf.status] }}>
-                              {STATUS_AR[sf.status] ?? sf.status}
-                            </span>
-                            <span className="font-bold text-foreground">{sf.count} ({total > 0 ? Math.round(sf.count/total*100) : 0}%)</span>
+                      const total = statusFunnel.reduce((a, b) => a + (b.count ?? 0), 0);
+                      return statusFunnel
+                        .sort((a, b) => (b.count ?? 0) - (a.count ?? 0))
+                        .map((sf) => (
+                          <div key={sf.status} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span
+                                className="font-medium"
+                                style={{ color: STATUS_COLORS[sf.status ?? ""] }}
+                              >
+                                {STATUS_AR[sf.status ?? ""] ?? sf.status}
+                              </span>
+                              <span className="font-bold text-foreground">
+                                {sf.count ?? 0} (
+                                {total > 0 ? Math.round(((sf.count ?? 0) / total) * 100) : 0}%)
+                              </span>
+                            </div>
+                            <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{
+                                  width: `${total > 0 ? ((sf.count ?? 0) / total) * 100 : 0}%`,
+                                  background: STATUS_COLORS[sf.status ?? ""] ?? "#1e3a5f",
+                                }}
+                              />
+                            </div>
                           </div>
-                          <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                            <div className="h-full rounded-full transition-all duration-500"
-                              style={{ width: `${total > 0 ? (sf.count / total) * 100 : 0}%`, background: STATUS_COLORS[sf.status] ?? "#1e3a5f" }}
-                            />
-                          </div>
-                        </div>
-                      ));
+                        ));
                     })()}
 
                     {/* Conversion insights */}
                     <div className="mt-4 pt-4 border-t border-border space-y-2">
                       <p className="text-xs font-semibold text-foreground">رؤى التحويل</p>
-                      {statusFunnel.find(s => s.status === "SUCCESS") && (
+                      {statusFunnel.find((s) => s.status === "SUCCESS") && (
                         <p className="text-xs text-muted-foreground">
-                          نسبة النجاح: <span className="font-bold text-green-600">
-                            {Math.round((statusFunnel.find(s=>s.status==="SUCCESS")!.count / statusFunnel.reduce((a,b)=>a+b.count,0)) * 100)}%
+                          نسبة النجاح:{" "}
+                          <span className="font-bold text-green-600">
+                            {Math.round(
+                              ((statusFunnel.find((s) => s.status === "SUCCESS")!.count ?? 0) /
+                                statusFunnel.reduce((a, b) => a + (b.count ?? 0), 0)) *
+                                100,
+                            )}
+                            %
                           </span>
                         </p>
                       )}
-                      {statusFunnel.find(s => s.status === "FAILED") && (
+                      {statusFunnel.find((s) => s.status === "FAILED") && (
                         <p className="text-xs text-muted-foreground">
-                          نسبة الفشل: <span className="font-bold text-red-500">
-                            {Math.round((statusFunnel.find(s=>s.status==="FAILED")!.count / statusFunnel.reduce((a,b)=>a+b.count,0)) * 100)}%
+                          نسبة الفشل:{" "}
+                          <span className="font-bold text-red-500">
+                            {Math.round(
+                              ((statusFunnel.find((s) => s.status === "FAILED")!.count ?? 0) /
+                                statusFunnel.reduce((a, b) => a + (b.count ?? 0), 0)) *
+                                100,
+                            )}
+                            %
                           </span>
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground">
-                        معدل التحويل إلى PO: <span className="font-bold text-primary">{summary?.conversionRate ?? 0}%</span>
+                        معدل التحويل إلى PO:{" "}
+                        <span className="font-bold text-primary">
+                          {summary?.conversionRate ?? 0}%
+                        </span>
                       </p>
                     </div>
                   </div>

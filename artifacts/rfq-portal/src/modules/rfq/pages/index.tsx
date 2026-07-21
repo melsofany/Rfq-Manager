@@ -75,7 +75,8 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
   const { data, isLoading } = useClosingSoon();
   const [open, setOpen] = useState(true);
 
-  const totalCount = (data?.today.length ?? 0) + (data?.tomorrow.length ?? 0) + (data?.dayAfterTomorrow.length ?? 0);
+  const totalCount =
+    (data?.today.length ?? 0) + (data?.tomorrow.length ?? 0) + (data?.dayAfterTomorrow.length ?? 0);
 
   const tableHead = (
     <thead>
@@ -167,7 +168,9 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
           {data && data.tomorrow.length > 0 && (
             <div
               className={
-                (data.today.length ?? 0) > 0 ? "border-t border-amber-200 dark:border-amber-800" : ""
+                (data.today.length ?? 0) > 0
+                  ? "border-t border-amber-200 dark:border-amber-800"
+                  : ""
               }
             >
               <div className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-950/30 border-b border-amber-200 dark:border-amber-800">

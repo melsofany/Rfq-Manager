@@ -51,7 +51,13 @@ type OfferRow = {
   isLowest: boolean;
   isAnomaly: boolean;
   notPriced?: boolean;
-  attachments?: Array<{ id: number; originalName: string; mimeType?: string; sizeLabel?: string; downloadUrl?: string }>;
+  attachments?: Array<{
+    id: number;
+    originalName: string;
+    mimeType?: string;
+    sizeLabel?: string;
+    downloadUrl?: string;
+  }>;
 };
 
 type ItemAnalysis = {
@@ -345,7 +351,7 @@ async function exportToPdf(
 
   // HTML-escape helper
   const esc = (s: string) =>
-    s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
   // Rows (with per-item notes sub-rows)
   const rows = items
@@ -384,7 +390,9 @@ async function exportToPdf(
           return `<td colspan="2" class="ntd">${parts.join(" | ")}</td>`;
         })
         .join("");
-      const hasDetails = allSuppliers.some((s) => map.get(s)?.notes || map.get(s)?.deliveryDays != null);
+      const hasDetails = allSuppliers.some(
+        (s) => map.get(s)?.notes || map.get(s)?.deliveryDays != null,
+      );
       const noteRow = hasDetails
         ? `<tr class="nrow"><td></td><td class="nlbl">مدة / ملاحظات</td><td colspan="2"></td>${detailCells}<td></td></tr>`
         : "";
@@ -394,16 +402,21 @@ async function exportToPdf(
 
   // ── Build supplier general notes + attachments HTML ─────────────────────────
   type _AttInfo = { originalName: string; downloadUrl?: string; mimeType?: string };
-  type _RawOffer = { supplierId?: number; supplierName?: string | null; generalNotes?: string | null; attachments?: Array<{originalName:string; downloadUrl?:string; mimeType?:string}> };
-  const _rawOffers = ((offersData as {offers?: _RawOffer[]}).offers ?? []) as _RawOffer[];
-  const _withNotes = _rawOffers.filter(o => o.generalNotes);
+  type _RawOffer = {
+    supplierId?: number;
+    supplierName?: string | null;
+    generalNotes?: string | null;
+    attachments?: Array<{ originalName: string; downloadUrl?: string; mimeType?: string }>;
+  };
+  const _rawOffers = ((offersData as { offers?: _RawOffer[] }).offers ?? []) as _RawOffer[];
+  const _withNotes = _rawOffers.filter((o) => o.generalNotes);
 
   // Collect attachments per supplier (from item-level offers which carry the attachment list)
   const _attBySupplier: Record<string, _AttInfo[]> = {};
   for (const item of items) {
     for (const o of item.offers) {
       if (o.attachments?.length && !_attBySupplier[o.supplierName]) {
-        _attBySupplier[o.supplierName] = (o.attachments as _AttInfo[]).map(a => ({
+        _attBySupplier[o.supplierName] = (o.attachments as _AttInfo[]).map((a) => ({
           originalName: a.originalName,
           downloadUrl: a.downloadUrl,
           mimeType: a.mimeType,
@@ -411,10 +424,17 @@ async function exportToPdf(
       }
     }
   }
-  const _suppliersWithAtt = Object.keys(_attBySupplier).filter(s => _attBySupplier[s].length > 0);
+  const _suppliersWithAtt = Object.keys(_attBySupplier).filter((s) => _attBySupplier[s].length > 0);
 
   // Pre-fetch images as base64 data-URLs so they embed in the print window
-  const _IMG_MIMES = new Set(["image/png","image/jpeg","image/jpg","image/gif","image/webp","image/bmp"]);
+  const _IMG_MIMES = new Set([
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/gif",
+    "image/webp",
+    "image/bmp",
+  ]);
   const _imgDataUrls: Record<string, string> = {};
   for (const sup of _suppliersWithAtt) {
     for (const att of _attBySupplier[sup]) {
@@ -430,7 +450,9 @@ async function exportToPdf(
             });
             _imgDataUrls[att.downloadUrl] = dataUrl;
           }
-        } catch { /* skip — will fall back to filename */ }
+        } catch {
+          /* skip — will fall back to filename */
+        }
       }
     }
   }
@@ -439,12 +461,14 @@ async function exportToPdf(
   let supplierSummaryHtml = "";
   if (_withNotes.length) {
     supplierSummaryHtml += '<div class="sn-section">';
-    supplierSummaryHtml += '<div class="sn-hdr">ملاحظات الموردين &nbsp;|&nbsp; Supplier Notes</div>';
-    supplierSummaryHtml += '<div class="sn-sub">الملاحظات العامة لكل مورد &nbsp;|&nbsp; General Notes per Supplier</div>';
+    supplierSummaryHtml +=
+      '<div class="sn-hdr">ملاحظات الموردين &nbsp;|&nbsp; Supplier Notes</div>';
+    supplierSummaryHtml +=
+      '<div class="sn-sub">الملاحظات العامة لكل مورد &nbsp;|&nbsp; General Notes per Supplier</div>';
     for (const o of _withNotes) {
       supplierSummaryHtml += `<div class="sn-row"><div class="sn-name">${esc(o.supplierName ?? "—")}</div><div class="sn-val">${esc(o.generalNotes ?? "")}</div></div>`;
     }
-    supplierSummaryHtml += '</div>';
+    supplierSummaryHtml += "</div>";
   }
 
   // Attachment pages — each image gets its own full printed page
@@ -1139,9 +1163,25 @@ export default function RfqDetailPage() {
 
             {offersLoading ? (
               <div className="bg-card border border-border rounded-lg p-8 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
-                <svg className="animate-spin h-4 w-4 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                <svg
+                  className="animate-spin h-4 w-4 text-muted-foreground"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
                 </svg>
                 جار تحميل العروض...
               </div>
@@ -1271,10 +1311,18 @@ export default function RfqDetailPage() {
                                     <td
                                       className={cn(
                                         "px-4 py-2.5 text-right text-xs font-medium",
-                                        !o.notPriced && o.deviation < 0 ? "text-green-600" : !o.notPriced ? "text-red-500" : "text-muted-foreground",
+                                        !o.notPriced && o.deviation < 0
+                                          ? "text-green-600"
+                                          : !o.notPriced
+                                            ? "text-red-500"
+                                            : "text-muted-foreground",
                                       )}
                                     >
-                                      {o.notPriced ? "—" : (o.deviation > 0 ? "+" : "") + o.deviation.toFixed(1) + "%"}
+                                      {o.notPriced
+                                        ? "—"
+                                        : (o.deviation > 0 ? "+" : "") +
+                                          o.deviation.toFixed(1) +
+                                          "%"}
                                     </td>
                                     {/* Supplier attachments */}
                                     <td className="px-4 py-2.5">
@@ -1292,7 +1340,9 @@ export default function RfqDetailPage() {
                                               <Paperclip size={11} className="shrink-0" />
                                               <span className="truncate">{att.originalName}</span>
                                               {att.sizeLabel && (
-                                                <span className="text-muted-foreground shrink-0">({att.sizeLabel})</span>
+                                                <span className="text-muted-foreground shrink-0">
+                                                  ({att.sizeLabel})
+                                                </span>
                                               )}
                                             </a>
                                           ))}
@@ -1384,11 +1434,21 @@ export default function RfqDetailPage() {
 
                 {/* Supplier Attachments Summary */}
                 {(() => {
-                  const offersWithAtts = (offersData?.offers as Array<{
-                    supplierId: number;
-                    supplierName: string | null;
-                    attachments?: Array<{ id: number; originalName: string; mimeType?: string; sizeLabel?: string; downloadUrl?: string }>;
-                  }> | undefined)?.filter((o) => o.attachments && o.attachments.length > 0);
+                  const offersWithAtts = (
+                    offersData?.offers as
+                      | Array<{
+                          supplierId: number;
+                          supplierName: string | null;
+                          attachments?: Array<{
+                            id: number;
+                            originalName: string;
+                            mimeType?: string;
+                            sizeLabel?: string;
+                            downloadUrl?: string;
+                          }>;
+                        }>
+                      | undefined
+                  )?.filter((o) => o.attachments && o.attachments.length > 0);
                   if (!offersWithAtts?.length) return null;
                   return (
                     <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -1399,7 +1459,9 @@ export default function RfqDetailPage() {
                       <div className="divide-y divide-border">
                         {offersWithAtts.map((o) => (
                           <div key={o.supplierId} className="px-5 py-3">
-                            <p className="text-xs font-semibold text-foreground mb-2">{o.supplierName ?? "مورد"}</p>
+                            <p className="text-xs font-semibold text-foreground mb-2">
+                              {o.supplierName ?? "مورد"}
+                            </p>
                             <div className="flex flex-wrap gap-2">
                               {o.attachments!.map((att) => (
                                 <a
@@ -1411,7 +1473,9 @@ export default function RfqDetailPage() {
                                 >
                                   <Paperclip size={11} className="shrink-0" />
                                   <span className="max-w-[200px] truncate">{att.originalName}</span>
-                                  {att.sizeLabel && <span className="text-muted-foreground">({att.sizeLabel})</span>}
+                                  {att.sizeLabel && (
+                                    <span className="text-muted-foreground">({att.sizeLabel})</span>
+                                  )}
                                 </a>
                               ))}
                             </div>

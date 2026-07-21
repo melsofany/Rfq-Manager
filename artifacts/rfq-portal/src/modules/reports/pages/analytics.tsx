@@ -1,8 +1,8 @@
 import {
   useGetDashboardStats,
   getGetDashboardStatsQueryKey,
-  useGetEmployeePerformance,
-  getGetEmployeePerformanceQueryKey,
+  useListEmployees,
+  getListEmployeesQueryKey,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import {
@@ -148,8 +148,8 @@ export default function AnalyticsPage() {
     query: { queryKey: getGetDashboardStatsQueryKey() },
   });
 
-  const { data: empPerf, isLoading: empLoading } = useGetEmployeePerformance({
-    query: { queryKey: getGetEmployeePerformanceQueryKey() },
+  const { data: empPerf, isLoading: empLoading } = useListEmployees({
+    query: { queryKey: getListEmployeesQueryKey() },
   });
 
   const [pageTab, setPageTab] = useState<"analytics" | "reports">("analytics");
@@ -234,12 +234,12 @@ export default function AnalyticsPage() {
         (e, i) => `
         <tr>
           <td style="text-align:center">${i + 1}</td>
-          <td>${e.employee?.name ?? "—"}</td>
-          <td style="text-align:center">${e.totalRfqsSent ?? 0}</td>
-          <td style="text-align:center">${e.totalOffersReceived ?? 0}</td>
-          <td style="text-align:center">${e.responseRate ?? 0}%</td>
-          <td style="text-align:center">${e.awardRate ?? 0}%</td>
-          <td style="text-align:left;direction:ltr">${e.totalPurchaseValue != null ? Number(e.totalPurchaseValue).toLocaleString(undefined, { maximumFractionDigits: 0 }) + " ج.م" : "—"}</td>
+          <td>${e.name ?? "—"}</td>
+          <td style="text-align:center">—</td>
+          <td style="text-align:center">—</td>
+          <td style="text-align:center">—</td>
+          <td style="text-align:center">—</td>
+          <td style="text-align:left;direction:ltr">—</td>
         </tr>`,
       )
       .join("");
@@ -478,10 +478,20 @@ ${
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Rate rings */}
                   <div className="bg-card border border-border rounded-lg p-5">
-                    <h2 className="font-semibold text-sm text-foreground mb-5">نسب الأداء الرئيسية</h2>
+                    <h2 className="font-semibold text-sm text-foreground mb-5">
+                      نسب الأداء الرئيسية
+                    </h2>
                     <div className="flex flex-wrap justify-around gap-6">
-                      <RateRing value={stats?.pricingRate ?? 0} label="نسبة التسعير" color="#0ea5e9" />
-                      <RateRing value={stats?.poRate ?? 0} label="نسبة البنود بـ PO" color="#10b981" />
+                      <RateRing
+                        value={stats?.pricingRate ?? 0}
+                        label="نسبة التسعير"
+                        color="#0ea5e9"
+                      />
+                      <RateRing
+                        value={stats?.poRate ?? 0}
+                        label="نسبة البنود بـ PO"
+                        color="#10b981"
+                      />
                       <RateRing
                         value={stats?.rfqToPoRate ?? 0}
                         label="تحويل RFQ → PO"
@@ -588,7 +598,9 @@ ${
                 <div className="bg-card border border-border rounded-lg p-5">
                   <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                     <div>
-                      <h2 className="font-semibold text-sm text-foreground">تحليل الموردين المتعمق</h2>
+                      <h2 className="font-semibold text-sm text-foreground">
+                        تحليل الموردين المتعمق
+                      </h2>
                       <p className="text-xs text-muted-foreground">
                         معدل الاستجابة · نسبة الفوز بـ PO · متوسط السعر · أيام التسليم
                       </p>
@@ -619,7 +631,9 @@ ${
                           type="number"
                           tick={{ fontSize: 10 }}
                           domain={
-                            supplierTab === "response" || supplierTab === "po" ? [0, 100] : undefined
+                            supplierTab === "response" || supplierTab === "po"
+                              ? [0, 100]
+                              : undefined
                           }
                           tickFormatter={
                             supplierTab === "response" || supplierTab === "po"
@@ -631,8 +645,12 @@ ${
                         <Tooltip
                           formatter={(v, name) => {
                             if (name === "responseRate" || name === "poWinRate")
-                              return [`${v}%`, name === "responseRate" ? "معدل الاستجابة" : "نسبة PO"];
-                            if (name === "avgPrice") return [Number(v).toLocaleString(), "متوسط السعر"];
+                              return [
+                                `${v}%`,
+                                name === "responseRate" ? "معدل الاستجابة" : "نسبة PO",
+                              ];
+                            if (name === "avgPrice")
+                              return [Number(v).toLocaleString(), "متوسط السعر"];
                             if (name === "avgDelivery") return [`${v} يوم`, "متوسط التسليم"];
                             return [v, name];
                           }}
@@ -680,7 +698,9 @@ ${
 
                 {/* ── Row 5: Full supplier table ── */}
                 <div className="bg-card border border-border rounded-lg p-5 overflow-x-auto">
-                  <h2 className="font-semibold text-sm text-foreground mb-4">جدول الموردين التفصيلي</h2>
+                  <h2 className="font-semibold text-sm text-foreground mb-4">
+                    جدول الموردين التفصيلي
+                  </h2>
                   {deepSuppliers.length > 0 ? (
                     <table className="w-full text-xs min-w-[640px]">
                       <thead>
@@ -717,7 +737,9 @@ ${
                             <td className="py-2.5 font-medium text-foreground pr-4 whitespace-nowrap">
                               {s.supplierName}
                             </td>
-                            <td className="py-2.5 text-muted-foreground pr-4">{s.category || "—"}</td>
+                            <td className="py-2.5 text-muted-foreground pr-4">
+                              {s.category || "—"}
+                            </td>
                             <td className="py-2.5 text-center pr-4">{s.totalRfqsReceived}</td>
                             <td className="py-2.5 text-center pr-4">{s.totalOffersSubmitted}</td>
                             <td className="py-2.5 pr-4">

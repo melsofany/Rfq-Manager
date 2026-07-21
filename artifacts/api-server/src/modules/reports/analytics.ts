@@ -277,7 +277,6 @@ router.get("/analytics/price-analysis/:rfqId", requireAuth, async (req, res): Pr
   res.json({ rfqId, itemAnalysis: [] });
 });
 
-
 // NEW: Comprehensive Reports endpoint with date-range filtering
 // GET /analytics/reports?from=YYYY-MM-DD&to=YYYY-MM-DD
 // ─────────────────────────────────────────────────────────────────
@@ -290,76 +289,140 @@ router.get("/analytics/reports", requireAuth, async (req, res): Promise<void> =>
   const toDate = toStr ? new Date(toStr + "T23:59:59Z") : null;
 
   function rfqDateFilter() {
-    if (fromDate && toDate) return and(gte(rfqTable.createdAt, fromDate), lte(rfqTable.createdAt, toDate));
+    if (fromDate && toDate)
+      return and(gte(rfqTable.createdAt, fromDate), lte(rfqTable.createdAt, toDate));
     if (fromDate) return gte(rfqTable.createdAt, fromDate);
     if (toDate) return lte(rfqTable.createdAt, toDate);
     return undefined;
   }
   function poDateFilter() {
-    if (fromDate && toDate) return and(gte(purchaseOrdersTable.createdAt, fromDate), lte(purchaseOrdersTable.createdAt, toDate));
+    if (fromDate && toDate)
+      return and(
+        gte(purchaseOrdersTable.createdAt, fromDate),
+        lte(purchaseOrdersTable.createdAt, toDate),
+      );
     if (fromDate) return gte(purchaseOrdersTable.createdAt, fromDate);
     if (toDate) return lte(purchaseOrdersTable.createdAt, toDate);
     return undefined;
   }
   function rfqItemDateFilter() {
-    if (fromDate && toDate) return and(gte(rfqItemsTable.createdAt, fromDate), lte(rfqItemsTable.createdAt, toDate));
+    if (fromDate && toDate)
+      return and(gte(rfqItemsTable.createdAt, fromDate), lte(rfqItemsTable.createdAt, toDate));
     if (fromDate) return gte(rfqItemsTable.createdAt, fromDate);
     if (toDate) return lte(rfqItemsTable.createdAt, toDate);
     return undefined;
   }
 
   // ── 1. Employee Performance ────────────────────────────────────
-  const allEmployees = await db.select().from(employeesTable).where(eq(employeesTable.isActive, true));
+  const allEmployees = await db
+    .select()
+    .from(employeesTable)
+    .where(eq(employeesTable.isActive, true));
 
   const rfqFilter = rfqDateFilter();
   const rfqsInRange = rfqFilter
-    ? await db.select({ id: rfqTable.id, employeeId: rfqTable.employeeId, status: rfqTable.status, createdAt: rfqTable.createdAt }).from(rfqTable).where(rfqFilter)
-    : await db.select({ id: rfqTable.id, employeeId: rfqTable.employeeId, status: rfqTable.status, createdAt: rfqTable.createdAt }).from(rfqTable);
+    ? await db
+        .select({
+          id: rfqTable.id,
+          employeeId: rfqTable.employeeId,
+          status: rfqTable.status,
+          createdAt: rfqTable.createdAt,
+        })
+        .from(rfqTable)
+        .where(rfqFilter)
+    : await db
+        .select({
+          id: rfqTable.id,
+          employeeId: rfqTable.employeeId,
+          status: rfqTable.status,
+          createdAt: rfqTable.createdAt,
+        })
+        .from(rfqTable);
 
   // Get RFQ ids in range for joining offers / PO
-  const rfqIdsInRange = rfqsInRange.map(r => r.id);
+  const rfqIdsInRange = rfqsInRange.map((r) => r.id);
 
   // Count offers per RFQ
-  const offersAll = rfqIdsInRange.length > 0
-    ? await db.select({ rfqId: offersTable.rfqId, employeeId: offersTable.employeeId }).from(offersTable).where(sql`${offersTable.rfqId} = ANY(ARRAY[${sql.raw(rfqIdsInRange.join(",") || "0")}]::int[])`)
-    : [];
+  const offersAll =
+    rfqIdsInRange.length > 0
+      ? await db
+          .select({ rfqId: offersTable.rfqId, employeeId: offersTable.employeeId })
+          .from(offersTable)
+          .where(
+            sql`${offersTable.rfqId} = ANY(ARRAY[${sql.raw(rfqIdsInRange.join(",") || "0")}]::int[])`,
+          )
+      : [];
 
   // POs in range
   const poFilter = poDateFilter();
   const posInRange = poFilter
-    ? await db.select({ id: purchaseOrdersTable.id, rfqId: purchaseOrdersTable.rfqId, employeeId: purchaseOrdersTable.employeeId }).from(purchaseOrdersTable).where(poFilter)
-    : await db.select({ id: purchaseOrdersTable.id, rfqId: purchaseOrdersTable.rfqId, employeeId: purchaseOrdersTable.employeeId }).from(purchaseOrdersTable);
+    ? await db
+        .select({
+          id: purchaseOrdersTable.id,
+          rfqId: purchaseOrdersTable.rfqId,
+          employeeId: purchaseOrdersTable.employeeId,
+        })
+        .from(purchaseOrdersTable)
+        .where(poFilter)
+    : await db
+        .select({
+          id: purchaseOrdersTable.id,
+          rfqId: purchaseOrdersTable.rfqId,
+          employeeId: purchaseOrdersTable.employeeId,
+        })
+        .from(purchaseOrdersTable);
 
-  const employeeStats = allEmployees.map((emp) => {
-    const myRfqs = rfqsInRange.filter(r => r.employeeId === emp.id);
-    const myOffers = offersAll.filter(o => o.employeeId === emp.id || myRfqs.some(r => r.id === o.rfqId && !o.employeeId));
-    const myPos = posInRange.filter(p => p.employeeId === emp.id || myRfqs.some(r => r.id === p.rfqId));
-    const successRfqs = myRfqs.filter(r => r.status === "SUCCESS" || r.status === "QUOTED");
-    return {
-      employeeId: emp.id,
-      employeeName: emp.name,
-      role: emp.role,
-      totalRfqs: myRfqs.length,
-      totalOffers: myOffers.length,
-      totalPos: myPos.length,
-      successRfqs: successRfqs.length,
-      conversionRate: myRfqs.length > 0 ? Math.round((myPos.length / myRfqs.length) * 100) : 0,
-    };
-  }).filter(e => e.totalRfqs > 0 || e.totalOffers > 0);
+  const employeeStats = allEmployees
+    .map((emp) => {
+      const myRfqs = rfqsInRange.filter((r) => r.employeeId === emp.id);
+      const myOffers = offersAll.filter(
+        (o) => o.employeeId === emp.id || myRfqs.some((r) => r.id === o.rfqId && !o.employeeId),
+      );
+      const myPos = posInRange.filter(
+        (p) => p.employeeId === emp.id || myRfqs.some((r) => r.id === p.rfqId),
+      );
+      const successRfqs = myRfqs.filter((r) => r.status === "SUCCESS" || r.status === "QUOTED");
+      return {
+        employeeId: emp.id,
+        employeeName: emp.name,
+        role: emp.role,
+        totalRfqs: myRfqs.length,
+        totalOffers: myOffers.length,
+        totalPos: myPos.length,
+        successRfqs: successRfqs.length,
+        conversionRate: myRfqs.length > 0 ? Math.round((myPos.length / myRfqs.length) * 100) : 0,
+      };
+    })
+    .filter((e) => e.totalRfqs > 0 || e.totalOffers > 0);
 
   // ── 2. Most Requested Items (from PO items in range) ──────────
-  const poIdsInRange = posInRange.map(p => p.id);
-  const poItemsAll = poIdsInRange.length > 0
-    ? await db.select({
-        description: purchaseOrderItemsTable.description,
-        partNo: purchaseOrderItemsTable.partNo,
-        lineItem: purchaseOrderItemsTable.lineItem,
-        qty: purchaseOrderItemsTable.qty,
-      }).from(purchaseOrderItemsTable).where(sql`${purchaseOrderItemsTable.poId} = ANY(ARRAY[${sql.raw(poIdsInRange.join(",") || "0")}]::int[])`)
-    : [];
+  const poIdsInRange = posInRange.map((p) => p.id);
+  const poItemsAll =
+    poIdsInRange.length > 0
+      ? await db
+          .select({
+            description: purchaseOrderItemsTable.description,
+            partNo: purchaseOrderItemsTable.partNo,
+            lineItem: purchaseOrderItemsTable.lineItem,
+            qty: purchaseOrderItemsTable.qty,
+          })
+          .from(purchaseOrderItemsTable)
+          .where(
+            sql`${purchaseOrderItemsTable.poId} = ANY(ARRAY[${sql.raw(poIdsInRange.join(",") || "0")}]::int[])`,
+          )
+      : [];
 
   // Aggregate by description (normalize)
-  const itemMap = new Map<string, { description: string; partNo: string | null; lineItem: string | null; count: number; totalQty: number }>();
+  const itemMap = new Map<
+    string,
+    {
+      description: string;
+      partNo: string | null;
+      lineItem: string | null;
+      count: number;
+      totalQty: number;
+    }
+  >();
   for (const item of poItemsAll) {
     const key = (item.description ?? "").trim().toLowerCase();
     if (!key) continue;
@@ -369,7 +432,13 @@ router.get("/analytics/reports", requireAuth, async (req, res): Promise<void> =>
       existing.count += 1;
       existing.totalQty += qty;
     } else {
-      itemMap.set(key, { description: item.description, partNo: item.partNo, lineItem: item.lineItem, count: 1, totalQty: qty });
+      itemMap.set(key, {
+        description: item.description,
+        partNo: item.partNo,
+        lineItem: item.lineItem,
+        count: 1,
+        totalQty: qty,
+      });
     }
   }
   const topItems = Array.from(itemMap.values())
@@ -379,11 +448,27 @@ router.get("/analytics/reports", requireAuth, async (req, res): Promise<void> =>
   // ── 3. Line Item Statistics (from rfq_items in range) ─────────
   const rfqItemFilter = rfqItemDateFilter();
   const rfqItemsInRange = rfqItemFilter
-    ? await db.select({ lineItem: rfqItemsTable.lineItem, description: rfqItemsTable.description, rfqId: rfqItemsTable.rfqId }).from(rfqItemsTable).where(rfqItemFilter)
-    : await db.select({ lineItem: rfqItemsTable.lineItem, description: rfqItemsTable.description, rfqId: rfqItemsTable.rfqId }).from(rfqItemsTable);
+    ? await db
+        .select({
+          lineItem: rfqItemsTable.lineItem,
+          description: rfqItemsTable.description,
+          rfqId: rfqItemsTable.rfqId,
+        })
+        .from(rfqItemsTable)
+        .where(rfqItemFilter)
+    : await db
+        .select({
+          lineItem: rfqItemsTable.lineItem,
+          description: rfqItemsTable.description,
+          rfqId: rfqItemsTable.rfqId,
+        })
+        .from(rfqItemsTable);
 
   // Group by lineItem
-  const lineItemMap = new Map<string, { lineItem: string; count: number; distinctRfqs: Set<number> }>();
+  const lineItemMap = new Map<
+    string,
+    { lineItem: string; count: number; distinctRfqs: Set<number> }
+  >();
   for (const item of rfqItemsInRange) {
     const key = (item.lineItem ?? "—").trim();
     const existing = lineItemMap.get(key);
@@ -397,7 +482,7 @@ router.get("/analytics/reports", requireAuth, async (req, res): Promise<void> =>
   const lineItemStats = Array.from(lineItemMap.values())
     .sort((a, b) => b.count - a.count)
     .slice(0, 20)
-    .map(i => ({ lineItem: i.lineItem, count: i.count, distinctRfqs: i.distinctRfqs.size }));
+    .map((i) => ({ lineItem: i.lineItem, count: i.count, distinctRfqs: i.distinctRfqs.size }));
 
   // ── 4. Monthly Trends ─────────────────────────────────────────
   const rfqByMonth = rfqsInRange.reduce<Record<string, number>>((acc, r) => {
@@ -428,7 +513,8 @@ router.get("/analytics/reports", requireAuth, async (req, res): Promise<void> =>
   const totalRfqsInPeriod = rfqsInRange.length;
   const totalPosInPeriod = posInRange.length;
   const totalItemsInPeriod = rfqItemsInRange.length;
-  const conversionRate = totalRfqsInPeriod > 0 ? Math.round((totalPosInPeriod / totalRfqsInPeriod) * 100) : 0;
+  const conversionRate =
+    totalRfqsInPeriod > 0 ? Math.round((totalPosInPeriod / totalRfqsInPeriod) * 100) : 0;
 
   res.json({
     period: { from: fromStr ?? null, to: toStr ?? null },

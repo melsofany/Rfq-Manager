@@ -838,7 +838,13 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
   // Fetch offer attachments uploaded by suppliers via the pricing page
   // Wrapped in try/catch: if the table doesn't exist yet in production this
   // should not break the entire offers endpoint — just return no attachments.
-  let offerAttachmentRows: { id: number; offerId: number; originalName: string; mimeType: string; size: number }[] = [];
+  let offerAttachmentRows: {
+    id: number;
+    offerId: number;
+    originalName: string;
+    mimeType: string;
+    size: number;
+  }[] = [];
   try {
     if (offerIds.length > 0) {
       offerAttachmentRows = await db
@@ -857,13 +863,22 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
     offerAttachmentRows = [];
   }
 
-  const _fmtAttSize = (bytes) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  const _fmtAttSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   };
 
-  const attachmentsByOffer = {};
+  const attachmentsByOffer: Record<
+    number,
+    Array<{
+      id: number;
+      originalName: string;
+      mimeType: string;
+      sizeLabel: string;
+      downloadUrl: string;
+    }>
+  > = {};
   for (const a of offerAttachmentRows) {
     if (!attachmentsByOffer[a.offerId]) attachmentsByOffer[a.offerId] = [];
     attachmentsByOffer[a.offerId].push({
@@ -871,7 +886,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       originalName: a.originalName,
       mimeType: a.mimeType,
       sizeLabel: _fmtAttSize(a.size),
-      downloadUrl: '/api/offer/attachments/' + a.id + '/download',
+      downloadUrl: "/api/offer/attachments/" + a.id + "/download",
     });
   }
 
@@ -891,7 +906,12 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       isLowest: boolean;
       isAnomaly: boolean;
       notPriced: boolean;
-      attachments: Array<{ id: number; originalName: string; sizeLabel: string; downloadUrl: string }>;
+      attachments: Array<{
+        id: number;
+        originalName: string;
+        sizeLabel: string;
+        downloadUrl: string;
+      }>;
     }> = [];
 
     for (const o of offers) {
@@ -1229,7 +1249,8 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
     const closeDate = sentLogRows.find((r) => r.closeDate)?.closeDate ?? null;
 
     // Fetch offer attachments for PDF — including file content so images can be embedded
-    let pdfAttRows: { offerId: number; originalName: string; mimeType: string; content: string }[] = [];
+    let pdfAttRows: { offerId: number; originalName: string; mimeType: string; content: string }[] =
+      [];
     if (offerIds.length > 0) {
       try {
         pdfAttRows = await db
@@ -1245,7 +1266,8 @@ router.get("/rfq/:id/offers/pdf", requireAuth, async (req, res): Promise<void> =
         // table may not exist in older deployments
       }
     }
-    const pdfAttByOffer: Record<number, { fileName: string; mimeType: string; content: string }[]> = {};
+    const pdfAttByOffer: Record<number, { fileName: string; mimeType: string; content: string }[]> =
+      {};
     for (const a of pdfAttRows) {
       if (!pdfAttByOffer[a.offerId]) pdfAttByOffer[a.offerId] = [];
       pdfAttByOffer[a.offerId].push({
@@ -1399,12 +1421,7 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
     .select({ rfq: rfqTable, employeeName: employeesTable.name })
     .from(rfqTable)
     .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
-    .where(
-      and(
-        sql`${rfqTable.status} IN ('SENT', 'QUOTED')`,
-        sql`${rfqTable.expiresAt} IS NULL`,
-      ),
-    );
+    .where(and(sql`${rfqTable.status} IN ('SENT', 'QUOTED')`, sql`${rfqTable.expiresAt} IS NULL`));
 
   const coveredByA = new Set(rfqByExpiresAt.map((r) => r.rfq.id));
   const rfqByRequiredDate: typeof rfqsWithoutExpiresAt = [];

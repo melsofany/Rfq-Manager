@@ -130,6 +130,8 @@ await client.query(`
 `);
 
 console.log("All tables created (no user records inserted).");
-console.log("Run seed.mjs with SEED_ADMIN_PASS / SEED_MANAGER_PASS / SEED_STAFF_PASS to create initial accounts.");
+console.log(
+  "Run seed.mjs with SEED_ADMIN_PASS / SEED_MANAGER_PASS / SEED_STAFF_PASS to create initial accounts.",
+);
 
 await client.end();

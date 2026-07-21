@@ -521,12 +521,11 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
             .font(FONT_BOLD)
             .fontSize(7)
             .fillColor("#92400e")
-            .text(
-              "مدة / ملاحظات",
-              tableX + 2,
-              y + 5,
-              { width: mainW - 4, align: "center", lineBreak: false },
-            );
+            .text("مدة / ملاحظات", tableX + 2, y + 5, {
+              width: mainW - 4,
+              align: "center",
+              lineBreak: false,
+            });
 
           let nx = tableX + mainW;
           allSuppliers.forEach((s) => {
@@ -655,8 +654,12 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
         // ── Attachments — each attachment gets its own full page ──────────
         if (hasAttachments) {
           const IMAGE_MIMES = new Set([
-            "image/png", "image/jpeg", "image/jpg",
-            "image/gif", "image/webp", "image/bmp",
+            "image/png",
+            "image/jpeg",
+            "image/jpg",
+            "image/gif",
+            "image/webp",
+            "image/bmp",
           ]);
 
           for (const s of opts.supplierSummaries ?? []) {
@@ -730,7 +733,7 @@ export function generateOffersPdf(opts: OffersPdfOptions): Promise<Buffer> {
                     height: imgAreaH,
                     fit: [imgAreaW, imgAreaH],
                     align: "center",
-                    valign: "top",
+                    valign: "center",
                   });
                 } catch {
                   // If the image can't be decoded, fall back to a text placeholder

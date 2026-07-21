@@ -253,17 +253,35 @@ export async function initDb(): Promise<void> {
     // Passwords are read exclusively from env vars — no fallback defaults.
     // ON CONFLICT DO NOTHING guarantees existing records (and passwords) are
     // never overwritten on restart or redeploy.
-    const existingCount = await client.query('SELECT COUNT(*) FROM employees');
+    const existingCount = await client.query("SELECT COUNT(*) FROM employees");
     const isEmpty = parseInt(existingCount.rows[0].count, 10) === 0;
     if (isEmpty) {
       const seedAccounts = [
-        { name: "Admin",           email: "admin@cortoba-supplies.com",   pass: process.env.SEED_ADMIN_PASS,   role: "admin" },
-        { name: "Khalid Al-Manager",email: "khalid@cortoba-supplies.com",  pass: process.env.SEED_MANAGER_PASS, role: "manager" },
-        { name: "Sara",             email: "sara@cortoba-supplies.com",    pass: process.env.SEED_STAFF_PASS,   role: "purchasing" },
+        {
+          name: "Admin",
+          email: "admin@cortoba-supplies.com",
+          pass: process.env.SEED_ADMIN_PASS,
+          role: "admin",
+        },
+        {
+          name: "Khalid Al-Manager",
+          email: "khalid@cortoba-supplies.com",
+          pass: process.env.SEED_MANAGER_PASS,
+          role: "manager",
+        },
+        {
+          name: "Sara",
+          email: "sara@cortoba-supplies.com",
+          pass: process.env.SEED_STAFF_PASS,
+          role: "purchasing",
+        },
       ];
       for (const acc of seedAccounts) {
         if (!acc.pass) {
-          logger.warn({ email: acc.email }, "initDb: env var for seed password not set — skipping account");
+          logger.warn(
+            { email: acc.email },
+            "initDb: env var for seed password not set — skipping account",
+          );
           continue;
         }
         const hash = await bcrypt.hash(acc.pass, 12);

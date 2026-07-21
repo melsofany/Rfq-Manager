@@ -431,22 +431,33 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
       setChats(data);
       fetch("/api/whatsapp/stats", { credentials: "include" })
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => { if (d) onStatsChange(d as Stats); })
+        .then((d) => {
+          if (d) onStatsChange(d as Stats);
+        })
         .catch(() => {});
       return data;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }, [onStatsChange]);
 
-  const loadMessages = useCallback(async (phone: string) => {
-    setLoading(true);
-    try {
-      const r = await fetch(`/api/whatsapp/chats/${encodeURIComponent(phone)}`, { credentials: "include" });
-      if (r.ok) {
-        setMessages(await r.json() as Message[]);
-        await loadChats();
+  const loadMessages = useCallback(
+    async (phone: string) => {
+      setLoading(true);
+      try {
+        const r = await fetch(`/api/whatsapp/chats/${encodeURIComponent(phone)}`, {
+          credentials: "include",
+        });
+        if (r.ok) {
+          setMessages((await r.json()) as Message[]);
+          await loadChats();
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally { setLoading(false); }
-  }, [loadChats]);
+    },
+    [loadChats],
+  );
 
   useEffect(() => {
     loadChats();
@@ -465,37 +476,67 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
         if (!e.data || e.data.startsWith(":")) return;
         try {
           const ev = JSON.parse(e.data) as {
-            type: string; phone?: string; senderName?: string;
-            waMessageId?: string; reactorPhone?: string; emoji?: string; reason?: string;
+            type: string;
+            phone?: string;
+            senderName?: string;
+            waMessageId?: string;
+            reactorPhone?: string;
+            emoji?: string;
+            reason?: string;
           };
           if (ev.type === "new_message") {
             playNotifSound();
             if ("Notification" in window && Notification.permission === "granted") {
               new Notification(t("whatsapp.newMessage"), {
-                body: ev.senderName ? `${t("whatsapp.from")} ${ev.senderName}` : `${t("whatsapp.from")} ${ev.phone}`,
-                icon: "/logo.png", tag: "wa", ...({ renotify: true } as Record<string, unknown>),
+                body: ev.senderName
+                  ? `${t("whatsapp.from")} ${ev.senderName}`
+                  : `${t("whatsapp.from")} ${ev.phone}`,
+                icon: "/logo.png",
+                tag: "wa",
+                ...({ renotify: true } as Record<string, unknown>),
               });
             }
             const fresh = await loadChats();
             if (ev.phone && ev.phone === selectedRef.current) {
-              const r = await fetch(`/api/whatsapp/chats/${encodeURIComponent(ev.phone)}`, { credentials: "include" });
-              if (r.ok) setMessages(await r.json() as Message[]);
+              const r = await fetch(`/api/whatsapp/chats/${encodeURIComponent(ev.phone)}`, {
+                credentials: "include",
+              });
+              if (r.ok) setMessages((await r.json()) as Message[]);
             } else {
               const chat = fresh?.find((c) => c.phone === ev.phone);
-              if (chat) showToast(`📩 ${chat.supplierName || ev.phone}: ${chat.lastMessage?.substring(0, 40)}`, false, ev.phone);
+              if (chat)
+                showToast(
+                  `📩 ${chat.supplierName || ev.phone}: ${chat.lastMessage?.substring(0, 40)}`,
+                  false,
+                  ev.phone,
+                );
             }
           } else if (ev.type === "reaction") {
-            setMessages((prev) => prev.map((m) => {
-              if (m.waMessageId !== ev.waMessageId) return m;
-              const reactions = (m.reactions ?? []).filter((r) => r.reactorPhone !== ev.reactorPhone);
-              return { ...m, reactions: ev.emoji ? [...reactions, { reactorPhone: ev.reactorPhone!, emoji: ev.emoji! }] : reactions };
-            }));
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.waMessageId !== ev.waMessageId) return m;
+                const reactions = (m.reactions ?? []).filter(
+                  (r) => r.reactorPhone !== ev.reactorPhone,
+                );
+                return {
+                  ...m,
+                  reactions: ev.emoji
+                    ? [...reactions, { reactorPhone: ev.reactorPhone!, emoji: ev.emoji! }]
+                    : reactions,
+                };
+              }),
+            );
           } else if (ev.type === "delivery_failed") {
             showToast(`❌ ${ev.reason || "فشل تسليم رسالة"}`, false);
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       };
-      es.onerror = () => { es?.close(); setTimeout(connect, 5000); };
+      es.onerror = () => {
+        es?.close();
+        setTimeout(connect, 5000);
+      };
     }
     async function requestNotif() {
       if (!("Notification" in window) || Notification.permission !== "default") return;
@@ -503,7 +544,9 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     }
     requestNotif();
     connect();
-    return () => { es?.close(); };
+    return () => {
+      es?.close();
+    };
   }, [loadChats, t]);
 
   // Auto-scroll
@@ -543,14 +586,20 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
         setUploading(true);
         const fd = new FormData();
         fd.append("phone", selected);
-        if (selectedChat?.supplierId != null) fd.append("supplierId", String(selectedChat.supplierId));
+        if (selectedChat?.supplierId != null)
+          fd.append("supplierId", String(selectedChat.supplierId));
         fd.append("file", pendingFile.file, pendingFile.file.name);
         const r = await fetch("/api/whatsapp/send-media", {
-          method: "POST", credentials: "include",
+          method: "POST",
+          credentials: "include",
           body: fd,
         });
-        if (!r.ok) { const d = await r.json() as { error?: string }; showToast(d.error || "فشل رفع الملف", false); }
-        else { showToast("تم إرسال الملف ✓", true); }
+        if (!r.ok) {
+          const d = (await r.json()) as { error?: string };
+          showToast(d.error || "فشل رفع الملف", false);
+        } else {
+          showToast("تم إرسال الملف ✓", true);
+        }
         setPendingFile(null);
         setUploading(false);
       } else {
@@ -561,22 +610,30 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
         };
         if (replyingTo?.waMessageId) body.replyToWaMessageId = replyingTo.waMessageId;
         const r = await fetch("/api/whatsapp/send", {
-          method: "POST", credentials: "include",
+          method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        if (!r.ok) { const d = await r.json() as { error?: string }; showToast(d.error || "فشل الإرسال", false); return; }
+        if (!r.ok) {
+          const d = (await r.json()) as { error?: string };
+          showToast(d.error || "فشل الإرسال", false);
+          return;
+        }
         setReplyingTo(null);
       }
       setDraft("");
       await loadMessages(selected);
-    } finally { setSending(false); }
+    } finally {
+      setSending(false);
+    }
   }
 
   async function handleForwardTo(toPhone: string) {
     if (!forwardingMsg) return;
     const r = await fetch("/api/whatsapp/forward", {
-      method: "POST", credentials: "include",
+      method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messageId: forwardingMsg.id, toPhone }),
     });
@@ -595,14 +652,22 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   async function handleReact(waMessageId: string, emoji: string) {
     const msg = messages.find((m) => m.waMessageId === waMessageId);
     if (!msg) return;
-    const isRemoving = (msg.reactions ?? []).some((r) => r.reactorPhone === "me" && r.emoji === emoji);
-    setMessages((prev) => prev.map((m) => {
-      if (m.waMessageId !== waMessageId) return m;
-      const reactions = (m.reactions ?? []).filter((r) => r.reactorPhone !== "me");
-      return { ...m, reactions: isRemoving ? reactions : [...reactions, { reactorPhone: "me", emoji }] };
-    }));
+    const isRemoving = (msg.reactions ?? []).some(
+      (r) => r.reactorPhone === "me" && r.emoji === emoji,
+    );
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.waMessageId !== waMessageId) return m;
+        const reactions = (m.reactions ?? []).filter((r) => r.reactorPhone !== "me");
+        return {
+          ...m,
+          reactions: isRemoving ? reactions : [...reactions, { reactorPhone: "me", emoji }],
+        };
+      }),
+    );
     await fetch("/api/whatsapp/react", {
-      method: "POST", credentials: "include",
+      method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ waMessageId, toPhone: msg.phone, emoji: isRemoving ? "" : emoji }),
     });
@@ -617,7 +682,10 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void handleSend(); }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleSend();
+    }
   }
 
   async function handleStartNewChat() {
@@ -630,7 +698,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
 
   // ── Derived state ────────────────────────────────────────────────────────
   const filteredChats = chats.filter((c) => {
-    const matchSearch = !search ||
+    const matchSearch =
+      !search ||
       c.supplierName?.toLowerCase().includes(search.toLowerCase()) ||
       c.phone.includes(search) ||
       c.lastMessage?.toLowerCase().includes(search.toLowerCase());
@@ -653,12 +722,20 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   return (
     <div className="flex h-full overflow-hidden" style={{ direction: "ltr" }}>
       {/* ── LEFT: Conversation List ────────────────────────────────────── */}
-      <div className={cn("flex flex-col bg-white border-r border-border flex-shrink-0 overflow-hidden", selected ? "hidden md:flex md:w-80" : "flex w-full md:w-80")}>
+      <div
+        className={cn(
+          "flex flex-col bg-white border-r border-border flex-shrink-0 overflow-hidden",
+          selected ? "hidden md:flex md:w-80" : "flex w-full md:w-80",
+        )}
+      >
         {/* Sidebar header */}
         <div className="p-3 border-b border-border flex-shrink-0" style={{ direction: "rtl" }}>
           <div className="flex items-center gap-2 mb-2.5">
             <div className="relative flex-1">
-              <Search size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <Search
+                size={14}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+              />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -679,7 +756,10 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               disabled={refreshing}
               className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-muted transition-colors"
             >
-              <RefreshCw size={15} className={cn("text-muted-foreground", refreshing && "animate-spin")} />
+              <RefreshCw
+                size={15}
+                className={cn("text-muted-foreground", refreshing && "animate-spin")}
+              />
             </button>
           </div>
           {/* Filter chips */}
@@ -694,7 +774,11 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                 )}
                 style={filter === f ? { background: WA_GREEN } : {}}
               >
-                {f === "all" ? t("whatsapp.filter.all") : f === "unread" ? t("whatsapp.filter.unread") : t("whatsapp.filter.suppliers")}
+                {f === "all"
+                  ? t("whatsapp.filter.all")
+                  : f === "unread"
+                    ? t("whatsapp.filter.unread")
+                    : t("whatsapp.filter.suppliers")}
               </button>
             ))}
           </div>
@@ -702,9 +786,15 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
 
         {/* New chat dialog */}
         {newChatOpen && (
-          <div className="p-3 border-b border-border bg-green-50 flex-shrink-0" style={{ direction: "rtl" }}>
+          <div
+            className="p-3 border-b border-border bg-green-50 flex-shrink-0"
+            style={{ direction: "rtl" }}
+          >
             <div className="flex items-center gap-2">
-              <button onClick={() => setNewChatOpen(false)} className="text-muted-foreground hover:text-foreground">
+              <button
+                onClick={() => setNewChatOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
                 <X size={16} />
               </button>
               <input
@@ -713,7 +803,9 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                 placeholder="+20 1xxxxxxxxx"
                 className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
                 dir="ltr"
-                onKeyDown={(e) => { if (e.key === "Enter") void handleStartNewChat(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleStartNewChat();
+                }}
                 autoFocus
               />
               <button
@@ -740,7 +832,10 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               const isActive = selected === chat.phone;
               const name = chat.supplierName || chat.phone;
               const lastTime = chat.lastAt
-                ? new Date(chat.lastAt).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" })
+                ? new Date(chat.lastAt).toLocaleTimeString("ar-EG", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
                 : "";
               return (
                 <div
@@ -765,11 +860,15 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline gap-1">
-                      <span className="text-[10px] text-muted-foreground flex-shrink-0">{lastTime}</span>
+                      <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                        {lastTime}
+                      </span>
                       <span className="font-semibold text-sm text-foreground truncate">{name}</span>
                     </div>
                     <div className="flex justify-end mt-0.5">
-                      <p className="text-xs text-muted-foreground truncate max-w-full">{chat.lastMessage}</p>
+                      <p className="text-xs text-muted-foreground truncate max-w-full">
+                        {chat.lastMessage}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -798,13 +897,18 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
             <Avatar name={displayName} phone={selected} size={40} />
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-sm leading-tight">{displayName}</div>
-              <div className="text-xs text-muted-foreground leading-tight" dir="ltr">{selected}</div>
+              <div className="text-xs text-muted-foreground leading-tight" dir="ltr">
+                {selected}
+              </div>
             </div>
             <button
               onClick={() => void handleRefresh()}
               className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors"
             >
-              <RefreshCw size={15} className={cn("text-muted-foreground", refreshing && "animate-spin")} />
+              <RefreshCw
+                size={15}
+                className={cn("text-muted-foreground", refreshing && "animate-spin")}
+              />
             </button>
           </div>
 
@@ -815,7 +919,10 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               background: "#e5ddd5",
               backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300000006'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
             }}
-            onTouchStart={() => { setHoveredMsgId(null); setEmojiPickerForMsg(null); }}
+            onTouchStart={() => {
+              setHoveredMsgId(null);
+              setEmojiPickerForMsg(null);
+            }}
           >
             {loading ? (
               <div className="flex justify-center py-12">
@@ -836,7 +943,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                   const prevMsg = messages[idx - 1];
                   const showDate =
                     !prevMsg ||
-                    new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
+                    new Date(msg.createdAt).toDateString() !==
+                      new Date(prevMsg.createdAt).toDateString();
                   const timeStr = new Date(msg.createdAt).toLocaleTimeString("ar-EG", {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -859,11 +967,21 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
 
                       {/* Message row */}
                       <div
-                        className={cn("flex gap-1.5 group mb-1", isOut ? "justify-end" : "justify-start")}
+                        className={cn(
+                          "flex gap-1.5 group mb-1",
+                          isOut ? "justify-end" : "justify-start",
+                        )}
                         style={{ direction: "ltr" }}
                         onMouseEnter={() => setHoveredMsgId(msg.id)}
-                        onMouseLeave={() => { setHoveredMsgId(null); setEmojiPickerForMsg(null); }}
-                        onTouchStart={(e) => { e.stopPropagation(); setHoveredMsgId(msg.id); setEmojiPickerForMsg(null); }}
+                        onMouseLeave={() => {
+                          setHoveredMsgId(null);
+                          setEmojiPickerForMsg(null);
+                        }}
+                        onTouchStart={(e) => {
+                          e.stopPropagation();
+                          setHoveredMsgId(msg.id);
+                          setEmojiPickerForMsg(null);
+                        }}
                       >
                         {!isOut && <Avatar name={displayName} phone={selected} size={28} />}
 
@@ -872,13 +990,19 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                           <div
                             className={cn(
                               "absolute top-0 z-10 flex items-center gap-0.5 transition-opacity",
-                              hoveredMsgId === msg.id ? "opacity-100" : "opacity-0 pointer-events-none",
+                              hoveredMsgId === msg.id
+                                ? "opacity-100"
+                                : "opacity-0 pointer-events-none",
                               isOut ? "right-full mr-1.5" : "left-full ml-1.5",
                             )}
                           >
                             {/* Reply */}
                             <button
-                              onClick={() => { setReplyingTo(msg); setHoveredMsgId(null); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                              onClick={() => {
+                                setReplyingTo(msg);
+                                setHoveredMsgId(null);
+                                setTimeout(() => textareaRef.current?.focus(), 50);
+                              }}
                               className="w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors"
                               title="رد"
                             >
@@ -886,7 +1010,10 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                             </button>
                             {/* Forward */}
                             <button
-                              onClick={() => { setForwardingMsg(msg); setHoveredMsgId(null); }}
+                              onClick={() => {
+                                setForwardingMsg(msg);
+                                setHoveredMsgId(null);
+                              }}
                               className="w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors"
                               title="إعادة توجيه"
                             >
@@ -898,7 +1025,11 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setEmojiPickerForMsg(emojiPickerForMsg === msg.waMessageId ? null : (msg.waMessageId ?? null));
+                                    setEmojiPickerForMsg(
+                                      emojiPickerForMsg === msg.waMessageId
+                                        ? null
+                                        : (msg.waMessageId ?? null),
+                                    );
                                   }}
                                   className="w-7 h-7 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50 transition-colors"
                                   title="تفاعل"
@@ -916,7 +1047,10 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                                     {QUICK_EMOJIS.map((em) => (
                                       <button
                                         key={em}
-                                        onClick={() => { void handleReact(msg.waMessageId!, em); setEmojiPickerForMsg(null); }}
+                                        onClick={() => {
+                                          void handleReact(msg.waMessageId!, em);
+                                          setEmojiPickerForMsg(null);
+                                        }}
                                         className="w-8 h-8 text-lg hover:bg-muted rounded-xl transition-colors flex items-center justify-center"
                                       >
                                         {em}
@@ -943,17 +1077,24 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                               isOut ? "rounded-tr-md" : "rounded-tl-md bg-white",
                             )}
                             style={isOut ? { background: "#DCF8C6" } : {}}
-                            onDoubleClick={() => { setReplyingTo(msg); setTimeout(() => textareaRef.current?.focus(), 50); }}
+                            onDoubleClick={() => {
+                              setReplyingTo(msg);
+                              setTimeout(() => textareaRef.current?.focus(), 50);
+                            }}
                           >
                             {/* Reply quote */}
                             {msg.replyToMessageId && (
                               <div
                                 className={cn(
                                   "mb-2 border-r-[3px] pr-2.5 py-1 rounded-sm text-right",
-                                  isOut ? "border-green-600 bg-green-50/60" : "border-green-500 bg-gray-50",
+                                  isOut
+                                    ? "border-green-600 bg-green-50/60"
+                                    : "border-green-500 bg-gray-50",
                                 )}
                               >
-                                <p className="text-[10px] font-bold text-green-700 mb-0.5">ردًا على رسالة</p>
+                                <p className="text-[10px] font-bold text-green-700 mb-0.5">
+                                  ردًا على رسالة
+                                </p>
                                 <p className="text-xs text-muted-foreground truncate">
                                   {getReplyBody(msg.replyToMessageId)}
                                 </p>
@@ -973,7 +1114,11 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                             {(msg.reactions?.length || 0) > 0 && (
                               <div className="flex gap-0.5 mt-1.5 flex-wrap">
                                 {msg.reactions!.map((r, i) => (
-                                  <span key={i} className="text-base leading-none" title={r.reactorPhone}>
+                                  <span
+                                    key={i}
+                                    className="text-base leading-none"
+                                    title={r.reactorPhone}
+                                  >
                                     {r.emoji}
                                   </span>
                                 ))}
@@ -1159,7 +1304,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               <div className="text-center flex-1">
                 <h3 className="font-bold text-base">إعادة توجيه الرسالة</h3>
                 <p className="text-xs text-muted-foreground truncate max-w-[240px] mx-auto">
-                  {forwardingMsg.body.substring(0, 60)}{forwardingMsg.body.length > 60 ? "…" : ""}
+                  {forwardingMsg.body.substring(0, 60)}
+                  {forwardingMsg.body.length > 60 ? "…" : ""}
                 </p>
               </div>
               <ChevronRight size={18} className="text-green-600" />
@@ -1169,12 +1315,10 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
             <div className="max-h-80 overflow-y-auto">
               {[
                 ...chats,
-                ...contacts.filter(
-                  (c) => c.phone && !chats.find((ch) => ch.phone === c.phone),
-                ),
+                ...contacts.filter((c) => c.phone && !chats.find((ch) => ch.phone === c.phone)),
               ].map((item) => {
                 const isChat = "lastAt" in item;
-                const phone = isChat ? (item as Chat).phone : (item as Supplier).phone ?? "";
+                const phone = isChat ? (item as Chat).phone : ((item as Supplier).phone ?? "");
                 const name = isChat
                   ? ((item as Chat).supplierName ?? phone)
                   : ((item as Supplier).name ?? phone);
@@ -1189,7 +1333,9 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                     <Avatar name={name} phone={phone} size={40} />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{name}</p>
-                      <p className="text-xs text-muted-foreground" dir="ltr">{phone}</p>
+                      <p className="text-xs text-muted-foreground" dir="ltr">
+                        {phone}
+                      </p>
                     </div>
                     <ChevronRight size={14} className="text-muted-foreground flex-shrink-0" />
                   </div>
@@ -1203,7 +1349,10 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
       {/* ── Toast ─────────────────────────────────────────────────────── */}
       {toast && (
         <div
-          onClick={() => { if (toast.phone) void handleSelect(toast.phone); setToast(null); }}
+          onClick={() => {
+            if (toast.phone) void handleSelect(toast.phone);
+            setToast(null);
+          }}
           className={cn(
             "fixed bottom-6 left-6 z-50 px-4 py-3 rounded-xl shadow-xl text-sm font-medium flex items-center gap-2.5 cursor-pointer max-w-xs",
             "transition-all animate-in slide-in-from-bottom-2 duration-200",
@@ -1212,7 +1361,9 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
           style={toast.ok ? { background: WA_GREEN } : {}}
         >
           {toast.ok ? <Check size={14} /> : <AlertCircle size={14} />}
-          <span className="flex-1" dir="rtl">{toast.msg}</span>
+          <span className="flex-1" dir="rtl">
+            {toast.msg}
+          </span>
           {toast.phone && <ChevronRight size={14} className="opacity-70 flex-shrink-0" />}
         </div>
       )}

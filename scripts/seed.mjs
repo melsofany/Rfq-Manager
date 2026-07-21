@@ -28,7 +28,7 @@ function requirePass(envVar) {
   if (!val) {
     throw new Error(
       `Missing required env var: ${envVar}\n` +
-        `Set it before running this script (e.g. ${envVar}=YourStrongPassword123!)`
+        `Set it before running this script (e.g. ${envVar}=YourStrongPassword123!)`,
     );
   }
   if (val.length < 8) {

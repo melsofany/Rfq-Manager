@@ -71,7 +71,10 @@ function requireConfigured(): void {
 function normalizePhone(phone: string): string {
   // Strip invisible Unicode directional/formatting marks that paste in from WhatsApp/browsers
   // eslint-disable-next-line no-control-regex
-  let cleaned = phone.replace(/[\u2066\u2067\u2068\u2069\u200e\u200f\u202a\u202b\u202c\u202d\u202e]/g, "");
+  let cleaned = phone.replace(
+    /[\u2066\u2067\u2068\u2069\u200e\u200f\u202a\u202b\u202c\u202d\u202e]/g,
+    "",
+  );
   cleaned = cleaned.replace(/[\s\-()]/g, "").replace(/\+/g, "");
   if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
   if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
@@ -388,8 +391,8 @@ export async function sendPoWhatsApp(opts: SendPoOpts): Promise<string | null> {
       new Language(TEMPLATE_LANG),
       new HeaderComponent(new HeaderParameter(new WADocument(mediaId, true, undefined, filename))),
       new BodyComponent(
-        new BodyParameter(toName),                  // {{1}} supplier / contact name
-        new BodyParameter(opts.poNo),               // {{2}} PO number
+        new BodyParameter(toName), // {{1}} supplier / contact name
+        new BodyParameter(opts.poNo), // {{2}} PO number
         new BodyParameter(buildPoContactText(opts)), // {{3}} employee contact
       ),
     );
