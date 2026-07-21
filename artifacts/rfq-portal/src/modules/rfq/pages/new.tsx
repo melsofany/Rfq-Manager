@@ -269,7 +269,7 @@ export default function NewRfqPage() {
 
   return (
     <Layout>
-      <div className="p-6 max-w-5xl space-y-6">
+      <div className="p-4 sm:p-6 max-w-5xl space-y-6">
         <div className="flex items-center gap-3">
           <Link href="/rfq">
             <a className="text-muted-foreground hover:text-foreground">

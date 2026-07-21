@@ -130,7 +130,7 @@ export default function SendRfqPage() {
 
     return (
       <Layout>
-        <div className="p-6 max-w-3xl space-y-5">
+        <div className="p-4 sm:p-6 max-w-3xl space-y-5">
           <div className="flex items-center gap-3">
             <Link href={`/rfq/${rfqId}`}>
               <a className="text-muted-foreground hover:text-foreground">
@@ -253,7 +253,7 @@ export default function SendRfqPage() {
   // ── Send form ─────────────────────────────────────────────────────────────
   return (
     <Layout>
-      <div className="p-6 max-w-4xl space-y-5">
+      <div className="p-4 sm:p-6 max-w-4xl space-y-5">
         <div className="flex items-center gap-3">
           <Link href={`/rfq/${rfqId}`}>
             <a className="text-muted-foreground hover:text-foreground">

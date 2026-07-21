@@ -178,14 +178,14 @@ export default function SupplierDetailPage() {
   if (isLoading) {
     return (
       <Layout>
-        <div className="p-6 text-muted-foreground text-sm">Loading...</div>
+        <div className="p-4 sm:p-6 text-muted-foreground text-sm">Loading...</div>
       </Layout>
     );
   }
   if (!supplier) {
     return (
       <Layout>
-        <div className="p-6 text-muted-foreground text-sm">Supplier not found.</div>
+        <div className="p-4 sm:p-6 text-muted-foreground text-sm">Supplier not found.</div>
       </Layout>
     );
   }

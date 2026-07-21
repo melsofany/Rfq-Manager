@@ -776,24 +776,24 @@ export default function RfqDetailPage() {
     <Layout>
       <div className="p-4 sm:p-6 space-y-5">
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
             <Link href="/rfq">
-              <a className="text-muted-foreground hover:text-foreground mt-1">
+              <a className="text-muted-foreground hover:text-foreground mt-1 flex-shrink-0">
                 <ArrowLeft size={18} />
               </a>
             </Link>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl font-bold text-foreground font-mono">{rfq.internalRfqNo}</h1>
                 <StatusBadge status={rfq.status} />
               </div>
-              <p className="text-muted-foreground text-sm mt-0.5">
+              <p className="text-muted-foreground text-sm mt-0.5 truncate">
                 Customer RFQ: <span className="font-mono">{rfq.customerRfqNo}</span>
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
             {(rfq.status === "DRAFT" || rfq.status === "SENT" || rfq.status === "QUOTED") &&
               (showCancelConfirm ? (
                 <>
@@ -861,73 +861,75 @@ export default function RfqDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="border-b border-border flex items-center justify-between">
-          <div className="flex gap-0">
-            {(["items", "sent", "offers", "attachments"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={cn(
-                  "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px capitalize transition-colors",
-                  tab === t
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t === "items" && `Items (${rfq.itemCount})`}
-                {t === "sent" && `Sent Log (${rfq.supplierCount})`}
-                {t === "offers" && `Offers & Analysis (${rfq.offerCount})`}
-                {t === "attachments" && (
-                  <span className="flex items-center gap-1">
-                    <Paperclip size={13} />
-                    المرفقات
-                  </span>
-                )}
-              </button>
-            ))}
+        <div className="border-b border-border space-y-0">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex overflow-x-auto scrollbar-none -mb-px">
+              {(["items", "sent", "offers", "attachments"] as Tab[]).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className={cn(
+                    "px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 capitalize transition-colors whitespace-nowrap flex-shrink-0",
+                    tab === t
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t === "items" && `Items (${rfq.itemCount})`}
+                  {t === "sent" && `Sent Log (${rfq.supplierCount})`}
+                  {t === "offers" && `Offers & Analysis (${rfq.offerCount})`}
+                  {t === "attachments" && (
+                    <span className="flex items-center gap-1">
+                      <Paperclip size={13} />
+                      المرفقات
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Export: Dispatch Report on Sent tab */}
+            {tab === "sent" && (rfq.supplierCount ?? 0) > 0 && (
+              <div className="flex items-center gap-2 pb-0.5 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs h-8"
+                  onClick={handleExportDispatch}
+                  disabled={exporting !== null || sentLogLoading}
+                >
+                  <ClipboardList size={14} className="text-blue-600" />
+                  {exporting === "dispatch" ? "جاري التصدير..." : "تقرير الإرسال PDF"}
+                </Button>
+              </div>
+            )}
+
+            {/* Export: Offers tab */}
+            {tab === "offers" && hasOffers && (
+              <div className="flex items-center gap-2 pb-0.5 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs h-8"
+                  onClick={handleExportExcel}
+                  disabled={exporting !== null}
+                >
+                  <FileSpreadsheet size={14} className="text-green-600" />
+                  {exporting === "excel" ? "جاري التصدير..." : "Export Excel"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs h-8"
+                  onClick={handleExportPdf}
+                  disabled={exporting !== null}
+                >
+                  <FileText size={14} className="text-red-500" />
+                  {exporting === "pdf" ? "جاري إنشاء PDF..." : "Export PDF"}
+                </Button>
+              </div>
+            )}
           </div>
-
-          {/* Export: Dispatch Report on Sent tab */}
-          {tab === "sent" && (rfq.supplierCount ?? 0) > 0 && (
-            <div className="flex items-center gap-2 pb-0.5">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs h-8"
-                onClick={handleExportDispatch}
-                disabled={exporting !== null || sentLogLoading}
-              >
-                <ClipboardList size={14} className="text-blue-600" />
-                {exporting === "dispatch" ? "جاري التصدير..." : "تقرير الإرسال PDF"}
-              </Button>
-            </div>
-          )}
-
-          {/* Export: Offers tab */}
-          {tab === "offers" && hasOffers && (
-            <div className="flex items-center gap-2 pb-0.5">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs h-8"
-                onClick={handleExportExcel}
-                disabled={exporting !== null}
-              >
-                <FileSpreadsheet size={14} className="text-green-600" />
-                {exporting === "excel" ? "جاري التصدير..." : "Export Excel"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs h-8"
-                onClick={handleExportPdf}
-                disabled={exporting !== null}
-              >
-                <FileText size={14} className="text-red-500" />
-                {exporting === "pdf" ? "جاري إنشاء PDF..." : "Export PDF"}
-              </Button>
-            </div>
-          )}
         </div>
 
         {/* Items Tab */}
