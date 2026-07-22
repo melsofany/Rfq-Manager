@@ -250,20 +250,144 @@ export default function PricingPage() {
     </div>
   );
 
-  /* ── Expired with NO submission — nothing to show ────────────────────── */
+  /* ── Expired with NO submission — show items read-only ───────────────── */
   if (isClientExpired && !data.alreadySubmitted && !submitted) {
     return (
       <div className="min-h-screen bg-background" dir="rtl">
         <PageHeader />
-        <div className="flex items-center justify-center p-8 min-h-[60vh]">
-          <div className="text-center max-w-sm">
-            <Lock size={44} className="mx-auto text-muted-foreground/50 mb-4" />
-            <h2 className="text-lg font-bold text-foreground">انتهى وقت تقديم العروض</h2>
-            <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
-              لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>.<br />
-              لم يُسجَّل أي عرض سعر من شركتكم لهذا الطلب.
-            </p>
+
+        <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
+          {/* Expired banner */}
+          <div className="flex items-start gap-3 bg-muted border border-border rounded-lg px-4 sm:px-5 py-3 sm:py-4">
+            <Lock size={18} className="text-muted-foreground flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-foreground text-sm">
+                انتهت مدة تقديم العروض — الصفحة مقفلة للقراءة فقط
+              </p>
+              <p className="text-muted-foreground text-xs mt-0.5 leading-relaxed">
+                لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>. لم يُسجَّل أي
+                عرض سعر من شركتكم لهذا الطلب. يمكنكم مراجعة البنود أدناه — لا يمكن إدخال أي
+                بيانات أو تقديم عرض.
+              </p>
+            </div>
           </div>
+
+          {/* Read-only items — desktop table */}
+          {data.items.length > 0 && (
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
+              <div className="px-4 sm:px-5 py-3 border-b border-border bg-muted/20">
+                <p className="font-medium text-foreground text-sm">بنود طلب العرض</p>
+              </div>
+
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-sm" style={{ direction: "rtl" }}>
+                  <thead>
+                    <tr className="bg-muted/30 border-b border-border text-right">
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-8">
+                        #
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        رقم القطعة
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        الوصف
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        الكمية
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                        الوحدة
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.items.map((item, i) => (
+                      <tr key={item.id} className="border-b border-border last:border-0">
+                        <td className="px-4 py-3 text-muted-foreground text-xs text-center">
+                          {i + 1}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                          {item.partNo ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-foreground text-sm max-w-[200px]">
+                          {item.description}
+                        </td>
+                        <td className="px-4 py-3 text-center text-xs text-foreground">
+                          {item.qty ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-center text-xs text-foreground">
+                          {item.uom ?? "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile cards */}
+              <div className="sm:hidden divide-y divide-border">
+                {data.items.map((item, i) => (
+                  <div key={item.id} className="p-4 space-y-1">
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs text-muted-foreground bg-muted rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground leading-snug">
+                          {item.description}
+                        </p>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5 text-xs text-muted-foreground">
+                          {item.partNo && (
+                            <span>
+                              رقم القطعة:{" "}
+                              <span className="font-mono text-foreground">{item.partNo}</span>
+                            </span>
+                          )}
+                          {item.qty != null && (
+                            <span>
+                              الكمية:{" "}
+                              <span className="text-foreground">
+                                {item.qty} {item.uom ?? ""}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* RFQ attachments (read-only) */}
+          {rfqAttachments.length > 0 && (
+            <div className="bg-card border border-border rounded-lg p-4 space-y-3">
+              <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                📎 المرفقات الفنية من المشتري
+              </p>
+              <div className="divide-y divide-border border border-border rounded-lg overflow-hidden">
+                {rfqAttachments.map((att) => (
+                  <div
+                    key={att.id}
+                    className="flex items-center gap-3 px-4 py-2.5 bg-background hover:bg-muted/20"
+                  >
+                    <span className="text-sm flex-1 truncate">{att.originalName}</span>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">
+                      {att.sizeLabel}
+                    </span>
+                    <a
+                      href={att.downloadUrl}
+                      download={att.originalName}
+                      className="text-xs text-primary underline underline-offset-2 hover:no-underline whitespace-nowrap"
+                    >
+                      تحميل
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
