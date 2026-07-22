@@ -570,31 +570,45 @@ router.get("/po/:id/pdf/:supplierId", requireAuth, async (req, res): Promise<voi
       ),
     );
 
-  const pdfBuffer = await generatePoPdf({
-    poNo: poRow.po.internalPoNo,
-    poDate: poRow.po.createdAt.toISOString(),
-    supplierName: supplierRow.name,
-    contactPerson: supplierRow.contactPerson,
-    receiverName: poRow.po.receiverName,
-    receiverPhone: poRow.po.receiverPhone,
-    employeeName: poRow.employeeName ?? "Cortoba Supplies",
-    employeePhone: poRow.employeePhone ?? null,
-    notes: poRow.po.notes,
-    items: items.map((r) => ({
-      lineItem: r.item.lineItem,
-      partNo: r.item.partNo,
-      description: r.item.description,
-      qty: r.item.qty,
-      uom: r.item.uom,
-      unitPrice: r.item.referencePrice,
-      taxIncluded: r.item.taxIncluded ?? false,
-    })),
-  });
+  let pdfBuffer: Buffer;
+  try {
+    pdfBuffer = await generatePoPdf({
+      poNo: poRow.po.internalPoNo,
+      poDate: poRow.po.createdAt.toISOString(),
+      supplierName: supplierRow.name,
+      contactPerson: supplierRow.contactPerson,
+      receiverName: poRow.po.receiverName,
+      receiverPhone: poRow.po.receiverPhone,
+      employeeName: poRow.employeeName ?? "Cortoba Supplies",
+      employeePhone: poRow.employeePhone ?? null,
+      notes: poRow.po.notes,
+      items: items.map((r) => ({
+        lineItem: r.item.lineItem,
+        partNo: r.item.partNo,
+        description: r.item.description,
+        qty: r.item.qty,
+        uom: r.item.uom,
+        unitPrice: r.item.referencePrice,
+        taxIncluded: r.item.taxIncluded ?? false,
+      })),
+    });
+  } catch (err) {
+    req.log.error({ err, poId, supplierId }, "Failed to generate PO PDF");
+    res.status(500).json({ error: "Failed to generate PDF" });
+    return;
+  }
+
+  // Use a plain ASCII base filename for old browsers, plus RFC 5987 encoded
+  // full filename (may include Arabic supplier name) for modern browsers.
+  const baseFilename = `PO-${poRow.po.internalPoNo}.pdf`;
+  const fullFilename = `PO-${poRow.po.internalPoNo}-${supplierRow.name}.pdf`;
+  const encodedFilename = encodeURIComponent(fullFilename);
 
   res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Length", pdfBuffer.length);
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="PO-${poRow.po.internalPoNo}-${supplierRow.name}.pdf"`,
+    `attachment; filename="${baseFilename}"; filename*=UTF-8''${encodedFilename}`,
   );
   res.send(pdfBuffer);
 });

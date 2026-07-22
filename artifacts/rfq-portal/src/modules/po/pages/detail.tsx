@@ -142,6 +142,8 @@ export default function PurchaseOrderDetailPage() {
   const [dispatching, setDispatching] = useState(false);
   const [dispatchResult, setDispatchResult] = useState<DispatchResponse | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState<number | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const [showLinkPanel, setShowLinkPanel] = useState(false);
   const [selectedRfqId, setSelectedRfqId] = useState<string>("");
@@ -209,11 +211,31 @@ export default function PurchaseOrderDetailPage() {
     }
   };
 
-  const downloadPdf = (supplierId: number, supplierName: string) => {
-    const a = document.createElement("a");
-    a.href = `/api/po/${id}/pdf/${supplierId}`;
-    a.download = `PO-${po?.internalPoNo ?? id}-${supplierName}.pdf`;
-    a.click();
+  const downloadPdf = async (supplierId: number, supplierName: string) => {
+    setDownloadingPdf(supplierId);
+    setPdfError(null);
+    try {
+      const res = await fetch(`/api/po/${id}/pdf/${supplierId}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `PO-${po?.internalPoNo ?? id}-${supplierName}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      setPdfError("فشل تحميل PDF — يرجى المحاولة مرة أخرى.");
+    } finally {
+      setDownloadingPdf(null);
+    }
   };
 
   if (poLoading || itemsLoading) {
@@ -356,6 +378,13 @@ export default function PurchaseOrderDetailPage() {
           )}
         </div>
 
+        {/* PDF download error */}
+        {pdfError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+            {pdfError}
+          </div>
+        )}
+
         {/* Dispatch result */}
         {dispatchError && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
@@ -416,11 +445,17 @@ export default function PurchaseOrderDetailPage() {
               {group.supplierId != null && (
                 <button
                   type="button"
+                  disabled={downloadingPdf === group.supplierId}
                   onClick={() => downloadPdf(group.supplierId!, group.supplierName ?? "Supplier")}
-                  className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+                  className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   title="تحميل PDF لهذا المورد"
                 >
-                  <Download size={13} /> PDF
+                  {downloadingPdf === group.supplierId ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Download size={13} />
+                  )}
+                  {downloadingPdf === group.supplierId ? "جاري التحميل..." : "PDF"}
                 </button>
               )}
             </div>
