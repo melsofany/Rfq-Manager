@@ -120,6 +120,39 @@ export interface SupplierUpdate {
   isActive?: boolean;
 }
 
+export interface BulkImportSuppliersInput {
+  /** @minItems 1 */
+  suppliers: SupplierInput[];
+}
+
+export type BulkImportSuppliersResultDetailsItemStatus = typeof BulkImportSuppliersResultDetailsItemStatus[keyof typeof BulkImportSuppliersResultDetailsItemStatus];
+
+
+export const BulkImportSuppliersResultDetailsItemStatus = {
+  imported: 'imported',
+  skipped: 'skipped',
+  error: 'error',
+} as const;
+
+export type BulkImportSuppliersResultDetailsItem = {
+  row?: number;
+  name?: string;
+  status?: BulkImportSuppliersResultDetailsItemStatus;
+  /** @nullable */
+  reason?: string | null;
+  supplier?: Supplier;
+};
+
+export interface BulkImportSuppliersResult {
+  /** عدد الموردين الذين تمت إضافتهم بنجاح */
+  imported: number;
+  /** عدد الموردين الذين تخطيناهم (مكررين) */
+  skipped: number;
+  /** عدد الموردين الذين فشل استيرادهم */
+  errors: number;
+  details?: BulkImportSuppliersResultDetailsItem[];
+}
+
 export interface SupplierScore {
   supplierId: number;
   supplierName?: string;

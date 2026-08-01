@@ -275,6 +275,50 @@ export const UpdateSupplierResponse = zod.object({
 
 
 /**
+ * إضافة عدة موردين دفعة واحدة مع تعيين التصنيف لكل منهم
+ * @summary استيراد موردين بالجملة
+ */
+
+
+
+export const BulkImportSuppliersBody = zod.object({
+  "suppliers": zod.array(zod.object({
+  "supplierId": zod.string().optional(),
+  "name": zod.string(),
+  "contactPerson": zod.string().optional(),
+  "email": zod.string().optional(),
+  "phone": zod.string().optional(),
+  "address": zod.string().optional(),
+  "category": zod.string()
+})).min(1)
+})
+
+export const BulkImportSuppliersResponse = zod.object({
+  "imported": zod.number().describe('عدد الموردين الذين تمت إضافتهم بنجاح'),
+  "skipped": zod.number().describe('عدد الموردين الذين تخطيناهم (مكررين)'),
+  "errors": zod.number().describe('عدد الموردين الذين فشل استيرادهم'),
+  "details": zod.array(zod.object({
+  "row": zod.number().optional(),
+  "name": zod.string().optional(),
+  "status": zod.enum(['imported', 'skipped', 'error']).optional(),
+  "reason": zod.string().nullish(),
+  "supplier": zod.object({
+  "id": zod.number(),
+  "supplierId": zod.string().optional(),
+  "name": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "category": zod.string(),
+  "isActive": zod.boolean().optional(),
+  "createdAt": zod.string().optional()
+}).optional()
+})).optional()
+})
+
+
+/**
  * @summary تقييمات جميع الموردين مرتبةً تنازلياً
  */
 export const ListSupplierScoresResponseItem = zod.object({

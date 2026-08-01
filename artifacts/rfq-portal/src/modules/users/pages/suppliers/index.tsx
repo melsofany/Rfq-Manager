@@ -13,8 +13,20 @@ import {
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Users, Settings, Pencil, Trash2, X, Check, AlertCircle } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Users,
+  Settings,
+  Pencil,
+  Trash2,
+  X,
+  Check,
+  AlertCircle,
+  Upload,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import ImportSuppliersTab from "./import-tab";
 
 function parseCategories(cat: string | null | undefined): string[] {
   if (!cat) return [];
@@ -243,7 +255,9 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-export default function SuppliersPage() {
+// ─── Suppliers List Tab ────────────────────────────────────────────────────────
+
+function SuppliersListTab() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
@@ -268,11 +282,12 @@ export default function SuppliersPage() {
   );
 
   return (
-    <Layout>
+    <>
       {showManage && <ManageCategoriesDialog onClose={() => setShowManage(false)} />}
 
-      <div className="p-4 sm:p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="space-y-4">
+        {/* Actions row */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 pt-4 sm:pt-6">
           <div>
             <h1 className="text-xl font-bold text-foreground">Suppliers</h1>
             <p className="text-muted-foreground text-sm">Manage supplier directory</p>
@@ -294,7 +309,8 @@ export default function SuppliersPage() {
           </div>
         </div>
 
-        <div className="flex gap-3 flex-wrap">
+        {/* Filters */}
+        <div className="flex gap-3 flex-wrap px-4 sm:px-6">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search
               size={15}
@@ -334,7 +350,8 @@ export default function SuppliersPage() {
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        {/* Table */}
+        <div className="bg-card border border-border rounded-lg overflow-hidden mx-4 sm:mx-6 mb-4 sm:mb-6">
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>
           ) : !suppliers?.length ? (
@@ -424,6 +441,49 @@ export default function SuppliersPage() {
           )}
         </div>
       </div>
+    </>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────────────────────
+
+type Tab = "list" | "import";
+
+export default function SuppliersPage() {
+  const [activeTab, setActiveTab] = useState<Tab>("list");
+
+  return (
+    <Layout>
+      {/* Tab bar */}
+      <div className="border-b border-border px-4 sm:px-6 pt-4 sm:pt-6">
+        <div className="flex gap-0">
+          <button
+            onClick={() => setActiveTab("list")}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              activeTab === "list"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+            }`}
+          >
+            <Users size={14} />
+            الموردون
+          </button>
+          <button
+            onClick={() => setActiveTab("import")}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              activeTab === "import"
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+            }`}
+          >
+            <Upload size={14} />
+            استيراد موردين
+          </button>
+        </div>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === "list" ? <SuppliersListTab /> : <ImportSuppliersTab />}
     </Layout>
   );
 }

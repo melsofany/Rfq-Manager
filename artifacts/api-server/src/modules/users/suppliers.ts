@@ -210,6 +210,115 @@ async function computeSupplierScore(supplierId: number) {
 
 // ─── Routes ────────────────────────────────────────────────────────────────
 
+// ─── Bulk Import ───────────────────────────────────────────────────────────
+router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
+  const { suppliers } = req.body as { suppliers?: unknown[] };
+
+  if (!Array.isArray(suppliers) || suppliers.length === 0) {
+    res.status(400).json({ error: "suppliers array required" });
+    return;
+  }
+
+  let imported = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  const details: Array<{
+    row: number;
+    name: string;
+    status: "imported" | "skipped" | "error";
+    reason: string | null;
+    supplier?: Record<string, unknown>;
+  }> = [];
+
+  for (let i = 0; i < suppliers.length; i++) {
+    const row = suppliers[i] as Record<string, unknown>;
+    const name = String(row.name ?? "").trim();
+    const rawCats = row.categories ?? row.category;
+    const category = rawCats ? toStored(rawCats as string | string[]) : "general";
+
+    if (!name) {
+      errors++;
+      details.push({ row: i + 1, name: name || "(بدون اسم)", status: "error", reason: "الاسم مطلوب" });
+      continue;
+    }
+
+    const email = row.email ? String(row.email).trim() : null;
+    const phone = row.phone ? String(row.phone).trim() : null;
+
+    // Check duplicate email
+    if (email) {
+      const [existingEmail] = await db
+        .select()
+        .from(suppliersTable)
+        .where(ilike(suppliersTable.email, email))
+        .limit(1);
+      if (existingEmail) {
+        skipped++;
+        details.push({ row: i + 1, name, status: "skipped", reason: `الإيميل مسجل بالفعل للمورد: ${existingEmail.name}` });
+        continue;
+      }
+    }
+
+    // Check duplicate phone
+    if (phone) {
+      const cleaned = phone.replace(/\s+/g, "");
+      const [existingPhone] = await db
+        .select()
+        .from(suppliersTable)
+        .where(sql`replace(${suppliersTable.phone}, ' ', '') = ${cleaned}`)
+        .limit(1);
+      if (existingPhone) {
+        skipped++;
+        details.push({ row: i + 1, name, status: "skipped", reason: `رقم الهاتف مسجل بالفعل للمورد: ${existingPhone.name}` });
+        continue;
+      }
+    }
+
+    try {
+      const [supplier] = await db
+        .insert(suppliersTable)
+        .values({
+          supplierId: row.supplierId ? String(row.supplierId) : undefined,
+          name,
+          contactPerson: row.contactPerson ? String(row.contactPerson) : undefined,
+          email: email || undefined,
+          phone: phone || undefined,
+          address: row.address ? String(row.address) : undefined,
+          category,
+        })
+        .returning();
+
+      imported++;
+      details.push({
+        row: i + 1,
+        name,
+        status: "imported",
+        reason: null,
+        supplier: {
+          id: supplier.id,
+          supplierId: supplier.supplierId,
+          name: supplier.name,
+          contactPerson: supplier.contactPerson,
+          email: supplier.email,
+          phone: supplier.phone,
+          address: supplier.address,
+          category: supplier.category,
+          categories: toArray(supplier.category),
+          isActive: supplier.isActive,
+          createdAt: supplier.createdAt.toISOString(),
+        },
+      });
+    } catch (err: unknown) {
+      errors++;
+      const msg = (err as { message?: string })?.message ?? "خطأ غير متوقع";
+      details.push({ row: i + 1, name, status: "error", reason: msg });
+    }
+  }
+
+  res.json({ imported, skipped, errors, details });
+});
+
 router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   const { category, search } = req.query as Record<string, string>;
 

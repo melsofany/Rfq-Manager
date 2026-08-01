@@ -22,6 +22,8 @@ import type {
 import type {
   AuditLog,
   AuthResponse,
+  BulkImportSuppliersInput,
+  BulkImportSuppliersResult,
   CategoryInput,
   CustomerRfqItem,
   DashboardStats,
@@ -1206,6 +1208,78 @@ export const useUpdateSupplier = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getUpdateSupplierMutationOptions(options));
+    }
+
+export const getBulkImportSuppliersUrl = () => {
+
+
+
+
+  return `/api/suppliers/bulk`
+}
+
+/**
+ * إضافة عدة موردين دفعة واحدة مع تعيين التصنيف لكل منهم
+ * @summary استيراد موردين بالجملة
+ */
+export const bulkImportSuppliers = async (bulkImportSuppliersInput: BulkImportSuppliersInput, options?: RequestInit): Promise<BulkImportSuppliersResult> => {
+
+  return customFetch<BulkImportSuppliersResult>(getBulkImportSuppliersUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bulkImportSuppliersInput)
+  }
+);}
+
+
+
+
+
+export const getBulkImportSuppliersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkImportSuppliers>>, TError,{data: BodyType<BulkImportSuppliersInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof bulkImportSuppliers>>, TError,{data: BodyType<BulkImportSuppliersInput>}, TContext> => {
+
+const mutationKey = ['bulkImportSuppliers'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof bulkImportSuppliers>>, {data: BodyType<BulkImportSuppliersInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  bulkImportSuppliers(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type BulkImportSuppliersMutationResult = NonNullable<Awaited<ReturnType<typeof bulkImportSuppliers>>>
+    export type BulkImportSuppliersMutationBody = BodyType<BulkImportSuppliersInput>
+    export type BulkImportSuppliersMutationError = ErrorType<unknown>
+
+    /**
+ * @summary استيراد موردين بالجملة
+ */
+export const useBulkImportSuppliers = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof bulkImportSuppliers>>, TError,{data: BodyType<BulkImportSuppliersInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof bulkImportSuppliers>>,
+        TError,
+        {data: BodyType<BulkImportSuppliersInput>},
+        TContext
+      > => {
+      return useMutation(getBulkImportSuppliersMutationOptions(options));
     }
 
 export const getListSupplierScoresUrl = () => {

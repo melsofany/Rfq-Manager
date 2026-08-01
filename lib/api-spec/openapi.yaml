@@ -297,6 +297,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/Supplier"
 
+  /suppliers/bulk:
+    post:
+      operationId: bulkImportSuppliers
+      tags: [suppliers]
+      summary: "استيراد موردين بالجملة"
+      description: "إضافة عدة موردين دفعة واحدة مع تعيين التصنيف لكل منهم"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkImportSuppliersInput"
+      responses:
+        "200":
+          description: نتيجة الاستيراد
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkImportSuppliersResult"
+
   /suppliers/scores:
     get:
       operationId: listSupplierScores
@@ -1200,6 +1220,46 @@ components:
           type: string
         isActive:
           type: boolean
+
+    BulkImportSuppliersInput:
+      type: object
+      required: [suppliers]
+      properties:
+        suppliers:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SupplierInput"
+
+    BulkImportSuppliersResult:
+      type: object
+      required: [imported, skipped, errors]
+      properties:
+        imported:
+          type: integer
+          description: "عدد الموردين الذين تمت إضافتهم بنجاح"
+        skipped:
+          type: integer
+          description: "عدد الموردين الذين تخطيناهم (مكررين)"
+        errors:
+          type: integer
+          description: "عدد الموردين الذين فشل استيرادهم"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              row:
+                type: integer
+              name:
+                type: string
+              status:
+                type: string
+                enum: [imported, skipped, error]
+              reason:
+                type: ["string", "null"]
+              supplier:
+                $ref: "#/components/schemas/Supplier"
 
     SupplierScore:
       type: object

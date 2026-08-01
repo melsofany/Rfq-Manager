@@ -8,6 +8,10 @@
 
 export * from './auditLog';
 export * from './authResponse';
+export * from './bulkImportSuppliersInput';
+export * from './bulkImportSuppliersResult';
+export * from './bulkImportSuppliersResultDetailsItem';
+export * from './bulkImportSuppliersResultDetailsItemStatus';
 export * from './categoryInput';
 export * from './customerRfqItem';
 export * from './dashboardStats';
