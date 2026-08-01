@@ -18,6 +18,8 @@ import {
   Loader2,
   RotateCcw,
   Download,
+  PhoneOff,
+  Phone,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -28,9 +30,136 @@ interface ParsedSupplier {
   supplierId?: string;
   contactPerson?: string;
   email?: string;
-  phone?: string;
+  phone?: string;       // الرقم الأول (بتنسيق واتساب)
+  phone2?: string;      // الرقم الثاني إن وُجد (بتنسيق واتساب)
   address?: string;
   category: string;
+  phoneWarning?: string; // تحذير: أرضي مرفوض أو تنسيق غير معروف
+}
+
+// ─── Phone normalization helpers ─────────────────────────────────────────────
+
+/**
+ * بادئات المحمول المصرية (بعد حذف الصفر البادئ):
+ * 10 = فودافون | 11 = اتصالات (e&) | 12 = أورنج | 15 = WE
+ */
+const EGYPT_MOBILE_PREFIXES = ["10", "11", "12", "15"];
+
+/**
+ * يحوّل رقم هاتف مصري (بأي تنسيق) إلى تنسيق واتساب الدولي (+20XXXXXXXXXX).
+ * يُرجع null إذا كان الرقم أرضياً أو غير صالح.
+ */
+function normalizeEgyptianMobile(raw: string): string | null {
+  // إزالة المسافات والرموز والحروف غير الرقمية ماعدا + في البداية
+  let digits = raw.replace(/[^\d+]/g, "").replace(/\s/g, "");
+  // إزالة + للمعالجة ثم إعادتها لاحقاً
+  digits = digits.replace(/^\+/, "");
+  // 0020... -> اقطع 00
+  if (digits.startsWith("0020")) digits = digits.slice(2);
+  // 00201... -> اقطع 00
+  if (digits.startsWith("00")) digits = digits.slice(2);
+
+  // الحالات الممكنة بعد التنظيف:
+  // 01XXXXXXXXX  (11 رقم - تنسيق محلي)
+  // 201XXXXXXXXX (12 رقم - مع كود الدولة)
+  // 1XXXXXXXXX   (10 أرقام - بدون صفر ومن غير كود دولة)
+
+  if (digits.length === 11 && digits.startsWith("0")) {
+    // تحويل 0XXXXXXXXXX -> 20XXXXXXXXXX
+    digits = "20" + digits.slice(1);
+  } else if (digits.length === 10 && (digits.startsWith("1"))) {
+    // تحويل 1XXXXXXXXX -> 201XXXXXXXXX (لو بدأ بـ 1x)
+    digits = "20" + digits;
+  }
+
+  // الآن يجب أن يكون 12 رقم ويبدأ بـ 20
+  if (digits.length !== 12) return null;
+  if (!digits.startsWith("20")) return null;
+
+  // الجزء المحلي (بعد 20)
+  const local = digits.slice(2); // 10 أرقام
+  const prefix = local.slice(0, 2); // e.g. "10", "11", "12", "15"
+
+  if (!EGYPT_MOBILE_PREFIXES.includes(prefix)) {
+    // رقم أرضي أو غير معروف
+    return null;
+  }
+
+  return "+" + digits; // e.g. +201012345678
+}
+
+/**
+ * يكتشف ما إذا كان الرقم يبدو كرقم أرضي مصري
+ */
+function looksLikeLandline(raw: string): boolean {
+  let digits = raw.replace(/[^\d]/g, "");
+  if (digits.startsWith("0020")) digits = digits.slice(2);
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.startsWith("20")) digits = digits.slice(2);
+  // أرقام أرضية مصرية تبدأ بـ 2 (القاهرة/الجيزة) أو 3 (الإسكندرية) أو 4X-6X
+  const landlinePrefixes = ["2", "3", "40", "45", "46", "47", "48", "50", "55", "57",
+    "62", "64", "65", "66", "68", "69"];
+  return landlinePrefixes.some((p) => digits.startsWith(p));
+}
+
+interface PhoneParseResult {
+  primary: string | null;   // الرقم الأساسي بتنسيق واتساب
+  secondary: string | null; // الرقم الثاني (إن وُجد)
+  warning: string | null;   // رسالة تحذير
+}
+
+/**
+ * يحلل حقل الهاتف الذي قد يحتوي على رقم واحد أو رقمين.
+ * يدعم الفاصل: / أو , أو ; أو | أو مسافة أو سطر جديد
+ */
+function parsePhoneField(raw: string): PhoneParseResult {
+  if (!raw || !raw.trim()) return { primary: null, secondary: null, warning: null };
+
+  // تقسيم على الفواصل الشائعة
+  const parts = raw
+    .split(/[,\/\\|;،\n\r]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const mobiles: string[] = [];
+  let landlineCount = 0;
+  let unknownCount = 0;
+
+  for (const part of parts) {
+    if (!part) continue;
+    const normalized = normalizeEgyptianMobile(part);
+    if (normalized) {
+      if (!mobiles.includes(normalized)) {
+        mobiles.push(normalized);
+      }
+    } else {
+      const digitsOnly = part.replace(/\D/g, "");
+      if (digitsOnly.length >= 7) {
+        if (looksLikeLandline(part)) {
+          landlineCount++;
+        } else {
+          unknownCount++;
+        }
+      }
+    }
+  }
+
+  const primary = mobiles[0] ?? null;
+  const secondary = mobiles[1] ?? null;
+
+  let warning: string | null = null;
+  if (landlineCount > 0 && mobiles.length === 0) {
+    warning = "رقم أرضي — لن يُستورد (واتساب لا يدعم الأرضي)";
+  } else if (landlineCount > 0 && mobiles.length > 0) {
+    warning = `تم رفض ${landlineCount} رقم أرضي والاحتفاظ بالمحمول فقط`;
+  } else if (unknownCount > 0 && mobiles.length === 0) {
+    warning = "تنسيق الرقم غير معروف — لن يُستورد";
+  } else if (mobiles.length > 2) {
+    warning = `تم الاحتفاظ بأول رقمين فقط من ${mobiles.length} أرقام`;
+  }
+
+  return { primary, secondary, warning };
 }
 
 // ─── Column mapping helpers ──────────────────────────────────────────────────
@@ -63,6 +192,16 @@ const COL_ALIASES: Record<string, keyof ParsedSupplier> = {
   "الهاتف": "phone",
   "الجوال": "phone",
   "رقم الهاتف": "phone",
+  "الموبايل": "phone",
+  "رقم الجوال": "phone",
+
+  // دعم عمود الهاتف الثاني المستقل
+  phone2: "phone2",
+  mobile2: "phone2",
+  "الهاتف 2": "phone2",
+  "الهاتف2": "phone2",
+  "جوال2": "phone2",
+  "رقم ثاني": "phone2",
 
   address: "address",
   "العنوان": "address",
@@ -81,7 +220,6 @@ function mapRow(row: Record<string, unknown>): ParsedSupplier | null {
   const mapped: Partial<ParsedSupplier> = {};
   for (const [rawKey, val] of Object.entries(row)) {
     const norm = normalizeKey(rawKey);
-    // Check direct alias
     const field =
       COL_ALIASES[rawKey.trim()] ??
       COL_ALIASES[norm] ??
@@ -93,15 +231,45 @@ function mapRow(row: Record<string, unknown>): ParsedSupplier | null {
     }
   }
   if (!mapped.name) return null;
+
+  // ── معالجة أرقام الهواتف ─────────────────────────────────────────────────
+  const rawPhone = mapped.phone as string | undefined;
+  const rawPhone2 = mapped.phone2 as string | undefined;
+
+  let finalPhone: string | undefined;
+  let finalPhone2: string | undefined;
+  let phoneWarning: string | undefined;
+
+  if (rawPhone) {
+    const parsed = parsePhoneField(rawPhone);
+    finalPhone = parsed.primary ?? undefined;
+    finalPhone2 = parsed.secondary ?? undefined;
+    if (parsed.warning) phoneWarning = parsed.warning;
+  }
+
+  // إذا كان هناك عمود phone2 مستقل وما وُجد رقم ثاني من phone
+  if (rawPhone2 && !finalPhone2) {
+    const parsed2 = parsePhoneField(rawPhone2);
+    if (parsed2.primary) {
+      finalPhone2 = parsed2.primary;
+    } else if (parsed2.warning) {
+      phoneWarning = phoneWarning
+        ? phoneWarning + " | " + parsed2.warning
+        : parsed2.warning;
+    }
+  }
+
   return {
     _rowIndex: 0,
-    name: mapped.name,
-    supplierId: mapped.supplierId,
-    contactPerson: mapped.contactPerson,
-    email: mapped.email,
-    phone: mapped.phone,
-    address: mapped.address,
-    category: mapped.category ?? "general",
+    name: mapped.name as string,
+    supplierId: mapped.supplierId as string | undefined,
+    contactPerson: mapped.contactPerson as string | undefined,
+    email: mapped.email as string | undefined,
+    phone: finalPhone,
+    phone2: finalPhone2,
+    address: mapped.address as string | undefined,
+    category: (mapped.category as string) ?? "general",
+    phoneWarning,
   };
 }
 
@@ -150,6 +318,15 @@ function downloadTemplate() {
       email: "ahmed@example.com",
       phone: "01012345678",
       address: "القاهرة، مصر",
+      category: "general",
+    },
+    {
+      name: "مؤسسة النماذج التجارية",
+      supplier_id: "SUP-002",
+      contact_person: "محمد علي",
+      email: "m.ali@example.com",
+      phone: "01112345678/01234567890",
+      address: "الإسكندرية، مصر",
       category: "general",
     },
   ];
@@ -244,7 +421,14 @@ export default function ImportSuppliersTab() {
         return;
       }
       setRows(parsed);
-      setSelected(new Set(parsed.map((_, i) => i)));
+      // استثناء الصفوف التي تحتوي على أرضي فقط (بدون محمول) من الاختيار التلقائي
+      const preSelected = new Set(
+        parsed
+          .map((r, i) => ({ r, i }))
+          .filter(({ r }) => !r.phoneWarning?.includes("لن يُستورد") || r.phone)
+          .map(({ i }) => i),
+      );
+      setSelected(preSelected);
       setStep("preview");
     } catch (err) {
       setParseError((err as Error).message || "خطأ في قراءة الملف");
@@ -292,7 +476,12 @@ export default function ImportSuppliersTab() {
         supplierId: r.supplierId || undefined,
         contactPerson: r.contactPerson || undefined,
         email: r.email || undefined,
-        phone: r.phone || undefined,
+        // إذا كان هناك رقمان محمول: نضمهما بـ "/" ليراهما المستخدم في التفاصيل
+        phone: r.phone
+          ? r.phone2
+            ? `${r.phone} / ${r.phone2}`
+            : r.phone
+          : undefined,
         address: r.address || undefined,
         category: r.category || "general",
       }));
@@ -312,6 +501,13 @@ export default function ImportSuppliersTab() {
     setResult(null);
     setBulkCategory("");
   }
+
+  // ─── إحصائيات التحذيرات للمعاينة ─────────────────────────────────────────
+  const warningCount = rows.filter((r) => r.phoneWarning).length;
+  const landlineOnlyCount = rows.filter(
+    (r) => r.phoneWarning?.includes("لن يُستورد") && !r.phone,
+  ).length;
+  const dualMobileCount = rows.filter((r) => r.phone2).length;
 
   // ─── RENDER ────────────────────────────────────────────────────────────────
 
@@ -407,6 +603,30 @@ export default function ImportSuppliersTab() {
           </div>
         </div>
 
+        {/* Phone warnings summary */}
+        {warningCount > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {landlineOnlyCount > 0 && (
+              <div className="flex items-center gap-1.5 text-xs bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-1.5">
+                <PhoneOff size={12} />
+                <span>
+                  {landlineOnlyCount} مورد {landlineOnlyCount === 1 ? "يحتوي" : "يحتوون"} على أرقام
+                  أرضية فقط — تم إلغاء تحديدهم تلقائياً
+                </span>
+              </div>
+            )}
+            {dualMobileCount > 0 && (
+              <div className="flex items-center gap-1.5 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-1.5">
+                <Phone size={12} />
+                <span>
+                  {dualMobileCount} مورد {dualMobileCount === 1 ? "لديه" : "لديهم"} رقمان محمول —
+                  سيُحفظان معاً
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Bulk Category Assignment */}
         <div className="flex items-center gap-2 bg-muted/30 border border-border rounded-lg px-3 py-2.5 flex-wrap">
           <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -464,61 +684,90 @@ export default function ImportSuppliersTab() {
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">الاسم</th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">المسؤول</th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">الإيميل</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">الهاتف</th>
+                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">الهاتف (واتساب)</th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right min-w-[140px]">
                     التصنيف
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, i) => (
-                  <tr
-                    key={i}
-                    className={`border-b border-border last:border-0 ${
-                      selected.has(i) ? "bg-background" : "bg-muted/10 opacity-60"
-                    }`}
-                  >
-                    <td className="px-3 py-2 text-center">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(i)}
-                        onChange={() => toggleRow(i)}
-                        className="rounded border-border"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground text-xs font-mono">{row._rowIndex}</td>
-                    <td className="px-3 py-2 font-medium text-foreground max-w-[160px] truncate">
-                      {row.name}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground text-xs max-w-[120px] truncate">
-                      {row.contactPerson ?? "-"}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground text-xs max-w-[160px] truncate">
-                      {row.email ?? "-"}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground text-xs">
-                      {row.phone ?? "-"}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="relative">
-                        <select
-                          value={row.category}
-                          onChange={(e) => updateRowCategory(i, e.target.value)}
-                          disabled={!selected.has(i)}
-                          className="w-full h-7 text-xs bg-background border border-border rounded px-2 pr-6 appearance-none focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-                        >
-                          <option value="general">general</option>
-                          {categories.map((c) => (
-                            <option key={c.id} value={c.name}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {rows.map((row, i) => {
+                  const hasWarning = !!row.phoneWarning;
+                  const isLandlineOnly = hasWarning && row.phoneWarning?.includes("لن يُستورد") && !row.phone;
+                  return (
+                    <tr
+                      key={i}
+                      className={`border-b border-border last:border-0 ${
+                        selected.has(i) ? "bg-background" : "bg-muted/10 opacity-60"
+                      } ${isLandlineOnly ? "bg-red-50/30" : ""}`}
+                    >
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(i)}
+                          onChange={() => toggleRow(i)}
+                          className="rounded border-border"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground text-xs font-mono">{row._rowIndex}</td>
+                      <td className="px-3 py-2 font-medium text-foreground max-w-[160px] truncate">
+                        {row.name}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground text-xs max-w-[120px] truncate">
+                        {row.contactPerson ?? "-"}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground text-xs max-w-[160px] truncate">
+                        {row.email ?? "-"}
+                      </td>
+                      <td className="px-3 py-2 text-xs min-w-[180px]">
+                        {row.phone ? (
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1">
+                              <span className="text-green-700 font-mono font-medium">{row.phone}</span>
+                            </div>
+                            {row.phone2 && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-blue-600 font-mono text-xs">{row.phone2}</span>
+                                <span className="text-muted-foreground text-[10px]">(ثاني)</span>
+                              </div>
+                            )}
+                            {hasWarning && !isLandlineOnly && (
+                              <div className="flex items-center gap-1 text-amber-600 text-[10px]">
+                                <AlertCircle size={10} />
+                                <span>{row.phoneWarning}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : isLandlineOnly ? (
+                          <div className="flex items-center gap-1 text-red-500">
+                            <PhoneOff size={11} />
+                            <span className="text-[10px]">{row.phoneWarning}</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="relative">
+                          <select
+                            value={row.category}
+                            onChange={(e) => updateRowCategory(i, e.target.value)}
+                            disabled={!selected.has(i)}
+                            className="w-full h-7 text-xs bg-background border border-border rounded px-2 pr-6 appearance-none focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                          >
+                            <option value="general">general</option>
+                            {categories.map((c) => (
+                              <option key={c.id} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -538,6 +787,19 @@ export default function ImportSuppliersTab() {
           <span className="font-medium"> .csv</span> ،
           <span className="font-medium"> .json</span>
         </p>
+      </div>
+
+      {/* Phone format notice */}
+      <div className="flex items-start gap-2 text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2.5">
+        <Phone size={13} className="mt-0.5 shrink-0" />
+        <div className="space-y-0.5">
+          <p className="font-medium">أرقام المحمول فقط — تنسيق واتساب تلقائي</p>
+          <p className="text-blue-600">
+            يقبل النظام أرقام المحمول المصرية (010 / 011 / 012 / 015) ويحوّلها تلقائياً
+            لتنسيق واتساب الدولي (+20...). الأرقام الأرضية مرفوضة.
+            يمكنك إدخال رقمين محمول في نفس الخلية مفصولين بـ /.
+          </p>
+        </div>
       </div>
 
       {/* Download template */}
@@ -605,6 +867,10 @@ export default function ImportSuppliersTab() {
             </div>
           ))}
         </div>
+        <p className="text-[11px] text-muted-foreground mt-1 border-t border-border pt-2">
+          💡 يمكن وضع رقمي محمول في عمود phone واحد مفصولين بـ <code className="bg-muted px-1 rounded">/</code>
+          — مثال: <code className="bg-muted px-1 rounded">01012345678/01112345678</code>
+        </p>
       </div>
     </div>
   );
