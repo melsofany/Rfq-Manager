@@ -6,10 +6,12 @@ import {
   useListSuppliers,
   useListCategories,
   useSendRfqToSuppliers,
+  useGetRfqSentLog,
   getGetRfqQueryKey,
   getListSuppliersQueryKey,
   getGetRfqSentLogQueryKey,
   getListCategoriesQueryKey,
+  type SendRfqInput,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,8 @@ import {
   MinusCircle,
   MessageCircle,
   Mail,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 
 function parseCategories(cat: string | null | undefined): string[] {
@@ -57,6 +61,10 @@ export default function SendRfqPage() {
   const [closeDate, setCloseDate] = useState("");
   const [sendResults, setSendResults] = useState<SendResult[] | null>(null);
 
+  // ── نافذة تأكيد إعادة الإرسال ─────────────────────────────────────────────
+  const [showResendConfirm, setShowResendConfirm] = useState(false);
+  const [resendSupplierNames, setResendSupplierNames] = useState<string[]>([]);
+
   const { data: dbCategories = [] } = useListCategories({
     query: { queryKey: getListCategoriesQueryKey() },
   });
@@ -76,6 +84,14 @@ export default function SendRfqPage() {
       },
     },
   );
+
+  // ── تحميل سجل الإرسال لهذا الطلب ─────────────────────────────────────────
+  const { data: sentLog = [] } = useGetRfqSentLog(rfqId, {
+    query: { queryKey: getGetRfqSentLogQueryKey(rfqId), enabled: !!rfqId },
+  });
+
+  // مجموعة معرّفات الموردين الذين أُرسل إليهم هذا الطلب من قبل
+  const alreadySentIds = new Set(sentLog.map((s) => s.supplierId));
 
   const sendMutation = useSendRfqToSuppliers({
     mutation: {
@@ -111,16 +127,53 @@ export default function SendRfqPage() {
     }
   };
 
-  const handleSend = () => {
-    if (!selectedIds.size) return;
+  // ── منطق الإرسال مع التحقق من الإرسال المسبق ─────────────────────────────
+  const doSend = (force: boolean) => {
     sendMutation.mutate({
       id: rfqId,
-      data: { supplierIds: Array.from(selectedIds), closeDate: closeDate || undefined },
+      data: {
+        supplierIds: Array.from(selectedIds),
+        closeDate: closeDate || undefined,
+        // force مدعوم في الـ backend لإعادة الإرسال
+        ...(force ? { force: true } : {}),
+      } as SendRfqInput,
     });
+  };
+
+  const handleSend = () => {
+    if (!selectedIds.size) return;
+
+    // الموردون المحددون الذين أُرسل إليهم هذا الطلب من قبل
+    const alreadySentSelected = Array.from(selectedIds).filter((sid) =>
+      alreadySentIds.has(sid),
+    );
+
+    if (alreadySentSelected.length > 0) {
+      // اجمع أسماء الموردين المسبق إرسالهم
+      const names = alreadySentSelected
+        .map((sid) => suppliers?.find((s) => s.id === sid)?.name ?? `#${sid}`)
+        .filter(Boolean);
+      setResendSupplierNames(names);
+      setShowResendConfirm(true);
+      return;
+    }
+
+    // لا يوجد إرسال مسبق — أرسل مباشرة
+    doSend(false);
+  };
+
+  const handleConfirmResend = () => {
+    setShowResendConfirm(false);
+    doSend(true);
   };
 
   const activeSuppliers = suppliers?.filter((s) => s.isActive) ?? [];
   const allSelected = activeSuppliers.length > 0 && selectedIds.size === activeSuppliers.length;
+
+  // عدد الموردين المحددين الذين أُرسل إليهم مسبقاً
+  const selectedAlreadySentCount = Array.from(selectedIds).filter((sid) =>
+    alreadySentIds.has(sid),
+  ).length;
 
   // ── Results view ──────────────────────────────────────────────────────────
   if (sendResults) {
@@ -261,7 +314,7 @@ export default function SendRfqPage() {
             </a>
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-foreground">Send RFQ to Suppliers</h1>
+            <h1 className="text-xl font-bold text-foreground">إرسال طلب التسعير للموردين</h1>
             {rfq && <p className="text-muted-foreground text-sm font-mono">{rfq.internalRfqNo}</p>}
           </div>
         </div>
@@ -269,7 +322,7 @@ export default function SendRfqPage() {
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="flex items-end gap-4">
             <div className="space-y-1.5">
-              <Label>Close Date (optional)</Label>
+              <Label>تاريخ الإغلاق (اختياري)</Label>
               <Input
                 type="date"
                 value={closeDate}
@@ -279,10 +332,22 @@ export default function SendRfqPage() {
               />
             </div>
             <p className="text-muted-foreground text-xs pb-2">
-              Suppliers won't be able to submit after this date.
+              لن يستطيع الموردون تقديم عروضهم بعد هذا التاريخ.
             </p>
           </div>
         </div>
+
+        {/* تنبيه الإرسال المسبق في الاختيار الحالي */}
+        {selectedAlreadySentCount > 0 && (
+          <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
+            <span>
+              <strong>{selectedAlreadySentCount}</strong>{" "}
+              {selectedAlreadySentCount === 1 ? "مورد محدد سبق إرسال هذا الطلب إليه" : "موردين محددين سبق إرسال هذا الطلب إليهم"} —
+              سيُطلب التأكيد قبل إعادة الإرسال.
+            </span>
+          </div>
+        )}
 
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3 flex-wrap">
@@ -309,7 +374,7 @@ export default function SendRfqPage() {
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search..."
+                placeholder="بحث..."
                 className="pl-8 h-7 text-xs w-40"
               />
             </div>
@@ -318,7 +383,7 @@ export default function SendRfqPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-muted/30 border-b border-border text-left">
+                <tr className="bg-muted/30 border-b border-border text-right">
                   <th className="px-4 py-2.5 w-10">
                     <button onClick={toggleAll}>
                       {allSelected ? (
@@ -329,12 +394,12 @@ export default function SendRfqPage() {
                     </button>
                   </th>
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                    Supplier
+                    المورد
                   </th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Contact</th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Email</th>
+                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">المسؤول</th>
+                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الإيميل</th>
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                    Categories
+                    التصنيفات
                   </th>
                 </tr>
               </thead>
@@ -342,17 +407,22 @@ export default function SendRfqPage() {
                 {!activeSuppliers.length ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground text-sm">
-                      No active suppliers found
+                      لا يوجد موردون نشطون
                     </td>
                   </tr>
                 ) : (
                   activeSuppliers.map((s) => {
                     const cats = parseCategories(s.category);
+                    const wasSentBefore = alreadySentIds.has(s.id);
                     return (
                       <tr
                         key={s.id}
                         className={`border-b border-border last:border-0 cursor-pointer transition-colors ${
-                          selectedIds.has(s.id) ? "bg-primary/5" : "hover:bg-muted/20"
+                          selectedIds.has(s.id)
+                            ? wasSentBefore
+                              ? "bg-amber-50/60"
+                              : "bg-primary/5"
+                            : "hover:bg-muted/20"
                         }`}
                         onClick={() => toggleSupplier(s.id)}
                       >
@@ -364,18 +434,29 @@ export default function SendRfqPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <p className="font-medium text-foreground">{s.name}</p>
-                          {s.supplierId && (
-                            <p className="text-muted-foreground text-xs font-mono">
-                              {s.supplierId}
-                            </p>
-                          )}
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <p className="font-medium text-foreground">{s.name}</p>
+                              {s.supplierId && (
+                                <p className="text-muted-foreground text-xs font-mono">
+                                  {s.supplierId}
+                                </p>
+                              )}
+                            </div>
+                            {/* شارة "أُرسل مسبقاً" */}
+                            {wasSentBefore && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
+                                <RefreshCw size={9} />
+                                أُرسل مسبقاً
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">
                           {s.contactPerson ?? "-"}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {s.email ?? <span className="text-amber-500">No email</span>}
+                          {s.email ?? <span className="text-amber-500">بدون إيميل</span>}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1">
@@ -400,12 +481,17 @@ export default function SendRfqPage() {
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            {selectedIds.size} supplier{selectedIds.size !== 1 ? "s" : ""} selected
+            {selectedIds.size} مورد محدد
+            {selectedAlreadySentCount > 0 && (
+              <span className="text-amber-600 mr-1">
+                ({selectedAlreadySentCount} أُرسل إليهم مسبقاً)
+              </span>
+            )}
           </p>
           <div className="flex flex-col-reverse sm:flex-row gap-3 sm:self-end">
             <Link href={`/rfq/${rfqId}`}>
               <a className="inline-flex items-center px-4 py-2 text-sm rounded border border-border text-muted-foreground hover:text-foreground">
-                Cancel
+                إلغاء
               </a>
             </Link>
             <Button
@@ -427,6 +513,76 @@ export default function SendRfqPage() {
           </div>
         )}
       </div>
+
+      {/* ── نافذة تأكيد إعادة الإرسال ───────────────────────────────────────── */}
+      {showResendConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowResendConfirm(false);
+          }}
+        >
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md p-6 space-y-4">
+            {/* أيقونة التحذير */}
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <AlertTriangle size={20} className="text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-foreground">
+                  إعادة إرسال طلب التسعير؟
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {resendSupplierNames.length === 1
+                    ? "المورد التالي سبق إرسال هذا الطلب إليه:"
+                    : `الموردون التاليون (${resendSupplierNames.length}) سبق إرسال هذا الطلب إليهم:`}
+                </p>
+              </div>
+            </div>
+
+            {/* قائمة الموردين */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 max-h-48 overflow-y-auto">
+              <ul className="space-y-1">
+                {resendSupplierNames.map((name, i) => (
+                  <li key={i} className="flex items-center gap-2 text-sm text-amber-800">
+                    <RefreshCw size={11} className="text-amber-500 shrink-0" />
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              إذا وافقت، سيُرسَل طلب التسعير مرة أخرى لهؤلاء الموردين وسيحصلون على رابط تسعير جديد.
+            </p>
+
+            {/* أزرار */}
+            <div className="flex gap-3 justify-end pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setShowResendConfirm(false)}
+                disabled={sendMutation.isPending}
+              >
+                إلغاء
+              </Button>
+              <Button
+                onClick={handleConfirmResend}
+                disabled={sendMutation.isPending}
+                className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                {sendMutation.isPending ? (
+                  <>جاري الإرسال...</>
+                ) : (
+                  <>
+                    <Send size={13} />
+                    إرسال على أي حال
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
