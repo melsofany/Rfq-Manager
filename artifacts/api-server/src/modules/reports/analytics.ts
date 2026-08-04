@@ -44,6 +44,29 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
     .orderBy(desc(rfqTable.createdAt))
     .limit(5);
 
+  // Fetch real item counts and offer counts for recent RFQs
+  const recentRfqIds = recentRfqRows.map((r) => r.rfq.id);
+
+  const [itemCountRows, offerCountRows] =
+    recentRfqIds.length > 0
+      ? await Promise.all([
+          db
+            .select({ rfqId: rfqItemsTable.rfqId, cnt: count() })
+            .from(rfqItemsTable)
+            .where(
+              sql`${rfqItemsTable.rfqId} = ANY(ARRAY[${sql.raw(recentRfqIds.join(","))}]::int[])`,
+            )
+            .groupBy(rfqItemsTable.rfqId),
+          db
+            .select({ rfqId: offersTable.rfqId, cnt: count() })
+            .from(offersTable)
+            .where(
+              sql`${offersTable.rfqId} = ANY(ARRAY[${sql.raw(recentRfqIds.join(","))}]::int[])`,
+            )
+            .groupBy(offersTable.rfqId),
+        ])
+      : [[], []];
+
   const recentRfqs = recentRfqRows.map((r) => ({
     id: r.rfq.id,
     internalRfqNo: r.rfq.internalRfqNo,
@@ -54,9 +77,9 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
     employeeId: r.rfq.employeeId,
     employeeName: r.employeeName,
     notes: r.rfq.notes,
-    itemCount: 0,
+    itemCount: itemCountRows.find((ic) => ic.rfqId === r.rfq.id)?.cnt ?? 0,
     supplierCount: 0,
-    offerCount: 0,
+    offerCount: offerCountRows.find((oc) => oc.rfqId === r.rfq.id)?.cnt ?? 0,
     createdAt: r.rfq.createdAt.toISOString(),
     updatedAt: r.rfq.updatedAt.toISOString(),
   }));
@@ -66,6 +89,20 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
   const [totalOffersCnt] = await db.select({ cnt: count() }).from(offersTable);
   const responseRate =
     (totalSent?.cnt ?? 0) > 0 ? ((totalOffersCnt?.cnt ?? 0) / (totalSent?.cnt ?? 1)) * 100 : 0;
+
+  // ── Avg response time (hours between sent and offer received) ──────────────
+  const avgResponseTimeResult = await db
+    .select({
+      avgHours: sql<string | null>`
+        avg(
+          extract(epoch from (${offersTable.createdAt} - ${sentLogTable.createdAt})) / 3600
+        )`,
+    })
+    .from(offersTable)
+    .innerJoin(sentLogTable, eq(offersTable.sentLogId, sentLogTable.id));
+  const avgResponseTimeHours = avgResponseTimeResult[0]?.avgHours
+    ? Math.round(parseFloat(avgResponseTimeResult[0].avgHours))
+    : null;
 
   // ── Item pricing analytics ─────────────────────────────────────────────────
   // Total items across all RFQs
@@ -205,8 +242,8 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
     recentRfqs,
     topSuppliers,
     responseRateThisMonth: Math.round(responseRate),
-    avgResponseTimeHours: 24,
-    // New fields
+    avgResponseTimeHours,
+    // Item & PO analytics
     totalItems,
     pricedItems,
     unpricedItems,
@@ -353,7 +390,7 @@ router.get("/analytics/reports", requireAuth, async (req, res): Promise<void> =>
           )
       : [];
 
-  // POs in range
+  // POs in range — include createdAt for monthly trend calculation
   const poFilter = poDateFilter();
   const posInRange = poFilter
     ? await db
@@ -361,6 +398,7 @@ router.get("/analytics/reports", requireAuth, async (req, res): Promise<void> =>
           id: purchaseOrdersTable.id,
           rfqId: purchaseOrdersTable.rfqId,
           employeeId: purchaseOrdersTable.employeeId,
+          createdAt: purchaseOrdersTable.createdAt,
         })
         .from(purchaseOrdersTable)
         .where(poFilter)
@@ -369,6 +407,7 @@ router.get("/analytics/reports", requireAuth, async (req, res): Promise<void> =>
           id: purchaseOrdersTable.id,
           rfqId: purchaseOrdersTable.rfqId,
           employeeId: purchaseOrdersTable.employeeId,
+          createdAt: purchaseOrdersTable.createdAt,
         })
         .from(purchaseOrdersTable);
 
@@ -490,18 +529,24 @@ router.get("/analytics/reports", requireAuth, async (req, res): Promise<void> =>
     acc[month] = (acc[month] ?? 0) + 1;
     return acc;
   }, {});
+
+  // Now posInRange includes createdAt — calculate PO counts per month
   const poByMonth = posInRange.reduce<Record<string, number>>((acc, p) => {
-    // We don't have createdAt from POs, skip for now - already fetched
+    const month = p.createdAt.toISOString().substring(0, 7);
+    acc[month] = (acc[month] ?? 0) + 1;
     return acc;
   }, {});
 
-  const monthlyTrend = Object.entries(rfqByMonth)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, rfqs]) => ({
-      month,
-      rfqs,
-      pos: poByMonth[month] ?? 0,
-    }));
+  // Merge all months from both RFQs and POs
+  const allMonths = Array.from(
+    new Set([...Object.keys(rfqByMonth), ...Object.keys(poByMonth)]),
+  ).sort();
+
+  const monthlyTrend = allMonths.map((month) => ({
+    month,
+    rfqs: rfqByMonth[month] ?? 0,
+    pos: poByMonth[month] ?? 0,
+  }));
 
   // ── 5. Status Funnel ─────────────────────────────────────────
   const statusFunnel = rfqsInRange.reduce<Record<string, number>>((acc, r) => {

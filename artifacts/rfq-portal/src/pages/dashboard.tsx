@@ -13,6 +13,10 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
+  ShoppingCart,
+  Package,
+  Tag,
+  BarChart2,
 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -202,6 +206,11 @@ export default function DashboardPage() {
               <div key={i} className="h-28 bg-muted rounded-lg animate-pulse" />
             ))}
           </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-28 bg-muted rounded-lg animate-pulse" />
+            ))}
+          </div>
         </div>
       </Layout>
     );
@@ -222,7 +231,7 @@ export default function DashboardPage() {
           <p className="text-muted-foreground text-sm">{t("dashboard.subtitle")}</p>
         </div>
 
-        {/* KPI Cards */}
+        {/* KPI Cards — Row 1: RFQ overview */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
             label={t("dashboard.totalRfqs")}
@@ -250,6 +259,38 @@ export default function DashboardPage() {
             sub={t("dashboard.allTime")}
             icon={TrendingUp}
             color="bg-purple-50 text-purple-600"
+          />
+        </div>
+
+        {/* KPI Cards — Row 2: PO & item analytics */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard
+            label="Purchase Orders"
+            value={stats?.totalPos ?? 0}
+            sub="Total POs created"
+            icon={ShoppingCart}
+            color="bg-indigo-50 text-indigo-600"
+          />
+          <KpiCard
+            label="RFQ → PO Rate"
+            value={`${stats?.rfqToPoRate ?? 0}%`}
+            sub="Conversion rate"
+            icon={BarChart2}
+            color="bg-rose-50 text-rose-600"
+          />
+          <KpiCard
+            label="Total Items"
+            value={stats?.totalItems ?? 0}
+            sub={`${stats?.pricedItems ?? 0} priced`}
+            icon={Package}
+            color="bg-cyan-50 text-cyan-600"
+          />
+          <KpiCard
+            label="Pricing Coverage"
+            value={`${stats?.pricingRate ?? 0}%`}
+            sub={`${stats?.unpricedItems ?? 0} items unpriced`}
+            icon={Tag}
+            color="bg-teal-50 text-teal-600"
           />
         </div>
 
@@ -298,7 +339,7 @@ export default function DashboardPage() {
                       <div className="w-16 bg-muted rounded-full h-1.5">
                         <div
                           className="bg-primary h-1.5 rounded-full"
-                          style={{ width: `${s.responseRate}%` }}
+                          style={{ width: `${Math.min(s.responseRate ?? 0, 100)}%` }}
                         />
                       </div>
                       <span className="text-xs font-medium text-foreground w-10 text-right">
@@ -315,6 +356,56 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+
+        {/* Item & PO breakdown */}
+        {((stats?.totalItems ?? 0) > 0 || (stats?.totalPos ?? 0) > 0) && (
+          <div className="bg-card border border-border rounded-lg p-5">
+            <h2 className="font-semibold text-foreground text-sm mb-4">Items & PO Breakdown</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-foreground">{stats?.totalItems ?? 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">Total RFQ Items</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-600">{stats?.pricedItems ?? 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">Priced Items</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-amber-600">{stats?.unpricedItems ?? 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">Unpriced Items</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-indigo-600">{stats?.itemsWithPo ?? 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">Items in POs</p>
+              </div>
+            </div>
+            {/* Pricing coverage bar */}
+            {(stats?.totalItems ?? 0) > 0 && (
+              <div className="mt-4">
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <span>Pricing coverage</span>
+                  <span>{stats?.pricingRate ?? 0}%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2">
+                  <div
+                    className="bg-green-500 h-2 rounded-full transition-all"
+                    style={{ width: `${Math.min(stats?.pricingRate ?? 0, 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>PO award rate</span>
+                  <span>{stats?.poRate ?? 0}%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2 mt-1">
+                  <div
+                    className="bg-indigo-500 h-2 rounded-full transition-all"
+                    style={{ width: `${Math.min(stats?.poRate ?? 0, 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Google Sheet Sync */}
         <SheetSyncCard />
@@ -344,6 +435,12 @@ export default function DashboardPage() {
                       Employee
                     </th>
                     <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">
+                      Items
+                    </th>
+                    <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">
+                      Offers
+                    </th>
+                    <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">
                       Status
                     </th>
                     <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">
@@ -369,6 +466,12 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-5 py-3 text-muted-foreground text-xs">
                         {rfq.employeeName ?? "-"}
+                      </td>
+                      <td className="px-5 py-3 text-muted-foreground text-xs text-center">
+                        {rfq.itemCount ?? 0}
+                      </td>
+                      <td className="px-5 py-3 text-muted-foreground text-xs text-center">
+                        {rfq.offerCount ?? 0}
                       </td>
                       <td className="px-5 py-3">
                         <StatusBadge status={rfq.status} />
