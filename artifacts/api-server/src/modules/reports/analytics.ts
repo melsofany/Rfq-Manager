@@ -19,10 +19,12 @@ const router = Router();
 router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> => {
   // ── Core KPIs ──────────────────────────────────────────────────────────────
   const [totalRfqs] = await db.select({ cnt: count() }).from(rfqTable);
+  // Open = actively sent to suppliers and awaiting a decision (SENT or QUOTED).
+  // DRAFT is excluded — those haven't been sent to any supplier yet.
   const [openRfqs] = await db
     .select({ cnt: count() })
     .from(rfqTable)
-    .where(sql`${rfqTable.status} IN ('DRAFT','SENT','QUOTED')`);
+    .where(sql`${rfqTable.status} IN ('SENT','QUOTED')`);
   const [totalSuppliers] = await db
     .select({ cnt: count() })
     .from(suppliersTable)
