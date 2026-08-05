@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useGetSupplier,
   useGetSupplierScore,
@@ -25,8 +25,13 @@ import {
   X,
   Check,
   AlertCircle,
+  FileText,
+  ShoppingCart,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
@@ -53,6 +58,52 @@ function parseCategories(cat: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
+const RFQ_STATUS_STYLES: Record<string, string> = {
+  DRAFT: "bg-muted text-muted-foreground",
+  SENT: "bg-blue-50 text-blue-700",
+  QUOTED: "bg-purple-50 text-purple-700",
+  SUCCESS: "bg-green-50 text-green-700",
+  FAILED: "bg-red-50 text-red-600",
+};
+
+const PO_STATUS_STYLES: Record<string, string> = {
+  draft: "bg-muted text-muted-foreground",
+  sent: "bg-blue-50 text-blue-700",
+  confirmed: "bg-green-50 text-green-700",
+};
+
+function fmtDate(iso: string | null | undefined) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("ar-EG", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface SupplierRfq {
+  id: number;
+  internalRfqNo: string;
+  customerRfqNo: string;
+  status: string;
+  sentAt: string | null;
+  hasOffer: boolean;
+  createdAt: string;
+}
+
+interface SupplierPo {
+  id: number;
+  internalPoNo: string;
+  sheetPoNo: string;
+  status: string;
+  itemCount: number;
+  createdAt: string;
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
 export default function SupplierDetailPage() {
   const { id } = useParams<{ id: string }>();
   const supplierId = parseInt(id, 10);
@@ -60,7 +111,6 @@ export default function SupplierDetailPage() {
   const queryClient = useQueryClient();
   const { employee } = useAuth();
 
-  // Only admin and manager can delete
   const canDelete = employee?.role === "admin" || employee?.role === "manager";
 
   const [editing, setEditing] = useState(false);
@@ -81,7 +131,31 @@ export default function SupplierDetailPage() {
     query: { queryKey: getGetSupplierScoreQueryKey(supplierId), enabled: !!supplierId },
   });
 
-  // Merge API categories with any categories stored on the supplier that are not in supplier_categories
+  // ── Supplier RFQs ──────────────────────────────────────────────────────────
+  const { data: supplierRfqs = [], isLoading: rfqsLoading } = useQuery<SupplierRfq[]>({
+    queryKey: ["supplier-rfqs", supplierId],
+    queryFn: async () => {
+      const res = await fetch(`/api/suppliers/${supplierId}/rfqs`);
+      if (!res.ok) throw new Error("Failed to fetch supplier RFQs");
+      return res.json() as Promise<SupplierRfq[]>;
+    },
+    enabled: !!supplierId,
+    staleTime: 30_000,
+  });
+
+  // ── Supplier POs ───────────────────────────────────────────────────────────
+  const { data: supplierPos = [], isLoading: posLoading } = useQuery<SupplierPo[]>({
+    queryKey: ["supplier-pos", supplierId],
+    queryFn: async () => {
+      const res = await fetch(`/api/suppliers/${supplierId}/pos`);
+      if (!res.ok) throw new Error("Failed to fetch supplier POs");
+      return res.json() as Promise<SupplierPo[]>;
+    },
+    enabled: !!supplierId,
+    staleTime: 30_000,
+  });
+
+  // ── Categories merge ───────────────────────────────────────────────────────
   const mergedCategories = useMemo(() => {
     const base = [...categories];
     const existingNames = new Set(base.map((c) => c.name));
@@ -194,7 +268,7 @@ export default function SupplierDetailPage() {
 
   return (
     <Layout>
-      <div className="p-4 sm:p-6 max-w-3xl space-y-5">
+      <div className="p-4 sm:p-6 max-w-4xl space-y-5">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -270,7 +344,7 @@ export default function SupplierDetailPage() {
           </div>
         )}
 
-        {/* Delete error — always visible when not editing */}
+        {/* Delete error */}
         {!editing && serverError && (
           <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3">
             <AlertCircle size={14} />
@@ -278,6 +352,7 @@ export default function SupplierDetailPage() {
           </div>
         )}
 
+        {/* Info + Scorecard */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Info / Edit Form */}
           <div className="bg-card border border-border rounded-lg p-5 space-y-4">
@@ -470,6 +545,176 @@ export default function SupplierDetailPage() {
               <div className="text-muted-foreground text-xs">No score data yet</div>
             )}
           </div>
+        </div>
+
+        {/* ── طلبات التسعير ──────────────────────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/20">
+            <div className="flex items-center gap-2">
+              <FileText size={15} className="text-muted-foreground" />
+              <h2 className="font-semibold text-sm text-foreground">طلبات التسعير المرسلة</h2>
+              {supplierRfqs.length > 0 && (
+                <span className="bg-primary/10 text-primary text-xs font-medium px-1.5 py-0.5 rounded">
+                  {supplierRfqs.length}
+                </span>
+              )}
+            </div>
+            <Link href="/rfq">
+              <a className="text-xs text-muted-foreground hover:text-primary flex items-center gap-0.5">
+                كل الطلبات <ChevronRight size={13} />
+              </a>
+            </Link>
+          </div>
+
+          {rfqsLoading ? (
+            <div className="p-6 text-center text-muted-foreground text-sm">Loading...</div>
+          ) : supplierRfqs.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground text-sm">
+              لم يُرسل لهذا المورد أي طلب تسعير بعد
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-right">
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
+                      رقم الطلب
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
+                      رقم العميل
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      الحالة
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      عرض سعر؟
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
+                      تاريخ الإرسال
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {supplierRfqs.map((rfq) => (
+                    <tr
+                      key={rfq.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
+                      onClick={() => navigate(`/rfq/${rfq.id}`)}
+                    >
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs font-medium text-foreground">
+                          {rfq.internalRfqNo}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {rfq.customerRfqNo}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${RFQ_STATUS_STYLES[rfq.status] ?? "bg-muted text-muted-foreground"}`}
+                        >
+                          {rfq.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {rfq.hasOffer ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
+                            ✓ نعم
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {fmtDate(rfq.sentAt ?? rfq.createdAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* ── أوامر الشراء ───────────────────────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-muted/20">
+            <div className="flex items-center gap-2">
+              <ShoppingCart size={15} className="text-muted-foreground" />
+              <h2 className="font-semibold text-sm text-foreground">أوامر الشراء</h2>
+              {supplierPos.length > 0 && (
+                <span className="bg-primary/10 text-primary text-xs font-medium px-1.5 py-0.5 rounded">
+                  {supplierPos.length}
+                </span>
+              )}
+            </div>
+            <Link href="/purchase-orders">
+              <a className="text-xs text-muted-foreground hover:text-primary flex items-center gap-0.5">
+                كل الأوامر <ChevronRight size={13} />
+              </a>
+            </Link>
+          </div>
+
+          {posLoading ? (
+            <div className="p-6 text-center text-muted-foreground text-sm">Loading...</div>
+          ) : supplierPos.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground text-sm">
+              لا توجد أوامر شراء مرتبطة بهذا المورد
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
+                      رقم أمر الشراء
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
+                      رقم PO (العميل)
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      الحالة
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      عدد البنود
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
+                      تاريخ الإنشاء
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {supplierPos.map((po) => (
+                    <tr
+                      key={po.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
+                      onClick={() => navigate(`/purchase-orders/${po.id}`)}
+                    >
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs font-medium text-foreground">
+                          {po.internalPoNo}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">{po.sheetPoNo}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${PO_STATUS_STYLES[po.status] ?? "bg-muted text-muted-foreground"}`}
+                        >
+                          {po.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs text-foreground font-medium">
+                        {po.itemCount}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {fmtDate(po.createdAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </Layout>

@@ -6,8 +6,10 @@ import {
   offersTable,
   offerItemsTable,
   purchaseOrderItemsTable,
+  purchaseOrdersTable,
+  rfqTable,
 } from "@workspace/db";
-import { eq, ilike, or, and, ne, count, sql, avg } from "drizzle-orm";
+import { eq, ilike, or, and, ne, count, sql, avg, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 
 const router = Router();
@@ -568,6 +570,97 @@ router.delete(
     }
   },
 );
+
+// GET /suppliers/:id/rfqs — طلبات التسعير المرسلة لهذا المورد
+router.get("/suppliers/:id/rfqs", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const supplierId = parseInt(raw, 10);
+
+  const rows = await db
+    .select({
+      rfqId: rfqTable.id,
+      internalRfqNo: rfqTable.internalRfqNo,
+      customerRfqNo: rfqTable.customerRfqNo,
+      status: rfqTable.status,
+      sentAt: sentLogTable.createdAt,
+      rfqCreatedAt: rfqTable.createdAt,
+    })
+    .from(sentLogTable)
+    .innerJoin(rfqTable, eq(sentLogTable.rfqId, rfqTable.id))
+    .where(eq(sentLogTable.supplierId, supplierId))
+    .orderBy(sql`${sentLogTable.createdAt} DESC`);
+
+  const rfqIds = rows.map((r) => r.rfqId);
+  const offerRows =
+    rfqIds.length > 0
+      ? await db
+          .select({ rfqId: offersTable.rfqId, cnt: count() })
+          .from(offersTable)
+          .where(and(eq(offersTable.supplierId, supplierId), inArray(offersTable.rfqId, rfqIds)))
+          .groupBy(offersTable.rfqId)
+      : [];
+
+  const offerMap = Object.fromEntries(offerRows.map((r) => [r.rfqId, Number(r.cnt)]));
+
+  res.json(
+    rows.map((r) => ({
+      id: r.rfqId,
+      internalRfqNo: r.internalRfqNo,
+      customerRfqNo: r.customerRfqNo,
+      status: r.status,
+      sentAt: r.sentAt?.toISOString() ?? null,
+      hasOffer: (offerMap[r.rfqId] ?? 0) > 0,
+      createdAt: r.rfqCreatedAt.toISOString(),
+    })),
+  );
+});
+
+// GET /suppliers/:id/pos — أوامر الشراء المرتبطة بهذا المورد
+router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const supplierId = parseInt(raw, 10);
+
+  const rows = await db
+    .selectDistinct({
+      id: purchaseOrdersTable.id,
+      internalPoNo: purchaseOrdersTable.internalPoNo,
+      sheetPoNo: purchaseOrdersTable.sheetPoNo,
+      status: purchaseOrdersTable.status,
+      createdAt: purchaseOrdersTable.createdAt,
+    })
+    .from(purchaseOrderItemsTable)
+    .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .where(eq(purchaseOrderItemsTable.supplierId, supplierId))
+    .orderBy(sql`${purchaseOrdersTable.createdAt} DESC`);
+
+  const poIds = rows.map((r) => r.id);
+  const itemCountRows =
+    poIds.length > 0
+      ? await db
+          .select({ poId: purchaseOrderItemsTable.poId, cnt: count() })
+          .from(purchaseOrderItemsTable)
+          .where(
+            and(
+              eq(purchaseOrderItemsTable.supplierId, supplierId),
+              inArray(purchaseOrderItemsTable.poId, poIds),
+            ),
+          )
+          .groupBy(purchaseOrderItemsTable.poId)
+      : [];
+
+  const itemMap = Object.fromEntries(itemCountRows.map((r) => [r.poId, Number(r.cnt)]));
+
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      internalPoNo: r.internalPoNo,
+      sheetPoNo: r.sheetPoNo,
+      status: r.status,
+      itemCount: itemMap[r.id] ?? 0,
+      createdAt: r.createdAt.toISOString(),
+    })),
+  );
+});
 
 router.get("/suppliers/:id/score", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
