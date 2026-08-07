@@ -11,7 +11,7 @@ import {
   purchaseOrdersTable,
   purchaseOrderItemsTable,
 } from "@workspace/db";
-import { eq, count, sql, desc, isNotNull, gte, lte, and } from "drizzle-orm";
+import { eq, count, countDistinct, sql, desc, isNotNull, gte, lte, and, or } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
@@ -49,25 +49,28 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
   // Fetch real item counts and offer counts for recent RFQs
   const recentRfqIds = recentRfqRows.map((r) => r.rfq.id);
 
-  const [itemCountRows, offerCountRows] =
-    recentRfqIds.length > 0
-      ? await Promise.all([
-          db
-            .select({ rfqId: rfqItemsTable.rfqId, cnt: count() })
-            .from(rfqItemsTable)
-            .where(
-              sql`${rfqItemsTable.rfqId} = ANY(ARRAY[${sql.raw(recentRfqIds.join(","))}]::int[])`,
-            )
-            .groupBy(rfqItemsTable.rfqId),
-          db
-            .select({ rfqId: offersTable.rfqId, cnt: count() })
-            .from(offersTable)
-            .where(
-              sql`${offersTable.rfqId} = ANY(ARRAY[${sql.raw(recentRfqIds.join(","))}]::int[])`,
-            )
-            .groupBy(offersTable.rfqId),
-        ])
-      : [[], []];
+  let itemCountRows: Array<{ rfqId: number; cnt: number }> = [];
+  let supplierCountRows: Array<{ rfqId: number; cnt: number }> = [];
+  let offerCountRows: Array<{ rfqId: number; cnt: number }> = [];
+  if (recentRfqIds.length > 0) {
+    [itemCountRows, supplierCountRows, offerCountRows] = await Promise.all([
+      db
+        .select({ rfqId: rfqItemsTable.rfqId, cnt: count() })
+        .from(rfqItemsTable)
+        .where(sql`${rfqItemsTable.rfqId} = ANY(ARRAY[${sql.raw(recentRfqIds.join(","))}]::int[])`)
+        .groupBy(rfqItemsTable.rfqId),
+      db
+        .select({ rfqId: sentLogTable.rfqId, cnt: countDistinct(sentLogTable.supplierId) })
+        .from(sentLogTable)
+        .where(sql`${sentLogTable.rfqId} = ANY(ARRAY[${sql.raw(recentRfqIds.join(","))}]::int[])`)
+        .groupBy(sentLogTable.rfqId),
+      db
+        .select({ rfqId: offersTable.rfqId, cnt: count() })
+        .from(offersTable)
+        .where(sql`${offersTable.rfqId} = ANY(ARRAY[${sql.raw(recentRfqIds.join(","))}]::int[])`)
+        .groupBy(offersTable.rfqId),
+    ]);
+  }
 
   const recentRfqs = recentRfqRows.map((r) => ({
     id: r.rfq.id,
@@ -80,17 +83,26 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
     employeeName: r.employeeName,
     notes: r.rfq.notes,
     itemCount: itemCountRows.find((ic) => ic.rfqId === r.rfq.id)?.cnt ?? 0,
-    supplierCount: 0,
+    supplierCount: supplierCountRows.find((sc) => sc.rfqId === r.rfq.id)?.cnt ?? 0,
     offerCount: offerCountRows.find((oc) => oc.rfqId === r.rfq.id)?.cnt ?? 0,
     createdAt: r.rfq.createdAt.toISOString(),
     updatedAt: r.rfq.updatedAt.toISOString(),
   }));
 
-  // ── Response rate ──────────────────────────────────────────────────────────
-  const [totalSent] = await db.select({ cnt: count() }).from(sentLogTable);
-  const [totalOffersCnt] = await db.select({ cnt: count() }).from(offersTable);
+  // ── Response rate this month ────────────────────────────────────────────────
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const [totalSent] = await db
+    .select({ cnt: count() })
+    .from(sentLogTable)
+    .where(gte(sentLogTable.createdAt, monthStart));
+  const [respondedSent] = await db
+    .select({ cnt: countDistinct(offersTable.sentLogId) })
+    .from(offersTable)
+    .innerJoin(sentLogTable, eq(offersTable.sentLogId, sentLogTable.id))
+    .where(and(gte(sentLogTable.createdAt, monthStart), isNotNull(offersTable.sentLogId)));
   const responseRate =
-    (totalSent?.cnt ?? 0) > 0 ? ((totalOffersCnt?.cnt ?? 0) / (totalSent?.cnt ?? 1)) * 100 : 0;
+    (totalSent?.cnt ?? 0) > 0 ? ((respondedSent?.cnt ?? 0) / (totalSent?.cnt ?? 1)) * 100 : 0;
 
   // ── Avg response time (hours between sent and offer received) ──────────────
   const avgResponseTimeResult = await db
@@ -118,9 +130,32 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
   const pricedItems = pricedItemsRows.length;
   const unpricedItems = Math.max(0, totalItems - pricedItems);
 
-  // Items that appear in any purchase_order_items (by partNo or itemId matching)
-  // We count PO items as unique items awarded
-  const [poItemsRow] = await db.select({ cnt: count() }).from(purchaseOrderItemsTable);
+  // Match PO rows back to RFQ items using the identifiers carried through the
+  // PO flow. Count distinct RFQ items, not PO rows, so repeated awards or
+  // multiple POs cannot inflate the coverage rate.
+  const [poItemsRow] = await db
+    .select({ cnt: countDistinct(rfqItemsTable.id) })
+    .from(rfqItemsTable)
+    .innerJoin(
+      purchaseOrderItemsTable,
+      or(
+        and(
+          isNotNull(rfqItemsTable.itemId),
+          isNotNull(purchaseOrderItemsTable.itemId),
+          eq(rfqItemsTable.itemId, purchaseOrderItemsTable.itemId),
+        ),
+        and(
+          isNotNull(rfqItemsTable.partNo),
+          isNotNull(purchaseOrderItemsTable.partNo),
+          eq(rfqItemsTable.partNo, purchaseOrderItemsTable.partNo),
+        ),
+        and(
+          isNotNull(rfqItemsTable.lineItem),
+          isNotNull(purchaseOrderItemsTable.lineItem),
+          eq(rfqItemsTable.lineItem, purchaseOrderItemsTable.lineItem),
+        ),
+      ),
+    );
   const itemsWithPo = poItemsRow?.cnt ?? 0;
 
   const pricingRate = totalItems > 0 ? Math.round((pricedItems / totalItems) * 1000) / 10 : 0;
@@ -128,7 +163,7 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
 
   // ── RFQ → PO conversion ────────────────────────────────────────────────────
   const [rfqsWithPoRow] = await db
-    .select({ cnt: count() })
+    .select({ cnt: countDistinct(purchaseOrdersTable.rfqId) })
     .from(purchaseOrdersTable)
     .where(isNotNull(purchaseOrdersTable.rfqId));
   const rfqsWithPo = rfqsWithPoRow?.cnt ?? 0;
@@ -153,14 +188,19 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
 
       // Offers submitted
       const [offerCount] = await db
-        .select({ cnt: count() })
+        .select({ cnt: countDistinct(offersTable.sentLogId) })
         .from(offersTable)
-        .where(eq(offersTable.supplierId, s.id));
+        .where(and(eq(offersTable.supplierId, s.id), isNotNull(offersTable.sentLogId)));
       const totalOffersSubmitted = offerCount?.cnt ?? 0;
 
+      const [respondedSentToSupplier] = await db
+        .select({ cnt: countDistinct(offersTable.sentLogId) })
+        .from(offersTable)
+        .innerJoin(sentLogTable, eq(offersTable.sentLogId, sentLogTable.id))
+        .where(and(eq(offersTable.supplierId, s.id), isNotNull(offersTable.sentLogId)));
       const responseRateSupplier =
         totalSentToSupplier > 0
-          ? Math.round((totalOffersSubmitted / totalSentToSupplier) * 1000) / 10
+          ? Math.round(((respondedSentToSupplier?.cnt ?? 0) / totalSentToSupplier) * 1000) / 10
           : 0;
 
       // Items offered (total offer_items for this supplier)

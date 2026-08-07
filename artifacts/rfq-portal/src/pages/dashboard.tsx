@@ -256,7 +256,7 @@ export default function DashboardPage() {
           <KpiCard
             label={t("dashboard.responseRate")}
             value={`${stats?.responseRateThisMonth ?? 0}%`}
-            sub={t("dashboard.allTime")}
+            sub={t("dashboard.thisMonth")}
             icon={TrendingUp}
             color="bg-purple-50 text-purple-600"
           />
@@ -434,9 +434,7 @@ export default function DashboardPage() {
                     <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">
                       Employee
                     </th>
-                    <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">
-                      Items
-                    </th>
+                    <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">Items</th>
                     <th className="px-5 py-2.5 text-muted-foreground text-xs font-medium">
                       Offers
                     </th>
