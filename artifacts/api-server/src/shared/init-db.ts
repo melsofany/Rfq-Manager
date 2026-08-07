@@ -8,6 +8,14 @@ export async function initDb(): Promise<void> {
   logger.info("initDb: connected successfully");
   try {
     await client.query(`
+      CREATE TABLE IF NOT EXISTS representatives (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL UNIQUE,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
       CREATE TABLE IF NOT EXISTS employees (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
