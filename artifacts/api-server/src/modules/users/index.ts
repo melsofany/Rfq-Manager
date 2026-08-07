@@ -15,11 +15,13 @@ import { Router, type IRouter } from "express";
 import authRouter from "./auth";
 import suppliersRouter from "./suppliers";
 import categoriesRouter from "./categories";
+import representativesRouter from "./representatives";
 
 const router: IRouter = Router();
 
 router.use(authRouter);
 router.use(suppliersRouter);
 router.use(categoriesRouter);
+router.use(representativesRouter);
 
 export default router;

@@ -1,4 +1,5 @@
 export * from "./employees";
+export * from "./representatives";
 export * from "./suppliers";
 export * from "./rfq";
 export * from "./sent_log";

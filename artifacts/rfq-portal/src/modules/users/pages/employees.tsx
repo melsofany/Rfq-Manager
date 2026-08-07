@@ -7,6 +7,7 @@ import {
   getListEmployeesQueryKey,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
+import RepresentativesPanel from "./representatives-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ export default function EmployeesPage() {
   const { t } = useLanguage();
   const queryClient = useQueryClient();
 
+  const [activeTab, setActiveTab] = useState<"employees" | "representatives">("employees");
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState<EmpForm>(EMPTY_FORM);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -175,6 +177,11 @@ export default function EmployeesPage() {
           </Button>
         </div>
 
+        <div className="flex gap-2 border-b border-border">
+          <button onClick={() => setActiveTab("employees")} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "employees" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{t("employees.tab")}</button>
+          <button onClick={() => setActiveTab("representatives")} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "representatives" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{t("representatives.tab")}</button>
+        </div>
+        {activeTab === "representatives" ? <RepresentativesPanel /> : <>
         {/* Create Form */}
         {showCreate && (
           <div className="bg-card border border-border rounded-lg p-5 space-y-4">
@@ -543,6 +550,7 @@ export default function EmployeesPage() {
             </div>
           )}
         </div>
+        </>}
       </div>
     </Layout>
   );
