@@ -16,15 +16,56 @@ import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
 
+function parsePricingDeadline(value: string | Date | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  // close_date is stored as a date string. Treat that date as open through
+  // the end of the day, matching the supplier pricing endpoint behavior.
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    parsed.setUTCHours(23, 59, 59, 999);
+  }
+  return parsed;
+}
+
 router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> => {
   // ── Core KPIs ──────────────────────────────────────────────────────────────
   const [totalRfqs] = await db.select({ cnt: count() }).from(rfqTable);
-  // Open = actively sent to suppliers and awaiting a decision (SENT or QUOTED).
-  // DRAFT is excluded — those haven't been sent to any supplier yet.
-  const [openRfqs] = await db
-    .select({ cnt: count() })
+
+  // An RFQ is open only while its pricing deadline has not passed. The latest
+  // supplier close date is the effective deadline when suppliers have different
+  // deadlines; expires_at / required_response_date are fallbacks for RFQs that
+  // do not yet have a sent-log row.
+  const dashboardNow = new Date();
+  const openCandidates = await db
+    .select({
+      id: rfqTable.id,
+      status: rfqTable.status,
+      expiresAt: rfqTable.expiresAt,
+      requiredResponseDate: rfqTable.requiredResponseDate,
+    })
     .from(rfqTable)
     .where(sql`${rfqTable.status} IN ('SENT','QUOTED')`);
+  const closeDates = await db
+    .select({ rfqId: sentLogTable.rfqId, closeDate: sentLogTable.closeDate })
+    .from(sentLogTable);
+  const latestCloseByRfq = new Map<number, Date>();
+  for (const row of closeDates) {
+    const deadline = parsePricingDeadline(row.closeDate);
+    if (!deadline) continue;
+    const previous = latestCloseByRfq.get(row.rfqId);
+    if (!previous || deadline > previous) latestCloseByRfq.set(row.rfqId, deadline);
+  }
+  const openRfqsCount = openCandidates.filter((rfq) => {
+    const sentDeadline = latestCloseByRfq.get(rfq.id);
+    const deadline =
+      sentDeadline ??
+      parsePricingDeadline(rfq.expiresAt) ??
+      parsePricingDeadline(rfq.requiredResponseDate);
+    return deadline !== null && deadline >= dashboardNow;
+  }).length;
+  const openRfqs = { cnt: openRfqsCount };
   const [totalSuppliers] = await db
     .select({ cnt: count() })
     .from(suppliersTable)
