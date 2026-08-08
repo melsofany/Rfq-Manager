@@ -704,6 +704,148 @@ router.get("/po/:id", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
+// PUT /api/po/:id — update a DRAFT purchase order (PO-level fields + full items replacement).
+// Only POs still in "draft" status may be edited. Once dispatched ("sent") the PO is locked.
+router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+
+  const { sheetPoNo, receiverName, receiverPhone, notes, employeeId, items } = req.body as {
+    sheetPoNo?: string;
+    receiverName?: string;
+    receiverPhone?: string;
+    notes?: string;
+    employeeId?: number | null;
+    items?: Array<{
+      itemId?: string | null;
+      lineItem?: string;
+      partNo?: string;
+      description: string;
+      uom?: string;
+      qty?: string | number | null;
+      referencePrice?: string | number | null;
+      supplierId?: number | null;
+      taxIncluded?: boolean;
+    }>;
+  };
+
+  const [existing] = await db
+    .select()
+    .from(purchaseOrdersTable)
+    .where(eq(purchaseOrdersTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Purchase order not found" });
+    return;
+  }
+  if (existing.status !== "draft") {
+    res
+      .status(400)
+      .json({ error: "لا يمكن تعديل أمر الشراء بعد إرساله — فقط الأوامر في حالة Draft قابلة للتعديل" });
+    return;
+  }
+
+  if (!sheetPoNo || !sheetPoNo.trim()) {
+    res.status(400).json({ error: "sheetPoNo required" });
+    return;
+  }
+  const validItems = (items ?? []).filter((it) => it.description?.trim());
+  if (validItems.length === 0) {
+    res.status(400).json({ error: "At least one item is required" });
+    return;
+  }
+
+  try {
+    const updated = await db.transaction(async (tx) => {
+      const [po] = await tx
+        .update(purchaseOrdersTable)
+        .set({
+          sheetPoNo: sheetPoNo.trim(),
+          receiverName: receiverName?.trim() || null,
+          receiverPhone: receiverPhone?.trim() || null,
+          notes: notes?.trim() || null,
+          employeeId: employeeId ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(purchaseOrdersTable.id, id))
+        .returning();
+
+      // Full replacement of items: delete then re-insert. Keeps add/edit/remove trivial.
+      await tx.delete(purchaseOrderItemsTable).where(eq(purchaseOrderItemsTable.poId, id));
+      await tx.insert(purchaseOrderItemsTable).values(
+        validItems.map((it) => ({
+          poId: id,
+          itemId: it.itemId || null,
+          lineItem: it.lineItem || null,
+          partNo: it.partNo || null,
+          description: it.description.trim(),
+          uom: it.uom || null,
+          qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
+          referencePrice:
+            it.referencePrice != null && it.referencePrice !== "" ? String(it.referencePrice) : null,
+          supplierId: it.supplierId ?? null,
+          taxIncluded: it.taxIncluded ?? false,
+        })),
+      );
+
+      await tx.insert(auditLogTable).values({
+        action: "po.updated",
+        entityType: "po",
+        entityId: id,
+        employeeId: req.session.employeeId,
+        description: `Updated draft purchase order ${po.internalPoNo} (${validItems.length} item(s))`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+
+      return po;
+    });
+
+    const [{ cnt: itemCount }] = await db
+      .select({ cnt: count() })
+      .from(purchaseOrderItemsTable)
+      .where(eq(purchaseOrderItemsTable.poId, id));
+
+    let linkedRfq: { id: number; internalRfqNo: string; status: string } | null = null;
+    if (updated.rfqId) {
+      const [rfqRow] = await db
+        .select({ id: rfqTable.id, internalRfqNo: rfqTable.internalRfqNo, status: rfqTable.status })
+        .from(rfqTable)
+        .where(eq(rfqTable.id, updated.rfqId));
+      if (rfqRow) linkedRfq = rfqRow;
+    }
+
+    let employeeName: string | null = null;
+    if (updated.employeeId) {
+      const [empRow] = await db
+        .select({ name: employeesTable.name })
+        .from(employeesTable)
+        .where(eq(employeesTable.id, updated.employeeId));
+      employeeName = empRow?.name ?? null;
+    }
+
+    res.json({
+      id: updated.id,
+      internalPoNo: updated.internalPoNo,
+      sheetPoNo: updated.sheetPoNo,
+      receiverName: updated.receiverName,
+      receiverPhone: updated.receiverPhone,
+      status: updated.status,
+      employeeId: updated.employeeId,
+      employeeName,
+      rfqId: updated.rfqId ?? null,
+      linkedRfq,
+      notes: updated.notes,
+      itemCount,
+      createdAt: updated.createdAt.toISOString(),
+      updatedAt: updated.updatedAt.toISOString(),
+    });
+  } catch (err) {
+    req.log.error({ err, id }, "Failed to update purchase order");
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Failed to update purchase order", details: message });
+  }
+});
+
 // PATCH /api/po/:id/link-rfq — link an existing PO to an RFQ and mark the RFQ as SUCCESS
 router.patch("/po/:id/link-rfq", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;

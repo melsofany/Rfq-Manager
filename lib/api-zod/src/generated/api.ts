@@ -924,6 +924,54 @@ export const GetPurchaseOrderResponse = zod.object({
 
 
 /**
+ * Only purchase orders still in "draft" status may be edited. Once a PO is
+ * dispatched ("sent") it is locked. The supplied `items` array fully replaces
+ * the existing items, so add/edit/remove are all handled by sending the new list.
+ * @summary Update a DRAFT purchase order (PO-level fields + full items replacement)
+ */
+export const UpdatePurchaseOrderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const updatePurchaseOrderBodyItemsItemTaxIncludedDefault = false;
+
+
+export const UpdatePurchaseOrderBody = zod.object({
+  "sheetPoNo": zod.string(),
+  "receiverName": zod.string().nullish(),
+  "receiverPhone": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "employeeId": zod.number().nullish().describe('Responsible employee (المندوب \/ المسؤول)'),
+  "items": zod.array(zod.object({
+  "itemId": zod.string().optional(),
+  "lineItem": zod.string().optional(),
+  "partNo": zod.string().optional(),
+  "description": zod.string(),
+  "uom": zod.string().optional(),
+  "qty": zod.number().nullish(),
+  "referencePrice": zod.number().nullish(),
+  "supplierId": zod.number().nullish(),
+  "taxIncluded": zod.boolean().default(updatePurchaseOrderBodyItemsItemTaxIncludedDefault)
+})).min(1)
+})
+
+export const UpdatePurchaseOrderResponse = zod.object({
+  "id": zod.number(),
+  "internalPoNo": zod.string(),
+  "sheetPoNo": zod.string(),
+  "receiverName": zod.string().nullish(),
+  "receiverPhone": zod.string().nullish(),
+  "status": zod.string(),
+  "employeeId": zod.number().optional(),
+  "employeeName": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "itemCount": zod.number().optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string().optional()
+})
+
+
+/**
  * @summary Get items for a purchase order
  */
 export const ListPurchaseOrderItemsParams = zod.object({

@@ -379,6 +379,23 @@ export interface PurchaseOrderInput {
   items: PurchaseOrderItemInput[];
 }
 
+export interface PurchaseOrderUpdateInput {
+  sheetPoNo: string;
+  /** @nullable */
+  receiverName?: string | null;
+  /** @nullable */
+  receiverPhone?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  /**
+     * Responsible employee (المندوب / المسؤول)
+     * @nullable
+     */
+  employeeId?: number | null;
+  /** @minItems 1 */
+  items: PurchaseOrderItemInput[];
+}
+
 export interface PurchaseOrderItem {
   id: number;
   poId: number;

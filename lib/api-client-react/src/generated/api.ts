@@ -53,6 +53,7 @@ import type {
   PurchaseOrder,
   PurchaseOrderInput,
   PurchaseOrderItem,
+  PurchaseOrderUpdateInput,
   ReportsData,
   Rfq,
   RfqInput,
@@ -3003,6 +3004,81 @@ export function useGetPurchaseOrder<TData = Awaited<ReturnType<typeof getPurchas
 
 
 
+
+export const getUpdatePurchaseOrderUrl = (id: number,) => {
+
+
+
+
+  return `/api/po/${id}`
+}
+
+/**
+ * Only purchase orders still in "draft" status may be edited. Once a PO is
+ * dispatched ("sent") it is locked. The supplied `items` array fully replaces
+ * the existing items, so add/edit/remove are all handled by sending the new list.
+ * @summary Update a DRAFT purchase order (PO-level fields + full items replacement)
+ */
+export const updatePurchaseOrder = async (id: number,
+    purchaseOrderUpdateInput: PurchaseOrderUpdateInput, options?: RequestInit): Promise<PurchaseOrder> => {
+
+  return customFetch<PurchaseOrder>(getUpdatePurchaseOrderUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(purchaseOrderUpdateInput)
+  }
+);}
+
+
+
+
+
+export const getUpdatePurchaseOrderMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePurchaseOrder>>, TError,{id: number;data: BodyType<PurchaseOrderUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePurchaseOrder>>, TError,{id: number;data: BodyType<PurchaseOrderUpdateInput>}, TContext> => {
+
+const mutationKey = ['updatePurchaseOrder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePurchaseOrder>>, {id: number;data: BodyType<PurchaseOrderUpdateInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updatePurchaseOrder(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePurchaseOrderMutationResult = NonNullable<Awaited<ReturnType<typeof updatePurchaseOrder>>>
+    export type UpdatePurchaseOrderMutationBody = BodyType<PurchaseOrderUpdateInput>
+    export type UpdatePurchaseOrderMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a DRAFT purchase order (PO-level fields + full items replacement)
+ */
+export const useUpdatePurchaseOrder = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePurchaseOrder>>, TError,{id: number;data: BodyType<PurchaseOrderUpdateInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePurchaseOrder>>,
+        TError,
+        {id: number;data: BodyType<PurchaseOrderUpdateInput>},
+        TContext
+      > => {
+      return useMutation(getUpdatePurchaseOrderMutationOptions(options));
+    }
 
 export const getListPurchaseOrderItemsUrl = (id: number,) => {
 
