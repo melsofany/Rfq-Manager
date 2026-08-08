@@ -41,10 +41,12 @@ function useRepresentatives() {
 function RepresentativeNameInput({
   value,
   onChange,
+  onSelect,
   representatives,
 }: {
   value: string;
   onChange: (value: string) => void;
+  onSelect: (representative: RepresentativeOption) => void;
   representatives: RepresentativeOption[];
 }) {
   const [open, setOpen] = useState(false);
@@ -74,6 +76,7 @@ function RepresentativeNameInput({
 
   const selectRepresentative = (representative: RepresentativeOption) => {
     onChange(representative.name);
+    onSelect(representative);
     setQuery(representative.name);
     setOpen(false);
   };
@@ -739,6 +742,7 @@ export default function NewPurchaseOrderPage() {
                   <RepresentativeNameInput
                     value={receiverName}
                     onChange={setReceiverName}
+                    onSelect={(representative) => setReceiverPhone(representative.phone)}
                     representatives={representatives}
                   />
                 </div>
