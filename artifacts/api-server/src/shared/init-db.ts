@@ -188,6 +188,19 @@ export async function initDb(): Promise<void> {
         supplier_id INTEGER REFERENCES suppliers(id),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS work_order_assignments (
+        id SERIAL PRIMARY KEY,
+        po_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        representative_id INTEGER REFERENCES representatives(id),
+        representative_name TEXT NOT NULL,
+        representative_phone TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'sent',
+        pending_action TEXT,
+        wa_message_id TEXT,
+        rejection_reason TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     // Add tax_included to purchase_order_items (safe migration — skipped if already present)
     await client.query(`

@@ -6,6 +6,7 @@ import app from "./app";
 import { logger } from "./shared/logger";
 import { runFullSync } from "./shared/sheet-sync";
 import { initDb } from "./shared/init-db";
+import { ensureWorkOrderTemplate } from "./modules/communications/service";
 
 const rawPort = process.env["PORT"];
 
@@ -29,8 +30,13 @@ process.on("unhandledRejection", (reason) => {
 
 // Initialize DB schema and seed before starting server
 initDb()
-  .then(() => {
+  .then(async () => {
     logger.info("DB initialized successfully");
+    try {
+      await ensureWorkOrderTemplate();
+    } catch (err) {
+      logger.warn({ err }, "WhatsApp work-order template provisioning failed (non-fatal)");
+    }
   })
   .catch((err) => {
     logger.warn({ err }, "DB init failed (non-fatal, tables may already exist)");

@@ -11,12 +11,17 @@ import {
   rfqItemsTable,
   whatsappChatsTable,
   rfqTable,
+  workOrderAssignmentsTable,
 } from "@workspace/db";
 import { eq, count, inArray, sql, and } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { lookupPoFromSheet, listSheetPoNumbers } from "../../shared/google-sheets";
 import { generatePoPdf } from "./po-pdf";
-import { sendPoWhatsApp, isWhatsAppConfigured } from "../communications/service";
+import {
+  sendPoWhatsApp,
+  isWhatsAppConfigured,
+  sendRepresentativeWorkOrderWhatsApp,
+} from "../communications/service";
 import { sendPoEmail } from "../../shared/email";
 
 const router = Router();
@@ -509,6 +514,39 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
     });
   }
 
+  let workOrderSent = false;
+  let workOrderError: string | null = null;
+  if (receiverName?.trim() && receiverPhone?.trim()) {
+    if (!isWhatsAppConfigured) {
+      workOrderError = "WhatsApp not configured";
+    } else {
+      try {
+        const itemsSummary = itemRows
+          .map((r, i) => `${r.item.lineItem || i + 1}. ${r.item.description} x${r.item.qty ?? "-"}`)
+          .slice(0, 8)
+          .join("، ");
+        const waMessageId = await sendRepresentativeWorkOrderWhatsApp({
+          phone: receiverPhone,
+          representativeName: receiverName,
+          poNo,
+          supplierName: [...bySupplier.values()].map((x) => x.supplier.name).join("، "),
+          itemsSummary,
+        });
+        await db.insert(workOrderAssignmentsTable).values({
+          poId: id,
+          representativeName: receiverName,
+          representativePhone: receiverPhone,
+          status: "sent",
+          waMessageId,
+        });
+        workOrderSent = true;
+      } catch (err) {
+        workOrderError = err instanceof Error ? err.message : String(err);
+        req.log.warn({ err, poNo }, "Representative work order could not be sent");
+      }
+    }
+  }
+
   // Update PO status to "sent" if at least one message went through
   const anySent = results.some((r) => r.emailSent || r.whatsappSent);
   if (anySent) {
@@ -528,7 +566,7 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
     });
   }
 
-  res.json({ poNo, results });
+  res.json({ poNo, results, workOrderSent, workOrderError });
 });
 
 // GET /api/po/:id/pdf/:supplierId — download PO PDF for a specific supplier

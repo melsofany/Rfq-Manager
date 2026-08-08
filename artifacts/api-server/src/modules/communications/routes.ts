@@ -5,6 +5,7 @@ import {
   whatsappChatsTable,
   whatsappReactionsTable,
   whatsappMediaTable,
+  workOrderAssignmentsTable,
 } from "@workspace/db";
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import {
@@ -13,6 +14,7 @@ import {
   WEBHOOK_VERIFY_TOKEN,
   isWhatsAppConfigured,
   sendWhatsAppText,
+  sendWhatsAppInteractiveConfirmation,
   uploadWhatsAppMedia,
 } from "./service";
 import { requireAuth } from "../../middlewares/auth";
@@ -106,6 +108,8 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
     const msg = message as unknown as ServerMessage;
     if (msg.type === "reaction") {
       await handleReactionWebhook(from, msg);
+    } else if (msg.type === "interactive" && await handleWorkOrderButton(from, msg)) {
+      logger.info({ from }, "Work-order interactive button handled");
     } else {
       await handleInboundMessage(phoneID, from, msg, name, reply);
     }
@@ -234,6 +238,8 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
 
       if (message.type === "reaction") {
         await handleReactionWebhook(from, message);
+      } else if (message.type === "interactive" && await handleWorkOrderButton(from, message)) {
+        logger.info({ from }, "Work-order interactive button handled");
       } else {
         await handleInboundMessage(phoneID, from, message, name, async () => {});
       }
@@ -280,7 +286,38 @@ interface ServerMessage {
   audio?: { id?: string; mime_type?: string };
   video?: { id?: string; caption?: string; mime_type?: string };
   reaction?: { message_id: string; emoji: string };
+  interactive?: { type?: string; button_reply?: { id?: string; title?: string } };
   context?: { id: string; from?: string }; // message being replied to
+}
+
+async function handleWorkOrderButton(phone: string, msg: ServerMessage): Promise<boolean> {
+  const payload = msg.interactive?.button_reply?.id;
+  if (!payload?.startsWith("work_order:")) return false;
+  const [, poNo, action, decision] = payload.split(":");
+  const candidates = await db.select().from(workOrderAssignmentsTable)
+    .where(eq(workOrderAssignmentsTable.representativePhone, normalizePhone(phone)));
+  const assignment = candidates.filter((a) => a.status !== "received" && a.status !== "rejected")
+    .sort((a, b) => b.id - a.id)[0];
+  if (!assignment) {
+    await sendWhatsAppText(phone, "تعذر العثور على أمر الشغل المرتبط بهذا الزر.");
+    return true;
+  }
+  if (action === "received" || action === "rejected") {
+    await db.update(workOrderAssignmentsTable).set({ pendingAction: action, status: `pending_${action}`, updatedAt: new Date() }).where(eq(workOrderAssignmentsTable.id, assignment.id));
+    await sendWhatsAppInteractiveConfirmation(phone, poNo, action);
+    return true;
+  }
+  if (decision === "cancel") {
+    await db.update(workOrderAssignmentsTable).set({ pendingAction: null, status: "sent", updatedAt: new Date() }).where(eq(workOrderAssignmentsTable.id, assignment.id));
+    await sendWhatsAppText(phone, "تم التراجع، ولم يتم تغيير حالة أمر الشغل.");
+    return true;
+  }
+  if (decision === "confirm" && (action === "received" || action === "rejected")) {
+    await db.update(workOrderAssignmentsTable).set({ pendingAction: null, status: action, updatedAt: new Date() }).where(eq(workOrderAssignmentsTable.id, assignment.id));
+    await sendWhatsAppText(phone, action === "received" ? `تم تأكيد استلام أمر الشغل ${poNo}.` : `تم تأكيد رفض أمر الشغل ${poNo}.`);
+    return true;
+  }
+  return true;
 }
 
 async function handleInboundMessage(

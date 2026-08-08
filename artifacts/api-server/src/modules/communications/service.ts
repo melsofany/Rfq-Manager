@@ -8,6 +8,11 @@ import {
   BodyComponent,
   BodyParameter,
   URLComponent,
+  PayloadComponent,
+  Interactive,
+  ActionButtons,
+  Button,
+  Body,
   Document as WADocument,
 } from "whatsapp-api-js/messages";
 import { logger } from "../../shared/logger";
@@ -34,9 +39,53 @@ const TEMPLATE_TEXT = process.env.WHATSAPP_TEMPLATE_TEXT || "rfq_send_ar";
 const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";
 const TEMPLATE_PDF = process.env.WHATSAPP_TEMPLATE_PDF || "rfq_pdf_ar";
 const TEMPLATE_PO_PDF = process.env.WHATSAPP_TEMPLATE_PO_PDF || "po_pdf_ar";
+export const TEMPLATE_WORK_ORDER = process.env.WHATSAPP_TEMPLATE_WORK_ORDER || "representative_work_order_ar";
 const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
 
+const BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
 export const isWhatsAppConfigured = Boolean(PHONE_NUMBER_ID && TOKEN);
+
+export async function ensureWorkOrderTemplate(): Promise<void> {
+  if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
+    logger.warn("WhatsApp template provisioning skipped: missing token or business account id");
+    return;
+  }
+  const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
+  const existing = await fetch(`${base}?name=${encodeURIComponent(TEMPLATE_WORK_ORDER)}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  if (!existing.ok) throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
+  if (found.data?.some((t) => t.name === TEMPLATE_WORK_ORDER)) {
+    logger.info({ template: TEMPLATE_WORK_ORDER }, "WhatsApp work-order template already exists");
+    return;
+  }
+  const response = await fetch(base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: TEMPLATE_WORK_ORDER,
+      language: TEMPLATE_LANG,
+      category: "UTILITY",
+      components: [
+        {
+          type: "BODY",
+          text: "مرحباً {{1}}، تم تكليفك باستلام أمر الشغل {{2}} من {{3}}. الأصناف: {{4}}. موعد الاستلام: {{5}}.",
+          example: { body_text: [["مندوبنا", "PO-2026-000001", "قرطبة للتوريدات", "1. صنف x2", "غير محدد"]] },
+        },
+        {
+          type: "BUTTONS",
+          buttons: [
+            { type: "QUICK_REPLY", text: "تم الاستلام" },
+            { type: "QUICK_REPLY", text: "مرفوض" },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!response.ok) throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info({ template: TEMPLATE_WORK_ORDER }, "WhatsApp work-order template submitted to Meta for approval");
+}
 
 export const Whatsapp = APP_SECRET
   ? new WhatsAppAPI({
@@ -416,6 +465,66 @@ export async function sendPoWhatsApp(opts: SendPoOpts): Promise<string | null> {
 }
 
 // Returns the WhatsApp message ID (wamid) so callers can store it for later deletion.
+export interface SendRepresentativeWorkOrderOpts {
+  phone: string;
+  representativeName: string;
+  poNo: string;
+  supplierName: string;
+  receiverName?: string | null;
+  receiverPhone?: string | null;
+  itemsSummary: string;
+  deliveryDate?: string | null;
+}
+
+/** Sends the approved Meta template with quick-reply buttons. The template must be approved first. */
+export async function sendRepresentativeWorkOrderWhatsApp(
+  opts: SendRepresentativeWorkOrderOpts,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(opts.phone);
+  const template = new Template(
+    TEMPLATE_WORK_ORDER,
+    new Language(TEMPLATE_LANG),
+    new BodyComponent(
+      new BodyParameter(opts.representativeName),
+      new BodyParameter(opts.poNo),
+      new BodyParameter(sanitizeWaParam(opts.supplierName)),
+      new BodyParameter(sanitizeWaParam(opts.itemsSummary)),
+      new BodyParameter(sanitizeWaParam(opts.deliveryDate || "غير محدد")),
+    ),
+    new PayloadComponent(`work_order:${opts.poNo}:received`),
+    new PayloadComponent(`work_order:${opts.poNo}:rejected`),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, poNo: opts.poNo, waId }, "Representative work order sent via WhatsApp");
+  return waId || null;
+}
+
+export async function sendWhatsAppInteractiveConfirmation(
+  phone: string,
+  poNo: string,
+  action: "received" | "rejected",
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const title = action === "received" ? "تأكيد الاستلام" : "تأكيد الرفض";
+  const body = action === "received"
+    ? `هل تؤكد استلام أمر الشغل ${poNo}؟`
+    : `هل تؤكد رفض أمر الشغل ${poNo}؟`;
+  const message = new Interactive(
+    new ActionButtons(
+      new Button(`work_order:${poNo}:${action}:confirm`, title),
+      new Button(`work_order:${poNo}:${action}:cancel`, "تراجع"),
+    ),
+    new Body(body),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
 export async function sendWhatsAppText(phone: string, text: string): Promise<string | null> {
   requireConfigured();
   const to = normalizePhone(phone);

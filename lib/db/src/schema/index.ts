@@ -10,5 +10,6 @@ export * from "./whatsapp_chats";
 export * from "./whatsapp_reactions";
 export * from "./whatsapp_media";
 export * from "./purchase_orders";
+export * from "./work_order_assignments";
 export * from "./erp_integrations";
 export * from "./attachments";
