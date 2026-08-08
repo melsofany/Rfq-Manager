@@ -530,6 +530,8 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
           representativeName: receiverName,
           poNo,
           supplierName: [...bySupplier.values()].map((x) => x.supplier.name).join("، "),
+          supplierPhone: [...bySupplier.values()].map((x) => x.supplier.phone?.trim() || "غير مسجل").join("، "),
+          supplierAddress: [...bySupplier.values()].map((x) => x.supplier.address?.trim() || "غير مسجل").join("، "),
           itemsSummary,
         });
         await db.insert(workOrderAssignmentsTable).values({

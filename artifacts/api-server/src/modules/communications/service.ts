@@ -39,7 +39,7 @@ const TEMPLATE_TEXT = process.env.WHATSAPP_TEMPLATE_TEXT || "rfq_send_ar";
 const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";
 const TEMPLATE_PDF = process.env.WHATSAPP_TEMPLATE_PDF || "rfq_pdf_ar";
 const TEMPLATE_PO_PDF = process.env.WHATSAPP_TEMPLATE_PO_PDF || "po_pdf_ar";
-export const TEMPLATE_WORK_ORDER = process.env.WHATSAPP_TEMPLATE_WORK_ORDER || "representative_work_order_ar";
+export const TEMPLATE_WORK_ORDER = process.env.WHATSAPP_TEMPLATE_WORK_ORDER || "representative_work_order_ar_v2";
 const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
 
 const BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
@@ -70,8 +70,8 @@ export async function ensureWorkOrderTemplate(): Promise<void> {
       components: [
         {
           type: "BODY",
-          text: "أمر شغل جديد من قرطبة للتوريدات.\nالمندوب: {{1}}\nرقم أمر الشراء: {{2}}\nالمورد: {{3}}\nالأصناف: {{4}}\nموعد الاستلام: {{5}}\nيرجى اختيار أحد الأزرار أدناه لتأكيد الاستلام أو الرفض.",
-          example: { body_text: [["أحمد محمد علي", "PO-2026-000001", "شركة النور", "1. صنف x2", "2026-08-15"]] },
+          text: "أمر شغل جديد من قرطبة للتوريدات.\nالمندوب: {{1}}\nرقم أمر الشراء: {{2}}\nالمورد: {{3}}\nهاتف المورد: {{4}}\nعنوان المورد: {{5}}\nالأصناف: {{6}}\nموعد الاستلام: {{7}}\nيرجى اختيار أحد الأزرار أدناه لتأكيد الاستلام أو الرفض.",
+          example: { body_text: [["أحمد محمد علي", "PO-2026-000001", "شركة النور", "+201000000000", "القاهرة، مصر", "1. صنف x2", "2026-08-15"]] },
         },
         {
           type: "BUTTONS",
@@ -474,6 +474,8 @@ export interface SendRepresentativeWorkOrderOpts {
   receiverPhone?: string | null;
   itemsSummary: string;
   deliveryDate?: string | null;
+  supplierPhone?: string | null;
+  supplierAddress?: string | null;
 }
 
 /** Sends the approved Meta template with quick-reply buttons. The template must be approved first. */
@@ -489,6 +491,8 @@ export async function sendRepresentativeWorkOrderWhatsApp(
       new BodyParameter(opts.representativeName),
       new BodyParameter(opts.poNo),
       new BodyParameter(sanitizeWaParam(opts.supplierName)),
+      new BodyParameter(sanitizeWaParam(opts.supplierPhone || "غير مسجل")),
+      new BodyParameter(sanitizeWaParam(opts.supplierAddress || "غير مسجل")),
       new BodyParameter(sanitizeWaParam(opts.itemsSummary)),
       new BodyParameter(sanitizeWaParam(opts.deliveryDate || "غير محدد")),
     ),
