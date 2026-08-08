@@ -24,6 +24,46 @@ interface SheetItem {
   poNo: string;
 }
 
+type RepresentativeOption = { id: number; name: string; phone: string; isActive: boolean };
+
+function useRepresentatives() {
+  return useQuery<RepresentativeOption[]>({
+    queryKey: ["representatives"],
+    queryFn: async () => {
+      const res = await fetch("/api/representatives", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch representatives");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+function RepresentativeNameInput({
+  value,
+  onChange,
+  representatives,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  representatives: RepresentativeOption[];
+}) {
+  return (
+    <>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Select or type the receiving representative name"
+        list="purchase-order-representatives"
+      />
+      <datalist id="purchase-order-representatives">
+        {representatives.filter((rep) => rep.isActive).map((rep) => (
+          <option key={rep.id} value={rep.name}>{rep.phone}</option>
+        ))}
+      </datalist>
+    </>
+  );
+}
+
 interface PoItemRow {
   id: string;
   itemId: string | null;
@@ -268,6 +308,8 @@ export default function NewPurchaseOrderPage() {
 
   const { data: sheetPoNumbers } = useSheetPoNumbers();
   const suggestions = sheetPoNumbers?.poNumbers ?? [];
+  const { data: representativesData } = useRepresentatives();
+  const representatives = representativesData ?? [];
 
   const { data: suppliers } = useListSuppliers(
     {},
@@ -630,11 +672,11 @@ export default function NewPurchaseOrderPage() {
 
               <div className="bg-card border border-border rounded-lg p-4 grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label>Receiver representative name</Label>
-                  <Input
+                  <Label>Receiver representative name <span className="text-xs text-muted-foreground">(select or type manually)</span></Label>
+                  <RepresentativeNameInput
                     value={receiverName}
-                    onChange={(e) => setReceiverName(e.target.value)}
-                    placeholder="Name of the receiving representative"
+                    onChange={setReceiverName}
+                    representatives={representatives}
                   />
                 </div>
                 <div className="space-y-1.5">
