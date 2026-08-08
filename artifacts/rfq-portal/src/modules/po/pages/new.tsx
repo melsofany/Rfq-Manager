@@ -47,20 +47,83 @@ function RepresentativeNameInput({
   onChange: (value: string) => void;
   representatives: RepresentativeOption[];
 }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const activeRepresentatives = representatives.filter((rep) => rep.isActive);
+  const filtered = (query.trim()
+    ? activeRepresentatives.filter((rep) =>
+        `${rep.name} ${rep.phone}`.toLowerCase().includes(query.trim().toLowerCase()),
+      )
+    : activeRepresentatives
+  ).slice(0, 50);
+
+  useEffect(() => {
+    setQuery(value);
+  }, [value]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  const selectRepresentative = (representative: RepresentativeOption) => {
+    onChange(representative.name);
+    setQuery(representative.name);
+    setOpen(false);
+  };
+
   return (
-    <>
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Select or type the receiving representative name"
-        list="purchase-order-representatives"
-      />
-      <datalist id="purchase-order-representatives">
-        {representatives.filter((rep) => rep.isActive).map((rep) => (
-          <option key={rep.id} value={rep.name}>{rep.phone}</option>
-        ))}
-      </datalist>
-    </>
+    <div ref={containerRef} className="relative">
+      <div className="flex">
+        <Input
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            onChange(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder="Select or type the receiving representative name"
+          className="rounded-r-none"
+        />
+        <button
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          aria-label="Show representatives"
+          className="border border-l-0 border-border rounded-r-md px-3 bg-muted hover:bg-muted/80 text-muted-foreground"
+        >
+          <ChevronDown size={16} />
+        </button>
+      </div>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto bg-popover border border-border rounded-md shadow-lg">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-muted-foreground">
+              No saved representatives. You can keep typing manually.
+            </div>
+          ) : (
+            filtered.map((representative) => (
+              <button
+                key={representative.id}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectRepresentative(representative)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground border-b border-border/50 last:border-0"
+              >
+                <span className="block font-medium">{representative.name}</span>
+                <span className="block text-xs text-muted-foreground">{representative.phone}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
