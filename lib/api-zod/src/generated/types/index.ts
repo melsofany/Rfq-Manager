@@ -59,6 +59,7 @@ export * from './purchaseOrder';
 export * from './purchaseOrderInput';
 export * from './purchaseOrderItem';
 export * from './purchaseOrderItemInput';
+export * from './purchaseOrderUpdateInput';
 export * from './reportsData';
 export * from './reportsDataEmployeeStatsItem';
 export * from './reportsDataLineItemStatsItem';

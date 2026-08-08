@@ -774,6 +774,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PurchaseOrder"
+    put:
+      operationId: updatePurchaseOrder
+      tags: [po]
+      summary: Update a DRAFT purchase order (PO-level fields + full items replacement)
+      description: |
+        Only purchase orders still in "draft" status may be edited. Once a PO is
+        dispatched ("sent") it is locked. The supplied `items` array fully replaces
+        the existing items, so add/edit/remove are all handled by sending the new list.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseOrderUpdateInput"
+      responses:
+        "200":
+          description: Updated purchase order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchaseOrder"
+        "400":
+          description: PO is not a draft or validation failed
+        "404":
+          description: Purchase order not found
 
   /po/{id}/items:
     get:
@@ -1576,6 +1607,27 @@ components:
         taxIncluded:
           type: boolean
           default: false
+
+    PurchaseOrderUpdateInput:
+      type: object
+      required: [sheetPoNo, items]
+      properties:
+        sheetPoNo:
+          type: string
+        receiverName:
+          type: ["string", "null"]
+        receiverPhone:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        employeeId:
+          type: ["integer", "null"]
+          description: Responsible employee (المندوب / المسؤول)
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/PurchaseOrderItemInput"
 
     PurchaseOrderItem:
       type: object
