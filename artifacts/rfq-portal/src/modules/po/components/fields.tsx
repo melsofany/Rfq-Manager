@@ -251,3 +251,147 @@ export async function fetchSupplierPrice(
     return null;
   }
 }
+
+export interface RfqOption {
+  id: number;
+  internalRfqNo: string;
+  customerRfqNo: string;
+  status: string;
+}
+
+/** RFQs eligible for linking to a PO — SENT, QUOTED, and SUCCESS (so one RFQ
+ *  can be linked to more than one purchase order). */
+export function useRfqOptions() {
+  return useQuery<RfqOption[]>({
+    queryKey: ["rfq-options-for-po"],
+    queryFn: async () => {
+      const res = await fetch("/api/rfq", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch RFQs");
+      const all: RfqOption[] = await res.json();
+      return all.filter((r) => r.status === "SENT" || r.status === "QUOTED" || r.status === "SUCCESS");
+    },
+    staleTime: 60 * 1000,
+  });
+}
+
+/** Searchable type-ahead combobox for picking a linked RFQ. Typing filters by
+ *  internal RFQ number or customer RFQ number. */
+export function RfqCombobox({
+  value,
+  onChange,
+  rfqs,
+  disabled,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  rfqs: RfqOption[];
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selected = rfqs.find((r) => String(r.id) === value);
+  const selectedLabel = selected
+    ? `${selected.internalRfqNo} (${selected.customerRfqNo})`
+    : "";
+  const displayValue = open ? query : selectedLabel;
+
+  const filtered = query
+    ? rfqs
+        .filter((r) =>
+          `${r.internalRfqNo} ${r.customerRfqNo}`
+            .toLowerCase()
+            .includes(query.trim().toLowerCase()),
+        )
+        .slice(0, 50)
+    : rfqs.slice(0, 50);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const handleSelect = (id: number) => {
+    onChange(String(id));
+    setQuery("");
+    setOpen(false);
+  };
+  const handleClear = () => {
+    onChange("");
+    setQuery("");
+    setOpen(false);
+  };
+
+  return (
+    <div ref={containerRef} className="relative flex-1">
+      <div className="flex">
+        <input
+          type="text"
+          value={displayValue}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => {
+            setQuery("");
+            setOpen(true);
+          }}
+          disabled={disabled}
+          placeholder="اكتب للبحث عن طلب تسعير..."
+          className="flex-1 min-w-0 text-sm border border-border rounded-r-md bg-background px-3 py-1.5 disabled:opacity-50 outline-none focus:ring-2 focus:ring-ring"
+        />
+        {value ? (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={handleClear}
+            className="border border-r-0 border-border rounded-l-md px-3 bg-muted hover:bg-muted/80 text-muted-foreground disabled:opacity-50"
+            title="مسح"
+          >
+            ×
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setOpen((o) => !o)}
+            className="border border-r-0 border-border rounded-l-md px-3 bg-muted hover:bg-muted/80 text-muted-foreground disabled:opacity-50"
+            aria-label="عرض طلبات التسعير"
+          >
+            <ChevronDown size={16} />
+          </button>
+        )}
+      </div>
+      {open && (
+        <ul className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto bg-popover border border-border rounded-md shadow-lg text-sm">
+          {filtered.length === 0 ? (
+            <li className="px-3 py-2 text-muted-foreground">لا توجد طلبات تسعير مطابقة</li>
+          ) : (
+            filtered.map((r) => (
+              <li
+                key={r.id}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelect(r.id);
+                }}
+                className={`px-3 py-2 cursor-pointer hover:bg-accent hover:text-accent-foreground border-b border-border/50 last:border-0 ${String(r.id) === value ? "font-medium bg-accent/50" : ""}`}
+              >
+                <span className="block font-mono">{r.internalRfqNo}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {r.customerRfqNo} — {r.status}
+                </span>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
