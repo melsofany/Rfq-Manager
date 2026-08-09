@@ -17,6 +17,7 @@ import usersModule from "../modules/users/index";
 import reportsModule from "../modules/reports/index";
 import communicationsModule from "../modules/communications/index";
 import integrationsModule from "../modules/integrations/index";
+import chatwootModule from "../modules/chatwoot/index";
 
 const router: IRouter = Router();
 
@@ -28,7 +29,8 @@ router.use(usersModule); // auth · suppliers · categories
 router.use(rfqModule); // rfq · offers · pricing · items
 router.use(poModule); // purchase-orders
 router.use(reportsModule); // analytics · audit · sync
-router.use(communicationsModule); // whatsapp
+router.use(communicationsModule); // whatsapp (legacy — kept read-only as backup)
+router.use(chatwootModule); // chatwoot SSO bridge for the /whatsapp inbox
 router.use(integrationsModule); // ERP integrations (Odoo · SAP · Oracle · Google Sheets)
 
 export default router;
