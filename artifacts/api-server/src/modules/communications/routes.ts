@@ -56,6 +56,8 @@ router.get("/whatsapp/events", requireAuth, (req, res): void => {
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
+  // 15s heartbeat: keeps the SSE stream alive behind Render's reverse proxy,
+  // which otherwise closes idle connections before the old 25s interval fired.
   const hb = setInterval(() => {
     try {
       res.write(": heartbeat\n\n");
@@ -63,7 +65,7 @@ router.get("/whatsapp/events", requireAuth, (req, res): void => {
       clearInterval(hb);
       sseClients.delete(res);
     }
-  }, 25000);
+  }, 15000);
   sseClients.add(res);
   req.on("close", () => {
     clearInterval(hb);

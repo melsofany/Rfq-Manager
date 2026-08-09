@@ -468,9 +468,15 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   }, [loadChats]);
 
   // ── SSE real-time ────────────────────────────────────────────────────────
+  // SSE may silently die behind Render's reverse proxy (onerror doesn't always
+  // fire), so we pair it with a polling fallback below to guarantee new
+  // messages still arrive.
   useEffect(() => {
     let es: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let disposed = false;
     function connect() {
+      if (disposed) return;
       es = new EventSource("/api/whatsapp/events", { withCredentials: true });
       es.onmessage = async (e) => {
         if (!e.data || e.data.startsWith(":")) return;
@@ -535,7 +541,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
       };
       es.onerror = () => {
         es?.close();
-        setTimeout(connect, 5000);
+        es = null;
+        if (!disposed) reconnectTimer = setTimeout(connect, 5000);
       };
     }
     async function requestNotif() {
@@ -545,9 +552,31 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     requestNotif();
     connect();
     return () => {
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       es?.close();
     };
   }, [loadChats, t]);
+
+  // ── Polling fallback ────────────────────────────────────────────────────
+  // Belt-and-suspenders: if SSE silently dies (common behind Render's proxy),
+  // poll the chat list + open conversation every 15s so messages still arrive.
+  useEffect(() => {
+    const id = setInterval(() => {
+      void loadChats();
+      if (selectedRef.current) {
+        void fetch(`/api/whatsapp/chats/${encodeURIComponent(selectedRef.current)}`, {
+          credentials: "include",
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d: Message[] | null) => {
+            if (d) setMessages(d);
+          })
+          .catch(() => {});
+      }
+    }, 15000);
+    return () => clearInterval(id);
+  }, [loadChats]);
 
   // Auto-scroll
   useEffect(() => {
@@ -566,7 +595,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   async function handleSelect(phone: string) {
     setSelected(phone);
     setReplyingTo(null);
-    setPendingFile(null);
+    clearPendingFile();
     setDraft("");
     await loadMessages(phone);
   }
@@ -600,15 +629,40 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
         } else {
           showToast("تم إرسال الملف ✓", true);
         }
-        setPendingFile(null);
+        clearPendingFile();
         setUploading(false);
       } else {
+        const text = draft.trim();
         const body: Record<string, unknown> = {
           phone: selected,
-          message: draft.trim(),
+          message: text,
           supplierId: selectedChat?.supplierId,
         };
         if (replyingTo?.waMessageId) body.replyToWaMessageId = replyingTo.waMessageId;
+        // Optimistic: show the outgoing message immediately so the UI doesn't
+        // appear frozen while the Meta API round-trip completes.
+        const tempId = Date.now();
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: tempId,
+            waMessageId: null,
+            direction: "outbound",
+            phone: selected,
+            supplierId: selectedChat?.supplierId ?? null,
+            body: text,
+            mediaId: null,
+            mediaType: null,
+            mimeType: null,
+            filename: null,
+            replyToMessageId: replyingTo?.waMessageId ?? null,
+            isRead: true,
+            createdAt: new Date().toISOString(),
+            reactions: [],
+          },
+        ]);
+        setDraft("");
+        setReplyingTo(null);
         const r = await fetch("/api/whatsapp/send", {
           method: "POST",
           credentials: "include",
@@ -616,11 +670,14 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
           body: JSON.stringify(body),
         });
         if (!r.ok) {
+          // Roll back the optimistic message on failure.
+          setMessages((prev) => prev.filter((m) => m.id !== tempId));
           const d = (await r.json()) as { error?: string };
           showToast(d.error || "فشل الإرسال", false);
           return;
         }
-        setReplyingTo(null);
+        void loadChats();
+        return;
       }
       setDraft("");
       await loadMessages(selected);
@@ -679,6 +736,13 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
     setPendingFile({ file, preview });
     e.target.value = "";
+  }
+
+  function clearPendingFile() {
+    setPendingFile((prev) => {
+      if (prev?.preview) URL.revokeObjectURL(prev.preview);
+      return null;
+    });
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -1177,7 +1241,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               style={{ direction: "rtl" }}
             >
               <button
-                onClick={() => setPendingFile(null)}
+                onClick={clearPendingFile}
                 className="text-muted-foreground hover:text-foreground flex-shrink-0"
               >
                 <X size={16} />
