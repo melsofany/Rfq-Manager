@@ -805,6 +805,37 @@ paths:
           description: PO is not a draft or validation failed
         "404":
           description: Purchase order not found
+    delete:
+      operationId: deletePurchaseOrder
+      tags: [po]
+      summary: Delete a DRAFT purchase order and all its line items
+      description: |
+        Only purchase orders still in "draft" status may be deleted. Once a PO is
+        dispatched ("sent") it is locked and cannot be removed. Deleting a draft PO
+        also removes its line items and any work-order assignments in a single
+        transaction.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Purchase order deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  id:
+                    type: integer
+        "400":
+          description: PO is not a draft (already sent)
+        "404":
+          description: Purchase order not found
 
   /po/{id}/items:
     get:
