@@ -33,6 +33,9 @@ import {
   RepresentativeNameInput,
   useRepresentatives,
   fetchSupplierPrice,
+  RfqCombobox,
+  useRfqOptions,
+  type RfqOption,
   type PoItemRow,
 } from "../components/fields";
 
@@ -77,13 +80,6 @@ interface EmployeeOption {
   isActive: boolean;
 }
 
-interface RfqOption {
-  id: number;
-  internalRfqNo: string;
-  customerRfqNo: string;
-  status: string;
-}
-
 interface DispatchResult {
   supplierId: number;
   supplierName: string;
@@ -119,19 +115,6 @@ function usePoItems(id: number) {
       return res.json();
     },
     enabled: !isNaN(id),
-  });
-}
-
-function useRfqOptions() {
-  return useQuery<RfqOption[]>({
-    queryKey: ["rfq-options-for-po"],
-    queryFn: async () => {
-      const res = await fetch("/api/rfq", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch RFQs");
-      const all: RfqOption[] = await res.json();
-      // Show SENT and QUOTED RFQs (eligible to be linked)
-      return all.filter((r) => r.status === "SENT" || r.status === "QUOTED");
-    },
   });
 }
 
@@ -699,7 +682,7 @@ export default function PurchaseOrderDetailPage() {
               onClick={() => {
                 setShowLinkPanel(!showLinkPanel);
                 setLinkError(null);
-                setSelectedRfqId("");
+                setSelectedRfqId(po.linkedRfq ? String(po.linkedRfq.id) : "");
               }}
             >
               {po.linkedRfq ? <Link2Off size={14} /> : <Link2 size={14} />}
@@ -710,22 +693,16 @@ export default function PurchaseOrderDetailPage() {
           {showLinkPanel && (
             <div className="mt-4 pt-4 border-t border-border space-y-3">
               <p className="text-xs text-muted-foreground">
-                اختر طلب التسعير لربطه بهذا الأمر — سيتحول الطلب تلقائياً إلى حالة{" "}
-                <strong>SUCCESS</strong>
+                اكتب للبحث عن طلب التسعير واختره من القائمة — سيتحول الطلب تلقائياً إلى حالة{" "}
+                <strong>SUCCESS</strong>. يمكن ربط نفس طلب التسعير بأكثر من أمر شراء.
               </p>
-              <div className="flex gap-2">
-                <select
-                  className="flex-1 text-sm border border-border rounded-md px-3 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+              <div className="flex gap-2 items-center">
+                <RfqCombobox
                   value={selectedRfqId}
-                  onChange={(e) => setSelectedRfqId(e.target.value)}
-                >
-                  <option value="">— اختر طلب تسعير —</option>
-                  {(rfqOptions ?? []).map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.internalRfqNo} ({r.customerRfqNo}) — {r.status}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedRfqId}
+                  rfqs={rfqOptions ?? []}
+                  disabled={linking}
+                />
                 <Button
                   size="sm"
                   disabled={!selectedRfqId || linking}
