@@ -154,7 +154,6 @@ const translations: Record<Lang, Record<string, string>> = {
 
     // WhatsApp page
     "whatsapp.title": "WhatsApp Business",
-    "whatsapp.openExternal": "Open in separate window",
     "whatsapp.chats": "Chats",
     "whatsapp.templates": "Templates",
     "whatsapp.broadcast": "Broadcast",
@@ -471,7 +470,6 @@ const translations: Record<Lang, Record<string, string>> = {
 
     // WhatsApp page
     "whatsapp.title": "واتساب بيزنس",
-    "whatsapp.openExternal": "فتح في نافذة منفصلة",
     "whatsapp.chats": "المحادثات",
     "whatsapp.templates": "القوالب",
     "whatsapp.broadcast": "إرسال جماعي",
