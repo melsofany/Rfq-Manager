@@ -877,6 +877,11 @@ status?: string;
 search?: string;
 };
 
+export type DeletePurchaseOrder200 = {
+  ok?: boolean;
+  id?: number;
+};
+
 export type ListSheetPoNumbersParams = {
 sheet?: string;
 };

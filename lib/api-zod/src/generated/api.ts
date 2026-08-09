@@ -972,6 +972,23 @@ export const UpdatePurchaseOrderResponse = zod.object({
 
 
 /**
+ * Only purchase orders still in "draft" status may be deleted. Once a PO is
+ * dispatched ("sent") it is locked and cannot be removed. Deleting a draft PO
+ * also removes its line items and any work-order assignments in a single
+ * transaction.
+ * @summary Delete a DRAFT purchase order and all its line items
+ */
+export const DeletePurchaseOrderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePurchaseOrderResponse = zod.object({
+  "ok": zod.boolean().optional(),
+  "id": zod.number().optional()
+})
+
+
+/**
  * @summary Get items for a purchase order
  */
 export const ListPurchaseOrderItemsParams = zod.object({

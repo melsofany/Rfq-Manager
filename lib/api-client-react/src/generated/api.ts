@@ -27,6 +27,7 @@ import type {
   CategoryInput,
   CustomerRfqItem,
   DashboardStats,
+  DeletePurchaseOrder200,
   Employee,
   EmployeeInput,
   EmployeePerformance,
@@ -3078,6 +3079,81 @@ export const useUpdatePurchaseOrder = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getUpdatePurchaseOrderMutationOptions(options));
+    }
+
+export const getDeletePurchaseOrderUrl = (id: number,) => {
+
+
+
+
+  return `/api/po/${id}`
+}
+
+/**
+ * Only purchase orders still in "draft" status may be deleted. Once a PO is
+ * dispatched ("sent") it is locked and cannot be removed. Deleting a draft PO
+ * also removes its line items and any work-order assignments in a single
+ * transaction.
+ * @summary Delete a DRAFT purchase order and all its line items
+ */
+export const deletePurchaseOrder = async (id: number, options?: RequestInit): Promise<DeletePurchaseOrder200> => {
+
+  return customFetch<DeletePurchaseOrder200>(getDeletePurchaseOrderUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeletePurchaseOrderMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePurchaseOrder>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePurchaseOrder>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deletePurchaseOrder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePurchaseOrder>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deletePurchaseOrder(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePurchaseOrderMutationResult = NonNullable<Awaited<ReturnType<typeof deletePurchaseOrder>>>
+
+    export type DeletePurchaseOrderMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a DRAFT purchase order and all its line items
+ */
+export const useDeletePurchaseOrder = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePurchaseOrder>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePurchaseOrder>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeletePurchaseOrderMutationOptions(options));
     }
 
 export const getListPurchaseOrderItemsUrl = (id: number,) => {

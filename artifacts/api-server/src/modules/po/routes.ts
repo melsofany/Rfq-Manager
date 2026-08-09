@@ -846,6 +846,52 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
+// DELETE /api/po/:id — delete a DRAFT purchase order and all its line items.
+router.delete("/po/:id", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+
+  const [existing] = await db
+    .select()
+    .from(purchaseOrdersTable)
+    .where(eq(purchaseOrdersTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Purchase order not found" });
+    return;
+  }
+  if (existing.status !== "draft") {
+    res
+      .status(400)
+      .json({ error: "لا يمكن حذف أمر الشراء بعد إرساله — فقط الأوامر في حالة Draft قابلة للحذف" });
+    return;
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      // Child rows are onDelete: cascade, but delete explicitly for clarity + transactional safety.
+      await tx.delete(purchaseOrderItemsTable).where(eq(purchaseOrderItemsTable.poId, id));
+      await tx.delete(workOrderAssignmentsTable).where(eq(workOrderAssignmentsTable.poId, id));
+      await tx.delete(purchaseOrdersTable).where(eq(purchaseOrdersTable.id, id));
+
+      await tx.insert(auditLogTable).values({
+        action: "po.deleted",
+        entityType: "po",
+        entityId: id,
+        employeeId: req.session.employeeId,
+        description: `Deleted draft purchase order ${existing.internalPoNo}`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+    });
+
+    res.json({ ok: true, id });
+  } catch (err) {
+    req.log.error({ err, id }, "Failed to delete purchase order");
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Failed to delete purchase order", details: message });
+  }
+});
+
 // PATCH /api/po/:id/link-rfq — link an existing PO to an RFQ and mark the RFQ as SUCCESS
 router.patch("/po/:id/link-rfq", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;

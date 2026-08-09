@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getListPurchaseOrdersQueryKey,
@@ -174,6 +174,7 @@ export default function PurchaseOrderDetailPage() {
   const params = useParams<{ id: string }>();
   const id = parseInt(params.id ?? "", 10);
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
 
   const { data: po, isLoading: poLoading } = usePoDetail(id);
   const { data: items, isLoading: itemsLoading } = usePoItems(id);
@@ -209,6 +210,8 @@ export default function PurchaseOrderDetailPage() {
   const [editEmployeeId, setEditEmployeeId] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [priceLoadingIds, setPriceLoadingIds] = useState<Set<string>>(new Set());
 
   const isDraft = po?.status === "draft";
@@ -343,6 +346,34 @@ export default function PurchaseOrderDetailPage() {
       setSaveError("خطأ في الشبكة — تعذّر الوصول للخادم");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!po) return;
+    const confirmed = window.confirm(
+      `هل أنت متأكد من حذف أمر الشراء "${po.internalPoNo}"؟\nسيتم حذف جميع البنود المرتبطة به. لا يمكن التراجع عن هذا الإجراء.`,
+    );
+    if (!confirmed) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/po/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error ?? "فشل حذف أمر الشراء");
+      } else {
+        await queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
+        await queryClient.removeQueries({ queryKey: ["po", id] });
+        navigate("/purchase-orders");
+      }
+    } catch {
+      setDeleteError("خطأ في الشبكة — تعذّر الوصول للخادم");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -501,6 +532,18 @@ export default function PurchaseOrderDetailPage() {
                 <Pencil size={15} /> تعديل
               </Button>
             )}
+            {isDraft && !editMode && (
+              <Button
+                variant="outline"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="gap-2 text-destructive hover:text-destructive border-destructive/40 hover:border-destructive/70"
+                title="حذف أمر الشراء"
+              >
+                {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                {deleting ? "حذف..." : "حذف"}
+              </Button>
+            )}
             {editMode && (
               <>
                 <Button
@@ -533,6 +576,12 @@ export default function PurchaseOrderDetailPage() {
             )}
           </div>
         </div>
+
+        {deleteError && (
+          <div className="text-destructive text-sm bg-destructive/10 border border-destructive/30 rounded px-3 py-2">
+            {deleteError}
+          </div>
+        )}
 
         {/* PO meta — read view */}
         {!editMode && (

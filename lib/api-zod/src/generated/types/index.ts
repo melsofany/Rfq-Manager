@@ -17,6 +17,7 @@ export * from './customerRfqItem';
 export * from './dashboardStats';
 export * from './dashboardStatsRfqsByStatusItem';
 export * from './dashboardStatsSupplierDeepStatsItem';
+export * from './deletePurchaseOrder200';
 export * from './employee';
 export * from './employeeInput';
 export * from './employeeInputRole';
