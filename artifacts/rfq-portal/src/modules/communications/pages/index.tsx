@@ -249,7 +249,9 @@ function MediaMessage({ msg }: { msg: Message }) {
             (e.target as HTMLImageElement).style.display = "none";
           }}
         />
-        {msg.body && !msg.body.startsWith("[صورة") && <p className="text-sm mt-1">{msg.body}</p>}
+        {msg.body && !msg.body.startsWith("[صورة") && !msg.body.startsWith("[ملصق") && (
+          <p className="text-sm mt-1">{msg.body}</p>
+        )}
       </a>
     );
   }
@@ -258,6 +260,16 @@ function MediaMessage({ msg }: { msg: Message }) {
       <div className="flex items-center gap-2">
         <Mic size={16} className="flex-shrink-0 opacity-70" />
         <audio controls src={url} className="h-8 max-w-[180px]" />
+      </div>
+    );
+  }
+  if (msg.mediaType === "video") {
+    return (
+      <div className="flex flex-col gap-1">
+        <video controls src={url} className="max-w-[260px] rounded-lg" />
+        {msg.body && !msg.body.startsWith("[فيديو") && (
+          <p className="text-sm">{msg.body}</p>
+        )}
       </div>
     );
   }

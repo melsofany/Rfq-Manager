@@ -287,8 +287,22 @@ interface ServerMessage {
   document?: { id?: string; filename?: string; mime_type?: string };
   audio?: { id?: string; mime_type?: string };
   video?: { id?: string; caption?: string; mime_type?: string };
+  sticker?: { id?: string; mime_type?: string };
   reaction?: { message_id: string; emoji: string };
-  interactive?: { type?: string; button_reply?: { id?: string; title?: string } };
+  interactive?: {
+    type?: string;
+    button_reply?: { id?: string; title?: string };
+    list_reply?: { id?: string; title?: string; description?: string };
+    nfm_reply?: { name?: string; body?: string; response_json?: string };
+  };
+  button?: { text?: string; payload?: string };
+  location?: { latitude?: number; longitude?: number; name?: string; address?: string };
+  contacts?: Array<{
+    name?: { formatted_name?: string };
+    phones?: Array<{ phone?: string; wa_id?: string }>;
+  }>;
+  order?: { catalog_id?: string; text?: string; product_items?: Array<{ product_retailer_id?: string; quantity?: string; item_price?: string; currency?: string }> };
+  system?: { body?: string; type?: string };
   context?: { id: string; from?: string }; // message being replied to
 }
 
@@ -359,6 +373,44 @@ async function handleInboundMessage(
     mediaId = msg.video.id ?? null;
     mediaType = "video";
     mimeType = msg.video.mime_type ?? null;
+  } else if (msg.type === "sticker" && msg.sticker) {
+    // Stickers arrive as image/webp media — render as an image.
+    body = "[ملصق]";
+    mediaId = msg.sticker.id ?? null;
+    mediaType = "image";
+    mimeType = msg.sticker.mime_type ?? "image/webp";
+  } else if (msg.type === "location" && msg.location) {
+    const { latitude, longitude, name, address } = msg.location;
+    const label = name || address ? ` (${name ?? ""}${address ? " — " + address : ""})`.trim() : "";
+    body = `📍 موقع${label}: ${latitude ?? ""}, ${longitude ?? ""}`;
+    if (latitude != null && longitude != null)
+      body += ` — https://maps.google.com/?q=${latitude},${longitude}`;
+  } else if (msg.type === "contacts" && msg.contacts?.length) {
+    body =
+      "👤 جهة اتصال:\n" +
+      msg.contacts
+        .map((c) => {
+          const nm = c.name?.formatted_name ?? "";
+          const nums = (c.phones ?? []).map((p) => p.phone ?? p.wa_id ?? "").filter(Boolean);
+          return `${nm}${nums.length ? " — " + nums.join("، ") : ""}`.trim();
+        })
+        .join("\n");
+  } else if (msg.type === "button" && msg.button) {
+    body = `🔘 رد على زر: ${msg.button.text ?? msg.button.payload ?? ""}`;
+  } else if (msg.type === "interactive" && msg.interactive) {
+    const ir = msg.interactive;
+    if (ir.list_reply) body = `📋 ${ir.list_reply.title ?? ""}${ir.list_reply.description ? " — " + ir.list_reply.description : ""}`;
+    else if (ir.nfm_reply) body = `📝 ${ir.nfm_reply.name ?? "نموذج"}: ${ir.nfm_reply.body ?? ir.nfm_reply.response_json ?? ""}`;
+    else body = `🔘 رد تفاعلي: ${ir.button_reply?.title ?? ""}`;
+  } else if (msg.type === "order" && msg.order) {
+    const items = msg.order.product_items ?? [];
+    body =
+      `🛒 طلب${msg.order.text ? " — " + msg.order.text : ""}:\n` +
+      items
+        .map((it) => `${it.quantity ?? "1"} × ${it.product_retailer_id ?? "منتج"}${it.item_price ? ` (${it.currency ?? ""} ${it.item_price})` : ""}`)
+        .join("\n");
+  } else if (msg.type === "system" && msg.system) {
+    body = `ℹ️ ${msg.system.body ?? msg.system.type ?? "رسالة نظام"}`;
   } else {
     body = `[رسالة من نوع: ${msg.type}]`;
   }
