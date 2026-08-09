@@ -1,0 +1,78 @@
+# Chatwoot — البديل الجاهز لصفحة دردشة الواتساب
+#
+# يشغّل: chatwoot-web + chatwoot-worker + postgres + redis
+# يعيد استخدام نفس بيانات اعتماد Official WhatsApp Cloud API الموجودة على تطبيق Render.
+#
+# التشغيل:
+#   cp .env.example .env  # ثم اضبط القيم
+#   docker compose -f deploy/chatwoot/docker-compose.chatwoot.yml up -d
+#
+# بعد أول تشغيل: أدخل حاوية chatwoot-web ونفّذ:
+#   docker compose -f deploy/chatwoot/docker-compose.chatwoot.yml exec chatwoot-web \
+#     rake db:chatwoot_prepare db:migrate
+# ثم افتح http://<host>:3000/app لإنشاء أول حساب أدمن.
+
+services:
+  chatwoot-postgres:
+    image: postgres:15-alpine
+    container_name: chatwoot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chatwoot
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      POSTGRES_DB: chatwoot
+    volumes:
+      - chatwoot_pg:/var/lib/postgresql/data
+
+  chatwoot-redis:
+    image: redis:7-alpine
+    container_name: chatwoot-redis
+    restart: unless-stopped
+    volumes:
+      - chatwoot_redis:/data
+
+  chatwoot-web:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot-web
+    restart: unless-stopped
+    depends_on: [chatwoot-postgres, chatwoot-redis]
+    ports:
+      - "${CHATWOOT_PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL required}
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-ar}
+      FORCE_SSL: ${FORCE_SSL:-true}
+      ENABLE_ACCOUNT_SIGNUP: false
+      DATABASE_URL: postgresql://chatwoot:${DB_PASSWORD}@chatwoot-postgres:5432/chatwoot
+      REDIS_URL: redis://chatwoot-redis:6379
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE required}
+      RAILS_LOG_LEVEL: ${RAILS_LOG_LEVEL:-info}
+      # SMTP لإشعارات البريد (اختياري لكن موصى به)
+      SMTP_ADDRESS: ${SMTP_ADDRESS:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAILER_SENDER_EMAIL: ${MAILER_SENDER_EMAIL:-Chatwoot <noreply@example.com>}
+    command: bundle exec rails s -b 0.0.0.0 -p 3000
+
+  chatwoot-worker:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot-worker
+    restart: unless-stopped
+    depends_on: [chatwoot-postgres, chatwoot-redis]
+    env_file: .env
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:?FRONTEND_URL required}
+      DATABASE_URL: postgresql://chatwoot:${DB_PASSWORD}@chatwoot-postgres:5432/chatwoot
+      REDIS_URL: redis://chatwoot-redis:6379
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?SECRET_KEY_BASE required}
+    command: bundle exec sidekiq -C config/sidekiq.yml
+
+volumes:
+  chatwoot_pg:
+  chatwoot_redis:

@@ -35,7 +35,11 @@ import AuditPage from "@/modules/reports/pages/audit";
 import ItemsPage from "@/modules/reports/pages/items";
 
 // ── Module: Communications — التواصل ──────────────────────────────────────
-import WhatsAppPage from "@/modules/communications/pages/index";
+// Chatwoot inbox replaces the legacy WhatsApp chat UI at /whatsapp.
+// The legacy custom chat is kept reachable at /whatsapp-legacy as a read-only backup
+// so no historical data loses a UI.
+import WhatsAppPage from "@/modules/communications/pages/chatwoot";
+import LegacyWhatsAppPage from "@/modules/communications/pages/index";
 
 // ── Module: Integrations — تكاملات ERP ────────────────────────────────────
 import IntegrationsPage from "@/modules/integrations/pages/index";
@@ -142,6 +146,9 @@ function Router() {
       {/* ── Module: Communications ─────────────────────────────────────── */}
       <Route path="/whatsapp">
         <ProtectedRoute component={WhatsAppPage} />
+      </Route>
+      <Route path="/whatsapp-legacy">
+        <ProtectedRoute component={LegacyWhatsAppPage} />
       </Route>
 
       {/* ── Module: Integrations ────────────────────────────────────────── */}

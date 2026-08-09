@@ -6,7 +6,8 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "seed": "node seed.mjs"
+    "seed": "node seed.mjs",
+    "migrate:chatwoot": "node migrate-whatsapp-to-chatwoot.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
