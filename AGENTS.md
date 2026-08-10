@@ -48,4 +48,10 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - PO statuses: `draft` → `sent`. Draft POs are fully editable; sent are immutable.
 - Git: use provided GitHub token for push. Co-author commits with `openhands <openhands@all-hands.dev>`.
 - Git identity: no global git config exists in this env — set `git config user.name "openhands"` and `git config user.email "openhands@all-hands.dev"` locally before first commit.
-- Token caveat: the system-managed `$GITHUB_TOKEN` env var (a `ghu_` OAuth token) has **empty OAuth scopes** and is rejected by git push (403). Use the user-provided `ghp_` classic token literally in the remote URL (e.g. `https://melsofany:<ghp_token>@github.com/...`) for push + PR creation. Reset remote to credential-less URL afterward.
+- Token caveat: the system-managed `$GITHUB_TOKEN` env var (a `ghu_` OAuth token) has **empty OAuth scopes** and is rejected by git push (403). Use the user-provided `ghp_` classic token literally in the remote URL (e.g. `https://melsofany:<ghp_token>@github.com/...`) for push + PR creation. Reset remote to credential-less URL afterward. The `create_pr` tool also fails (403) because it uses the `ghu_` token — create PRs directly via `curl` to `https://api.github.com/repos/<owner>/<repo>/pulls` with the `ghp_` token.
+
+## Customer module (added in PR #9)
+- DB: `lib/db/src/schema/customers.ts` — `customers` table (id, customerId, name, nickname, contactPerson, email, phone, address, taxId, notes, isActive, createdAt, updatedAt). Drizzle `push` (prebuild) creates the table on deploy when `DATABASE_URL` is set.
+- API: `artifacts/api-server/src/modules/users/customers.ts` — `GET/POST /customers`, `GET/PATCH/DELETE /customers/:id`. Duplicate email/phone guarded on create + update. Delete is `requireRole("admin","manager")` and FK-aware (409 on linked records). Mounted via `modules/users/index.ts`.
+- Frontend: `artifacts/rfq-portal/src/modules/customers/pages/{index,new,detail}.tsx` (list + search + delete confirm, add form, detail + inline edit + delete modal). Routes `/customers`, `/customers/new`, `/customers/:id` in `App.tsx`.
+- Customers page pattern (in-place edit + delete) mirrors the suppliers module but drops categories/scores/bulk-import.
