@@ -376,6 +376,131 @@ export const GetSupplierScoreResponse = zod.object({
 
 
 /**
+ * @summary List customers with optional search
+ */
+export const ListCustomersQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "active": zod.enum(['true', 'false']).optional()
+})
+
+export const ListCustomersResponseItem = zod.object({
+  "id": zod.number(),
+  "customerId": zod.string().nullish(),
+  "name": zod.string(),
+  "nickname": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string().optional()
+})
+export const ListCustomersResponse = zod.array(ListCustomersResponseItem)
+
+
+/**
+ * @summary Create customer
+ */
+export const CreateCustomerBody = zod.object({
+  "customerId": zod.string().optional(),
+  "name": zod.string(),
+  "nickname": zod.string().optional(),
+  "contactPerson": zod.string().optional(),
+  "email": zod.string().optional(),
+  "phone": zod.string(),
+  "address": zod.string(),
+  "taxId": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreateCustomerResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.string().nullish(),
+  "name": zod.string(),
+  "nickname": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string().optional()
+})
+
+
+/**
+ * @summary Get customer
+ */
+export const GetCustomerParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCustomerResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.string().nullish(),
+  "name": zod.string(),
+  "nickname": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string().optional()
+})
+
+
+/**
+ * @summary Update customer
+ */
+export const UpdateCustomerParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateCustomerBody = zod.object({
+  "customerId": zod.string().optional(),
+  "name": zod.string().optional(),
+  "nickname": zod.string().optional(),
+  "contactPerson": zod.string().optional(),
+  "email": zod.string().optional(),
+  "phone": zod.string().optional(),
+  "address": zod.string().optional(),
+  "taxId": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateCustomerResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.string().nullish(),
+  "name": zod.string(),
+  "nickname": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "createdAt": zod.string().optional()
+})
+
+
+/**
+ * @summary Delete customer (admin/manager only)
+ */
+export const DeleteCustomerParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteCustomerResponse = zod.void()
+
+
+/**
  * @summary قائمة تكاملات الـ ERP
  */
 export const ListIntegrationsResponseItem = zod.object({
