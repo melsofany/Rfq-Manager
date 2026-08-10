@@ -16,6 +16,8 @@ tags:
     description: RFQ management
   - name: suppliers
     description: Supplier management
+  - name: customers
+    description: Customer management
   - name: offers
     description: Supplier offers/pricing
   - name: analytics
@@ -350,6 +352,106 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SupplierScore"
+
+  # CUSTOMERS
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List customers with optional search
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: active
+          in: query
+          schema:
+            type: string
+            enum: ["true", "false"]
+      responses:
+        "200":
+          description: List of customers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create customer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    patch:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update customer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      summary: Delete customer (admin/manager only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: Cannot delete (linked records exist)
 
   # ERP INTEGRATIONS
   /integrations:
@@ -1279,6 +1381,83 @@ components:
         address:
           type: string
         category:
+          type: string
+        isActive:
+          type: boolean
+
+    # CUSTOMERS
+    Customer:
+      type: object
+      required: [id, name, isActive]
+      properties:
+        id:
+          type: integer
+        customerId:
+          type: ["string", "null"]
+        name:
+          type: string
+        nickname:
+          type: ["string", "null"]
+        contactPerson:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        taxId:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+
+    CustomerInput:
+      type: object
+      required: [name, phone, address]
+      properties:
+        customerId:
+          type: string
+        name:
+          type: string
+        nickname:
+          type: string
+        contactPerson:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        taxId:
+          type: string
+        notes:
+          type: string
+
+    CustomerUpdate:
+      type: object
+      properties:
+        customerId:
+          type: string
+        name:
+          type: string
+        nickname:
+          type: string
+        contactPerson:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        taxId:
+          type: string
+        notes:
           type: string
         isActive:
           type: boolean

@@ -141,7 +141,9 @@ const translations: Record<Lang, Record<string, string>> = {
 
     // Customers pages
     "customers.title": "Customers",
-    "customers.subtitle": "Manage your customers",
+    "customers.subtitle": "Manage your customers directory",
+    "customers.add": "Add Customer",
+    "customers.search": "Search by name or phone...",
     "customers.comingSoon": "Customer content will be added soon",
     "customerRfq.title": "Customer RFQs",
     "customerRfq.subtitle": "Customer Request for Quotation workflow",
@@ -471,7 +473,9 @@ const translations: Record<Lang, Record<string, string>> = {
 
     // Customers pages
     "customers.title": "العملاء",
-    "customers.subtitle": "إدارة العملاء",
+    "customers.subtitle": "إدارة دليل العملاء",
+    "customers.add": "إضافة عميل",
+    "customers.search": "بحث بالاسم أو الهاتف...",
     "customers.comingSoon": "سيتم إضافة محتوى العملاء لاحقاً",
     "customerRfq.title": "طلبات تسعير العملاء",
     "customerRfq.subtitle": "سير عمل طلبات تسعير العملاء",

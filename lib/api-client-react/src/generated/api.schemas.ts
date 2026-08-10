@@ -120,6 +120,54 @@ export interface SupplierUpdate {
   isActive?: boolean;
 }
 
+export interface Customer {
+  id: number;
+  /** @nullable */
+  customerId?: string | null;
+  name: string;
+  /** @nullable */
+  nickname?: string | null;
+  /** @nullable */
+  contactPerson?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  taxId?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface CustomerInput {
+  customerId?: string;
+  name: string;
+  nickname?: string;
+  contactPerson?: string;
+  email?: string;
+  phone: string;
+  address: string;
+  taxId?: string;
+  notes?: string;
+}
+
+export interface CustomerUpdate {
+  customerId?: string;
+  name?: string;
+  nickname?: string;
+  contactPerson?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  taxId?: string;
+  notes?: string;
+  isActive?: boolean;
+}
+
 export interface BulkImportSuppliersInput {
   /** @minItems 1 */
   suppliers: SupplierInput[];
@@ -860,6 +908,19 @@ export type ListSuppliersParams = {
 category?: string;
 search?: string;
 };
+
+export type ListCustomersParams = {
+search?: string;
+active?: ListCustomersActive;
+};
+
+export type ListCustomersActive = typeof ListCustomersActive[keyof typeof ListCustomersActive];
+
+
+export const ListCustomersActive = {
+  true: 'true',
+  false: 'false',
+} as const;
 
 export type SyncIntegration200 = {
   message?: string;

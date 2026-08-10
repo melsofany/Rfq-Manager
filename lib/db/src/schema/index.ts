@@ -1,6 +1,7 @@
 export * from "./employees";
 export * from "./representatives";
 export * from "./suppliers";
+export * from "./customers";
 export * from "./rfq";
 export * from "./sent_log";
 export * from "./offers";

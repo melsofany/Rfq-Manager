@@ -43,6 +43,8 @@ import ConnectPopupPage from "@/modules/integrations/pages/connect";
 
 // ── Module: Customers — العملاء ────────────────────────────────────────────
 import CustomersPage from "@/modules/customers/pages/index";
+import NewCustomerPage from "@/modules/customers/pages/new";
+import CustomerDetailPage from "@/modules/customers/pages/detail";
 import CustomerRfqPage from "@/modules/customer-rfq/pages/index";
 import CustomerPoPage from "@/modules/customer-po/pages/index";
 
@@ -158,6 +160,12 @@ function Router() {
       <Route path="/integrations/connect" component={ConnectPopupPage} />
 
       {/* ── Module: Customers ──────────────────────────────────────────── */}
+      <Route path="/customers/new">
+        <ProtectedRoute component={NewCustomerPage} />
+      </Route>
+      <Route path="/customers/:id">
+        <ProtectedRoute component={CustomerDetailPage} />
+      </Route>
       <Route path="/customers">
         <ProtectedRoute component={CustomersPage} />
       </Route>
