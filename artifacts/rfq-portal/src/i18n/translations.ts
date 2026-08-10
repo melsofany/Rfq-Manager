@@ -15,6 +15,9 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.auditLog": "Audit Log",
     "nav.integrations": "ERP Integrations",
     "nav.admin": "Admin",
+    "nav.customers": "Customers",
+    "nav.customerRfq": "Customer RFQs",
+    "nav.customerPo": "Customer POs",
     "lang.toggle": "عربي",
 
     // Status labels
@@ -135,6 +138,17 @@ const translations: Record<Lang, Record<string, string>> = {
     "dashboard.noSupplierData": "No supplier data yet",
     "dashboard.noRfqs": "No RFQs yet",
     "dashboard.offers": "offers",
+
+    // Customers pages
+    "customers.title": "Customers",
+    "customers.subtitle": "Manage your customers",
+    "customers.comingSoon": "Customer content will be added soon",
+    "customerRfq.title": "Customer RFQs",
+    "customerRfq.subtitle": "Customer Request for Quotation workflow",
+    "customerRfq.comingSoon": "Customer RFQ content will be added soon",
+    "customerPo.title": "Customer POs",
+    "customerPo.subtitle": "Customer purchase orders",
+    "customerPo.comingSoon": "Customer PO content will be added soon",
 
     // Employees role display in dashboard/auth context
     "role.admin": "Admin",
@@ -332,6 +346,9 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.auditLog": "سجل المراجعة",
     "nav.integrations": "تكاملات ERP",
     "nav.admin": "المدير",
+    "nav.customers": "العملاء",
+    "nav.customerRfq": "طلبات تسعير العملاء",
+    "nav.customerPo": "أوامر شراء العملاء",
     "lang.toggle": "English",
 
     // Status labels
@@ -451,6 +468,17 @@ const translations: Record<Lang, Record<string, string>> = {
     "dashboard.noSupplierData": "لا توجد بيانات موردين",
     "dashboard.noRfqs": "لا توجد طلبات",
     "dashboard.offers": "عروض",
+
+    // Customers pages
+    "customers.title": "العملاء",
+    "customers.subtitle": "إدارة العملاء",
+    "customers.comingSoon": "سيتم إضافة محتوى العملاء لاحقاً",
+    "customerRfq.title": "طلبات تسعير العملاء",
+    "customerRfq.subtitle": "سير عمل طلبات تسعير العملاء",
+    "customerRfq.comingSoon": "سيتم إضافة محتوى طلبات التسعير لاحقاً",
+    "customerPo.title": "أوامر شراء العملاء",
+    "customerPo.subtitle": "أوامر شراء العملاء",
+    "customerPo.comingSoon": "سيتم إضافة محتوى أوامر الشراء لاحقاً",
 
     // Role display
     "role.admin": "مدير النظام",
