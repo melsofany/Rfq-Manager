@@ -47,3 +47,5 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Arabic UI (RTL) with English code/comments. Field labels in Arabic.
 - PO statuses: `draft` → `sent`. Draft POs are fully editable; sent are immutable.
 - Git: use provided GitHub token for push. Co-author commits with `openhands <openhands@all-hands.dev>`.
+- Git identity: no global git config exists in this env — set `git config user.name "openhands"` and `git config user.email "openhands@all-hands.dev"` locally before first commit.
+- Token caveat: the system-managed `$GITHUB_TOKEN` env var (a `ghu_` OAuth token) has **empty OAuth scopes** and is rejected by git push (403). Use the user-provided `ghp_` classic token literally in the remote URL (e.g. `https://melsofany:<ghp_token>@github.com/...`) for push + PR creation. Reset remote to credential-less URL afterward.

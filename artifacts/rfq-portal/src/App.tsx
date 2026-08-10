@@ -41,6 +41,11 @@ import WhatsAppPage from "@/modules/communications/pages/index";
 import IntegrationsPage from "@/modules/integrations/pages/index";
 import ConnectPopupPage from "@/modules/integrations/pages/connect";
 
+// ── Module: Customers — العملاء ────────────────────────────────────────────
+import CustomersPage from "@/modules/customers/pages/index";
+import CustomerRfqPage from "@/modules/customer-rfq/pages/index";
+import CustomerPoPage from "@/modules/customer-po/pages/index";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -151,6 +156,17 @@ function Router() {
 
       {/* Popup page — standalone, no Layout, no auth guard (auth via API) */}
       <Route path="/integrations/connect" component={ConnectPopupPage} />
+
+      {/* ── Module: Customers ──────────────────────────────────────────── */}
+      <Route path="/customers">
+        <ProtectedRoute component={CustomersPage} />
+      </Route>
+      <Route path="/customer-rfq">
+        <ProtectedRoute component={CustomerRfqPage} />
+      </Route>
+      <Route path="/customer-po">
+        <ProtectedRoute component={CustomerPoPage} />
+      </Route>
 
       <Route component={NotFound} />
     </Switch>

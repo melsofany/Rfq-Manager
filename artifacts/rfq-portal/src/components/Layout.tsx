@@ -16,6 +16,7 @@ import {
   ShoppingCart,
   Languages,
   Plug,
+  UserRound,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
+    { href: "/customers", label: t("nav.customers"), icon: UserRound },
+    { href: "/customer-rfq", label: t("nav.customerRfq"), icon: FileText },
+    { href: "/customer-po", label: t("nav.customerPo"), icon: ShoppingCart },
     { href: "/rfq", label: t("nav.rfq"), icon: FileText },
     { href: "/suppliers", label: t("nav.suppliers"), icon: Users },
     { href: "/items", label: t("nav.items"), icon: Package },
