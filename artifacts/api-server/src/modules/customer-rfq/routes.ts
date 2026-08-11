@@ -4,12 +4,94 @@ import {
   customerRfqsTable,
   customerRfqItemsTable,
   customersTable,
+  rfqItemsTable,
+  offerItemsTable,
   auditLogTable,
 } from "@workspace/db";
-import { eq, ilike, count, inArray, desc } from "drizzle-orm";
+import { eq, ilike, count, inArray, desc, and, isNull, or } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
+
+// VAT rate — must match the rfq module (used to normalize tax-inclusive
+// supplier prices to excl-tax for the margin check).
+const VAT_RATE = 0.14;
+// Required margin: the customer price (excl tax) must be at least this factor
+// times the approved supplier price (excl tax) — prevents pricing at a loss.
+const MARGIN_FACTOR = 1.06;
+
+// For each customer RFQ item, resolve the approved supplier price (excl tax)
+// via the rfq_items.customer_rfq_item_id link, falling back to partNo/lineItem
+// matching for legacy supplier RFQs that lack the FK link. Returns a map
+// customerItemId -> { costExclTax (min approved) | null, hasApproved }.
+async function resolveApprovedCosts(
+  customerItems: Array<{ id: number; partNo: string | null; lineItem: string | null }>,
+): Promise<Map<number, number | null>> {
+  const result = new Map<number, number | null>();
+  if (customerItems.length === 0) return result;
+
+  const ids = customerItems.map((i) => i.id);
+  // Approved offer items linked directly via the FK.
+  const linked = await db
+    .select({
+      customerRfqItemId: rfqItemsTable.customerRfqItemId,
+      price: offerItemsTable.price,
+      taxIncluded: offerItemsTable.taxIncluded,
+    })
+    .from(offerItemsTable)
+    .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+    .where(and(inArray(rfqItemsTable.customerRfqItemId, ids), eq(offerItemsTable.isApproved, true)));
+
+  const byCustomerItem = new Map<number, number[]>();
+  for (const row of linked) {
+    if (row.customerRfqItemId == null) continue;
+    const price = parseFloat(row.price);
+    const excl = row.taxIncluded ? price / (1 + VAT_RATE) : price;
+    const arr = byCustomerItem.get(row.customerRfqItemId) ?? [];
+    arr.push(excl);
+    byCustomerItem.set(row.customerRfqItemId, arr);
+  }
+
+  for (const ci of customerItems) {
+    const approved = byCustomerItem.get(ci.id);
+    if (approved && approved.length > 0) {
+      result.set(ci.id, Math.min(...approved));
+      continue;
+    }
+    // Fallback: match by partNo (priority) or lineItem for legacy rfq_items
+    // that have no customer_rfq_item_id link.
+    const key = ci.partNo?.trim() || ci.lineItem?.trim();
+    if (!key) {
+      result.set(ci.id, null);
+      continue;
+    }
+    const partMatch = ci.partNo?.trim()
+      ? eq(rfqItemsTable.partNo, ci.partNo.trim())
+      : null;
+    const lineMatch = ci.lineItem?.trim()
+      ? eq(rfqItemsTable.lineItem, ci.lineItem.trim())
+      : null;
+    const matchCond = partMatch && lineMatch ? or(partMatch, lineMatch) : partMatch ?? lineMatch;
+    if (!matchCond) {
+      result.set(ci.id, null);
+      continue;
+    }
+    const fallback = await db
+      .select({ price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
+      .from(offerItemsTable)
+      .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+      .where(and(matchCond, isNull(rfqItemsTable.customerRfqItemId), eq(offerItemsTable.isApproved, true)));
+    if (fallback.length > 0) {
+      const excl = fallback.map((f) =>
+        f.taxIncluded ? parseFloat(f.price) / (1 + VAT_RATE) : parseFloat(f.price),
+      );
+      result.set(ci.id, Math.min(...excl));
+    } else {
+      result.set(ci.id, null);
+    }
+  }
+  return result;
+}
 
 // Generate internal customer-RFQ number: CRFQ-YYYY-NNNNNN
 async function generateInternalNo(): Promise<string> {
@@ -247,7 +329,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     return;
   }
 
-  const { customerName, customerRfqNo, entryDate, expiryDate, buyerName, notes, status, items } =
+  const { customerName, customerRfqNo, entryDate, expiryDate, buyerName, notes, status, items, overrideMarginCheck } =
     req.body as {
       customerName?: string;
       customerRfqNo?: string;
@@ -264,6 +346,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
         qty?: string | number | null;
         unitPrice?: string | number | null;
       }>;
+      overrideMarginCheck?: boolean;
     };
 
   const updates: Record<string, unknown> = {};
@@ -284,7 +367,8 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   if (buyerName !== undefined) updates.buyerName = buyerName?.trim() || null;
   if (notes !== undefined) updates.notes = notes?.trim() || null;
 
-  // Finalizing (status → sent) requires every item to have a price.
+  // Finalizing (status → sent) requires every item to have a price, and every
+  // priced item to clear the margin check against the approved supplier price.
   const validItems = items
     ? items.filter((it) => (it.partNo?.trim() || it.lineItem?.trim()) && it.qty)
     : undefined;
@@ -294,6 +378,73 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       res.status(400).json({ error: "أدخل سعر كل بند قبل تثبيت الطلب" });
       return;
     }
+
+    // Margin check: each customer price (excl tax) must be ≥ 1.06 × the
+    // approved supplier price (excl tax) for the matching item. The approved
+    // cost is resolved via the customer_rfq_item_id link on rfq_items, with a
+    // partNo/lineItem fallback for legacy supplier RFQs. An admin may override
+    // (with audit logging); non-admins are blocked.
+    const isAdmin = req.session.role === "admin";
+    const overriding = overrideMarginCheck === true && isAdmin;
+
+    // Current DB items carry the original ids that rfq_items link to (the
+    // delete+recreate below would invalidate those ids, so resolve first).
+    const currentDbItems = await db
+      .select({ id: customerRfqItemsTable.id, partNo: customerRfqItemsTable.partNo, lineItem: customerRfqItemsTable.lineItem })
+      .from(customerRfqItemsTable)
+      .where(eq(customerRfqItemsTable.customerRfqId, id));
+    const costs = await resolveApprovedCosts(currentDbItems);
+
+    // Map a req.body item to its current DB item id by partNo (priority) then lineItem.
+    const findDbId = (it: { partNo?: string; lineItem?: string }): number | null => {
+      const p = it.partNo?.trim();
+      const l = it.lineItem?.trim();
+      if (p) {
+        const m = currentDbItems.find((d) => (d.partNo ?? "").trim() === p);
+        if (m) return m.id;
+      }
+      if (l) {
+        const m = currentDbItems.find((d) => (d.lineItem ?? "").trim() === l);
+        if (m) return m.id;
+      }
+      return null;
+    };
+
+    const violations: string[] = [];
+    for (const it of validItems) {
+      const dbId = findDbId(it);
+      const cost = dbId != null ? (costs.get(dbId) ?? null) : null;
+      const customerPrice = Number(it.unitPrice);
+      if (cost == null) {
+        violations.push(`لا يوجد سعر مورد معتمد للبند (${it.partNo || it.lineItem})`);
+      } else if (customerPrice < cost * MARGIN_FACTOR) {
+        const minRequired = cost * MARGIN_FACTOR;
+        violations.push(
+          `سعر البند (${it.partNo || it.lineItem}) ${customerPrice.toFixed(2)} أقل من الحد الأدنى ${minRequired.toFixed(2)} (سعر المورد المعتمد ${cost.toFixed(2)} × 1.06)`,
+        );
+      }
+    }
+
+    if (violations.length > 0 && !overriding) {
+      res.status(400).json({
+        error: "تعذّر تثبيت الطلب: " + violations.join(" — "),
+        marginViolations: violations,
+      });
+      return;
+    }
+
+    if (violations.length > 0 && overriding) {
+      await db.insert(auditLogTable).values({
+        action: "customer_rfq.margin_override",
+        entityType: "customer_rfq",
+        entityId: id,
+        employeeId: req.session.employeeId,
+        description: `Admin overrode margin check on finalize: ${violations.join(" | ")}`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+    }
+
     updates.status = "sent";
   } else if (status !== undefined) {
     updates.status = status;

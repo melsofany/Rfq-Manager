@@ -20,6 +20,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ApproveOfferItem200,
+  ApproveOfferItemBody,
   AuditLog,
   AuthResponse,
   BulkImportSuppliersInput,
@@ -3455,6 +3457,78 @@ export function useGetRfqOffers<TData = Awaited<ReturnType<typeof getRfqOffers>>
 
 
 
+
+export const getApproveOfferItemUrl = (offerItemId: number,) => {
+
+
+
+
+  return `/api/offers/items/${offerItemId}/approve`
+}
+
+/**
+ * @summary Approve (endorse) a supplier price for an rfq_item — only one approved price per rfq_item.
+ */
+export const approveOfferItem = async (offerItemId: number,
+    approveOfferItemBody: ApproveOfferItemBody, options?: RequestInit): Promise<ApproveOfferItem200> => {
+
+  return customFetch<ApproveOfferItem200>(getApproveOfferItemUrl(offerItemId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(approveOfferItemBody)
+  }
+);}
+
+
+
+
+
+export const getApproveOfferItemMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveOfferItem>>, TError,{offerItemId: number;data: BodyType<ApproveOfferItemBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveOfferItem>>, TError,{offerItemId: number;data: BodyType<ApproveOfferItemBody>}, TContext> => {
+
+const mutationKey = ['approveOfferItem'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveOfferItem>>, {offerItemId: number;data: BodyType<ApproveOfferItemBody>}> = (props) => {
+          const {offerItemId,data} = props ?? {};
+
+          return  approveOfferItem(offerItemId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveOfferItemMutationResult = NonNullable<Awaited<ReturnType<typeof approveOfferItem>>>
+    export type ApproveOfferItemMutationBody = BodyType<ApproveOfferItemBody>
+    export type ApproveOfferItemMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Approve (endorse) a supplier price for an rfq_item — only one approved price per rfq_item.
+ */
+export const useApproveOfferItem = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveOfferItem>>, TError,{offerItemId: number;data: BodyType<ApproveOfferItemBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof approveOfferItem>>,
+        TError,
+        {offerItemId: number;data: BodyType<ApproveOfferItemBody>},
+        TContext
+      > => {
+      return useMutation(getApproveOfferItemMutationOptions(options));
+    }
 
 export const getLookupCustomerRfqUrl = (customerRfqNo: string,) => {
 

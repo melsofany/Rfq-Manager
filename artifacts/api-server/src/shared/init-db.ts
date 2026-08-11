@@ -68,6 +68,7 @@ export async function initDb(): Promise<void> {
         uom TEXT,
         qty NUMERIC(15,4),
         reference_price NUMERIC(15,4),
+        customer_rfq_item_id INTEGER REFERENCES customer_rfq_items(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS sent_log (
@@ -101,6 +102,7 @@ export async function initDb(): Promise<void> {
         rfq_item_id INTEGER NOT NULL REFERENCES rfq_items(id),
         price NUMERIC(15,4) NOT NULL,
         tax_included BOOLEAN NOT NULL DEFAULT false,
+        is_approved BOOLEAN NOT NULL DEFAULT false,
         delivery_days INTEGER,
         notes TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -259,6 +261,13 @@ export async function initDb(): Promise<void> {
     await client.query(`
       ALTER TABLE offer_items ADD COLUMN IF NOT EXISTS delivery_days INTEGER;
       ALTER TABLE offer_items ADD COLUMN IF NOT EXISTS notes TEXT;
+      ALTER TABLE offer_items ADD COLUMN IF NOT EXISTS is_approved BOOLEAN NOT NULL DEFAULT false;
+    `);
+
+    // Link supplier RFQ items back to the originating customer RFQ item for
+    // exact margin checks. Nullable for legacy/sheet-only supplier RFQs.
+    await client.query(`
+      ALTER TABLE rfq_items ADD COLUMN IF NOT EXISTS customer_rfq_item_id INTEGER REFERENCES customer_rfq_items(id) ON DELETE SET NULL;
     `);
 
     // Add media columns to whatsapp_chats (safe migration — skipped if already present)

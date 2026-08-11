@@ -10,6 +10,8 @@ import {
   offerItemsTable,
   offerAttachmentsTable,
   auditLogTable,
+  customerRfqsTable,
+  customerRfqItemsTable,
 } from "@workspace/db";
 import { eq, and, ilike, or, count, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
@@ -169,6 +171,7 @@ router.post("/rfq", requireAuth, async (req, res): Promise<void> => {
       uom?: string;
       qty?: string | number | null;
       referencePrice?: string | number | null;
+      customerRfqItemId?: number | null;
     }>;
   };
 
@@ -206,6 +209,7 @@ router.post("/rfq", requireAuth, async (req, res): Promise<void> => {
             it.referencePrice != null && it.referencePrice !== ""
               ? String(it.referencePrice)
               : null,
+          customerRfqItemId: it.customerRfqItemId || null,
         })),
       );
       itemCount = validItems.length;
@@ -248,7 +252,38 @@ router.get("/rfq/lookup/:customerRfqNo", requireAuth, async (req, res): Promise<
   const customerRfqNo = decodeURIComponent(raw);
   const { sheet } = req.query as Record<string, string>;
 
-  // 1. Check DB first (already imported RFQ)
+  // 0. Customer RFQ (DB) — the new source of truth (replaces the sheet).
+  //    Returns items with their customer_rfq_item_id so the supplier RFQ can
+  //    be linked back exactly for margin checks.
+  const [customerRfq] = await db
+    .select()
+    .from(customerRfqsTable)
+    .where(eq(customerRfqsTable.customerRfqNo, customerRfqNo));
+  if (customerRfq) {
+    const cItems = await db
+      .select()
+      .from(customerRfqItemsTable)
+      .where(eq(customerRfqItemsTable.customerRfqId, customerRfq.id));
+    if (cItems.length > 0) {
+      res.json(
+        cItems.map((i) => ({
+          customerRfqItemId: i.id,
+          lineItem: i.lineItem,
+          partNo: i.partNo,
+          description: i.description || i.lineItem || i.partNo || "",
+          uom: i.uom,
+          qty: i.qty ? parseFloat(i.qty) : null,
+          referencePrice: null,
+          rfqNo: customerRfqNo,
+          rfqDate: customerRfq.entryDate || "",
+          requiredResponseDate: customerRfq.expiryDate || "",
+        })),
+      );
+      return;
+    }
+  }
+
+  // 1. Check DB first (already imported supplier RFQ — legacy re-import path)
   const existingRfq = await db
     .select()
     .from(rfqTable)
@@ -261,6 +296,7 @@ router.get("/rfq/lookup/:customerRfqNo", requireAuth, async (req, res): Promise<
     if (items.length > 0) {
       res.json(
         items.map((i) => ({
+          customerRfqItemId: i.customerRfqItemId,
           itemId: i.itemId,
           lineItem: i.lineItem,
           partNo: i.partNo,
@@ -277,7 +313,7 @@ router.get("/rfq/lookup/:customerRfqNo", requireAuth, async (req, res): Promise<
     }
   }
 
-  // 2. Lookup from Google Sheets
+  // 2. Lookup from Google Sheets (fallback for legacy entries)
   try {
     const sheetItems = await lookupRfqFromSheet(customerRfqNo, sheet || "DATA");
     res.json(sheetItems);
@@ -1133,11 +1169,13 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
   const itemAnalysis = rfqItems.map((rfqItem) => {
     const vatPrices: number[] = [];
     const offerDetails: Array<{
+      offerItemId: number;
       supplierId: number;
       supplierName: string;
       price: number;
       priceWithVat: number;
       taxIncluded: boolean;
+      isApproved: boolean;
       deliveryDays: number | null;
       notes: string | null;
       deviation: number;
@@ -1162,11 +1200,13 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
         const notPriced = price <= 0;
         if (!notPriced) vatPrices.push(priceWithVat);
         offerDetails.push({
+          offerItemId: oi.item.id,
           supplierId: o.offer.supplierId,
           supplierName: o.supplierName || "",
           price,
           priceWithVat,
           taxIncluded: oi.item.taxIncluded,
+          isApproved: oi.item.isApproved,
           deliveryDays: oi.item.deliveryDays,
           notes: oi.item.notes ?? null,
           deviation: 0,
@@ -1242,6 +1282,7 @@ router.get("/rfq/:id/offers", requireAuth, async (req, res): Promise<void> => {
       uom: oi.rfqItem?.uom ?? null,
       price: parseFloat(oi.item.price),
       taxIncluded: oi.item.taxIncluded,
+      isApproved: oi.item.isApproved,
       deliveryDays: oi.item.deliveryDays,
       notes: oi.item.notes,
     })),

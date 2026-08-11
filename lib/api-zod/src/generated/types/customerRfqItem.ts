@@ -8,6 +8,8 @@
 
 export interface CustomerRfqItem {
   itemId?: string;
+  /** FK to customer_rfq_items.id (present when sourced from a DB customer RFQ). */
+  customerRfqItemId?: number;
   lineItem?: string;
   partNo?: string;
   description: string;

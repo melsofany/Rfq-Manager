@@ -2,6 +2,7 @@ import { pgTable, text, serial, timestamp, integer, numeric } from "drizzle-orm/
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { employeesTable } from "./employees";
+import { customerRfqItemsTable } from "./customer_rfqs";
 
 export const rfqTable = pgTable("rfq", {
   id: serial("id").primaryKey(),
@@ -32,6 +33,12 @@ export const rfqItemsTable = pgTable("rfq_items", {
   uom: text("uom"),
   qty: numeric("qty", { precision: 15, scale: 4 }),
   referencePrice: numeric("reference_price", { precision: 15, scale: 4 }),
+  // Links this supplier RFQ item back to the originating customer RFQ item,
+  // enabling exact margin checks on the customer-rfq side. Nullable for
+  // legacy/sheet-only supplier RFQs that have no DB customer RFQ origin.
+  customerRfqItemId: integer("customer_rfq_item_id").references(() => customerRfqItemsTable.id, {
+    onDelete: "set null",
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
