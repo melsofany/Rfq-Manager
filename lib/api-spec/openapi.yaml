@@ -1607,6 +1607,9 @@ components:
         lineItem:
           type: string
           description: Spaces are stripped automatically by the server
+        description:
+          type: string
+          description: Item description / توصيف البند
         uom:
           type: string
         qty:
@@ -1623,6 +1626,8 @@ components:
         partNo:
           type: ["string", "null"]
         lineItem:
+          type: ["string", "null"]
+        description:
           type: ["string", "null"]
         uom:
           type: ["string", "null"]

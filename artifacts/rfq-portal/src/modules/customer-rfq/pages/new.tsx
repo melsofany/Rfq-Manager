@@ -19,6 +19,7 @@ import { getApiErrorMessage } from "@/lib/api-error";
 interface ItemRow {
   partNo: string;
   lineItem: string;
+  description: string;
   uom: string;
   qty: string;
 }
@@ -165,7 +166,7 @@ export default function NewCustomerRfqPage() {
   const [buyerName, setBuyerName] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<ItemRow[]>([
-    { partNo: "", lineItem: "", uom: "", qty: "" },
+    { partNo: "", lineItem: "", description: "", uom: "", qty: "" },
   ]);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -193,7 +194,7 @@ export default function NewCustomerRfqPage() {
   });
 
   const addItem = () =>
-    setItems((prev) => [...prev, { partNo: "", lineItem: "", uom: "", qty: "" }]);
+    setItems((prev) => [...prev, { partNo: "", lineItem: "", description: "", uom: "", qty: "" }]);
 
   const removeItem = (i: number) => setItems((prev) => prev.filter((_, idx) => idx !== i));
 
@@ -212,6 +213,7 @@ export default function NewCustomerRfqPage() {
       .map((it) => ({
         partNo: it.partNo.trim() || undefined,
         lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : undefined,
+        description: it.description.trim() || undefined,
         uom: it.uom.trim() || undefined,
         qty: it.qty ? Number(it.qty) : undefined,
       }));
@@ -353,6 +355,9 @@ export default function NewCustomerRfqPage() {
                     <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-40">
                       Line Item
                     </th>
+                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
+                      التوصيف
+                    </th>
                     <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-28">
                       UOM
                     </th>
@@ -384,6 +389,14 @@ export default function NewCustomerRfqPage() {
                           className="h-7 text-xs"
                           placeholder="تُحذف المسافات تلقائياً"
                           dir="ltr"
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          value={row.description}
+                          onChange={(e) => updateItem(i, "description", e.target.value)}
+                          className="h-7 text-xs"
+                          placeholder="توصيف البند"
                         />
                       </td>
                       <td className="px-2 py-1.5">

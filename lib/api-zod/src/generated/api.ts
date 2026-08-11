@@ -541,6 +541,7 @@ export const CreateCustomerRfqBody = zod.object({
   "items": zod.array(zod.object({
   "partNo": zod.string().optional(),
   "lineItem": zod.string().optional().describe('Spaces are stripped automatically by the server'),
+  "description": zod.string().optional().describe('Item description \/ توصيف البند'),
   "uom": zod.string().optional(),
   "qty": zod.number().optional()
 })).optional()
@@ -592,6 +593,7 @@ export const GetCustomerRfqResponse = zod.object({
   "customerRfqId": zod.number(),
   "partNo": zod.string().nullish(),
   "lineItem": zod.string().nullish(),
+  "description": zod.string().nullish(),
   "uom": zod.string().nullish(),
   "qty": zod.number().nullish(),
   "createdAt": zod.string()
@@ -617,6 +619,7 @@ export const UpdateCustomerRfqBody = zod.object({
   "items": zod.array(zod.object({
   "partNo": zod.string().optional(),
   "lineItem": zod.string().optional().describe('Spaces are stripped automatically by the server'),
+  "description": zod.string().optional().describe('Item description \/ توصيف البند'),
   "uom": zod.string().optional(),
   "qty": zod.number().optional()
 })).optional()
@@ -643,6 +646,7 @@ export const UpdateCustomerRfqResponse = zod.object({
   "customerRfqId": zod.number(),
   "partNo": zod.string().nullish(),
   "lineItem": zod.string().nullish(),
+  "description": zod.string().nullish(),
   "uom": zod.string().nullish(),
   "qty": zod.number().nullish(),
   "createdAt": zod.string()

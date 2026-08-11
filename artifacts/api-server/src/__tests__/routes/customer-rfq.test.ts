@@ -181,6 +181,16 @@ describe("POST /api/customer-rfq (create)", () => {
     expect(insertedItems[0].lineItem).toBe("ABCD");
   });
 
+  it("persists the line-item description", async () => {
+    await request(testApp).post("/api/customer-rfq").send({
+      customerName: "Acme",
+      customerRfqNo: "RFQ-2",
+      items: [{ partNo: "P1", lineItem: "AB", description: "  وصف البند  ", uom: "pc", qty: 1 }],
+    });
+    expect(insertedItems).toHaveLength(1);
+    expect(insertedItems[0].description).toBe("وصف البند");
+  });
+
   it("returns 400 when customerName is missing", async () => {
     const res = await request(testApp).post("/api/customer-rfq").send({ customerRfqNo: "X" });
     expect(res.status).toBe(400);
@@ -208,13 +218,14 @@ describe("GET /api/customer-rfq/:id", () => {
   it("returns the rfq with items when found", async () => {
     detailRow = insertedRfq;
     detailItems = [
-      { id: 1, customerRfqId: 42, partNo: "P1", lineItem: "ABCD", uom: "pc", qty: "5", createdAt: new Date("2025-01-01") },
+      { id: 1, customerRfqId: 42, partNo: "P1", lineItem: "ABCD", description: "وصف البند", uom: "pc", qty: "5", createdAt: new Date("2025-01-01") },
     ];
     const res = await request(testApp).get("/api/customer-rfq/42");
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(42);
     expect(res.body.items).toHaveLength(1);
     expect(res.body.items[0].lineItem).toBe("ABCD");
+    expect(res.body.items[0].description).toBe("وصف البند");
   });
 });
 

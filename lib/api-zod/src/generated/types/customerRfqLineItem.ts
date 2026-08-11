@@ -14,6 +14,8 @@ export interface CustomerRfqLineItem {
   /** @nullable */
   lineItem?: string | null;
   /** @nullable */
+  description?: string | null;
+  /** @nullable */
   uom?: string | null;
   /** @nullable */
   qty?: number | null;

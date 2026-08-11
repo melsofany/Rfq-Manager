@@ -195,6 +195,8 @@ export interface CustomerRfqLineItemInput {
   partNo?: string;
   /** Spaces are stripped automatically by the server */
   lineItem?: string;
+  /** Item description / توصيف البند */
+  description?: string;
   uom?: string;
   qty?: number;
 }
@@ -206,6 +208,8 @@ export interface CustomerRfqLineItem {
   partNo?: string | null;
   /** @nullable */
   lineItem?: string | null;
+  /** @nullable */
+  description?: string | null;
   /** @nullable */
   uom?: string | null;
   /** @nullable */

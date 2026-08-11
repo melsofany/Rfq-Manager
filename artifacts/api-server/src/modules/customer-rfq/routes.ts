@@ -95,6 +95,7 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
     items?: Array<{
       partNo?: string;
       lineItem?: string;
+      description?: string;
       uom?: string;
       qty?: string | number | null;
     }>;
@@ -151,6 +152,7 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
           partNo: it.partNo?.trim() || null,
           // lineItem must contain no spaces — strip them automatically.
           lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : null,
+          description: it.description?.trim() || null,
           uom: it.uom?.trim() || null,
           qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
         })),
@@ -197,6 +199,7 @@ router.get("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => 
       customerRfqId: i.customerRfqId,
       partNo: i.partNo,
       lineItem: i.lineItem,
+      description: i.description,
       uom: i.uom,
       qty: i.qty,
       createdAt: i.createdAt.toISOString(),
@@ -233,6 +236,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       items?: Array<{
         partNo?: string;
         lineItem?: string;
+        description?: string;
         uom?: string;
         qty?: string | number | null;
       }>;
@@ -260,6 +264,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
           customerRfqId: id,
           partNo: it.partNo?.trim() || null,
           lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : null,
+          description: it.description?.trim() || null,
           uom: it.uom?.trim() || null,
           qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
         })),
@@ -282,6 +287,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       customerRfqId: i.customerRfqId,
       partNo: i.partNo,
       lineItem: i.lineItem,
+      description: i.description,
       uom: i.uom,
       qty: i.qty,
       createdAt: i.createdAt.toISOString(),

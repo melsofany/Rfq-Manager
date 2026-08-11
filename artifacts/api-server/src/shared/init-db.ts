@@ -236,6 +236,7 @@ export async function initDb(): Promise<void> {
         customer_rfq_id INTEGER NOT NULL REFERENCES customer_rfqs(id) ON DELETE CASCADE,
         part_no TEXT,
         line_item TEXT,
+        description TEXT,
         uom TEXT,
         qty NUMERIC(15,4),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -245,6 +246,11 @@ export async function initDb(): Promise<void> {
     await client.query(`
       ALTER TABLE purchase_order_items
         ADD COLUMN IF NOT EXISTS tax_included BOOLEAN NOT NULL DEFAULT false;
+    `);
+
+    // Add description to customer_rfq_items (safe migration — skipped if already present)
+    await client.query(`
+      ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS description TEXT;
     `);
 
     // Add delivery_days and notes to offer_items (safe migration — skipped if already present)

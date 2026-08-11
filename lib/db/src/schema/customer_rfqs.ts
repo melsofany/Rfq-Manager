@@ -30,6 +30,7 @@ export const customerRfqItemsTable = pgTable("customer_rfq_items", {
     .references(() => customerRfqsTable.id, { onDelete: "cascade" }),
   partNo: text("part_no"),
   lineItem: text("line_item"),
+  description: text("description"),
   uom: text("uom"),
   qty: numeric("qty", { precision: 15, scale: 4 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

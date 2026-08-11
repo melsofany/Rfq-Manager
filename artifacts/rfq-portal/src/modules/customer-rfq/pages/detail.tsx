@@ -20,6 +20,7 @@ interface ItemRow {
   id?: number;
   partNo: string;
   lineItem: string;
+  description: string;
   uom: string;
   qty: string;
 }
@@ -88,6 +89,7 @@ export default function CustomerRfqDetailPage() {
         id: i.id,
         partNo: i.partNo ?? "",
         lineItem: i.lineItem ?? "",
+        description: i.description ?? "",
         uom: i.uom ?? "",
         qty: i.qty != null ? String(i.qty) : "",
       })),
@@ -97,7 +99,7 @@ export default function CustomerRfqDetailPage() {
   };
 
   const addItem = () =>
-    setItems((prev) => [...prev, { partNo: "", lineItem: "", uom: "", qty: "" }]);
+    setItems((prev) => [...prev, { partNo: "", lineItem: "", description: "", uom: "", qty: "" }]);
   const removeItem = (i: number) => setItems((prev) => prev.filter((_, idx) => idx !== i));
   const updateItem = (i: number, field: keyof ItemRow, value: string) =>
     setItems((prev) => prev.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
@@ -113,6 +115,7 @@ export default function CustomerRfqDetailPage() {
       .map((it) => ({
         partNo: it.partNo.trim() || undefined,
         lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : undefined,
+        description: it.description.trim() || undefined,
         uom: it.uom.trim() || undefined,
         qty: it.qty ? Number(it.qty) : undefined,
       }));
@@ -233,6 +236,7 @@ export default function CustomerRfqDetailPage() {
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-8">#</th>
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium">Part No</th>
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium">Line Item</th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">التوصيف</th>
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium">UOM</th>
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium">الكمية</th>
                       <th className="px-3 py-2 w-8" />
@@ -247,6 +251,9 @@ export default function CustomerRfqDetailPage() {
                         </td>
                         <td className="px-2 py-1.5">
                           <Input value={row.lineItem} onChange={(e) => updateItem(i, "lineItem", e.target.value)} className="h-7 text-xs" dir="ltr" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input value={row.description} onChange={(e) => updateItem(i, "description", e.target.value)} className="h-7 text-xs" placeholder="توصيف البند" />
                         </td>
                         <td className="px-2 py-1.5">
                           <Input value={row.uom} onChange={(e) => updateItem(i, "uom", e.target.value)} className="h-7 text-xs" dir="ltr" />
@@ -320,6 +327,7 @@ export default function CustomerRfqDetailPage() {
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-8">#</th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Part No</th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Line Item</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">التوصيف</th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">UOM</th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الكمية</th>
                     </tr>
@@ -327,7 +335,7 @@ export default function CustomerRfqDetailPage() {
                   <tbody>
                     {(rfq.items ?? []).length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground text-sm">
+                        <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground text-sm">
                           لا توجد بنود
                         </td>
                       </tr>
@@ -337,6 +345,7 @@ export default function CustomerRfqDetailPage() {
                           <td className="px-4 py-2.5 text-muted-foreground text-xs text-center">{i + 1}</td>
                           <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">{it.partNo ?? "—"}</td>
                           <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">{it.lineItem ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs">{it.description ?? "—"}</td>
                           <td className="px-4 py-2.5 text-xs">{it.uom ?? "—"}</td>
                           <td className="px-4 py-2.5 text-xs" dir="ltr">{it.qty ?? "—"}</td>
                         </tr>
