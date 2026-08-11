@@ -497,6 +497,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/CustomerRfq"
 
+  /customer-rfq/numbers:
+    get:
+      operationId: listCustomerRfqNumbers
+      tags: [customer-rfq]
+      summary: List all customer RFQ numbers (for the supplier-RFQ import combobox)
+      responses:
+        "200":
+          description: List of customer RFQ numbers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rfqNumbers:
+                    type: array
+                    items:
+                      type: string
+                required: [rfqNumbers]
+
   /customer-rfq/{id}:
     get:
       operationId: getCustomerRfq
@@ -1621,6 +1640,12 @@ components:
           type: ["string", "null"]
         buyerName:
           type: ["string", "null"]
+        employeeId:
+          type: ["integer", "null"]
+          description: Employee who entered the RFQ (auto from session)
+        employeeName:
+          type: ["string", "null"]
+          description: Name of the employee who entered the RFQ
         status:
           type: string
         notes:

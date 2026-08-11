@@ -378,6 +378,7 @@ export default function CustomerRfqDetailPage() {
                 <DetailField label="تاريخ دخول الطلب" value={rfq.entryDate ?? "—"} ltr />
                 <DetailField label="تاريخ انتهاء الطلب" value={rfq.expiryDate ?? "—"} ltr />
                 <DetailField label="المشتري / الموظف المسئول" value={rfq.buyerName ?? "—"} />
+                <DetailField label="المدخل" value={rfq.employeeName ?? "—"} />
                 <DetailField label="تاريخ الإنشاء" value={new Date(rfq.createdAt).toLocaleString("ar-EG")} />
                 {rfq.notes && (
                   <div className="sm:col-span-2 space-y-1">

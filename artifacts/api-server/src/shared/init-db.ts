@@ -270,6 +270,12 @@ export async function initDb(): Promise<void> {
       ALTER TABLE rfq_items ADD COLUMN IF NOT EXISTS customer_rfq_item_id INTEGER REFERENCES customer_rfq_items(id) ON DELETE SET NULL;
     `);
 
+    // Record the employee who entered each customer RFQ (auto from session).
+    await client.query(`
+      ALTER TABLE customer_rfqs ADD COLUMN IF NOT EXISTS employee_id INTEGER REFERENCES employees(id);
+      ALTER TABLE customer_rfqs ADD COLUMN IF NOT EXISTS employee_name TEXT;
+    `);
+
     // Add media columns to whatsapp_chats (safe migration — skipped if already present)
     await client.query(`
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS media_id TEXT;
