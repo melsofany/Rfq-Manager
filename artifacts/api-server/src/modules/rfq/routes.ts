@@ -20,6 +20,7 @@ import { generateOffersPdf } from "./offers-pdf.js";
 import { generateDispatchReportPdf } from "../reports/dispatch-pdf.js";
 import { sendRfqEmail } from "../../shared/email";
 import { sendRfqWhatsApp } from "../communications/service";
+import { resolvePublicBaseUrl } from "../../shared/base-url";
 import { whatsappChatsTable } from "@workspace/db";
 import { lookupRfqFromSheet, listSheetRfqNumbers, listSheetTabs } from "../../shared/google-sheets";
 
@@ -764,11 +765,7 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
   let sent = 0;
   let skipped = 0;
 
-  const baseUrl =
-    process.env.BASE_URL ??
-    (process.env.REPLIT_DOMAINS
-      ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}`
-      : `http://localhost:${process.env.PORT}`);
+  const baseUrl = resolvePublicBaseUrl(req);
 
   req.log.info(
     { rfqId, rfqNo: rfq.internalRfqNo, supplierCount: suppliers.length, force: !!force, baseUrl },
