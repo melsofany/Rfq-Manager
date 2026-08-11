@@ -9,7 +9,12 @@ import type { CustomerPoLineItemInput } from './customerPoLineItemInput';
 
 export interface CustomerPoInput {
   customerPoNo: string;
+  /** @nullable */
+  customerId?: number | null;
+  /** The owning customer's name (explicitly selected/typed) */
+  customerName: string;
   poDate?: string;
+  /** Optional customer-side buyer/contact reference */
   buyerName?: string;
   notes?: string;
   items: CustomerPoLineItemInput[];

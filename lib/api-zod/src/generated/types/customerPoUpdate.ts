@@ -9,6 +9,9 @@ import type { CustomerPoLineItemInput } from './customerPoLineItemInput';
 
 export interface CustomerPoUpdate {
   customerPoNo?: string;
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
   poDate?: string;
   buyerName?: string;
   notes?: string;

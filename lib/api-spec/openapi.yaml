@@ -1904,18 +1904,22 @@ components:
         customerPoNo:
           type: string
           description: PO number received from the customer
+        customerId:
+          type: ["integer", "null"]
+          description: The owning customer (explicitly selected on entry)
+        customerName:
+          type: ["string", "null"]
+          description: The owning customer's name (stored, not derived)
         poDate:
           type: ["string", "null"]
         buyerName:
           type: ["string", "null"]
+          description: The customer's buyer/contact reference (separate from the entering employee)
         employeeId:
           type: ["integer", "null"]
           description: Employee who entered the PO (auto from session)
         employeeName:
           type: ["string", "null"]
-        customerName:
-          type: ["string", "null"]
-          description: Resolved from the first RFQ-linked item (null when no RFQ link)
         status:
           type: string
         notes:
@@ -2002,14 +2006,20 @@ components:
 
     CustomerPoInput:
       type: object
-      required: [customerPoNo, items]
+      required: [customerPoNo, customerName, items]
       properties:
         customerPoNo:
           type: string
+        customerId:
+          type: ["integer", "null"]
+        customerName:
+          type: string
+          description: The owning customer's name (explicitly selected/typed)
         poDate:
           type: string
         buyerName:
           type: string
+          description: Optional customer-side buyer/contact reference
         notes:
           type: string
         items:
@@ -2021,6 +2031,10 @@ components:
       type: object
       properties:
         customerPoNo:
+          type: string
+        customerId:
+          type: ["integer", "null"]
+        customerName:
           type: string
         poDate:
           type: string

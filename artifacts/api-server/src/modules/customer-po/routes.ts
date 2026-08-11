@@ -51,35 +51,23 @@ function computeTotal(qty: string | null, unitPrice: string | null): string | nu
 function serialize(
   r: typeof customerPosTable.$inferSelect,
   itemCount: number,
-  customerName: string | null,
 ) {
   return {
     id: r.id,
     internalPoNo: r.internalPoNo,
     customerPoNo: r.customerPoNo,
+    customerId: r.customerId,
+    customerName: r.customerName,
     poDate: r.poDate,
     buyerName: r.buyerName,
     employeeId: r.employeeId,
     employeeName: r.employeeName,
-    customerName,
     status: r.status,
     notes: r.notes,
     itemCount,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
   };
-}
-
-// Resolve the customer name for a PO from its first linked customer RFQ.
-// POs without any RFQ-linked item return null (customer unknown).
-async function resolveCustomerName(poId: number): Promise<string | null> {
-  const [row] = await db
-    .select({ name: customerRfqsTable.customerName })
-    .from(customerPoItemsTable)
-    .innerJoin(customerRfqsTable, eq(customerPoItemsTable.customerRfqId, customerRfqsTable.id))
-    .where(eq(customerPoItemsTable.customerPoId, poId))
-    .limit(1);
-  return row?.name ?? null;
 }
 
 // GET /customer-po — list with optional search
@@ -99,7 +87,8 @@ router.get("/customer-po", requireAuth, async (req, res): Promise<void> => {
       (r) =>
         r.po.internalPoNo.toLowerCase().includes(s) ||
         r.po.customerPoNo.toLowerCase().includes(s) ||
-        (r.po.buyerName ?? "").toLowerCase().includes(s),
+        (r.po.buyerName ?? "").toLowerCase().includes(s) ||
+        (r.po.customerName ?? "").toLowerCase().includes(s),
     );
   }
 
@@ -114,12 +103,7 @@ router.get("/customer-po", requireAuth, async (req, res): Promise<void> => {
       : [];
   const countMap = Object.fromEntries(counts.map((c) => [c.customerPoId, c.cnt]));
 
-  const names = new Map<number, string | null>();
-  for (const r of filtered) {
-    names.set(r.po.id, await resolveCustomerName(r.po.id));
-  }
-
-  res.json(filtered.map((r) => serialize(r.po, countMap[r.po.id] ?? 0, names.get(r.po.id) ?? null)));
+  res.json(filtered.map((r) => serialize(r.po, countMap[r.po.id] ?? 0)));
 });
 
 // GET /customer-po/customer-rfqs — light list of customer RFQs (id, number,
@@ -141,8 +125,10 @@ router.get("/customer-po/customer-rfqs", requireAuth, async (_req, res): Promise
 
 // POST /customer-po — create a customer PO
 router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
-  const { customerPoNo, poDate, buyerName, notes, items } = req.body as {
+  const { customerPoNo, customerId, customerName, poDate, buyerName, notes, items } = req.body as {
     customerPoNo?: string;
+    customerId?: number | null;
+    customerName?: string;
     poDate?: string;
     buyerName?: string;
     notes?: string;
@@ -163,6 +149,10 @@ router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "رقم أمر شراء العميل مطلوب" });
     return;
   }
+  if (!customerName?.trim() && !customerId) {
+    res.status(400).json({ error: "يجب اختيار اسم العميل" });
+    return;
+  }
   const validItems = (items ?? []).filter(
     (it) => (it.partNo?.trim() || it.lineItem?.trim() || it.description?.trim()) && it.qty,
   );
@@ -173,6 +163,7 @@ router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
 
   const internalPoNo = await generateInternalPoNo();
 
+  // Record the logged-in employee (the user who entered the PO).
   let employeeName: string | null = null;
   if (req.session.employeeId) {
     const [emp] = await db
@@ -187,6 +178,8 @@ router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
     .values({
       internalPoNo,
       customerPoNo: customerPoNo.trim(),
+      customerId: customerId ?? null,
+      customerName: customerName?.trim() || null,
       poDate: poDate || null,
       buyerName: buyerName?.trim() || null,
       employeeId: req.session.employeeId,
@@ -216,12 +209,12 @@ router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
     entityType: "customer_po",
     entityId: po.id,
     employeeId: req.session.employeeId,
-    description: `Created customer PO ${internalPoNo} for customer PO ${customerPoNo} with ${validItems.length} item(s)`,
+    description: `Created customer PO ${internalPoNo} (customer PO ${customerPoNo}) for ${customerName?.trim() || "—"} with ${validItems.length} item(s)`,
     ipAddress: req.ip,
     userAgent: req.get("user-agent"),
   });
 
-  res.status(201).json(serialize(po, validItems.length, await resolveCustomerName(po.id)));
+  res.status(201).json(serialize(po, validItems.length));
 });
 
 // GET /customer-po/:id — detail with items
@@ -238,7 +231,7 @@ router.get("/customer-po/:id", requireAuth, async (req, res): Promise<void> => {
     .from(customerPoItemsTable)
     .where(eq(customerPoItemsTable.customerPoId, id));
   res.json({
-    ...serialize(po, items.length, await resolveCustomerName(id)),
+    ...serialize(po, items.length),
     items: items.map((i) => ({
       id: i.id,
       customerPoId: i.customerPoId,
@@ -271,8 +264,10 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
     return;
   }
 
-  const { customerPoNo, poDate, buyerName, notes, status, items } = req.body as {
+  const { customerPoNo, customerId, customerName, poDate, buyerName, notes, status, items } = req.body as {
     customerPoNo?: string;
+    customerId?: number | null;
+    customerName?: string;
     poDate?: string;
     buyerName?: string;
     notes?: string;
@@ -292,6 +287,8 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
 
   const updates: Record<string, unknown> = {};
   if (customerPoNo !== undefined) updates.customerPoNo = customerPoNo.trim();
+  if (customerId !== undefined) updates.customerId = customerId ?? null;
+  if (customerName !== undefined) updates.customerName = customerName?.trim() || null;
   if (poDate !== undefined) updates.poDate = poDate || null;
   if (buyerName !== undefined) updates.buyerName = buyerName?.trim() || null;
   if (notes !== undefined) updates.notes = notes?.trim() || null;
@@ -331,7 +328,7 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
     .from(customerPoItemsTable)
     .where(eq(customerPoItemsTable.customerPoId, id));
   res.json({
-    ...serialize(updated, itemRows.length, await resolveCustomerName(id)),
+    ...serialize(updated, itemRows.length),
     items: itemRows.map((i) => ({
       id: i.id,
       customerPoId: i.customerPoId,

@@ -12,9 +12,22 @@ export interface CustomerPo {
   internalPoNo: string;
   /** PO number received from the customer */
   customerPoNo: string;
+  /**
+     * The owning customer (explicitly selected on entry)
+     * @nullable
+     */
+  customerId?: number | null;
+  /**
+     * The owning customer's name (stored, not derived)
+     * @nullable
+     */
+  customerName?: string | null;
   /** @nullable */
   poDate?: string | null;
-  /** @nullable */
+  /**
+     * The customer's buyer/contact reference (separate from the entering employee)
+     * @nullable
+     */
   buyerName?: string | null;
   /**
      * Employee who entered the PO (auto from session)
@@ -23,11 +36,6 @@ export interface CustomerPo {
   employeeId?: number | null;
   /** @nullable */
   employeeName?: string | null;
-  /**
-     * Resolved from the first RFQ-linked item (null when no RFQ link)
-     * @nullable
-     */
-  customerName?: string | null;
   status: string;
   /** @nullable */
   notes?: string | null;

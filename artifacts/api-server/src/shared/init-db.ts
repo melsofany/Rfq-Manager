@@ -248,6 +248,8 @@ export async function initDb(): Promise<void> {
         id SERIAL PRIMARY KEY,
         internal_po_no TEXT NOT NULL UNIQUE,
         customer_po_no TEXT NOT NULL,
+        customer_id INTEGER REFERENCES customers(id),
+        customer_name TEXT,
         po_date TEXT,
         buyer_name TEXT,
         status TEXT NOT NULL DEFAULT 'draft',
@@ -282,6 +284,12 @@ export async function initDb(): Promise<void> {
     await client.query(`
       ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS description TEXT;
       ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS unit_price NUMERIC(15,4);
+    `);
+
+    // Add owning customer to customer_pos (safe migration — skipped if already present)
+    await client.query(`
+      ALTER TABLE customer_pos ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id);
+      ALTER TABLE customer_pos ADD COLUMN IF NOT EXISTS customer_name TEXT;
     `);
 
     // Add delivery_days and notes to offer_items (safe migration — skipped if already present)
