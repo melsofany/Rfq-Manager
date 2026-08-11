@@ -37,7 +37,6 @@ let countRow: { maxNo: string | null }; // generateInternalPoNo: { maxNo }
 let insertedPo: any; // base row returned by insert().returning()
 let detailRow: any | null; // the customer PO itself (bare select)
 let detailItems: any[]; // customer_po_items for a PO
-let customerNameRow: { name: string } | null; // resolveCustomerName first-row
 let employeeRow: { name: string } | null; // POST employee name lookup
 // Tracks exact values written to customer_po_items so tests can assert links.
 const insertedItems: any[] = [];
@@ -74,22 +73,10 @@ const dbMock: any = {
           groupBy: vi.fn(() => chainable(countRows)),
         });
       }
-      // customer_po_items (bare select) — two callers:
-      //   - detail items: select().from(poItems).where()  → detailItems
-      //   - resolveCustomerName: select({name}).from(poItems).innerJoin(rfqs).where().limit()
+      // customer_po_items (bare select) — detail items: select().from(poItems).where()
       if (table === poItemsTable) {
-        // resolveCustomerName passes arg with "name"; detail items pass no arg.
-        const isCustomerNameResolve = arg && typeof arg === "object" && "name" in arg;
-        const rows = isCustomerNameResolve ? (customerNameRow ? [customerNameRow] : []) : detailItems;
-        return chainable(rows, {
-          where: vi.fn(() => chainable(rows, { limit: vi.fn(() => chainable(rows)) })),
-          limit: vi.fn(() => chainable(rows)),
-          innerJoin: vi.fn(() =>
-            chainable(rows, {
-              where: vi.fn(() => chainable(rows, { limit: vi.fn(() => chainable(rows)) })),
-              limit: vi.fn(() => chainable(rows)),
-            }),
-          ),
+        return chainable(detailItems, {
+          where: vi.fn(() => chainable(detailItems)),
         });
       }
       // Employee name lookup: select({name}).from(employees).where().limit()
@@ -160,6 +147,8 @@ beforeEach(() => {
     id: 7,
     internalPoNo: "CPO-2025-000001",
     customerPoNo: "CUST-PO-1",
+    customerId: null,
+    customerName: null,
     poDate: null,
     buyerName: null,
     employeeId: null,
@@ -171,17 +160,17 @@ beforeEach(() => {
   };
   detailRow = null;
   detailItems = [];
-  customerNameRow = null;
   employeeRow = { name: "Tester" };
   sessionState.role = undefined;
   insertedItems.length = 0;
 });
 
 describe("POST /api/customer-po (create)", () => {
-  it("creates a PO, auto-generates the internal number, and links items to RFQ items", async () => {
-    customerNameRow = { name: "Acme" };
+  it("creates a PO, auto-generates the internal number, records the employee, and links items to RFQ items", async () => {
     const res = await request(testApp).post("/api/customer-po").send({
       customerPoNo: "PO-100",
+      customerId: 5,
+      customerName: "Acme",
       poDate: "2025-02-03",
       buyerName: "Buyer One",
       items: [
@@ -201,7 +190,9 @@ describe("POST /api/customer-po (create)", () => {
     expect(res.status).toBe(201);
     expect(res.body.internalPoNo).toMatch(/^CPO-\d{4}-/);
     expect(res.body.customerPoNo).toBe("PO-100");
+    expect(res.body.customerId).toBe(5);
     expect(res.body.customerName).toBe("Acme");
+    // The entering employee is auto-recorded from the session.
     expect(res.body.employeeName).toBe("Tester");
     expect(res.body.employeeId).toBe(sessionState.employeeId);
 
@@ -218,36 +209,47 @@ describe("POST /api/customer-po (create)", () => {
 
   it("returns 400 when customerPoNo is missing", async () => {
     const res = await request(testApp).post("/api/customer-po").send({
+      customerName: "Acme",
       items: [{ partNo: "P1", qty: 1 }],
     });
     expect(res.status).toBe(400);
   });
 
+  it("returns 400 when customerName is missing (customer must be selected)", async () => {
+    const res = await request(testApp).post("/api/customer-po").send({
+      customerPoNo: "PO-X",
+      items: [{ partNo: "P1", qty: 1 }],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("العميل");
+  });
+
   it("returns 400 when no valid items are provided", async () => {
     const res = await request(testApp).post("/api/customer-po").send({
       customerPoNo: "PO-X",
+      customerName: "Acme",
       items: [{ partNo: "P1" }], // no qty → filtered out
     });
     expect(res.status).toBe(400);
   });
 
-  it("accepts manual items with no customer RFQ link (customerName stays null)", async () => {
-    customerNameRow = null; // resolveCustomerName returns nothing
+  it("accepts manual items with no customer RFQ link (customerName from the picker)", async () => {
     const res = await request(testApp).post("/api/customer-po").send({
       customerPoNo: "PO-101",
+      customerName: "Walk-in",
       items: [{ description: "Manual item", uom: "pc", qty: 2, unitPrice: 5 }],
     });
     expect(res.status).toBe(201);
-    expect(res.body.customerName).toBeNull();
+    expect(res.body.customerName).toBe("Walk-in");
     expect(insertedItems[0].customerRfqId).toBeNull();
     expect(insertedItems[0].customerRfqItemId).toBeNull();
     expect(insertedItems[0].description).toBe("Manual item");
   });
 
   it("allows the same customer RFQ item on a second PO (partial shipment — no uniqueness error)", async () => {
-    customerNameRow = { name: "Acme" };
     const res = await request(testApp).post("/api/customer-po").send({
       customerPoNo: "PO-102",
+      customerName: "Acme",
       items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 2, unitPrice: 10 }],
     });
     expect(res.status).toBe(201);
@@ -257,10 +259,9 @@ describe("POST /api/customer-po (create)", () => {
 });
 
 describe("GET /api/customer-po (list)", () => {
-  it("returns the list with item counts and resolved customer names", async () => {
-    listRows = [{ po: { ...insertedPo, id: 7, customerPoNo: "PO-100", buyerName: "B" } }];
+  it("returns the list with item counts and stored customer names", async () => {
+    listRows = [{ po: { ...insertedPo, id: 7, customerPoNo: "PO-100", buyerName: "B", customerName: "Acme" } }];
     countRows = [{ customerPoId: 7, cnt: 4 }];
-    customerNameRow = { name: "Acme" };
     const res = await request(testApp).get("/api/customer-po");
     expect(res.status).toBe(200);
     expect(res.body[0].internalPoNo).toBe("CPO-2025-000001");
@@ -269,7 +270,7 @@ describe("GET /api/customer-po (list)", () => {
   });
 
   it("filters by search term (client-side) without erroring", async () => {
-    listRows = [{ po: { ...insertedPo, customerPoNo: "PO-100", buyerName: "B" } }];
+    listRows = [{ po: { ...insertedPo, customerPoNo: "PO-100", buyerName: "B", customerName: "Acme" } }];
     countRows = [];
     const res = await request(testApp).get("/api/customer-po?search=PO-100");
     expect(res.status).toBe(200);
@@ -285,8 +286,7 @@ describe("GET /api/customer-po/:id", () => {
   });
 
   it("returns the PO with formatted items when found", async () => {
-    detailRow = insertedPo;
-    customerNameRow = { name: "Acme" };
+    detailRow = { ...insertedPo, customerName: "Acme" };
     detailItems = [
       {
         id: 1,
@@ -323,11 +323,13 @@ describe("PATCH /api/customer-po/:id", () => {
       .patch("/api/customer-po/7")
       .send({
         customerPoNo: "PO-200",
+        customerName: "Acme Updated",
         buyerName: "New Buyer",
         items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 1, unitPrice: 9 }],
       });
     expect(res.status).toBe(200);
     expect(res.body.customerPoNo).toBe("PO-200");
+    expect(res.body.customerName).toBe("Acme Updated");
     expect(insertedItems[0].customerRfqItemId).toBe(11);
     expect(insertedItems[0].lineItem).toBeNull(); // lineItem "" → null
   });

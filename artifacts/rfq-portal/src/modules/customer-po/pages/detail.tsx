@@ -9,6 +9,7 @@ import {
   getListCustomerPosQueryKey,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
+import { CustomerCombobox } from "@/components/CustomerCombobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,6 +58,8 @@ export default function CustomerPoDetailPage() {
 
   const [editing, setEditing] = useState(false);
   const [customerPoNo, setCustomerPoNo] = useState("");
+  const [customerId, setCustomerId] = useState<number | null>(null);
+  const [customerName, setCustomerName] = useState("");
   const [poDate, setPoDate] = useState("");
   const [buyerName, setBuyerName] = useState("");
   const [notes, setNotes] = useState("");
@@ -97,6 +100,8 @@ export default function CustomerPoDetailPage() {
   const startEdit = () => {
     if (!po) return;
     setCustomerPoNo(po.customerPoNo);
+    setCustomerId(po.customerId ?? null);
+    setCustomerName(po.customerName ?? "");
     setPoDate(po.poDate ?? "");
     setBuyerName(po.buyerName ?? "");
     setNotes(po.notes ?? "");
@@ -143,6 +148,10 @@ export default function CustomerPoDetailPage() {
       setError("رقم أمر شراء العميل مطلوب");
       return;
     }
+    if (!customerName.trim()) {
+      setError("يجب اختيار اسم العميل");
+      return;
+    }
     const validItems = items
       .filter(
         (it) =>
@@ -163,6 +172,8 @@ export default function CustomerPoDetailPage() {
       id,
       data: {
         customerPoNo: customerPoNo.trim(),
+        customerId: customerId ?? undefined,
+        customerName: customerName.trim(),
         poDate: poDate || undefined,
         buyerName: buyerName.trim(),
         notes: notes.trim(),
@@ -412,13 +423,27 @@ export default function CustomerPoDetailPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>المشتري</Label>
+                  <Label>المشتري (المرجع من العميل)</Label>
                   <Input
                     value={buyerName}
                     onChange={(e) => setBuyerName(e.target.value)}
-                    placeholder="اسم المشتري"
+                    placeholder="اسم المشتري / المرجع"
                   />
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>اسم العميل *</Label>
+                <CustomerCombobox
+                  value={customerName}
+                  onChange={(v) => {
+                    setCustomerName(v);
+                    setCustomerId(null);
+                  }}
+                  onPick={(c) => {
+                    setCustomerId(c.id);
+                    setCustomerName(c.name);
+                  }}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>ملاحظات</Label>

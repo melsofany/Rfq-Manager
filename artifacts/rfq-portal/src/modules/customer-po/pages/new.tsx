@@ -10,12 +10,14 @@ import {
   getGetCustomerRfqQueryKey,
   type CustomerPoLineItemInput,
 } from "@workspace/api-client-react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/Layout";
+import { CustomerCombobox } from "@/components/CustomerCombobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Plus, Trash2, ChevronDown, AlertCircle, FileText } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, ChevronDown, AlertCircle, FileText, UserCircle } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
 
 interface ItemRow {
@@ -139,9 +141,12 @@ function CustomerRfqPicker({
 export default function NewCustomerPoPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const { employee } = useAuth();
 
   // Top-level PO fields
   const [customerPoNo, setCustomerPoNo] = useState("");
+  const [customerId, setCustomerId] = useState<number | null>(null);
+  const [customerName, setCustomerName] = useState("");
   const [poDate, setPoDate] = useState("");
   const [buyerName, setBuyerName] = useState("");
   const [notes, setNotes] = useState("");
@@ -241,6 +246,8 @@ export default function NewCustomerPoPage() {
       }));
     return {
       customerPoNo: customerPoNo.trim(),
+      customerId: customerId ?? undefined,
+      customerName: customerName.trim(),
       poDate: poDate || undefined,
       buyerName: buyerName.trim() || undefined,
       notes: notes.trim() || undefined,
@@ -253,6 +260,10 @@ export default function NewCustomerPoPage() {
     setServerError(null);
     if (!customerPoNo.trim()) {
       setServerError("رقم أمر شراء العميل مطلوب");
+      return;
+    }
+    if (!customerName.trim()) {
+      setServerError("يجب اختيار اسم العميل");
       return;
     }
     const validCount = items.filter(
@@ -303,12 +314,40 @@ export default function NewCustomerPoPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>اسم الموظف / Buyer</Label>
+                <Label>المشتري (المرجع من العميل)</Label>
                 <Input
                   value={buyerName}
                   onChange={(e) => setBuyerName(e.target.value)}
-                  placeholder="اسم المشتري"
+                  placeholder="اسم المشتري / المرجع"
                 />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>اسم العميل *</Label>
+                <CustomerCombobox
+                  value={customerName}
+                  onChange={(v) => {
+                    setCustomerName(v);
+                    setCustomerId(null);
+                  }}
+                  onPick={(c) => {
+                    setCustomerId(c.id);
+                    setCustomerName(c.name);
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>الموظف المُدخِل</Label>
+                <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-muted/40 text-sm">
+                  <UserCircle size={15} className="text-muted-foreground" />
+                  <span className="text-foreground">
+                    {employee?.name ?? "—"}
+                  </span>
+                  <span className="text-xs text-muted-foreground mr-auto">
+                    (يُسجَّل تلقائيًا)
+                  </span>
+                </div>
               </div>
             </div>
             <div className="space-y-1.5">
@@ -347,9 +386,11 @@ export default function NewCustomerPoPage() {
               rfqs={rfqOptions?.rfqs}
               isLoading={rfqsLoading}
               selectedId={selectedRfq?.id ?? null}
-              onSelect={(r) =>
-                setSelectedRfq({ id: r.id, customerRfqNo: r.customerRfqNo, customerName: r.customerName })
-              }
+              onSelect={(r) => {
+                setSelectedRfq({ id: r.id, customerRfqNo: r.customerRfqNo, customerName: r.customerName });
+                // Auto-fill the owning customer from the RFQ if still empty.
+                if (!customerName.trim()) setCustomerName(r.customerName ?? "");
+              }}
             />
 
             {selectedRfq && (
@@ -569,7 +610,7 @@ export default function NewCustomerPoPage() {
             </Link>
             <Button
               type="submit"
-              disabled={createMutation.isPending || !customerPoNo.trim()}
+              disabled={createMutation.isPending || !customerPoNo.trim() || !customerName.trim()}
             >
               {createMutation.isPending ? "جارٍ الحفظ..." : "حفظ أمر الشراء"}
             </Button>

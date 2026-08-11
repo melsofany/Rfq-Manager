@@ -2,17 +2,22 @@ import { pgTable, text, serial, timestamp, integer, numeric } from "drizzle-orm/
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { employeesTable } from "./employees";
+import { customersTable } from "./customers";
 import { customerRfqsTable, customerRfqItemsTable } from "./customer_rfqs";
 
 // أمر شراء العميل — Customer Purchase Order
 // A customer PO can mix items from several customer RFQs, and the same
 // customer_rfq_item can appear on more than one customer PO (partial
 // shipments). A customer PO may also arrive with no customer RFQ number, so
-// both the RFQ and item links are nullable.
+// both the RFQ and item links are nullable. The owning customer is explicitly
+// selected on entry (customerId/customerName), so a PO's customer is known even
+// without an RFQ link.
 export const customerPosTable = pgTable("customer_pos", {
   id: serial("id").primaryKey(),
   internalPoNo: text("internal_po_no").notNull().unique(),
   customerPoNo: text("customer_po_no").notNull(),
+  customerId: integer("customer_id").references(() => customersTable.id),
+  customerName: text("customer_name"),
   poDate: text("po_date"),
   buyerName: text("buyer_name"),
   employeeId: integer("employee_id").references(() => employeesTable.id),
