@@ -1614,6 +1614,9 @@ components:
           type: string
         qty:
           type: number
+        unitPrice:
+          type: number
+          description: Unit price entered after the RFQ is saved (required to finalize)
 
     CustomerRfqLineItem:
       type: object
@@ -1633,6 +1636,11 @@ components:
           type: ["string", "null"]
         qty:
           type: ["number", "null"]
+        unitPrice:
+          type: ["number", "null"]
+        total:
+          type: ["number", "null"]
+          description: qty * unitPrice, computed by the server
         createdAt:
           type: string
 
