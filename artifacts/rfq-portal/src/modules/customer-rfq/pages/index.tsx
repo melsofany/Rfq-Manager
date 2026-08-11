@@ -1,24 +1,130 @@
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { useListCustomerRfqs, getListCustomerRfqsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { FileText } from "lucide-react";
-import { useLanguage } from "@/contexts/LanguageContext";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Plus, Search, FileText } from "lucide-react";
 
 export default function CustomerRfqPage() {
-  const { t } = useLanguage();
+  const [, navigate] = useLocation();
+  const [search, setSearch] = useState("");
+
+  const { data: rfqs, isLoading } = useListCustomerRfqs(
+    { search: search || undefined },
+    { query: { queryKey: getListCustomerRfqsQueryKey({ search: search || undefined }) } },
+  );
 
   return (
     <Layout>
-      <div className="p-4 sm:p-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <FileText size={20} className="text-primary" />
-            {t("customerRfq.title")}
-          </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">{t("customerRfq.subtitle")}</p>
+      <div className="p-4 sm:p-6 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-foreground">طلبات تسعير العملاء</h1>
+            <p className="text-muted-foreground text-sm">إدارة طلبات التسعير الواردة من العملاء</p>
+          </div>
+          <Button onClick={() => navigate("/customer-rfq/new")} size="sm" className="gap-1.5">
+            <Plus size={15} /> طلب تسعير جديد
+          </Button>
         </div>
 
-        <div className="bg-card border border-border rounded-lg py-16 text-center text-muted-foreground">
-          <FileText size={36} className="mx-auto mb-3 opacity-20" />
-          <p className="text-sm font-medium">{t("customerRfq.comingSoon")}</p>
+        <div className="relative max-w-xs">
+          <Search
+            size={15}
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="بحث برقم الطلب أو العميل..."
+            className="pl-8 h-8 text-sm"
+          />
+        </div>
+
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          {isLoading ? (
+            <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
+          ) : !rfqs?.length ? (
+            <div className="p-12 text-center">
+              <FileText size={40} className="mx-auto text-muted-foreground/30 mb-3" />
+              <p className="text-muted-foreground text-sm">لا توجد طلبات تسعير</p>
+              <Button
+                onClick={() => navigate("/customer-rfq/new")}
+                size="sm"
+                className="mt-3 gap-1.5"
+              >
+                <Plus size={14} /> إنشاء أول طلب
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/30 border-b border-border text-right">
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      الرقم الداخلي
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">العميل</th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      رقم طلب العميل
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      تاريخ الدخول
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      تاريخ الانتهاء
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      المشتري
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
+                      البنود
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rfqs.map((rfq) => (
+                    <tr
+                      key={rfq.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
+                      onClick={() => navigate(`/customer-rfq/${rfq.id}`)}
+                    >
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-primary font-medium">
+                          {rfq.internalNo}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-foreground text-xs">{rfq.customerName}</td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-foreground">
+                          {rfq.customerRfqNo}
+                        </span>
+                        {rfq.numberAutoGenerated && (
+                          <span className="mr-1 inline-block px-1.5 py-0.5 rounded text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400">
+                            تلقائي
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs" dir="ltr">
+                        {rfq.entryDate ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs" dir="ltr">
+                        {rfq.expiryDate ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {rfq.buyerName ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-xs font-medium text-foreground">
+                          {rfq.itemCount ?? 0}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </Layout>

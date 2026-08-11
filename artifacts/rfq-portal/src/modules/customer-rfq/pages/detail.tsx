@@ -1,0 +1,422 @@
+import { useState } from "react";
+import { Link, useLocation, useParams } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useGetCustomerRfq,
+  useUpdateCustomerRfq,
+  useDeleteCustomerRfq,
+  getGetCustomerRfqQueryKey,
+  getListCustomerRfqsQueryKey,
+} from "@workspace/api-client-react";
+import { Layout } from "@/components/Layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, Plus, Trash2, AlertCircle, AlertTriangle, Pencil } from "lucide-react";
+import { getApiErrorMessage } from "@/lib/api-error";
+
+interface ItemRow {
+  id?: number;
+  partNo: string;
+  lineItem: string;
+  description: string;
+  uom: string;
+  qty: string;
+}
+
+export default function CustomerRfqDetailPage() {
+  const params = useParams<{ id: string }>();
+  const id = parseInt(params.id, 10);
+  const [location, navigate] = useLocation();
+  const queryClient = useQueryClient();
+
+  const { data: rfq, isLoading } = useGetCustomerRfq(id);
+  const isDraft = rfq?.status === "draft";
+
+  const [editing, setEditing] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [customerRfqNo, setCustomerRfqNo] = useState("");
+  const [entryDate, setEntryDate] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [buyerName, setBuyerName] = useState("");
+  const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<ItemRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // Show the auto-number warning when navigated from the create page with ?warn=auto-number.
+  const showAutoNumberWarning =
+    new URLSearchParams(location.split("?")[1] || "").get("warn") === "auto-number";
+
+  const updateMutation = useUpdateCustomerRfq({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetCustomerRfqQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getListCustomerRfqsQueryKey() });
+        setEditing(false);
+        setError(null);
+      },
+      onError: (err: unknown) => {
+        setError(getApiErrorMessage(err, "فشل تحديث الطلب"));
+      },
+    },
+  });
+
+  const deleteMutation = useDeleteCustomerRfq({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListCustomerRfqsQueryKey() });
+        navigate("/customer-rfq");
+      },
+      onError: (err: unknown) => {
+        setError(getApiErrorMessage(err, "فشل حذف الطلب"));
+        setConfirmDelete(false);
+      },
+    },
+  });
+
+  const startEdit = () => {
+    if (!rfq) return;
+    setCustomerName(rfq.customerName);
+    setCustomerRfqNo(rfq.customerRfqNo);
+    setEntryDate(rfq.entryDate ?? "");
+    setExpiryDate(rfq.expiryDate ?? "");
+    setBuyerName(rfq.buyerName ?? "");
+    setNotes(rfq.notes ?? "");
+    setItems(
+      (rfq.items ?? []).map((i) => ({
+        id: i.id,
+        partNo: i.partNo ?? "",
+        lineItem: i.lineItem ?? "",
+        description: i.description ?? "",
+        uom: i.uom ?? "",
+        qty: i.qty != null ? String(i.qty) : "",
+      })),
+    );
+    setEditing(true);
+    setError(null);
+  };
+
+  const addItem = () =>
+    setItems((prev) => [...prev, { partNo: "", lineItem: "", description: "", uom: "", qty: "" }]);
+  const removeItem = (i: number) => setItems((prev) => prev.filter((_, idx) => idx !== i));
+  const updateItem = (i: number, field: keyof ItemRow, value: string) =>
+    setItems((prev) => prev.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerName.trim()) {
+      setError("اسم العميل مطلوب");
+      return;
+    }
+    const validItems = items
+      .filter((it) => (it.partNo.trim() || it.lineItem.trim()) && it.qty)
+      .map((it) => ({
+        partNo: it.partNo.trim() || undefined,
+        lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : undefined,
+        description: it.description.trim() || undefined,
+        uom: it.uom.trim() || undefined,
+        qty: it.qty ? Number(it.qty) : undefined,
+      }));
+    updateMutation.mutate({
+      id,
+      data: {
+        customerName: customerName.trim(),
+        customerRfqNo: customerRfqNo.trim(),
+        entryDate: entryDate || undefined,
+        expiryDate: expiryDate || undefined,
+        buyerName: buyerName.trim(),
+        notes: notes.trim(),
+        items: validItems,
+      } as Parameters<typeof updateMutation.mutate>[0]["data"],
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="p-6 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
+      </Layout>
+    );
+  }
+
+  if (!rfq) {
+    return (
+      <Layout>
+        <div className="p-6 text-center">
+          <p className="text-muted-foreground text-sm">طلب التسعير غير موجود</p>
+          <Link href="/customer-rfq">
+            <a className="text-primary text-sm mt-2 inline-block">العودة للقائمة</a>
+          </Link>
+        </div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout>
+      <div className="p-4 sm:p-6 max-w-4xl space-y-5">
+        <div className="flex items-center gap-3">
+          <Link href="/customer-rfq">
+            <a className="text-muted-foreground hover:text-foreground">
+              <ArrowLeft size={18} />
+            </a>
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+              <span className="font-mono text-primary">{rfq.internalNo}</span>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded font-medium ${
+                  isDraft
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400"
+                }`}
+              >
+                {rfq.status}
+              </span>
+            </h1>
+            <p className="text-muted-foreground text-sm">{rfq.customerName}</p>
+          </div>
+        </div>
+
+        {(showAutoNumberWarning || rfq.numberAutoGenerated) && (
+          <div className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded px-3 py-2">
+            <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
+            <span>
+              رقم طلب تسعير العميل <span className="font-mono font-semibold">{rfq.customerRfqNo}</span>{" "}
+              تم إنشاؤه تلقائياً لأن الحقل تُرك فارغاً عند الحفظ.
+            </span>
+          </div>
+        )}
+
+        {editing ? (
+          <form onSubmit={handleSave} className="space-y-5">
+            <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+              <h2 className="font-semibold text-sm text-foreground">تعديل بيانات الطلب</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>اسم العميل *</Label>
+                  <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>رقم طلب تسعير العميل</Label>
+                  <Input value={customerRfqNo} onChange={(e) => setCustomerRfqNo(e.target.value)} dir="ltr" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>تاريخ دخول الطلب</Label>
+                  <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} dir="ltr" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>تاريخ انتهاء الطلب</Label>
+                  <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} dir="ltr" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>المشتري / الموظف المسئول</Label>
+                  <Input value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>ملاحظات</Label>
+                  <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+                <h2 className="font-semibold text-sm text-foreground">البنود</h2>
+                <Button type="button" onClick={addItem} variant="ghost" size="sm" className="gap-1.5 h-7 text-xs">
+                  <Plus size={13} /> إضافة بند
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/30 border-b border-border text-right">
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-8">#</th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">Part No</th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">Line Item</th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">التوصيف</th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">UOM</th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">الكمية</th>
+                      <th className="px-3 py-2 w-8" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((row, i) => (
+                      <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/20">
+                        <td className="px-3 py-2 text-muted-foreground text-xs text-center">{i + 1}</td>
+                        <td className="px-2 py-1.5">
+                          <Input value={row.partNo} onChange={(e) => updateItem(i, "partNo", e.target.value)} className="h-7 text-xs" dir="ltr" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input value={row.lineItem} onChange={(e) => updateItem(i, "lineItem", e.target.value)} className="h-7 text-xs" dir="ltr" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input value={row.description} onChange={(e) => updateItem(i, "description", e.target.value)} className="h-7 text-xs" placeholder="توصيف البند" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input value={row.uom} onChange={(e) => updateItem(i, "uom", e.target.value)} className="h-7 text-xs" dir="ltr" />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input value={row.qty} onChange={(e) => updateItem(i, "qty", e.target.value)} className="h-7 text-xs" type="number" dir="ltr" />
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          {items.length > 1 && (
+                            <button type="button" onClick={() => removeItem(i)} className="text-muted-foreground hover:text-destructive">
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded px-3 py-2">
+                <AlertCircle size={14} />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end">
+              <Button type="button" variant="ghost" onClick={() => { setEditing(false); setError(null); }}>
+                إلغاء
+              </Button>
+              <Button type="submit" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? "جارٍ الحفظ..." : "حفظ التعديلات"}
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <div className="bg-card border border-border rounded-lg p-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <DetailField label="العميل" value={rfq.customerName} />
+                <DetailField
+                  label="رقم طلب تسعير العميل"
+                  value={rfq.customerRfqNo}
+                  mono
+                />
+                <DetailField label="تاريخ دخول الطلب" value={rfq.entryDate ?? "—"} ltr />
+                <DetailField label="تاريخ انتهاء الطلب" value={rfq.expiryDate ?? "—"} ltr />
+                <DetailField label="المشتري / الموظف المسئول" value={rfq.buyerName ?? "—"} />
+                <DetailField label="تاريخ الإنشاء" value={new Date(rfq.createdAt).toLocaleString("ar-EG")} />
+                {rfq.notes && (
+                  <div className="sm:col-span-2 space-y-1">
+                    <Label className="text-muted-foreground text-xs">ملاحظات</Label>
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{rfq.notes}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
+              <div className="px-5 py-3 border-b border-border">
+                <h2 className="font-semibold text-sm text-foreground">
+                  البنود <span className="text-muted-foreground font-normal">({rfq.items?.length ?? 0})</span>
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/30 border-b border-border text-right">
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-8">#</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Part No</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Line Item</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">التوصيف</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">UOM</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الكمية</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(rfq.items ?? []).length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground text-sm">
+                          لا توجد بنود
+                        </td>
+                      </tr>
+                    ) : (
+                      (rfq.items ?? []).map((it, i) => (
+                        <tr key={it.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                          <td className="px-4 py-2.5 text-muted-foreground text-xs text-center">{i + 1}</td>
+                          <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">{it.partNo ?? "—"}</td>
+                          <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">{it.lineItem ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs">{it.description ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs">{it.uom ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs" dir="ltr">{it.qty ?? "—"}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded px-3 py-2">
+                <AlertCircle size={14} />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end">
+              {confirmDelete ? (
+                <>
+                  <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+                    إلغاء
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={deleteMutation.isPending}
+                    onClick={() => deleteMutation.mutate({ id })}
+                  >
+                    {deleteMutation.isPending ? "جارٍ الحذف..." : "تأكيد الحذف"}
+                  </Button>
+                </>
+              ) : (
+                isDraft && (
+                  <>
+                    <Button variant="ghost" onClick={() => setConfirmDelete(true)} className="text-destructive hover:text-destructive">
+                      <Trash2 size={15} className="ml-1" /> حذف
+                    </Button>
+                    <Button variant="outline" onClick={startEdit} className="gap-1.5">
+                      <Pencil size={15} /> تعديل
+                    </Button>
+                  </>
+                )
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </Layout>
+  );
+}
+
+function DetailField({
+  label,
+  value,
+  mono,
+  ltr,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  ltr?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-muted-foreground text-xs">{label}</Label>
+      <p
+        className={`text-sm text-foreground ${mono ? "font-mono" : ""}`}
+        dir={ltr ? "ltr" : undefined}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
