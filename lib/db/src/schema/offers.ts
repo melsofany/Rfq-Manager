@@ -35,6 +35,10 @@ export const offerItemsTable = pgTable("offer_items", {
     .references(() => rfqItemsTable.id),
   price: numeric("price", { precision: 15, scale: 4 }).notNull(),
   taxIncluded: boolean("tax_included").notNull().default(false),
+  // Marks this supplier price as the approved/endorsed one for its rfq_item —
+  // the reference cost used by the customer-rfq margin check. Only one
+  // offer_item per rfq_item may be approved at a time (enforced in the API).
+  isApproved: boolean("is_approved").notNull().default(false),
   deliveryDays: integer("delivery_days"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

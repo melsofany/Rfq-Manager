@@ -20,6 +20,7 @@ export interface OfferItem {
   uom?: string | null;
   price: number;
   taxIncluded?: boolean;
+  isApproved?: boolean;
   /** @nullable */
   deliveryDays?: number | null;
   /** @nullable */

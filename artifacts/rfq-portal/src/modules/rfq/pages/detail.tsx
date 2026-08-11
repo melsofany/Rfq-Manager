@@ -6,6 +6,7 @@ import {
   useGetRfqSentLog,
   useGetRfqOffers,
   useUpdateRfq,
+  useApproveOfferItem,
   getGetRfqQueryKey,
   getListRfqItemsQueryKey,
   getGetRfqSentLogQueryKey,
@@ -29,6 +30,7 @@ import {
   Copy,
   ExternalLink,
   Paperclip,
+  BadgeCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -40,11 +42,13 @@ const VAT_LABEL = "14%";
 type Tab = "items" | "sent" | "offers" | "attachments";
 
 type OfferRow = {
+  offerItemId?: number;
   supplierId: number;
   supplierName: string;
   price: number;
   priceWithVat: number;
   taxIncluded: boolean;
+  isApproved?: boolean;
   deliveryDays?: number | null;
   notes?: string | null;
   deviation: number;
@@ -689,6 +693,25 @@ export default function RfqDetailPage() {
     },
   });
 
+  const [approvingId, setApprovingId] = useState<number | null>(null);
+  const approveMutation = useApproveOfferItem({
+    mutation: {
+      onSuccess: () => {
+        toast.success("تم تحديث حالة الاعتماد");
+        setApprovingId(null);
+      },
+      onError: (err) => {
+        toast.error("تعذّر تحديث الاعتماد: " + (err as Error).message);
+        setApprovingId(null);
+      },
+    },
+  });
+
+  const handleToggleApprove = (offerItemId: number, currentlyApproved: boolean) => {
+    setApprovingId(offerItemId);
+    approveMutation.mutate({ offerItemId, data: { approved: !currentlyApproved } });
+  };
+
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const cancelMutation = useUpdateRfq({
     mutation: {
@@ -1199,6 +1222,8 @@ export default function RfqDetailPage() {
                       (o as OfferRow).priceWithVat ??
                       (o.taxIncluded ? o.price : o.price * (1 + VAT_RATE)),
                     notes: (o as OfferRow).notes ?? null,
+                    isApproved: (o as OfferRow).isApproved ?? false,
+                    offerItemId: (o as OfferRow).offerItemId,
                   }));
 
                   return (
@@ -1252,6 +1277,9 @@ export default function RfqDetailPage() {
                                 </th>
                                 <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-right">
                                   مقارنة بالمتوسط
+                                </th>
+                                <th className="px-4 py-2 text-muted-foreground text-xs font-medium text-center">
+                                  اعتماد السعر
                                 </th>
                                 <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
                                   مرفقات المورد
@@ -1324,6 +1352,37 @@ export default function RfqDetailPage() {
                                           o.deviation.toFixed(1) +
                                           "%"}
                                     </td>
+                                    {/* Approve supplier price (one per item) */}
+                                    <td className="px-4 py-2.5 text-center">
+                                      {o.offerItemId != null && !o.notPriced ? (
+                                        <button
+                                          onClick={() =>
+                                            handleToggleApprove(o.offerItemId!, !!o.isApproved)
+                                          }
+                                          disabled={approvingId === o.offerItemId}
+                                          title={
+                                            o.isApproved
+                                              ? "إلغاء اعتماد هذا السعر"
+                                              : "اعتماد هذا السعر للبند (المرجع لفحص الهامش)"
+                                          }
+                                          className={cn(
+                                            "inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50",
+                                            o.isApproved
+                                              ? "bg-green-100 text-green-800 border border-green-300 hover:bg-green-200"
+                                              : "bg-muted text-muted-foreground border border-border hover:bg-accent hover:text-foreground",
+                                          )}
+                                        >
+                                          <BadgeCheck size={13} />
+                                          {approvingId === o.offerItemId
+                                            ? "..."
+                                            : o.isApproved
+                                              ? "معتمد"
+                                              : "اعتماد"}
+                                        </button>
+                                      ) : (
+                                        <span className="text-xs text-muted-foreground">—</span>
+                                      )}
+                                    </td>
                                     {/* Supplier attachments */}
                                     <td className="px-4 py-2.5">
                                       {o.attachments && o.attachments.length > 0 ? (
@@ -1365,7 +1424,7 @@ export default function RfqDetailPage() {
                                   </td>
                                   <td
                                     className="px-4 py-2 text-right text-xs text-foreground font-mono"
-                                    colSpan={4}
+                                    colSpan={6}
                                   >
                                     <span className="text-green-700 font-semibold">
                                       أقل:{" "}

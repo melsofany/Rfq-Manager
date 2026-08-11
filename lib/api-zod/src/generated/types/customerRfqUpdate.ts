@@ -16,4 +16,6 @@ export interface CustomerRfqUpdate {
   notes?: string;
   status?: string;
   items?: CustomerRfqLineItemInput[];
+  /** Admin-only — bypass the 1.06× margin check on finalize (audited). */
+  overrideMarginCheck?: boolean;
 }

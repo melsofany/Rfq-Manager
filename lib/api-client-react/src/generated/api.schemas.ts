@@ -248,6 +248,8 @@ export interface CustomerRfqUpdate {
   notes?: string;
   status?: string;
   items?: CustomerRfqLineItemInput[];
+  /** Admin-only — bypass the 1.06× margin check on finalize (audited). */
+  overrideMarginCheck?: boolean;
 }
 
 export type CustomerRfqDetail = CustomerRfq & {
@@ -410,6 +412,8 @@ export interface RfqItem {
 
 export interface CustomerRfqItem {
   itemId?: string;
+  /** FK to customer_rfq_items.id (present when sourced from a DB customer RFQ). */
+  customerRfqItemId?: number;
   lineItem?: string;
   partNo?: string;
   description: string;
@@ -580,6 +584,7 @@ export interface OfferItem {
   uom?: string | null;
   price: number;
   taxIncluded?: boolean;
+  isApproved?: boolean;
   /** @nullable */
   deliveryDays?: number | null;
   /** @nullable */
@@ -629,10 +634,12 @@ export interface OfferInput {
 }
 
 export type PriceAnalysisItemAnalysisItemOffersItem = {
+  offerItemId?: number;
   supplierId?: number;
   supplierName?: string;
   price?: number;
   taxIncluded?: boolean;
+  isApproved?: boolean;
   /** @nullable */
   deliveryDays?: number | null;
   deviation?: number;
@@ -1022,6 +1029,15 @@ export type ListRfqsParams = {
 status?: string;
 employeeId?: number;
 search?: string;
+};
+
+export type ApproveOfferItemBody = {
+  approved?: boolean;
+};
+
+export type ApproveOfferItem200 = {
+  id?: number;
+  isApproved?: boolean;
 };
 
 export type ListPurchaseOrdersParams = {

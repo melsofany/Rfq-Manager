@@ -25,6 +25,7 @@ interface ItemRow {
   uom: string;
   qty: string;
   referencePrice: string;
+  customerRfqItemId?: number | null;
 }
 
 interface PendingItem extends ItemRow {
@@ -132,7 +133,7 @@ export default function NewRfqPage() {
   const [notes, setNotes] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [items, setItems] = useState<ItemRow[]>([
-    { lineItem: "", partNo: "", description: "", uom: "", qty: "", referencePrice: "" },
+    { lineItem: "", partNo: "", description: "", uom: "", qty: "", referencePrice: "", customerRfqItemId: null },
   ]);
 
   const [isLookingUp, setIsLookingUp] = useState(false);
@@ -178,6 +179,8 @@ export default function NewRfqPage() {
           uom: String(item.uom ?? ""),
           qty: item.qty != null ? String(item.qty) : "",
           referencePrice: item.referencePrice != null ? String(item.referencePrice) : "",
+          customerRfqItemId:
+            item.customerRfqItemId != null ? Number(item.customerRfqItemId) : null,
           rfqNo: String(item.rfqNo ?? ""),
           rfqDate: String(item.rfqDate ?? ""),
           requiredResponseDate: String(item.requiredResponseDate ?? ""),
@@ -233,7 +236,7 @@ export default function NewRfqPage() {
   const addItem = () =>
     setItems((prev) => [
       ...prev,
-      { lineItem: "", partNo: "", description: "", uom: "", qty: "", referencePrice: "" },
+      { lineItem: "", partNo: "", description: "", uom: "", qty: "", referencePrice: "", customerRfqItemId: null },
     ]);
 
   const removeItem = (i: number) => setItems((prev) => prev.filter((_, idx) => idx !== i));
@@ -259,6 +262,7 @@ export default function NewRfqPage() {
           uom: it.uom || undefined,
           qty: it.qty ? it.qty : undefined,
           referencePrice: it.referencePrice ? it.referencePrice : undefined,
+          customerRfqItemId: it.customerRfqItemId || undefined,
         })),
       } as Parameters<typeof createMutation.mutate>[0]["data"],
     });

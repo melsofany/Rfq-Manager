@@ -7,10 +7,12 @@
  */
 
 export type PriceAnalysisItemAnalysisItemOffersItem = {
+  offerItemId?: number;
   supplierId?: number;
   supplierName?: string;
   price?: number;
   taxIncluded?: boolean;
+  isApproved?: boolean;
   /** @nullable */
   deliveryDays?: number | null;
   deviation?: number;

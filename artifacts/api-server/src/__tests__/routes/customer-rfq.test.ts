@@ -19,11 +19,15 @@ const rfqTable = { _: "customerRfqs", createdAt: "createdAt", id: "id" };
 const itemsTable = { _: "customerRfqItems", customerRfqId: "customerRfqId" };
 const customersTable = { _: "customers", id: "id", name: "name" };
 const auditTable = { _: "audit" };
+const rfqItemsTbl = { _: "rfqItems", customerRfqItemId: "customerRfqItemId", partNo: "partNo", lineItem: "lineItem" };
+const offerItemsTbl = { _: "offerItems", isApproved: "isApproved" };
 const tables = {
   customerRfqsTable: rfqTable,
   customerRfqItemsTable: itemsTable,
   customersTable,
   auditLogTable: auditTable,
+  rfqItemsTable: rfqItemsTbl,
+  offerItemsTable: offerItemsTbl,
 };
 
 // Per-test state.
@@ -33,6 +37,11 @@ let countRow: { cnt: number };
 let insertedRfq: any;
 let detailRow: any | null;
 let detailItems: any[];
+// Approved supplier offer_items returned by resolveApprovedCosts (margin check).
+// Each row: { customerRfqItemId, price, taxIncluded }.
+let approvedRows: any[];
+// Mutable session so individual tests can flip role=admin for override tests.
+const sessionState: { employeeId: number; role?: string } = { employeeId: 1 };
 
 // Tracks the exact values written to customer_rfq_items so we can assert the
 // lineItem space-stripping behaviour.
@@ -78,6 +87,15 @@ const dbMock: any = {
       if (table === itemsTable) {
         return chainable(detailItems, {
           where: vi.fn(() => chainable(detailItems)),
+        });
+      }
+      // resolveApprovedCosts: select({...}).from(offerItems).innerJoin(rfqItems).where(...)
+      // returns the per-test approvedRows.
+      if (table === offerItemsTbl) {
+        return chainable(approvedRows, {
+          innerJoin: vi.fn(() => chainable(approvedRows, {
+            where: vi.fn(() => chainable(approvedRows)),
+          })),
         });
       }
       // customer name resolution (select {id}).from(customers).where().limit()
@@ -126,7 +144,7 @@ beforeAll(async () => {
   testApp.use(express.json());
   testApp.use((req: any, _res: any, next: any) => {
     req.log = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} };
-    req.session = { employeeId: 1 };
+    req.session = sessionState;
     next();
   });
   testApp.use("/api", customerRfqRouter);
@@ -154,6 +172,8 @@ beforeEach(() => {
   };
   detailRow = null;
   detailItems = [];
+  approvedRows = [];
+  sessionState.role = undefined;
   insertedItems.length = 0;
 });
 
@@ -253,7 +273,7 @@ describe("PATCH /api/customer-rfq/:id", () => {
     expect(res.body.customerRfqNo).toBe("RFQ-X");
   });
 
-  it("saves item prices and locks the RFQ (status → sent)", async () => {
+  it("saves item prices and locks the RFQ (status → sent) when margin clears", async () => {
     detailRow = { ...insertedRfq }; // draft
     detailItems = [
       {
@@ -268,6 +288,8 @@ describe("PATCH /api/customer-rfq/:id", () => {
         createdAt: new Date("2025-01-03"),
       },
     ];
+    // Approved supplier price (excl tax) = 8 → 1.06 × 8 = 8.48 ≤ 10 ✓
+    approvedRows = [{ customerRfqItemId: 1, price: "8", taxIncluded: false }];
     const res = await request(testApp).patch("/api/customer-rfq/42").send({
       status: "sent",
       items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
@@ -276,6 +298,84 @@ describe("PATCH /api/customer-rfq/:id", () => {
     expect(res.body.status).toBe("sent");
     expect(res.body.items[0].unitPrice).toBe("10");
     expect(res.body.items[0].total).toBe("30");
+  });
+
+  it("blocks finalizing when the customer price is below 1.06× approved cost", async () => {
+    detailRow = { ...insertedRfq };
+    detailItems = [
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: null,
+        uom: "pc",
+        qty: "3.0000",
+        unitPrice: "10.0000",
+        createdAt: new Date("2025-01-03"),
+      },
+    ];
+    // Approved cost = 10 → 1.06 × 10 = 10.6 > 10 → violation
+    approvedRows = [{ customerRfqItemId: 1, price: "10", taxIncluded: false }];
+    const res = await request(testApp).patch("/api/customer-rfq/42").send({
+      status: "sent",
+      items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.marginViolations).toBeDefined();
+    expect(res.body.error).toContain("الحد الأدنى");
+  });
+
+  it("blocks finalizing when no approved supplier price exists for an item", async () => {
+    detailRow = { ...insertedRfq };
+    detailItems = [
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: null,
+        uom: "pc",
+        qty: "3.0000",
+        unitPrice: "10.0000",
+        createdAt: new Date("2025-01-03"),
+      },
+    ];
+    // No approved supplier price at all.
+    approvedRows = [];
+    const res = await request(testApp).patch("/api/customer-rfq/42").send({
+      status: "sent",
+      items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.marginViolations).toBeDefined();
+    expect(res.body.error).toContain("معتمد");
+  });
+
+  it("allows an admin to override the margin check (audited)", async () => {
+    detailRow = { ...insertedRfq };
+    detailItems = [
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: null,
+        uom: "pc",
+        qty: "3.0000",
+        unitPrice: "10.0000",
+        createdAt: new Date("2025-01-03"),
+      },
+    ];
+    approvedRows = []; // would normally block
+    sessionState.role = "admin";
+    const res = await request(testApp).patch("/api/customer-rfq/42").send({
+      status: "sent",
+      overrideMarginCheck: true,
+      items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("sent");
   });
 
   it("rejects finalizing when an item has no price", async () => {

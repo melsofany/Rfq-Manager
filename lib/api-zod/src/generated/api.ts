@@ -626,7 +626,8 @@ export const UpdateCustomerRfqBody = zod.object({
   "uom": zod.string().optional(),
   "qty": zod.number().optional(),
   "unitPrice": zod.number().optional().describe('Unit price entered after the RFQ is saved (required to finalize)')
-})).optional()
+})).optional(),
+  "overrideMarginCheck": zod.boolean().optional().describe('Admin-only — bypass the 1.06× margin check on finalize (audited).')
 })
 
 export const UpdateCustomerRfqResponse = zod.object({
@@ -1073,6 +1074,7 @@ export const GetRfqOffersResponse = zod.object({
   "uom": zod.string().nullish(),
   "price": zod.number(),
   "taxIncluded": zod.boolean().optional(),
+  "isApproved": zod.boolean().optional(),
   "deliveryDays": zod.number().nullish(),
   "notes": zod.string().nullish()
 })).optional()
@@ -1091,10 +1093,12 @@ export const GetRfqOffersResponse = zod.object({
   "avgPrice": zod.number().nullish(),
   "fairPrice": zod.number().nullish(),
   "offers": zod.array(zod.object({
+  "offerItemId": zod.number().optional(),
   "supplierId": zod.number().optional(),
   "supplierName": zod.string().optional(),
   "price": zod.number().optional(),
   "taxIncluded": zod.boolean().optional(),
+  "isApproved": zod.boolean().optional(),
   "deliveryDays": zod.number().nullish(),
   "deviation": zod.number().optional(),
   "isLowest": zod.boolean().optional(),
@@ -1109,6 +1113,23 @@ export const GetRfqOffersResponse = zod.object({
 
 
 /**
+ * @summary Approve (endorse) a supplier price for an rfq_item — only one approved price per rfq_item.
+ */
+export const ApproveOfferItemParams = zod.object({
+  "offerItemId": zod.coerce.number()
+})
+
+export const ApproveOfferItemBody = zod.object({
+  "approved": zod.boolean().optional()
+})
+
+export const ApproveOfferItemResponse = zod.object({
+  "id": zod.number().optional(),
+  "isApproved": zod.boolean().optional()
+})
+
+
+/**
  * @summary Lookup items from customer RFQ number (reads Google Sheets DATA sheet)
  */
 export const LookupCustomerRfqParams = zod.object({
@@ -1117,6 +1138,7 @@ export const LookupCustomerRfqParams = zod.object({
 
 export const LookupCustomerRfqResponseItem = zod.object({
   "itemId": zod.string().optional(),
+  "customerRfqItemId": zod.number().optional().describe('FK to customer_rfq_items.id (present when sourced from a DB customer RFQ).'),
   "lineItem": zod.string().optional(),
   "partNo": zod.string().optional(),
   "description": zod.string(),
@@ -1384,6 +1406,7 @@ export const GetPricingPageResponse = zod.object({
   "uom": zod.string().nullish(),
   "price": zod.number(),
   "taxIncluded": zod.boolean().optional(),
+  "isApproved": zod.boolean().optional(),
   "deliveryDays": zod.number().nullish(),
   "notes": zod.string().nullish()
 })).optional()
@@ -1429,6 +1452,7 @@ export const SubmitOfferResponse = zod.object({
   "uom": zod.string().nullish(),
   "price": zod.number(),
   "taxIncluded": zod.boolean().optional(),
+  "isApproved": zod.boolean().optional(),
   "deliveryDays": zod.number().nullish(),
   "notes": zod.string().nullish()
 })).optional()
@@ -1517,6 +1541,7 @@ export const ListOffersResponseItem = zod.object({
   "uom": zod.string().nullish(),
   "price": zod.number(),
   "taxIncluded": zod.boolean().optional(),
+  "isApproved": zod.boolean().optional(),
   "deliveryDays": zod.number().nullish(),
   "notes": zod.string().nullish()
 })).optional()
@@ -1652,10 +1677,12 @@ export const GetPriceAnalysisResponse = zod.object({
   "avgPrice": zod.number().nullish(),
   "fairPrice": zod.number().nullish(),
   "offers": zod.array(zod.object({
+  "offerItemId": zod.number().optional(),
   "supplierId": zod.number().optional(),
   "supplierName": zod.string().optional(),
   "price": zod.number().optional(),
   "taxIncluded": zod.boolean().optional(),
+  "isApproved": zod.boolean().optional(),
   "deliveryDays": zod.number().nullish(),
   "deviation": zod.number().optional(),
   "isLowest": zod.boolean().optional(),
