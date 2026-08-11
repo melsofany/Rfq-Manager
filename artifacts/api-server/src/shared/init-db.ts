@@ -244,6 +244,33 @@ export async function initDb(): Promise<void> {
         unit_price NUMERIC(15,4),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS customer_pos (
+        id SERIAL PRIMARY KEY,
+        internal_po_no TEXT NOT NULL UNIQUE,
+        customer_po_no TEXT NOT NULL,
+        po_date TEXT,
+        buyer_name TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        employee_id INTEGER REFERENCES employees(id),
+        employee_name TEXT,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS customer_po_items (
+        id SERIAL PRIMARY KEY,
+        customer_po_id INTEGER NOT NULL REFERENCES customer_pos(id) ON DELETE CASCADE,
+        customer_rfq_id INTEGER REFERENCES customer_rfqs(id),
+        customer_rfq_item_id INTEGER REFERENCES customer_rfq_items(id) ON DELETE SET NULL,
+        part_no TEXT,
+        line_item TEXT,
+        description TEXT,
+        uom TEXT,
+        qty NUMERIC(15,4),
+        unit_price NUMERIC(15,4),
+        delivery_date TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     // Add tax_included to purchase_order_items (safe migration — skipped if already present)
     await client.query(`
