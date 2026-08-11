@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, AlertCircle } from "lucide-react";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 const empty = {
   customerId: "",
@@ -35,8 +36,7 @@ export default function NewCustomerPage() {
         navigate(`/customers/${customer.id}`);
       },
       onError: (err: unknown) => {
-        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-        setServerError(msg ?? "حدث خطأ أثناء الحفظ");
+        setServerError(getApiErrorMessage(err, "حدث خطأ أثناء الحفظ"));
       },
     },
   });

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Users, Pencil, Trash2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 export default function CustomersPage() {
   const [, navigate] = useLocation();
@@ -39,8 +40,7 @@ export default function CustomersPage() {
         setDeleteError(null);
       },
       onError: (err: unknown) => {
-        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-        setDeleteError(msg ?? "تعذر حذف العميل");
+        setDeleteError(getApiErrorMessage(err, "تعذر حذف العميل"));
         setConfirmId(null);
       },
     },
