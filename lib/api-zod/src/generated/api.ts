@@ -688,6 +688,193 @@ export const DeleteCustomerRfqResponse = zod.void()
 
 
 /**
+ * @summary List customer POs with optional search
+ */
+export const ListCustomerPosQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional()
+})
+
+export const ListCustomerPosResponseItem = zod.object({
+  "id": zod.number(),
+  "internalPoNo": zod.string().describe('Auto-generated internal number (CPO-YYYY-NNNNNN)'),
+  "customerPoNo": zod.string().describe('PO number received from the customer'),
+  "poDate": zod.string().nullish(),
+  "buyerName": zod.string().nullish(),
+  "employeeId": zod.number().nullish().describe('Employee who entered the PO (auto from session)'),
+  "employeeName": zod.string().nullish(),
+  "customerName": zod.string().nullish().describe('Resolved from the first RFQ-linked item (null when no RFQ link)'),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "itemCount": zod.number().optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListCustomerPosResponse = zod.array(ListCustomerPosResponseItem)
+
+
+/**
+ * @summary Create a customer PO (auto-generates the internal number)
+ */
+export const CreateCustomerPoBody = zod.object({
+  "customerPoNo": zod.string(),
+  "poDate": zod.string().optional(),
+  "buyerName": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "customerRfqId": zod.number().nullish().describe('The customer RFQ this line was sourced from (null for free\/manual lines)'),
+  "customerRfqItemId": zod.number().nullish().describe('The specific customer RFQ line item. Not unique — the same item may be ordered again on a later PO.'),
+  "partNo": zod.string().optional(),
+  "lineItem": zod.string().optional().describe('Spaces are stripped automatically by the server'),
+  "description": zod.string().optional(),
+  "uom": zod.string().optional(),
+  "qty": zod.number().optional(),
+  "unitPrice": zod.number().optional(),
+  "deliveryDate": zod.string().optional().describe('Required delivery date for this line')
+}))
+})
+
+export const CreateCustomerPoResponse = zod.object({
+  "id": zod.number(),
+  "internalPoNo": zod.string().describe('Auto-generated internal number (CPO-YYYY-NNNNNN)'),
+  "customerPoNo": zod.string().describe('PO number received from the customer'),
+  "poDate": zod.string().nullish(),
+  "buyerName": zod.string().nullish(),
+  "employeeId": zod.number().nullish().describe('Employee who entered the PO (auto from session)'),
+  "employeeName": zod.string().nullish(),
+  "customerName": zod.string().nullish().describe('Resolved from the first RFQ-linked item (null when no RFQ link)'),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "itemCount": zod.number().optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Light list of customer RFQs for the customer-PO picker
+ */
+export const ListCustomerPosCustomerRfqsResponse = zod.object({
+  "rfqs": zod.array(zod.object({
+  "id": zod.number(),
+  "customerRfqNo": zod.string(),
+  "internalNo": zod.string(),
+  "customerName": zod.string(),
+  "status": zod.string()
+}))
+})
+
+
+/**
+ * @summary Get customer PO with items
+ */
+export const GetCustomerPoParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCustomerPoResponse = zod.object({
+  "id": zod.number(),
+  "internalPoNo": zod.string().describe('Auto-generated internal number (CPO-YYYY-NNNNNN)'),
+  "customerPoNo": zod.string().describe('PO number received from the customer'),
+  "poDate": zod.string().nullish(),
+  "buyerName": zod.string().nullish(),
+  "employeeId": zod.number().nullish().describe('Employee who entered the PO (auto from session)'),
+  "employeeName": zod.string().nullish(),
+  "customerName": zod.string().nullish().describe('Resolved from the first RFQ-linked item (null when no RFQ link)'),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "itemCount": zod.number().optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}).and(zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "customerPoId": zod.number(),
+  "customerRfqId": zod.number().nullish(),
+  "customerRfqItemId": zod.number().nullish(),
+  "partNo": zod.string().nullish(),
+  "lineItem": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "uom": zod.string().nullish(),
+  "qty": zod.number().nullish(),
+  "unitPrice": zod.number().nullish(),
+  "total": zod.number().nullish().describe('qty \* unitPrice, computed by the server'),
+  "deliveryDate": zod.string().nullish(),
+  "createdAt": zod.string()
+})).optional()
+}))
+
+
+/**
+ * @summary Update a draft customer PO (or finalize → sent)
+ */
+export const UpdateCustomerPoParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateCustomerPoBody = zod.object({
+  "customerPoNo": zod.string().optional(),
+  "poDate": zod.string().optional(),
+  "buyerName": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "status": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "customerRfqId": zod.number().nullish().describe('The customer RFQ this line was sourced from (null for free\/manual lines)'),
+  "customerRfqItemId": zod.number().nullish().describe('The specific customer RFQ line item. Not unique — the same item may be ordered again on a later PO.'),
+  "partNo": zod.string().optional(),
+  "lineItem": zod.string().optional().describe('Spaces are stripped automatically by the server'),
+  "description": zod.string().optional(),
+  "uom": zod.string().optional(),
+  "qty": zod.number().optional(),
+  "unitPrice": zod.number().optional(),
+  "deliveryDate": zod.string().optional().describe('Required delivery date for this line')
+})).optional()
+})
+
+export const UpdateCustomerPoResponse = zod.object({
+  "id": zod.number(),
+  "internalPoNo": zod.string().describe('Auto-generated internal number (CPO-YYYY-NNNNNN)'),
+  "customerPoNo": zod.string().describe('PO number received from the customer'),
+  "poDate": zod.string().nullish(),
+  "buyerName": zod.string().nullish(),
+  "employeeId": zod.number().nullish().describe('Employee who entered the PO (auto from session)'),
+  "employeeName": zod.string().nullish(),
+  "customerName": zod.string().nullish().describe('Resolved from the first RFQ-linked item (null when no RFQ link)'),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "itemCount": zod.number().optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+}).and(zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "customerPoId": zod.number(),
+  "customerRfqId": zod.number().nullish(),
+  "customerRfqItemId": zod.number().nullish(),
+  "partNo": zod.string().nullish(),
+  "lineItem": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "uom": zod.string().nullish(),
+  "qty": zod.number().nullish(),
+  "unitPrice": zod.number().nullish(),
+  "total": zod.number().nullish().describe('qty \* unitPrice, computed by the server'),
+  "deliveryDate": zod.string().nullish(),
+  "createdAt": zod.string()
+})).optional()
+}))
+
+
+/**
+ * @summary Delete a draft customer PO
+ */
+export const DeleteCustomerPoParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteCustomerPoResponse = zod.void()
+
+
+/**
  * @summary قائمة تكاملات الـ ERP
  */
 export const ListIntegrationsResponseItem = zod.object({

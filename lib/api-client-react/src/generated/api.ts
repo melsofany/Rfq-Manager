@@ -29,6 +29,10 @@ import type {
   CategoryInput,
   Customer,
   CustomerInput,
+  CustomerPo,
+  CustomerPoDetail,
+  CustomerPoInput,
+  CustomerPoUpdate,
   CustomerRfq,
   CustomerRfqDetail,
   CustomerRfqInput,
@@ -49,6 +53,8 @@ import type {
   HealthStatus,
   ItemHistory,
   ListAuditLogsParams,
+  ListCustomerPosCustomerRfqs200,
+  ListCustomerPosParams,
   ListCustomerRfqNumbers200,
   ListCustomerRfqsParams,
   ListCustomersParams,
@@ -2275,6 +2281,458 @@ export const useDeleteCustomerRfq = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDeleteCustomerRfqMutationOptions(options));
+    }
+
+export const getListCustomerPosUrl = (params?: ListCustomerPosParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/customer-po?${stringifiedParams}` : `/api/customer-po`
+}
+
+/**
+ * @summary List customer POs with optional search
+ */
+export const listCustomerPos = async (params?: ListCustomerPosParams, options?: RequestInit): Promise<CustomerPo[]> => {
+
+  return customFetch<CustomerPo[]>(getListCustomerPosUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCustomerPosQueryKey = (params?: ListCustomerPosParams,) => {
+    return [
+    `/api/customer-po`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCustomerPosQueryOptions = <TData = Awaited<ReturnType<typeof listCustomerPos>>, TError = ErrorType<unknown>>(params?: ListCustomerPosParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerPos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCustomerPosQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCustomerPos>>> = ({ signal }) => listCustomerPos(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCustomerPos>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCustomerPosQueryResult = NonNullable<Awaited<ReturnType<typeof listCustomerPos>>>
+export type ListCustomerPosQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List customer POs with optional search
+ */
+
+export function useListCustomerPos<TData = Awaited<ReturnType<typeof listCustomerPos>>, TError = ErrorType<unknown>>(
+ params?: ListCustomerPosParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerPos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCustomerPosQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateCustomerPoUrl = () => {
+
+
+
+
+  return `/api/customer-po`
+}
+
+/**
+ * @summary Create a customer PO (auto-generates the internal number)
+ */
+export const createCustomerPo = async (customerPoInput: CustomerPoInput, options?: RequestInit): Promise<CustomerPo> => {
+
+  return customFetch<CustomerPo>(getCreateCustomerPoUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customerPoInput)
+  }
+);}
+
+
+
+
+
+export const getCreateCustomerPoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomerPo>>, TError,{data: BodyType<CustomerPoInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCustomerPo>>, TError,{data: BodyType<CustomerPoInput>}, TContext> => {
+
+const mutationKey = ['createCustomerPo'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCustomerPo>>, {data: BodyType<CustomerPoInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createCustomerPo(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCustomerPoMutationResult = NonNullable<Awaited<ReturnType<typeof createCustomerPo>>>
+    export type CreateCustomerPoMutationBody = BodyType<CustomerPoInput>
+    export type CreateCustomerPoMutationError = ErrorType<void>
+
+    /**
+ * @summary Create a customer PO (auto-generates the internal number)
+ */
+export const useCreateCustomerPo = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomerPo>>, TError,{data: BodyType<CustomerPoInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCustomerPo>>,
+        TError,
+        {data: BodyType<CustomerPoInput>},
+        TContext
+      > => {
+      return useMutation(getCreateCustomerPoMutationOptions(options));
+    }
+
+export const getListCustomerPosCustomerRfqsUrl = () => {
+
+
+
+
+  return `/api/customer-po/customer-rfqs`
+}
+
+/**
+ * @summary Light list of customer RFQs for the customer-PO picker
+ */
+export const listCustomerPosCustomerRfqs = async ( options?: RequestInit): Promise<ListCustomerPosCustomerRfqs200> => {
+
+  return customFetch<ListCustomerPosCustomerRfqs200>(getListCustomerPosCustomerRfqsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCustomerPosCustomerRfqsQueryKey = () => {
+    return [
+    `/api/customer-po/customer-rfqs`
+    ] as const;
+    }
+
+
+export const getListCustomerPosCustomerRfqsQueryOptions = <TData = Awaited<ReturnType<typeof listCustomerPosCustomerRfqs>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerPosCustomerRfqs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCustomerPosCustomerRfqsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCustomerPosCustomerRfqs>>> = ({ signal }) => listCustomerPosCustomerRfqs({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCustomerPosCustomerRfqs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCustomerPosCustomerRfqsQueryResult = NonNullable<Awaited<ReturnType<typeof listCustomerPosCustomerRfqs>>>
+export type ListCustomerPosCustomerRfqsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Light list of customer RFQs for the customer-PO picker
+ */
+
+export function useListCustomerPosCustomerRfqs<TData = Awaited<ReturnType<typeof listCustomerPosCustomerRfqs>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerPosCustomerRfqs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCustomerPosCustomerRfqsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCustomerPoUrl = (id: number,) => {
+
+
+
+
+  return `/api/customer-po/${id}`
+}
+
+/**
+ * @summary Get customer PO with items
+ */
+export const getCustomerPo = async (id: number, options?: RequestInit): Promise<CustomerPoDetail> => {
+
+  return customFetch<CustomerPoDetail>(getGetCustomerPoUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCustomerPoQueryKey = (id: number,) => {
+    return [
+    `/api/customer-po/${id}`
+    ] as const;
+    }
+
+
+export const getGetCustomerPoQueryOptions = <TData = Awaited<ReturnType<typeof getCustomerPo>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerPo>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCustomerPoQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCustomerPo>>> = ({ signal }) => getCustomerPo(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCustomerPo>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCustomerPoQueryResult = NonNullable<Awaited<ReturnType<typeof getCustomerPo>>>
+export type GetCustomerPoQueryError = ErrorType<void>
+
+
+/**
+ * @summary Get customer PO with items
+ */
+
+export function useGetCustomerPo<TData = Awaited<ReturnType<typeof getCustomerPo>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerPo>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCustomerPoQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateCustomerPoUrl = (id: number,) => {
+
+
+
+
+  return `/api/customer-po/${id}`
+}
+
+/**
+ * @summary Update a draft customer PO (or finalize → sent)
+ */
+export const updateCustomerPo = async (id: number,
+    customerPoUpdate: CustomerPoUpdate, options?: RequestInit): Promise<CustomerPoDetail> => {
+
+  return customFetch<CustomerPoDetail>(getUpdateCustomerPoUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customerPoUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateCustomerPoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCustomerPo>>, TError,{id: number;data: BodyType<CustomerPoUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCustomerPo>>, TError,{id: number;data: BodyType<CustomerPoUpdate>}, TContext> => {
+
+const mutationKey = ['updateCustomerPo'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCustomerPo>>, {id: number;data: BodyType<CustomerPoUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateCustomerPo(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCustomerPoMutationResult = NonNullable<Awaited<ReturnType<typeof updateCustomerPo>>>
+    export type UpdateCustomerPoMutationBody = BodyType<CustomerPoUpdate>
+    export type UpdateCustomerPoMutationError = ErrorType<void>
+
+    /**
+ * @summary Update a draft customer PO (or finalize → sent)
+ */
+export const useUpdateCustomerPo = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCustomerPo>>, TError,{id: number;data: BodyType<CustomerPoUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCustomerPo>>,
+        TError,
+        {id: number;data: BodyType<CustomerPoUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateCustomerPoMutationOptions(options));
+    }
+
+export const getDeleteCustomerPoUrl = (id: number,) => {
+
+
+
+
+  return `/api/customer-po/${id}`
+}
+
+/**
+ * @summary Delete a draft customer PO
+ */
+export const deleteCustomerPo = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteCustomerPoUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteCustomerPoMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCustomerPo>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCustomerPo>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteCustomerPo'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCustomerPo>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteCustomerPo(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCustomerPoMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCustomerPo>>>
+
+    export type DeleteCustomerPoMutationError = ErrorType<void>
+
+    /**
+ * @summary Delete a draft customer PO
+ */
+export const useDeleteCustomerPo = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCustomerPo>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCustomerPo>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteCustomerPoMutationOptions(options));
     }
 
 export const getListIntegrationsUrl = () => {

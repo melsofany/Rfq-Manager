@@ -266,6 +266,116 @@ export type CustomerRfqDetail = CustomerRfq & {
   items?: CustomerRfqLineItem[];
 };
 
+export interface CustomerPo {
+  id: number;
+  /** Auto-generated internal number (CPO-YYYY-NNNNNN) */
+  internalPoNo: string;
+  /** PO number received from the customer */
+  customerPoNo: string;
+  /** @nullable */
+  poDate?: string | null;
+  /** @nullable */
+  buyerName?: string | null;
+  /**
+     * Employee who entered the PO (auto from session)
+     * @nullable
+     */
+  employeeId?: number | null;
+  /** @nullable */
+  employeeName?: string | null;
+  /**
+     * Resolved from the first RFQ-linked item (null when no RFQ link)
+     * @nullable
+     */
+  customerName?: string | null;
+  status: string;
+  /** @nullable */
+  notes?: string | null;
+  itemCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerPoCustomerRfqOption {
+  id: number;
+  customerRfqNo: string;
+  internalNo: string;
+  customerName: string;
+  status: string;
+}
+
+export interface CustomerPoLineItemInput {
+  /**
+     * The customer RFQ this line was sourced from (null for free/manual lines)
+     * @nullable
+     */
+  customerRfqId?: number | null;
+  /**
+     * The specific customer RFQ line item. Not unique — the same item may be ordered again on a later PO.
+     * @nullable
+     */
+  customerRfqItemId?: number | null;
+  partNo?: string;
+  /** Spaces are stripped automatically by the server */
+  lineItem?: string;
+  description?: string;
+  uom?: string;
+  qty?: number;
+  unitPrice?: number;
+  /** Required delivery date for this line */
+  deliveryDate?: string;
+}
+
+export interface CustomerPoLineItem {
+  id: number;
+  customerPoId: number;
+  /** @nullable */
+  customerRfqId?: number | null;
+  /** @nullable */
+  customerRfqItemId?: number | null;
+  /** @nullable */
+  partNo?: string | null;
+  /** @nullable */
+  lineItem?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  uom?: string | null;
+  /** @nullable */
+  qty?: number | null;
+  /** @nullable */
+  unitPrice?: number | null;
+  /**
+     * qty * unitPrice, computed by the server
+     * @nullable
+     */
+  total?: number | null;
+  /** @nullable */
+  deliveryDate?: string | null;
+  createdAt: string;
+}
+
+export interface CustomerPoInput {
+  customerPoNo: string;
+  poDate?: string;
+  buyerName?: string;
+  notes?: string;
+  items: CustomerPoLineItemInput[];
+}
+
+export interface CustomerPoUpdate {
+  customerPoNo?: string;
+  poDate?: string;
+  buyerName?: string;
+  notes?: string;
+  status?: string;
+  items?: CustomerPoLineItemInput[];
+}
+
+export type CustomerPoDetail = CustomerPo & {
+  items?: CustomerPoLineItem[];
+};
+
 export interface BulkImportSuppliersInput {
   /** @minItems 1 */
   suppliers: SupplierInput[];
@@ -1032,6 +1142,15 @@ status?: string;
 
 export type ListCustomerRfqNumbers200 = {
   rfqNumbers: string[];
+};
+
+export type ListCustomerPosParams = {
+search?: string;
+status?: string;
+};
+
+export type ListCustomerPosCustomerRfqs200 = {
+  rfqs: CustomerPoCustomerRfqOption[];
 };
 
 export type SyncIntegration200 = {

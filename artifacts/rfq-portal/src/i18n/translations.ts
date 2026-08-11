@@ -150,7 +150,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "customerRfq.comingSoon": "Customer RFQ content will be added soon",
     "customerPo.title": "Customer POs",
     "customerPo.subtitle": "Customer purchase orders",
-    "customerPo.comingSoon": "Customer PO content will be added soon",
+    "customerPo.new": "New customer PO",
 
     // Employees role display in dashboard/auth context
     "role.admin": "Admin",
@@ -481,8 +481,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "customerRfq.subtitle": "سير عمل طلبات تسعير العملاء",
     "customerRfq.comingSoon": "سيتم إضافة محتوى طلبات التسعير لاحقاً",
     "customerPo.title": "أوامر شراء العملاء",
-    "customerPo.subtitle": "أوامر شراء العملاء",
-    "customerPo.comingSoon": "سيتم إضافة محتوى أوامر الشراء لاحقاً",
+    "customerPo.subtitle": "إدارة أوامر الشراء الواردة من العملاء",
+    "customerPo.new": "أمر شراء عميل جديد",
 
     // Role display
     "role.admin": "مدير النظام",

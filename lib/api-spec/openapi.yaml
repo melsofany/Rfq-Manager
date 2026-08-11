@@ -20,6 +20,8 @@ tags:
     description: Customer management
   - name: customer-rfq
     description: Customer Request for Quotation intake
+  - name: customer-po
+    description: Customer purchase orders
   - name: offers
     description: Supplier offers/pricing
   - name: analytics
@@ -572,6 +574,134 @@ paths:
       responses:
         "204":
           description: Deleted
+        "404":
+          description: Not found
+
+  # CUSTOMER PO
+  /customer-po:
+    get:
+      operationId: listCustomerPos
+      tags: [customer-po]
+      summary: List customer POs with optional search
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of customer POs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerPo"
+    post:
+      operationId: createCustomerPo
+      tags: [customer-po]
+      summary: Create a customer PO (auto-generates the internal number)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerPoInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerPo"
+        "400":
+          description: Validation error
+
+  /customer-po/customer-rfqs:
+    get:
+      operationId: listCustomerPosCustomerRfqs
+      tags: [customer-po]
+      summary: Light list of customer RFQs for the customer-PO picker
+      responses:
+        "200":
+          description: List of customer RFQs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rfqs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CustomerPoCustomerRfqOption"
+                required: [rfqs]
+
+  /customer-po/{id}:
+    get:
+      operationId: getCustomerPo
+      tags: [customer-po]
+      summary: Get customer PO with items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer PO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerPoDetail"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateCustomerPo
+      tags: [customer-po]
+      summary: Update a draft customer PO (or finalize → sent)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerPoUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerPoDetail"
+        "400":
+          description: PO is not a draft or validation failed
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteCustomerPo
+      tags: [customer-po]
+      summary: Delete a draft customer PO
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: PO is not a draft (already sent)
         "404":
           description: Not found
 
@@ -1760,6 +1890,160 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/CustomerRfqLineItem"
+
+    # ── Customer PO ──────────────────────────────────────────────────────────
+    CustomerPo:
+      type: object
+      required: [id, internalPoNo, customerPoNo, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        internalPoNo:
+          type: string
+          description: Auto-generated internal number (CPO-YYYY-NNNNNN)
+        customerPoNo:
+          type: string
+          description: PO number received from the customer
+        poDate:
+          type: ["string", "null"]
+        buyerName:
+          type: ["string", "null"]
+        employeeId:
+          type: ["integer", "null"]
+          description: Employee who entered the PO (auto from session)
+        employeeName:
+          type: ["string", "null"]
+        customerName:
+          type: ["string", "null"]
+          description: Resolved from the first RFQ-linked item (null when no RFQ link)
+        status:
+          type: string
+        notes:
+          type: ["string", "null"]
+        itemCount:
+          type: integer
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+
+    CustomerPoCustomerRfqOption:
+      type: object
+      required: [id, customerRfqNo, internalNo, customerName, status]
+      properties:
+        id:
+          type: integer
+        customerRfqNo:
+          type: string
+        internalNo:
+          type: string
+        customerName:
+          type: string
+        status:
+          type: string
+
+    CustomerPoLineItemInput:
+      type: object
+      properties:
+        customerRfqId:
+          type: ["integer", "null"]
+          description: The customer RFQ this line was sourced from (null for free/manual lines)
+        customerRfqItemId:
+          type: ["integer", "null"]
+          description: The specific customer RFQ line item. Not unique — the same item may be ordered again on a later PO.
+        partNo:
+          type: string
+        lineItem:
+          type: string
+          description: Spaces are stripped automatically by the server
+        description:
+          type: string
+        uom:
+          type: string
+        qty:
+          type: number
+        unitPrice:
+          type: number
+        deliveryDate:
+          type: string
+          description: Required delivery date for this line
+
+    CustomerPoLineItem:
+      type: object
+      required: [id, customerPoId, createdAt]
+      properties:
+        id:
+          type: integer
+        customerPoId:
+          type: integer
+        customerRfqId:
+          type: ["integer", "null"]
+        customerRfqItemId:
+          type: ["integer", "null"]
+        partNo:
+          type: ["string", "null"]
+        lineItem:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        uom:
+          type: ["string", "null"]
+        qty:
+          type: ["number", "null"]
+        unitPrice:
+          type: ["number", "null"]
+        total:
+          type: ["number", "null"]
+          description: qty * unitPrice, computed by the server
+        deliveryDate:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    CustomerPoInput:
+      type: object
+      required: [customerPoNo, items]
+      properties:
+        customerPoNo:
+          type: string
+        poDate:
+          type: string
+        buyerName:
+          type: string
+        notes:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomerPoLineItemInput"
+
+    CustomerPoUpdate:
+      type: object
+      properties:
+        customerPoNo:
+          type: string
+        poDate:
+          type: string
+        buyerName:
+          type: string
+        notes:
+          type: string
+        status:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomerPoLineItemInput"
+
+    CustomerPoDetail:
+      allOf:
+        - $ref: "#/components/schemas/CustomerPo"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/CustomerPoLineItem"
 
     BulkImportSuppliersInput:
       type: object
