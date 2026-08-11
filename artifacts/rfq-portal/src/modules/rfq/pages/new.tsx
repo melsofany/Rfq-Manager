@@ -47,6 +47,20 @@ function useSheetRfqNumbers() {
   });
 }
 
+// DB customer RFQ numbers — merged with sheet numbers so the user can pick a
+// customer RFQ created in the portal (the lookup then fetches its items).
+function useCustomerRfqNumbers() {
+  return useQuery<{ rfqNumbers: string[] }>({
+    queryKey: ["customer-rfq-numbers"],
+    queryFn: async () => {
+      const res = await fetch("/api/customer-rfq/numbers", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch customer RFQ numbers");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 function RfqNumberCombobox({
   value,
   onChange,
@@ -144,7 +158,15 @@ export default function NewRfqPage() {
   const [showPicker, setShowPicker] = useState(false);
 
   const { data: rfqNumbersData } = useSheetRfqNumbers();
-  const suggestions = rfqNumbersData?.rfqNumbers ?? [];
+  const { data: customerRfqNumbersData } = useCustomerRfqNumbers();
+  // Merge sheet numbers + DB customer RFQ numbers (deduped); sheets stay the
+  // primary fallback so legacy sheet-only RFQs remain reachable.
+  const suggestions = Array.from(
+    new Set([
+      ...(rfqNumbersData?.rfqNumbers ?? []),
+      ...(customerRfqNumbersData?.rfqNumbers ?? []),
+    ]),
+  );
 
   const createMutation = useCreateRfq({
     mutation: {
@@ -225,6 +247,7 @@ export default function NewRfqPage() {
       uom: p.uom,
       qty: p.qty,
       referencePrice: p.referencePrice,
+      customerRfqItemId: p.customerRfqItemId ?? null,
     }));
     const hasOnlyBlank = items.length === 1 && !items[0].description && !items[0].partNo;
     setItems(hasOnlyBlank ? newRows : [...items, ...newRows]);

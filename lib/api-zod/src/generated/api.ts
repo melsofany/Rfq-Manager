@@ -518,6 +518,8 @@ export const ListCustomerRfqsResponseItem = zod.object({
   "entryDate": zod.string().nullish(),
   "expiryDate": zod.string().nullish(),
   "buyerName": zod.string().nullish(),
+  "employeeId": zod.number().nullish().describe('Employee who entered the RFQ (auto from session)'),
+  "employeeName": zod.string().nullish().describe('Name of the employee who entered the RFQ'),
   "status": zod.string(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
@@ -558,11 +560,21 @@ export const CreateCustomerRfqResponse = zod.object({
   "entryDate": zod.string().nullish(),
   "expiryDate": zod.string().nullish(),
   "buyerName": zod.string().nullish(),
+  "employeeId": zod.number().nullish().describe('Employee who entered the RFQ (auto from session)'),
+  "employeeName": zod.string().nullish().describe('Name of the employee who entered the RFQ'),
   "status": zod.string(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary List all customer RFQ numbers (for the supplier-RFQ import combobox)
+ */
+export const ListCustomerRfqNumbersResponse = zod.object({
+  "rfqNumbers": zod.array(zod.string())
 })
 
 
@@ -583,6 +595,8 @@ export const GetCustomerRfqResponse = zod.object({
   "entryDate": zod.string().nullish(),
   "expiryDate": zod.string().nullish(),
   "buyerName": zod.string().nullish(),
+  "employeeId": zod.number().nullish().describe('Employee who entered the RFQ (auto from session)'),
+  "employeeName": zod.string().nullish().describe('Name of the employee who entered the RFQ'),
   "status": zod.string(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
@@ -640,6 +654,8 @@ export const UpdateCustomerRfqResponse = zod.object({
   "entryDate": zod.string().nullish(),
   "expiryDate": zod.string().nullish(),
   "buyerName": zod.string().nullish(),
+  "employeeId": zod.number().nullish().describe('Employee who entered the RFQ (auto from session)'),
+  "employeeName": zod.string().nullish().describe('Name of the employee who entered the RFQ'),
   "status": zod.string(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),

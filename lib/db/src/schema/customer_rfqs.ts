@@ -2,6 +2,7 @@ import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "dri
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
+import { employeesTable } from "./employees";
 
 // طلب تسعير العميل — Customer Request for Quotation
 export const customerRfqsTable = pgTable("customer_rfqs", {
@@ -14,6 +15,9 @@ export const customerRfqsTable = pgTable("customer_rfqs", {
   entryDate: text("entry_date"),
   expiryDate: text("expiry_date"),
   buyerName: text("buyer_name"),
+  // Employee who entered the RFQ (auto from session, like supplier rfq).
+  employeeId: integer("employee_id").references(() => employeesTable.id),
+  employeeName: text("employee_name"),
   status: text("status").notNull().default("draft"),
   notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

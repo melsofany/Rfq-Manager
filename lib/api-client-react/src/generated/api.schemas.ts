@@ -183,6 +183,16 @@ export interface CustomerRfq {
   expiryDate?: string | null;
   /** @nullable */
   buyerName?: string | null;
+  /**
+     * Employee who entered the RFQ (auto from session)
+     * @nullable
+     */
+  employeeId?: number | null;
+  /**
+     * Name of the employee who entered the RFQ
+     * @nullable
+     */
+  employeeName?: string | null;
   status: string;
   /** @nullable */
   notes?: string | null;
@@ -1018,6 +1028,10 @@ export const ListCustomersActive = {
 export type ListCustomerRfqsParams = {
 search?: string;
 status?: string;
+};
+
+export type ListCustomerRfqNumbers200 = {
+  rfqNumbers: string[];
 };
 
 export type SyncIntegration200 = {

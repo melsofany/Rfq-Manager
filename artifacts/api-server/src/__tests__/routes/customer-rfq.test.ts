@@ -18,6 +18,7 @@ function thenable<T>(value: T, extra: Record<string, any> = {}): any {
 const rfqTable = { _: "customerRfqs", createdAt: "createdAt", id: "id" };
 const itemsTable = { _: "customerRfqItems", customerRfqId: "customerRfqId" };
 const customersTable = { _: "customers", id: "id", name: "name" };
+const employeesTbl = { _: "employees", id: "id", name: "name" };
 const auditTable = { _: "audit" };
 const rfqItemsTbl = { _: "rfqItems", customerRfqItemId: "customerRfqItemId", partNo: "partNo", lineItem: "lineItem" };
 const offerItemsTbl = { _: "offerItems", isApproved: "isApproved" };
@@ -25,6 +26,7 @@ const tables = {
   customerRfqsTable: rfqTable,
   customerRfqItemsTable: itemsTable,
   customersTable,
+  employeesTable: employeesTbl,
   auditLogTable: auditTable,
   rfqItemsTable: rfqItemsTbl,
   offerItemsTable: offerItemsTbl,
@@ -40,6 +42,8 @@ let detailItems: any[];
 // Approved supplier offer_items returned by resolveApprovedCosts (margin check).
 // Each row: { customerRfqItemId, price, taxIncluded }.
 let approvedRows: any[];
+// Employee row returned for the POST "who entered it" lookup: { name }.
+let employeeRow: any;
 // Mutable session so individual tests can flip role=admin for override tests.
 const sessionState: { employeeId: number; role?: string } = { employeeId: 1 };
 
@@ -96,6 +100,15 @@ const dbMock: any = {
           innerJoin: vi.fn(() => chainable(approvedRows, {
             where: vi.fn(() => chainable(approvedRows)),
           })),
+        });
+      }
+      // Employee name lookup: select({name}).from(employees).where().limit() —
+      // returns the per-test employeeRow (so POST records who entered the RFQ).
+      if (table === employeesTbl) {
+        const rows = employeeRow ? [employeeRow] : [];
+        return chainable(rows, {
+          where: vi.fn(() => chainable(rows, { limit: vi.fn(() => chainable(rows)) })),
+          limit: vi.fn(() => chainable(rows)),
         });
       }
       // customer name resolution (select {id}).from(customers).where().limit()
@@ -165,6 +178,8 @@ beforeEach(() => {
     entryDate: null,
     expiryDate: null,
     buyerName: null,
+    employeeId: null,
+    employeeName: null,
     status: "draft",
     notes: null,
     createdAt: new Date("2025-01-01"),
@@ -173,6 +188,7 @@ beforeEach(() => {
   detailRow = null;
   detailItems = [];
   approvedRows = [];
+  employeeRow = { name: "Tester" };
   sessionState.role = undefined;
   insertedItems.length = 0;
 });
@@ -224,6 +240,18 @@ describe("POST /api/customer-rfq (create)", () => {
     const res = await request(testApp).post("/api/customer-rfq").send({ customerRfqNo: "X" });
     expect(res.status).toBe(400);
   });
+
+  it("records the logged-in employee who entered the RFQ", async () => {
+    employeeRow = { name: "Ahmed" };
+    const res = await request(testApp).post("/api/customer-rfq").send({
+      customerName: "Acme",
+      customerRfqNo: "RFQ-E1",
+      items: [{ partNo: "P1", uom: "pc", qty: 1 }],
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.employeeId).toBe(sessionState.employeeId);
+    expect(res.body.employeeName).toBe("Ahmed");
+  });
 });
 
 describe("GET /api/customer-rfq (list)", () => {
@@ -234,6 +262,19 @@ describe("GET /api/customer-rfq (list)", () => {
     expect(res.status).toBe(200);
     expect(res.body[0].internalNo).toBe("CRFQ-1");
     expect(res.body[0].itemCount).toBe(3);
+  });
+});
+
+describe("GET /api/customer-rfq/numbers", () => {
+  it("returns all customer RFQ numbers for the import combobox", async () => {
+    // Reuse the list path mock: select().from(rfqTable).orderBy() returns listRows.
+    listRows = [
+      { customerRfqNo: "RFQ-AAA" },
+      { customerRfqNo: "RFQ-BBB" },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/numbers");
+    expect(res.status).toBe(200);
+    expect(res.body.rfqNumbers).toEqual(["RFQ-AAA", "RFQ-BBB"]);
   });
 });
 

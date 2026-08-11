@@ -77,6 +77,9 @@ export default function CustomerRfqPage() {
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
                       المشتري
                     </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      المدخل
+                    </th>
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
                       البنود
                     </th>
@@ -113,6 +116,9 @@ export default function CustomerRfqPage() {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">
                         {rfq.buyerName ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {rfq.employeeName ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-xs font-medium text-foreground">

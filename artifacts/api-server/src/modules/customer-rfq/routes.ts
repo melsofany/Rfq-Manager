@@ -4,6 +4,7 @@ import {
   customerRfqsTable,
   customerRfqItemsTable,
   customersTable,
+  employeesTable,
   rfqItemsTable,
   offerItemsTable,
   auditLogTable,
@@ -131,6 +132,8 @@ function serialize(r: typeof customerRfqsTable.$inferSelect, itemCount: number) 
     entryDate: r.entryDate,
     expiryDate: r.expiryDate,
     buyerName: r.buyerName,
+    employeeId: r.employeeId,
+    employeeName: r.employeeName,
     status: r.status,
     notes: r.notes,
     itemCount,
@@ -172,6 +175,18 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
   const countMap = Object.fromEntries(counts.map((c) => [c.customerRfqId, c.cnt]));
 
   res.json(filtered.map((r) => serialize(r.rfq, countMap[r.rfq.id] ?? 0)));
+});
+
+// GET /customer-rfq/numbers — all customer RFQ numbers (for the supplier-RFQ
+// import combobox). Lets users pick a DB customer RFQ number instead of only
+// Google-Sheet numbers; the lookup endpoint then fetches its items (DB first,
+// sheet fallback).
+router.get("/customer-rfq/numbers", requireAuth, async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({ customerRfqNo: customerRfqsTable.customerRfqNo })
+    .from(customerRfqsTable)
+    .orderBy(desc(customerRfqsTable.createdAt));
+  res.json({ rfqNumbers: rows.map((r) => r.customerRfqNo) });
 });
 
 // POST /customer-rfq — create a customer RFQ
@@ -228,6 +243,16 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
 
   const internalNo = await generateInternalNo();
 
+  // Resolve the creating employee's name (auto from the logged-in session).
+  let employeeName: string | null = null;
+  if (req.session.employeeId) {
+    const [emp] = await db
+      .select({ name: employeesTable.name })
+      .from(employeesTable)
+      .where(eq(employeesTable.id, req.session.employeeId));
+    employeeName = emp?.name ?? null;
+  }
+
   const [rfq] = await db
     .insert(customerRfqsTable)
     .values({
@@ -239,6 +264,8 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
       entryDate: entryDate || null,
       expiryDate: expiryDate || null,
       buyerName: buyerName?.trim() || null,
+      employeeId: req.session.employeeId ?? null,
+      employeeName,
       status: "draft",
       notes: notes?.trim() || null,
     })

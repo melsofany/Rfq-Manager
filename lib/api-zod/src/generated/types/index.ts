@@ -50,6 +50,7 @@ export * from './healthStatus';
 export * from './itemHistory';
 export * from './itemSupplierResponse';
 export * from './listAuditLogsParams';
+export * from './listCustomerRfqNumbers200';
 export * from './listCustomerRfqsParams';
 export * from './listCustomersActive';
 export * from './listCustomersParams';

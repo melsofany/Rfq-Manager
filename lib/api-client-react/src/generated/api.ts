@@ -49,6 +49,7 @@ import type {
   HealthStatus,
   ItemHistory,
   ListAuditLogsParams,
+  ListCustomerRfqNumbers200,
   ListCustomerRfqsParams,
   ListCustomersParams,
   ListOffersParams,
@@ -1978,6 +1979,83 @@ export const useCreateCustomerRfq = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getCreateCustomerRfqMutationOptions(options));
     }
+
+export const getListCustomerRfqNumbersUrl = () => {
+
+
+
+
+  return `/api/customer-rfq/numbers`
+}
+
+/**
+ * @summary List all customer RFQ numbers (for the supplier-RFQ import combobox)
+ */
+export const listCustomerRfqNumbers = async ( options?: RequestInit): Promise<ListCustomerRfqNumbers200> => {
+
+  return customFetch<ListCustomerRfqNumbers200>(getListCustomerRfqNumbersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCustomerRfqNumbersQueryKey = () => {
+    return [
+    `/api/customer-rfq/numbers`
+    ] as const;
+    }
+
+
+export const getListCustomerRfqNumbersQueryOptions = <TData = Awaited<ReturnType<typeof listCustomerRfqNumbers>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerRfqNumbers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCustomerRfqNumbersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCustomerRfqNumbers>>> = ({ signal }) => listCustomerRfqNumbers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCustomerRfqNumbers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCustomerRfqNumbersQueryResult = NonNullable<Awaited<ReturnType<typeof listCustomerRfqNumbers>>>
+export type ListCustomerRfqNumbersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all customer RFQ numbers (for the supplier-RFQ import combobox)
+ */
+
+export function useListCustomerRfqNumbers<TData = Awaited<ReturnType<typeof listCustomerRfqNumbers>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerRfqNumbers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCustomerRfqNumbersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetCustomerRfqUrl = (id: number,) => {
 
