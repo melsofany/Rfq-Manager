@@ -201,6 +201,21 @@ export async function initDb(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS customers (
+        id SERIAL PRIMARY KEY,
+        customer_id TEXT,
+        name TEXT NOT NULL,
+        nickname TEXT,
+        contact_person TEXT,
+        email TEXT,
+        phone TEXT,
+        address TEXT,
+        tax_id TEXT,
+        notes TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
     // Add tax_included to purchase_order_items (safe migration — skipped if already present)
     await client.query(`

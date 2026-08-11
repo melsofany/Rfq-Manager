@@ -28,6 +28,7 @@ import {
   Hash,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getApiErrorMessage } from "@/lib/api-error";
 
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,8 +68,7 @@ export default function CustomerDetailPage() {
         setServerError(null);
       },
       onError: (err: unknown) => {
-        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-        setServerError(msg ?? "حدث خطأ أثناء الحفظ");
+        setServerError(getApiErrorMessage(err, "حدث خطأ أثناء الحفظ"));
       },
     },
   });
@@ -80,8 +80,7 @@ export default function CustomerDetailPage() {
         navigate("/customers");
       },
       onError: (err: unknown) => {
-        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-        setServerError(msg ?? "تعذر حذف العميل");
+        setServerError(getApiErrorMessage(err, "تعذر حذف العميل"));
         setConfirmDelete(false);
       },
     },
