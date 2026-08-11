@@ -42,6 +42,8 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Build: `pnpm install --no-frozen-lockfile && pnpm --filter @workspace/rfq-portal run build && pnpm --filter @workspace/api-server run build`
 - Start: `node artifacts/api-server/dist/index.mjs`
 - Trigger manual deploy: `POST https://api.render.com/v1/services/<id>/deploys -d '{"clearCache":"clear"}'` with `Authorization: Bearer <RENDER_API>`.
+- **Schema creation**: tables are created via `artifacts/api-server/src/shared/init-db.ts` (`CREATE TABLE IF NOT EXISTS ...` run on every startup) — NOT via `drizzle-kit push`. The `prebuild` push only runs when `DATABASE_URL` is set and is not relied upon. **Any new table MUST be added to `init-db.ts`** or it will not exist on Render and inserts will 500. The `lib/db/src/schema/*.ts` files define the Drizzle ORM objects used in code, but the DDL lives in `init-db.ts`.
+- **Frontend error extraction**: the orval client (`lib/api-client-react/src/custom-fetch.ts`) throws `ApiError`, where the server JSON body is `err.data.error` (NOT `err.response.data.error` as with Axios). Use the shared `getApiErrorMessage(err)` helper (`artifacts/rfq-portal/src/lib/api-error.ts`) in mutation `onError` handlers so real server messages surface instead of a generic fallback. Older pages (suppliers) still use the broken Axios-style extractor — fix them when touched.
 
 ## Conventions
 - Arabic UI (RTL) with English code/comments. Field labels in Arabic.
