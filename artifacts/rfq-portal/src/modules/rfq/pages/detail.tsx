@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useLocation, Link } from "wouter";
 import {
   useGetRfq,
@@ -694,11 +695,15 @@ export default function RfqDetailPage() {
   });
 
   const [approvingId, setApprovingId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
   const approveMutation = useApproveOfferItem({
     mutation: {
       onSuccess: () => {
         toast.success("تم تحديث حالة الاعتماد");
         setApprovingId(null);
+        // Refetch offers so the approved row flips green / another row un-approves
+        // (the API enforces one approved price per rfq_item).
+        void queryClient.invalidateQueries({ queryKey: getGetRfqOffersQueryKey(rfqId) });
       },
       onError: (err) => {
         toast.error("تعذّر تحديث الاعتماد: " + (err as Error).message);
