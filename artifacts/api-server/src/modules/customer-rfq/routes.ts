@@ -28,6 +28,16 @@ function formatQty(qty: string | null): string | null {
   return trimmed === "" ? "0" : trimmed;
 }
 
+// Line total = qty * unitPrice, rounded to 4dp and stripped of trailing zeros.
+function computeTotal(qty: string | null, unitPrice: string | null): string | null {
+  if (qty == null || unitPrice == null) return null;
+  const q = Number(qty);
+  const p = Number(unitPrice);
+  if (!isFinite(q) || !isFinite(p)) return null;
+  const n = Math.round(q * p * 10000) / 10000;
+  return formatQty(String(n));
+}
+
 function serialize(r: typeof customerRfqsTable.$inferSelect, itemCount: number) {
   return {
     id: r.id,
@@ -107,6 +117,7 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
       description?: string;
       uom?: string;
       qty?: string | number | null;
+      unitPrice?: string | number | null;
     }>;
   };
 
@@ -164,6 +175,7 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
           description: it.description?.trim() || null,
           uom: it.uom?.trim() || null,
           qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
+          unitPrice: it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null,
         })),
       );
       itemCount = validItems.length;
@@ -211,6 +223,8 @@ router.get("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => 
       description: i.description,
       uom: i.uom,
       qty: formatQty(i.qty),
+      unitPrice: formatQty(i.unitPrice),
+      total: computeTotal(i.qty, i.unitPrice),
       createdAt: i.createdAt.toISOString(),
     })),
   });
@@ -248,6 +262,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
         description?: string;
         uom?: string;
         qty?: string | number | null;
+        unitPrice?: string | number | null;
       }>;
     };
 
@@ -268,7 +283,21 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   if (expiryDate !== undefined) updates.expiryDate = expiryDate || null;
   if (buyerName !== undefined) updates.buyerName = buyerName?.trim() || null;
   if (notes !== undefined) updates.notes = notes?.trim() || null;
-  if (status !== undefined) updates.status = status;
+
+  // Finalizing (status → sent) requires every item to have a price.
+  const validItems = items
+    ? items.filter((it) => (it.partNo?.trim() || it.lineItem?.trim()) && it.qty)
+    : undefined;
+  if (status === "sent" && validItems !== undefined) {
+    const unpriced = validItems.filter((it) => it.unitPrice == null || it.unitPrice === "" || Number(it.unitPrice) <= 0);
+    if (unpriced.length > 0) {
+      res.status(400).json({ error: "أدخل سعر كل بند قبل تثبيت الطلب" });
+      return;
+    }
+    updates.status = "sent";
+  } else if (status !== undefined) {
+    updates.status = status;
+  }
 
   if (Object.keys(updates).length > 0) {
     await db.update(customerRfqsTable).set(updates).where(eq(customerRfqsTable.id, id));
@@ -276,8 +305,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
 
   if (items !== undefined) {
     await db.delete(customerRfqItemsTable).where(eq(customerRfqItemsTable.customerRfqId, id));
-    const validItems = items.filter((it) => (it.partNo?.trim() || it.lineItem?.trim()) && it.qty);
-    if (validItems.length > 0) {
+    if (validItems && validItems.length > 0) {
       await db.insert(customerRfqItemsTable).values(
         validItems.map((it) => ({
           customerRfqId: id,
@@ -286,6 +314,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
           description: it.description?.trim() || null,
           uom: it.uom?.trim() || null,
           qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
+          unitPrice: it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null,
         })),
       );
     }
@@ -309,6 +338,8 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       description: i.description,
       uom: i.uom,
       qty: formatQty(i.qty),
+      unitPrice: formatQty(i.unitPrice),
+      total: computeTotal(i.qty, i.unitPrice),
       createdAt: i.createdAt.toISOString(),
     })),
   });

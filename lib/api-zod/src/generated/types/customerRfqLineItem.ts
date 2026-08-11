@@ -19,5 +19,12 @@ export interface CustomerRfqLineItem {
   uom?: string | null;
   /** @nullable */
   qty?: number | null;
+  /** @nullable */
+  unitPrice?: number | null;
+  /**
+     * qty * unitPrice, computed by the server
+     * @nullable
+     */
+  total?: number | null;
   createdAt: string;
 }

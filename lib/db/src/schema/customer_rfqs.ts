@@ -33,6 +33,7 @@ export const customerRfqItemsTable = pgTable("customer_rfq_items", {
   description: text("description"),
   uom: text("uom"),
   qty: numeric("qty", { precision: 15, scale: 4 }),
+  unitPrice: numeric("unit_price", { precision: 15, scale: 4 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

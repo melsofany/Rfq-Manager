@@ -239,6 +239,7 @@ export async function initDb(): Promise<void> {
         description TEXT,
         uom TEXT,
         qty NUMERIC(15,4),
+        unit_price NUMERIC(15,4),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
@@ -251,6 +252,7 @@ export async function initDb(): Promise<void> {
     // Add description to customer_rfq_items (safe migration — skipped if already present)
     await client.query(`
       ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS unit_price NUMERIC(15,4);
     `);
 
     // Add delivery_days and notes to offer_items (safe migration — skipped if already present)

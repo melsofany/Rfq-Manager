@@ -14,4 +14,6 @@ export interface CustomerRfqLineItemInput {
   description?: string;
   uom?: string;
   qty?: number;
+  /** Unit price entered after the RFQ is saved (required to finalize) */
+  unitPrice?: number;
 }

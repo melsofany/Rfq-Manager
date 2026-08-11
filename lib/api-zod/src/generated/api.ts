@@ -543,7 +543,8 @@ export const CreateCustomerRfqBody = zod.object({
   "lineItem": zod.string().optional().describe('Spaces are stripped automatically by the server'),
   "description": zod.string().optional().describe('Item description \/ توصيف البند'),
   "uom": zod.string().optional(),
-  "qty": zod.number().optional()
+  "qty": zod.number().optional(),
+  "unitPrice": zod.number().optional().describe('Unit price entered after the RFQ is saved (required to finalize)')
 })).optional()
 })
 
@@ -596,6 +597,8 @@ export const GetCustomerRfqResponse = zod.object({
   "description": zod.string().nullish(),
   "uom": zod.string().nullish(),
   "qty": zod.number().nullish(),
+  "unitPrice": zod.number().nullish(),
+  "total": zod.number().nullish().describe('qty \* unitPrice, computed by the server'),
   "createdAt": zod.string()
 })).optional()
 }))
@@ -621,7 +624,8 @@ export const UpdateCustomerRfqBody = zod.object({
   "lineItem": zod.string().optional().describe('Spaces are stripped automatically by the server'),
   "description": zod.string().optional().describe('Item description \/ توصيف البند'),
   "uom": zod.string().optional(),
-  "qty": zod.number().optional()
+  "qty": zod.number().optional(),
+  "unitPrice": zod.number().optional().describe('Unit price entered after the RFQ is saved (required to finalize)')
 })).optional()
 })
 
@@ -649,6 +653,8 @@ export const UpdateCustomerRfqResponse = zod.object({
   "description": zod.string().nullish(),
   "uom": zod.string().nullish(),
   "qty": zod.number().nullish(),
+  "unitPrice": zod.number().nullish(),
+  "total": zod.number().nullish().describe('qty \* unitPrice, computed by the server'),
   "createdAt": zod.string()
 })).optional()
 }))
