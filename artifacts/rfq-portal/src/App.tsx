@@ -46,6 +46,8 @@ import CustomersPage from "@/modules/customers/pages/index";
 import NewCustomerPage from "@/modules/customers/pages/new";
 import CustomerDetailPage from "@/modules/customers/pages/detail";
 import CustomerRfqPage from "@/modules/customer-rfq/pages/index";
+import NewCustomerRfqPage from "@/modules/customer-rfq/pages/new";
+import CustomerRfqDetailPage from "@/modules/customer-rfq/pages/detail";
 import CustomerPoPage from "@/modules/customer-po/pages/index";
 
 const queryClient = new QueryClient({
@@ -168,6 +170,12 @@ function Router() {
       </Route>
       <Route path="/customers">
         <ProtectedRoute component={CustomersPage} />
+      </Route>
+      <Route path="/customer-rfq/new">
+        <ProtectedRoute component={NewCustomerRfqPage} />
+      </Route>
+      <Route path="/customer-rfq/:id">
+        <ProtectedRoute component={CustomerRfqDetailPage} />
       </Route>
       <Route path="/customer-rfq">
         <ProtectedRoute component={CustomerRfqPage} />

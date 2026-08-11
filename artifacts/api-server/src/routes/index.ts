@@ -12,6 +12,7 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import rfqModule from "../modules/rfq/index";
+import customerRfqModule from "../modules/customer-rfq/index";
 import poModule from "../modules/po/index";
 import usersModule from "../modules/users/index";
 import reportsModule from "../modules/reports/index";
@@ -25,8 +26,9 @@ const router: IRouter = Router();
 router.use(healthRouter);
 
 // Business modules
-router.use(usersModule); // auth · suppliers · categories
+router.use(usersModule); // auth · suppliers · categories · customers
 router.use(rfqModule); // rfq · offers · pricing · items
+router.use(customerRfqModule); // customer-rfq intake
 router.use(poModule); // purchase-orders
 router.use(reportsModule); // analytics · audit · sync
 router.use(communicationsModule); // whatsapp (legacy — kept read-only as backup)
