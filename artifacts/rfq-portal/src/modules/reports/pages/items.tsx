@@ -415,28 +415,28 @@ function SheetViewTab() {
 
       {/* Table */}
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-200px)]">
           <table className="w-full text-xs">
-            <thead className="sticky top-0">
-              <tr className="bg-muted/40 border-b border-border text-right">
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">Line Item</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">Part No</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium min-w-[180px]">التوصيف</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">UOM</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">طلب التسعير</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">تاريخ الطلب</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">الكمية</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">السعر للعميل</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">انتهاء الطلب</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">العميل</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">المشتري</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap border-r border-border/60">رقم أمر الشراء</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">تاريخ أمر الشراء</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">الكمية</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">السعر</th>
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-muted/60 border-b border-border text-right">
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">Line Item</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">Part No</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium min-w-[180px] bg-muted/60">التوصيف</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">UOM</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">طلب التسعير</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">تاريخ الطلب</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">الكمية</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">السعر للعميل</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">انتهاء الطلب</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">العميل</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">المشتري</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60 border-r border-border/60">رقم أمر الشراء</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">تاريخ أمر الشراء</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">الكمية</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">السعر</th>
               </tr>
               {/* Per-column filter row (Excel-style autofilter "contains") */}
-              <tr className="bg-muted/20 border-b border-border">
+              <tr className="bg-muted/30 border-b border-border">
                 {[
                   ["lineItem", true],
                   ["partNo", true],
@@ -457,7 +457,7 @@ function SheetViewTab() {
                   <th
                     key={col as string}
                     className={cn(
-                      "px-1 py-1",
+                      "px-1 py-1 bg-muted/30",
                       rightBorder === false && "border-r border-border/60",
                     )}
                   >
