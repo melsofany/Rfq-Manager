@@ -1,8 +1,13 @@
 import { useState, useRef } from "react";
 import { Link } from "wouter";
 import { Layout } from "@/components/Layout";
-import { useSearchItems, getSearchItemsQueryKey } from "@workspace/api-client-react";
-import type { ItemHistory, ItemSupplierResponse } from "@workspace/api-client-react";
+import {
+  useSearchItems,
+  getSearchItemsQueryKey,
+  useListCustomerRfqSheetView,
+  getListCustomerRfqSheetViewQueryKey,
+} from "@workspace/api-client-react";
+import type { ItemHistory, ItemSupplierResponse, CustomerRfqSheetRow } from "@workspace/api-client-react";
 import {
   Search,
   Package,
@@ -17,6 +22,8 @@ import {
   Minus,
   Eye,
   EyeOff,
+  Table,
+  ListFilter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -303,12 +310,224 @@ function ItemCard({ item }: { item: ItemHistory }) {
   );
 }
 
+// ─── Sheet View Tab ────────────────────────────────────────────────────────────
+// A flat, read-only mirror of the legacy single Google Sheet ("DATA" tab):
+// one row per customer RFQ line item, with the matched customer PO columns
+// joined in the same row. New data entered anywhere in the system shows up
+// here automatically. Columns match the old sheet layout exactly.
+
+const SHEET_PAGE_SIZE = 100;
+
+function cell(v: string | null | undefined) {
+  if (v == null || v === "") return <span className="text-muted-foreground/50">—</span>;
+  return v;
+}
+
+function SheetViewTab() {
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+
+  const { data, isLoading, isFetching, isError } = useListCustomerRfqSheetView(
+    { search: search || undefined, limit: SHEET_PAGE_SIZE, offset },
+    { query: { queryKey: getListCustomerRfqSheetViewQueryKey({ search: search || undefined, limit: SHEET_PAGE_SIZE, offset }) } },
+  );
+
+  const rows = data?.rows ?? [];
+  const total = data?.total ?? 0;
+  const hasNext = offset + SHEET_PAGE_SIZE < total;
+  const hasPrev = offset > 0;
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    setOffset(0);
+    setSearch(searchInput.trim());
+  };
+
+  const resetSearch = () => {
+    setSearchInput("");
+    setSearch("");
+    setOffset(0);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Search + count */}
+      <div className="flex flex-wrap items-center gap-2">
+        <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-[240px]">
+          <div className="relative flex-1">
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+            />
+            <Input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="ابحث برقم البند، Part No، التوصيف، رقم طلب التسعير، العميل، أو رقم أمر الشراء…"
+              className="pl-9"
+            />
+          </div>
+          <Button type="submit" disabled={isFetching}>
+            {isFetching ? "جارٍ البحث…" : "بحث"}
+          </Button>
+          {search && (
+            <Button type="button" variant="ghost" onClick={resetSearch}>
+              مسح
+            </Button>
+          )}
+        </form>
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {total.toLocaleString("en-US")} صف
+        </span>
+      </div>
+
+      {/* Table */}
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0">
+              <tr className="bg-muted/40 border-b border-border text-right">
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">Line Item</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">Part No</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium min-w-[180px]">التوصيف</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">UOM</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">طلب التسعير</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">تاريخ الطلب</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">الكمية</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">السعر للعميل</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">انتهاء الطلب</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">العميل</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">المشتري</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap border-r border-border/60">رقم أمر الشراء</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">تاريخ أمر الشراء</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">الكمية</th>
+                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">السعر</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading && (
+                <tr>
+                  <td colSpan={15} className="px-4 py-10 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="h-5 w-5 border-2 border-muted border-t-primary rounded-full animate-spin" />
+                      <span>جارٍ التحميل…</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {isError && (
+                <tr>
+                  <td colSpan={15} className="px-4 py-10 text-center text-destructive">
+                    فشل تحميل البيانات. حاول مرة أخرى.
+                  </td>
+                </tr>
+              )}
+              {!isLoading && !isError && rows.length === 0 && (
+                <tr>
+                  <td colSpan={15} className="px-4 py-10 text-center text-muted-foreground">
+                    {search ? `لا توجد نتائج لـ «${search}»` : "لا توجد بيانات بعد"}
+                  </td>
+                </tr>
+              )}
+              {!isLoading &&
+                !isError &&
+                rows.map((r: CustomerRfqSheetRow) => (
+                  <tr
+                    key={`${r.rfqItemId}-${r.poItemId ?? "nopo"}`}
+                    className="border-b border-border/40 last:border-0 hover:bg-muted/20"
+                  >
+                    <td className="px-2 py-1.5 font-mono whitespace-nowrap" dir="ltr">
+                      {cell(r.lineItem)}
+                    </td>
+                    <td className="px-2 py-1.5 font-mono whitespace-nowrap" dir="ltr">
+                      {cell(r.partNo)}
+                    </td>
+                    <td className="px-2 py-1.5">{cell(r.description)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-center">{cell(r.uom)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      <Link href={`/customer-rfq/${r.customerRfqId}`}>
+                        <a className="text-primary hover:underline font-mono" dir="ltr">
+                          {r.customerRfqNo}
+                        </a>
+                      </Link>
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-center" dir="ltr">
+                      {cell(r.entryDate)}
+                    </td>
+                    <td className="px-2 py-1.5 text-center font-mono" dir="ltr">
+                      {cell(r.rfqQty)}
+                    </td>
+                    <td className="px-2 py-1.5 text-center font-mono" dir="ltr">
+                      {cell(r.rfqUnitPrice)}
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-center" dir="ltr">
+                      {cell(r.expiryDate)}
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{cell(r.customerName)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{cell(r.buyerName)}</td>
+                    {/* PO columns — separated by a subtle divider to mirror the sheet split */}
+                    <td className="px-2 py-1.5 whitespace-nowrap border-r border-border/60">
+                      {r.poNo ? (
+                        <span className="font-mono" dir="ltr">
+                          {r.poNo}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-center" dir="ltr">
+                      {cell(r.poDate)}
+                    </td>
+                    <td className="px-2 py-1.5 text-center font-mono" dir="ltr">
+                      {cell(r.poQty)}
+                    </td>
+                    <td className="px-2 py-1.5 text-center font-mono" dir="ltr">
+                      {cell(r.poUnitPrice)}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Pagination */}
+      {total > SHEET_PAGE_SIZE && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            {offset + 1}–{Math.min(offset + SHEET_PAGE_SIZE, total)} من {total.toLocaleString("en-US")}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasPrev || isFetching}
+              onClick={() => setOffset((o) => Math.max(0, o - SHEET_PAGE_SIZE))}
+            >
+              السابق
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasNext || isFetching}
+              onClick={() => setOffset((o) => o + SHEET_PAGE_SIZE)}
+            >
+              التالي
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ItemsPage() {
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [tab, setTab] = useState<"search" | "sheet">("search");
 
   const {
     data: results,
@@ -336,7 +555,7 @@ export default function ItemsPage() {
 
   return (
     <Layout>
-      <div className="p-4 sm:p-6 space-y-5 max-w-5xl mx-auto">
+      <div className={cn("p-4 sm:p-6 space-y-5 mx-auto", tab === "sheet" ? "max-w-[1400px]" : "max-w-5xl")}>
         {/* Page header */}
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
@@ -344,87 +563,122 @@ export default function ItemsPage() {
             Items
           </h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            Search for any item by description, part number, or line item — see the full RFQ history
-            and all supplier responses.
+            {tab === "search"
+              ? "Search for any item by description, part number, or line item — see the full RFQ history and all supplier responses."
+              : "عرض بنفس شكل الشيت — كل بند طلب تسعير في صف واحد مع أعمدة أمر الشراء المقابل إن وُجد. أي بيانات مستقبليه تُضاف تظهر هنا تلقائيًا."}
           </p>
         </div>
 
-        {/* Search form */}
-        <form onSubmit={handleSearch} className="flex gap-2">
-          <div className="relative flex-1">
-            <Search
-              size={15}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
-            />
-            <Input
-              ref={inputRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by description, part no, or line item…"
-              className="pl-9"
-            />
-          </div>
-          <Button type="submit" disabled={query.trim().length < 2 || isFetching}>
-            {isFetching ? "Searching…" : "Search"}
-          </Button>
-        </form>
-
-        {/* Results */}
-        {submitted.length >= 2 && (
-          <div className="space-y-3">
-            {/* Summary */}
-            {results && results.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Found <span className="font-semibold text-foreground">{results.length}</span> result
-                {results.length !== 1 ? "s" : ""} for{" "}
-                <span className="font-semibold text-foreground">"{submitted}"</span>
-              </p>
+        {/* Tab switcher */}
+        <div className="flex gap-1 border-b border-border">
+          <button
+            onClick={() => setTab("search")}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+              tab === "search"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
             )}
+          >
+            <Search size={15} />
+            بحث البنود
+          </button>
+          <button
+            onClick={() => setTab("sheet")}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+              tab === "sheet"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Table size={15} />
+            عرض الشيت
+          </button>
+        </div>
 
-            {/* Loading skeleton */}
-            {isLoading && (
+        {tab === "sheet" ? (
+          <SheetViewTab />
+        ) : (
+          <>
+            {/* Search form */}
+            <form onSubmit={handleSearch} className="flex gap-2">
+              <div className="relative flex-1">
+                <Search
+                  size={15}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                />
+                <Input
+                  ref={inputRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by description, part no, or line item…"
+                  className="pl-9"
+                />
+              </div>
+              <Button type="submit" disabled={query.trim().length < 2 || isFetching}>
+                {isFetching ? "Searching…" : "Search"}
+              </Button>
+            </form>
+
+            {/* Results */}
+            {submitted.length >= 2 && (
               <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
-                ))}
+                {/* Summary */}
+                {results && results.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Found <span className="font-semibold text-foreground">{results.length}</span> result
+                    {results.length !== 1 ? "s" : ""} for{" "}
+                    <span className="font-semibold text-foreground">"{submitted}"</span>
+                  </p>
+                )}
+
+                {/* Loading skeleton */}
+                {isLoading && (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
+                    ))}
+                  </div>
+                )}
+
+                {/* Error state */}
+                {isError && (
+                  <div className="py-10 text-center text-muted-foreground">
+                    <XCircle size={28} className="mx-auto mb-2 text-red-400" />
+                    <p className="text-sm font-medium text-red-600">Search failed</p>
+                    <p className="text-xs mt-1">Please try again or check your connection.</p>
+                  </div>
+                )}
+
+                {/* No results */}
+                {noResults && (
+                  <div className="py-12 text-center text-muted-foreground">
+                    <Package size={32} className="mx-auto mb-3 opacity-30" />
+                    <p className="text-sm font-medium">No items found for "{submitted}"</p>
+                    <p className="text-xs mt-1">
+                      Try searching with a different description, part number, or line item.
+                    </p>
+                  </div>
+                )}
+
+                {/* Item cards */}
+                {!isLoading &&
+                  results?.map((item) => <ItemCard key={`${item.rfqItemId}`} item={item} />)}
               </div>
             )}
 
-            {/* Error state */}
-            {isError && (
-              <div className="py-10 text-center text-muted-foreground">
-                <XCircle size={28} className="mx-auto mb-2 text-red-400" />
-                <p className="text-sm font-medium text-red-600">Search failed</p>
-                <p className="text-xs mt-1">Please try again or check your connection.</p>
-              </div>
-            )}
-
-            {/* No results */}
-            {noResults && (
-              <div className="py-12 text-center text-muted-foreground">
-                <Package size={32} className="mx-auto mb-3 opacity-30" />
-                <p className="text-sm font-medium">No items found for "{submitted}"</p>
+            {/* Empty state (no search yet) */}
+            {!submitted && (
+              <div className="py-16 text-center text-muted-foreground">
+                <Search size={36} className="mx-auto mb-3 opacity-20" />
+                <p className="text-sm font-medium">Enter at least 2 characters to search</p>
                 <p className="text-xs mt-1">
-                  Try searching with a different description, part number, or line item.
+                  You can search by item description, part number, or line item number.
                 </p>
               </div>
             )}
-
-            {/* Item cards */}
-            {!isLoading &&
-              results?.map((item) => <ItemCard key={`${item.rfqItemId}`} item={item} />)}
-          </div>
-        )}
-
-        {/* Empty state (no search yet) */}
-        {!submitted && (
-          <div className="py-16 text-center text-muted-foreground">
-            <Search size={36} className="mx-auto mb-3 opacity-20" />
-            <p className="text-sm font-medium">Enter at least 2 characters to search</p>
-            <p className="text-xs mt-1">
-              You can search by item description, part number, or line item number.
-            </p>
-          </div>
+          </>
         )}
       </div>
     </Layout>

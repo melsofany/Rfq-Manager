@@ -168,6 +168,66 @@ export interface CustomerUpdate {
   isActive?: boolean;
 }
 
+/**
+ * One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued).
+ */
+export interface CustomerRfqSheetRow {
+  rfqItemId?: number;
+  /** @nullable */
+  lineItem?: string | null;
+  /** @nullable */
+  partNo?: string | null;
+  /** @nullable */
+  description?: string | null;
+  /** @nullable */
+  uom?: string | null;
+  /** @nullable */
+  rfqQty?: string | null;
+  /**
+     * Price offered to the customer (from the customer RFQ item)
+     * @nullable
+     */
+  rfqUnitPrice?: string | null;
+  customerRfqId?: number;
+  customerRfqNo?: string;
+  customerName?: string;
+  /**
+     * Request date (تاريخ الطلب)
+     * @nullable
+     */
+  entryDate?: string | null;
+  /**
+     * Request expiry date (تاريخ انتهاء الطلب)
+     * @nullable
+     */
+  expiryDate?: string | null;
+  /**
+     * Buyer / employee at the customer's company (recorded with the RFQ)
+     * @nullable
+     */
+  buyerName?: string | null;
+  /** @nullable */
+  poItemId?: number | null;
+  /** @nullable */
+  poNo?: string | null;
+  /** @nullable */
+  poDate?: string | null;
+  /** @nullable */
+  poQty?: string | null;
+  /** @nullable */
+  poUnitPrice?: string | null;
+}
+
+/**
+ * Paginated flat sheet-style view (one row per customer RFQ item, with joined PO columns).
+ */
+export interface CustomerRfqSheetView {
+  total: number;
+  limit: number;
+  offset: number;
+  rows: CustomerRfqSheetRow[];
+}
+
 export interface CustomerRfq {
   id: number;
   internalNo: string;
@@ -1163,6 +1223,19 @@ status?: string;
 
 export type ListCustomerRfqNumbers200 = {
   rfqNumbers: string[];
+};
+
+export type ListCustomerRfqSheetViewParams = {
+search?: string;
+/**
+ * @minimum 1
+ * @maximum 500
+ */
+limit?: number;
+/**
+ * @minimum 0
+ */
+offset?: number;
 };
 
 export type ListCustomerPosParams = {

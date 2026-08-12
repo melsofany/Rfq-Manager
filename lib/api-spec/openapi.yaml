@@ -518,6 +518,37 @@ paths:
                       type: string
                 required: [rfqNumbers]
 
+  /customer-rfq/sheet-view:
+    get:
+      operationId: listCustomerRfqSheetView
+      tags: [customer-rfq]
+      summary: Flat sheet-style view (one row per customer RFQ item with joined PO columns)
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paginated flat sheet-style rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerRfqSheetView"
+
   /customer-rfq/{id}:
     get:
       operationId: getCustomerRfq
@@ -1746,6 +1777,67 @@ components:
           type: string
         isActive:
           type: boolean
+
+    CustomerRfqSheetRow:
+      type: object
+      description: One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued).
+      properties:
+        rfqItemId:
+          type: integer
+        lineItem:
+          type: ["string", "null"]
+        partNo:
+          type: ["string", "null"]
+        description:
+          type: ["string", "null"]
+        uom:
+          type: ["string", "null"]
+        rfqQty:
+          type: ["string", "null"]
+        rfqUnitPrice:
+          type: ["string", "null"]
+          description: Price offered to the customer (from the customer RFQ item)
+        customerRfqId:
+          type: integer
+        customerRfqNo:
+          type: string
+        customerName:
+          type: string
+        entryDate:
+          type: ["string", "null"]
+          description: Request date (تاريخ الطلب)
+        expiryDate:
+          type: ["string", "null"]
+          description: Request expiry date (تاريخ انتهاء الطلب)
+        buyerName:
+          type: ["string", "null"]
+          description: Buyer / employee at the customer's company (recorded with the RFQ)
+        poItemId:
+          type: ["integer", "null"]
+        poNo:
+          type: ["string", "null"]
+        poDate:
+          type: ["string", "null"]
+        poQty:
+          type: ["string", "null"]
+        poUnitPrice:
+          type: ["string", "null"]
+
+    CustomerRfqSheetView:
+      type: object
+      description: Paginated flat sheet-style view (one row per customer RFQ item, with joined PO columns).
+      required: [total, limit, offset, rows]
+      properties:
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomerRfqSheetRow"
 
     CustomerRfq:
       type: object

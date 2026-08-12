@@ -8,8 +8,10 @@ import {
   rfqItemsTable,
   offerItemsTable,
   auditLogTable,
+  customerPoItemsTable,
+  customerPosTable,
 } from "@workspace/db";
-import { eq, ilike, count, inArray, desc, and, isNull, or } from "drizzle-orm";
+import { eq, ilike, count, inArray, desc, and, isNull, or, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
@@ -187,6 +189,99 @@ router.get("/customer-rfq/numbers", requireAuth, async (_req, res): Promise<void
     .from(customerRfqsTable)
     .orderBy(desc(customerRfqsTable.createdAt));
   res.json({ rfqNumbers: rows.map((r) => r.customerRfqNo) });
+});
+
+// GET /customer-rfq/sheet-view — a flat, denormalized view that reproduces the
+// old single-sheet (Google Sheets "DATA" tab) layout: one row per customer
+// RFQ line item, with the matching customer PO columns joined in the SAME row
+// (poNo/poDate/poQty/poPrice) when a PO was issued for that item. The buyer
+// name lives on the customer RFQ (employee at the customer's company). This is
+// a read-only mirror of the legacy sheet, kept current as new data is entered.
+//
+// Query params: ?search=&limit=&offset=
+router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<void> => {
+  const { search, limit: limitQ, offset: offsetQ } = req.query as Record<string, string>;
+  const limit = Math.min(Math.max(parseInt(limitQ || "100", 10) || 100, 1), 500);
+  const offset = Math.max(parseInt(offsetQ || "0", 10) || 0, 0);
+
+  // One row per customer_rfq_item, LEFT JOIN the customer_po_item matched by
+  // customerRfqItemId, then LEFT JOIN the customer_po for the PO header. A
+  // single customer_rfq_item may appear on multiple POs (partial shipments),
+  // which yields one sheet row per (rfq-item × po-item) combination; an rfq
+  // item with no PO yet yields one row with null PO columns — mirroring the
+  // sheet where the PO columns were simply left blank until a PO arrived.
+  const rows = await db
+    .select({
+      rfqItemId: customerRfqItemsTable.id,
+      lineItem: customerRfqItemsTable.lineItem,
+      partNo: customerRfqItemsTable.partNo,
+      description: customerRfqItemsTable.description,
+      uom: customerRfqItemsTable.uom,
+      rfqQty: customerRfqItemsTable.qty,
+      rfqUnitPrice: customerRfqItemsTable.unitPrice,
+      customerRfqId: customerRfqsTable.id,
+      customerRfqNo: customerRfqsTable.customerRfqNo,
+      customerName: customerRfqsTable.customerName,
+      entryDate: customerRfqsTable.entryDate,
+      expiryDate: customerRfqsTable.expiryDate,
+      buyerName: customerRfqsTable.buyerName,
+      poItemId: customerPoItemsTable.id,
+      poNo: customerPosTable.customerPoNo,
+      poDate: customerPosTable.poDate,
+      poQty: customerPoItemsTable.qty,
+      poUnitPrice: customerPoItemsTable.unitPrice,
+    })
+    .from(customerRfqItemsTable)
+    .innerJoin(customerRfqsTable, eq(customerRfqItemsTable.customerRfqId, customerRfqsTable.id))
+    .leftJoin(
+      customerPoItemsTable,
+      eq(customerPoItemsTable.customerRfqItemId, customerRfqItemsTable.id),
+    )
+    .leftJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
+    .orderBy(desc(customerRfqsTable.createdAt), desc(customerRfqItemsTable.id));
+
+  let filtered = rows;
+  if (search) {
+    const s = search.toLowerCase();
+    filtered = rows.filter(
+      (r) =>
+        (r.lineItem ?? "").toLowerCase().includes(s) ||
+        (r.partNo ?? "").toLowerCase().includes(s) ||
+        (r.description ?? "").toLowerCase().includes(s) ||
+        r.customerRfqNo.toLowerCase().includes(s) ||
+        r.customerName.toLowerCase().includes(s) ||
+        (r.poNo ?? "").toLowerCase().includes(s),
+    );
+  }
+
+  const total = filtered.length;
+  const page = filtered.slice(offset, offset + limit);
+
+  res.json({
+    total,
+    limit,
+    offset,
+    rows: page.map((r) => ({
+      rfqItemId: r.rfqItemId,
+      lineItem: r.lineItem,
+      partNo: r.partNo,
+      description: r.description,
+      uom: r.uom,
+      rfqQty: formatQty(r.rfqQty),
+      rfqUnitPrice: formatQty(r.rfqUnitPrice),
+      customerRfqId: r.customerRfqId,
+      customerRfqNo: r.customerRfqNo,
+      customerName: r.customerName,
+      entryDate: r.entryDate,
+      expiryDate: r.expiryDate,
+      buyerName: r.buyerName,
+      poItemId: r.poItemId,
+      poNo: r.poNo,
+      poDate: r.poDate,
+      poQty: formatQty(r.poQty),
+      poUnitPrice: formatQty(r.poUnitPrice),
+    })),
+  });
 });
 
 // POST /customer-rfq — create a customer RFQ

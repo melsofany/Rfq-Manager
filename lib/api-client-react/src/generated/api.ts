@@ -37,6 +37,7 @@ import type {
   CustomerRfqDetail,
   CustomerRfqInput,
   CustomerRfqItem,
+  CustomerRfqSheetView,
   CustomerRfqUpdate,
   CustomerUpdate,
   DashboardStats,
@@ -56,6 +57,7 @@ import type {
   ListCustomerPosCustomerRfqs200,
   ListCustomerPosParams,
   ListCustomerRfqNumbers200,
+  ListCustomerRfqSheetViewParams,
   ListCustomerRfqsParams,
   ListCustomersParams,
   ListOffersParams,
@@ -2051,6 +2053,90 @@ export function useListCustomerRfqNumbers<TData = Awaited<ReturnType<typeof list
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListCustomerRfqNumbersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCustomerRfqSheetViewUrl = (params?: ListCustomerRfqSheetViewParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/customer-rfq/sheet-view?${stringifiedParams}` : `/api/customer-rfq/sheet-view`
+}
+
+/**
+ * @summary Flat sheet-style view (one row per customer RFQ item with joined PO columns)
+ */
+export const listCustomerRfqSheetView = async (params?: ListCustomerRfqSheetViewParams, options?: RequestInit): Promise<CustomerRfqSheetView> => {
+
+  return customFetch<CustomerRfqSheetView>(getListCustomerRfqSheetViewUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCustomerRfqSheetViewQueryKey = (params?: ListCustomerRfqSheetViewParams,) => {
+    return [
+    `/api/customer-rfq/sheet-view`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCustomerRfqSheetViewQueryOptions = <TData = Awaited<ReturnType<typeof listCustomerRfqSheetView>>, TError = ErrorType<unknown>>(params?: ListCustomerRfqSheetViewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerRfqSheetView>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCustomerRfqSheetViewQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCustomerRfqSheetView>>> = ({ signal }) => listCustomerRfqSheetView(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCustomerRfqSheetView>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCustomerRfqSheetViewQueryResult = NonNullable<Awaited<ReturnType<typeof listCustomerRfqSheetView>>>
+export type ListCustomerRfqSheetViewQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Flat sheet-style view (one row per customer RFQ item with joined PO columns)
+ */
+
+export function useListCustomerRfqSheetView<TData = Awaited<ReturnType<typeof listCustomerRfqSheetView>>, TError = ErrorType<unknown>>(
+ params?: ListCustomerRfqSheetViewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerRfqSheetView>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCustomerRfqSheetViewQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
