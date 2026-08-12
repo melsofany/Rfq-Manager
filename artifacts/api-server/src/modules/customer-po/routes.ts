@@ -48,6 +48,44 @@ function computeTotal(qty: string | null, unitPrice: string | null): string | nu
   return formatQty(String(n));
 }
 
+// Resolve customer RFQ numbers for a set of po-item rows. Returns a map of
+// customerRfqId -> customerRfqNo (only for non-null ids that exist).
+async function resolveRfqNos(
+  items: (typeof customerPoItemsTable.$inferSelect)[],
+): Promise<Record<number, string>> {
+  const ids = Array.from(
+    new Set(items.map((i) => i.customerRfqId).filter((x): x is number => x != null)),
+  );
+  if (ids.length === 0) return {};
+  const rows = await db
+    .select({ id: customerRfqsTable.id, no: customerRfqsTable.customerRfqNo })
+    .from(customerRfqsTable)
+    .where(inArray(customerRfqsTable.id, ids));
+  return Object.fromEntries(rows.map((r) => [r.id, r.no]));
+}
+
+function serializeItem(
+  i: typeof customerPoItemsTable.$inferSelect,
+  rfqNoMap: Record<number, string>,
+) {
+  return {
+    id: i.id,
+    customerPoId: i.customerPoId,
+    customerRfqId: i.customerRfqId,
+    customerRfqItemId: i.customerRfqItemId,
+    customerRfqNo: (i.customerRfqId != null ? rfqNoMap[i.customerRfqId] ?? null : null),
+    partNo: i.partNo,
+    lineItem: i.lineItem,
+    description: i.description,
+    uom: i.uom,
+    qty: formatQty(i.qty),
+    unitPrice: formatQty(i.unitPrice),
+    total: computeTotal(i.qty, i.unitPrice),
+    deliveryDate: i.deliveryDate,
+    createdAt: i.createdAt.toISOString(),
+  };
+}
+
 function serialize(
   r: typeof customerPosTable.$inferSelect,
   itemCount: number,
@@ -230,23 +268,10 @@ router.get("/customer-po/:id", requireAuth, async (req, res): Promise<void> => {
     .select()
     .from(customerPoItemsTable)
     .where(eq(customerPoItemsTable.customerPoId, id));
+  const rfqNoMap = await resolveRfqNos(items);
   res.json({
     ...serialize(po, items.length),
-    items: items.map((i) => ({
-      id: i.id,
-      customerPoId: i.customerPoId,
-      customerRfqId: i.customerRfqId,
-      customerRfqItemId: i.customerRfqItemId,
-      partNo: i.partNo,
-      lineItem: i.lineItem,
-      description: i.description,
-      uom: i.uom,
-      qty: formatQty(i.qty),
-      unitPrice: formatQty(i.unitPrice),
-      total: computeTotal(i.qty, i.unitPrice),
-      deliveryDate: i.deliveryDate,
-      createdAt: i.createdAt.toISOString(),
-    })),
+    items: items.map((i) => serializeItem(i, rfqNoMap)),
   });
 });
 
@@ -327,23 +352,10 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
     .select()
     .from(customerPoItemsTable)
     .where(eq(customerPoItemsTable.customerPoId, id));
+  const rfqNoMap = await resolveRfqNos(itemRows);
   res.json({
     ...serialize(updated, itemRows.length),
-    items: itemRows.map((i) => ({
-      id: i.id,
-      customerPoId: i.customerPoId,
-      customerRfqId: i.customerRfqId,
-      customerRfqItemId: i.customerRfqItemId,
-      partNo: i.partNo,
-      lineItem: i.lineItem,
-      description: i.description,
-      uom: i.uom,
-      qty: formatQty(i.qty),
-      unitPrice: formatQty(i.unitPrice),
-      total: computeTotal(i.qty, i.unitPrice),
-      deliveryDate: i.deliveryDate,
-      createdAt: i.createdAt.toISOString(),
-    })),
+    items: itemRows.map((i) => serializeItem(i, rfqNoMap)),
   });
 });
 

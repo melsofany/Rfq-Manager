@@ -38,6 +38,7 @@ let insertedPo: any; // base row returned by insert().returning()
 let detailRow: any | null; // the customer PO itself (bare select)
 let detailItems: any[]; // customer_po_items for a PO
 let employeeRow: { name: string } | null; // POST employee name lookup
+let rfqRows: any[]; // resolveRfqNos: select({id,no}).from(rfqs).where() → [{id, no}]
 // Tracks exact values written to customer_po_items so tests can assert links.
 const insertedItems: any[] = [];
 
@@ -88,8 +89,15 @@ const dbMock: any = {
         });
       }
       // customer-rfqs picker list: select({...}).from(rfqs).orderBy()
+      // (also serves resolveRfqNos: select({id,no}).from(rfqs).where(inArray))
       if (table === rfqsTable) {
-        return chainable([], { orderBy: vi.fn(() => chainable([])) });
+        // resolveRfqNos passes a select with `no`/`id`; return rfqRows.
+        const isRfqNoLookup = arg && typeof arg === "object" && "no" in arg;
+        const rows = isRfqNoLookup ? rfqRows : [];
+        return chainable(rows, {
+          orderBy: vi.fn(() => chainable([])),
+          where: vi.fn(() => chainable(rows)),
+        });
       }
       return chainable([], {
         where: vi.fn(() => chainable([], { limit: vi.fn(() => chainable([])) })),
@@ -161,6 +169,7 @@ beforeEach(() => {
   detailRow = null;
   detailItems = [];
   employeeRow = { name: "Tester" };
+  rfqRows = [];
   sessionState.role = undefined;
   insertedItems.length = 0;
 });
@@ -303,6 +312,7 @@ describe("GET /api/customer-po/:id", () => {
         createdAt: new Date("2025-01-03"),
       },
     ];
+    rfqRows = [{ id: 3, no: "25R010001" }];
     const res = await request(testApp).get("/api/customer-po/7");
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(7);
@@ -312,6 +322,32 @@ describe("GET /api/customer-po/:id", () => {
     expect(res.body.items[0].unitPrice).toBe("10");
     expect(res.body.items[0].total).toBe("30");
     expect(res.body.items[0].deliveryDate).toBe("2025-03-01");
+    // The linked customer RFQ number is resolved and exposed per item.
+    expect(res.body.items[0].customerRfqId).toBe(3);
+    expect(res.body.items[0].customerRfqNo).toBe("25R010001");
+  });
+
+  it("exposes customerRfqNo=null for items without an RFQ link", async () => {
+    detailRow = { ...insertedPo, customerName: "Acme" };
+    detailItems = [
+      {
+        id: 2,
+        customerPoId: 7,
+        customerRfqId: null,
+        customerRfqItemId: null,
+        partNo: "P2",
+        lineItem: "XYZ",
+        description: "",
+        uom: "pc",
+        qty: "1.0000",
+        unitPrice: "5.0000",
+        deliveryDate: null,
+        createdAt: new Date("2025-01-04"),
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-po/7");
+    expect(res.status).toBe(200);
+    expect(res.body.items[0].customerRfqNo).toBeNull();
   });
 });
 

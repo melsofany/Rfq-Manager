@@ -1984,6 +1984,9 @@ components:
           type: ["integer", "null"]
         customerRfqItemId:
           type: ["integer", "null"]
+        customerRfqNo:
+          type: ["string", "null"]
+          description: The customer RFQ number linked to this item (resolved by the server)
         partNo:
           type: ["string", "null"]
         lineItem:
