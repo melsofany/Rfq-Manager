@@ -579,6 +579,50 @@ export const ListCustomerRfqNumbersResponse = zod.object({
 
 
 /**
+ * @summary Flat sheet-style view (one row per customer RFQ item with joined PO columns)
+ */
+export const listCustomerRfqSheetViewQueryLimitDefault = 100;
+export const listCustomerRfqSheetViewQueryLimitMax = 500;
+
+export const listCustomerRfqSheetViewQueryOffsetDefault = 0;
+export const listCustomerRfqSheetViewQueryOffsetMin = 0;
+
+
+
+export const ListCustomerRfqSheetViewQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "limit": zod.coerce.number().min(1).max(listCustomerRfqSheetViewQueryLimitMax).default(listCustomerRfqSheetViewQueryLimitDefault),
+  "offset": zod.coerce.number().min(listCustomerRfqSheetViewQueryOffsetMin).default(listCustomerRfqSheetViewQueryOffsetDefault)
+})
+
+export const ListCustomerRfqSheetViewResponse = zod.object({
+  "total": zod.number(),
+  "limit": zod.number(),
+  "offset": zod.number(),
+  "rows": zod.array(zod.object({
+  "rfqItemId": zod.number().optional(),
+  "lineItem": zod.string().nullish(),
+  "partNo": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "uom": zod.string().nullish(),
+  "rfqQty": zod.string().nullish(),
+  "rfqUnitPrice": zod.string().nullish().describe('Price offered to the customer (from the customer RFQ item)'),
+  "customerRfqId": zod.number().optional(),
+  "customerRfqNo": zod.string().optional(),
+  "customerName": zod.string().optional(),
+  "entryDate": zod.string().nullish().describe('Request date (تاريخ الطلب)'),
+  "expiryDate": zod.string().nullish().describe('Request expiry date (تاريخ انتهاء الطلب)'),
+  "buyerName": zod.string().nullish().describe('Buyer \/ employee at the customer\'s company (recorded with the RFQ)'),
+  "poItemId": zod.number().nullish(),
+  "poNo": zod.string().nullish(),
+  "poDate": zod.string().nullish(),
+  "poQty": zod.string().nullish(),
+  "poUnitPrice": zod.string().nullish()
+}).describe('One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued).'))
+}).describe('Paginated flat sheet-style view (one row per customer RFQ item, with joined PO columns).')
+
+
+/**
  * @summary Get customer RFQ with items
  */
 export const GetCustomerRfqParams = zod.object({

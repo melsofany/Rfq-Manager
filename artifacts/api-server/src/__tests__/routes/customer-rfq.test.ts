@@ -22,6 +22,8 @@ const employeesTbl = { _: "employees", id: "id", name: "name" };
 const auditTable = { _: "audit" };
 const rfqItemsTbl = { _: "rfqItems", customerRfqItemId: "customerRfqItemId", partNo: "partNo", lineItem: "lineItem" };
 const offerItemsTbl = { _: "offerItems", isApproved: "isApproved" };
+const customerPoItemsTbl = { _: "customerPoItems", customerRfqItemId: "customerRfqItemId", customerPoId: "customerPoId" };
+const customerPosTbl = { _: "customerPos", customerPoNo: "customerPoNo", id: "id" };
 const tables = {
   customerRfqsTable: rfqTable,
   customerRfqItemsTable: itemsTable,
@@ -30,6 +32,8 @@ const tables = {
   auditLogTable: auditTable,
   rfqItemsTable: rfqItemsTbl,
   offerItemsTable: offerItemsTbl,
+  customerPoItemsTable: customerPoItemsTbl,
+  customerPosTable: customerPosTbl,
 };
 
 // Per-test state.
@@ -42,6 +46,8 @@ let detailItems: any[];
 // Approved supplier offer_items returned by resolveApprovedCosts (margin check).
 // Each row: { customerRfqItemId, price, taxIncluded }.
 let approvedRows: any[];
+// Sheet-view flat rows returned by GET /customer-rfq/sheet-view.
+let sheetRows: any[];
 // Employee row returned for the POST "who entered it" lookup: { name }.
 let employeeRow: any;
 // Mutable session so individual tests can flip role=admin for override tests.
@@ -89,6 +95,20 @@ const dbMock: any = {
       }
       // items list for detail (bare select).from(items).where()
       if (table === itemsTable) {
+        // sheet-view: select({...}).from(items).innerJoin(rfq).leftJoin(poItems).leftJoin(po).orderBy()
+        // returns the per-test sheetRows (already flat, multi-column). The
+        // orderBy is the terminal thenable.
+        if (arg && typeof arg === "object" && "rfqItemId" in arg) {
+          return chainable(sheetRows, {
+            innerJoin: vi.fn(() => chainable(sheetRows, {
+              leftJoin: vi.fn(() => chainable(sheetRows, {
+                leftJoin: vi.fn(() => chainable(sheetRows, {
+                  orderBy: vi.fn(() => chainable(sheetRows)),
+                })),
+              })),
+            })),
+          });
+        }
         return chainable(detailItems, {
           where: vi.fn(() => chainable(detailItems)),
         });
@@ -188,6 +208,7 @@ beforeEach(() => {
   detailRow = null;
   detailItems = [];
   approvedRows = [];
+  sheetRows = [];
   employeeRow = { name: "Tester" };
   sessionState.role = undefined;
   insertedItems.length = 0;
@@ -451,5 +472,145 @@ describe("DELETE /api/customer-rfq/:id", () => {
     detailRow = null;
     const res = await request(testApp).delete("/api/customer-rfq/999");
     expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/customer-rfq/sheet-view", () => {
+  it("returns flat rows with joined PO columns and pagination metadata", async () => {
+    sheetRows = [
+      {
+        rfqItemId: 10,
+        lineItem: "A1",
+        partNo: "P-100",
+        description: "Widget",
+        uom: "pc",
+        rfqQty: "5",
+        rfqUnitPrice: "120",
+        customerRfqId: 7,
+        customerRfqNo: "CUST-001",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: "2025-02-10",
+        buyerName: "Sam",
+        poItemId: 90,
+        poNo: "PO-55",
+        poDate: "2025-01-20",
+        poQty: "3",
+        poUnitPrice: "130",
+      },
+      {
+        rfqItemId: 11,
+        lineItem: "A2",
+        partNo: null,
+        description: "Gadget",
+        uom: null,
+        rfqQty: "2",
+        rfqUnitPrice: null,
+        customerRfqId: 7,
+        customerRfqNo: "CUST-001",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: null,
+        poItemId: null,
+        poNo: null,
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view");
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
+    expect(res.body.limit).toBe(100);
+    expect(res.body.offset).toBe(0);
+    expect(res.body.rows).toHaveLength(2);
+    expect(res.body.rows[0]).toMatchObject({
+      lineItem: "A1",
+      partNo: "P-100",
+      customerRfqNo: "CUST-001",
+      poNo: "PO-55",
+      poQty: "3",
+    });
+    // An RFQ item with no PO yet keeps null PO columns.
+    expect(res.body.rows[1].poNo).toBeNull();
+    expect(res.body.rows[1].poQty).toBeNull();
+  });
+
+  it("filters rows by the search term", async () => {
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "X1",
+        partNo: "P-A",
+        description: "Alpha",
+        uom: null,
+        rfqQty: null,
+        rfqUnitPrice: null,
+        customerRfqId: 1,
+        customerRfqNo: "CUST-A",
+        customerName: "Acme",
+        entryDate: null,
+        expiryDate: null,
+        buyerName: null,
+        poItemId: null,
+        poNo: null,
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+      {
+        rfqItemId: 2,
+        lineItem: "X2",
+        partNo: "P-B",
+        description: "Beta",
+        uom: null,
+        rfqQty: null,
+        rfqUnitPrice: null,
+        customerRfqId: 2,
+        customerRfqNo: "CUST-B",
+        customerName: "Globex",
+        entryDate: null,
+        expiryDate: null,
+        buyerName: null,
+        poItemId: null,
+        poNo: null,
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view?search=globex");
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.rows[0].customerName).toBe("Globex");
+  });
+
+  it("paginates with limit and offset", async () => {
+    sheetRows = Array.from({ length: 3 }, (_, i) => ({
+      rfqItemId: i + 1,
+      lineItem: `L${i}`,
+      partNo: null,
+      description: `Item ${i}`,
+      uom: null,
+      rfqQty: null,
+      rfqUnitPrice: null,
+      customerRfqId: 1,
+      customerRfqNo: "CUST-1",
+      customerName: "Acme",
+      entryDate: null,
+      expiryDate: null,
+      buyerName: null,
+      poItemId: null,
+      poNo: null,
+      poDate: null,
+      poQty: null,
+      poUnitPrice: null,
+    }));
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view?limit=2&offset=1");
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(3);
+    expect(res.body.rows).toHaveLength(2);
+    expect(res.body.rows[0].rfqItemId).toBe(2);
   });
 });
