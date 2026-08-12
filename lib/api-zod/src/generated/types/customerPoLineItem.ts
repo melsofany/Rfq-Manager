@@ -13,6 +13,11 @@ export interface CustomerPoLineItem {
   customerRfqId?: number | null;
   /** @nullable */
   customerRfqItemId?: number | null;
+  /**
+     * The customer RFQ number linked to this item (resolved by the server)
+     * @nullable
+     */
+  customerRfqNo?: string | null;
   /** @nullable */
   partNo?: string | null;
   /** @nullable */

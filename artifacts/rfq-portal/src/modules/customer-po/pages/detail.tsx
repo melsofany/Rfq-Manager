@@ -5,6 +5,7 @@ import {
   useGetCustomerPo,
   useUpdateCustomerPo,
   useDeleteCustomerPo,
+  useListCustomerPosCustomerRfqs,
   getGetCustomerPoQueryKey,
   getListCustomerPosQueryKey,
 } from "@workspace/api-client-react";
@@ -14,8 +15,88 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Trash2, AlertCircle, AlertTriangle, Pencil, Lock } from "lucide-react";
+import { ArrowLeft, Trash2, AlertCircle, AlertTriangle, Pencil, Lock, ChevronDown } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
+
+// Per-item combobox to pick a customer RFQ by number. Sets customerRfqId on the
+// row (and clears customerRfqItemId, since the specific rfq line link must be
+// re-established against the newly chosen RFQ).
+function RfqCellPicker({
+  rfqs,
+  rfqId,
+  rfqNo,
+  onPick,
+}: {
+  rfqs: { id: number; customerRfqNo: string; internalNo: string; customerName: string }[] | undefined;
+  rfqId: number | null;
+  rfqNo: string;
+  onPick: (rfq: { id: number; customerRfqNo: string } | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+
+  const selected = rfqs?.find((r) => r.id === rfqId);
+  const display = selected ? selected.customerRfqNo : rfqNo || filter;
+
+  const filtered = filter
+    ? (rfqs ?? [])
+        .filter(
+          (r) =>
+            r.customerRfqNo.toLowerCase().includes(filter.toLowerCase()) ||
+            r.internalNo.toLowerCase().includes(filter.toLowerCase()),
+        )
+        .slice(0, 50)
+    : (rfqs ?? []).slice(0, 50);
+
+  return (
+    <div className="relative">
+      <div className="flex">
+        <Input
+          value={display}
+          onChange={(e) => {
+            setFilter(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="—"
+          className="h-7 text-xs rounded-l-none"
+          dir="ltr"
+        />
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="border border-r-0 border-border rounded-r-md px-1 bg-muted hover:bg-muted/80 text-muted-foreground"
+        >
+          <ChevronDown size={12} />
+        </button>
+      </div>
+      {open && (
+        <ul className="absolute z-50 mt-1 w-full max-h-48 overflow-y-auto bg-popover border border-border rounded-md shadow-md text-xs">
+          {filtered.length === 0 ? (
+            <li className="px-3 py-2 text-muted-foreground">لا توجد طلبات تسعير</li>
+          ) : (
+            filtered.map((r) => (
+              <li
+                key={r.id}
+                className="px-2 py-1 cursor-pointer hover:bg-accent hover:text-accent-foreground"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onPick({ id: r.id, customerRfqNo: r.customerRfqNo });
+                  setOpen(false);
+                  setFilter("");
+                }}
+              >
+                <div className="font-mono font-medium" dir="ltr">{r.customerRfqNo}</div>
+                <div className="text-muted-foreground text-[10px]">{r.internalNo}</div>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 // Strip trailing zeros from a NUMERIC value: "3.0000" → "3", "3.5000" → "3.5".
 function formatQty(qty: unknown): string {
@@ -38,6 +119,7 @@ interface ItemRow {
   id?: number;
   customerRfqId: number | null;
   customerRfqItemId: number | null;
+  customerRfqNo: string;
   partNo: string;
   lineItem: string;
   description: string;
@@ -54,6 +136,7 @@ export default function CustomerPoDetailPage() {
   const queryClient = useQueryClient();
 
   const { data: po, isLoading } = useGetCustomerPo(id);
+  const { data: rfqOptions } = useListCustomerPosCustomerRfqs();
   const isDraft = po?.status === "draft";
 
   const [editing, setEditing] = useState(false);
@@ -110,6 +193,7 @@ export default function CustomerPoDetailPage() {
         id: i.id,
         customerRfqId: i.customerRfqId ?? null,
         customerRfqItemId: i.customerRfqItemId ?? null,
+        customerRfqNo: i.customerRfqNo ?? "",
         partNo: i.partNo ?? "",
         lineItem: i.lineItem ?? "",
         description: i.description ?? "",
@@ -129,6 +213,7 @@ export default function CustomerPoDetailPage() {
       {
         customerRfqId: null,
         customerRfqItemId: null,
+        customerRfqNo: "",
         partNo: "",
         lineItem: "",
         description: "",
@@ -298,12 +383,13 @@ export default function CustomerPoDetailPage() {
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">سعر الوحدة</th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الإجمالي</th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">تاريخ التسليم</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">طلب التسعير</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(po.items ?? []).length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="px-4 py-6 text-center text-muted-foreground text-sm">
+                        <td colSpan={10} className="px-4 py-6 text-center text-muted-foreground text-sm">
                           لا توجد بنود
                         </td>
                       </tr>
@@ -319,6 +405,15 @@ export default function CustomerPoDetailPage() {
                           <td className="px-4 py-2.5 text-xs" dir="ltr">{formatQty(it.unitPrice) || "—"}</td>
                           <td className="px-4 py-2.5 text-xs" dir="ltr">{formatQty(it.total) || "—"}</td>
                           <td className="px-4 py-2.5 text-xs" dir="ltr">{it.deliveryDate ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs" dir="ltr">
+                            {it.customerRfqNo ? (
+                              <Link href={`/customer-rfq/${it.customerRfqId}`}>
+                                <a className="text-primary hover:underline font-mono">{it.customerRfqNo}</a>
+                              </Link>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -326,7 +421,7 @@ export default function CustomerPoDetailPage() {
                   {(po.items ?? []).length > 0 && (
                     <tfoot>
                       <tr className="bg-muted/20 border-t-2 border-border font-semibold">
-                        <td colSpan={7} className="px-4 py-2.5 text-left text-xs text-muted-foreground">
+                        <td colSpan={8} className="px-4 py-2.5 text-left text-xs text-muted-foreground">
                           الإجمالي الكلي
                         </td>
                         <td className="px-4 py-2.5 text-sm" dir="ltr">{grandTotalStr || "—"}</td>
@@ -482,6 +577,7 @@ export default function CustomerPoDetailPage() {
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-24">الكمية</th>
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-24">سعر الوحدة</th>
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-32">تاريخ التسليم</th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-36">طلب التسعير</th>
                       <th className="px-3 py-2 w-8" />
                     </tr>
                   </thead>
@@ -551,6 +647,20 @@ export default function CustomerPoDetailPage() {
                           </td>
                           <td className="px-2 py-1.5 text-xs text-center" dir="ltr">
                             {total || "—"}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <RfqCellPicker
+                              rfqs={rfqOptions?.rfqs}
+                              rfqId={row.customerRfqId}
+                              rfqNo={row.customerRfqNo}
+                              onPick={(rfq) =>
+                                updateItem(i, {
+                                  customerRfqId: rfq ? rfq.id : null,
+                                  customerRfqNo: rfq ? rfq.customerRfqNo : "",
+                                  customerRfqItemId: null,
+                                })
+                              }
+                            />
                           </td>
                           <td className="px-2 py-1.5 text-center">
                             {items.length > 1 && (
