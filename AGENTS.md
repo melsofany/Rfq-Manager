@@ -74,6 +74,14 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 ## Workflow caveat (learned the hard way)
 - **Commit before switching branches / `git reset --hard`.** Uncommitted working-tree edits are destroyed by `git reset --hard` (and by `git checkout` if it touches overlapping files). When doing a multi-edit feature, commit incrementally on the feature branch BEFORE fetching/resetting against origin, or you lose all uncommitted work irrecoverably (git never staged the blobs).
 
+## Purchase-order items from customer POs (PR #20)
+- On `/purchase-orders/new`, the PO-number lookup gained a **source toggle** (radio): `Google Sheets` (default, unchanged) | `أوامر شراء العملاء` (new).
+- New backend endpoints in `modules/po/routes.ts` (BEHIND `requireAuth`):
+  - `GET /api/po/customer-po-numbers` → `{ poNumbers: [{value,label,internalNo,customerName,status}] }` for the combobox (rich two-line suggestions). Reads `customer_pos` ordered by `createdAt DESC`.
+  - `GET /api/po/customer-po-lookup/:poNo` → finds a `customer_po` by `ilike(customerPoNo, poNo)` (case-insensitive exact) and returns its `customer_po_items` in the **SheetItem shape** (`itemId/lineItem/partNo/description/uom/qty/referencePrice/poNo`) so the existing frontend mapping (`SheetItem[] → PoItemRow[]`) works unchanged. `referencePrice` = stored `unit_price`.
+- Frontend (`modules/po/pages/new.tsx`): `source` state ("sheet"|"customer-po"); `useCustomerPoNumbers` hook; `PoNumberCombobox` accepts optional `richSuggestions`; when source="customer-po" the lookup hits `customer-po-lookup` and **pre-fills `unitPrice`** from `referencePrice`. Switching source clears items. Google Sheets path (`/api/po/sheets/po-numbers` + `/api/po/lookup/:poNo` → `lookupPoFromSheet`) is **untouched**.
+- Imports in `po/routes.ts` extended with `customerPosTable`/`customerPoItemsTable` + `ilike`.
+
 ## Customer PO module (PR #17 + #18)
 - DB: `customer_pos` (id, internalPoNo, customerPoNo, customerId→customers, customerName, poDate, buyerName, notes, employeeId, employeeName, status, createdAt, updatedAt) + `customer_po_items` (id, customerPoId→customer_pos ON DELETE CASCADE, customerRfqId, customerRfqItemId, partNo, lineItem, description, uom, qty NUMERIC(15,4), unitPrice NUMERIC(15,4), deliveryDate, createdAt). Tables created via `init-db.ts`.
 - API: `modules/customer-po/routes.ts` — `GET/POST /customer-po`, `GET/PATCH/DELETE /customer-po/:id`. Mounted via `modules/customer-po/index.ts` → `routes/index.ts`. POST auto-generates `internalPoNo` (`CPO-YYYY-NNNNNN`), records `employeeId`/`employeeName` from `req.session`. `customerId`/`customerName` are explicit input (POST 400s without a customerName). Customer name is stored, NOT derived from a linked RFQ — works for POs without an RFQ number. `lineItem` stripped. PATCH replaces items. `status:sent` finalizes (immutable after). `GET /customer-po/:id` returns items with `unitPrice`/`total` (server-computed).
