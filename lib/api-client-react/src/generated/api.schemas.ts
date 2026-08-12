@@ -1226,7 +1226,28 @@ export type ListCustomerRfqNumbers200 = {
 };
 
 export type ListCustomerRfqSheetViewParams = {
+/**
+ * Global OR search across the main text columns
+ */
 search?: string;
+/**
+ * Per-column "contains" filter (Excel-style)
+ */
+lineItem?: string;
+partNo?: string;
+description?: string;
+uom?: string;
+customerRfqNo?: string;
+customerName?: string;
+entryDate?: string;
+expiryDate?: string;
+buyerName?: string;
+poNo?: string;
+poDate?: string;
+rfqQty?: string;
+rfqUnitPrice?: string;
+poQty?: string;
+poUnitPrice?: string;
 /**
  * @minimum 1
  * @maximum 500

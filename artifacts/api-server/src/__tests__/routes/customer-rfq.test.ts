@@ -613,4 +613,56 @@ describe("GET /api/customer-rfq/sheet-view", () => {
     expect(res.body.rows).toHaveLength(2);
     expect(res.body.rows[0].rfqItemId).toBe(2);
   });
+
+  it("applies per-column contains filters (AND between columns)", async () => {
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "A1",
+        partNo: "P-100",
+        description: "Widget",
+        uom: "pc",
+        rfqQty: "5",
+        rfqUnitPrice: "120",
+        customerRfqId: 1,
+        customerRfqNo: "CUST-001",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: null,
+        poNo: "PO-55",
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+      {
+        rfqItemId: 2,
+        lineItem: "A2",
+        partNo: "P-200",
+        description: "Widget Pro",
+        uom: "set",
+        rfqQty: "10",
+        rfqUnitPrice: "200",
+        customerRfqId: 2,
+        customerRfqNo: "CUST-002",
+        customerName: "Globex",
+        entryDate: "2025-03-10",
+        expiryDate: null,
+        buyerName: "Alex",
+        poItemId: null,
+        poNo: null,
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+    ];
+    // Filter customerName ~ "acme" (case-insensitive) AND poNo ~ "55".
+    const res = await request(testApp).get(
+      "/api/customer-rfq/sheet-view?customerName=acme&poNo=55",
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.rows[0].rfqItemId).toBe(1);
+  });
 });

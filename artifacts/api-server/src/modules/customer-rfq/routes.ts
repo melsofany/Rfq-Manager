@@ -200,7 +200,26 @@ router.get("/customer-rfq/numbers", requireAuth, async (_req, res): Promise<void
 //
 // Query params: ?search=&limit=&offset=
 router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<void> => {
-  const { search, limit: limitQ, offset: offsetQ } = req.query as Record<string, string>;
+  const {
+    search,
+    limit: limitQ,
+    offset: offsetQ,
+    lineItem,
+    partNo,
+    description,
+    uom,
+    customerRfqNo,
+    customerName,
+    entryDate,
+    expiryDate,
+    buyerName,
+    poNo,
+    poDate,
+    rfqQty,
+    rfqUnitPrice,
+    poQty,
+    poUnitPrice,
+  } = req.query as Record<string, string>;
   const limit = Math.min(Math.max(parseInt(limitQ || "100", 10) || 100, 1), 500);
   const offset = Math.max(parseInt(offsetQ || "0", 10) || 0, 0);
 
@@ -241,9 +260,10 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
     .orderBy(desc(customerRfqsTable.createdAt), desc(customerRfqItemsTable.id));
 
   let filtered = rows;
+  // Global OR search across the main text columns.
   if (search) {
     const s = search.toLowerCase();
-    filtered = rows.filter(
+    filtered = filtered.filter(
       (r) =>
         (r.lineItem ?? "").toLowerCase().includes(s) ||
         (r.partNo ?? "").toLowerCase().includes(s) ||
@@ -253,6 +273,30 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
         (r.poNo ?? "").toLowerCase().includes(s),
     );
   }
+
+  // Per-column "contains" filters (Excel-style autofilter). Each non-empty
+  // value narrows its column independently (AND between columns). Compared
+  // case-insensitively against the raw value (numbers as their string form).
+  const colFilter = (raw: string | null, term: string | undefined) =>
+    term ? (raw ?? "").toLowerCase().includes(term.toLowerCase()) : true;
+  filtered = filtered.filter(
+    (r) =>
+      colFilter(r.lineItem, lineItem) &&
+      colFilter(r.partNo, partNo) &&
+      colFilter(r.description, description) &&
+      colFilter(r.uom, uom) &&
+      colFilter(r.customerRfqNo, customerRfqNo) &&
+      colFilter(r.customerName, customerName) &&
+      colFilter(r.entryDate, entryDate) &&
+      colFilter(r.expiryDate, expiryDate) &&
+      colFilter(r.buyerName, buyerName) &&
+      colFilter(r.poNo, poNo) &&
+      colFilter(r.poDate, poDate) &&
+      colFilter(r.rfqQty, rfqQty) &&
+      colFilter(r.rfqUnitPrice, rfqUnitPrice) &&
+      colFilter(r.poQty, poQty) &&
+      colFilter(r.poUnitPrice, poUnitPrice),
+  );
 
   const total = filtered.length;
   const page = filtered.slice(offset, offset + limit);

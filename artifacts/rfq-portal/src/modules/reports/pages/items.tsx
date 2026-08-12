@@ -24,6 +24,7 @@ import {
   EyeOff,
   Table,
   ListFilter,
+  Filter,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -327,10 +328,25 @@ function SheetViewTab() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
+  // Per-column "contains" filters (Excel-style autofilter). Keys mirror the
+  // sheet-view query params; an empty/undefined value means "no filter".
+  const [colFilters, setColFilters] = useState<Record<string, string>>({});
+
+  const activeFilters = Object.fromEntries(
+    Object.entries(colFilters).filter(([, v]) => v.trim() !== ""),
+  );
+  const hasColFilters = Object.keys(activeFilters).length > 0;
+
+  const params = {
+    search: search || undefined,
+    limit: SHEET_PAGE_SIZE,
+    offset,
+    ...activeFilters,
+  };
 
   const { data, isLoading, isFetching, isError } = useListCustomerRfqSheetView(
-    { search: search || undefined, limit: SHEET_PAGE_SIZE, offset },
-    { query: { queryKey: getListCustomerRfqSheetViewQueryKey({ search: search || undefined, limit: SHEET_PAGE_SIZE, offset }) } },
+    params,
+    { query: { queryKey: getListCustomerRfqSheetViewQueryKey(params) } },
   );
 
   const rows = data?.rows ?? [];
@@ -347,6 +363,16 @@ function SheetViewTab() {
   const resetSearch = () => {
     setSearchInput("");
     setSearch("");
+    setOffset(0);
+  };
+
+  const updateColFilter = (col: string, value: string) => {
+    setOffset(0);
+    setColFilters((prev) => ({ ...prev, [col]: value }));
+  };
+
+  const clearColFilters = () => {
+    setColFilters({});
     setOffset(0);
   };
 
@@ -379,6 +405,12 @@ function SheetViewTab() {
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           {total.toLocaleString("en-US")} صف
         </span>
+        {hasColFilters && (
+          <Button type="button" variant="ghost" size="sm" onClick={clearColFilters}>
+            <Filter size={13} />
+            مسح الفلاتر
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -402,6 +434,52 @@ function SheetViewTab() {
                 <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">تاريخ أمر الشراء</th>
                 <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">الكمية</th>
                 <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap">السعر</th>
+              </tr>
+              {/* Per-column filter row (Excel-style autofilter "contains") */}
+              <tr className="bg-muted/20 border-b border-border">
+                {[
+                  ["lineItem", true],
+                  ["partNo", true],
+                  ["description", true],
+                  ["uom", true],
+                  ["customerRfqNo", true],
+                  ["entryDate", true],
+                  ["rfqQty", true],
+                  ["rfqUnitPrice", true],
+                  ["expiryDate", true],
+                  ["customerName", true],
+                  ["buyerName", true],
+                  ["poNo", false],
+                  ["poDate", true],
+                  ["poQty", true],
+                  ["poUnitPrice", true],
+                ].map(([col, rightBorder]) => (
+                  <th
+                    key={col as string}
+                    className={cn(
+                      "px-1 py-1",
+                      rightBorder === false && "border-r border-border/60",
+                    )}
+                  >
+                    <div className="relative">
+                      <Filter
+                        size={11}
+                        className={cn(
+                          "absolute top-1/2 -translate-y-1/2 left-1 pointer-events-none",
+                          colFilters[col as string]?.trim()
+                            ? "text-primary"
+                            : "text-muted-foreground/40",
+                        )}
+                      />
+                      <input
+                        value={colFilters[col as string] ?? ""}
+                        onChange={(e) => updateColFilter(col as string, e.target.value)}
+                        placeholder="…"
+                        className="w-full min-w-[60px] bg-background border border-border/60 rounded px-1 py-0.5 pl-4 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
+                      />
+                    </div>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
