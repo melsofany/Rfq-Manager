@@ -529,50 +529,50 @@ paths:
           schema:
             type: string
           description: Global OR search across the main text columns
-        - name: lineItem
+        - name: lineItemExclude
           in: query
           schema: { type: string }
-          description: Per-column "contains" filter (Excel-style)
-        - name: partNo
+          description: Comma-separated values to HIDE from this column (Excel autofilter)
+        - name: partNoExclude
           in: query
           schema: { type: string }
-        - name: description
+        - name: descriptionExclude
           in: query
           schema: { type: string }
-        - name: uom
+        - name: uomExclude
           in: query
           schema: { type: string }
-        - name: customerRfqNo
+        - name: customerRfqNoExclude
           in: query
           schema: { type: string }
-        - name: customerName
+        - name: customerNameExclude
           in: query
           schema: { type: string }
-        - name: entryDate
+        - name: entryDateExclude
           in: query
           schema: { type: string }
-        - name: expiryDate
+        - name: expiryDateExclude
           in: query
           schema: { type: string }
-        - name: buyerName
+        - name: buyerNameExclude
           in: query
           schema: { type: string }
-        - name: poNo
+        - name: poNoExclude
           in: query
           schema: { type: string }
-        - name: poDate
+        - name: poDateExclude
           in: query
           schema: { type: string }
-        - name: rfqQty
+        - name: rfqQtyExclude
           in: query
           schema: { type: string }
-        - name: rfqUnitPrice
+        - name: rfqUnitPriceExclude
           in: query
           schema: { type: string }
-        - name: poQty
+        - name: poQtyExclude
           in: query
           schema: { type: string }
-        - name: poUnitPrice
+        - name: poUnitPriceExclude
           in: query
           schema: { type: string }
         - name: limit
@@ -595,6 +595,76 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CustomerRfqSheetView"
+  /customer-rfq/sheet-view/facets:
+    get:
+      operationId: listCustomerRfqSheetViewFacets
+      tags: [customer-rfq]
+      summary: Distinct values (with counts) for one sheet-view column, after applying other columns' filters
+      parameters:
+        - name: column
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [lineItem, partNo, description, uom, customerRfqNo, customerName, entryDate, expiryDate, buyerName, poNo, poDate, rfqQty, rfqUnitPrice, poQty, poUnitPrice]
+          description: The column to compute distinct values for
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: lineItemExclude
+          in: query
+          schema: { type: string }
+        - name: partNoExclude
+          in: query
+          schema: { type: string }
+        - name: descriptionExclude
+          in: query
+          schema: { type: string }
+        - name: uomExclude
+          in: query
+          schema: { type: string }
+        - name: customerRfqNoExclude
+          in: query
+          schema: { type: string }
+        - name: customerNameExclude
+          in: query
+          schema: { type: string }
+        - name: entryDateExclude
+          in: query
+          schema: { type: string }
+        - name: expiryDateExclude
+          in: query
+          schema: { type: string }
+        - name: buyerNameExclude
+          in: query
+          schema: { type: string }
+        - name: poNoExclude
+          in: query
+          schema: { type: string }
+        - name: poDateExclude
+          in: query
+          schema: { type: string }
+        - name: rfqQtyExclude
+          in: query
+          schema: { type: string }
+        - name: rfqUnitPriceExclude
+          in: query
+          schema: { type: string }
+        - name: poQtyExclude
+          in: query
+          schema: { type: string }
+        - name: poUnitPriceExclude
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Distinct values with counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerRfqSheetFacets"
+        "400":
+          description: Invalid or missing column
 
   /customer-rfq/{id}:
     get:
@@ -1885,6 +1955,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CustomerRfqSheetRow"
+    CustomerRfqSheetFacetValue:
+      type: object
+      description: A distinct value for a sheet-view column with its occurrence count.
+      required: [value, count]
+      properties:
+        value:
+          type: string
+          description: The distinct cell value (empty string for NULL/blank).
+        count:
+          type: integer
+    CustomerRfqSheetFacets:
+      type: object
+      description: Distinct values (with counts) for one sheet-view column, computed after applying other columns' filters.
+      required: [column, values]
+      properties:
+        column:
+          type: string
+        values:
+          type: array
+          items:
+            $ref: "#/components/schemas/CustomerRfqSheetFacetValue"
 
     CustomerRfq:
       type: object

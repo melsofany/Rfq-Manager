@@ -6,8 +6,15 @@ import {
   getSearchItemsQueryKey,
   useListCustomerRfqSheetView,
   getListCustomerRfqSheetViewQueryKey,
+  useListCustomerRfqSheetViewFacets,
+  getListCustomerRfqSheetViewFacetsQueryKey,
 } from "@workspace/api-client-react";
-import type { ItemHistory, ItemSupplierResponse, CustomerRfqSheetRow } from "@workspace/api-client-react";
+import type {
+  ItemHistory,
+  ItemSupplierResponse,
+  CustomerRfqSheetRow,
+  CustomerRfqSheetFacetValue,
+} from "@workspace/api-client-react";
 import {
   Search,
   Package,
@@ -25,11 +32,15 @@ import {
   Table,
   ListFilter,
   Filter,
+  X,
+  Search as SearchIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -324,24 +335,179 @@ function cell(v: string | null | undefined) {
   return v;
 }
 
+const MAX_FACET_ROWS = 500;
+
+// A column header with an Excel-style autofilter dropdown. Clicking the funnel
+// icon opens a popover listing the distinct values that could still appear in
+// this column given the OTHER columns' filters, each with a checkbox. Uncheck a
+// value to hide its rows. A search box narrows the list (Excel "search" within
+// the filter dropdown) so you can find and toggle the item you need even with
+// thousands of distinct values.
+function FilterHeader({
+  col,
+  label,
+  excludes,
+  facetParams: facetParamsProp,
+  onToggle,
+  onSelectAll,
+  onClear,
+  onClearColumn,
+}: {
+  col: string;
+  label: string;
+  excludes: Set<string>;
+  facetParams: Record<string, string | undefined>;
+  onToggle: (value: string) => void;
+  onSelectAll: (values: string[]) => void;
+  onClear: () => void;
+  onClearColumn: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [facetSearch, setFacetSearch] = useState("");
+  const facetParams = { column: col as never, ...facetParamsProp };
+  const { data, isLoading } = useListCustomerRfqSheetViewFacets(facetParams, {
+    query: { enabled: open, queryKey: getListCustomerRfqSheetViewFacetsQueryKey(facetParams) },
+  });
+  const values: CustomerRfqSheetFacetValue[] = data?.values ?? [];
+  const filteredValues = facetSearch
+    ? values.filter((v) => v.value.toLowerCase().includes(facetSearch.toLowerCase()))
+    : values;
+  const shown = filteredValues.slice(0, MAX_FACET_ROWS);
+  const allChecked = excludes.size === 0;
+  // "Select all" currently visible (i.e. none of the visible values excluded).
+  const visibleAllChecked =
+    excludes.size === 0 || shown.every((v) => !excludes.has(v.value));
+
+  return (
+    <div className="inline-flex items-center gap-1">
+      <span className="truncate">{label}</span>
+      <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setFacetSearch(""); }}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={`فلتر ${label}`}
+            className={cn(
+              "inline-flex items-center justify-center rounded p-0.5 hover:bg-accent",
+              excludes.size > 0 && "text-primary",
+            )}
+          >
+            <Filter size={12} />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          sideOffset={2}
+          className="w-64 p-0"
+          side="bottom"
+        >
+          <div className="border-b border-border p-2">
+            <div className="relative">
+              <SearchIcon
+                size={12}
+                className="absolute top-1/2 -translate-y-1/2 left-2 text-muted-foreground pointer-events-none"
+              />
+              <input
+                value={facetSearch}
+                onChange={(e) => setFacetSearch(e.target.value)}
+                placeholder="بحث في القيم…"
+                className="w-full bg-background border border-border rounded pl-6 pr-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary/40"
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => onSelectAll(shown.map((v) => v.value))}
+                className="text-[11px] text-primary hover:underline"
+                disabled={visibleAllChecked}
+              >
+                تحديد الكل
+              </button>
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-[11px] text-muted-foreground hover:underline"
+                disabled={excludes.size === 0}
+              >
+                مسح الفلتر
+              </button>
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            {isLoading ? (
+              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+                جارٍ التحميل…
+              </div>
+            ) : shown.length === 0 ? (
+              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+                لا توجد قيم
+              </div>
+            ) : (
+              shown.map((v) => {
+                const checked = !excludes.has(v.value);
+                const display = v.value === "" ? <span className="text-muted-foreground">(فارغ)</span> : v.value;
+                return (
+                  <label
+                    key={v.value || "__blank__"}
+                    className="flex items-center gap-2 px-2 py-1 hover:bg-accent cursor-pointer text-xs"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => onToggle(v.value)}
+                    />
+                    <span className="flex-1 truncate" title={v.value}>{display}</span>
+                    <span className="text-[10px] text-muted-foreground/70">{v.count}</span>
+                  </label>
+                );
+              })
+            )}
+            {filteredValues.length > MAX_FACET_ROWS && (
+              <div className="px-2 py-1 text-[10px] text-muted-foreground/70 border-t border-border">
+                تُعرض أول {MAX_FACET_ROWS} من {filteredValues.length} — استخدم البحث للوصول للباقي
+              </div>
+            )}
+          </div>
+          <div className="border-t border-border p-2 flex justify-between">
+            <button
+              type="button"
+              onClick={onClearColumn}
+              className="text-[11px] text-destructive hover:underline"
+            >
+              مسح العمود
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-[11px] font-medium hover:underline"
+            >
+              تم
+            </button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 function SheetViewTab() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  // Per-column "contains" filters (Excel-style autofilter). Keys mirror the
-  // sheet-view query params; an empty/undefined value means "no filter".
-  const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  // Excel-style autofilter: per-column EXCLUDE set. A value in the set is
+  // hidden from the table. Empty set = show all (no filter). The facets
+  // endpoint lists the values that could still appear given the OTHER columns.
+  const [excludes, setExcludes] = useState<Record<string, Set<string>>>({});
 
-  const activeFilters = Object.fromEntries(
-    Object.entries(colFilters).filter(([, v]) => v.trim() !== ""),
+  const activeExcludes = Object.fromEntries(
+    Object.entries(excludes)
+      .filter(([, s]) => s.size > 0)
+      .map(([k, s]) => [`${k}Exclude`, [...s].join(",")]),
   );
-  const hasColFilters = Object.keys(activeFilters).length > 0;
+  const hasColFilters = Object.keys(activeExcludes).length > 0;
 
   const params = {
     search: search || undefined,
     limit: SHEET_PAGE_SIZE,
     offset,
-    ...activeFilters,
+    ...activeExcludes,
   };
 
   const { data, isLoading, isFetching, isError } = useListCustomerRfqSheetView(
@@ -366,13 +532,32 @@ function SheetViewTab() {
     setOffset(0);
   };
 
-  const updateColFilter = (col: string, value: string) => {
+  const toggleExclude = (col: string, value: string) => {
     setOffset(0);
-    setColFilters((prev) => ({ ...prev, [col]: value }));
+    setExcludes((prev) => {
+      const set = new Set(prev[col]);
+      if (set.has(value)) set.delete(value);
+      else set.add(value);
+      return { ...prev, [col]: set };
+    });
+  };
+
+  const setColumnExcludes = (col: string, values: string[]) => {
+    setOffset(0);
+    setExcludes((prev) => ({ ...prev, [col]: new Set(values) }));
+  };
+
+  const clearColumn = (col: string) => {
+    setOffset(0);
+    setExcludes((prev) => {
+      const next = { ...prev };
+      delete next[col];
+      return next;
+    });
   };
 
   const clearColFilters = () => {
-    setColFilters({});
+    setExcludes({});
     setOffset(0);
   };
 
@@ -419,65 +604,43 @@ function SheetViewTab() {
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="bg-muted/60 border-b border-border text-right">
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">Line Item</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">Part No</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium min-w-[180px] bg-muted/60">التوصيف</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">UOM</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">طلب التسعير</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">تاريخ الطلب</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">الكمية</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">السعر للعميل</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">انتهاء الطلب</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">العميل</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">المشتري</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60 border-r border-border/60">رقم أمر الشراء</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">تاريخ أمر الشراء</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">الكمية</th>
-                <th className="px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60">السعر</th>
-              </tr>
-              {/* Per-column filter row (Excel-style autofilter "contains") */}
-              <tr className="bg-muted/30 border-b border-border">
-                {[
-                  ["lineItem", true],
-                  ["partNo", true],
-                  ["description", true],
-                  ["uom", true],
-                  ["customerRfqNo", true],
-                  ["entryDate", true],
-                  ["rfqQty", true],
-                  ["rfqUnitPrice", true],
-                  ["expiryDate", true],
-                  ["customerName", true],
-                  ["buyerName", true],
-                  ["poNo", false],
-                  ["poDate", true],
-                  ["poQty", true],
-                  ["poUnitPrice", true],
-                ].map(([col, rightBorder]) => (
+                {([
+                  ["lineItem", "Line Item"],
+                  ["partNo", "Part No"],
+                  ["description", "التوصيف"],
+                  ["uom", "UOM"],
+                  ["customerRfqNo", "طلب التسعير"],
+                  ["entryDate", "تاريخ الطلب"],
+                  ["rfqQty", "الكمية"],
+                  ["rfqUnitPrice", "السعر للعميل"],
+                  ["expiryDate", "انتهاء الطلب"],
+                  ["customerName", "العميل"],
+                  ["buyerName", "المشتري"],
+                  ["poNo", "رقم أمر الشراء"],
+                  ["poDate", "تاريخ أمر الشراء"],
+                  ["poQty", "الكمية"],
+                  ["poUnitPrice", "السعر"],
+                ] as const).map(([col, label]) => (
                   <th
-                    key={col as string}
+                    key={col}
                     className={cn(
-                      "px-1 py-1 bg-muted/30",
-                      rightBorder === false && "border-r border-border/60",
+                      "px-2 py-2 text-muted-foreground font-medium whitespace-nowrap bg-muted/60",
+                      col === "poNo" && "border-r border-border/60",
                     )}
                   >
-                    <div className="relative">
-                      <Filter
-                        size={11}
-                        className={cn(
-                          "absolute top-1/2 -translate-y-1/2 left-1 pointer-events-none",
-                          colFilters[col as string]?.trim()
-                            ? "text-primary"
-                            : "text-muted-foreground/40",
-                        )}
-                      />
-                      <input
-                        value={colFilters[col as string] ?? ""}
-                        onChange={(e) => updateColFilter(col as string, e.target.value)}
-                        placeholder="…"
-                        className="w-full min-w-[60px] bg-background border border-border/60 rounded px-1 py-0.5 pl-4 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
-                      />
-                    </div>
+                    <FilterHeader
+                      col={col}
+                      label={label}
+                      excludes={excludes[col] ?? new Set()}
+                      facetParams={activeExcludes}
+                      onToggle={(v) => toggleExclude(col, v)}
+                      onSelectAll={(vals) => setColumnExcludes(
+                        col,
+                        [...(excludes[col] ?? new Set())].filter((v) => !vals.includes(v)),
+                      )}
+                      onClear={() => clearColumn(col)}
+                      onClearColumn={() => clearColumn(col)}
+                    />
                   </th>
                 ))}
               </tr>
