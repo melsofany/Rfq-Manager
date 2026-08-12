@@ -590,7 +590,22 @@ export const listCustomerRfqSheetViewQueryOffsetMin = 0;
 
 
 export const ListCustomerRfqSheetViewQueryParams = zod.object({
-  "search": zod.coerce.string().optional(),
+  "search": zod.coerce.string().optional().describe('Global OR search across the main text columns'),
+  "lineItem": zod.coerce.string().optional().describe('Per-column \"contains\" filter (Excel-style)'),
+  "partNo": zod.coerce.string().optional(),
+  "description": zod.coerce.string().optional(),
+  "uom": zod.coerce.string().optional(),
+  "customerRfqNo": zod.coerce.string().optional(),
+  "customerName": zod.coerce.string().optional(),
+  "entryDate": zod.coerce.string().optional(),
+  "expiryDate": zod.coerce.string().optional(),
+  "buyerName": zod.coerce.string().optional(),
+  "poNo": zod.coerce.string().optional(),
+  "poDate": zod.coerce.string().optional(),
+  "rfqQty": zod.coerce.string().optional(),
+  "rfqUnitPrice": zod.coerce.string().optional(),
+  "poQty": zod.coerce.string().optional(),
+  "poUnitPrice": zod.coerce.string().optional(),
   "limit": zod.coerce.number().min(1).max(listCustomerRfqSheetViewQueryLimitMax).default(listCustomerRfqSheetViewQueryLimitDefault),
   "offset": zod.coerce.number().min(listCustomerRfqSheetViewQueryOffsetMin).default(listCustomerRfqSheetViewQueryOffsetDefault)
 })

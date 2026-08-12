@@ -528,6 +528,53 @@ paths:
           in: query
           schema:
             type: string
+          description: Global OR search across the main text columns
+        - name: lineItem
+          in: query
+          schema: { type: string }
+          description: Per-column "contains" filter (Excel-style)
+        - name: partNo
+          in: query
+          schema: { type: string }
+        - name: description
+          in: query
+          schema: { type: string }
+        - name: uom
+          in: query
+          schema: { type: string }
+        - name: customerRfqNo
+          in: query
+          schema: { type: string }
+        - name: customerName
+          in: query
+          schema: { type: string }
+        - name: entryDate
+          in: query
+          schema: { type: string }
+        - name: expiryDate
+          in: query
+          schema: { type: string }
+        - name: buyerName
+          in: query
+          schema: { type: string }
+        - name: poNo
+          in: query
+          schema: { type: string }
+        - name: poDate
+          in: query
+          schema: { type: string }
+        - name: rfqQty
+          in: query
+          schema: { type: string }
+        - name: rfqUnitPrice
+          in: query
+          schema: { type: string }
+        - name: poQty
+          in: query
+          schema: { type: string }
+        - name: poUnitPrice
+          in: query
+          schema: { type: string }
         - name: limit
           in: query
           schema:
