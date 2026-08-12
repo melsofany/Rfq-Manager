@@ -806,7 +806,7 @@ export default function ItemsPage() {
           <p className="text-muted-foreground text-sm mt-0.5">
             {tab === "search"
               ? "Search for any item by description, part number, or line item — see the full RFQ history and all supplier responses."
-              : "عرض بنفس شكل الشيت — كل بند طلب تسعير في صف واحد مع أعمدة أمر الشراء المقابل إن وُجد. أي بيانات مستقبليه تُضاف تظهر هنا تلقائيًا."}
+              : "سجل مسطّح يعرض كل بند طلب تسعير في صف واحد مع أعمدة أمر الشراء المقابل إن وُجد. أي بيانات مستقبليه تُضاف تظهر هنا تلقائيًا."}
           </p>
         </div>
 
@@ -834,7 +834,7 @@ export default function ItemsPage() {
             )}
           >
             <Table size={15} />
-            عرض الشيت
+            سجل البنود والطلبات
           </button>
         </div>
 
