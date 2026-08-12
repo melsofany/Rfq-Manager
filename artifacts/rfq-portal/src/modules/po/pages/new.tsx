@@ -31,6 +31,8 @@ interface SheetItem {
   poNo: string;
 }
 
+type PoSource = "sheet" | "customer-po";
+
 function useSheetPoNumbers() {
   return useQuery<{ poNumbers: string[] }>({
     queryKey: ["sheet-po-numbers"],
@@ -43,20 +45,47 @@ function useSheetPoNumbers() {
   });
 }
 
+interface CustomerPoSuggestion {
+  value: string;
+  label: string;
+  internalNo: string;
+  customerName: string | null;
+  status: string;
+}
+
+function useCustomerPoNumbers() {
+  return useQuery<{ poNumbers: CustomerPoSuggestion[] }>({
+    queryKey: ["customer-po-numbers"],
+    queryFn: async () => {
+      const res = await fetch("/api/po/customer-po-numbers", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch customer PO numbers");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 function PoNumberCombobox({
   value,
   onChange,
   suggestions,
+  richSuggestions,
 }: {
   value: string;
   onChange: (v: string) => void;
   suggestions: string[];
+  richSuggestions?: CustomerPoSuggestion[];
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState(value);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const filtered = filter
+    ? (richSuggestions ?? [])
+        .filter((s) => s.value.toLowerCase().includes(filter.toLowerCase()))
+        .slice(0, 50)
+    : (richSuggestions ?? []).slice(0, 50);
+  const plainFiltered = filter
     ? suggestions.filter((s) => s.toLowerCase().includes(filter.toLowerCase())).slice(0, 50)
     : suggestions.slice(0, 50);
 
@@ -97,9 +126,32 @@ function PoNumberCombobox({
           <ChevronDown size={14} />
         </button>
       </div>
-      {open && filtered.length > 0 && (
+      {open && richSuggestions && richSuggestions.length > 0 && (
+        <ul className="absolute z-50 mt-1 w-full max-h-60 overflow-y-auto bg-popover border border-border rounded-md shadow-md text-sm">
+          {filtered.map((s) => (
+            <li
+              key={s.value + s.internalNo}
+              className="px-3 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(s.value);
+                setFilter(s.value);
+                setOpen(false);
+              }}
+            >
+              <div className="font-medium" dir="ltr">{s.value}</div>
+              <div className="text-xs text-muted-foreground">
+                {s.internalNo}
+                {s.customerName ? ` · ${s.customerName}` : ""}
+                {s.status ? ` · ${s.status}` : ""}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && !richSuggestions && plainFiltered.length > 0 && (
         <ul className="absolute z-50 mt-1 w-full max-h-52 overflow-y-auto bg-popover border border-border rounded-md shadow-md text-sm">
-          {filtered.map((num) => (
+          {plainFiltered.map((num) => (
             <li
               key={num}
               className="px-3 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground"
@@ -126,6 +178,7 @@ export default function NewPurchaseOrderPage() {
 
   const [sheetPoNo, setSheetPoNo] = useState("");
   const [lookupQuery, setLookupQuery] = useState("");
+  const [source, setSource] = useState<PoSource>("sheet");
   const [receiverName, setReceiverName] = useState("");
   const [receiverPhone, setReceiverPhone] = useState("");
   const [notes, setNotes] = useState("");
@@ -138,7 +191,9 @@ export default function NewPurchaseOrderPage() {
   const [priceLoadingIds, setPriceLoadingIds] = useState<Set<string>>(new Set());
 
   const { data: sheetPoNumbers } = useSheetPoNumbers();
-  const suggestions = sheetPoNumbers?.poNumbers ?? [];
+  const sheetSuggestions = sheetPoNumbers?.poNumbers ?? [];
+  const { data: customerPoNumbers } = useCustomerPoNumbers();
+  const customerSuggestions = customerPoNumbers?.poNumbers ?? [];
   const { data: representativesData } = useRepresentatives();
   const representatives = representativesData ?? [];
 
@@ -162,7 +217,10 @@ export default function NewPurchaseOrderPage() {
     setLookupError(null);
     setIsLookingUp(true);
     try {
-      const url = `/api/po/lookup/${encodeURIComponent(lookupQuery)}`;
+      const url =
+        source === "customer-po"
+          ? `/api/po/customer-po-lookup/${encodeURIComponent(lookupQuery)}`
+          : `/api/po/lookup/${encodeURIComponent(lookupQuery)}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -179,7 +237,10 @@ export default function NewPurchaseOrderPage() {
           description: item.description,
           uom: item.uom,
           qty: item.qty != null ? String(item.qty) : "",
-          unitPrice: "",
+          unitPrice:
+            source === "customer-po" && item.referencePrice != null
+              ? String(item.referencePrice)
+              : "",
           supplierId: "",
           taxIncluded: false,
         }));
@@ -323,13 +384,51 @@ export default function NewPurchaseOrderPage() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-            <Label>Purchase order number (sheet column K)</Label>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-muted-foreground">مصدر البنود:</span>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="po-source"
+                  checked={source === "sheet"}
+                  onChange={() => {
+                    setSource("sheet");
+                    setItems([]);
+                    setSelectedIds(new Set());
+                    setLookupError(null);
+                  }}
+                  className="cursor-pointer"
+                />
+                Google Sheets
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="po-source"
+                  checked={source === "customer-po"}
+                  onChange={() => {
+                    setSource("customer-po");
+                    setItems([]);
+                    setSelectedIds(new Set());
+                    setLookupError(null);
+                  }}
+                  className="cursor-pointer"
+                />
+                أوامر شراء العملاء
+              </label>
+            </div>
+            <Label>
+              {source === "sheet"
+                ? "Purchase order number (sheet column K)"
+                : "رقم أمر شراء العميل (من صفحة أوامر شراء العملاء)"}
+            </Label>
             <div className="flex gap-2">
               <div className="flex-1">
                 <PoNumberCombobox
                   value={lookupQuery}
                   onChange={setLookupQuery}
-                  suggestions={suggestions}
+                  suggestions={sheetSuggestions}
+                  richSuggestions={source === "customer-po" ? customerSuggestions : undefined}
                 />
               </div>
               <Button type="button" onClick={handleLookup} disabled={isLookingUp || !lookupQuery}>
