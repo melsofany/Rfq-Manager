@@ -12,8 +12,10 @@ import {
   whatsappChatsTable,
   rfqTable,
   workOrderAssignmentsTable,
+  customerPosTable,
+  customerPoItemsTable,
 } from "@workspace/db";
-import { eq, count, inArray, sql, and } from "drizzle-orm";
+import { eq, count, inArray, sql, and, ilike } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { lookupPoFromSheet, listSheetPoNumbers } from "../../shared/google-sheets";
 import { generatePoPdf } from "./po-pdf";
@@ -265,6 +267,76 @@ router.get("/po/sheets/po-numbers", requireAuth, async (req, res): Promise<void>
     res
       .status(500)
       .json({ error: "Failed to connect to Google Sheets", details: (err as Error).message });
+  }
+});
+
+// ── Customer PO source ───────────────────────────────────────────────────────
+// Lets the supplier purchase-order page pull items from a customer PO entered
+// on /customer-po, as an alternative to the Google Sheets source. The shape
+// returned matches SheetItem so the existing frontend mapping works unchanged.
+
+// GET /api/po/customer-po-numbers — list customer PO numbers for the combobox.
+router.get("/po/customer-po-numbers", requireAuth, async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      id: customerPosTable.id,
+      customerPoNo: customerPosTable.customerPoNo,
+      internalPoNo: customerPosTable.internalPoNo,
+      customerName: customerPosTable.customerName,
+      status: customerPosTable.status,
+    })
+    .from(customerPosTable)
+    .orderBy(sql`${customerPosTable.createdAt} DESC`);
+  res.json({
+    poNumbers: rows.map((r) => ({
+      value: r.customerPoNo,
+      label: r.customerPoNo,
+      internalNo: r.internalPoNo,
+      customerName: r.customerName,
+      status: r.status,
+    })),
+  });
+});
+
+// GET /api/po/customer-po-lookup/:poNo — find a customer PO by its number
+// (case-insensitive exact match on customerPoNo) and return its items in the
+// SheetItem shape.
+router.get("/po/customer-po-lookup/:poNo", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.poNo) ? req.params.poNo[0] : req.params.poNo;
+  const poNo = decodeURIComponent(raw).trim();
+  if (!poNo) {
+    res.status(400).json({ error: "poNo required" });
+    return;
+  }
+  try {
+    const [po] = await db
+      .select()
+      .from(customerPosTable)
+      .where(ilike(customerPosTable.customerPoNo, poNo))
+      .limit(1);
+    if (!po) {
+      res.json([]);
+      return;
+    }
+    const items = await db
+      .select()
+      .from(customerPoItemsTable)
+      .where(eq(customerPoItemsTable.customerPoId, po.id));
+    res.json(
+      items.map((i) => ({
+        itemId: i.id != null ? String(i.id) : null,
+        lineItem: i.lineItem,
+        partNo: i.partNo,
+        description: i.description ?? "",
+        uom: i.uom,
+        qty: i.qty != null ? Number(i.qty) : null,
+        referencePrice: i.unitPrice != null ? Number(i.unitPrice) : null,
+        poNo: po.customerPoNo,
+      })),
+    );
+  } catch (err) {
+    req.log.error({ err, poNo }, "Customer PO lookup failed");
+    res.status(500).json({ error: "Failed to look up customer PO", details: (err as Error).message });
   }
 });
 
