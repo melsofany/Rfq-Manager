@@ -614,7 +614,7 @@ describe("GET /api/customer-rfq/sheet-view", () => {
     expect(res.body.rows[0].rfqItemId).toBe(2);
   });
 
-  it("applies per-column contains filters (AND between columns)", async () => {
+  it("hides rows whose value is in the column's Exclude list (Excel autofilter)", async () => {
     sheetRows = [
       {
         rfqItemId: 1,
@@ -657,12 +657,94 @@ describe("GET /api/customer-rfq/sheet-view", () => {
         poUnitPrice: null,
       },
     ];
-    // Filter customerName ~ "acme" (case-insensitive) AND poNo ~ "55".
+    // Exclude customerName=Globex → only Acme remains.
     const res = await request(testApp).get(
-      "/api/customer-rfq/sheet-view?customerName=acme&poNo=55",
+      "/api/customer-rfq/sheet-view?customerNameExclude=Globex",
     );
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
     expect(res.body.rows[0].rfqItemId).toBe(1);
+  });
+
+  it("facets: returns distinct values with counts, ignoring the column's own exclude", async () => {
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "A1",
+        partNo: "P-100",
+        description: "Widget",
+        uom: "pc",
+        rfqQty: "5",
+        rfqUnitPrice: "120",
+        customerRfqId: 1,
+        customerRfqNo: "CUST-001",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: null,
+        poNo: "PO-55",
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+      {
+        rfqItemId: 2,
+        lineItem: "A2",
+        partNo: "P-200",
+        description: "Widget Pro",
+        uom: "set",
+        rfqQty: "10",
+        rfqUnitPrice: "200",
+        customerRfqId: 2,
+        customerRfqNo: "CUST-002",
+        customerName: "Acme",
+        entryDate: "2025-03-10",
+        expiryDate: null,
+        buyerName: "Alex",
+        poItemId: null,
+        poNo: null,
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+      {
+        rfqItemId: 3,
+        lineItem: "A3",
+        partNo: "P-300",
+        description: "Widget",
+        uom: "pc",
+        rfqQty: "5",
+        rfqUnitPrice: "120",
+        customerRfqId: 3,
+        customerRfqNo: "CUST-003",
+        customerName: "Globex",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: null,
+        poNo: null,
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+    ];
+    // Facet on customerName while excluding customerName=Globex: the dropdown
+    // still lists Globex (its own exclude is ignored) with count 1, and Acme
+    // (count 2) — but the count reflects the set AFTER other filters (none here).
+    const res = await request(testApp).get(
+      "/api/customer-rfq/sheet-view/facets?column=customerName&customerNameExclude=Globex",
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.column).toBe("customerName");
+    const acme = res.body.values.find((v: any) => v.value === "Acme");
+    const globex = res.body.values.find((v: any) => v.value === "Globex");
+    expect(acme?.count).toBe(2);
+    expect(globex?.count).toBe(1);
+  });
+
+  it("facets: 400 for an unknown column", async () => {
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view/facets?column=nope");
+    expect(res.status).toBe(400);
   });
 });

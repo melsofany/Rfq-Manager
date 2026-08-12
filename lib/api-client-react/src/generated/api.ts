@@ -37,6 +37,7 @@ import type {
   CustomerRfqDetail,
   CustomerRfqInput,
   CustomerRfqItem,
+  CustomerRfqSheetFacets,
   CustomerRfqSheetView,
   CustomerRfqUpdate,
   CustomerUpdate,
@@ -57,6 +58,7 @@ import type {
   ListCustomerPosCustomerRfqs200,
   ListCustomerPosParams,
   ListCustomerRfqNumbers200,
+  ListCustomerRfqSheetViewFacetsParams,
   ListCustomerRfqSheetViewParams,
   ListCustomerRfqsParams,
   ListCustomersParams,
@@ -2137,6 +2139,90 @@ export function useListCustomerRfqSheetView<TData = Awaited<ReturnType<typeof li
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListCustomerRfqSheetViewQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCustomerRfqSheetViewFacetsUrl = (params: ListCustomerRfqSheetViewFacetsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/customer-rfq/sheet-view/facets?${stringifiedParams}` : `/api/customer-rfq/sheet-view/facets`
+}
+
+/**
+ * @summary Distinct values (with counts) for one sheet-view column, after applying other columns' filters
+ */
+export const listCustomerRfqSheetViewFacets = async (params: ListCustomerRfqSheetViewFacetsParams, options?: RequestInit): Promise<CustomerRfqSheetFacets> => {
+
+  return customFetch<CustomerRfqSheetFacets>(getListCustomerRfqSheetViewFacetsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCustomerRfqSheetViewFacetsQueryKey = (params?: ListCustomerRfqSheetViewFacetsParams,) => {
+    return [
+    `/api/customer-rfq/sheet-view/facets`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCustomerRfqSheetViewFacetsQueryOptions = <TData = Awaited<ReturnType<typeof listCustomerRfqSheetViewFacets>>, TError = ErrorType<void>>(params: ListCustomerRfqSheetViewFacetsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerRfqSheetViewFacets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCustomerRfqSheetViewFacetsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCustomerRfqSheetViewFacets>>> = ({ signal }) => listCustomerRfqSheetViewFacets(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCustomerRfqSheetViewFacets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCustomerRfqSheetViewFacetsQueryResult = NonNullable<Awaited<ReturnType<typeof listCustomerRfqSheetViewFacets>>>
+export type ListCustomerRfqSheetViewFacetsQueryError = ErrorType<void>
+
+
+/**
+ * @summary Distinct values (with counts) for one sheet-view column, after applying other columns' filters
+ */
+
+export function useListCustomerRfqSheetViewFacets<TData = Awaited<ReturnType<typeof listCustomerRfqSheetViewFacets>>, TError = ErrorType<void>>(
+ params: ListCustomerRfqSheetViewFacetsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerRfqSheetViewFacets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCustomerRfqSheetViewFacetsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

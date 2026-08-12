@@ -591,21 +591,21 @@ export const listCustomerRfqSheetViewQueryOffsetMin = 0;
 
 export const ListCustomerRfqSheetViewQueryParams = zod.object({
   "search": zod.coerce.string().optional().describe('Global OR search across the main text columns'),
-  "lineItem": zod.coerce.string().optional().describe('Per-column \"contains\" filter (Excel-style)'),
-  "partNo": zod.coerce.string().optional(),
-  "description": zod.coerce.string().optional(),
-  "uom": zod.coerce.string().optional(),
-  "customerRfqNo": zod.coerce.string().optional(),
-  "customerName": zod.coerce.string().optional(),
-  "entryDate": zod.coerce.string().optional(),
-  "expiryDate": zod.coerce.string().optional(),
-  "buyerName": zod.coerce.string().optional(),
-  "poNo": zod.coerce.string().optional(),
-  "poDate": zod.coerce.string().optional(),
-  "rfqQty": zod.coerce.string().optional(),
-  "rfqUnitPrice": zod.coerce.string().optional(),
-  "poQty": zod.coerce.string().optional(),
-  "poUnitPrice": zod.coerce.string().optional(),
+  "lineItemExclude": zod.coerce.string().optional().describe('Comma-separated values to HIDE from this column (Excel autofilter)'),
+  "partNoExclude": zod.coerce.string().optional(),
+  "descriptionExclude": zod.coerce.string().optional(),
+  "uomExclude": zod.coerce.string().optional(),
+  "customerRfqNoExclude": zod.coerce.string().optional(),
+  "customerNameExclude": zod.coerce.string().optional(),
+  "entryDateExclude": zod.coerce.string().optional(),
+  "expiryDateExclude": zod.coerce.string().optional(),
+  "buyerNameExclude": zod.coerce.string().optional(),
+  "poNoExclude": zod.coerce.string().optional(),
+  "poDateExclude": zod.coerce.string().optional(),
+  "rfqQtyExclude": zod.coerce.string().optional(),
+  "rfqUnitPriceExclude": zod.coerce.string().optional(),
+  "poQtyExclude": zod.coerce.string().optional(),
+  "poUnitPriceExclude": zod.coerce.string().optional(),
   "limit": zod.coerce.number().min(1).max(listCustomerRfqSheetViewQueryLimitMax).default(listCustomerRfqSheetViewQueryLimitDefault),
   "offset": zod.coerce.number().min(listCustomerRfqSheetViewQueryOffsetMin).default(listCustomerRfqSheetViewQueryOffsetDefault)
 })
@@ -635,6 +635,38 @@ export const ListCustomerRfqSheetViewResponse = zod.object({
   "poUnitPrice": zod.string().nullish()
 }).describe('One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued).'))
 }).describe('Paginated flat sheet-style view (one row per customer RFQ item, with joined PO columns).')
+
+
+/**
+ * @summary Distinct values (with counts) for one sheet-view column, after applying other columns' filters
+ */
+export const ListCustomerRfqSheetViewFacetsQueryParams = zod.object({
+  "column": zod.enum(['lineItem', 'partNo', 'description', 'uom', 'customerRfqNo', 'customerName', 'entryDate', 'expiryDate', 'buyerName', 'poNo', 'poDate', 'rfqQty', 'rfqUnitPrice', 'poQty', 'poUnitPrice']).describe('The column to compute distinct values for'),
+  "search": zod.coerce.string().optional(),
+  "lineItemExclude": zod.coerce.string().optional(),
+  "partNoExclude": zod.coerce.string().optional(),
+  "descriptionExclude": zod.coerce.string().optional(),
+  "uomExclude": zod.coerce.string().optional(),
+  "customerRfqNoExclude": zod.coerce.string().optional(),
+  "customerNameExclude": zod.coerce.string().optional(),
+  "entryDateExclude": zod.coerce.string().optional(),
+  "expiryDateExclude": zod.coerce.string().optional(),
+  "buyerNameExclude": zod.coerce.string().optional(),
+  "poNoExclude": zod.coerce.string().optional(),
+  "poDateExclude": zod.coerce.string().optional(),
+  "rfqQtyExclude": zod.coerce.string().optional(),
+  "rfqUnitPriceExclude": zod.coerce.string().optional(),
+  "poQtyExclude": zod.coerce.string().optional(),
+  "poUnitPriceExclude": zod.coerce.string().optional()
+})
+
+export const ListCustomerRfqSheetViewFacetsResponse = zod.object({
+  "column": zod.string(),
+  "values": zod.array(zod.object({
+  "value": zod.string().describe('The distinct cell value (empty string for NULL\/blank).'),
+  "count": zod.number()
+}).describe('A distinct value for a sheet-view column with its occurrence count.'))
+}).describe('Distinct values (with counts) for one sheet-view column, computed after applying other columns\' filters.')
 
 
 /**

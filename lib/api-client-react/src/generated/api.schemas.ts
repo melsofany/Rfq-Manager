@@ -228,6 +228,23 @@ export interface CustomerRfqSheetView {
   rows: CustomerRfqSheetRow[];
 }
 
+/**
+ * A distinct value for a sheet-view column with its occurrence count.
+ */
+export interface CustomerRfqSheetFacetValue {
+  /** The distinct cell value (empty string for NULL/blank). */
+  value: string;
+  count: number;
+}
+
+/**
+ * Distinct values (with counts) for one sheet-view column, computed after applying other columns' filters.
+ */
+export interface CustomerRfqSheetFacets {
+  column: string;
+  values: CustomerRfqSheetFacetValue[];
+}
+
 export interface CustomerRfq {
   id: number;
   internalNo: string;
@@ -1231,23 +1248,23 @@ export type ListCustomerRfqSheetViewParams = {
  */
 search?: string;
 /**
- * Per-column "contains" filter (Excel-style)
+ * Comma-separated values to HIDE from this column (Excel autofilter)
  */
-lineItem?: string;
-partNo?: string;
-description?: string;
-uom?: string;
-customerRfqNo?: string;
-customerName?: string;
-entryDate?: string;
-expiryDate?: string;
-buyerName?: string;
-poNo?: string;
-poDate?: string;
-rfqQty?: string;
-rfqUnitPrice?: string;
-poQty?: string;
-poUnitPrice?: string;
+lineItemExclude?: string;
+partNoExclude?: string;
+descriptionExclude?: string;
+uomExclude?: string;
+customerRfqNoExclude?: string;
+customerNameExclude?: string;
+entryDateExclude?: string;
+expiryDateExclude?: string;
+buyerNameExclude?: string;
+poNoExclude?: string;
+poDateExclude?: string;
+rfqQtyExclude?: string;
+rfqUnitPriceExclude?: string;
+poQtyExclude?: string;
+poUnitPriceExclude?: string;
 /**
  * @minimum 1
  * @maximum 500
@@ -1258,6 +1275,50 @@ limit?: number;
  */
 offset?: number;
 };
+
+export type ListCustomerRfqSheetViewFacetsParams = {
+/**
+ * The column to compute distinct values for
+ */
+column: ListCustomerRfqSheetViewFacetsColumn;
+search?: string;
+lineItemExclude?: string;
+partNoExclude?: string;
+descriptionExclude?: string;
+uomExclude?: string;
+customerRfqNoExclude?: string;
+customerNameExclude?: string;
+entryDateExclude?: string;
+expiryDateExclude?: string;
+buyerNameExclude?: string;
+poNoExclude?: string;
+poDateExclude?: string;
+rfqQtyExclude?: string;
+rfqUnitPriceExclude?: string;
+poQtyExclude?: string;
+poUnitPriceExclude?: string;
+};
+
+export type ListCustomerRfqSheetViewFacetsColumn = typeof ListCustomerRfqSheetViewFacetsColumn[keyof typeof ListCustomerRfqSheetViewFacetsColumn];
+
+
+export const ListCustomerRfqSheetViewFacetsColumn = {
+  lineItem: 'lineItem',
+  partNo: 'partNo',
+  description: 'description',
+  uom: 'uom',
+  customerRfqNo: 'customerRfqNo',
+  customerName: 'customerName',
+  entryDate: 'entryDate',
+  expiryDate: 'expiryDate',
+  buyerName: 'buyerName',
+  poNo: 'poNo',
+  poDate: 'poDate',
+  rfqQty: 'rfqQty',
+  rfqUnitPrice: 'rfqUnitPrice',
+  poQty: 'poQty',
+  poUnitPrice: 'poUnitPrice',
+} as const;
 
 export type ListCustomerPosParams = {
 search?: string;

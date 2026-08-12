@@ -5,15 +5,14 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
+import type { ListCustomerRfqSheetViewFacetsColumn } from './listCustomerRfqSheetViewFacetsColumn';
 
-export type ListCustomerRfqSheetViewParams = {
+export type ListCustomerRfqSheetViewFacetsParams = {
 /**
- * Global OR search across the main text columns
+ * The column to compute distinct values for
  */
+column: ListCustomerRfqSheetViewFacetsColumn;
 search?: string;
-/**
- * Comma-separated values to HIDE from this column (Excel autofilter)
- */
 lineItemExclude?: string;
 partNoExclude?: string;
 descriptionExclude?: string;
@@ -29,13 +28,4 @@ rfqQtyExclude?: string;
 rfqUnitPriceExclude?: string;
 poQtyExclude?: string;
 poUnitPriceExclude?: string;
-/**
- * @minimum 1
- * @maximum 500
- */
-limit?: number;
-/**
- * @minimum 0
- */
-offset?: number;
 };

@@ -198,38 +198,32 @@ router.get("/customer-rfq/numbers", requireAuth, async (_req, res): Promise<void
 // name lives on the customer RFQ (employee at the customer's company). This is
 // a read-only mirror of the legacy sheet, kept current as new data is entered.
 //
-// Query params: ?search=&limit=&offset=
-router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<void> => {
-  const {
-    search,
-    limit: limitQ,
-    offset: offsetQ,
-    lineItem,
-    partNo,
-    description,
-    uom,
-    customerRfqNo,
-    customerName,
-    entryDate,
-    expiryDate,
-    buyerName,
-    poNo,
-    poDate,
-    rfqQty,
-    rfqUnitPrice,
-    poQty,
-    poUnitPrice,
-  } = req.query as Record<string, string>;
-  const limit = Math.min(Math.max(parseInt(limitQ || "100", 10) || 100, 1), 500);
-  const offset = Math.max(parseInt(offsetQ || "0", 10) || 0, 0);
+// Query params: ?search=&limit=&offset=&<col>Exclude=v1,v2 (Excel-style)
 
-  // One row per customer_rfq_item, LEFT JOIN the customer_po_item matched by
-  // customerRfqItemId, then LEFT JOIN the customer_po for the PO header. A
-  // single customer_rfq_item may appear on multiple POs (partial shipments),
-  // which yields one sheet row per (rfq-item × po-item) combination; an rfq
-  // item with no PO yet yields one row with null PO columns — mirroring the
-  // sheet where the PO columns were simply left blank until a PO arrived.
-  const rows = await db
+// Columns that can be filtered/excluded via the autofilter. Order matches the
+// sheet layout. Each entry maps a query-param name to the row field it reads.
+const SHEET_FILTER_COLUMNS: { param: string; field: keyof SheetRow }[] = [
+  { param: "lineItem", field: "lineItem" },
+  { param: "partNo", field: "partNo" },
+  { param: "description", field: "description" },
+  { param: "uom", field: "uom" },
+  { param: "customerRfqNo", field: "customerRfqNo" },
+  { param: "customerName", field: "customerName" },
+  { param: "entryDate", field: "entryDate" },
+  { param: "expiryDate", field: "expiryDate" },
+  { param: "buyerName", field: "buyerName" },
+  { param: "poNo", field: "poNo" },
+  { param: "poDate", field: "poDate" },
+  { param: "rfqQty", field: "rfqQty" },
+  { param: "rfqUnitPrice", field: "rfqUnitPrice" },
+  { param: "poQty", field: "poQty" },
+  { param: "poUnitPrice", field: "poUnitPrice" },
+];
+
+type SheetRow = Awaited<ReturnType<typeof loadSheetRowsRaw>>[number];
+
+async function loadSheetRowsRaw() {
+  return db
     .select({
       rfqItemId: customerRfqItemsTable.id,
       lineItem: customerRfqItemsTable.lineItem,
@@ -258,9 +252,22 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
     )
     .leftJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
     .orderBy(desc(customerRfqsTable.createdAt), desc(customerRfqItemsTable.id));
+}
 
+// Load all sheet rows and apply the Excel-style filters: a global OR `search`
+// across the main text columns, plus per-column exclusion lists
+// (`<col>Exclude=v1,v2` → hide rows whose value is in that set). When
+// `exceptColumn` is set, that column's exclusion is skipped — used by the
+// facets endpoint so the filtered dropdown still lists every value the column
+// could show once the OTHER columns are applied (Excel behavior).
+async function loadSheetRows(
+  query: Record<string, string>,
+  exceptColumn?: string,
+): Promise<SheetRow[]> {
+  const rows = await loadSheetRowsRaw();
   let filtered = rows;
-  // Global OR search across the main text columns.
+
+  const search = query.search;
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter(
@@ -274,30 +281,33 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
     );
   }
 
-  // Per-column "contains" filters (Excel-style autofilter). Each non-empty
-  // value narrows its column independently (AND between columns). Compared
-  // case-insensitively against the raw value (numbers as their string form).
-  const colFilter = (raw: string | null, term: string | undefined) =>
-    term ? (raw ?? "").toLowerCase().includes(term.toLowerCase()) : true;
-  filtered = filtered.filter(
-    (r) =>
-      colFilter(r.lineItem, lineItem) &&
-      colFilter(r.partNo, partNo) &&
-      colFilter(r.description, description) &&
-      colFilter(r.uom, uom) &&
-      colFilter(r.customerRfqNo, customerRfqNo) &&
-      colFilter(r.customerName, customerName) &&
-      colFilter(r.entryDate, entryDate) &&
-      colFilter(r.expiryDate, expiryDate) &&
-      colFilter(r.buyerName, buyerName) &&
-      colFilter(r.poNo, poNo) &&
-      colFilter(r.poDate, poDate) &&
-      colFilter(r.rfqQty, rfqQty) &&
-      colFilter(r.rfqUnitPrice, rfqUnitPrice) &&
-      colFilter(r.poQty, poQty) &&
-      colFilter(r.poUnitPrice, poUnitPrice),
-  );
+  for (const { param, field } of SHEET_FILTER_COLUMNS) {
+    if (param === exceptColumn) continue;
+    const excludeRaw = query[`${param}Exclude`];
+    if (!excludeRaw) continue;
+    const excludeSet = new Set(
+      excludeRaw
+        .split(",")
+        .map((v) => v.trim())
+        .filter((v) => v.length > 0),
+    );
+    if (excludeSet.size === 0) continue;
+    filtered = filtered.filter((r) => {
+      const v = r[field];
+      const cell = v == null ? "" : String(v);
+      return !excludeSet.has(cell);
+    });
+  }
 
+  return filtered;
+}
+
+router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<void> => {
+  const { limit: limitQ, offset: offsetQ } = req.query as Record<string, string>;
+  const limit = Math.min(Math.max(parseInt(limitQ || "100", 10) || 100, 1), 500);
+  const offset = Math.max(parseInt(offsetQ || "0", 10) || 0, 0);
+
+  const filtered = await loadSheetRows(req.query as Record<string, string>);
   const total = filtered.length;
   const page = filtered.slice(offset, offset + limit);
 
@@ -326,6 +336,32 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
       poUnitPrice: formatQty(r.poUnitPrice),
     })),
   });
+});
+
+// GET /customer-rfq/sheet-view/facets — Excel-style autofilter dropdown values.
+// Returns the distinct values (with counts) for one column, computed AFTER
+// applying every OTHER column's filters — so the dropdown lists exactly the
+// values that could still appear. Used by the per-column filter popover.
+router.get("/customer-rfq/sheet-view/facets", requireAuth, async (req, res): Promise<void> => {
+  const { column } = req.query as Record<string, string>;
+  if (!column || !SHEET_FILTER_COLUMNS.some((c) => c.param === column)) {
+    res.status(400).json({ error: "Invalid or missing column" });
+    return;
+  }
+  const field = SHEET_FILTER_COLUMNS.find((c) => c.param === column)!.field;
+  const filtered = await loadSheetRows(req.query as Record<string, string>, column);
+
+  const counts = new Map<string, number>();
+  for (const r of filtered) {
+    const v = r[field];
+    const key = v == null ? "" : String(v);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const values = [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "ar"));
+
+  res.json({ column, values });
 });
 
 // POST /customer-rfq — create a customer RFQ
