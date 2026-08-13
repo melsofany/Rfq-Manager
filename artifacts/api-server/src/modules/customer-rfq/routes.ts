@@ -160,8 +160,14 @@ export interface CustomerRfqRequestStatus {
 // Resolve the approved-supplier-priced flag per RFQ item id. Reuses the same
 // join as resolveApprovedCosts but only needs the set of item ids that have ANY
 // approved offer_item (we don't care about the price here).
+//
+// `withLegacyFallback` runs a per-item partNo/lineItem match for items that have
+// no FK link to a supplier rfq_item. It is O(N) in the number of unlinked items
+// (one query each), so it is only safe for a SINGLE RFQ's handful of items —
+// never the list view (which loads every item of every listed RFQ).
 async function resolveSupplierPricedItemIds(
   customerItems: Array<{ id: number; partNo: string | null; lineItem: string | null }>,
+  withLegacyFallback = true,
 ): Promise<Set<number>> {
   const priced = new Set<number>();
   if (customerItems.length === 0) return priced;
@@ -175,6 +181,8 @@ async function resolveSupplierPricedItemIds(
   for (const row of linked) {
     if (row.customerRfqItemId != null) priced.add(row.customerRfqItemId);
   }
+
+  if (!withLegacyFallback) return priced;
 
   // Legacy fallback: items with no FK link, matched by partNo/lineItem.
   const unlinked = customerItems.filter((ci) => !priced.has(ci.id));
@@ -363,9 +371,14 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
   for (const [rfqId, arr] of itemsByRfq) countMap.set(rfqId, arr.length);
 
   // 2) supplier-priced: which customer_rfq_item_ids have an approved offer_item.
+  // List path uses only the FK-linked batch query — the per-item legacy
+  // fallback is O(N) and would hang the page for large lists.
   const allItemIds = allItems.map((i) => i.id);
   const supplierPricedItemIds = allItemIds.length > 0
-    ? await resolveSupplierPricedItemIds(allItems.map((i) => ({ id: i.id, partNo: i.partNo, lineItem: i.lineItem })))
+    ? await resolveSupplierPricedItemIds(
+        allItems.map((i) => ({ id: i.id, partNo: i.partNo, lineItem: i.lineItem })),
+        false,
+      )
     : new Set<number>();
 
   // 4) PO issued + delivered share across all listed RFQs (single query).
