@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useListCustomerPos, getListCustomerPosQueryKey } from "@workspace/api-client-react";
-import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Truck, ChevronLeft, ChevronRight } from "lucide-react";
@@ -128,17 +127,16 @@ export default function CustomerDeliveriesPage() {
   }
 
   return (
-    <Layout>
-      <div className="p-4 sm:p-6 space-y-5">
-        <div>
-          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <Truck size={20} className="text-primary" />
-            تسليمات العملاء
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            تسجيل تسليم بنود أوامر شراء العملاء ومتابعة الرفض والأرصدة
-          </p>
-        </div>
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+          <Truck size={20} className="text-primary" />
+          تسليمات العملاء
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          تسجيل تسليم بنود أوامر شراء العملاء ومتابعة الرفض والأرصدة
+        </p>
+      </div>
 
         <div className="relative max-w-xs">
           <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -231,8 +229,7 @@ export default function CustomerDeliveriesPage() {
             ))
           )}
         </div>
-      </div>
-    </Layout>
+    </div>
   );
 }
 
