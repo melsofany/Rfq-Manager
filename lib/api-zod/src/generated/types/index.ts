@@ -28,6 +28,8 @@ export * from './customerRfqInput';
 export * from './customerRfqItem';
 export * from './customerRfqLineItem';
 export * from './customerRfqLineItemInput';
+export * from './customerRfqRequestStatus';
+export * from './customerRfqRequestStatusStage';
 export * from './customerRfqSheetFacets';
 export * from './customerRfqSheetFacetValue';
 export * from './customerRfqSheetRow';

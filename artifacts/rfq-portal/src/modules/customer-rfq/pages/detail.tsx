@@ -8,6 +8,7 @@ import {
   getGetCustomerRfqQueryKey,
   getListCustomerRfqsQueryKey,
 } from "@workspace/api-client-react";
+import type { CustomerRfqRequestStatus } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -380,6 +381,10 @@ export default function CustomerRfqDetailPage() {
                 <DetailField label="المشتري / الموظف المسئول" value={rfq.buyerName ?? "—"} />
                 <DetailField label="المدخل" value={rfq.employeeName ?? "—"} />
                 <DetailField label="تاريخ الإنشاء" value={new Date(rfq.createdAt).toLocaleString("ar-EG")} />
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs">حالة الطلب</Label>
+                  <RequestStatusBadge status={rfq.requestStatus} />
+                </div>
                 {rfq.notes && (
                   <div className="sm:col-span-2 space-y-1">
                     <Label className="text-muted-foreground text-xs">ملاحظات</Label>
@@ -407,20 +412,23 @@ export default function CustomerRfqDetailPage() {
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الكمية</th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">سعر الوحدة</th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الإجمالي</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">أمر شراء</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(rfq.items ?? []).length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-6 text-center text-muted-foreground text-sm">
+                        <td colSpan={9} className="px-4 py-6 text-center text-muted-foreground text-sm">
                           لا توجد بنود
                         </td>
                       </tr>
                     ) : (
                       (rfq.items ?? []).map((it, i) => {
                         const price = it.id != null ? priceInputs[it.id] ?? "" : "";
+                        // Highlight rows that already have an issued customer PO.
+                        const rowTint = it.hasPo ? "bg-green-50/60 dark:bg-green-950/20" : "";
                         return (
-                          <tr key={it.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                          <tr key={it.id} className={`border-b border-border last:border-0 hover:bg-muted/20 ${rowTint}`}>
                             <td className="px-4 py-2.5 text-muted-foreground text-xs text-center">{i + 1}</td>
                             <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">{it.partNo ?? "—"}</td>
                             <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">{it.lineItem ?? "—"}</td>
@@ -448,6 +456,15 @@ export default function CustomerRfqDetailPage() {
                             <td className="px-4 py-2.5 text-xs" dir="ltr">
                               {isDraft ? formatLineTotal(it.qty, price) || "—" : formatQty(it.total) || "—"}
                             </td>
+                            <td className="px-4 py-2.5 text-center">
+                              {it.hasPo ? (
+                                <span title="صدر أمر شراء لهذا البند" className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300">
+                                  أمر شراء
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
                           </tr>
                         );
                       })
@@ -456,7 +473,7 @@ export default function CustomerRfqDetailPage() {
                   {(rfq.items ?? []).length > 0 && (
                     <tfoot>
                       <tr className="bg-muted/20 border-t-2 border-border font-semibold">
-                        <td colSpan={7} className="px-4 py-2.5 text-left text-xs text-muted-foreground">
+                        <td colSpan={8} className="px-4 py-2.5 text-left text-xs text-muted-foreground">
                           الإجمالي الكلي
                         </td>
                         <td className="px-4 py-2.5 text-sm" dir="ltr">{grandTotalStr || "—"}</td>
@@ -551,5 +568,30 @@ function DetailField({
         {value}
       </p>
     </div>
+  );
+}
+
+// Colored badge for the derived request status. Each stage gets a distinct
+// color so the status reads at a glance.
+function RequestStatusBadge({
+  status,
+}: {
+  status?: CustomerRfqRequestStatus | null;
+}) {
+  if (!status) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const STAGE_STYLES: Record<string, string> = {
+    received: "bg-slate-100 text-slate-600 dark:bg-slate-900/50 dark:text-slate-300",
+    supplier_priced: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
+    customer_priced: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+    po_issued: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300",
+    delivered: "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
+  };
+  const cls = STAGE_STYLES[status.stage] ?? STAGE_STYLES.received;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${cls}`}>
+      {status.label}
+    </span>
   );
 }

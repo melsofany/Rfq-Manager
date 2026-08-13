@@ -5,6 +5,7 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomerRfqRequestStatus } from './customerRfqRequestStatus';
 
 export interface CustomerRfq {
   id: number;
@@ -35,6 +36,7 @@ export interface CustomerRfq {
   /** @nullable */
   notes?: string | null;
   itemCount?: number;
+  requestStatus?: CustomerRfqRequestStatus;
   createdAt: string;
   updatedAt: string;
 }

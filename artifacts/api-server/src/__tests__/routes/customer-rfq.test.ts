@@ -46,6 +46,10 @@ let detailItems: any[];
 // Approved supplier offer_items returned by resolveApprovedCosts (margin check).
 // Each row: { customerRfqItemId, price, taxIncluded }.
 let approvedRows: any[];
+// Customer PO items returned by the request-status PO/delivery lookup. Each row
+// matches the shape selected in routes.ts: { customerRfqItemId, qty,
+// totalDeliveredQty, deliveryStatus }.
+let poItemRows: any[];
 // Sheet-view flat rows returned by GET /customer-rfq/sheet-view.
 let sheetRows: any[];
 // Employee row returned for the POST "who entered it" lookup: { name }.
@@ -120,6 +124,13 @@ const dbMock: any = {
           innerJoin: vi.fn(() => chainable(approvedRows, {
             where: vi.fn(() => chainable(approvedRows)),
           })),
+        });
+      }
+      // Request-status PO/delivery lookup: select({...}).from(customerPoItems)
+      // .where(inArray + isNotNull) — returns the per-test poItemRows.
+      if (table === customerPoItemsTbl) {
+        return chainable(poItemRows, {
+          where: vi.fn(() => chainable(poItemRows)),
         });
       }
       // Employee name lookup: select({name}).from(employees).where().limit() —
@@ -208,6 +219,7 @@ beforeEach(() => {
   detailRow = null;
   detailItems = [];
   approvedRows = [];
+  poItemRows = [];
   sheetRows = [];
   employeeRow = { name: "Tester" };
   sessionState.role = undefined;
@@ -276,13 +288,38 @@ describe("POST /api/customer-rfq (create)", () => {
 });
 
 describe("GET /api/customer-rfq (list)", () => {
-  it("returns the list with item counts", async () => {
+  it("returns the list with item counts + derived request status", async () => {
     listRows = [{ rfq: { ...insertedRfq, id: 1, internalNo: "CRFQ-1", itemCount: undefined } }];
-    countRows = [{ customerRfqId: 1, cnt: 3 }];
+    // The list now loads the RFQ's actual items (batched) to compute both the
+    // item count and the derived request status. Two items, one priced.
+    detailItems = [
+      { id: 10, customerRfqId: 1, partNo: "P1", lineItem: "A1", uom: "pc", qty: "3", unitPrice: "10" },
+      { id: 11, customerRfqId: 1, partNo: "P2", lineItem: "A2", uom: "pc", qty: "2", unitPrice: null },
+    ];
     const res = await request(testApp).get("/api/customer-rfq");
     expect(res.status).toBe(200);
     expect(res.body[0].internalNo).toBe("CRFQ-1");
-    expect(res.body[0].itemCount).toBe(3);
+    expect(res.body[0].itemCount).toBe(2);
+    // No approved supplier offer + 1 of 2 items priced → "مُسعَّر 50%".
+    expect(res.body[0].requestStatus).toBeDefined();
+    expect(res.body[0].requestStatus.customerPricingPct).toBe(50);
+    expect(res.body[0].requestStatus.poIssued).toBe(false);
+    expect(res.body[0].requestStatus.stage).toBe("customer_priced");
+  });
+
+  it("request status reflects supplier-priced when an approved offer exists", async () => {
+    listRows = [{ rfq: { ...insertedRfq, id: 2, internalNo: "CRFQ-2", itemCount: undefined } }];
+    detailItems = [
+      { id: 20, customerRfqId: 2, partNo: "P1", lineItem: "A1", uom: "pc", qty: "1", unitPrice: null },
+    ];
+    // resolveSupplierPricedItemIds queries offerItems (mock returns approvedRows
+    // for items with an id in the set). Mark item 20 as approved.
+    approvedRows = [{ customerRfqItemId: 20, price: "5", taxIncluded: false }];
+    const res = await request(testApp).get("/api/customer-rfq");
+    expect(res.status).toBe(200);
+    expect(res.body[0].requestStatus.supplierPriced).toBe(true);
+    // No customer price yet → still "مُسعَّر من المورد".
+    expect(res.body[0].requestStatus.stage).toBe("supplier_priced");
   });
 });
 
@@ -319,6 +356,29 @@ describe("GET /api/customer-rfq/:id", () => {
     expect(res.body.items[0].description).toBe("وصف البند");
     // NUMERIC qty "3.0000" is formatted without trailing zeros.
     expect(res.body.items[0].qty).toBe("3");
+  });
+
+  it("flags items with an issued PO and reports poIssued/deliveredPct", async () => {
+    detailRow = insertedRfq;
+    // Two items: id 1 (on a PO, fully delivered) and id 2 (no PO).
+    detailItems = [
+      { id: 1, customerRfqId: 42, partNo: "P1", lineItem: "A1", uom: "pc", qty: "3", unitPrice: "10", createdAt: new Date("2025-01-01") },
+      { id: 2, customerRfqId: 42, partNo: "P2", lineItem: "A2", uom: "pc", qty: "5", unitPrice: null, createdAt: new Date("2025-01-01") },
+    ];
+    // Item 1 appears on a customer PO and is fully delivered.
+    poItemRows = [
+      { customerRfqItemId: 1, qty: "3", totalDeliveredQty: "3", deliveryStatus: "delivered" },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/42");
+    expect(res.status).toBe(200);
+    // Item 1 → hasPo true (highlighted green); item 2 → hasPo false.
+    expect(res.body.items[0].hasPo).toBe(true);
+    expect(res.body.items[1].hasPo).toBe(false);
+    // Request status: a PO was issued and that item is delivered → stage "delivered".
+    expect(res.body.requestStatus.poIssued).toBe(true);
+    expect(res.body.requestStatus.poItemIds).toContain(1);
+    expect(res.body.requestStatus.deliveredPct).toBe(100);
+    expect(res.body.requestStatus.stage).toBe("delivered");
   });
 });
 

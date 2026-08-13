@@ -26,5 +26,7 @@ export interface CustomerRfqLineItem {
      * @nullable
      */
   total?: number | null;
+  /** True when this line item already appears on an issued customer PO (detail page highlights such rows green). */
+  hasPo?: boolean;
   createdAt: string;
 }

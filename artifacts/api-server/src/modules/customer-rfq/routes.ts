@@ -10,8 +10,9 @@ import {
   auditLogTable,
   customerPoItemsTable,
   customerPosTable,
+  customerPoItemDeliveriesTable,
 } from "@workspace/db";
-import { eq, ilike, count, inArray, desc, and, isNull, or, sql } from "drizzle-orm";
+import { eq, ilike, count, inArray, desc, and, isNull, or, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
@@ -123,6 +124,179 @@ function computeTotal(qty: string | null, unitPrice: string | null): string | nu
   return formatQty(String(n));
 }
 
+// ── Request status (حالة الطلب) ───────────────────────────────────────────────
+// A derived, progressive status shown on the customer-RFQ list/detail. It rolls
+// up four milestones across several tables:
+//   1. received   — the RFQ exists (default).
+//   2. supplierPriced — at least one offer_item with is_approved=true links to an
+//      item of this RFQ (via rfq_items.customer_rfq_item_id, with partNo/lineItem
+//      fallback for legacy rows).
+//   3. customerPricedPct — share of this RFQ's items that carry a customer
+//      unit_price > 0.
+//   4. poIssued / deliveredPct — whether a customer PO was issued for any item,
+//      and (via customer_po_items.total_delivered_qty) the share of PO'd items
+//      that have been (fully or partially) delivered to the customer.
+//
+// The headline label prefers the most advanced milestone reached, while the
+// numeric fields let the UI render a richer badge ("مسعَّر 60%").
+export interface CustomerRfqRequestStatus {
+  // Machine-readable headline stage: received | supplier_priced | customer_priced | po_issued | delivered
+  stage: string;
+  // Arabic label ready to display, e.g. "طلب وارد", "مسعَّر من المورد", "مسعَّر 50%", "صدر أمر شراء", "مُسلَّم 100%"
+  label: string;
+  // True when at least one approved supplier offer exists for an item of this RFQ.
+  supplierPriced: boolean;
+  // Share (0–100) of this RFQ's items priced for the customer (unit_price > 0).
+  customerPricingPct: number | null;
+  // True when any customer_po_items row links back to an item (or the RFQ) of this RFQ.
+  poIssued: boolean;
+  // Set of customer_rfq_item_ids that already appear on a customer PO — used to
+  // highlight rows green inside the detail page.
+  poItemIds: number[];
+  // Share (0–100) of PO'd items delivered to the customer. Null when no PO yet.
+  deliveredPct: number | null;
+}
+
+// Resolve the approved-supplier-priced flag per RFQ item id. Reuses the same
+// join as resolveApprovedCosts but only needs the set of item ids that have ANY
+// approved offer_item (we don't care about the price here).
+async function resolveSupplierPricedItemIds(
+  customerItems: Array<{ id: number; partNo: string | null; lineItem: string | null }>,
+): Promise<Set<number>> {
+  const priced = new Set<number>();
+  if (customerItems.length === 0) return priced;
+
+  const ids = customerItems.map((i) => i.id);
+  const linked = await db
+    .select({ customerRfqItemId: rfqItemsTable.customerRfqItemId })
+    .from(offerItemsTable)
+    .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+    .where(and(inArray(rfqItemsTable.customerRfqItemId, ids), eq(offerItemsTable.isApproved, true)));
+  for (const row of linked) {
+    if (row.customerRfqItemId != null) priced.add(row.customerRfqItemId);
+  }
+
+  // Legacy fallback: items with no FK link, matched by partNo/lineItem.
+  const unlinked = customerItems.filter((ci) => !priced.has(ci.id));
+  for (const ci of unlinked) {
+    const key = ci.partNo?.trim() || ci.lineItem?.trim();
+    if (!key) continue;
+    const partMatch = ci.partNo?.trim() ? eq(rfqItemsTable.partNo, ci.partNo.trim()) : null;
+    const lineMatch = ci.lineItem?.trim() ? eq(rfqItemsTable.lineItem, ci.lineItem.trim()) : null;
+    const matchCond = partMatch && lineMatch ? or(partMatch, lineMatch) : partMatch ?? lineMatch;
+    if (!matchCond) continue;
+    const fallback = await db
+      .select({ id: offerItemsTable.id })
+      .from(offerItemsTable)
+      .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+      .where(and(matchCond, isNull(rfqItemsTable.customerRfqItemId), eq(offerItemsTable.isApproved, true)));
+    if (fallback.length > 0) priced.add(ci.id);
+  }
+  return priced;
+}
+
+// For a single RFQ: load its items + the cross-table milestones and return the
+// derived request status. Used by GET /:id (detail) and as a one-off helper.
+async function computeRequestStatusForRfq(
+  rfqId: number,
+): Promise<{ status: CustomerRfqRequestStatus; items: typeof customerRfqItemsTable.$inferSelect[] }> {
+  const items = await db
+    .select()
+    .from(customerRfqItemsTable)
+    .where(eq(customerRfqItemsTable.customerRfqId, rfqId));
+
+  const itemIds = items.map((i) => i.id);
+  const totalItems = items.length;
+
+  // 2) supplier-priced: any approved offer for an item of this RFQ.
+  const supplierPricedIds = await resolveSupplierPricedItemIds(
+    items.map((i) => ({ id: i.id, partNo: i.partNo, lineItem: i.lineItem })),
+  );
+  const supplierPriced = supplierPricedIds.size > 0;
+
+  // 3) customer-priced share: items with unit_price > 0.
+  let customerPricingPct: number | null = null;
+  if (totalItems > 0) {
+    const priced = items.filter((i) => i.unitPrice != null && Number(i.unitPrice) > 0).length;
+    customerPricingPct = Math.round((priced / totalItems) * 100);
+  }
+
+  // 4) PO issued + delivered share.
+  let poIssued = false;
+  let poItemIds: number[] = [];
+  let deliveredPct: number | null = null;
+  if (itemIds.length > 0) {
+    const poRows = await db
+      .select({
+        customerRfqItemId: customerPoItemsTable.customerRfqItemId,
+        totalDeliveredQty: customerPoItemsTable.totalDeliveredQty,
+        deliveryStatus: customerPoItemsTable.deliveryStatus,
+        qty: customerPoItemsTable.qty,
+      })
+      .from(customerPoItemsTable)
+      .where(and(inArray(customerPoItemsTable.customerRfqItemId, itemIds), isNotNull(customerPoItemsTable.customerRfqItemId)));
+
+    const poItemIdSet = new Set<number>();
+    let deliveredItems = 0;
+    const poCount = poRows.length;
+    for (const r of poRows) {
+      if (r.customerRfqItemId != null) poItemIdSet.add(r.customerRfqItemId);
+      // Count an item as delivered when its delivery_status is "delivered", or
+      // when the rolled-up delivered qty reaches the ordered qty.
+      const ordered = r.qty != null ? Number(r.qty) : 0;
+      const delivered = r.totalDeliveredQty != null ? Number(r.totalDeliveredQty) : 0;
+      if (r.deliveryStatus === "delivered" || (ordered > 0 && delivered >= ordered)) {
+        deliveredItems += 1;
+      }
+    }
+    poItemIds = [...poItemIdSet];
+    poIssued = poCount > 0;
+    if (poCount > 0) {
+      // Delivered share is computed against the RFQ's items that appear on a PO.
+      deliveredPct = Math.round((deliveredItems / poCount) * 100);
+    }
+  }
+
+  return { status: buildRequestStatus({ supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct }), items };
+}
+
+// Build the headline stage + label from the resolved milestone flags.
+function buildRequestStatus(input: {
+  supplierPriced: boolean;
+  customerPricingPct: number | null;
+  poIssued: boolean;
+  poItemIds: number[];
+  deliveredPct: number | null;
+}): CustomerRfqRequestStatus {
+  const { supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct } = input;
+
+  let stage = "received";
+  let label = "طلب وارد";
+
+  if (poIssued) {
+    stage = "po_issued";
+    label = "صدر أمر شراء";
+    if (deliveredPct != null) {
+      if (deliveredPct >= 100) {
+        stage = "delivered";
+        label = "مُسلَّم بالكامل";
+      } else if (deliveredPct > 0) {
+        stage = "delivered";
+        label = `مُسلَّم ${deliveredPct}%`;
+      }
+    }
+  } else if (customerPricingPct != null && customerPricingPct > 0) {
+    stage = "customer_priced";
+    label = customerPricingPct >= 100 ? "مُسعَّر بالكامل" : `مُسعَّر ${customerPricingPct}%`;
+  } else if (supplierPriced) {
+    stage = "supplier_priced";
+    label = "مُسعَّر من المورد";
+  }
+
+  return { stage, label, supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct };
+}
+
+
 function serialize(r: typeof customerRfqsTable.$inferSelect, itemCount: number) {
   return {
     id: r.id,
@@ -166,18 +340,101 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
   }
 
   const ids = filtered.map((r) => r.rfq.id);
-  const counts =
+
+  // Batch-load the items of every listed RFQ so we can compute the per-RFQ
+  // request status without N+1 queries. We fetch: the items themselves (for the
+  // customer-pricing share + partNo/lineItem for the supplier-price lookup),
+  // the per-item counts, the approved offer_items links, and the PO/delivery
+  // rollups — all keyed by customerRfqId.
+  const allItems =
     ids.length > 0
       ? await db
-          .select({ customerRfqId: customerRfqItemsTable.customerRfqId, cnt: count() })
+          .select()
           .from(customerRfqItemsTable)
           .where(inArray(customerRfqItemsTable.customerRfqId, ids))
-          .groupBy(customerRfqItemsTable.customerRfqId)
       : [];
-  const countMap = Object.fromEntries(counts.map((c) => [c.customerRfqId, c.cnt]));
+  const itemsByRfq = new Map<number, (typeof allItems)[number][]>();
+  for (const it of allItems) {
+    const arr = itemsByRfq.get(it.customerRfqId) ?? [];
+    arr.push(it);
+    itemsByRfq.set(it.customerRfqId, arr);
+  }
+  const countMap = new Map<number, number>();
+  for (const [rfqId, arr] of itemsByRfq) countMap.set(rfqId, arr.length);
 
-  res.json(filtered.map((r) => serialize(r.rfq, countMap[r.rfq.id] ?? 0)));
+  // 2) supplier-priced: which customer_rfq_item_ids have an approved offer_item.
+  const allItemIds = allItems.map((i) => i.id);
+  const supplierPricedItemIds = allItemIds.length > 0
+    ? await resolveSupplierPricedItemIds(allItems.map((i) => ({ id: i.id, partNo: i.partNo, lineItem: i.lineItem })))
+    : new Set<number>();
+
+  // 4) PO issued + delivered share across all listed RFQs (single query).
+  let poRowsByItem = new Map<number, { qty: string | null; totalDeliveredQty: string | null; deliveryStatus: string }>();
+  if (allItemIds.length > 0) {
+    const poRows = await db
+      .select({
+        customerRfqItemId: customerPoItemsTable.customerRfqItemId,
+        totalDeliveredQty: customerPoItemsTable.totalDeliveredQty,
+        deliveryStatus: customerPoItemsTable.deliveryStatus,
+        qty: customerPoItemsTable.qty,
+      })
+      .from(customerPoItemsTable)
+      .where(and(inArray(customerPoItemsTable.customerRfqItemId, allItemIds), isNotNull(customerPoItemsTable.customerRfqItemId)));
+    for (const r of poRows) {
+      if (r.customerRfqItemId == null) continue;
+      // Keep the most-delivered row per item (an item can appear on multiple POs).
+      const existing = poRowsByItem.get(r.customerRfqItemId);
+      if (!existing) {
+        poRowsByItem.set(r.customerRfqItemId, { qty: r.qty, totalDeliveredQty: r.totalDeliveredQty, deliveryStatus: r.deliveryStatus });
+      }
+    }
+  }
+
+  res.json(
+    filtered.map((r) => {
+      const rfqItems = itemsByRfq.get(r.rfq.id) ?? [];
+      const status = computeListRequestStatus(rfqItems, supplierPricedItemIds, poRowsByItem);
+      return { ...serialize(r.rfq, countMap.get(r.rfq.id) ?? 0), requestStatus: status };
+    }),
+  );
 });
+
+// Lighter per-RFQ request-status builder for the list view: takes the already-
+// batched items + the supplier-priced id set + the PO/delivery map. Mirrors the
+// milestone logic of computeRequestStatusForRfq but without re-querying.
+function computeListRequestStatus(
+  rfqItems: Array<{ id: number; unitPrice: string | null }>,
+  supplierPricedItemIds: Set<number>,
+  poRowsByItem: Map<number, { qty: string | null; totalDeliveredQty: string | null; deliveryStatus: string }>,
+): CustomerRfqRequestStatus {
+  const totalItems = rfqItems.length;
+  const supplierPriced = rfqItems.some((i) => supplierPricedItemIds.has(i.id));
+
+  let customerPricingPct: number | null = null;
+  if (totalItems > 0) {
+    const priced = rfqItems.filter((i) => i.unitPrice != null && Number(i.unitPrice) > 0).length;
+    customerPricingPct = Math.round((priced / totalItems) * 100);
+  }
+
+  let poIssued = false;
+  let poItemIds: number[] = [];
+  let deliveredPct: number | null = null;
+  const poItems = rfqItems.filter((i) => poRowsByItem.has(i.id));
+  if (poItems.length > 0) {
+    poIssued = true;
+    poItemIds = poItems.map((i) => i.id);
+    let deliveredItems = 0;
+    for (const i of poItems) {
+      const r = poRowsByItem.get(i.id)!;
+      const ordered = r.qty != null ? Number(r.qty) : 0;
+      const delivered = r.totalDeliveredQty != null ? Number(r.totalDeliveredQty) : 0;
+      if (r.deliveryStatus === "delivered" || (ordered > 0 && delivered >= ordered)) deliveredItems += 1;
+    }
+    deliveredPct = Math.round((deliveredItems / poItems.length) * 100);
+  }
+
+  return buildRequestStatus({ supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct });
+}
 
 // GET /customer-rfq/numbers — all customer RFQ numbers (for the supplier-RFQ
 // import combobox). Lets users pick a DB customer RFQ number instead of only
@@ -493,12 +750,12 @@ router.get("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => 
     res.status(404).json({ error: "Not found" });
     return;
   }
-  const items = await db
-    .select()
-    .from(customerRfqItemsTable)
-    .where(eq(customerRfqItemsTable.customerRfqId, id));
+  // Compute the derived request status (also loads the items for this RFQ).
+  const { status: requestStatus, items } = await computeRequestStatusForRfq(id);
+  const poItemIdSet = new Set(requestStatus.poItemIds);
   res.json({
     ...serialize(row.rfq, items.length),
+    requestStatus,
     items: items.map((i) => ({
       id: i.id,
       customerRfqId: i.customerRfqId,
@@ -509,6 +766,9 @@ router.get("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => 
       qty: formatQty(i.qty),
       unitPrice: formatQty(i.unitPrice),
       total: computeTotal(i.qty, i.unitPrice),
+      // True when this line item already appears on an issued customer PO —
+      // the detail page highlights such rows green.
+      hasPo: poItemIdSet.has(i.id),
       createdAt: i.createdAt.toISOString(),
     })),
   });
@@ -677,12 +937,13 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     .select()
     .from(customerRfqsTable)
     .where(eq(customerRfqsTable.id, id));
-  const itemRows = await db
-    .select()
-    .from(customerRfqItemsTable)
-    .where(eq(customerRfqItemsTable.customerRfqId, id));
+  // Recompute the derived status + per-item PO flag after the update so the UI
+  // reflects the new pricing/PO state immediately.
+  const { status: requestStatus, items: itemRows } = await computeRequestStatusForRfq(id);
+  const poItemIdSet = new Set(requestStatus.poItemIds);
   res.json({
     ...serialize(updated, itemRows.length),
+    requestStatus,
     items: itemRows.map((i) => ({
       id: i.id,
       customerRfqId: i.customerRfqId,
@@ -693,6 +954,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       qty: formatQty(i.qty),
       unitPrice: formatQty(i.unitPrice),
       total: computeTotal(i.qty, i.unitPrice),
+      hasPo: poItemIdSet.has(i.id),
       createdAt: i.createdAt.toISOString(),
     })),
   });
