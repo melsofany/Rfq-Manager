@@ -82,6 +82,9 @@ function serializeItem(
     unitPrice: formatQty(i.unitPrice),
     total: computeTotal(i.qty, i.unitPrice),
     deliveryDate: i.deliveryDate,
+    deliveryStatus: i.deliveryStatus,
+    totalDeliveredQty: formatQty(i.totalDeliveredQty),
+    totalRejectedByCustomerQty: formatQty(i.totalRejectedByCustomerQty),
     createdAt: i.createdAt.toISOString(),
   };
 }

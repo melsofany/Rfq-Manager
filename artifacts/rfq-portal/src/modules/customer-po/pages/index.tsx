@@ -4,11 +4,14 @@ import { useListCustomerPos, getListCustomerPosQueryKey } from "@workspace/api-c
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, ShoppingCart } from "lucide-react";
+import CustomerDeliveriesPage from "./deliveries";
 
 export default function CustomerPoPage() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
+  const [tab, setTab] = useState("orders");
 
   const { data: pos, isLoading } = useListCustomerPos(
     { search: search || undefined },
@@ -33,6 +36,17 @@ export default function CustomerPoPage() {
           </Button>
         </div>
 
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="orders" className="text-xs">أوامر شراء العملاء</TabsTrigger>
+            <TabsTrigger value="deliveries" className="text-xs">تسليمات العملاء</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {tab === "deliveries" ? (
+          <CustomerDeliveriesPage />
+        ) : (
+          <>
         <div className="relative max-w-xs">
           <Search
             size={15}
@@ -142,6 +156,8 @@ export default function CustomerPoPage() {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
     </Layout>
   );
