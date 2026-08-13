@@ -523,6 +523,15 @@ export const ListCustomerRfqsResponseItem = zod.object({
   "status": zod.string(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
+  "requestStatus": zod.object({
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"مُسلَّم 100%\".'),
+  "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
+  "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
+  "poIssued": zod.boolean().describe('True when any customer_po_items row links back to an item of this RFQ.'),
+  "poItemIds": zod.array(zod.number()).describe('customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).'),
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items delivered to the customer. Null when no PO was issued.')
+}).optional().describe('Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage\/label prefers the most advanced milestone reached.\n'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -565,6 +574,15 @@ export const CreateCustomerRfqResponse = zod.object({
   "status": zod.string(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
+  "requestStatus": zod.object({
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"مُسلَّم 100%\".'),
+  "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
+  "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
+  "poIssued": zod.boolean().describe('True when any customer_po_items row links back to an item of this RFQ.'),
+  "poItemIds": zod.array(zod.number()).describe('customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).'),
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items delivered to the customer. Null when no PO was issued.')
+}).optional().describe('Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage\/label prefers the most advanced milestone reached.\n'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -691,6 +709,15 @@ export const GetCustomerRfqResponse = zod.object({
   "status": zod.string(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
+  "requestStatus": zod.object({
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"مُسلَّم 100%\".'),
+  "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
+  "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
+  "poIssued": zod.boolean().describe('True when any customer_po_items row links back to an item of this RFQ.'),
+  "poItemIds": zod.array(zod.number()).describe('customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).'),
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items delivered to the customer. Null when no PO was issued.')
+}).optional().describe('Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage\/label prefers the most advanced milestone reached.\n'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }).and(zod.object({
@@ -704,6 +731,7 @@ export const GetCustomerRfqResponse = zod.object({
   "qty": zod.number().nullish(),
   "unitPrice": zod.number().nullish(),
   "total": zod.number().nullish().describe('qty \* unitPrice, computed by the server'),
+  "hasPo": zod.boolean().optional().describe('True when this line item already appears on an issued customer PO (detail page highlights such rows green).'),
   "createdAt": zod.string()
 })).optional()
 }))
@@ -750,6 +778,15 @@ export const UpdateCustomerRfqResponse = zod.object({
   "status": zod.string(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
+  "requestStatus": zod.object({
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"مُسلَّم 100%\".'),
+  "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
+  "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
+  "poIssued": zod.boolean().describe('True when any customer_po_items row links back to an item of this RFQ.'),
+  "poItemIds": zod.array(zod.number()).describe('customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).'),
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items delivered to the customer. Null when no PO was issued.')
+}).optional().describe('Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage\/label prefers the most advanced milestone reached.\n'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }).and(zod.object({
@@ -763,6 +800,7 @@ export const UpdateCustomerRfqResponse = zod.object({
   "qty": zod.number().nullish(),
   "unitPrice": zod.number().nullish(),
   "total": zod.number().nullish().describe('qty \* unitPrice, computed by the server'),
+  "hasPo": zod.boolean().optional().describe('True when this line item already appears on an issued customer PO (detail page highlights such rows green).'),
   "createdAt": zod.string()
 })).optional()
 }))

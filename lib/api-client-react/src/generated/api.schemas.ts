@@ -245,6 +245,46 @@ export interface CustomerRfqSheetFacets {
   values: CustomerRfqSheetFacetValue[];
 }
 
+/**
+ * received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered).
+ */
+export type CustomerRfqRequestStatusStage = typeof CustomerRfqRequestStatusStage[keyof typeof CustomerRfqRequestStatusStage];
+
+
+export const CustomerRfqRequestStatusStage = {
+  received: 'received',
+  supplier_priced: 'supplier_priced',
+  customer_priced: 'customer_priced',
+  po_issued: 'po_issued',
+  delivered: 'delivered',
+} as const;
+
+/**
+ * Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage/label prefers the most advanced milestone reached.
+ */
+export interface CustomerRfqRequestStatus {
+  /** received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered). */
+  stage: CustomerRfqRequestStatusStage;
+  /** Arabic label ready to display, e.g. "طلب وارد", "مُسعَّر من المورد", "مُسعَّر 50%", "صدر أمر شراء", "مُسلَّم 100%". */
+  label: string;
+  /** True when at least one approved supplier offer exists for an item of this RFQ. */
+  supplierPriced: boolean;
+  /**
+     * Share (0–100) of this RFQ's items priced for the customer (unit_price > 0). Null when the RFQ has no items.
+     * @nullable
+     */
+  customerPricingPct?: number | null;
+  /** True when any customer_po_items row links back to an item of this RFQ. */
+  poIssued: boolean;
+  /** customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page). */
+  poItemIds: number[];
+  /**
+     * Share (0–100) of PO'd items delivered to the customer. Null when no PO was issued.
+     * @nullable
+     */
+  deliveredPct?: number | null;
+}
+
 export interface CustomerRfq {
   id: number;
   internalNo: string;
@@ -274,6 +314,7 @@ export interface CustomerRfq {
   /** @nullable */
   notes?: string | null;
   itemCount?: number;
+  requestStatus?: CustomerRfqRequestStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -310,6 +351,8 @@ export interface CustomerRfqLineItem {
      * @nullable
      */
   total?: number | null;
+  /** True when this line item already appears on an issued customer PO (detail page highlights such rows green). */
+  hasPo?: boolean;
   createdAt: string;
 }
 

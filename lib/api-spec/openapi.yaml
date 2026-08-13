@@ -2012,10 +2012,48 @@ components:
           type: ["string", "null"]
         itemCount:
           type: integer
+        requestStatus:
+          $ref: "#/components/schemas/CustomerRfqRequestStatus"
         createdAt:
           type: string
         updatedAt:
           type: string
+
+    CustomerRfqRequestStatus:
+      type: object
+      description: >
+        Derived, progressive request status (حالة الطلب) rolled up across offers,
+        customer pricing, customer POs and deliveries. The headline stage/label
+        prefers the most advanced milestone reached.
+      required: [stage, label, supplierPriced, poIssued, poItemIds]
+      properties:
+        stage:
+          type: string
+          enum: [received, supplier_priced, customer_priced, po_issued, delivered]
+          description: >
+            received (default) | supplier_priced (an approved offer exists) |
+            customer_priced (some items priced for the customer) | po_issued (a
+            customer PO was issued for an item) | delivered (items delivered).
+        label:
+          type: string
+          description: Arabic label ready to display, e.g. "طلب وارد", "مُسعَّر من المورد", "مُسعَّر 50%", "صدر أمر شراء", "مُسلَّم 100%".
+        supplierPriced:
+          type: boolean
+          description: True when at least one approved supplier offer exists for an item of this RFQ.
+        customerPricingPct:
+          type: ["integer", "null"]
+          description: Share (0–100) of this RFQ's items priced for the customer (unit_price > 0). Null when the RFQ has no items.
+        poIssued:
+          type: boolean
+          description: True when any customer_po_items row links back to an item of this RFQ.
+        poItemIds:
+          type: array
+          items:
+            type: integer
+          description: customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).
+        deliveredPct:
+          type: ["integer", "null"]
+          description: Share (0–100) of PO'd items delivered to the customer. Null when no PO was issued.
 
     CustomerRfqLineItemInput:
       type: object
@@ -2059,6 +2097,9 @@ components:
         total:
           type: ["number", "null"]
           description: qty * unitPrice, computed by the server
+        hasPo:
+          type: boolean
+          description: True when this line item already appears on an issued customer PO (detail page highlights such rows green).
         createdAt:
           type: string
 

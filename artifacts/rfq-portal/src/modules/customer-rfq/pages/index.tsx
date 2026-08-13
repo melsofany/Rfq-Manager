@@ -83,6 +83,9 @@ export default function CustomerRfqPage() {
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
                       البنود
                     </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      حالة الطلب
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -125,6 +128,9 @@ export default function CustomerRfqPage() {
                           {rfq.itemCount ?? 0}
                         </span>
                       </td>
+                      <td className="px-4 py-3">
+                        <RequestStatusBadge status={rfq.requestStatus} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -134,5 +140,30 @@ export default function CustomerRfqPage() {
         </div>
       </div>
     </Layout>
+  );
+}
+
+// Colored badge for the derived request status. Each stage gets a distinct
+// color so the list reads at a glance.
+function RequestStatusBadge({
+  status,
+}: {
+  status?: import("@workspace/api-client-react").CustomerRfqRequestStatus | null;
+}) {
+  if (!status) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const STAGE_STYLES: Record<string, string> = {
+    received: "bg-slate-100 text-slate-600 dark:bg-slate-900/50 dark:text-slate-300",
+    supplier_priced: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300",
+    customer_priced: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+    po_issued: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300",
+    delivered: "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
+  };
+  const cls = STAGE_STYLES[status.stage] ?? STAGE_STYLES.received;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${cls}`}>
+      {status.label}
+    </span>
   );
 }
