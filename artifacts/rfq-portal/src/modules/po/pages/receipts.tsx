@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useListPurchaseOrders, getListPurchaseOrdersQueryKey } from "@workspace/api-client-react";
-import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -173,11 +172,10 @@ export default function GoodsReceiptPage() {
   }
 
   return (
-    <Layout>
-      <div className="p-4 sm:p-6 space-y-5">
-        <div>
-          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <PackageCheck size={20} className="text-primary" />
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+          <PackageCheck size={20} className="text-primary" />
             استلام التوريدات
           </h1>
           <p className="text-muted-foreground text-sm">
@@ -303,8 +301,7 @@ export default function GoodsReceiptPage() {
             ))
           )}
         </div>
-      </div>
-    </Layout>
+    </div>
   );
 }
 
