@@ -348,6 +348,71 @@ export async function initDb(): Promise<void> {
         WHERE status IN ('SENT', 'QUOTED')
           AND id IN (SELECT DISTINCT rfq_id FROM purchase_orders WHERE rfq_id IS NOT NULL);
       `);
+
+    // ── Goods receipt / customer delivery tracking (line-item level) ───────
+    // New columns on existing tables (safe migration — skipped if present).
+    await client.query(`
+      ALTER TABLE purchase_order_items
+        ADD COLUMN IF NOT EXISTS customer_po_item_id INTEGER REFERENCES customer_po_items(id) ON DELETE SET NULL;
+      ALTER TABLE purchase_order_items
+        ADD COLUMN IF NOT EXISTS total_received_qty NUMERIC(15,4);
+      ALTER TABLE purchase_order_items
+        ADD COLUMN IF NOT EXISTS total_accepted_qty NUMERIC(15,4);
+      ALTER TABLE purchase_order_items
+        ADD COLUMN IF NOT EXISTS total_rejected_qty NUMERIC(15,4);
+      ALTER TABLE purchase_order_items
+        ADD COLUMN IF NOT EXISTS final_actual_cost NUMERIC(15,4);
+      ALTER TABLE purchase_order_items
+        ADD COLUMN IF NOT EXISTS line_status TEXT NOT NULL DEFAULT 'pending';
+
+      ALTER TABLE customer_po_items
+        ADD COLUMN IF NOT EXISTS total_delivered_qty NUMERIC(15,4);
+      ALTER TABLE customer_po_items
+        ADD COLUMN IF NOT EXISTS total_rejected_by_customer_qty NUMERIC(15,4);
+      ALTER TABLE customer_po_items
+        ADD COLUMN IF NOT EXISTS delivery_status TEXT NOT NULL DEFAULT 'pending';
+
+      ALTER TABLE work_order_assignments
+        ADD COLUMN IF NOT EXISTS po_item_id INTEGER REFERENCES purchase_order_items(id) ON DELETE SET NULL;
+    `);
+
+    // Per-line supplier PO receipt log. A purchase_order_item may have several
+    // rows (partial shipments); the aggregated totals mirror onto
+    // purchase_order_items, but these rows are the source of truth.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS po_item_receipts (
+        id SERIAL PRIMARY KEY,
+        po_item_id INTEGER NOT NULL REFERENCES purchase_order_items(id) ON DELETE CASCADE,
+        po_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        assignment_id INTEGER REFERENCES work_order_assignments(id) ON DELETE SET NULL,
+        received_qty NUMERIC(15,4),
+        accepted_qty NUMERIC(15,4),
+        rejected_qty NUMERIC(15,4),
+        rejection_reason TEXT,
+        actual_cost NUMERIC(15,4),
+        receipt_status TEXT NOT NULL DEFAULT 'received',
+        received_by TEXT,
+        received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // Per-line customer delivery log. Delivered qty is guarded in the API
+    // against the accepted qty received from the supplier (via customerPoItemId).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS customer_po_item_deliveries (
+        id SERIAL PRIMARY KEY,
+        customer_po_item_id INTEGER NOT NULL REFERENCES customer_po_items(id) ON DELETE CASCADE,
+        customer_po_id INTEGER NOT NULL REFERENCES customer_pos(id) ON DELETE CASCADE,
+        delivered_qty NUMERIC(15,4),
+        rejected_by_customer_qty NUMERIC(15,4),
+        rejection_reason TEXT,
+        delivery_status TEXT NOT NULL DEFAULT 'delivered',
+        delivered_by TEXT,
+        delivered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
     logger.info("initDb: all tables created");
 
     // ── ERP Integrations table ─────────────────────────────────────────────

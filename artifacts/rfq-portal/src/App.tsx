@@ -51,6 +51,7 @@ import CustomerRfqDetailPage from "@/modules/customer-rfq/pages/detail";
 import CustomerPoPage from "@/modules/customer-po/pages/index";
 import NewCustomerPoPage from "@/modules/customer-po/pages/new";
 import CustomerPoDetailPage from "@/modules/customer-po/pages/detail";
+import AccountsPage from "@/modules/accounts/pages/index";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -190,6 +191,9 @@ function Router() {
       </Route>
       <Route path="/customer-po">
         <ProtectedRoute component={CustomerPoPage} />
+      </Route>
+      <Route path="/accounts">
+        <ProtectedRoute component={AccountsPage} />
       </Route>
 
       <Route component={NotFound} />

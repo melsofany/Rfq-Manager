@@ -28,7 +28,7 @@ import { sendPoEmail } from "../../shared/email";
 
 const router = Router();
 
-function normalizePhone(phone: string): string {
+export function normalizePhone(phone: string): string {
   // Strip invisible Unicode directional/formatting marks that paste in from WhatsApp/browsers
   // eslint-disable-next-line no-control-regex
   let cleaned = phone.replace(

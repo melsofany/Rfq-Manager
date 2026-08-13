@@ -14,8 +14,10 @@
  */
 import { Router, type IRouter } from "express";
 import customerPoRouter from "./routes";
+import deliveriesRouter from "./deliveries";
 
 const router: IRouter = Router();
 router.use(customerPoRouter);
+router.use(deliveriesRouter);
 
 export default router;

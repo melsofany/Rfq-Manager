@@ -15,6 +15,7 @@ import rfqModule from "../modules/rfq/index";
 import customerRfqModule from "../modules/customer-rfq/index";
 import customerPoModule from "../modules/customer-po/index";
 import poModule from "../modules/po/index";
+import accountsModule from "../modules/accounts/index";
 import usersModule from "../modules/users/index";
 import reportsModule from "../modules/reports/index";
 import communicationsModule from "../modules/communications/index";
@@ -32,6 +33,7 @@ router.use(rfqModule); // rfq · offers · pricing · items
 router.use(customerRfqModule); // customer-rfq intake
 router.use(customerPoModule); // customer purchase orders
 router.use(poModule); // purchase-orders
+router.use(accountsModule); // accounts · realized margins
 router.use(reportsModule); // analytics · audit · sync
 router.use(communicationsModule); // whatsapp (legacy — kept read-only as backup)
 router.use(chatwootModule); // chatwoot SSO bridge for the /whatsapp inbox

@@ -5,7 +5,9 @@ import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, ShoppingCart } from "lucide-react";
+import GoodsReceiptPage from "./receipts";
 
 const STATUSES = ["all", "draft", "sent", "cancelled"];
 
@@ -13,6 +15,7 @@ export default function PurchaseOrdersListPage() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [tab, setTab] = useState("orders");
 
   const { data: purchaseOrders, isLoading } = useListPurchaseOrders(
     { status: status !== "all" ? status : undefined, search: search || undefined },
@@ -46,6 +49,17 @@ export default function PurchaseOrdersListPage() {
           </Button>
         </div>
 
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList>
+            <TabsTrigger value="orders" className="text-xs">أوامر الشراء</TabsTrigger>
+            <TabsTrigger value="receipts" className="text-xs">استلام التوريدات</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {tab === "receipts" ? (
+          <GoodsReceiptPage />
+        ) : (
+          <>
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search
@@ -154,6 +168,8 @@ export default function PurchaseOrdersListPage() {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
     </Layout>
   );

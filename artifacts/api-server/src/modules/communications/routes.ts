@@ -6,6 +6,9 @@ import {
   whatsappReactionsTable,
   whatsappMediaTable,
   workOrderAssignmentsTable,
+  purchaseOrdersTable,
+  purchaseOrderItemsTable,
+  poItemReceiptsTable,
 } from "@workspace/db";
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import {
@@ -15,10 +18,13 @@ import {
   isWhatsAppConfigured,
   sendWhatsAppText,
   sendWhatsAppInteractiveConfirmation,
+  sendRepresentativeItemReceiptWhatsApp,
+  sendRejectionReasonOptions,
   uploadWhatsAppMedia,
 } from "./service";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
+import { REJECTION_REASONS } from "../po/receipts";
 import multer from "multer";
 const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -306,14 +312,198 @@ interface ServerMessage {
   context?: { id: string; from?: string }; // message being replied to
 }
 
+/**
+ * Resolve the pending (or most recent) work_order_assignment for a phone,
+ * optionally constrained to a specific PO line item. Whole-PO assignments
+ * (legacy, poItemId null) are matched by representativePhone; per-item
+ * assignments additionally match poItemId.
+ */
+async function findAssignment(
+  phone: string,
+  poItemId?: number,
+): Promise<typeof workOrderAssignmentsTable.$inferSelect | undefined> {
+  const candidates = await db
+    .select()
+    .from(workOrderAssignmentsTable)
+    .where(eq(workOrderAssignmentsTable.representativePhone, normalizePhone(phone)));
+  return (
+    candidates
+      .filter((a) => a.status !== "received" && a.status !== "rejected")
+      .filter((a) => (poItemId == null ? true : a.poItemId === poItemId))
+      .sort((a, b) => b.id - a.id)[0] ?? undefined
+  );
+}
+
+/**
+ * Handle per-item goods-receipt buttons and the rejection-reason list.
+ * Payloads:
+ *   work_order_item:<poNo>:<poItemId>:received
+ *   work_order_item:<poNo>:<poItemId>:rejected
+ *   work_order_reason:<poNo>:<poItemId>:<encodedReason>   (from the list reply)
+ *
+ * "received" creates a po_item_receipts row using the ordered qty as both
+ * received and accepted (full receipt). "rejected" prompts for the reason via
+ * a list; the chosen reason creates a receipt row with rejectedQty = ordered qty.
+ */
+async function handleWorkOrderItemButton(
+  phone: string,
+  msg: ServerMessage,
+): Promise<boolean> {
+  const buttonId = msg.interactive?.button_reply?.id;
+  const listId = msg.interactive?.list_reply?.id;
+  const payload = buttonId ?? listId ?? "";
+  if (!payload.startsWith("work_order_item:") && !payload.startsWith("work_order_reason:")) {
+    return false;
+  }
+
+  // work_order_item:<poNo>:<poItemId>:<received|rejected>
+  if (payload.startsWith("work_order_item:")) {
+    const parts = payload.split(":");
+    const poNo = parts[1];
+    const poItemId = parseInt(parts[2], 10);
+    const action = parts[3];
+    if (!isFinite(poItemId)) {
+      await sendWhatsAppText(phone, "تعذر تحديد البند المرتبط بهذا الزر.");
+      return true;
+    }
+    if (action === "rejected") {
+      await sendRejectionReasonOptions(phone, poNo, poItemId, REJECTION_REASONS);
+      return true;
+    }
+    if (action === "received") {
+      const created = await recordItemReceipt(poItemId, {
+        receivedQtyFromOrdered: true,
+        acceptedQtyFromOrdered: true,
+      });
+      await sendWhatsAppText(
+        phone,
+        created
+          ? `تم تسجيل استلام البند في أمر الشراء ${poNo}.`
+          : `تعذر العثور على البند في أمر الشراء ${poNo}.`,
+      );
+      return true;
+    }
+    return true;
+  }
+
+  // work_order_reason:<poNo>:<poItemId>:<encodedReason>
+  const parts = payload.split(":");
+  const poNo = parts[1];
+  const poItemId = parseInt(parts[2], 10);
+  const reason = decodeURIComponent(parts.slice(3).join(":"));
+  if (!isFinite(poItemId)) {
+    await sendWhatsAppText(phone, "تعذر تحديد البند المرتبط بهذا الرد.");
+    return true;
+  }
+  const created = await recordItemReceipt(poItemId, {
+    rejectedQtyFromOrdered: true,
+    rejectionReason: reason,
+  });
+  await sendWhatsAppText(
+    phone,
+    created
+      ? `تم تسجيل رفض البند في أمر الشراء ${poNo} — السبب: ${reason}.`
+      : `تعذر العثور على البند في أمر الشراء ${poNo}.`,
+  );
+  return true;
+}
+
+/**
+ * Inserts a po_item_receipts row for a supplier PO line and re-aggregates the
+ * item's totals. Uses the ordered qty on the purchase_order_item as the basis
+ * (full receipt / full rejection). Returns false when the line is not found.
+ *
+ * The representative-driven WhatsApp flow records a single full-qty event; for
+ * partial shipments or cost adjustments the operator should use the receipt
+ * screen in the portal (POST /po/:id/receipts) where qty/cost are explicit.
+ */
+async function recordItemReceipt(
+  poItemId: number,
+  opts: {
+    receivedQtyFromOrdered?: boolean;
+    acceptedQtyFromOrdered?: boolean;
+    rejectedQtyFromOrdered?: boolean;
+    rejectionReason?: string;
+  },
+): Promise<boolean> {
+  const [line] = await db
+    .select({
+      id: purchaseOrderItemsTable.id,
+      poId: purchaseOrderItemsTable.poId,
+      qty: purchaseOrderItemsTable.qty,
+    })
+    .from(purchaseOrderItemsTable)
+    .where(eq(purchaseOrderItemsTable.id, poItemId));
+  if (!line) return false;
+
+  const ordered = line.qty ? String(line.qty) : null;
+  await db.insert(poItemReceiptsTable).values({
+    poItemId: line.id,
+    poId: line.poId,
+    receivedQty: opts.receivedQtyFromOrdered ? ordered : null,
+    acceptedQty: opts.acceptedQtyFromOrdered ? ordered : null,
+    rejectedQty: opts.rejectedQtyFromOrdered ? ordered : null,
+    rejectionReason: opts.rejectionReason ?? null,
+    receiptStatus: opts.rejectedQtyFromOrdered ? "rejected" : "received",
+    receivedBy: "واتساب",
+  });
+
+  // Re-aggregate the line's totals (mirrors the receipts endpoint logic).
+  const rows = await db
+    .select()
+    .from(poItemReceiptsTable)
+    .where(eq(poItemReceiptsTable.poItemId, line.id));
+  const sum = (sel: (r: (typeof rows)[number]) => string | null) =>
+    rows.reduce((acc, r) => acc + (sel(r) ? Number(sel(r)) : 0), 0);
+  const received = sum((r) => r.receivedQty);
+  const accepted = sum((r) => r.acceptedQty);
+  const rejected = sum((r) => r.rejectedQty);
+
+  // Weighted average actual cost across batches.
+  let actualCost: number | null = null;
+  const weighted = rows.reduce(
+    (acc, r) => {
+      const q = r.acceptedQty ? Number(r.acceptedQty) : 0;
+      const c = r.actualCost ? Number(r.actualCost) : null;
+      if (q > 0 && c != null) {
+        acc.total += q * c;
+        acc.weight += q;
+      }
+      return acc;
+    },
+    { total: 0, weight: 0 },
+  );
+  if (weighted.weight > 0) actualCost = weighted.total / weighted.weight;
+
+  const orderedNum = ordered ? Number(ordered) : null;
+  let lineStatus = "pending";
+  if (accepted > 0) {
+    lineStatus = orderedNum != null && accepted >= orderedNum ? "fulfilled" : "partial";
+  } else if (rejected > 0) {
+    lineStatus = "rejected";
+  }
+
+  await db
+    .update(purchaseOrderItemsTable)
+    .set({
+      totalReceivedQty: String(received),
+      totalAcceptedQty: String(accepted),
+      totalRejectedQty: String(rejected),
+      finalActualCost: actualCost != null ? String(actualCost) : null,
+      lineStatus,
+    })
+    .where(eq(purchaseOrderItemsTable.id, line.id));
+  return true;
+}
+
 async function handleWorkOrderButton(phone: string, msg: ServerMessage): Promise<boolean> {
+  // Per-item goods-receipt flow takes precedence over the legacy whole-PO flow.
+  if (await handleWorkOrderItemButton(phone, msg)) return true;
+
   const payload = msg.interactive?.button_reply?.id;
   if (!payload?.startsWith("work_order:")) return false;
   const [, poNo, action, decision] = payload.split(":");
-  const candidates = await db.select().from(workOrderAssignmentsTable)
-    .where(eq(workOrderAssignmentsTable.representativePhone, normalizePhone(phone)));
-  const assignment = candidates.filter((a) => a.status !== "received" && a.status !== "rejected")
-    .sort((a, b) => b.id - a.id)[0];
+  const assignment = await findAssignment(phone);
   if (!assignment) {
     await sendWhatsAppText(phone, "تعذر العثور على أمر الشغل المرتبط بهذا الزر.");
     return true;

@@ -10,6 +10,7 @@ declare module "express-session" {
   interface SessionData {
     employeeId: number;
     role: string;
+    employeeName?: string;
   }
 }
 
@@ -37,6 +38,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   req.session.employeeId = employee.id;
   req.session.role = employee.role;
+  req.session.employeeName = employee.name;
 
   req.log.info({ employeeId: employee.id }, "Employee logged in");
 

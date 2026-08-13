@@ -13,6 +13,9 @@ import {
   ActionButtons,
   Button,
   Body,
+  ActionList,
+  ListSection,
+  Row,
   Document as WADocument,
 } from "whatsapp-api-js/messages";
 import { logger } from "../../shared/logger";
@@ -521,6 +524,77 @@ export async function sendWhatsAppInteractiveConfirmation(
       new Button(`work_order:${poNo}:${action}:cancel`, "تراجع"),
     ),
     new Body(body),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/**
+ * Per-item goods-receipt prompt. Sends a simple interactive-button message for
+ * ONE supplier PO line so the representative can confirm receipt or rejection
+ * directly from WhatsApp. The payload encodes the poItemId so the inbound
+ * handler can record the receipt against the exact line:
+ *   work_order_item:<poNo>:<poItemId>:received
+ *   work_order_item:<poNo>:<poItemId>:rejected
+ */
+export async function sendRepresentativeItemReceiptWhatsApp(opts: {
+  phone: string;
+  poNo: string;
+  poItemId: number;
+  lineLabel: string; // e.g. "بند 3 - وصف البند"
+  qty?: string | null;
+}): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(opts.phone);
+  const qtyText = opts.qty ? ` — الكمية: ${opts.qty}` : "";
+  const body = `استلام التوريدات\nأمر الشراء: ${opts.poNo}\n${opts.lineLabel}${qtyText}\nهل تم الاستلام؟`;
+  const message = new Interactive(
+    new ActionButtons(
+      new Button(`work_order_item:${opts.poNo}:${opts.poItemId}:received`, "تم الاستلام"),
+      new Button(`work_order_item:${opts.poNo}:${opts.poItemId}:rejected`, "رفض"),
+    ),
+    new Body(body),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/**
+ * Sends the rejection-reason picker as an interactive list after the
+ * representative taps "رفض" on a line. Payload per option:
+ *   work_order_reason:<poNo>:<poItemId>:<reason>
+ */
+export async function sendRejectionReasonOptions(
+  phone: string,
+  poNo: string,
+  poItemId: number,
+  reasons: readonly string[],
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const rows = reasons.map(
+    (r, i) =>
+      new Row(
+        `work_order_reason:${poNo}:${poItemId}:${encodeURIComponent(r)}`,
+        `${i + 1}. ${r}`,
+        "",
+      ),
+  );
+  // ListSection expects AtLeastOne<Row> ([T, ...T[]]); split into a guaranteed
+  // non-empty tuple so the spread type-checks.
+  const [firstRow, ...restRows] = rows;
+  const message = new Interactive(
+    new ActionList(
+      "اختر سبب الرفض",
+      new ListSection("أسباب الرفض", firstRow, ...restRows),
+    ),
+    new Body(`تم اختيار الرفض لبند في أمر الشراء ${poNo}.\nاختر سبب الرفض:`),
   );
   const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
   if ("error" in result && result.error) {

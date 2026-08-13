@@ -51,6 +51,13 @@ export const customerPoItemsTable = pgTable("customer_po_items", {
   qty: numeric("qty", { precision: 15, scale: 4 }),
   unitPrice: numeric("unit_price", { precision: 15, scale: 4 }),
   deliveryDate: text("delivery_date"),
+  // Delivery summary — rolled up from customer_po_item_deliveries so the UI can
+  // render a snapshot. Guarded in the API: delivered qty may not exceed the
+  // accepted qty received from the supplier on the linked purchase_order_items.
+  totalDeliveredQty: numeric("total_delivered_qty", { precision: 15, scale: 4 }),
+  totalRejectedByCustomerQty: numeric("total_rejected_by_customer_qty", { precision: 15, scale: 4 }),
+  // pending | partial | delivered | rejected
+  deliveryStatus: text("delivery_status").notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

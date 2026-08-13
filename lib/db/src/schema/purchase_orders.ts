@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { employeesTable } from "./employees";
 import { suppliersTable } from "./suppliers";
 import { rfqTable } from "./rfq";
+import { customerPoItemsTable } from "./customer_pos";
 
 export const purchaseOrdersTable = pgTable("purchase_orders", {
   id: serial("id").primaryKey(),
@@ -36,6 +37,20 @@ export const purchaseOrderItemsTable = pgTable("purchase_order_items", {
   qty: numeric("qty", { precision: 15, scale: 4 }),
   referencePrice: numeric("reference_price", { precision: 15, scale: 4 }),
   taxIncluded: boolean("tax_included").notNull().default(false),
+  // Links this supplier PO line to the customer PO line it fulfils, enabling
+  // realized-margin computation (selling price − actual cost). Nullable for
+  // legacy/sheet-only POs with no customer PO origin.
+  customerPoItemId: integer("customer_po_item_id").references(() => customerPoItemsTable.id, {
+    onDelete: "set null",
+  }),
+  // Receipt summary — rolled up from po_item_receipts so the UI can render a
+  // snapshot without re-aggregating every receipt row on each request.
+  totalReceivedQty: numeric("total_received_qty", { precision: 15, scale: 4 }),
+  totalAcceptedQty: numeric("total_accepted_qty", { precision: 15, scale: 4 }),
+  totalRejectedQty: numeric("total_rejected_qty", { precision: 15, scale: 4 }),
+  finalActualCost: numeric("final_actual_cost", { precision: 15, scale: 4 }),
+  // pending | partial | fulfilled | rejected | postponed
+  lineStatus: text("line_status").notNull().default("pending"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
