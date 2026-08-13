@@ -177,6 +177,7 @@ export default function AccountsPage() {
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-left">
                     <th className="px-3 py-3 text-muted-foreground text-xs font-medium">أمر شراء العميل</th>
+                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">رقم أمر العميل</th>
                     <th className="px-3 py-3 text-muted-foreground text-xs font-medium">العميل</th>
                     <th className="px-3 py-3 text-muted-foreground text-xs font-medium">البند</th>
                     <th className="px-3 py-3 text-muted-foreground text-xs font-medium">كمية البيع</th>
@@ -199,6 +200,9 @@ export default function AccountsPage() {
                     >
                       <td className="px-3 py-3 font-mono text-xs text-primary">
                         {l.internalPoNo}
+                      </td>
+                      <td className="px-3 py-3 font-mono text-xs text-foreground">
+                        {l.customerPoNo ?? "-"}
                       </td>
                       <td className="px-3 py-3 text-xs text-foreground">{l.customerName ?? "-"}</td>
                       <td className="px-3 py-3">
