@@ -159,6 +159,7 @@ function RequestStatusBadge({
     customer_priced: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
     po_issued: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300",
     delivered: "bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300",
+    expired: "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300",
   };
   const cls = STAGE_STYLES[status.stage] ?? STAGE_STYLES.received;
   return (

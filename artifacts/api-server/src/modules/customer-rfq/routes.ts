@@ -137,12 +137,17 @@ function computeTotal(qty: string | null, unitPrice: string | null): string | nu
 //      and (via customer_po_items.total_delivered_qty) the share of PO'd items
 //      that have been (fully or partially) delivered to the customer.
 //
+// When the close date (expiryDate) has passed and the request never progressed
+// past "received" (no item was priced by supplier or customer, no PO issued),
+// the stage becomes "expired" (فشل/منتهي) — a failed request.
+//
 // The headline label prefers the most advanced milestone reached, while the
 // numeric fields let the UI render a richer badge ("مسعَّر 60%").
 export interface CustomerRfqRequestStatus {
-  // Machine-readable headline stage: received | supplier_priced | customer_priced | po_issued | delivered
+  // Machine-readable headline stage:
+  // received | supplier_priced | customer_priced | po_issued | delivered | expired
   stage: string;
-  // Arabic label ready to display, e.g. "طلب وارد", "مسعَّر من المورد", "مسعَّر 50%", "صدر أمر شراء", "مُسلَّم 100%"
+  // Arabic label ready to display, e.g. "طلب وارد", "مسعَّر من المورد", "مسعَّر 50%", "صدر أمر شراء", "مُسلَّم 100%", "منتهي (فشل)"
   label: string;
   // True when at least one approved supplier offer exists for an item of this RFQ.
   supplierPriced: boolean;
@@ -203,10 +208,25 @@ async function resolveSupplierPricedItemIds(
   return priced;
 }
 
+// True when the customer RFQ's close date (expiryDate, a free-text YYYY-MM-DD
+// or similar parseable date) is in the past. Used to mark requests that passed
+// their close date with no pricing as "expired" (failed). A non-parseable or
+// missing expiryDate is never considered expired.
+function hasExpired(expiryDate: string | null): boolean {
+  if (!expiryDate) return false;
+  const d = new Date(expiryDate);
+  if (Number.isNaN(d.getTime())) return false;
+  // Compare against the start of today so the whole close day stays valid.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d.getTime() < today.getTime();
+}
+
 // For a single RFQ: load its items + the cross-table milestones and return the
 // derived request status. Used by GET /:id (detail) and as a one-off helper.
 async function computeRequestStatusForRfq(
   rfqId: number,
+  expiryDate: string | null = null,
 ): Promise<{ status: CustomerRfqRequestStatus; items: typeof customerRfqItemsTable.$inferSelect[] }> {
   const items = await db
     .select()
@@ -265,7 +285,10 @@ async function computeRequestStatusForRfq(
     }
   }
 
-  return { status: buildRequestStatus({ supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct }), items };
+  return {
+    status: buildRequestStatus({ supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct, expiryDate }),
+    items,
+  };
 }
 
 // Build the headline stage + label from the resolved milestone flags.
@@ -275,8 +298,9 @@ function buildRequestStatus(input: {
   poIssued: boolean;
   poItemIds: number[];
   deliveredPct: number | null;
+  expiryDate?: string | null;
 }): CustomerRfqRequestStatus {
-  const { supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct } = input;
+  const { supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct, expiryDate } = input;
 
   let stage = "received";
   let label = "طلب وارد";
@@ -299,6 +323,11 @@ function buildRequestStatus(input: {
   } else if (supplierPriced) {
     stage = "supplier_priced";
     label = "مُسعَّر من المورد";
+  } else if (hasExpired(expiryDate ?? null)) {
+    // The close date passed with no item priced (no supplier offer, no customer
+    // price, no PO) — the request failed without ever progressing.
+    stage = "expired";
+    label = "منتهي (فشل)";
   }
 
   return { stage, label, supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct };
@@ -406,7 +435,7 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
   res.json(
     filtered.map((r) => {
       const rfqItems = itemsByRfq.get(r.rfq.id) ?? [];
-      const status = computeListRequestStatus(rfqItems, supplierPricedItemIds, poRowsByItem);
+      const status = computeListRequestStatus(rfqItems, supplierPricedItemIds, poRowsByItem, r.rfq.expiryDate);
       return { ...serialize(r.rfq, countMap.get(r.rfq.id) ?? 0), requestStatus: status };
     }),
   );
@@ -419,6 +448,7 @@ function computeListRequestStatus(
   rfqItems: Array<{ id: number; unitPrice: string | null }>,
   supplierPricedItemIds: Set<number>,
   poRowsByItem: Map<number, { qty: string | null; totalDeliveredQty: string | null; deliveryStatus: string }>,
+  expiryDate: string | null,
 ): CustomerRfqRequestStatus {
   const totalItems = rfqItems.length;
   const supplierPriced = rfqItems.some((i) => supplierPricedItemIds.has(i.id));
@@ -446,7 +476,7 @@ function computeListRequestStatus(
     deliveredPct = Math.round((deliveredItems / poItems.length) * 100);
   }
 
-  return buildRequestStatus({ supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct });
+  return buildRequestStatus({ supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct, expiryDate });
 }
 
 // GET /customer-rfq/numbers — all customer RFQ numbers (for the supplier-RFQ
@@ -781,7 +811,7 @@ router.get("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => 
     return;
   }
   // Compute the derived request status (also loads the items for this RFQ).
-  const { status: requestStatus, items } = await computeRequestStatusForRfq(id);
+  const { status: requestStatus, items } = await computeRequestStatusForRfq(id, row.rfq.expiryDate);
   const poItemIdSet = new Set(requestStatus.poItemIds);
   res.json({
     ...serialize(row.rfq, items.length),
@@ -969,7 +999,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     .where(eq(customerRfqsTable.id, id));
   // Recompute the derived status + per-item PO flag after the update so the UI
   // reflects the new pricing/PO state immediately.
-  const { status: requestStatus, items: itemRows } = await computeRequestStatusForRfq(id);
+  const { status: requestStatus, items: itemRows } = await computeRequestStatusForRfq(id, updated.expiryDate);
   const poItemIdSet = new Set(requestStatus.poItemIds);
   res.json({
     ...serialize(updated, itemRows.length),

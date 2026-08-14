@@ -524,7 +524,7 @@ export const ListCustomerRfqsResponseItem = zod.object({
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "requestStatus": zod.object({
-  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered).\n'),
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed).\n'),
   "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"مُسلَّم 100%\".'),
   "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
   "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
@@ -575,7 +575,7 @@ export const CreateCustomerRfqResponse = zod.object({
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "requestStatus": zod.object({
-  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered).\n'),
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed).\n'),
   "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"مُسلَّم 100%\".'),
   "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
   "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
@@ -710,7 +710,7 @@ export const GetCustomerRfqResponse = zod.object({
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "requestStatus": zod.object({
-  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered).\n'),
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed).\n'),
   "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"مُسلَّم 100%\".'),
   "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
   "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
@@ -779,7 +779,7 @@ export const UpdateCustomerRfqResponse = zod.object({
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "requestStatus": zod.object({
-  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered).\n'),
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed).\n'),
   "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"مُسلَّم 100%\".'),
   "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
   "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
