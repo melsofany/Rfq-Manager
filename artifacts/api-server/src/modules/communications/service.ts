@@ -831,6 +831,9 @@ export async function sendRepItemAction(
     poId: number;        // for the رجوع button (re-send item picker)
     label: string;
     qty?: string | null;
+    supplierName?: string | null;
+    supplierAddress?: string | null;
+    supplierPhone?: string | null;
   },
 ): Promise<string | null> {
   requireConfigured();
@@ -838,7 +841,12 @@ export async function sendRepItemAction(
   const qtyText = opts.qty ? ` — الكمية: ${opts.qty}` : "";
   const back = new Button(`rep_back:item:${opts.kind}:${opts.poId}`, "رجوع");
   if (opts.kind === "receipt") {
-    const body = `استلام من مورد\nأمر الشراء: ${opts.no}\n${opts.label}${qtyText}\nهل تم الاستلام؟`;
+    const supplierLines: string[] = [];
+    if (opts.supplierName) supplierLines.push(`المورد: ${opts.supplierName}`);
+    if (opts.supplierAddress) supplierLines.push(`عنوان المورد: ${opts.supplierAddress}`);
+    if (opts.supplierPhone) supplierLines.push(`هاتف المورد: ${opts.supplierPhone}`);
+    const supplierBlock = supplierLines.length ? `\n${supplierLines.join("\n")}` : "";
+    const body = `استلام من مورد\nأمر الشراء: ${opts.no}${supplierBlock}\n${opts.label}${qtyText}\nهل تم الاستلام؟`;
     const message = new Interactive(
       new ActionButtons(
         new Button(`work_order_item:${opts.no}:${opts.itemId}:received`, "تم الاستلام"),
