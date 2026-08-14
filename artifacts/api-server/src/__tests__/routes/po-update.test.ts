@@ -24,6 +24,7 @@ vi.mock("../../modules/communications/service", () => ({
   sendPoWhatsApp: vi.fn().mockResolvedValue({ ok: true }),
   isWhatsAppConfigured: vi.fn().mockReturnValue(false),
   sendRepresentativeWorkOrderWhatsApp: vi.fn().mockResolvedValue({ ok: true }),
+  sendRepresentativeItemReceiptWhatsApp: vi.fn().mockResolvedValue("wa-id"),
 }));
 
 vi.mock("../../modules/po/po-pdf", () => ({
