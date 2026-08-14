@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { BookCopy, Plus, Eye, CheckCircle, Send, XCircle, Trash2 } from "lucide-react";
+import { BookCopy, Plus, Eye, CheckCircle, Send, XCircle, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 
@@ -65,7 +65,27 @@ const SOURCE_LABELS: Record<string, string> = {
   supplier_invoice: "فاتورة مورد",
   supplier_payment: "سند صرف",
   sales_invoice: "فاتورة بيع",
+  operating_expense: "مصروف تشغيلي",
 };
+
+/** خريطة أنواع المصروفات إلى أكواد الحسابات (تطابق accounts/integration.ts). */
+const EXPENSE_CATEGORIES: { code: string; label: string }[] = [
+  { code: "5300", label: "إيجارات" },
+  { code: "5700", label: "دومينات واستضافة وخدمات تقنية" },
+  { code: "5400", label: "كهرباء ومياه" },
+  { code: "5410", label: "اتصالات" },
+  { code: "5990", label: "نثريات" },
+  { code: "5500", label: "صيانة" },
+  { code: "5600", label: "مصروفات إدارية" },
+  { code: "5200", label: "رواتب" },
+  { code: "5900", label: "عمولات ومصاريف بنكية" },
+  { code: "5990", label: "أخرى" },
+];
+
+const PAYMENT_METHODS = [
+  { code: "1001", label: "نقدية (الخزينة)" },
+  { code: "1010", label: "تحويل بنكي" },
+];
 
 export default function JournalTab() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -73,12 +93,22 @@ export default function JournalTab() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ from: "", to: "", status: "" });
   const [createOpen, setCreateOpen] = useState(false);
+  const [expenseOpen, setExpenseOpen] = useState(false);
   const [detail, setDetail] = useState<JournalDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [form, setForm] = useState({
     entryDate: new Date().toISOString().slice(0, 10),
     description: "",
     lines: [{ accountCode: "", description: "", debit: "", credit: "" }, { accountCode: "", description: "", debit: "", credit: "" }],
+  });
+  const [expenseForm, setExpenseForm] = useState({
+    expenseDate: new Date().toISOString().slice(0, 10),
+    category: EXPENSE_CATEGORIES[0].label,
+    expenseAccountCode: EXPENSE_CATEGORIES[0].code,
+    cashAccountCode: PAYMENT_METHODS[0].code,
+    amount: "",
+    description: "",
+    post: true,
   });
 
   async function load() {
@@ -152,6 +182,55 @@ export default function JournalTab() {
     }
   }
 
+  async function createExpense() {
+    const amount = Number(expenseForm.amount);
+    if (!amount || amount <= 0) {
+      toast.error("أدخل مبلغًا صحيحًا");
+      return;
+    }
+    if (!expenseForm.expenseAccountCode || !expenseForm.cashAccountCode) {
+      toast.error("اختر حساب المصروف وطريقة السداد");
+      return;
+    }
+    const desc = expenseForm.description
+      ? `${expenseForm.category} — ${expenseForm.description}`
+      : expenseForm.category;
+    try {
+      const r = await fetch("/api/accounts/journal", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entryDate: expenseForm.expenseDate,
+          description: `مصروف تشغيلي — ${desc}`,
+          status: expenseForm.post ? "posted" : "draft",
+          lines: [
+            { accountCode: expenseForm.expenseAccountCode, description: expenseForm.category, debit: amount },
+            { accountCode: expenseForm.cashAccountCode, description: "سداد مصروف", credit: amount },
+          ],
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || "فشل تسجيل المصروف");
+      }
+      toast.success(expenseForm.post ? "تم تسجيل المصروف وترحيل القيد" : "تم إنشاء قيد المصروف (مسودة)");
+      setExpenseOpen(false);
+      setExpenseForm({
+        expenseDate: new Date().toISOString().slice(0, 10),
+        category: EXPENSE_CATEGORIES[0].label,
+        expenseAccountCode: EXPENSE_CATEGORIES[0].code,
+        cashAccountCode: PAYMENT_METHODS[0].code,
+        amount: "",
+        description: "",
+        post: true,
+      });
+      load();
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, "فشل تسجيل المصروف"));
+    }
+  }
+
   async function review(id: number) {
     try {
       const r = await fetch(`/api/accounts/journal/${id}/review`, { method: "POST", credentials: "include" });
@@ -203,6 +282,9 @@ export default function JournalTab() {
         </p>
         <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
           <Plus size={14} /> قيد جديد
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => setExpenseOpen(true)} className="gap-1.5">
+          <Wallet size={14} /> قيد مصروف سريع
         </Button>
       </div>
 
@@ -366,6 +448,92 @@ export default function JournalTab() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>إلغاء</Button>
             <Button onClick={create}>حفظ كمسودة</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick expense dialog */}
+      <Dialog open={expenseOpen} onOpenChange={setExpenseOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>قيد مصروف سريع</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-muted-foreground text-xs">
+              تسجيل مصروف تشغيلي كقيد يومية مزدوج: من ح/ المصروف إلى ح/ النقدية أو البنك. القيد يظهر في
+              قيود اليومية والقوائم المالية مباشرة.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">التاريخ</Label>
+                <Input
+                  type="date"
+                  value={expenseForm.expenseDate}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, expenseDate: e.target.value })}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">المبلغ</Label>
+                <Input
+                  type="number"
+                  value={expenseForm.amount}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+                  className="h-8 text-sm"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">نوع المصروف (الحساب المدين)</Label>
+              <select
+                value={expenseForm.expenseAccountCode}
+                onChange={(e) => {
+                  const opt = EXPENSE_CATEGORIES.find((c) => c.code === e.target.value);
+                  setExpenseForm({ ...expenseForm, expenseAccountCode: e.target.value, category: opt?.label ?? "أخرى" });
+                }}
+                className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <option key={`${c.label}-${c.code}`} value={c.code}>{c.label} — {c.code}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">طريقة السداد (الحساب الدائن)</Label>
+              <select
+                value={expenseForm.cashAccountCode}
+                onChange={(e) => setExpenseForm({ ...expenseForm, cashAccountCode: e.target.value })}
+                className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {PAYMENT_METHODS.map((m) => (
+                  <option key={m.code} value={m.code}>{m.label} — {m.code}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">بيان تفصيلي (اختياري)</Label>
+              <Textarea
+                value={expenseForm.description}
+                onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+                className="text-sm"
+                rows={2}
+                placeholder="تفاصيل المصروف..."
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={expenseForm.post}
+                onChange={(e) => setExpenseForm({ ...expenseForm, post: e.target.checked })}
+                className="rounded"
+              />
+              ترحيل القيد مباشرةً (مُرحّل) — ألغِ التحديد لحفظه كمسودة للمراجعة
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExpenseOpen(false)}>إلغاء</Button>
+            <Button onClick={createExpense}>تسجيل المصروف</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
