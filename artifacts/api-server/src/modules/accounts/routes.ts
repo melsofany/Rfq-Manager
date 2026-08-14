@@ -10,6 +10,10 @@
  * Routes mounted:
  *   GET /accounts/margins           → per-line realized margins (filterable)
  *   GET /accounts/margins/summary   → aggregated totals + loss-making count
+ *   GET /accounts/vat               → VAT statement (output/input/net)  Egyptian 14%
+ *   GET /accounts/withholding       → خصم تحت حساب المورد per supplier PO (3%)
+ *   GET /accounts/tax-settings      → Egyptian tax identity + rates
+ *   PUT /accounts/tax-settings      → update the tax identity + rates (admin/manager)
  */
 import { Router } from "express";
 import {
@@ -17,10 +21,15 @@ import {
   customerPosTable,
   customerPoItemsTable,
   purchaseOrderItemsTable,
+  purchaseOrdersTable,
+  suppliersTable,
   customersTable,
+  taxSettingsTable,
+  auditLogTable,
 } from "@workspace/db";
 import { eq, sql, and, desc, gte, lte } from "drizzle-orm";
-import { requireAuth } from "../../middlewares/auth";
+import { requireAuth, requireRole } from "../../middlewares/auth";
+import { rateOf, vatComponents, vatOnNet, round2 } from "./tax";
 
 const router = Router();
 
@@ -35,6 +44,23 @@ function formatNum(n: number | null): string | null {
   const s = String(Math.round(n * 10000) / 10000);
   if (!s.includes(".")) return s;
   return s.replace(/0+$/, "").replace(/\.$/, "");
+}
+
+/** Load the single tax_settings row (creates a sane default if absent). */
+async function loadTaxSettings() {
+  const rows = await db.select().from(taxSettingsTable).limit(1);
+  const row = rows[0];
+  return {
+    id: row?.id ?? null,
+    companyName: row?.companyName ?? null,
+    companyTaxId: row?.companyTaxId ?? null,
+    companyAddress: row?.companyAddress ?? null,
+    companyPhone: row?.companyPhone ?? null,
+    vatRate: rateOf(row?.vatRate, 14),
+    withholdingRate: rateOf(row?.withholdingRate, 3),
+    withholdingRateServices: rateOf(row?.withholdingRateServices, 5),
+    withholdingRatePurchases: rateOf(row?.withholdingRatePurchases, 1),
+  };
 }
 
 function buildConditions(customerName?: string, from?: string, to?: string) {
@@ -196,3 +222,378 @@ router.get("/accounts/margins/summary", requireAuth, async (req, res): Promise<v
 });
 
 export default router;
+
+// ───────────────────────────────────────────────────────────────────────────
+// VAT — ضريبة القيمة المضافة (Egyptian VAT Law No. 67 of 2016)
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Output VAT (ضريبة المبيعات) — charged to customers on customer PO lines.
+// Input VAT (ضريبة المشتريات) — paid to suppliers on purchase-order items.
+// A line is taxable when it carries a unit price (sales) or actual cost /
+// reference price (purchases). VAT-inclusive lines are split into net + VAT
+// using the configured 14% rate; VAT-exclusive lines add VAT on the net base.
+// Net VAT payable = Output VAT − Input VAT (credit carried forward if < 0).
+
+interface VatLine {
+  date: string | null;
+  party: string | null;
+  document: string | null;
+  net: number;
+  vat: number;
+  gross: number;
+}
+
+function dateOf(d: unknown): string | null {
+  if (d == null) return null;
+  const s = String(d);
+  return s.slice(0, 10);
+}
+
+router.get("/accounts/vat", requireAuth, async (req, res): Promise<void> => {
+  const from = (req.query.from as string) || undefined;
+  const to = (req.query.to as string) || undefined;
+  const settings = await loadTaxSettings();
+  const vatRate = settings.vatRate;
+
+  // ── Output VAT: customer PO lines (sales). ───────────────────────────────
+  const sellRows = await db
+    .select({
+      poDate: customerPosTable.poDate,
+      internalPoNo: customerPosTable.internalPoNo,
+      customerPoNo: customerPosTable.customerPoNo,
+      customerName: customerPosTable.customerName,
+      storedCustomerName: customersTable.name,
+      qty: customerPoItemsTable.qty,
+      unitPrice: customerPoItemsTable.unitPrice,
+      createdAt: customerPosTable.createdAt,
+    })
+    .from(customerPoItemsTable)
+    .innerJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
+    .leftJoin(customersTable, eq(customerPosTable.customerId, customersTable.id))
+    .where(
+      buildConditions(undefined, from, to)
+        ? and(
+            ...[
+              ...(from ? [gte(customerPosTable.createdAt, new Date(from))] : []),
+              ...(to ? [lte(customerPosTable.createdAt, new Date(to + " 23:59:59"))] : []),
+            ],
+          )
+        : undefined,
+    )
+    .orderBy(desc(customerPosTable.createdAt));
+
+  const output: VatLine[] = [];
+  let outputNet = 0;
+  let outputVat = 0;
+  for (const r of sellRows) {
+    const qty = toNum(r.qty);
+    const unit = toNum(r.unitPrice);
+    if (qty == null || unit == null) continue;
+    const gross = qty * unit;
+    // Customer selling prices are stored net (VAT-exclusive): add 14% on top.
+    const net = gross;
+    const vat = vatOnNet(net, vatRate);
+    outputNet += net;
+    outputVat += vat;
+    output.push({
+      date: dateOf(r.poDate) ?? dateOf(r.createdAt),
+      party: r.customerName ?? r.storedCustomerName ?? null,
+      document: r.customerPoNo ?? r.internalPoNo,
+      net,
+      vat,
+      gross: net + vat,
+    });
+  }
+
+  // ── Input VAT: supplier PO items (purchases). ────────────────────────────
+  // `taxIncluded` flags lines quoted gross (VAT-inclusive); otherwise the line
+  // value is net and VAT is added on top at the same 14%.
+  const buyRows = await db
+    .select({
+      createdAt: purchaseOrdersTable.createdAt,
+      internalPoNo: purchaseOrdersTable.internalPoNo,
+      sheetPoNo: purchaseOrdersTable.sheetPoNo,
+      supplierName: suppliersTable.name,
+      qty: purchaseOrderItemsTable.qty,
+      referencePrice: purchaseOrderItemsTable.referencePrice,
+      taxIncluded: purchaseOrderItemsTable.taxIncluded,
+      finalActualCost: purchaseOrderItemsTable.finalActualCost,
+      acceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
+    })
+    .from(purchaseOrderItemsTable)
+    .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
+    .where(
+      from || to
+        ? and(
+            ...[
+              ...(from ? [gte(purchaseOrdersTable.createdAt, new Date(from))] : []),
+              ...(to ? [lte(purchaseOrdersTable.createdAt, new Date(to + " 23:59:59"))] : []),
+            ],
+          )
+        : undefined,
+    )
+    .orderBy(desc(purchaseOrdersTable.createdAt));
+
+  const input: VatLine[] = [];
+  let inputNet = 0;
+  let inputVat = 0;
+  for (const r of buyRows) {
+    const qty = toNum(r.qty);
+    const refPrice = toNum(r.referencePrice);
+    const accepted = toNum(r.acceptedQty);
+    const actualCost = toNum(r.finalActualCost);
+    // Prefer realized cost (accepted qty × finalActualCost) when goods were
+    // received; otherwise the planned cost (ordered qty × reference price).
+    let gross = 0;
+    if (accepted != null && actualCost != null && accepted > 0 && actualCost > 0) {
+      gross = accepted * actualCost;
+    } else if (qty != null && refPrice != null) {
+      gross = qty * refPrice;
+    } else {
+      continue;
+    }
+    const { net, vat } = r.taxIncluded
+      ? vatComponents(gross, vatRate)
+      : { net: gross, vat: vatOnNet(gross, vatRate) };
+    inputNet += net;
+    inputVat += vat;
+    input.push({
+      date: dateOf(r.createdAt),
+      party: r.supplierName ?? null,
+      document: r.sheetPoNo ?? r.internalPoNo,
+      net,
+      vat,
+      gross,
+    });
+  }
+
+  const netVat = round2(outputVat - inputVat);
+
+  res.json({
+    vatRate,
+    from: from ?? null,
+    to: to ?? null,
+    output: { net: round2(outputNet), vat: round2(outputVat) },
+    input: { net: round2(inputNet), vat: round2(inputVat) },
+    netVat,
+    payable: netVat > 0 ? netVat : 0,
+    credit: netVat < 0 ? Math.abs(netVat) : 0,
+    outputLines: output.map((l) => ({
+      ...l,
+      net: round2(l.net),
+      vat: round2(l.vat),
+      gross: round2(l.gross),
+    })),
+    inputLines: input.map((l) => ({
+      ...l,
+      net: round2(l.net),
+      vat: round2(l.vat),
+      gross: round2(l.gross),
+    })),
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Withholding tax — خصم تحت حساب المورد
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Applied per supplier purchase order: the company withholds a percentage of
+// each PO's net value and remits it to the Egyptian Tax Authority on behalf of
+// the supplier. Defaults: 3% general (services), 1% purchases, 5% professional
+// fees. The general `withholdingRate` (3%) is applied unless a PO is flagged
+// otherwise. The supplier receives (net − withholding).
+
+interface WithholdingLine {
+  poId: number;
+  internalPoNo: string;
+  sheetPoNo: string;
+  supplierName: string | null;
+  poDate: string | null;
+  status: string;
+  netValue: number;
+  rate: number;
+  withholding: number;
+  payableToSupplier: number;
+}
+
+router.get("/accounts/withholding", requireAuth, async (req, res): Promise<void> => {
+  const from = (req.query.from as string) || undefined;
+  const to = (req.query.to as string) || undefined;
+  const settings = await loadTaxSettings();
+
+  // Aggregate each PO's net purchase value (planned qty×price, gross-of-VAT
+  // since withholding is on the supply value before VAT).
+  const rows = await db
+    .select({
+      poId: purchaseOrdersTable.id,
+      internalPoNo: purchaseOrdersTable.internalPoNo,
+      sheetPoNo: purchaseOrdersTable.sheetPoNo,
+      supplierName: suppliersTable.name,
+      status: purchaseOrdersTable.status,
+      createdAt: purchaseOrdersTable.createdAt,
+      qty: purchaseOrderItemsTable.qty,
+      referencePrice: purchaseOrderItemsTable.referencePrice,
+      taxIncluded: purchaseOrderItemsTable.taxIncluded,
+    })
+    .from(purchaseOrdersTable)
+    .leftJoin(purchaseOrderItemsTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
+    .where(
+      from || to
+        ? and(
+            ...[
+              ...(from ? [gte(purchaseOrdersTable.createdAt, new Date(from))] : []),
+              ...(to ? [lte(purchaseOrdersTable.createdAt, new Date(to + " 23:59:59"))] : []),
+            ],
+          )
+        : undefined,
+    )
+    .orderBy(desc(purchaseOrdersTable.createdAt));
+
+  const byPo = new Map<number, WithholdingLine>();
+  for (const r of rows) {
+    const qty = toNum(r.qty);
+    const price = toNum(r.referencePrice);
+    const existing = byPo.get(r.poId);
+    const lineNet = (() => {
+      if (qty == null || price == null) return 0;
+      const gross = qty * price;
+      if (r.taxIncluded) return vatComponents(gross, settings.vatRate).net;
+      return gross;
+    })();
+    if (existing) {
+      existing.netValue = round2(existing.netValue + lineNet);
+      existing.withholding = round2((existing.netValue * existing.rate) / 100);
+      existing.payableToSupplier = round2(existing.netValue - existing.withholding);
+    } else {
+      const rate = settings.withholdingRate;
+      const netValue = round2(lineNet);
+      const withholding = round2((netValue * rate) / 100);
+      byPo.set(r.poId, {
+        poId: r.poId,
+        internalPoNo: r.internalPoNo,
+        sheetPoNo: r.sheetPoNo,
+        supplierName: r.supplierName ?? null,
+        poDate: dateOf(r.createdAt),
+        status: r.status,
+        netValue,
+        rate,
+        withholding,
+        payableToSupplier: round2(netValue - withholding),
+      });
+    }
+  }
+
+  const lines = Array.from(byPo.values());
+  const totalNet = round2(lines.reduce((s, l) => s + l.netValue, 0));
+  const totalWithholding = round2(lines.reduce((s, l) => s + l.withholding, 0));
+  const totalPayable = round2(lines.reduce((s, l) => s + l.payableToSupplier, 0));
+
+  res.json({
+    withholdingRate: settings.withholdingRate,
+    withholdingRateServices: settings.withholdingRateServices,
+    withholdingRatePurchases: settings.withholdingRatePurchases,
+    from: from ?? null,
+    to: to ?? null,
+    totalNet,
+    totalWithholding,
+    totalPayable,
+    lines,
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Tax settings — إعدادات الضرائب المصرية
+// ───────────────────────────────────────────────────────────────────────────
+
+router.get("/accounts/tax-settings", requireAuth, async (_req, res): Promise<void> => {
+  res.json(await loadTaxSettings());
+});
+
+router.put("/accounts/tax-settings", requireRole("admin", "manager"), async (req, res): Promise<void> => {
+  const body = (req.body ?? {}) as {
+    companyName?: string | null;
+    companyTaxId?: string | null;
+    companyAddress?: string | null;
+    companyPhone?: string | null;
+    vatRate?: string | number | null;
+    withholdingRate?: string | number | null;
+    withholdingRateServices?: string | number | null;
+    withholdingRatePurchases?: string | number | null;
+  };
+  const session = req.session as { employeeId?: number; role?: string };
+  const settings = await loadTaxSettings();
+
+  const strOrNull = (v: unknown): string | null => (v == null ? null : String(v));
+
+  const next = {
+    companyName: body.companyName ?? settings.companyName,
+    companyTaxId: body.companyTaxId ?? settings.companyTaxId,
+    companyAddress: body.companyAddress ?? settings.companyAddress,
+    companyPhone: body.companyPhone ?? settings.companyPhone,
+    vatRate: rateOf(body.vatRate != null ? String(body.vatRate) : null, settings.vatRate),
+    withholdingRate: rateOf(
+      body.withholdingRate != null ? String(body.withholdingRate) : null,
+      settings.withholdingRate,
+    ),
+    withholdingRateServices: rateOf(
+      body.withholdingRateServices != null ? String(body.withholdingRateServices) : null,
+      settings.withholdingRateServices,
+    ),
+    withholdingRatePurchases: rateOf(
+      body.withholdingRatePurchases != null ? String(body.withholdingRatePurchases) : null,
+      settings.withholdingRatePurchases,
+    ),
+  };
+
+  if (settings.id == null) {
+    const [inserted] = await db
+      .insert(taxSettingsTable)
+      .values({
+        companyName: next.companyName,
+        companyTaxId: next.companyTaxId,
+        companyAddress: next.companyAddress,
+        companyPhone: next.companyPhone,
+        vatRate: String(next.vatRate),
+        withholdingRate: String(next.withholdingRate),
+        withholdingRateServices: String(next.withholdingRateServices),
+        withholdingRatePurchases: String(next.withholdingRatePurchases),
+      })
+      .returning();
+    await db
+      .insert(auditLogTable)
+      .values({
+        action: "tax_settings.update",
+        entityType: "tax_settings",
+        entityId: inserted.id,
+        employeeId: session.employeeId,
+        description: "تحديث إعدادات الضرائب المصرية",
+      });
+    res.json({ ...next, id: inserted.id });
+  } else {
+    await db
+      .update(taxSettingsTable)
+      .set({
+        companyName: strOrNull(next.companyName),
+        companyTaxId: strOrNull(next.companyTaxId),
+        companyAddress: strOrNull(next.companyAddress),
+        companyPhone: strOrNull(next.companyPhone),
+        vatRate: String(next.vatRate),
+        withholdingRate: String(next.withholdingRate),
+        withholdingRateServices: String(next.withholdingRateServices),
+        withholdingRatePurchases: String(next.withholdingRatePurchases),
+      })
+      .where(eq(taxSettingsTable.id, settings.id));
+    await db
+      .insert(auditLogTable)
+      .values({
+        action: "tax_settings.update",
+        entityType: "tax_settings",
+        entityId: settings.id,
+        employeeId: session.employeeId,
+        description: "تحديث إعدادات الضرائب المصرية",
+      });
+    res.json({ ...next, id: settings.id });
+  }
+});
