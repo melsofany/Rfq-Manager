@@ -488,8 +488,12 @@ async function resendItemActionReceipt(phone: string, poNo: string, poItemId: nu
       description: purchaseOrderItemsTable.description,
       lineItem: purchaseOrderItemsTable.lineItem,
       qty: purchaseOrderItemsTable.qty,
+      supplierName: suppliersTable.name,
+      supplierAddress: suppliersTable.address,
+      supplierPhone: suppliersTable.phone,
     })
     .from(purchaseOrderItemsTable)
+    .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
     .where(eq(purchaseOrderItemsTable.id, poItemId));
   await sendRepItemAction(phone, {
     kind: "receipt",
@@ -498,6 +502,9 @@ async function resendItemActionReceipt(phone: string, poNo: string, poItemId: nu
     poId: line?.poId ?? 0,
     label: [line?.lineItem, line?.description].filter(Boolean).join(" - ") || "بند",
     qty: formatWaQty(line?.qty),
+    supplierName: line?.supplierName,
+    supplierAddress: line?.supplierAddress,
+    supplierPhone: line?.supplierPhone,
   });
 }
 
@@ -900,7 +907,7 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
     const poId = parseInt(poIdStr, 10);
     const itemId = parseInt(itemIdStr, 10);
     if (kind === "receipt") {
-      // Resolve poNo + line label.
+      // Resolve poNo + line label + supplier info.
       const [po] = await db
         .select({ no: purchaseOrdersTable.sheetPoNo })
         .from(purchaseOrdersTable)
@@ -910,8 +917,12 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
           description: purchaseOrderItemsTable.description,
           lineItem: purchaseOrderItemsTable.lineItem,
           qty: purchaseOrderItemsTable.qty,
+          supplierName: suppliersTable.name,
+          supplierAddress: suppliersTable.address,
+          supplierPhone: suppliersTable.phone,
         })
         .from(purchaseOrderItemsTable)
+        .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
         .where(eq(purchaseOrderItemsTable.id, itemId));
       await sendRepItemAction(phone, {
         kind: "receipt",
@@ -920,6 +931,9 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
         poId,
         label: [it?.lineItem, it?.description].filter(Boolean).join(" - ") || "بند",
         qty: formatWaQty(it?.qty),
+        supplierName: it?.supplierName,
+        supplierAddress: it?.supplierAddress,
+        supplierPhone: it?.supplierPhone,
       });
     } else {
       const [po] = await db
