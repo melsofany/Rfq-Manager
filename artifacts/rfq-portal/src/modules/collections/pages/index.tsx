@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -249,21 +248,10 @@ export default function CollectionsPage() {
   }
 
   return (
-    <Layout>
-      <div className="p-4 sm:p-6 space-y-5">
-        <div>
-          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <Banknote size={20} className="text-primary" />
-            تحصيل مستحقات العملاء
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            متابعة تحصيل دفعات العملاء وحساب تاريخ الاستحقاق والتنبيهات
-          </p>
-        </div>
-
-        {/* Alert summary */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
+    <div className="space-y-5">
+      {/* Alert summary */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
             <AlertCircle size={18} className="text-red-600" />
             <div>
               <p className="text-xs text-red-700">متأخرات</p>
@@ -356,7 +344,6 @@ export default function CollectionsPage() {
             </div>
           )}
         </div>
-      </div>
 
       {/* Detail dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
@@ -533,6 +520,6 @@ export default function CollectionsPage() {
           )}
         </DialogContent>
       </Dialog>
-    </Layout>
+    </div>
   );
 }

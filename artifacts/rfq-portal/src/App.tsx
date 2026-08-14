@@ -52,8 +52,6 @@ import CustomerPoPage from "@/modules/customer-po/pages/index";
 import NewCustomerPoPage from "@/modules/customer-po/pages/new";
 import CustomerPoDetailPage from "@/modules/customer-po/pages/detail";
 import AccountsPage from "@/modules/accounts/pages/index";
-import ExpensesPage from "@/modules/expenses/pages/index";
-import CollectionsPage from "@/modules/collections/pages/index";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -196,12 +194,6 @@ function Router() {
       </Route>
       <Route path="/accounts">
         <ProtectedRoute component={AccountsPage} />
-      </Route>
-      <Route path="/expenses">
-        <ProtectedRoute component={ExpensesPage} />
-      </Route>
-      <Route path="/collections">
-        <ProtectedRoute component={CollectionsPage} />
       </Route>
 
       <Route component={NotFound} />
