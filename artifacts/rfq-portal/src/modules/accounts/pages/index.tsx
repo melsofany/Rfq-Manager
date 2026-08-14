@@ -1,21 +1,16 @@
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calculator, ReceiptText, ShieldCheck, Settings2, Banknote, LayoutDashboard, BookOpen, BookCopy, Receipt, FileText, Scale, TrendingUp } from "lucide-react";
-import MarginsTab from "./MarginsTab";
-import VatTab from "./VatTab";
-import WithholdingTab from "./WithholdingTab";
-import TaxSettingsTab from "./TaxSettingsTab";
-import CollectionsPage from "@/modules/collections/pages";
-import DashboardTab from "./DashboardTab";
-import ChartOfAccountsTab from "./ChartOfAccountsTab";
+import { Calculator, BookCopy, BookOpen, FileText, Truck, BarChart3, Percent } from "lucide-react";
 import JournalTab from "./JournalTab";
-import SupplierInvoicesTab from "./SupplierInvoicesTab";
-import SalesInvoicesTab from "./SalesInvoicesTab";
-import FinancialStatementsTab from "./FinancialStatementsTab";
+import SalesAndCollectionsTab from "./SalesAndCollectionsTab";
+import SuppliersTab from "./SuppliersTab";
+import ChartOfAccountsTab from "./ChartOfAccountsTab";
+import ReportsTab from "./ReportsTab";
+import TaxesTab from "./TaxesTab";
 
 function readTabParam(): string {
-  return new URLSearchParams(window.location.search).get("tab") || "dashboard";
+  return new URLSearchParams(window.location.search).get("tab") || "journal";
 }
 
 export default function AccountsPage() {
@@ -52,87 +47,49 @@ export default function AccountsPage() {
 
         <Tabs value={tab} onValueChange={onTabChange}>
           <TabsList className="flex-wrap h-auto">
-            {/* الإدخال — المستندات والقيود */}
             <TabsTrigger value="journal" className="text-xs gap-1.5">
               <BookCopy size={14} />
               قيود اليومية
             </TabsTrigger>
-            <TabsTrigger value="sales-invoices" className="text-xs gap-1.5">
+            <TabsTrigger value="sales" className="text-xs gap-1.5">
               <FileText size={14} />
-              فواتير البيع
+              المبيعات والتحصيل
             </TabsTrigger>
-            <TabsTrigger value="supplier-invoices" className="text-xs gap-1.5">
-              <Receipt size={14} />
-              فواتير الموردين
-            </TabsTrigger>
-            <TabsTrigger value="collections" className="text-xs gap-1.5">
-              <Banknote size={14} />
-              تحصيل العملاء
-            </TabsTrigger>
-            {/* التقارير المالية */}
-            <TabsTrigger value="dashboard" className="text-xs gap-1.5">
-              <LayoutDashboard size={14} />
-              لوحة المحاسب
+            <TabsTrigger value="suppliers" className="text-xs gap-1.5">
+              <Truck size={14} />
+              الموردون
             </TabsTrigger>
             <TabsTrigger value="coa" className="text-xs gap-1.5">
               <BookOpen size={14} />
               دليل الحسابات
             </TabsTrigger>
-            <TabsTrigger value="statements" className="text-xs gap-1.5">
-              <Scale size={14} />
-              القوائم المالية
+            <TabsTrigger value="reports" className="text-xs gap-1.5">
+              <BarChart3 size={14} />
+              التقارير المالية
             </TabsTrigger>
-            <TabsTrigger value="margins" className="text-xs gap-1.5">
-              <TrendingUp size={14} />
-              الهامش المحقق
-            </TabsTrigger>
-            {/* الامتثال الضريبي */}
-            <TabsTrigger value="vat" className="text-xs gap-1.5">
-              <ReceiptText size={14} />
-              ضريبة القيمة المضافة
-            </TabsTrigger>
-            <TabsTrigger value="withholding" className="text-xs gap-1.5">
-              <ShieldCheck size={14} />
-              الخصم تحت حساب المورد
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="text-xs gap-1.5">
-              <Settings2 size={14} />
-              إعدادات الضرائب
+            <TabsTrigger value="taxes" className="text-xs gap-1.5">
+              <Percent size={14} />
+              الضرائب
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="journal" className="mt-5">
             <JournalTab />
           </TabsContent>
-          <TabsContent value="sales-invoices" className="mt-5">
-            <SalesInvoicesTab />
+          <TabsContent value="sales" className="mt-5">
+            <SalesAndCollectionsTab />
           </TabsContent>
-          <TabsContent value="supplier-invoices" className="mt-5">
-            <SupplierInvoicesTab />
-          </TabsContent>
-          <TabsContent value="collections" className="mt-5">
-            <CollectionsPage />
-          </TabsContent>
-          <TabsContent value="dashboard" className="mt-5">
-            <DashboardTab />
+          <TabsContent value="suppliers" className="mt-5">
+            <SuppliersTab />
           </TabsContent>
           <TabsContent value="coa" className="mt-5">
             <ChartOfAccountsTab />
           </TabsContent>
-          <TabsContent value="statements" className="mt-5">
-            <FinancialStatementsTab />
+          <TabsContent value="reports" className="mt-5">
+            <ReportsTab />
           </TabsContent>
-          <TabsContent value="margins" className="mt-5">
-            <MarginsTab />
-          </TabsContent>
-          <TabsContent value="vat" className="mt-5">
-            <VatTab />
-          </TabsContent>
-          <TabsContent value="withholding" className="mt-5">
-            <WithholdingTab />
-          </TabsContent>
-          <TabsContent value="settings" className="mt-5">
-            <TaxSettingsTab />
+          <TabsContent value="taxes" className="mt-5">
+            <TaxesTab />
           </TabsContent>
         </Tabs>
       </div>
