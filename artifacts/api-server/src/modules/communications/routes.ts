@@ -127,6 +127,9 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
     const msg = message as unknown as ServerMessage;
     if (msg.type === "reaction") {
       await handleReactionWebhook(from, msg);
+    } else if (await handleRepMessage(from, msg)) {
+      // Registered representative bot owns this message (text or rep_ menu).
+      logger.info({ from }, "Representative bot message handled");
     } else if (msg.type === "interactive" && await handleWorkOrderButton(from, msg)) {
       logger.info({ from }, "Work-order interactive button handled");
     } else {
