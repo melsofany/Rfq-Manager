@@ -374,6 +374,12 @@ export async function initDb(): Promise<void> {
 
       ALTER TABLE work_order_assignments
         ADD COLUMN IF NOT EXISTS po_item_id INTEGER REFERENCES purchase_order_items(id) ON DELETE SET NULL;
+      ALTER TABLE work_order_assignments
+        ADD COLUMN IF NOT EXISTS customer_po_id INTEGER REFERENCES customer_pos(id) ON DELETE CASCADE;
+      ALTER TABLE work_order_assignments
+        ADD COLUMN IF NOT EXISTS customer_po_item_id INTEGER REFERENCES customer_po_items(id) ON DELETE SET NULL;
+      ALTER TABLE work_order_assignments
+        ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'receipt';
     `);
 
     // Per-line supplier PO receipt log. A purchase_order_item may have several
