@@ -27,10 +27,12 @@ import {
   taxSettingsTable,
   poItemChargesTable,
   auditLogTable,
+  supplierInvoicesTable,
+  salesInvoicesTable,
 } from "@workspace/db";
 import { eq, sql, and, desc, gte, lte } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
-import { rateOf, vatComponents, vatOnNet, round2 } from "./tax";
+import { rateOf, round2 } from "./tax";
 
 const router = Router();
 
@@ -293,116 +295,80 @@ router.get("/accounts/vat", requireAuth, async (req, res): Promise<void> => {
   const settings = await loadTaxSettings();
   const vatRate = settings.vatRate;
 
-  // ── Output VAT: customer PO lines (sales). ───────────────────────────────
-  const sellRows = await db
+  // ── Output VAT: posted sales invoices. ───────────────────────────────────
+  // Sales invoices are VAT-exclusive by construction (net + vat computed at
+  // 14% on top); this is the same figure posted to the OUTPUT_VAT ledger.
+  const sellInvoices = await db
     .select({
-      poDate: customerPosTable.poDate,
-      internalPoNo: customerPosTable.internalPoNo,
-      customerPoNo: customerPosTable.customerPoNo,
-      customerName: customerPosTable.customerName,
-      storedCustomerName: customersTable.name,
-      qty: customerPoItemsTable.qty,
-      unitPrice: customerPoItemsTable.unitPrice,
-      createdAt: customerPosTable.createdAt,
+      id: salesInvoicesTable.id,
+      invoiceNo: salesInvoicesTable.invoiceNo,
+      customerName: salesInvoicesTable.customerName,
+      customerPoNo: salesInvoicesTable.customerPoNo,
+      invoiceDate: salesInvoicesTable.invoiceDate,
+      netAmount: salesInvoicesTable.netAmount,
+      vatAmount: salesInvoicesTable.vatAmount,
+      grossAmount: salesInvoicesTable.grossAmount,
+      status: salesInvoicesTable.status,
     })
-    .from(customerPoItemsTable)
-    .innerJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
-    .leftJoin(customersTable, eq(customerPosTable.customerId, customersTable.id))
-    .where(
-      buildConditions(undefined, from, to)
-        ? and(
-            ...[
-              ...(from ? [gte(customerPosTable.createdAt, new Date(from))] : []),
-              ...(to ? [lte(customerPosTable.createdAt, new Date(to + " 23:59:59"))] : []),
-            ],
-          )
-        : undefined,
-    )
-    .orderBy(desc(customerPosTable.createdAt));
+    .from(salesInvoicesTable)
+    .where(eq(salesInvoicesTable.status, "posted"));
 
   const output: VatLine[] = [];
   let outputNet = 0;
   let outputVat = 0;
-  for (const r of sellRows) {
-    const qty = toNum(r.qty);
-    const unit = toNum(r.unitPrice);
-    if (qty == null || unit == null) continue;
-    const gross = qty * unit;
-    // Customer selling prices are stored net (VAT-exclusive): add 14% on top.
-    const net = gross;
-    const vat = vatOnNet(net, vatRate);
+  for (const r of sellInvoices) {
+    if (from && r.invoiceDate < from) continue;
+    if (to && r.invoiceDate > to + " 23:59:59") continue;
+    const net = toNum(r.netAmount) ?? 0;
+    const vat = toNum(r.vatAmount) ?? 0;
+    if (net === 0 && vat === 0) continue;
     outputNet += net;
     outputVat += vat;
     output.push({
-      date: dateOf(r.poDate) ?? dateOf(r.createdAt),
-      party: r.customerName ?? r.storedCustomerName ?? null,
-      document: r.customerPoNo ?? r.internalPoNo,
+      date: dateOf(r.invoiceDate),
+      party: r.customerName ?? null,
+      document: r.invoiceNo ?? r.customerPoNo,
       net,
       vat,
       gross: net + vat,
     });
   }
 
-  // ── Input VAT: supplier PO items (purchases). ────────────────────────────
-  // `taxIncluded` flags lines quoted gross (VAT-inclusive); otherwise the line
-  // value is net and VAT is added on top at the same 14%.
-  const buyRows = await db
+  // ── Input VAT: posted supplier invoices. ────────────────────────────────
+  const buyInvoices = await db
     .select({
-      createdAt: purchaseOrdersTable.createdAt,
-      internalPoNo: purchaseOrdersTable.internalPoNo,
-      sheetPoNo: purchaseOrdersTable.sheetPoNo,
-      supplierName: suppliersTable.name,
-      qty: purchaseOrderItemsTable.qty,
-      referencePrice: purchaseOrderItemsTable.referencePrice,
-      taxIncluded: purchaseOrderItemsTable.taxIncluded,
-      finalActualCost: purchaseOrderItemsTable.finalActualCost,
-      acceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
+      id: supplierInvoicesTable.id,
+      invoiceNo: supplierInvoicesTable.invoiceNo,
+      supplierInvoiceNo: supplierInvoicesTable.supplierInvoiceNo,
+      supplierName: supplierInvoicesTable.supplierName,
+      poNo: supplierInvoicesTable.poNo,
+      invoiceDate: supplierInvoicesTable.invoiceDate,
+      netAmount: supplierInvoicesTable.netAmount,
+      vatAmount: supplierInvoicesTable.vatAmount,
+      grossAmount: supplierInvoicesTable.grossAmount,
+      status: supplierInvoicesTable.status,
     })
-    .from(purchaseOrderItemsTable)
-    .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
-    .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
-    .where(
-      from || to
-        ? and(
-            ...[
-              ...(from ? [gte(purchaseOrdersTable.createdAt, new Date(from))] : []),
-              ...(to ? [lte(purchaseOrdersTable.createdAt, new Date(to + " 23:59:59"))] : []),
-            ],
-          )
-        : undefined,
-    )
-    .orderBy(desc(purchaseOrdersTable.createdAt));
+    .from(supplierInvoicesTable)
+    .where(eq(supplierInvoicesTable.status, "posted"));
 
   const input: VatLine[] = [];
   let inputNet = 0;
   let inputVat = 0;
-  for (const r of buyRows) {
-    const qty = toNum(r.qty);
-    const refPrice = toNum(r.referencePrice);
-    const accepted = toNum(r.acceptedQty);
-    const actualCost = toNum(r.finalActualCost);
-    // Prefer realized cost (accepted qty × finalActualCost) when goods were
-    // received; otherwise the planned cost (ordered qty × reference price).
-    let gross = 0;
-    if (accepted != null && actualCost != null && accepted > 0 && actualCost > 0) {
-      gross = accepted * actualCost;
-    } else if (qty != null && refPrice != null) {
-      gross = qty * refPrice;
-    } else {
-      continue;
-    }
-    const { net, vat } = r.taxIncluded
-      ? vatComponents(gross, vatRate)
-      : { net: gross, vat: vatOnNet(gross, vatRate) };
+  for (const r of buyInvoices) {
+    if (from && r.invoiceDate < from) continue;
+    if (to && r.invoiceDate > to + " 23:59:59") continue;
+    const net = toNum(r.netAmount) ?? 0;
+    const vat = toNum(r.vatAmount) ?? 0;
+    if (net === 0 && vat === 0) continue;
     inputNet += net;
     inputVat += vat;
     input.push({
-      date: dateOf(r.createdAt),
+      date: dateOf(r.invoiceDate),
       party: r.supplierName ?? null,
-      document: r.sheetPoNo ?? r.internalPoNo,
+      document: r.supplierInvoiceNo ?? r.invoiceNo ?? r.poNo,
       net,
       vat,
-      gross,
+      gross: net + vat,
     });
   }
 
@@ -460,73 +426,57 @@ router.get("/accounts/withholding", requireAuth, async (req, res): Promise<void>
   const to = (req.query.to as string) || undefined;
   const settings = await loadTaxSettings();
 
-  // Aggregate each PO's net purchase value (planned qty×price, gross-of-VAT
-  // since withholding is on the supply value before VAT).
-  const rows = await db
+  // Withholding is sourced from posted supplier invoices — each carries the
+  // netValue, withholdingRate and withholdingAmount computed at create/post
+  // time (the same amounts posted to the WITHHOLDING_PAYABLE ledger account).
+  const buyInvoices = await db
     .select({
-      poId: purchaseOrdersTable.id,
-      internalPoNo: purchaseOrdersTable.internalPoNo,
-      sheetPoNo: purchaseOrdersTable.sheetPoNo,
-      supplierName: suppliersTable.name,
-      status: purchaseOrdersTable.status,
-      createdAt: purchaseOrdersTable.createdAt,
-      qty: purchaseOrderItemsTable.qty,
-      referencePrice: purchaseOrderItemsTable.referencePrice,
-      taxIncluded: purchaseOrderItemsTable.taxIncluded,
+      id: supplierInvoicesTable.id,
+      invoiceNo: supplierInvoicesTable.invoiceNo,
+      supplierInvoiceNo: supplierInvoicesTable.supplierInvoiceNo,
+      supplierName: supplierInvoicesTable.supplierName,
+      poNo: supplierInvoicesTable.poNo,
+      invoiceDate: supplierInvoicesTable.invoiceDate,
+      netAmount: supplierInvoicesTable.netAmount,
+      withholdingRate: supplierInvoicesTable.withholdingRate,
+      withholdingAmount: supplierInvoicesTable.withholdingAmount,
+      grossAmount: supplierInvoicesTable.grossAmount,
+      status: supplierInvoicesTable.status,
     })
-    .from(purchaseOrdersTable)
-    .leftJoin(purchaseOrderItemsTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
-    .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
-    .where(
-      from || to
-        ? and(
-            ...[
-              ...(from ? [gte(purchaseOrdersTable.createdAt, new Date(from))] : []),
-              ...(to ? [lte(purchaseOrdersTable.createdAt, new Date(to + " 23:59:59"))] : []),
-            ],
-          )
-        : undefined,
-    )
-    .orderBy(desc(purchaseOrdersTable.createdAt));
+    .from(supplierInvoicesTable)
+    .where(eq(supplierInvoicesTable.status, "posted"));
 
-  const byPo = new Map<number, WithholdingLine>();
-  for (const r of rows) {
-    const qty = toNum(r.qty);
-    const price = toNum(r.referencePrice);
-    const existing = byPo.get(r.poId);
-    const lineNet = (() => {
-      if (qty == null || price == null) return 0;
-      const gross = qty * price;
-      if (r.taxIncluded) return vatComponents(gross, settings.vatRate).net;
-      return gross;
-    })();
-    if (existing) {
-      existing.netValue = round2(existing.netValue + lineNet);
-      existing.withholding = round2((existing.netValue * existing.rate) / 100);
-      existing.payableToSupplier = round2(existing.netValue - existing.withholding);
-    } else {
-      const rate = settings.withholdingRate;
-      const netValue = round2(lineNet);
-      const withholding = round2((netValue * rate) / 100);
-      byPo.set(r.poId, {
-        poId: r.poId,
-        internalPoNo: r.internalPoNo,
-        sheetPoNo: r.sheetPoNo,
-        supplierName: r.supplierName ?? null,
-        poDate: dateOf(r.createdAt),
-        status: r.status,
-        netValue,
-        rate,
-        withholding,
-        payableToSupplier: round2(netValue - withholding),
-      });
-    }
+  const lines: WithholdingLine[] = [];
+  let totalNet = 0;
+  let totalWithholding = 0;
+  let totalPayable = 0;
+  for (const r of buyInvoices) {
+    if (from && r.invoiceDate < from) continue;
+    if (to && r.invoiceDate > to + " 23:59:59") continue;
+    const netValue = toNum(r.netAmount) ?? 0;
+    const rate = toNum(r.withholdingRate) ?? settings.withholdingRate;
+    const withholding = toNum(r.withholdingAmount) ?? round2((netValue * rate) / 100);
+    const payableToSupplier = round2(netValue - withholding);
+    if (netValue === 0 && withholding === 0) continue;
+    totalNet = round2(totalNet + netValue);
+    totalWithholding = round2(totalWithholding + withholding);
+    totalPayable = round2(totalPayable + payableToSupplier);
+    lines.push({
+      poId: r.id,
+      internalPoNo: r.invoiceNo,
+      sheetPoNo: r.supplierInvoiceNo ?? r.poNo ?? "",
+      supplierName: r.supplierName ?? null,
+      poDate: dateOf(r.invoiceDate),
+      status: r.status,
+      netValue,
+      rate,
+      withholding,
+      payableToSupplier,
+    });
   }
 
-  const lines = Array.from(byPo.values());
-  const totalNet = round2(lines.reduce((s, l) => s + l.netValue, 0));
-  const totalWithholding = round2(lines.reduce((s, l) => s + l.withholding, 0));
-  const totalPayable = round2(lines.reduce((s, l) => s + l.payableToSupplier, 0));
+  // newest first (mirrors the old PO-based order)
+  lines.sort((a, b) => (b.poDate ?? "").localeCompare(a.poDate ?? ""));
 
   res.json({
     withholdingRate: settings.withholdingRate,

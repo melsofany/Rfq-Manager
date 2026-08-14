@@ -63,8 +63,8 @@ export default function WithholdingTab() {
   return (
     <div className="space-y-5">
       <p className="text-muted-foreground text-sm">
-        الخصم تحت حساب المورد — يتم خصم {data?.withholdingRate ?? 3}%؜ من قيمة كل أمر شراء
-        للمورد وتوريدها لمصلحة الضرائب نيابةً عن المورد. النسبة للخدمات {data?.withholdingRateServices ?? 5}%؜
+        الخصم تحت حساب المورد — مبنيّ على فواتير الموردين المُرحَّلة: يُخصم {data?.withholdingRate ?? 3}%؜
+        من قيمة كل فاتورة للمورد ويُورَّد لمصلحة الضرائب نيابةً عنه. النسبة للخدمات {data?.withholdingRateServices ?? 5}%؜
         وللمشتريات/التوريدات {data?.withholdingRatePurchases ?? 1}%؜ (جدول الضرائب المصري).
       </p>
 
@@ -117,14 +117,14 @@ export default function WithholdingTab() {
         ) : (data?.lines ?? []).length === 0 ? (
           <div className="p-12 text-center">
             <ShieldCheck size={40} className="mx-auto text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground text-sm">لا توجد أوامر شراء ضمن الفترة</p>
+            <p className="text-muted-foreground text-sm">لا توجد فواتير موردين مُرحَّلة ضمن الفترة</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-left">
-                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">أمر الشراء</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">فاتورة المورد</th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">المورد</th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">التاريخ</th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">صافي القيمة</th>

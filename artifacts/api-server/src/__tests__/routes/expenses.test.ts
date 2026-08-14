@@ -30,6 +30,9 @@ function chainable(value: any, methods: Record<string, any> = {}): any {
 const operatingExpensesTbl = "operatingExpenses";
 const expenseAttachmentsTbl = "expenseAttachments";
 const auditTbl = "audit";
+const chartOfAccountsTbl = "chartOfAccounts";
+const journalEntriesTbl = "journalEntries";
+const journalLinesTbl = "journalLines";
 
 let expenseRows: any[];
 let attachmentRows: any[];
@@ -40,6 +43,8 @@ function selectBuilder() {
       let rows: any[] = [];
       if (table === operatingExpensesTbl) rows = expenseRows;
       else if (table === expenseAttachmentsTbl) rows = attachmentRows;
+      else if (table === chartOfAccountsTbl) rows = [{ code: "1001" }, { code: "1010" }, { code: "5300" }, { code: "5990" }];
+      else if (table === journalEntriesTbl) rows = [];
       const cur: any = {
         innerJoin: vi.fn(() => cur),
         leftJoin: vi.fn(() => cur),
@@ -64,21 +69,43 @@ const dbMock: any = {
   delete: vi.fn(() => ({ where: vi.fn(() => chainable(undefined)) })),
 };
 
+const ACCOUNT_CODES_MOCK = {
+  CASH: "1001",
+  BANK: "1010",
+  RENT_EXPENSE: "5300",
+  MISC_EXPENSE: "5990",
+  IT_EXPENSE: "5700",
+  UTILITIES_EXPENSE: "5400",
+  TELECOM_EXPENSE: "5410",
+  MAINTENANCE_EXPENSE: "5500",
+  ADMIN_EXPENSE: "5600",
+  SALARIES_EXPENSE: "5200",
+};
+
 vi.mock("@workspace/db", () => ({
   db: dbMock,
   operatingExpensesTable: operatingExpensesTbl,
   expenseAttachmentsTable: expenseAttachmentsTbl,
   auditLogTable: auditTbl,
+  chartOfAccountsTable: chartOfAccountsTbl,
+  journalEntriesTable: journalEntriesTbl,
+  journalLinesTable: journalLinesTbl,
+  ACCOUNT_CODES: ACCOUNT_CODES_MOCK,
 }));
 
-vi.mock("drizzle-orm", () => ({
-  eq: (a: any, _b: any) => a,
-  and: (...args: any[]) => args.find((a) => a !== undefined) ?? undefined,
-  desc: (a: any) => a,
-  gte: (_a: any, _b: any) => undefined,
-  lte: (_a: any, _b: any) => undefined,
-  sql: { template: { raw: (s: any) => s } },
-}));
+vi.mock("drizzle-orm", () => {
+  const sqlTag = (strings: TemplateStringsArray, ...vals: any[]) =>
+    strings.reduce((acc: string, s: string, i: number) => acc + s + (vals[i] != null ? String(vals[i]) : ""), "");
+  (sqlTag as any).raw = (s: any) => s;
+  return {
+    eq: (a: any, _b: any) => a,
+    and: (...args: any[]) => args.find((a) => a !== undefined) ?? undefined,
+    desc: (a: any) => a,
+    gte: (_a: any, _b: any) => undefined,
+    lte: (_a: any, _b: any) => undefined,
+    sql: sqlTag as any,
+  };
+});
 
 let testApp: express.Express;
 
@@ -113,13 +140,15 @@ describe("Operating expenses API", () => {
     expect(res.body[0].amount).toBe("5000");
   });
 
-  it("POST /api/expenses creates an expense and audits it", async () => {
+  it("POST /api/expenses creates an expense, posts a journal entry, and audits it", async () => {
     const res = await request(testApp)
       .post("/api/expenses")
       .send({ category: "نثريات", expenseDate: "2026-08-05", amount: 250 });
     expect(res.status).toBe(201);
     expect(res.body.id).toBe(1);
     expect(dbMock.insert).toHaveBeenCalled();
+    // expense row + journal entry header + journal lines + audit = 4 inserts
+    expect(dbMock.insert).toHaveBeenCalledTimes(4);
   });
 
   it("POST /api/expenses rejects missing fields", async () => {
