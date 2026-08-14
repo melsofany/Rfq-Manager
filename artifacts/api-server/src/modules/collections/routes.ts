@@ -32,12 +32,16 @@ import {
   customerPoCollectionsTable,
   customerPoPaymentsTable,
   customersTable,
+  salesInvoicesTable,
   auditLogTable,
   COLLECTION_STATUS,
   DUE_SOON_DAYS,
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
+import { postJournalEntry } from "../accounts/posting";
+import { ACCOUNT_CODES } from "@workspace/db";
+import { cashAccountFor } from "../accounts/integration";
 
 const router = Router();
 
@@ -63,6 +67,10 @@ function addDays(dateStr: string, days: number): string {
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 function daysBetween(a: string, b: string): number {
@@ -407,6 +415,7 @@ router.post("/collections/:poId/payments", requireAuth, async (req, res): Promis
     return;
   }
 
+  const method = typeof body.method === "string" ? body.method : null;
   const session = req.session as { employeeId?: number; employeeName?: string };
   const [row] = await db
     .insert(customerPoPaymentsTable)
@@ -414,13 +423,72 @@ router.post("/collections/:poId/payments", requireAuth, async (req, res): Promis
       customerPoId: poId,
       paymentDate,
       amount: String(amount),
-      method: typeof body.method === "string" ? body.method : null,
+      method,
       reference: typeof body.reference === "string" ? body.reference : null,
       notes: typeof body.notes === "string" ? body.notes : null,
       employeeId: session.employeeId ?? null,
       employeeName: session.employeeName ?? null,
     })
     .returning({ id: customerPoPaymentsTable.id });
+
+  // ── Ledger integration ──────────────────────────────────────────────────
+  // 1. Post a journal entry: debit cash/bank, credit accounts receivable.
+  // 2. Apply the payment to the linked posted sales invoices (oldest-first),
+  //    reducing their balance / increasing collectedAmount so AR reconciles.
+  const cashAccount =
+    (typeof body.cashAccountCode === "string" && body.cashAccountCode.trim() ? body.cashAccountCode.trim() : null) ||
+    cashAccountFor(method);
+  let customerName: string | null = null;
+  let remaining = amount;
+  const invoices = await db
+    .select({
+      id: salesInvoicesTable.id,
+      invoiceNo: salesInvoicesTable.invoiceNo,
+      balance: salesInvoicesTable.balance,
+      customerName: salesInvoicesTable.customerName,
+    })
+    .from(salesInvoicesTable)
+    .where(eq(salesInvoicesTable.customerPoId, poId));
+  // oldest-first by id
+  invoices.sort((a, b) => a.id - b.id);
+  for (const inv of invoices) {
+    if (remaining <= 0) break;
+    const bal = toNum(inv.balance) ?? 0;
+    if (bal <= 0) continue;
+    customerName = inv.customerName;
+    const applied = Math.min(remaining, bal);
+    const newBalance = round2(bal - applied);
+    const settled = newBalance <= 0.001;
+    await db
+      .update(salesInvoicesTable)
+      .set(settled ? { balance: String(newBalance), status: "paid" } : { balance: String(newBalance) })
+      .where(eq(salesInvoicesTable.id, inv.id));
+    remaining = round2(remaining - applied);
+  }
+  if (!customerName) {
+    const [poRow] = await db
+      .select({ name: customerPosTable.customerName })
+      .from(customerPosTable)
+      .where(eq(customerPosTable.id, poId));
+    customerName = poRow?.name ?? null;
+  }
+
+  try {
+    await postJournalEntry({
+      entryDate: paymentDate,
+      description: `تحصيل من العميل — ${customerName ?? `PO ${poId}`}`,
+      source: "customer_collection",
+      sourceRefId: row.id,
+      employeeId: session.employeeId,
+      employeeName: session.employeeName,
+      lines: [
+        { accountCode: cashAccount, description: "إيداع تحصيل", debit: amount, partyType: "customer", partyName: customerName },
+        { accountCode: ACCOUNT_CODES.AR, description: "تحصيل ذمم عملاء", credit: amount, partyType: "customer", partyName: customerName },
+      ],
+    });
+  } catch (err) {
+    req.log?.error?.({ err }, "collection journal posting failed");
+  }
 
   await db.insert(auditLogTable).values({
     action: "collection.payment",

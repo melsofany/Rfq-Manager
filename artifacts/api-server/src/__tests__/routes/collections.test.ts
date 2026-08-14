@@ -33,11 +33,16 @@ const paymentsTbl = "payments";
 const collectionsTbl = "collections";
 const customersTbl = "customers";
 const auditTbl = "audit";
+const salesInvoicesTbl = "salesInvoices";
+const chartOfAccountsTbl = "chartOfAccounts";
+const journalEntriesTbl = "journalEntries";
+const journalLinesTbl = "journalLines";
 
 let poListRows: any[];
 let itemRows: any[];
 let paymentRows: any[];
 let termsRows: any[];
+let salesInvoiceRows: any[];
 
 // Maps to return specific rows for a given poId in the per-PO detail.
 let poDetailRow: any | null;
@@ -51,6 +56,9 @@ function selectBuilder() {
       else if (table === paymentsTbl) rows = paymentRows;
       else if (table === collectionsTbl) rows = termsRows;
       else if (table === customersTbl) rows = [];
+      else if (table === salesInvoicesTbl) rows = salesInvoiceRows;
+      else if (table === chartOfAccountsTbl) rows = [{ code: "1001" }, { code: "1010" }, { code: "1200" }];
+      else if (table === journalEntriesTbl) rows = [];
       const cur: any = {
         innerJoin: vi.fn(() => cur),
         leftJoin: vi.fn(() => cur),
@@ -75,6 +83,12 @@ const dbMock: any = {
   delete: vi.fn(() => ({ where: vi.fn(() => chainable(undefined)) })),
 };
 
+const ACCOUNT_CODES_MOCK = {
+  CASH: "1001",
+  BANK: "1010",
+  AR: "1200",
+};
+
 vi.mock("@workspace/db", () => ({
   db: dbMock,
   customerPosTable: customerPosTbl,
@@ -83,6 +97,11 @@ vi.mock("@workspace/db", () => ({
   customerPoCollectionsTable: collectionsTbl,
   customersTable: customersTbl,
   auditLogTable: auditTbl,
+  salesInvoicesTable: salesInvoicesTbl,
+  chartOfAccountsTable: chartOfAccountsTbl,
+  journalEntriesTable: journalEntriesTbl,
+  journalLinesTable: journalLinesTbl,
+  ACCOUNT_CODES: ACCOUNT_CODES_MOCK,
   COLLECTION_STATUS: {
     pending: "pending",
     dueSoon: "due_soon",
@@ -93,11 +112,17 @@ vi.mock("@workspace/db", () => ({
   DUE_SOON_DAYS: 7,
 }));
 
-vi.mock("drizzle-orm", () => ({
-  eq: (a: any, _b: any) => a,
-  and: (...args: any[]) => args.find((a) => a !== undefined) ?? undefined,
-  desc: (a: any) => a,
-}));
+vi.mock("drizzle-orm", () => {
+  const sqlTag = (strings: TemplateStringsArray, ...vals: any[]) =>
+    strings.reduce((acc: string, s: string, i: number) => acc + s + (vals[i] != null ? String(vals[i]) : ""), "");
+  (sqlTag as any).raw = (s: any) => s;
+  return {
+    eq: (a: any, _b: any) => a,
+    and: (...args: any[]) => args.find((a) => a !== undefined) ?? undefined,
+    desc: (a: any) => a,
+    sql: sqlTag as any,
+  };
+});
 
 let testApp: express.Express;
 
@@ -121,6 +146,7 @@ beforeEach(() => {
   paymentRows = [];
   termsRows = [];
   poDetailRow = null;
+  salesInvoiceRows = [];
 });
 
 // Helper: simulate the per-PO detail select returning one row when eq matches.

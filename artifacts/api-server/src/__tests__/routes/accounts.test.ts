@@ -38,12 +38,16 @@ const purchaseOrderItemsTbl = "purchaseOrderItems";
 const suppliersTbl = "suppliers";
 const customersTbl = "customers";
 const auditTbl = "audit";
+const supplierInvoicesTbl = "supplierInvoices";
+const salesInvoicesTbl = "salesInvoices";
 
 // Per-test rows.
 let taxSettingsRow: any | null;
 let sellRows: any[];
 let buyRows: any[];
 let poRows: any[];
+let salesInvoiceRows: any[];
+let supplierInvoiceRows: any[];
 
 function selectBuilder() {
   // The accounts routes call select().from(t).innerJoin().leftJoin().where().orderBy()
@@ -57,6 +61,8 @@ function selectBuilder() {
       else if (table === purchaseOrderItemsTbl) rows = buyRows;
       else if (table === purchaseOrdersTbl) rows = poRows;
       else if (table === taxSettingsTbl) rows = taxSettingsRow ? [taxSettingsRow] : [];
+      else if (table === salesInvoicesTbl) rows = salesInvoiceRows.filter((r) => r.status === "posted");
+      else if (table === supplierInvoicesTbl) rows = supplierInvoiceRows.filter((r) => r.status === "posted");
       const cur: any = {
         innerJoin: vi.fn(() => cur),
         leftJoin: vi.fn(() => cur),
@@ -87,6 +93,8 @@ vi.mock("@workspace/db", () => ({
   suppliersTable: suppliersTbl,
   customersTable: customersTbl,
   auditLogTable: auditTbl,
+  supplierInvoicesTable: supplierInvoicesTbl,
+  salesInvoicesTable: salesInvoicesTbl,
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -119,6 +127,8 @@ beforeEach(() => {
   sellRows = [];
   buyRows = [];
   poRows = [];
+  salesInvoiceRows = [];
+  supplierInvoiceRows = [];
 });
 
 describe("GET /api/accounts/tax-settings", () => {
@@ -141,17 +151,21 @@ describe("GET /api/accounts/tax-settings", () => {
 });
 
 describe("GET /api/accounts/vat", () => {
-  it("computes output VAT (14% on net sales) and input VAT, returns net payable", async () => {
-    sellRows = [{ qty: "10", unitPrice: "100", poDate: "2026-08-01", internalPoNo: "CPO-2026-000001", customerPoNo: "C-1", customerName: "عميل أ", storedCustomerName: null }];
-    buyRows = [{ qty: "10", referencePrice: "60", taxIncluded: false, createdAt: new Date("2026-08-02"), internalPoNo: "PO-2026-000001", sheetPoNo: "S-1", supplierName: "مورد ب", finalActualCost: null, acceptedQty: null }];
+  it("computes output VAT (posted sales invoices) and input VAT (posted supplier invoices), returns net payable", async () => {
+    salesInvoiceRows = [
+      { id: 1, invoiceNo: "INV-2026-000001", customerName: "عميل أ", customerPoNo: "C-1", invoiceDate: "2026-08-01", netAmount: "1000", vatAmount: "140", grossAmount: "1140", status: "posted" },
+    ];
+    supplierInvoiceRows = [
+      { id: 2, invoiceNo: "SI-2026-000001", supplierInvoiceNo: "S-1", supplierName: "مورد ب", poNo: "PO-1", invoiceDate: "2026-08-02", netAmount: "600", vatAmount: "84", grossAmount: "684", status: "posted" },
+    ];
 
     const res = await request(testApp).get("/api/accounts/vat");
     expect(res.status).toBe(200);
     expect(res.body.vatRate).toBe(14);
-    // Output: 10×100 = 1000 net → VAT 140
+    // Output: net 1000 → VAT 140
     expect(res.body.output.net).toBe(1000);
     expect(res.body.output.vat).toBe(140);
-    // Input: 10×60 = 600 net → VAT 84
+    // Input: net 600 → VAT 84
     expect(res.body.input.net).toBe(600);
     expect(res.body.input.vat).toBe(84);
     // Net VAT = 140 − 84 = 56 payable
@@ -160,39 +174,48 @@ describe("GET /api/accounts/vat", () => {
     expect(res.body.credit).toBe(0);
   });
 
-  it("strips VAT from tax-inclusive supplier lines", async () => {
-    sellRows = [];
-    buyRows = [{ qty: "10", referencePrice: "120", taxIncluded: true, createdAt: new Date("2026-08-02"), internalPoNo: "PO-1", sheetPoNo: "S-1", supplierName: "مورد ب", finalActualCost: null, acceptedQty: null }];
+  it("returns a credit when input VAT exceeds output VAT", async () => {
+    salesInvoiceRows = [];
+    supplierInvoiceRows = [
+      { id: 2, invoiceNo: "SI-2026-000001", supplierInvoiceNo: "S-1", supplierName: "مورد ب", poNo: "PO-1", invoiceDate: "2026-08-02", netAmount: "1052.63", vatAmount: "147.37", grossAmount: "1200", status: "posted" },
+    ];
 
     const res = await request(testApp).get("/api/accounts/vat");
     expect(res.status).toBe(200);
-    // Gross 1200 incl. 14% → net = 1200/1.14 ≈ 1052.63, VAT ≈ 147.37
     expect(res.body.input.vat).toBeCloseTo(147.37, 1);
     expect(res.body.credit).toBeGreaterThan(0);
     expect(res.body.payable).toBe(0);
   });
+
+  it("ignores draft/void invoices", async () => {
+    salesInvoiceRows = [
+      { id: 1, invoiceNo: "INV-DRAFT", customerName: "عميل أ", customerPoNo: null, invoiceDate: "2026-08-01", netAmount: "1000", vatAmount: "140", grossAmount: "1140", status: "draft" },
+    ];
+    supplierInvoiceRows = [];
+    const res = await request(testApp).get("/api/accounts/vat");
+    expect(res.status).toBe(200);
+    expect(res.body.output.net).toBe(0);
+    expect(res.body.input.net).toBe(0);
+    expect(res.body.netVat).toBe(0);
+  });
 });
 
 describe("GET /api/accounts/withholding", () => {
-  it("withholds 3% of each PO net value and sums totals", async () => {
-    // Two POs; the flat rows list repeats a PO header per item row.
-    poRows = [
-      { poId: 1, internalPoNo: "PO-2026-000001", sheetPoNo: "S-1", supplierName: "مورد ب", status: "sent", createdAt: new Date("2026-08-01"), qty: "10", referencePrice: "100", taxIncluded: false },
-      { poId: 1, internalPoNo: "PO-2026-000001", sheetPoNo: "S-1", supplierName: "مورد ب", status: "sent", createdAt: new Date("2026-08-01"), qty: "5", referencePrice: "40", taxIncluded: false },
-      { poId: 2, internalPoNo: "PO-2026-000002", sheetPoNo: "S-2", supplierName: "مورد ج", status: "draft", createdAt: new Date("2026-08-03"), qty: "2", referencePrice: "50", taxIncluded: false },
+  it("withholds from posted supplier invoices and sums totals", async () => {
+    supplierInvoiceRows = [
+      { id: 1, invoiceNo: "SI-2026-000001", supplierInvoiceNo: "S-1", supplierName: "مورد ب", poNo: "PO-2026-000001", invoiceDate: "2026-08-01", netAmount: "1200", withholdingRate: "3", withholdingAmount: "36", grossAmount: "1368", status: "posted" },
+      { id: 2, invoiceNo: "SI-2026-000002", supplierInvoiceNo: "S-2", supplierName: "مورد ج", poNo: "PO-2026-000002", invoiceDate: "2026-08-03", netAmount: "100", withholdingRate: "3", withholdingAmount: "3", grossAmount: "114", status: "posted" },
     ];
 
     const res = await request(testApp).get("/api/accounts/withholding");
     expect(res.status).toBe(200);
     expect(res.body.withholdingRate).toBe(3);
-    // PO1 net = 1000 + 200 = 1200 → withhold 36
-    // PO2 net = 100 → withhold 3
-    const po1 = res.body.lines.find((l: any) => l.poId === 1);
-    const po2 = res.body.lines.find((l: any) => l.poId === 2);
-    expect(po1.netValue).toBe(1200);
-    expect(po1.withholding).toBe(36);
-    expect(po1.payableToSupplier).toBe(1164);
-    expect(po2.withholding).toBe(3);
+    const l1 = res.body.lines.find((l: any) => l.poId === 1);
+    const l2 = res.body.lines.find((l: any) => l.poId === 2);
+    expect(l1.netValue).toBe(1200);
+    expect(l1.withholding).toBe(36);
+    expect(l1.payableToSupplier).toBe(1164);
+    expect(l2.withholding).toBe(3);
     expect(res.body.totalNet).toBe(1300);
     expect(res.body.totalWithholding).toBe(39);
     expect(res.body.totalPayable).toBe(1261);

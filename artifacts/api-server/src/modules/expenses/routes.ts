@@ -28,6 +28,8 @@ import {
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import type { Request } from "express";
+import { postJournalEntry } from "../accounts/posting";
+import { expenseAccountFor, cashAccountFor } from "../accounts/integration";
 
 const router = Router();
 
@@ -182,6 +184,8 @@ interface ExpenseInput {
   expenseDate?: string;
   amount?: string | number;
   notes?: string | null;
+  paymentMethod?: string | null;
+  cashAccountCode?: string | null;
 }
 
 async function validateExpense(body: ExpenseInput): Promise<{
@@ -193,6 +197,8 @@ async function validateExpense(body: ExpenseInput): Promise<{
     expenseDate: string;
     amount: string;
     notes: string | null;
+    paymentMethod: string | null;
+    cashAccountCode: string | null;
   };
 }> {
   const category = typeof body.category === "string" ? body.category.trim() : "";
@@ -201,6 +207,8 @@ async function validateExpense(body: ExpenseInput): Promise<{
   if (!category) return { ok: false, error: "نوع المصروف مطلوب" };
   if (!expenseDate) return { ok: false, error: "تاريخ المصروف مطلوب" };
   if (amount == null || amount <= 0) return { ok: false, error: "قيمة المصروف غير صالحة" };
+  const paymentMethod = typeof body.paymentMethod === "string" && body.paymentMethod.trim() ? body.paymentMethod.trim() : null;
+  const cashAccountCode = typeof body.cashAccountCode === "string" && body.cashAccountCode.trim() ? body.cashAccountCode.trim() : null;
   return {
     ok: true,
     values: {
@@ -209,11 +217,15 @@ async function validateExpense(body: ExpenseInput): Promise<{
       expenseDate,
       amount: String(amount),
       notes: body.notes ?? null,
+      paymentMethod,
+      cashAccountCode,
     },
   };
 }
 
-// POST /expenses — create.
+// POST /expenses — create. Also posts a balanced journal entry (expense
+// account debit / cash-or-bank credit) so operating expenses reach the
+// income statement + trial balance.
 router.post("/expenses", requireAuth, async (req, res): Promise<void> => {
   const v = await validateExpense(req.body ?? {});
   if (!v.ok || !v.values) {
@@ -224,11 +236,37 @@ router.post("/expenses", requireAuth, async (req, res): Promise<void> => {
   const [row] = await db
     .insert(operatingExpensesTable)
     .values({
-      ...v.values,
+      category: v.values.category,
+      description: v.values.description,
+      expenseDate: v.values.expenseDate,
+      amount: v.values.amount,
+      notes: v.values.notes,
       employeeId: session.employeeId ?? null,
       employeeName: session.employeeName ?? null,
     })
     .returning({ id: operatingExpensesTable.id });
+
+  // Post to the double-entry ledger.
+  const amount = Number(v.values.amount);
+  const cashAccount =
+    v.values.cashAccountCode || cashAccountFor(v.values.paymentMethod);
+  const expenseAccount = expenseAccountFor(v.values.category);
+  try {
+    await postJournalEntry({
+      entryDate: v.values.expenseDate,
+      description: `مصروف تشغيلي — ${v.values.category}${v.values.description ? ` (${v.values.description})` : ""}`,
+      source: "operating_expense",
+      sourceRefId: row.id,
+      employeeId: session.employeeId,
+      employeeName: session.employeeName,
+      lines: [
+        { accountCode: expenseAccount, description: v.values.category, debit: amount },
+        { accountCode: cashAccount, description: "سداد مصروف", credit: amount },
+      ],
+    });
+  } catch (err) {
+    req.log?.error?.({ err }, "expense journal posting failed");
+  }
 
   await db.insert(auditLogTable).values({
     action: "expense.create",
