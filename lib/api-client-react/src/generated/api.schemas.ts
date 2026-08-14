@@ -246,7 +246,7 @@ export interface CustomerRfqSheetFacets {
 }
 
 /**
- * received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered).
+ * received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed).
  */
 export type CustomerRfqRequestStatusStage = typeof CustomerRfqRequestStatusStage[keyof typeof CustomerRfqRequestStatusStage];
 
@@ -257,13 +257,14 @@ export const CustomerRfqRequestStatusStage = {
   customer_priced: 'customer_priced',
   po_issued: 'po_issued',
   delivered: 'delivered',
+  expired: 'expired',
 } as const;
 
 /**
  * Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage/label prefers the most advanced milestone reached.
  */
 export interface CustomerRfqRequestStatus {
-  /** received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered). */
+  /** received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed). */
   stage: CustomerRfqRequestStatusStage;
   /** Arabic label ready to display, e.g. "طلب وارد", "مُسعَّر من المورد", "مُسعَّر 50%", "صدر أمر شراء", "مُسلَّم 100%". */
   label: string;

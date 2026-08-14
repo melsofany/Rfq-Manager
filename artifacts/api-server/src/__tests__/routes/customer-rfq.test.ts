@@ -321,6 +321,21 @@ describe("GET /api/customer-rfq (list)", () => {
     // No customer price yet → still "مُسعَّر من المورد".
     expect(res.body[0].requestStatus.stage).toBe("supplier_priced");
   });
+
+  it("marks an unpriced RFQ whose close date passed as expired", async () => {
+    listRows = [
+      { rfq: { ...insertedRfq, id: 3, internalNo: "CRFQ-3", itemCount: undefined, expiryDate: "2020-01-01" } },
+    ];
+    // One item with no price, no approved offer, no PO → would be "received"
+    // except the close date is long past → "expired".
+    detailItems = [
+      { id: 30, customerRfqId: 3, partNo: "P1", lineItem: "A1", uom: "pc", qty: "1", unitPrice: null },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq");
+    expect(res.status).toBe(200);
+    expect(res.body[0].requestStatus.stage).toBe("expired");
+    expect(res.body[0].requestStatus.label).toContain("منتهي");
+  });
 });
 
 describe("GET /api/customer-rfq/numbers", () => {
@@ -379,6 +394,33 @@ describe("GET /api/customer-rfq/:id", () => {
     expect(res.body.requestStatus.poItemIds).toContain(1);
     expect(res.body.requestStatus.deliveredPct).toBe(100);
     expect(res.body.requestStatus.stage).toBe("delivered");
+  });
+
+  it("marks an unpriced RFQ as expired when its close date passed", async () => {
+    detailRow = { ...insertedRfq, expiryDate: "2020-01-01" };
+    // No price, no approved offer, no PO — but the close date is past.
+    detailItems = [
+      { id: 5, customerRfqId: 42, partNo: "P1", lineItem: "A1", uom: "pc", qty: "1", unitPrice: null, createdAt: new Date("2025-01-01") },
+    ];
+    approvedRows = [];
+    poItemRows = [];
+    const res = await request(testApp).get("/api/customer-rfq/42");
+    expect(res.status).toBe(200);
+    expect(res.body.requestStatus.stage).toBe("expired");
+    expect(res.body.requestStatus.label).toContain("منتهي");
+  });
+
+  it("does not mark a priced RFQ as expired even past its close date", async () => {
+    detailRow = { ...insertedRfq, expiryDate: "2020-01-01" };
+    // Has a customer price → takes precedence over the expired stage.
+    detailItems = [
+      { id: 6, customerRfqId: 42, partNo: "P1", lineItem: "A1", uom: "pc", qty: "1", unitPrice: "10", createdAt: new Date("2025-01-01") },
+    ];
+    approvedRows = [];
+    poItemRows = [];
+    const res = await request(testApp).get("/api/customer-rfq/42");
+    expect(res.status).toBe(200);
+    expect(res.body.requestStatus.stage).toBe("customer_priced");
   });
 });
 
