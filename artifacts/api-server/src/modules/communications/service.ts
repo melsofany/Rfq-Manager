@@ -139,6 +139,16 @@ function extractPricingToken(pricingUrl: string): string {
   return parts[parts.length - 1] || pricingUrl;
 }
 
+/** Trim a NUMERIC qty string so "3.0000" → "3", "3.50" → "3.5". */
+export function formatQty(qty: string | null | undefined): string | null {
+  if (qty == null) return null;
+  const s = String(qty).trim();
+  if (s === "") return null;
+  if (!s.includes(".")) return s;
+  const trimmed = s.replace(/0+$/, "").replace(/\.$/, "");
+  return trimmed === "" ? "0" : trimmed;
+}
+
 // Uploads a media buffer to Meta's Cloud API and returns the resulting media ID.
 // The library doesn't expose a typed multipart-form helper for uploadMedia, so
 // we use its authenticated `$$apiFetch$$` escape hatch — still the official,
@@ -523,6 +533,55 @@ export async function sendWhatsAppInteractiveConfirmation(
       new Button(`work_order:${poNo}:${action}:confirm`, title),
       new Button(`work_order:${poNo}:${action}:cancel`, "تراجع"),
     ),
+    new Body(body),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/**
+ * Consolidated per-PO representative dispatch notification. Sends ONE interactive
+ * message listing the supplier (name / address / phone), the PO number, and ALL
+ * its pending line items (with clean quantities). A single «بدء الاستلام» button
+ * opens the rep-bot receipt menu (payload rep_menu:receipt), where the PO picker
+ * → item picker shows every pending item. This replaces the old per-item prompts
+ * (which could drop items when a rapid second WhatsApp send was rate-limited) and
+ * guarantees all items appear because the assignment rows are created up front by
+ * the dispatch route regardless of send success.
+ */
+export async function sendRepPoDispatchWhatsApp(opts: {
+  phone: string;
+  poNo: string;
+  supplierName: string;
+  supplierAddress?: string | null;
+  supplierPhone?: string | null;
+  items: Array<{ lineItem?: string | null; description?: string | null; qty?: string | null; uom?: string | null }>;
+}): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(opts.phone);
+  const lines: string[] = [];
+  lines.push(`أمر شراء جديد للمندوب`);
+  lines.push(`رقم الأمر: ${opts.poNo}`);
+  lines.push(`المورد: ${opts.supplierName}`);
+  if (opts.supplierAddress?.trim()) lines.push(`عنوان المورد: ${opts.supplierAddress.trim()}`);
+  if (opts.supplierPhone?.trim()) lines.push(`هاتف المورد: ${opts.supplierPhone.trim()}`);
+  lines.push("");
+  lines.push("البنود:");
+  opts.items.slice(0, 20).forEach((it, i) => {
+    const label = [it.lineItem || String(i + 1), it.description].filter(Boolean).join(" — ") || `بند ${i + 1}`;
+    const qty = formatQty(it.qty);
+    const qtyText = qty ? ` × ${qty}${it.uom ? " " + it.uom : ""}` : "";
+    lines.push(`${i + 1}. ${label}${qtyText}`);
+  });
+  if (opts.items.length > 20) lines.push(`…و ${opts.items.length - 20} بند آخر`);
+  lines.push("");
+  lines.push("اضغط «بدء الاستلام» لتأكيد استلام البنود.");
+  const body = lines.join("\n");
+  const message = new Interactive(
+    new ActionButtons(new Button("rep_menu:receipt", "بدء الاستلام")),
     new Body(body),
   );
   const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
