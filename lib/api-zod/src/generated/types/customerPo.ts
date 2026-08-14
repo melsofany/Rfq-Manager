@@ -5,6 +5,7 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomerPoFulfillmentStatus } from './customerPoFulfillmentStatus';
 
 export interface CustomerPo {
   id: number;
@@ -36,7 +37,9 @@ export interface CustomerPo {
   employeeId?: number | null;
   /** @nullable */
   employeeName?: string | null;
+  /** Stored lifecycle status (draft | sent). The customer-PO finalization flag, NOT the fulfillment progress. */
   status: string;
+  fulfillmentStatus?: CustomerPoFulfillmentStatus;
   /** @nullable */
   notes?: string | null;
   itemCount?: number;

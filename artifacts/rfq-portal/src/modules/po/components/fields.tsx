@@ -13,6 +13,7 @@ export type RepresentativeOption = {
 export interface PoItemRow {
   id: string;
   itemId: string | null;
+  customerPoItemId: number | null;
   lineItem: string | null;
   partNo: string | null;
   description: string;

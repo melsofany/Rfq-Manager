@@ -18,6 +18,8 @@ export * from './customerInput';
 export * from './customerPo';
 export * from './customerPoCustomerRfqOption';
 export * from './customerPoDetail';
+export * from './customerPoFulfillmentStatus';
+export * from './customerPoFulfillmentStatusStage';
 export * from './customerPoInput';
 export * from './customerPoLineItem';
 export * from './customerPoLineItemInput';

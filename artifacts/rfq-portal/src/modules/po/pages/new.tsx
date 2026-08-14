@@ -22,6 +22,7 @@ import {
 
 interface SheetItem {
   itemId: string | null;
+  customerPoItemId?: number | null;
   lineItem: string | null;
   partNo: string | null;
   description: string;
@@ -225,6 +226,7 @@ export default function NewPurchaseOrderPage() {
         const mapped: PoItemRow[] = data.map((item, idx) => ({
           id: `${idx}`,
           itemId: item.itemId,
+          customerPoItemId: item.customerPoItemId ?? null,
           lineItem: item.lineItem,
           partNo: item.partNo,
           description: item.description,
@@ -339,6 +341,7 @@ export default function NewPurchaseOrderPage() {
         notes: notes || undefined,
         items: chosen.map((i) => ({
           itemId: i.itemId || undefined,
+          customerPoItemId: i.customerPoItemId ?? undefined,
           lineItem: i.lineItem || undefined,
           partNo: i.partNo || undefined,
           description: i.description,

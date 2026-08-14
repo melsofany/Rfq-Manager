@@ -62,6 +62,7 @@ interface PoItem {
   supplierId: number | null;
   supplierName: string | null;
   itemId: string | null;
+  customerPoItemId: number | null;
   lineItem: string | null;
   partNo: string | null;
   description: string;
@@ -210,6 +211,7 @@ export default function PurchaseOrderDetailPage() {
       (items ?? []).map((it, idx) => ({
         id: `item-${it.id}-${idx}`,
         itemId: it.itemId,
+        customerPoItemId: it.customerPoItemId ?? null,
         lineItem: it.lineItem,
         partNo: it.partNo,
         description: it.description,
@@ -237,6 +239,7 @@ export default function PurchaseOrderDetailPage() {
       {
         id: nid,
         itemId: null,
+        customerPoItemId: null,
         lineItem: null,
         partNo: "",
         description: "",
@@ -305,6 +308,7 @@ export default function PurchaseOrderDetailPage() {
           employeeId: editEmployeeId ? parseInt(editEmployeeId, 10) : null,
           items: validItems.map((i) => ({
             itemId: i.itemId || null,
+            customerPoItemId: i.customerPoItemId ?? null,
             lineItem: i.lineItem || null,
             partNo: i.partNo || null,
             description: i.description.trim(),

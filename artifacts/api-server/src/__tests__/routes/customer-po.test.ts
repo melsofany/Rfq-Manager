@@ -18,16 +18,21 @@ function chainable(value: any, methods: Record<string, any> = {}): any {
 
 // Tables referenced by .from() / eq() / .references() — truthy markers.
 const poTable = { _: "customerPos", createdAt: "createdAt", id: "id", internalPoNo: "internalPoNo" };
-const poItemsTable = { _: "customerPoItems", customerPoId: "customerPoId" };
+const poItemsTable = { _: "customerPoItems", customerPoId: "customerPoId", id: "id" };
 const rfqsTable = { _: "customerRfqs", customerName: "customerName", createdAt: "createdAt" };
 const employeesTbl = { _: "employees", id: "id", name: "name" };
 const auditTable = { _: "audit" };
+// Supplier-PO tables used by the derived fulfillment status (po_issued check).
+const purchaseOrdersTbl = { _: "purchaseOrders", status: "status", sheetPoNo: "sheetPoNo", id: "id" };
+const purchaseOrderItemsTbl = { _: "purchaseOrderItems", poId: "poId", customerPoItemId: "customerPoItemId", customerPoId: "customerPoId" };
 const tables = {
   customerPosTable: poTable,
   customerPoItemsTable: poItemsTable,
   customerRfqsTable: rfqsTable,
   employeesTable: employeesTbl,
   auditLogTable: auditTable,
+  purchaseOrdersTable: purchaseOrdersTbl,
+  purchaseOrderItemsTable: purchaseOrderItemsTbl,
 };
 
 // Per-test state.
@@ -39,6 +44,10 @@ let detailRow: any | null; // the customer PO itself (bare select)
 let detailItems: any[]; // customer_po_items for a PO
 let employeeRow: { name: string } | null; // POST employee name lookup
 let rfqRows: any[]; // resolveRfqNos: select({id,no}).from(rfqs).where() → [{id, no}]
+// Dispatched supplier POs (status="sent") — for the po_issued fulfillment check.
+let dispatchedPoRows: any[]; // [{ sheetPoNo }]
+// Item-level links: dispatched supplier-PO items joined to customer_po_items.
+let linkedPoItemRows: any[]; // [{ customerPoId }]
 // Tracks exact values written to customer_po_items so tests can assert links.
 const insertedItems: any[] = [];
 
@@ -74,10 +83,28 @@ const dbMock: any = {
           groupBy: vi.fn(() => chainable(countRows)),
         });
       }
-      // customer_po_items (bare select) — detail items: select().from(poItems).where()
+      // customerPoItemIdsFor / delivery rollup: select({id | customerPoId, deliveryStatus})
+      // .from(poItems).where(inArray(...)) — return detailItems (the per-test items).
       if (table === poItemsTable) {
         return chainable(detailItems, {
           where: vi.fn(() => chainable(detailItems)),
+        });
+      }
+      // Item-level po_issued link: select({customerPoId}).from(purchaseOrderItems)
+      // .innerJoin(purchaseOrders).where(and(...)) — return linkedPoItemRows.
+      if (table === purchaseOrderItemsTbl) {
+        return chainable(linkedPoItemRows, {
+          innerJoin: vi.fn(() =>
+            chainable(linkedPoItemRows, { where: vi.fn(() => chainable(linkedPoItemRows)) }),
+          ),
+          where: vi.fn(() => chainable(linkedPoItemRows)),
+        });
+      }
+      // Header-level po_issued fallback: select({sheetPoNo}).from(purchaseOrders)
+      // .where(eq(status,"sent")) — return dispatchedPoRows.
+      if (table === purchaseOrdersTbl) {
+        return chainable(dispatchedPoRows, {
+          where: vi.fn(() => chainable(dispatchedPoRows)),
         });
       }
       // Employee name lookup: select({name}).from(employees).where().limit()
@@ -170,6 +197,8 @@ beforeEach(() => {
   detailItems = [];
   employeeRow = { name: "Tester" };
   rfqRows = [];
+  dispatchedPoRows = [];
+  linkedPoItemRows = [];
   sessionState.role = undefined;
   insertedItems.length = 0;
 });
@@ -276,6 +305,9 @@ describe("GET /api/customer-po (list)", () => {
     expect(res.body[0].internalPoNo).toBe("CPO-2025-000001");
     expect(res.body[0].itemCount).toBe(4);
     expect(res.body[0].customerName).toBe("Acme");
+    // Derived fulfillment status is always present on the list row.
+    expect(res.body[0].fulfillmentStatus).toBeTruthy();
+    expect(res.body[0].fulfillmentStatus.stage).toBe("draft");
   });
 
   it("filters by search term (client-side) without erroring", async () => {
@@ -286,6 +318,91 @@ describe("GET /api/customer-po (list)", () => {
     expect(res.body).toHaveLength(1);
   });
 });
+
+// ── Derived fulfillment status (حالة الطلب) ───────────────────────────────────
+// The customer-PO list/detail surface a computed `fulfillmentStatus` that
+// advances automatically: draft → sent → po_issued (a supplier PO was
+// dispatched) → delivered (partial %) → fulfilled (all items delivered).
+describe("Customer PO fulfillment status (derived)", () => {
+  it("shows po_issued when a dispatched supplier PO matches the customerPoNo (header fallback)", async () => {
+    listRows = [{ po: { ...insertedPo, id: 7, customerPoNo: "CUST-1", status: "sent" } }];
+    countRows = [{ customerPoId: 7, cnt: 2 }];
+    detailItems = [{ id: 1, customerPoId: 7, deliveryStatus: "pending" }, { id: 2, customerPoId: 7, deliveryStatus: "pending" }];
+    // A supplier PO with status=sent and sheetPoNo matching the customer PO.
+    dispatchedPoRows = [{ sheetPoNo: "CUST-1" }];
+    const res = await request(testApp).get("/api/customer-po");
+    expect(res.status).toBe(200);
+    expect(res.body[0].fulfillmentStatus.stage).toBe("po_issued");
+    expect(res.body[0].fulfillmentStatus.poIssued).toBe(true);
+  });
+
+  it("shows po_issued when a dispatched supplier PO links via customerPoItemId", async () => {
+    listRows = [{ po: { ...insertedPo, id: 7, customerPoNo: "CUST-2", status: "sent" } }];
+    countRows = [{ customerPoId: 7, cnt: 1 }];
+    detailItems = [{ id: 50, customerPoId: 7, deliveryStatus: "pending" }];
+    linkedPoItemRows = [{ customerPoId: 7 }];
+    const res = await request(testApp).get("/api/customer-po");
+    expect(res.status).toBe(200);
+    expect(res.body[0].fulfillmentStatus.stage).toBe("po_issued");
+  });
+
+  it("shows delivered with the delivered-items percentage", async () => {
+    listRows = [{ po: { ...insertedPo, id: 7, customerPoNo: "CUST-3", status: "sent" } }];
+    countRows = [{ customerPoId: 7, cnt: 4 }];
+    // 4 items, 2 delivered → 50%.
+    detailItems = [
+      { id: 1, customerPoId: 7, deliveryStatus: "delivered" },
+      { id: 2, customerPoId: 7, deliveryStatus: "delivered" },
+      { id: 3, customerPoId: 7, deliveryStatus: "partial" },
+      { id: 4, customerPoId: 7, deliveryStatus: "pending" },
+    ];
+    dispatchedPoRows = [{ sheetPoNo: "CUST-3" }];
+    const res = await request(testApp).get("/api/customer-po");
+    expect(res.status).toBe(200);
+    expect(res.body[0].fulfillmentStatus.stage).toBe("delivered");
+    expect(res.body[0].fulfillmentStatus.deliveredItems).toBe(2);
+    expect(res.body[0].fulfillmentStatus.totalItems).toBe(4);
+    expect(res.body[0].fulfillmentStatus.deliveredPct).toBe(50);
+  });
+
+  it("shows fulfilled when every item is delivered", async () => {
+    listRows = [{ po: { ...insertedPo, id: 7, customerPoNo: "CUST-4", status: "sent" } }];
+    countRows = [{ customerPoId: 7, cnt: 2 }];
+    detailItems = [
+      { id: 1, customerPoId: 7, deliveryStatus: "delivered" },
+      { id: 2, customerPoId: 7, deliveryStatus: "delivered" },
+    ];
+    dispatchedPoRows = [{ sheetPoNo: "CUST-4" }];
+    const res = await request(testApp).get("/api/customer-po");
+    expect(res.status).toBe(200);
+    expect(res.body[0].fulfillmentStatus.stage).toBe("fulfilled");
+    expect(res.body[0].fulfillmentStatus.deliveredPct).toBe(100);
+  });
+
+  it("stays at sent when finalized but no supplier PO dispatched and nothing delivered", async () => {
+    listRows = [{ po: { ...insertedPo, id: 7, customerPoNo: "CUST-5", status: "sent" } }];
+    countRows = [{ customerPoId: 7, cnt: 1 }];
+    detailItems = [{ id: 1, customerPoId: 7, deliveryStatus: "pending" }];
+    const res = await request(testApp).get("/api/customer-po");
+    expect(res.status).toBe(200);
+    expect(res.body[0].fulfillmentStatus.stage).toBe("sent");
+    expect(res.body[0].fulfillmentStatus.poIssued).toBe(false);
+  });
+
+  it("exposes fulfillmentStatus on the detail response too", async () => {
+    detailRow = { ...insertedPo, customerPoNo: "CUST-6", status: "sent" };
+    detailItems = [
+      { id: 1, customerPoId: 7, deliveryStatus: "delivered", createdAt: new Date("2025-01-05") },
+      { id: 2, customerPoId: 7, deliveryStatus: "pending", createdAt: new Date("2025-01-05") },
+    ];
+    dispatchedPoRows = [{ sheetPoNo: "CUST-6" }];
+    const res = await request(testApp).get("/api/customer-po/7");
+    expect(res.status).toBe(200);
+    expect(res.body.fulfillmentStatus.stage).toBe("delivered");
+    expect(res.body.fulfillmentStatus.deliveredPct).toBe(50);
+  });
+});
+
 
 describe("GET /api/customer-po/:id", () => {
   it("returns 404 when not found", async () => {

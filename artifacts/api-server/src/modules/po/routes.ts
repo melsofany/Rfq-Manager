@@ -132,6 +132,7 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
     rfqId?: number | null;
     items?: Array<{
       itemId?: string | null;
+      customerPoItemId?: number | null;
       lineItem?: string;
       partNo?: string;
       description: string;
@@ -178,6 +179,7 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
         validItems.map((it) => ({
           poId: po.id,
           itemId: it.itemId || null,
+          customerPoItemId: it.customerPoItemId ?? null,
           lineItem: it.lineItem || null,
           partNo: it.partNo || null,
           description: it.description.trim(),
@@ -263,6 +265,7 @@ router.get("/po/lookup/:poNo", requireAuth, async (req, res): Promise<void> => {
         res.json(
           items.map((i) => ({
             itemId: i.id != null ? String(i.id) : null,
+            customerPoItemId: i.id ?? null,
             lineItem: i.lineItem,
             partNo: i.partNo,
             description: i.description ?? "",
@@ -782,6 +785,7 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
     employeeId?: number | null;
     items?: Array<{
       itemId?: string | null;
+      customerPoItemId?: number | null;
       lineItem?: string;
       partNo?: string;
       description: string;
@@ -839,6 +843,7 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
         validItems.map((it) => ({
           poId: id,
           itemId: it.itemId || null,
+          customerPoItemId: it.customerPoItemId ?? null,
           lineItem: it.lineItem || null,
           partNo: it.partNo || null,
           description: it.description.trim(),
@@ -1017,6 +1022,7 @@ router.get("/po/:id/items", requireAuth, async (req, res): Promise<void> => {
       supplierId: r.item.supplierId,
       supplierName: r.supplierName,
       itemId: r.item.itemId,
+      customerPoItemId: r.item.customerPoItemId ?? null,
       lineItem: r.item.lineItem,
       partNo: r.item.partNo,
       description: r.item.description,
