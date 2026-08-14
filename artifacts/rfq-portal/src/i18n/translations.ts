@@ -19,6 +19,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.customers": "Customers",
     "nav.customerRfq": "Customer RFQs",
     "nav.customerPo": "Customer POs",
+    "nav.expenses": "Operating Expenses",
+    "nav.collections": "Collections",
     "lang.toggle": "عربي",
 
     // Status labels
@@ -353,6 +355,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.customers": "العملاء",
     "nav.customerRfq": "طلبات تسعير العملاء",
     "nav.customerPo": "أوامر شراء العملاء",
+    "nav.expenses": "المصروفات التشغيلية",
+    "nav.collections": "تحصيل العملاء",
     "lang.toggle": "English",
 
     // Status labels

@@ -11,10 +11,12 @@
 import { Router, type IRouter } from "express";
 import poRouter from "./routes";
 import receiptsRouter from "./receipts";
+import chargesRouter from "./charges";
 
 const router: IRouter = Router();
 
 router.use(poRouter);
 router.use(receiptsRouter);
+router.use(chargesRouter);
 
 export default router;
