@@ -550,6 +550,220 @@ export async function initDb(): Promise<void> {
       ALTER TABLE rfq_items  ADD COLUMN IF NOT EXISTS reference_price NUMERIC(15,4);
     `);
 
+    // ══════════════════════════════════════════════════════════════════════
+    // Accounting — القيد المزدوج ودليل الحسابات
+    // ══════════════════════════════════════════════════════════════════════
+    // All DDL lives here (CREATE TABLE IF NOT EXISTS) so Render picks it up
+    // on next startup — the drizzle-kit prebuild push is NOT relied upon.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chart_of_accounts (
+        id          SERIAL PRIMARY KEY,
+        code        TEXT NOT NULL UNIQUE,
+        name_ar     TEXT NOT NULL,
+        name_en     TEXT,
+        type         TEXT NOT NULL,
+        parent_id   INTEGER,
+        is_control  BOOLEAN NOT NULL DEFAULT false,
+        is_active   BOOLEAN NOT NULL DEFAULT true,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS journal_entries (
+        id                SERIAL PRIMARY KEY,
+        entry_no          TEXT NOT NULL UNIQUE,
+        entry_date        TEXT NOT NULL,
+        description       TEXT NOT NULL,
+        source            TEXT,
+        source_ref_id     INTEGER,
+        status            TEXT NOT NULL DEFAULT 'draft',
+        total_debit       NUMERIC(18,4) NOT NULL DEFAULT 0,
+        total_credit      NUMERIC(18,4) NOT NULL DEFAULT 0,
+        employee_id       INTEGER REFERENCES employees(id),
+        employee_name     TEXT,
+        reviewed_by       INTEGER REFERENCES employees(id),
+        reviewed_by_name  TEXT,
+        reviewed_at       TIMESTAMPTZ,
+        posted_at         TIMESTAMPTZ,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS journal_lines (
+        id            SERIAL PRIMARY KEY,
+        entry_id      INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+        account_code  TEXT NOT NULL,
+        line_no       INTEGER NOT NULL DEFAULT 1,
+        description   TEXT,
+        debit         NUMERIC(18,4) NOT NULL DEFAULT 0,
+        credit        NUMERIC(18,4) NOT NULL DEFAULT 0,
+        party_type    TEXT,
+        party_id      INTEGER,
+        party_name    TEXT,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS journal_lines_entry_id_idx ON journal_lines(entry_id);
+      CREATE INDEX IF NOT EXISTS journal_lines_account_code_idx ON journal_lines(account_code);
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS supplier_invoices (
+        id                    SERIAL PRIMARY KEY,
+        invoice_no            TEXT NOT NULL UNIQUE,
+        supplier_invoice_no   TEXT,
+        supplier_id           INTEGER REFERENCES suppliers(id),
+        supplier_name         TEXT NOT NULL,
+        po_id                 INTEGER REFERENCES purchase_orders(id) ON DELETE SET NULL,
+        po_no                 TEXT,
+        invoice_date          TEXT NOT NULL,
+        due_date              TEXT,
+        net_amount            NUMERIC(15,4) NOT NULL DEFAULT 0,
+        vat_amount            NUMERIC(15,4) NOT NULL DEFAULT 0,
+        withholding_rate      NUMERIC(6,4) NOT NULL DEFAULT 0,
+        withholding_amount    NUMERIC(15,4) NOT NULL DEFAULT 0,
+        gross_amount          NUMERIC(15,4) NOT NULL DEFAULT 0,
+        paid_amount           NUMERIC(15,4) NOT NULL DEFAULT 0,
+        balance               NUMERIC(15,4) NOT NULL DEFAULT 0,
+        status                TEXT NOT NULL DEFAULT 'draft',
+        journal_entry_id      INTEGER,
+        notes                 TEXT,
+        employee_id           INTEGER REFERENCES employees(id),
+        employee_name         TEXT,
+        reviewed_by           INTEGER REFERENCES employees(id),
+        reviewed_by_name      TEXT,
+        reviewed_at           TIMESTAMPTZ,
+        posted_at             TIMESTAMPTZ,
+        created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS supplier_payments (
+        id                  SERIAL PRIMARY KEY,
+        payment_no          TEXT NOT NULL UNIQUE,
+        supplier_id         INTEGER REFERENCES suppliers(id),
+        supplier_name       TEXT NOT NULL,
+        po_id               INTEGER REFERENCES purchase_orders(id) ON DELETE SET NULL,
+        po_no               TEXT,
+        payment_date        TEXT NOT NULL,
+        method              TEXT NOT NULL,
+        reference           TEXT,
+        amount              NUMERIC(15,4) NOT NULL,
+        bank_charges        NUMERIC(15,4) NOT NULL DEFAULT 0,
+        cash_account_code   TEXT NOT NULL DEFAULT '1001',
+        status              TEXT NOT NULL DEFAULT 'posted',
+        journal_entry_id    INTEGER,
+        notes               TEXT,
+        employee_id         INTEGER REFERENCES employees(id),
+        employee_name       TEXT,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS supplier_payment_applications (
+        id          SERIAL PRIMARY KEY,
+        payment_id  INTEGER NOT NULL REFERENCES supplier_payments(id) ON DELETE CASCADE,
+        invoice_id  INTEGER NOT NULL REFERENCES supplier_invoices(id) ON DELETE CASCADE,
+        amount      NUMERIC(15,4) NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sales_invoices (
+        id                SERIAL PRIMARY KEY,
+        invoice_no        TEXT NOT NULL UNIQUE,
+        customer_po_id    INTEGER REFERENCES customer_pos(id) ON DELETE SET NULL,
+        customer_po_no    TEXT,
+        customer_rfq_id   INTEGER REFERENCES customer_rfqs(id) ON DELETE SET NULL,
+        customer_id       INTEGER REFERENCES customers(id),
+        customer_name     TEXT NOT NULL,
+        invoice_date      TEXT NOT NULL,
+        due_date          TEXT,
+        net_amount        NUMERIC(15,4) NOT NULL DEFAULT 0,
+        vat_amount        NUMERIC(15,4) NOT NULL DEFAULT 0,
+        gross_amount      NUMERIC(15,4) NOT NULL DEFAULT 0,
+        cogs_amount       NUMERIC(15,4) NOT NULL DEFAULT 0,
+        collected_amount  NUMERIC(15,4) NOT NULL DEFAULT 0,
+        balance           NUMERIC(15,4) NOT NULL DEFAULT 0,
+        status            TEXT NOT NULL DEFAULT 'draft',
+        journal_entry_id  INTEGER,
+        notes             TEXT,
+        employee_id       INTEGER REFERENCES employees(id),
+        employee_name     TEXT,
+        reviewed_by       INTEGER REFERENCES employees(id),
+        reviewed_by_name  TEXT,
+        reviewed_at       TIMESTAMPTZ,
+        posted_at         TIMESTAMPTZ,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS sales_invoice_items (
+        id                  SERIAL PRIMARY KEY,
+        invoice_id          INTEGER NOT NULL REFERENCES sales_invoices(id) ON DELETE CASCADE,
+        customer_po_item_id INTEGER,
+        line_item           TEXT,
+        part_no             TEXT,
+        description         TEXT NOT NULL,
+        uom                 TEXT,
+        qty                 NUMERIC(15,4),
+        unit_price          NUMERIC(15,4),
+        total               NUMERIC(15,4),
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // ── Seed the default Egyptian chart of accounts (idempotent) ───────────
+    // Mirrors ACCOUNT_CODES in lib/db/src/schema/accounting.ts.
+    const coaSeed: Array<[string, string, string, boolean]> = [
+      // Assets (1xxx)
+      ["1001", "النقدية بالخزينة", "asset", true],
+      ["1010", "البنوك", "asset", true],
+      ["1200", "ذمم العملاء (المدينون)", "asset", true],
+      ["1300", "المخزون", "asset", true],
+      ["1401", "ضريبة القيمة المضافة على المشتريات (المدخلات)", "asset", true],
+      ["1410", "الخصم تحت حساب المورد (مسترد)", "asset", false],
+      ["1500", "دفعات مقدمة للموردين", "asset", false],
+      // Liabilities (2xxx)
+      ["2100", "ذمم الموردين (الدائنون)", "liability", true],
+      ["2401", "ضريبة القيمة المضافة على المبيعات (المخرجات)", "liability", true],
+      ["2402", "الخصم تحت حساب الضريبة المستحقة للمالية", "liability", true],
+      ["2500", "مصروفات مستحقة", "liability", false],
+      // Equity (3xxx)
+      ["3100", "رأس المال", "equity", false],
+      ["3200", "أرباح مرحّلة", "equity", false],
+      // Revenue (4xxx)
+      ["4100", "إيرادات المبيعات", "revenue", false],
+      ["4101", "مردود المبيعات", "revenue", false],
+      ["4900", "إيرادات أخرى", "revenue", false],
+      // Expenses (5xxx)
+      ["5100", "تكلفة البضاعة المباعة", "expense", false],
+      ["5110", "خصم مشتريات", "expense", false],
+      ["5200", "رواتب وأجور", "expense", false],
+      ["5300", "إيجارات", "expense", false],
+      ["5400", "كهرباء ومياه", "expense", false],
+      ["5410", "اتصالات", "expense", false],
+      ["5500", "صيانة", "expense", false],
+      ["5600", "مصروفات إدارية", "expense", false],
+      ["5700", "خدمات تقنية واستضافة", "expense", false],
+      ["5800", "مصاريف نقل وشحن", "expense", false],
+      ["5810", "مصاريف جمارك", "expense", false],
+      ["5900", "عمولات ومصاريف بنكية", "expense", false],
+      ["5990", "نثريات", "expense", false],
+    ];
+    for (const [code, nameAr, type, isControl] of coaSeed) {
+      await client.query(
+        `INSERT INTO chart_of_accounts (code, name_ar, type, is_control)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (code) DO NOTHING`,
+        [code, nameAr, type, isControl],
+      );
+    }
+    logger.info({ count: coaSeed.length }, "initDb: chart of accounts seeded");
+
     const existingCount = await client.query("SELECT COUNT(*) FROM employees");
     const isEmpty = parseInt(existingCount.rows[0].count, 10) === 0;
     if (isEmpty) {

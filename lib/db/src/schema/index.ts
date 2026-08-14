@@ -19,3 +19,4 @@ export * from "./erp_integrations";
 export * from "./attachments";
 export * from "./tax_settings";
 export * from "./expenses";
+export * from "./accounting";

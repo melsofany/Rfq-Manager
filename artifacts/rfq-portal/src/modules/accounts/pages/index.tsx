@@ -1,16 +1,40 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calculator, ReceiptText, ShieldCheck, Settings2, Wallet, Banknote } from "lucide-react";
+import { Calculator, ReceiptText, ShieldCheck, Settings2, Wallet, Banknote, LayoutDashboard, BookOpen, BookCopy, Receipt, FileText, Scale } from "lucide-react";
 import MarginsTab from "./MarginsTab";
 import VatTab from "./VatTab";
 import WithholdingTab from "./WithholdingTab";
 import TaxSettingsTab from "./TaxSettingsTab";
 import ExpensesPage from "@/modules/expenses/pages";
 import CollectionsPage from "@/modules/collections/pages";
+import DashboardTab from "./DashboardTab";
+import ChartOfAccountsTab from "./ChartOfAccountsTab";
+import JournalTab from "./JournalTab";
+import SupplierInvoicesTab from "./SupplierInvoicesTab";
+import SalesInvoicesTab from "./SalesInvoicesTab";
+import FinancialStatementsTab from "./FinancialStatementsTab";
+
+function readTabParam(): string {
+  return new URLSearchParams(window.location.search).get("tab") || "dashboard";
+}
 
 export default function AccountsPage() {
-  const [tab, setTab] = useState("margins");
+  const [tab, setTab] = useState<string>(readTabParam());
+
+  useEffect(() => {
+    const onPop = () => setTab(readTabParam());
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  function onTabChange(value: string) {
+    setTab(value);
+    const url = new URL(window.location.href);
+    if (value === "dashboard") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", value);
+    window.history.replaceState(null, "", url);
+  }
 
   return (
     <Layout>
@@ -21,13 +45,37 @@ export default function AccountsPage() {
             الحسابات والامتثال الضريبي المصري
           </h1>
           <p className="text-muted-foreground text-sm">
-            الهامش المحقق، ضريبة القيمة المضافة 14%؜، والخصم تحت حساب المورد 3%؜ على أوامر الشراء
-            وفق القانون المصري
+            نظام محاسبة متكامل بالقيد المزدوج — دليل الحسابات، قيود اليومية، فواتير الموردين والعملاء،
+            والقوائم المالية وفقًا للقانون المصري (ض.ق.م. 14%؜، خصم تحت حساب المورد 3%؜)
           </p>
         </div>
 
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs value={tab} onValueChange={onTabChange}>
           <TabsList className="flex-wrap h-auto">
+            <TabsTrigger value="dashboard" className="text-xs gap-1.5">
+              <LayoutDashboard size={14} />
+              لوحة المحاسب
+            </TabsTrigger>
+            <TabsTrigger value="coa" className="text-xs gap-1.5">
+              <BookOpen size={14} />
+              دليل الحسابات
+            </TabsTrigger>
+            <TabsTrigger value="journal" className="text-xs gap-1.5">
+              <BookCopy size={14} />
+              قيود اليومية
+            </TabsTrigger>
+            <TabsTrigger value="supplier-invoices" className="text-xs gap-1.5">
+              <Receipt size={14} />
+              فواتير الموردين
+            </TabsTrigger>
+            <TabsTrigger value="sales-invoices" className="text-xs gap-1.5">
+              <FileText size={14} />
+              فواتير البيع
+            </TabsTrigger>
+            <TabsTrigger value="statements" className="text-xs gap-1.5">
+              <Scale size={14} />
+              القوائم المالية
+            </TabsTrigger>
             <TabsTrigger value="margins" className="text-xs gap-1.5">
               <Calculator size={14} />
               الهامش المحقق
@@ -54,6 +102,24 @@ export default function AccountsPage() {
             </TabsTrigger>
           </TabsList>
 
+          <TabsContent value="dashboard" className="mt-5">
+            <DashboardTab />
+          </TabsContent>
+          <TabsContent value="coa" className="mt-5">
+            <ChartOfAccountsTab />
+          </TabsContent>
+          <TabsContent value="journal" className="mt-5">
+            <JournalTab />
+          </TabsContent>
+          <TabsContent value="supplier-invoices" className="mt-5">
+            <SupplierInvoicesTab />
+          </TabsContent>
+          <TabsContent value="sales-invoices" className="mt-5">
+            <SalesInvoicesTab />
+          </TabsContent>
+          <TabsContent value="statements" className="mt-5">
+            <FinancialStatementsTab />
+          </TabsContent>
           <TabsContent value="margins" className="mt-5">
             <MarginsTab />
           </TabsContent>
