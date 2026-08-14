@@ -14,6 +14,7 @@ import {
   workOrderAssignmentsTable,
   customerPosTable,
   customerPoItemsTable,
+  WORK_ORDER_KIND,
 } from "@workspace/db";
 import { eq, count, inArray, sql, and, ilike } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
@@ -22,7 +23,7 @@ import { generatePoPdf } from "./po-pdf";
 import {
   sendPoWhatsApp,
   isWhatsAppConfigured,
-  sendRepresentativeWorkOrderWhatsApp,
+  sendRepresentativeItemReceiptWhatsApp,
 } from "../communications/service";
 import { sendPoEmail } from "../../shared/email";
 
@@ -587,32 +588,48 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
     if (!isWhatsAppConfigured) {
       workOrderError = "WhatsApp not configured";
     } else {
-      try {
-        const itemsSummary = itemRows
-          .map((r, i) => `${r.item.lineItem || i + 1}. ${r.item.description} x${r.item.qty ?? "-"}`)
-          .slice(0, 8)
-          .join("، ");
-        const waMessageId = await sendRepresentativeWorkOrderWhatsApp({
-          phone: receiverPhone,
-          representativeName: receiverName,
-          poNo,
-          supplierName: [...bySupplier.values()].map((x) => x.supplier.name).join("، "),
-          supplierPhone: [...bySupplier.values()].map((x) => x.supplier.phone?.trim() || "غير مسجل").join("، "),
-          supplierAddress: [...bySupplier.values()].map((x) => x.supplier.address?.trim() || "غير مسجل").join("، "),
-          itemsSummary,
-        });
-        await db.insert(workOrderAssignmentsTable).values({
-          poId: id,
-          representativeName: receiverName,
-          representativePhone: receiverPhone,
-          status: "sent",
-          waMessageId,
-        });
-        workOrderSent = true;
-      } catch (err) {
-        workOrderError = err instanceof Error ? err.message : String(err);
-        req.log.warn({ err, poNo }, "Representative work order could not be sent");
+      // Send the representative a per-item interactive receipt prompt (the
+      // rep bot's entry point) instead of a single whole-PO template. Each
+      // prompt carries work_order_item:<poNo>:<poItemId>:received/rejected
+      // buttons and creates a kind=receipt work-order assignment with the
+      // poItemId set, so the rep bot menu opens with these items directly.
+      const repName = receiverName.trim();
+      const repPhone = normalizePhone(receiverPhone.trim());
+      let sentCount = 0;
+      let firstError: string | null = null;
+      for (const row of itemRows) {
+        const it = row.item;
+        if (it.lineStatus === "fulfilled" || it.lineStatus === "rejected") continue;
+        const lineLabel = `${it.lineItem || "بند"} — ${it.description || ""}`.trim();
+        const qtyText = it.qty != null && it.qty !== "" ? String(it.qty) : null;
+        try {
+          const waId = await sendRepresentativeItemReceiptWhatsApp({
+            phone: repPhone,
+            poNo,
+            poItemId: it.id,
+            lineLabel,
+            qty: qtyText,
+          });
+          await db.insert(workOrderAssignmentsTable).values({
+            poId: id,
+            poItemId: it.id,
+            representativeName: repName,
+            representativePhone: repPhone,
+            status: "sent",
+            kind: WORK_ORDER_KIND.RECEIPT,
+            waMessageId: waId,
+          });
+          sentCount++;
+        } catch (err) {
+          if (!firstError) firstError = err instanceof Error ? err.message : String(err);
+          req.log.warn(
+            { err, poItemId: it.id, poNo },
+            "Representative per-item receipt prompt failed",
+          );
+        }
       }
+      workOrderSent = sentCount > 0;
+      workOrderError = firstError;
     }
   }
 
