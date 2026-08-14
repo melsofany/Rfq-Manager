@@ -531,6 +531,19 @@ async function recordItemReceipt(
   if (!line) return false;
 
   const ordered = line.qty ? String(line.qty) : null;
+  // The WhatsApp rep flow records a single full-qty event per line. To keep the
+  // item's state authoritative (and avoid a "received" + "rejected" pair both
+  // summing in and leaving the line in a misleading 'fulfilled' state), remove
+  // any prior bot receipts for this line before inserting the new one. Portal-
+  // entered receipts are preserved because they use a different receivedBy.
+  await db
+    .delete(poItemReceiptsTable)
+    .where(
+      and(
+        eq(poItemReceiptsTable.poItemId, line.id),
+        eq(poItemReceiptsTable.receivedBy, "واتساب"),
+      ),
+    );
   await db.insert(poItemReceiptsTable).values({
     poItemId: line.id,
     poId: line.poId,
@@ -1121,6 +1134,18 @@ async function recordItemDelivery(
   if (accepted <= 0 || linked.lineStatus === "rejected") return false;
 
   const ordered = cpi.qty ? String(cpi.qty) : null;
+  // Mirror the receipt flow: a WhatsApp delivery action is a single full-qty
+  // event, so remove prior bot deliveries for this line before inserting the
+  // new one — the latest action is authoritative and conflicting rows don't
+  // both sum in.
+  await db
+    .delete(customerPoItemDeliveriesTable)
+    .where(
+      and(
+        eq(customerPoItemDeliveriesTable.customerPoItemId, cpi.id),
+        eq(customerPoItemDeliveriesTable.deliveredBy, "واتساب"),
+      ),
+    );
   await db.insert(customerPoItemDeliveriesTable).values({
     customerPoItemId: cpi.id,
     customerPoId: cpi.customerPoId,

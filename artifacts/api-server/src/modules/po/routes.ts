@@ -16,7 +16,7 @@ import {
   customerPoItemsTable,
   WORK_ORDER_KIND,
 } from "@workspace/db";
-import { eq, count, inArray, sql, and, ilike } from "drizzle-orm";
+import { eq, count, inArray, sql, and, ilike, ne } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { lookupPoFromSheet, listSheetPoNumbers } from "../../shared/google-sheets";
 import { generatePoPdf } from "./po-pdf";
@@ -610,7 +610,22 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
         if (pending.length === 0) continue;
 
         // Create assignment rows for ALL pending items first (independent of WA).
+        // Idempotent: skip items that already have an active receipt assignment
+        // (so re-dispatching doesn't pile up duplicate rows).
         for (const r of pending) {
+          const [existing] = await db
+            .select({ id: workOrderAssignmentsTable.id })
+            .from(workOrderAssignmentsTable)
+            .where(
+              and(
+                eq(workOrderAssignmentsTable.poItemId, r.item.id),
+                eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+                ne(workOrderAssignmentsTable.status, "received"),
+                ne(workOrderAssignmentsTable.status, "rejected"),
+              ),
+            )
+            .limit(1);
+          if (existing) continue;
           try {
             await db.insert(workOrderAssignmentsTable).values({
               poId: id,
@@ -621,8 +636,7 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
               kind: WORK_ORDER_KIND.RECEIPT,
             });
           } catch (err) {
-            // A duplicate assignment (same poItemId) is fine — ignore.
-            req.log.warn({ err, poItemId: r.item.id }, "Rep receipt assignment insert failed (may be a duplicate)");
+            req.log.warn({ err, poItemId: r.item.id }, "Rep receipt assignment insert failed");
           }
         }
 
