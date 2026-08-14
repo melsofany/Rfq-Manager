@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calculator, ReceiptText, ShieldCheck, Settings2, Wallet, Banknote, LayoutDashboard, BookOpen, BookCopy, Receipt, FileText, Scale } from "lucide-react";
+import { Calculator, ReceiptText, ShieldCheck, Settings2, Banknote, LayoutDashboard, BookOpen, BookCopy, Receipt, FileText, Scale, TrendingUp } from "lucide-react";
 import MarginsTab from "./MarginsTab";
 import VatTab from "./VatTab";
 import WithholdingTab from "./WithholdingTab";
 import TaxSettingsTab from "./TaxSettingsTab";
-import ExpensesPage from "@/modules/expenses/pages";
 import CollectionsPage from "@/modules/collections/pages";
 import DashboardTab from "./DashboardTab";
 import ChartOfAccountsTab from "./ChartOfAccountsTab";
@@ -45,13 +44,32 @@ export default function AccountsPage() {
             الحسابات والامتثال الضريبي المصري
           </h1>
           <p className="text-muted-foreground text-sm">
-            نظام محاسبة متكامل بالقيد المزدوج — دليل الحسابات، قيود اليومية، فواتير الموردين والعملاء،
-            والقوائم المالية وفقًا للقانون المصري (ض.ق.م. 14%؜، خصم تحت حساب المورد 3%؜)
+            نظام محاسبة متكامل بالقيد المزدوج — مصدر واحد للحقيقة: كل المدخلات (القيود، الفواتير، التحصيلات)
+            تُرحَّل إلى دفتر اليومية، وكل التقارير والقوائم المالية والإقرارات الضريبية تُقرأ منه.
+            وفقًا للقانون المصري (ض.ق.م. 14%؜، خصم تحت حساب المورد 3%؜).
           </p>
         </div>
 
         <Tabs value={tab} onValueChange={onTabChange}>
           <TabsList className="flex-wrap h-auto">
+            {/* الإدخال — المستندات والقيود */}
+            <TabsTrigger value="journal" className="text-xs gap-1.5">
+              <BookCopy size={14} />
+              قيود اليومية
+            </TabsTrigger>
+            <TabsTrigger value="sales-invoices" className="text-xs gap-1.5">
+              <FileText size={14} />
+              فواتير البيع
+            </TabsTrigger>
+            <TabsTrigger value="supplier-invoices" className="text-xs gap-1.5">
+              <Receipt size={14} />
+              فواتير الموردين
+            </TabsTrigger>
+            <TabsTrigger value="collections" className="text-xs gap-1.5">
+              <Banknote size={14} />
+              تحصيل العملاء
+            </TabsTrigger>
+            {/* التقارير المالية */}
             <TabsTrigger value="dashboard" className="text-xs gap-1.5">
               <LayoutDashboard size={14} />
               لوحة المحاسب
@@ -60,26 +78,15 @@ export default function AccountsPage() {
               <BookOpen size={14} />
               دليل الحسابات
             </TabsTrigger>
-            <TabsTrigger value="journal" className="text-xs gap-1.5">
-              <BookCopy size={14} />
-              قيود اليومية
-            </TabsTrigger>
-            <TabsTrigger value="supplier-invoices" className="text-xs gap-1.5">
-              <Receipt size={14} />
-              فواتير الموردين
-            </TabsTrigger>
-            <TabsTrigger value="sales-invoices" className="text-xs gap-1.5">
-              <FileText size={14} />
-              فواتير البيع
-            </TabsTrigger>
             <TabsTrigger value="statements" className="text-xs gap-1.5">
               <Scale size={14} />
               القوائم المالية
             </TabsTrigger>
             <TabsTrigger value="margins" className="text-xs gap-1.5">
-              <Calculator size={14} />
+              <TrendingUp size={14} />
               الهامش المحقق
             </TabsTrigger>
+            {/* الامتثال الضريبي */}
             <TabsTrigger value="vat" className="text-xs gap-1.5">
               <ReceiptText size={14} />
               ضريبة القيمة المضافة
@@ -88,34 +95,29 @@ export default function AccountsPage() {
               <ShieldCheck size={14} />
               الخصم تحت حساب المورد
             </TabsTrigger>
-            <TabsTrigger value="expenses" className="text-xs gap-1.5">
-              <Wallet size={14} />
-              المصروفات التشغيلية
-            </TabsTrigger>
-            <TabsTrigger value="collections" className="text-xs gap-1.5">
-              <Banknote size={14} />
-              تحصيل العملاء
-            </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs gap-1.5">
               <Settings2 size={14} />
               إعدادات الضرائب
             </TabsTrigger>
           </TabsList>
 
+          <TabsContent value="journal" className="mt-5">
+            <JournalTab />
+          </TabsContent>
+          <TabsContent value="sales-invoices" className="mt-5">
+            <SalesInvoicesTab />
+          </TabsContent>
+          <TabsContent value="supplier-invoices" className="mt-5">
+            <SupplierInvoicesTab />
+          </TabsContent>
+          <TabsContent value="collections" className="mt-5">
+            <CollectionsPage />
+          </TabsContent>
           <TabsContent value="dashboard" className="mt-5">
             <DashboardTab />
           </TabsContent>
           <TabsContent value="coa" className="mt-5">
             <ChartOfAccountsTab />
-          </TabsContent>
-          <TabsContent value="journal" className="mt-5">
-            <JournalTab />
-          </TabsContent>
-          <TabsContent value="supplier-invoices" className="mt-5">
-            <SupplierInvoicesTab />
-          </TabsContent>
-          <TabsContent value="sales-invoices" className="mt-5">
-            <SalesInvoicesTab />
           </TabsContent>
           <TabsContent value="statements" className="mt-5">
             <FinancialStatementsTab />
@@ -128,12 +130,6 @@ export default function AccountsPage() {
           </TabsContent>
           <TabsContent value="withholding" className="mt-5">
             <WithholdingTab />
-          </TabsContent>
-          <TabsContent value="expenses" className="mt-5">
-            <ExpensesPage />
-          </TabsContent>
-          <TabsContent value="collections" className="mt-5">
-            <CollectionsPage />
           </TabsContent>
           <TabsContent value="settings" className="mt-5">
             <TaxSettingsTab />
