@@ -1,13 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import {
   useSearchItems,
   getSearchItemsQueryKey,
-  useListCustomerRfqSheetView,
-  getListCustomerRfqSheetViewQueryKey,
-  useListCustomerRfqSheetViewFacets,
-  getListCustomerRfqSheetViewFacetsQueryKey,
 } from "@workspace/api-client-react";
 import type {
   ItemHistory,
@@ -337,62 +334,168 @@ function cell(v: string | null | undefined) {
 
 const MAX_FACET_ROWS = 500;
 
-// A column header with an Excel-style autofilter dropdown. Clicking the funnel
-// icon opens a popover listing the distinct values that could still appear in
-// this column given the OTHER columns' filters, each with a checkbox. Uncheck a
-// value to hide its rows. A search box narrows the list (Excel "search" within
-// the filter dropdown) so you can find and toggle the item you need even with
-// thousands of distinct values.
+// Filter state for one column. `mode: "all"` = show everything (no filter);
+// `mode: "only"` = show only `set` (possibly empty = show none).
+type ColumnFilter = { mode: "all" } | { mode: "only"; set: Set<string> };
+
+function emptyFilter(): ColumnFilter {
+  return { mode: "all" };
+}
+
+// Build the query-string fragment for the active include filters.
+// A column in "only" mode sends `<col>Include=v1,v2` (empty list → `=`).
+function buildIncludeParams(
+  filters: Record<string, ColumnFilter>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [col, f] of Object.entries(filters)) {
+    if (f.mode === "only") out[`${col}Include`] = [...f.set].join(",");
+  }
+  return out;
+}
+
+type SheetViewResponse = {
+  total: number;
+  limit: number;
+  offset: number;
+  rows: CustomerRfqSheetRow[];
+};
+type FacetsResponse = { column: string; values: CustomerRfqSheetFacetValue[] };
+
+async function fetchSheetView(
+  params: Record<string, string | number | undefined>,
+): Promise<SheetViewResponse> {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) sp.set(k, String(v));
+  }
+  const res = await fetch(`/api/customer-rfq/sheet-view?${sp.toString()}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`sheet-view ${res.status}`);
+  return res.json();
+}
+
+async function fetchFacets(
+  params: Record<string, string | undefined>,
+): Promise<FacetsResponse> {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined) sp.set(k, v);
+  }
+  const res = await fetch(`/api/customer-rfq/sheet-view/facets?${sp.toString()}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(`facets ${res.status}`);
+  return res.json();
+}
+
+// A column header with an autofilter dropdown. The dropdown lists the distinct
+// values that could still appear in this column given the OTHER columns' filters.
+// Selection uses an INCLUDE model: a value's checkbox means "show this value".
+//  - «تحديد الكل»      → show all (no filter)
+//  - «إلغاء تحديد الكل» → show none (empty include set), then check the wanted few
+//  - «تطبيق الفلتر»    → commit the selection and reload the table once
+// While the popover is open, toggling checkboxes updates a local draft only
+// (no table reload, no facets reload) so picking many items stays fast. The
+// in-dropdown search is client-side over the already-loaded values.
 function FilterHeader({
   col,
   label,
-  excludes,
-  facetParams: facetParamsProp,
-  onToggle,
-  onSelectAll,
-  onDeselectAll,
-  onClear,
+  applied,
+  facetParams,
+  onApply,
   onClearColumn,
 }: {
   col: string;
   label: string;
-  excludes: Set<string>;
+  applied: ColumnFilter;
   facetParams: Record<string, string | undefined>;
-  onToggle: (value: string) => void;
-  onSelectAll: (values: string[]) => void;
-  onDeselectAll: (values: string[]) => void;
-  onClear: () => void;
+  onApply: (filter: ColumnFilter) => void;
   onClearColumn: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [facetSearch, setFacetSearch] = useState("");
-  const facetParams = { column: col as never, ...facetParamsProp };
-  const { data, isLoading } = useListCustomerRfqSheetViewFacets(facetParams, {
-    query: { enabled: open, queryKey: getListCustomerRfqSheetViewFacetsQueryKey(facetParams) },
+  // Local draft selection, committed only on «تطبيق الفلتر».
+  const [draft, setDraft] = useState<ColumnFilter>(applied);
+  const [loadedValues, setLoadedValues] = useState<string[]>([]);
+
+  const facetsQueryKey = useMemo(
+    () => ["sheet-facets", col, facetParams] as const,
+    [col, facetParams],
+  );
+
+  const { data, isLoading } = useQuery<FacetsResponse>({
+    queryKey: facetsQueryKey,
+    queryFn: () => fetchFacets({ column: col, ...facetParams }),
+    enabled: open,
+    staleTime: 30_000,
   });
+
   const values: CustomerRfqSheetFacetValue[] = data?.values ?? [];
+  useEffect(() => {
+    if (values.length) setLoadedValues(values.map((v) => v.value));
+  }, [values]);
+
   const filteredValues = facetSearch
     ? values.filter((v) => v.value.toLowerCase().includes(facetSearch.toLowerCase()))
     : values;
   const shown = filteredValues.slice(0, MAX_FACET_ROWS);
-  const allChecked = excludes.size === 0;
-  // "Select all" currently visible (i.e. none of the visible values excluded).
+
+  const isChecked = (val: string) =>
+    draft.mode === "all" ? true : draft.set.has(val);
   const visibleAllChecked =
-    excludes.size === 0 || shown.every((v) => !excludes.has(v.value));
-  // "Deselect all" currently visible (i.e. every visible value is excluded).
-  const visibleNoneChecked = shown.length > 0 && shown.every((v) => excludes.has(v.value));
+    draft.mode === "all" || shown.every((v) => isChecked(v.value));
+  const visibleNoneChecked =
+    shown.length > 0 && shown.every((v) => !isChecked(v.value));
+
+  const handleOpen = (o: boolean) => {
+    setOpen(o);
+    if (o) {
+      // Reset the draft to the currently-applied filter each time we open.
+      setDraft(applied);
+      setFacetSearch("");
+    }
+  };
+
+  const selectAll = () => setDraft({ mode: "all" });
+  const deselectAll = () => setDraft({ mode: "only", set: new Set<string>() });
+
+  const toggle = (val: string) => {
+    setDraft((prev) => {
+      if (prev.mode === "all") {
+        // Narrowing from "all": keep the loaded values minus the one just
+        // unchecked. (Values beyond the loaded cap are uncommon for the
+        // typical "select a few" workflow, which uses deselect-all first.)
+        const next = new Set(loadedValues);
+        next.delete(val);
+        return { mode: "only", set: next };
+      }
+      const next = new Set(prev.set);
+      if (next.has(val)) next.delete(val);
+      else next.add(val);
+      return { mode: "only", set: next };
+    });
+  };
+
+  const apply = () => {
+    onApply(draft);
+    setOpen(false);
+  };
+
+  const isActive = applied.mode === "only";
 
   return (
     <div className="inline-flex items-center gap-1">
       <span className="truncate">{label}</span>
-      <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) setFacetSearch(""); }}>
+      <Popover open={open} onOpenChange={handleOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
             aria-label={`فلتر ${label}`}
             className={cn(
               "inline-flex items-center justify-center rounded p-0.5 hover:bg-accent",
-              excludes.size > 0 && "text-primary",
+              isActive && "text-primary",
             )}
           >
             <Filter size={12} />
@@ -422,7 +525,7 @@ function FilterHeader({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => onSelectAll(shown.map((v) => v.value))}
+                  onClick={selectAll}
                   className="text-[11px] text-primary hover:underline"
                   disabled={visibleAllChecked}
                 >
@@ -430,22 +533,27 @@ function FilterHeader({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onDeselectAll(shown.map((v) => v.value))}
+                  onClick={deselectAll}
                   className="text-[11px] text-primary hover:underline"
                   disabled={visibleNoneChecked}
                 >
                   إلغاء تحديد الكل
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={onClear}
-                className="text-[11px] text-muted-foreground hover:underline"
-                disabled={excludes.size === 0}
-              >
-                مسح الفلتر
-              </button>
+              {isActive && (
+                <button
+                  type="button"
+                  onClick={onClearColumn}
+                  className="text-[11px] text-muted-foreground hover:underline"
+                >
+                  مسح الفلتر
+                </button>
+              )}
             </div>
+            <p className="mt-1.5 text-[10px] text-muted-foreground/80 leading-relaxed">
+              اختر البنود المطلوبة ثم اضغط «تطبيق الفلتر». للعرض بند/بضعة بنود فقط:
+              اضغط «إلغاء تحديد الكل» ثم ضع ✓ على المطلوب.
+            </p>
           </div>
           <div className="max-h-64 overflow-y-auto">
             {isLoading ? (
@@ -458,28 +566,25 @@ function FilterHeader({
               </div>
             ) : (
               shown.map((v) => {
-                const checked = !excludes.has(v.value);
-                const display = v.value === "" ? <span className="text-muted-foreground">(فارغ)</span> : v.value;
+                const checked = isChecked(v.value);
+                const display =
+                  v.value === "" ? <span className="text-muted-foreground">(فارغ)</span> : v.value;
                 return (
                   <div
                     key={v.value || "__blank__"}
                     role="checkbox"
                     aria-checked={checked}
                     tabIndex={0}
-                    onClick={() => onToggle(v.value)}
+                    onClick={() => toggle(v.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        onToggle(v.value);
+                        toggle(v.value);
                       }
                     }}
                     className="flex items-center gap-2 px-2 py-1 hover:bg-accent cursor-pointer text-xs select-none"
                   >
-                    <Checkbox
-                      checked={checked}
-                      className="pointer-events-none"
-                      tabIndex={-1}
-                    />
+                    <Checkbox checked={checked} className="pointer-events-none" tabIndex={-1} />
                     <span className="flex-1 truncate" title={v.value}>{display}</span>
                     <span className="text-[10px] text-muted-foreground/70">{v.count}</span>
                   </div>
@@ -492,7 +597,7 @@ function FilterHeader({
               </div>
             )}
           </div>
-          <div className="border-t border-border p-2 flex justify-between">
+          <div className="border-t border-border p-2 flex justify-between gap-2">
             <button
               type="button"
               onClick={onClearColumn}
@@ -500,13 +605,22 @@ function FilterHeader({
             >
               مسح العمود
             </button>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="text-[11px] font-medium hover:underline"
-            >
-              تم
-            </button>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="text-[11px] text-muted-foreground hover:underline"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={apply}
+                className="text-[11px] font-medium text-primary hover:underline"
+              >
+                تطبيق الفلتر
+              </button>
+            </div>
           </div>
         </PopoverContent>
       </Popover>
@@ -518,29 +632,29 @@ function SheetViewTab() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  // Excel-style autofilter: per-column EXCLUDE set. A value in the set is
-  // hidden from the table. Empty set = show all (no filter). The facets
-  // endpoint lists the values that could still appear given the OTHER columns.
-  const [excludes, setExcludes] = useState<Record<string, Set<string>>>({});
+  // Per-column INCLUDE filter. Absent key = show all; present key with
+  // mode "only" = show only its set (empty set = show none).
+  const [filters, setFilters] = useState<Record<string, ColumnFilter>>({});
 
-  const activeExcludes = Object.fromEntries(
-    Object.entries(excludes)
-      .filter(([, s]) => s.size > 0)
-      .map(([k, s]) => [`${k}Exclude`, [...s].join(",")]),
-  );
-  const hasColFilters = Object.keys(activeExcludes).length > 0;
+  const includeParams = buildIncludeParams(filters);
+  const hasColFilters = Object.keys(includeParams).length > 0;
 
   const params = {
     search: search || undefined,
     limit: SHEET_PAGE_SIZE,
     offset,
-    ...activeExcludes,
+    ...includeParams,
   };
 
-  const { data, isLoading, isFetching, isError } = useListCustomerRfqSheetView(
-    params,
-    { query: { queryKey: getListCustomerRfqSheetViewQueryKey(params) } },
+  const queryKey = useMemo(
+    () => ["sheet-view", params] as const,
+    [params],
   );
+
+  const { data, isLoading, isFetching, isError } = useQuery<SheetViewResponse>({
+    queryKey,
+    queryFn: () => fetchSheetView(params),
+  });
 
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
@@ -559,24 +673,14 @@ function SheetViewTab() {
     setOffset(0);
   };
 
-  const toggleExclude = (col: string, value: string) => {
+  const applyColumnFilter = (col: string, filter: ColumnFilter) => {
     setOffset(0);
-    setExcludes((prev) => {
-      const set = new Set(prev[col]);
-      if (set.has(value)) set.delete(value);
-      else set.add(value);
-      return { ...prev, [col]: set };
-    });
-  };
-
-  const setColumnExcludes = (col: string, values: string[]) => {
-    setOffset(0);
-    setExcludes((prev) => ({ ...prev, [col]: new Set(values) }));
+    setFilters((prev) => ({ ...prev, [col]: filter }));
   };
 
   const clearColumn = (col: string) => {
     setOffset(0);
-    setExcludes((prev) => {
+    setFilters((prev) => {
       const next = { ...prev };
       delete next[col];
       return next;
@@ -584,7 +688,7 @@ function SheetViewTab() {
   };
 
   const clearColFilters = () => {
-    setExcludes({});
+    setFilters({});
     setOffset(0);
   };
 
@@ -658,18 +762,9 @@ function SheetViewTab() {
                     <FilterHeader
                       col={col}
                       label={label}
-                      excludes={excludes[col] ?? new Set()}
-                      facetParams={activeExcludes}
-                      onToggle={(v) => toggleExclude(col, v)}
-                      onSelectAll={(vals) => setColumnExcludes(
-                        col,
-                        [...(excludes[col] ?? new Set())].filter((v) => !vals.includes(v)),
-                      )}
-                      onDeselectAll={(vals) => setColumnExcludes(
-                        col,
-                        [...new Set([...(excludes[col] ?? new Set())].filter((v) => !vals.includes(v)).concat(vals))],
-                      )}
-                      onClear={() => clearColumn(col)}
+                      applied={filters[col] ?? emptyFilter()}
+                      facetParams={includeParams}
+                      onApply={(filter) => applyColumnFilter(col, filter)}
                       onClearColumn={() => clearColumn(col)}
                     />
                   </th>

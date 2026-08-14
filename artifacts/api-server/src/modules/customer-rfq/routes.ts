@@ -525,9 +525,10 @@ async function loadSheetRowsRaw() {
 }
 
 // Load all sheet rows and apply the Excel-style filters: a global OR `search`
-// across the main text columns, plus per-column exclusion lists
-// (`<col>Exclude=v1,v2` → hide rows whose value is in that set). When
-// `exceptColumn` is set, that column's exclusion is skipped — used by the
+// across the main text columns, plus per-column INCLUDE or EXCLUDE lists.
+// `<col>Include=v1,v2` → show ONLY those values (empty → show none). Takes
+// precedence over Exclude. `<col>Exclude=v1,v2` → hide those values. When
+// `exceptColumn` is set, that column's filter is skipped — used by the
 // facets endpoint so the filtered dropdown still lists every value the column
 // could show once the OTHER columns are applied (Excel behavior).
 async function loadSheetRows(
@@ -553,6 +554,22 @@ async function loadSheetRows(
 
   for (const { param, field } of SHEET_FILTER_COLUMNS) {
     if (param === exceptColumn) continue;
+    const includeRaw = query[`${param}Include`];
+    if (includeRaw !== undefined) {
+      // Include mode: show only these values. An empty list shows nothing.
+      const includeSet = new Set(
+        includeRaw
+          .split(",")
+          .map((v) => v.trim())
+          .filter((v) => v.length > 0),
+      );
+      filtered = filtered.filter((r) => {
+        const v = r[field];
+        const cell = v == null ? "" : String(v);
+        return includeSet.has(cell);
+      });
+      continue;
+    }
     const excludeRaw = query[`${param}Exclude`];
     if (!excludeRaw) continue;
     const excludeSet = new Set(
