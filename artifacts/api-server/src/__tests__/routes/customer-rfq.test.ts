@@ -726,6 +726,122 @@ describe("GET /api/customer-rfq/sheet-view", () => {
     expect(res.body.rows[0].rfqItemId).toBe(1);
   });
 
+  it("shows only rows whose value is in the column's Include list", async () => {
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "A1",
+        partNo: "P-100",
+        description: "Widget",
+        uom: "pc",
+        rfqQty: "5",
+        rfqUnitPrice: "120",
+        customerRfqId: 1,
+        customerRfqNo: "CUST-001",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: null,
+        poNo: "PO-55",
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+      {
+        rfqItemId: 2,
+        lineItem: "A2",
+        partNo: "P-200",
+        description: "Widget Pro",
+        uom: "set",
+        rfqQty: "10",
+        rfqUnitPrice: "200",
+        customerRfqId: 2,
+        customerRfqNo: "CUST-002",
+        customerName: "Globex",
+        entryDate: "2025-03-10",
+        expiryDate: null,
+        buyerName: "Alex",
+        poItemId: null,
+        poNo: null,
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+    ];
+    // Include customerName=Acme → only Acme remains.
+    const res = await request(testApp).get(
+      "/api/customer-rfq/sheet-view?customerNameInclude=Acme",
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.rows[0].rfqItemId).toBe(1);
+  });
+
+  it("an empty Include list shows nothing for that column", async () => {
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "A1",
+        partNo: "P-100",
+        description: "Widget",
+        uom: "pc",
+        rfqQty: "5",
+        rfqUnitPrice: "120",
+        customerRfqId: 1,
+        customerRfqNo: "CUST-001",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: null,
+        poNo: "PO-55",
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+    ];
+    // Empty include set (deselect all) → show none.
+    const res = await request(testApp).get(
+      "/api/customer-rfq/sheet-view?customerNameInclude=",
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(0);
+    expect(res.body.rows).toHaveLength(0);
+  });
+
+  it("Include takes precedence over Exclude for the same column", async () => {
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "A1",
+        partNo: "P-100",
+        description: "Widget",
+        uom: "pc",
+        rfqQty: "5",
+        rfqUnitPrice: "120",
+        customerRfqId: 1,
+        customerRfqNo: "CUST-001",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: null,
+        poNo: "PO-55",
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+      },
+    ];
+    // Include present (even though Exclude also present) → only Acme kept by include.
+    const res = await request(testApp).get(
+      "/api/customer-rfq/sheet-view?customerNameInclude=Acme&customerNameExclude=Acme",
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.rows[0].rfqItemId).toBe(1);
+  });
+
   it("facets: returns distinct values with counts, ignoring the column's own exclude", async () => {
     sheetRows = [
       {
