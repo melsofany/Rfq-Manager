@@ -21,10 +21,14 @@ import {
   customerPoItemsTable,
   customerPoItemDeliveriesTable,
   purchaseOrderItemsTable,
+  workOrderAssignmentsTable,
   auditLogTable,
+  WORK_ORDER_KIND,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { logger } from "../../shared/logger";
+import { sendRepMainMenu } from "../communications/service";
 
 const router = Router();
 
@@ -33,13 +37,6 @@ function toNum(v: unknown): number | null {
   const n = Number(v);
   return isFinite(n) ? n : null;
 }
-
-export const CUSTOMER_REJECTION_REASONS = [
-  "تالف",
-  "خطأ في الصنف",
-  "مواصفات غير مطابقة",
-  "متأخر عن الموعد",
-] as const;
 
 /**
  * Re-aggregate the delivery totals onto a customer_po_item and recompute its
@@ -88,13 +85,19 @@ async function recomputeItemTotals(customerPoItemId: number): Promise<void> {
  * customerPoItemId. Returns null when no supplier link exists (free/manual
  * lines) — in that case the guard is skipped.
  */
-async function acceptedQtyFromSupplier(customerPoItemId: number): Promise<number | null> {
+export async function acceptedQtyFromSupplier(customerPoItemId: number): Promise<number | null> {
   const rows = await db
-    .select({ accepted: purchaseOrderItemsTable.totalAcceptedQty })
+    .select({
+      accepted: purchaseOrderItemsTable.totalAcceptedQty,
+      lineStatus: purchaseOrderItemsTable.lineStatus,
+    })
     .from(purchaseOrderItemsTable)
     .where(eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemId));
   if (!rows.length) return null; // no supplier link → unguarded
-  return rows.reduce((acc, r) => acc + (toNum(r.accepted) ?? 0), 0);
+  // Only count lines that were actually received (not pending/rejected).
+  return rows
+    .filter((r) => r.lineStatus !== "rejected")
+    .reduce((acc, r) => acc + (toNum(r.accepted) ?? 0), 0);
 }
 
 // GET /customer-po/:id/deliveries — list all delivery rows for a customer PO.
@@ -196,8 +199,15 @@ router.post("/customer-po/:id/deliveries", requireAuth, async (req, res): Promis
     const delivered = toNum(it.deliveredQty);
     const rejected = toNum(it.rejectedByCustomerQty);
 
-    // Guard: delivered may not exceed accepted qty from supplier.
+    // Guard: cannot deliver to the customer before receiving from the supplier.
+    // If a supplier link exists, accepted must be > 0 and delivered ≤ accepted.
     const accepted = await acceptedQtyFromSupplier(customerPoItemId);
+    if (accepted != null && accepted <= 0) {
+      res.status(400).json({
+        error: "لا يمكن التسليم قبل الاستلام من المورد — البند لم يُستلم بعد",
+      });
+      return;
+    }
     if (accepted != null && delivered != null && delivered > accepted + 1e-9) {
       res.status(400).json({
         error: `الكمية المسلّمة (${delivered}) تتجاوز الكمية المقبولة من المورد (${accepted})`,
@@ -236,6 +246,80 @@ router.post("/customer-po/:id/deliveries", requireAuth, async (req, res): Promis
   });
 
   res.status(201).json({ ok: true, createdIds });
+});
+
+/**
+ * POST /customer-po/:id/send-delivery-prompts — nudge the representative(s)
+ * assigned to this customer PO's pending delivery lines by sending them the
+ * rep bot main menu (which lists their pending deliveries). Body may specify
+ * { representativePhone, representativeName } to target one rep; otherwise all
+ * reps with pending delivery assignments for this PO are pinged.
+ */
+router.post("/customer-po/:id/send-delivery-prompts", requireAuth, async (req, res): Promise<void> => {
+  const customerPoId = parseInt(String(req.params.id), 10);
+  if (!isFinite(customerPoId)) {
+    res.status(400).json({ error: "معرّف أمر شراء العميل غير صالح" });
+    return;
+  }
+  const [po] = await db
+    .select({ id: customerPosTable.id, internalPoNo: customerPosTable.internalPoNo })
+    .from(customerPosTable)
+    .where(eq(customerPosTable.id, customerPoId));
+  if (!po) {
+    res.status(404).json({ error: "أمر شراء العميل غير موجود" });
+    return;
+  }
+
+  // Find delivery assignments for this PO that are still pending.
+  const assigns = await db
+    .select({
+      repPhone: workOrderAssignmentsTable.representativePhone,
+      repName: workOrderAssignmentsTable.representativeName,
+      status: workOrderAssignmentsTable.status,
+    })
+    .from(workOrderAssignmentsTable)
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.customerPoId, customerPoId),
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
+      ),
+    );
+  const phones = new Set<string>();
+  for (const a of assigns) {
+    if (a.status !== "delivered" && a.status !== "rejected") phones.add(a.repPhone);
+  }
+  // Allow an explicit target rep (e.g. when assigning a delivery to a rep who
+  // has no assignment yet, so the nudge still reaches them).
+  const bodyPhone = typeof req.body?.representativePhone === "string" ? req.body.representativePhone : null;
+  if (bodyPhone) phones.add(bodyPhone);
+
+  if (phones.size === 0) {
+    res.status(400).json({ error: "لا يوجد مندوب مسند لهذا الأمر بعد." });
+    return;
+  }
+
+  let sent = 0;
+  for (const phone of phones) {
+    try {
+      // Send a nudge text + main menu so the rep sees their pending deliveries.
+      await sendRepMainMenu(phone, { receipt: 0, delivery: 1 });
+      sent++;
+    } catch (err) {
+      logger.warn({ err, phone }, "send-delivery-prompts: failed to message rep");
+    }
+  }
+
+  await db.insert(auditLogTable).values({
+    action: "customer_po.send_delivery_prompts",
+    entityType: "customer_po",
+    entityId: customerPoId,
+    employeeId: req.session.employeeId,
+    description: `Sent ${sent} delivery prompt(s) for customer PO ${po.internalPoNo}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+
+  res.json({ ok: true, sent });
 });
 
 // PATCH /customer-po/deliveries/:deliveryId — edit a single delivery row.

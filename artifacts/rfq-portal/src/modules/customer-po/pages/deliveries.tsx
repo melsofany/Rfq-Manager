@@ -126,6 +126,25 @@ export default function CustomerDeliveriesPage() {
     }
   }
 
+  async function sendDeliveryPrompts(poId: number) {
+    try {
+      const r = await fetch(`/api/customer-po/${poId}/send-delivery-prompts`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error || "فشل الإرسال");
+      }
+      const d = await r.json();
+      toast.success(`تم إرسال مطالبة التسليم إلى ${d.sent} مندوب`);
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, "فشل الإرسال"));
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -188,6 +207,19 @@ export default function CustomerDeliveriesPage() {
                   >
                     {po.status === "sent" ? "تم الإرسال" : "مسودة"}
                   </span>
+                  {expandedPo === po.id && (
+                    <Button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sendDeliveryPrompts(po.id);
+                      }}
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                    >
+                      إرسال مطالبة للمندوب
+                    </Button>
+                  )}
                 </button>
 
                 {expandedPo === po.id && (

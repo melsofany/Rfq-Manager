@@ -622,3 +622,210 @@ export async function markWhatsAppRead(messageId: string): Promise<void> {
     // non-critical
   }
 }
+
+// ─── Representative bot (interactive list menus) ───────────────────────────
+// The rep bot is a menu-driven conversation: the rep opens the WhatsApp list
+// (or sends any text), gets a main menu, then drills into POs → items → action.
+// Payloads are prefixed `rep_` so they never collide with work_order_* flows.
+
+/** Main menu shown when a registered representative sends any text/taps the list. */
+export async function sendRepMainMenu(phone: string, counts: {
+  receipt: number;
+  delivery: number;
+}): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const rows: Row[] = [];
+  if (counts.receipt > 0) {
+    rows.push(new Row("rep_menu:receipt", `استلام من مورد (${counts.receipt})`, "بنود بانتظار الاستلام"));
+  }
+  if (counts.delivery > 0) {
+    rows.push(new Row("rep_menu:delivery", `تسليم لعميل (${counts.delivery})`, "بنود بانتظار التسليم"));
+  }
+  if (rows.length === 0) {
+    return sendWhatsAppText(
+      phone,
+      "لا توجد لديك مهام حالياً.\nعند إسناد أمر شغل جديد سيظهر هنا. اكتب أي رسالة لتحديث القائمة.",
+    );
+  }
+  const [first, ...rest] = rows;
+  const message = new Interactive(
+    new ActionList("اختر مهمة", new ListSection("المهام", first, ...rest)),
+    new Body("مرحباً 👋\nهذه قائمة مهامك الحالية. اختر مهمة للبدء."),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/**
+ * List the POs assigned to this representative that still have pending lines
+ * of the given kind. Each row opens the item picker for that PO.
+ * kind = "receipt" → supplier POs awaiting goods receipt
+ * kind = "delivery" → customer POs awaiting delivery to customer
+ */
+export async function sendRepPoPicker(
+  phone: string,
+  kind: "receipt" | "delivery",
+  pos: Array<{ id: number; no: string; label: string; pendingItems: number }>,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  if (pos.length === 0) {
+    return sendWhatsAppText(
+      phone,
+      kind === "receipt"
+        ? "لا توجد أوامر شراء بانتظار الاستلام حالياً."
+        : "لا توجد بنود بانتظار التسليم للعميل حالياً.",
+    );
+  }
+  const rows = pos.slice(0, 10).map(
+    (p) => new Row(`rep_po:${kind}:${p.id}`, `${p.no} — ${p.label}`, `${p.pendingItems} بند بانتظار`),
+  );
+  const [first, ...rest] = rows;
+  const title = kind === "receipt" ? "أوامر شراء بانتظار الاستلام" : "بنود بانتظار التسليم للعميل";
+  const message = new Interactive(
+    new ActionList("اختر أمر شغل", new ListSection(title, first, ...rest)),
+    new Body(`اختر الأمر الذي تريد العمل عليه:`),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/**
+ * List the line items of one PO awaiting the representative's action.
+ * kind="receipt": supplier PO items not yet fully received/rejected.
+ * kind="delivery": customer PO items not yet fully delivered/rejected.
+ */
+export async function sendRepItemPicker(
+  phone: string,
+  kind: "receipt" | "delivery",
+  poId: number,
+  items: Array<{ id: number; label: string; qty: string | null; statusHint: string }>,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  if (items.length === 0) {
+    return sendWhatsAppText(phone, "لا توجد بنود بانتظار الإجراء في هذا الأمر.");
+  }
+  const rows = items.slice(0, 10).map(
+    (it) =>
+      new Row(
+        `rep_item:${kind}:${poId}:${it.id}`,
+        it.label.slice(0, 24),
+        `${it.qty ? `الكمية: ${it.qty} — ` : ""}${it.statusHint}`,
+      ),
+  );
+  const [first, ...rest] = rows;
+  const title = kind === "receipt" ? "بنود بانتظار الاستلام" : "بنود بانتظار التسليم";
+  const message = new Interactive(
+    new ActionList("اختر بند", new ListSection(title, first, ...rest)),
+    new Body("اختر البند الذي تريد تسجيل إجراء له:"),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/**
+ * Action buttons for a single line item:
+ *  - receipt: «تم الاستلام» / «رفض» → payloads work_order_item:<poNo>:<poItemId>:*
+ *  - delivery: «تم التسليم» / «رفض العميل الاستلام» → work_order_delivery:<customerPoNo>:<customerPoItemId>:*
+ *
+ * We reuse the existing work_order_item: payload for receipts (so the existing
+ * handler records it), and introduce work_order_delivery: for deliveries.
+ */
+export async function sendRepItemAction(
+  phone: string,
+  opts: {
+    kind: "receipt" | "delivery";
+    no: string;          // poNo (receipt) or customerPoNo (delivery)
+    itemId: number;      // poItemId (receipt) or customerPoItemId (delivery)
+    label: string;
+    qty?: string | null;
+  },
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const qtyText = opts.qty ? ` — الكمية: ${opts.qty}` : "";
+  if (opts.kind === "receipt") {
+    const body = `استلام من مورد\nأمر الشراء: ${opts.no}\n${opts.label}${qtyText}\nهل تم الاستلام؟`;
+    const message = new Interactive(
+      new ActionButtons(
+        new Button(`work_order_item:${opts.no}:${opts.itemId}:received`, "تم الاستلام"),
+        new Button(`work_order_item:${opts.no}:${opts.itemId}:rejected`, "رفض"),
+      ),
+      new Body(body),
+    );
+    const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+    if ("error" in result && result.error) {
+      throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+    }
+    return result.messages?.[0]?.id ?? null;
+  }
+  // delivery
+  const body = `تسليم للعميل\nأمر شراء العميل: ${opts.no}\n${opts.label}${qtyText}\nهل تم التسليم للعميل؟`;
+  const message = new Interactive(
+    new ActionButtons(
+      new Button(`work_order_delivery:${opts.no}:${opts.itemId}:delivered`, "تم التسليم"),
+      new Button(`work_order_delivery:${opts.no}:${opts.itemId}:customer_rejected`, "رفض العميل"),
+    ),
+    new Body(body),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/**
+ * Delivery rejection-reason picker (reasons the *customer* refused), shown after
+ * the rep taps "رفض العميل". Payload per option:
+ *   work_order_delivery_reason:<customerPoNo>:<customerPoItemId>:<reason>
+ */
+export const CUSTOMER_REJECTION_REASONS = [
+  "تالف",
+  "خطأ في الصنف",
+  "كمية أقل",
+  "متأخر عن الموعد",
+  "مواصفات غير مطابقة",
+] as const;
+
+export async function sendDeliveryRejectionReasonOptions(
+  phone: string,
+  customerPoNo: string,
+  customerPoItemId: number,
+  reasons: readonly string[] = CUSTOMER_REJECTION_REASONS,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const rows = reasons.map(
+    (r, i) =>
+      new Row(
+        `work_order_delivery_reason:${customerPoNo}:${customerPoItemId}:${encodeURIComponent(r)}`,
+        `${i + 1}. ${r}`,
+        "",
+      ),
+  );
+  const [firstRow, ...restRows] = rows;
+  const message = new Interactive(
+    new ActionList(
+      "اختر سبب الرفض",
+      new ListSection("أسباب رفض العميل", firstRow, ...restRows),
+    ),
+    new Body(`تم اختيار رفض العميل لبند في أمر شراء العميل ${customerPoNo}.\nاختر سبب الرفض:`),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}

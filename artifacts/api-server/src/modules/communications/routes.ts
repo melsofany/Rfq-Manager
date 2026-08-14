@@ -9,8 +9,13 @@ import {
   purchaseOrdersTable,
   purchaseOrderItemsTable,
   poItemReceiptsTable,
+  customerPosTable,
+  customerPoItemsTable,
+  customerPoItemDeliveriesTable,
+  representativesTable,
+  WORK_ORDER_KIND,
 } from "@workspace/db";
-import { eq, desc, sql, and, inArray } from "drizzle-orm";
+import { eq, desc, sql, and, inArray, ne, isNotNull } from "drizzle-orm";
 import {
   Whatsapp,
   PHONE_NUMBER_ID,
@@ -21,6 +26,12 @@ import {
   sendRepresentativeItemReceiptWhatsApp,
   sendRejectionReasonOptions,
   uploadWhatsAppMedia,
+  sendRepMainMenu,
+  sendRepPoPicker,
+  sendRepItemPicker,
+  sendRepItemAction,
+  sendDeliveryRejectionReasonOptions,
+  CUSTOMER_REJECTION_REASONS,
 } from "./service";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
@@ -246,6 +257,9 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
 
       if (message.type === "reaction") {
         await handleReactionWebhook(from, message);
+      } else if (await handleRepMessage(from, message)) {
+        // Registered representative bot owns this message (text or rep_ menu).
+        logger.info({ from }, "Representative bot message handled");
       } else if (message.type === "interactive" && await handleWorkOrderButton(from, message)) {
         logger.info({ from }, "Work-order interactive button handled");
       } else {
@@ -431,6 +445,7 @@ async function recordItemReceipt(
       id: purchaseOrderItemsTable.id,
       poId: purchaseOrderItemsTable.poId,
       qty: purchaseOrderItemsTable.qty,
+      customerPoItemId: purchaseOrderItemsTable.customerPoItemId,
     })
     .from(purchaseOrderItemsTable)
     .where(eq(purchaseOrderItemsTable.id, poItemId));
@@ -493,10 +508,525 @@ async function recordItemReceipt(
       lineStatus,
     })
     .where(eq(purchaseOrderItemsTable.id, line.id));
+
+  // Auto-create a delivery work-order assignment when this supplier PO line is
+  // linked to a customer PO item and the receipt was accepted (not rejected).
+  // The representative can then deliver it to the customer via the bot menu.
+  // Guarded: never allows delivering something that wasn't received.
+  if (opts.acceptedQtyFromOrdered && line.customerPoItemId) {
+    try {
+      await ensureDeliveryAssignment(line.id, line.poId, line.customerPoItemId);
+    } catch (err) {
+      logger.warn({ err, poItemId: line.id }, "Auto delivery-assignment creation failed");
+    }
+  }
+  return true;
+}
+
+/**
+ * Create a delivery work-order assignment for a customer PO line linked to a
+ * supplier PO item, reusing the representative from the receipt assignment if
+ * available (so the same rep who received delivers), and resolving the
+ * customerPoId from the customer_po_item. Idempotent: skips if an active
+ * delivery assignment already exists for this customer_po_item_id.
+ */
+async function ensureDeliveryAssignment(
+  poItemId: number,
+  poId: number,
+  customerPoItemId: number,
+): Promise<void> {
+  // Resolve the owning customer PO + customer_po_item row.
+  const [cpi] = await db
+    .select({
+      id: customerPoItemsTable.id,
+      customerPoId: customerPoItemsTable.customerPoId,
+      deliveryStatus: customerPoItemsTable.deliveryStatus,
+    })
+    .from(customerPoItemsTable)
+    .where(eq(customerPoItemsTable.id, customerPoItemId));
+  if (!cpi) return;
+  // Already fully delivered/rejected — no new assignment needed.
+  if (cpi.deliveryStatus === "delivered" || cpi.deliveryStatus === "rejected") return;
+
+  // Already has an active delivery assignment? skip.
+  const existing = await db
+    .select({ id: workOrderAssignmentsTable.id })
+    .from(workOrderAssignmentsTable)
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.customerPoItemId, customerPoItemId),
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
+      ),
+    );
+  if (existing.length > 0) return;
+
+  // Inherit representative from the receipt assignment of the linked PO item.
+  const [receiptAssign] = await db
+    .select({
+      repName: workOrderAssignmentsTable.representativeName,
+      repPhone: workOrderAssignmentsTable.representativePhone,
+      repId: workOrderAssignmentsTable.representativeId,
+    })
+    .from(workOrderAssignmentsTable)
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.poItemId, poItemId),
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+      ),
+    )
+    .orderBy(desc(workOrderAssignmentsTable.id));
+  if (!receiptAssign) return; // no rep on record → wait for explicit assignment
+
+  await db.insert(workOrderAssignmentsTable).values({
+    poId,
+    representativeId: receiptAssign.repId,
+    representativeName: receiptAssign.repName,
+    representativePhone: receiptAssign.repPhone,
+    status: "sent",
+    kind: WORK_ORDER_KIND.DELIVERY,
+    customerPoId: cpi.customerPoId,
+    customerPoItemId,
+  });
+}
+
+// ─── Representative bot (menu-driven receipts & deliveries) ────────────────
+// A registered representative interacting with the business number gets a
+// menu-driven bot: any text → main menu; list replies drill into POs → items →
+// action buttons. Non-reps fall through to the normal chat flow.
+
+/** Is this phone number a registered, active representative? */
+async function findRepresentative(phone: string) {
+  const [rep] = await db
+    .select()
+    .from(representativesTable)
+    .where(eq(representativesTable.phone, normalizePhone(phone)));
+  return rep && rep.isActive ? rep : undefined;
+}
+
+/** Count pending receipt + delivery assignments for a rep phone. */
+async function countRepTasks(repPhone: string): Promise<{ receipt: number; delivery: number }> {
+  const normalized = normalizePhone(repPhone);
+  const rows = await db
+    .select({
+      kind: workOrderAssignmentsTable.kind,
+      status: workOrderAssignmentsTable.status,
+      poItemId: workOrderAssignmentsTable.poItemId,
+      customerPoItemId: workOrderAssignmentsTable.customerPoItemId,
+    })
+    .from(workOrderAssignmentsTable)
+    .where(eq(workOrderAssignmentsTable.representativePhone, normalized));
+  let receipt = 0;
+  let delivery = 0;
+  for (const r of rows) {
+    if (r.kind === WORK_ORDER_KIND.DELIVERY) {
+      if (r.status === "delivered" || r.status === "rejected") continue;
+      delivery++;
+    } else {
+      if (r.status === "received" || r.status === "rejected") continue;
+      receipt++;
+    }
+  }
+  return { receipt, delivery };
+}
+
+/**
+ * Group pending receipt assignments for a rep by supplier PO, returning the POs
+ * with their pending item counts (for the PO picker list).
+ */
+async function repReceiptPoList(repPhone: string): Promise<
+  Array<{ id: number; no: string; label: string; pendingItems: number }>
+> {
+  const normalized = normalizePhone(repPhone);
+  const assigns = await db
+    .select({
+      poItemId: workOrderAssignmentsTable.poItemId,
+      poId: workOrderAssignmentsTable.poId,
+      status: workOrderAssignmentsTable.status,
+    })
+    .from(workOrderAssignmentsTable)
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.representativePhone, normalized),
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+      ),
+    );
+  const active = assigns.filter((a) => a.poItemId && a.status !== "received" && a.status !== "rejected");
+  const poIds = [...new Set(active.map((a) => a.poId))];
+  if (poIds.length === 0) return [];
+  const pos = await db
+    .select({ id: purchaseOrdersTable.id, no: purchaseOrdersTable.sheetPoNo })
+    .from(purchaseOrdersTable)
+    .where(inArray(purchaseOrdersTable.id, poIds));
+  return pos.map((po) => ({
+    id: po.id,
+    no: po.no,
+    label: `أمر شراء`,
+    pendingItems: active.filter((a) => a.poId === po.id).length,
+  }));
+}
+
+/**
+ * Group pending delivery assignments for a rep by customer PO. Each row is a
+ * customer PO with pending delivery items. Only items whose linked supplier PO
+ * line was *accepted* appear (no delivering what wasn't received).
+ */
+async function repDeliveryPoList(repPhone: string): Promise<
+  Array<{ id: number; no: string; label: string; pendingItems: number }>
+> {
+  const normalized = normalizePhone(repPhone);
+  const assigns = await db
+    .select({
+      customerPoId: workOrderAssignmentsTable.customerPoId,
+      customerPoItemId: workOrderAssignmentsTable.customerPoItemId,
+      status: workOrderAssignmentsTable.status,
+    })
+    .from(workOrderAssignmentsTable)
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.representativePhone, normalized),
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
+      ),
+    );
+  const active = assigns.filter(
+    (a) => a.customerPoId && a.customerPoItemId && a.status !== "delivered" && a.status !== "rejected",
+  );
+  const poIds = [...new Set(active.map((a) => a.customerPoId!))];
+  if (poIds.length === 0) return [];
+  const pos = await db
+    .select({ id: customerPosTable.id, no: customerPosTable.customerPoNo, name: customerPosTable.customerName })
+    .from(customerPosTable)
+    .where(inArray(customerPosTable.id, poIds));
+  return pos.map((po) => ({
+    id: po.id,
+    no: po.no,
+    label: po.name || "أمر شراء عميل",
+    pendingItems: active.filter((a) => a.customerPoId === po.id).length,
+  }));
+}
+
+/** Pending receipt items for a supplier PO (not yet received/rejected). */
+async function repReceiptItems(poId: number): Promise<
+  Array<{ id: number; label: string; qty: string | null; statusHint: string }>
+> {
+  const rows = await db
+    .select({
+      id: purchaseOrderItemsTable.id,
+      description: purchaseOrderItemsTable.description,
+      lineItem: purchaseOrderItemsTable.lineItem,
+      qty: purchaseOrderItemsTable.qty,
+      lineStatus: purchaseOrderItemsTable.lineStatus,
+    })
+    .from(purchaseOrderItemsTable)
+    .where(eq(purchaseOrderItemsTable.poId, poId));
+  const pending = rows.filter(
+    (r) => r.lineStatus === "pending" || r.lineStatus === "partial",
+  );
+  return pending.map((r) => ({
+    id: r.id,
+    label: [r.lineItem, r.description].filter(Boolean).join(" - ") || "بند",
+    qty: r.qty ? String(r.qty) : null,
+    statusHint: r.lineStatus === "partial" ? "استلام جزئي" : "بانتظار الاستلام",
+  }));
+}
+
+/** Pending delivery items for a customer PO (not yet delivered/rejected). */
+async function repDeliveryItems(customerPoId: number): Promise<
+  Array<{ id: number; label: string; qty: string | null; statusHint: string }>
+> {
+  const rows = await db
+    .select({
+      id: customerPoItemsTable.id,
+      description: customerPoItemsTable.description,
+      lineItem: customerPoItemsTable.lineItem,
+      qty: customerPoItemsTable.qty,
+      deliveryStatus: customerPoItemsTable.deliveryStatus,
+    })
+    .from(customerPoItemsTable)
+    .where(eq(customerPoItemsTable.customerPoId, customerPoId));
+  const pending = rows.filter(
+    (r) => r.deliveryStatus === "pending" || r.deliveryStatus === "partial",
+  );
+  return pending.map((r) => ({
+    id: r.id,
+    label: [r.lineItem, r.description].filter(Boolean).join(" - ") || "بند",
+    qty: r.qty ? String(r.qty) : null,
+    statusHint: r.deliveryStatus === "partial" ? "تسليم جزئي" : "بانتظار التسليم",
+  }));
+}
+
+/**
+ * Handle an inbound message from a registered representative. Returns true if
+ * handled (rep bot owns the message), false to let it fall through to the
+ * normal chat flow. Triggers on: any text, or a list_reply/button_reply with a
+ * `rep_` prefix.
+ */
+async function handleRepMessage(phone: string, msg: ServerMessage): Promise<boolean> {
+  const listId = msg.interactive?.list_reply?.id;
+  const buttonId = msg.interactive?.button_reply?.id;
+  const payload = listId ?? buttonId ?? "";
+  const isRepPayload = payload.startsWith("rep_");
+  const isText = msg.type === "text" && Boolean(msg.text?.body);
+
+  // Only engage the bot for registered reps. If a rep sent a rep_ payload (from
+  // a previous menu) always handle it; otherwise any text from a rep opens the
+  // main menu.
+  const rep = await findRepresentative(phone);
+  if (!rep && !isRepPayload) return false;
+  if (!rep && isRepPayload) {
+    await sendWhatsAppText(phone, "هذا الرقم غير مسجل كمندوب. تواصل مع الإدارة.");
+    return true;
+  }
+  // rep is defined from here on.
+
+  if (isText && !isRepPayload) {
+    const counts = await countRepTasks(phone);
+    await sendRepMainMenu(phone, counts);
+    return true;
+  }
+  if (!isRepPayload) return false;
+
+  // rep_menu:<kind>
+  if (payload.startsWith("rep_menu:")) {
+    const kind = payload.split(":")[1] as "receipt" | "delivery";
+    if (kind === "receipt") {
+      await sendRepPoPicker(phone, "receipt", await repReceiptPoList(phone));
+    } else {
+      await sendRepPoPicker(phone, "delivery", await repDeliveryPoList(phone));
+    }
+    return true;
+  }
+  // rep_po:<kind>:<poId>
+  if (payload.startsWith("rep_po:")) {
+    const [, kind, poIdStr] = payload.split(":");
+    const poId = parseInt(poIdStr, 10);
+    if (kind === "receipt") {
+      await sendRepItemPicker(phone, "receipt", poId, await repReceiptItems(poId));
+    } else {
+      await sendRepItemPicker(phone, "delivery", poId, await repDeliveryItems(poId));
+    }
+    return true;
+  }
+  // rep_item:<kind>:<poId>:<itemId> → action buttons
+  if (payload.startsWith("rep_item:")) {
+    const [, kind, poIdStr, itemIdStr] = payload.split(":");
+    const itemId = parseInt(itemIdStr, 10);
+    if (kind === "receipt") {
+      // Resolve poNo + line label.
+      const [po] = await db
+        .select({ no: purchaseOrdersTable.sheetPoNo })
+        .from(purchaseOrdersTable)
+        .where(eq(purchaseOrdersTable.id, parseInt(poIdStr, 10)));
+      const [it] = await db
+        .select({
+          description: purchaseOrderItemsTable.description,
+          lineItem: purchaseOrderItemsTable.lineItem,
+          qty: purchaseOrderItemsTable.qty,
+        })
+        .from(purchaseOrderItemsTable)
+        .where(eq(purchaseOrderItemsTable.id, itemId));
+      await sendRepItemAction(phone, {
+        kind: "receipt",
+        no: po?.no ?? poIdStr,
+        itemId,
+        label: [it?.lineItem, it?.description].filter(Boolean).join(" - ") || "بند",
+        qty: it?.qty ? String(it.qty) : null,
+      });
+    } else {
+      const [po] = await db
+        .select({ no: customerPosTable.customerPoNo })
+        .from(customerPosTable)
+        .where(eq(customerPosTable.id, parseInt(poIdStr, 10)));
+      const [it] = await db
+        .select({
+          description: customerPoItemsTable.description,
+          lineItem: customerPoItemsTable.lineItem,
+          qty: customerPoItemsTable.qty,
+        })
+        .from(customerPoItemsTable)
+        .where(eq(customerPoItemsTable.id, itemId));
+      await sendRepItemAction(phone, {
+        kind: "delivery",
+        no: po?.no ?? poIdStr,
+        itemId,
+        label: [it?.lineItem, it?.description].filter(Boolean).join(" - ") || "بند",
+        qty: it?.qty ? String(it.qty) : null,
+      });
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Handle per-item customer-delivery buttons and the customer-rejection list.
+ * Payloads:
+ *   work_order_delivery:<customerPoNo>:<customerPoItemId>:delivered
+ *   work_order_delivery:<customerPoNo>:<customerPoItemId>:customer_rejected
+ *   work_order_delivery_reason:<customerPoNo>:<customerPoItemId>:<reason>
+ *
+ * "delivered" creates a customer_po_item_deliveries row using the ordered qty
+ * (full delivery). "customer_rejected" prompts for the reason; the chosen
+ * reason creates a delivery row with rejectedByCustomerQty = ordered qty.
+ * Guard: the customer_po_item must be linked to a supplier PO item whose line
+ * was *accepted* (received) — no delivering what wasn't received.
+ */
+async function handleWorkOrderDeliveryButton(
+  phone: string,
+  msg: ServerMessage,
+): Promise<boolean> {
+  const buttonId = msg.interactive?.button_reply?.id;
+  const listId = msg.interactive?.list_reply?.id;
+  const payload = buttonId ?? listId ?? "";
+  if (
+    !payload.startsWith("work_order_delivery:") &&
+    !payload.startsWith("work_order_delivery_reason:")
+  ) {
+    return false;
+  }
+
+  // work_order_delivery:<customerPoNo>:<customerPoItemId>:<delivered|customer_rejected>
+  if (payload.startsWith("work_order_delivery:")) {
+    const parts = payload.split(":");
+    const customerPoNo = parts[1];
+    const customerPoItemId = parseInt(parts[2], 10);
+    const action = parts[3];
+    if (!isFinite(customerPoItemId)) {
+      await sendWhatsAppText(phone, "تعذر تحديد البند المرتبط بهذا الزر.");
+      return true;
+    }
+    if (action === "customer_rejected") {
+      await sendDeliveryRejectionReasonOptions(phone, customerPoNo, customerPoItemId, CUSTOMER_REJECTION_REASONS);
+      return true;
+    }
+    if (action === "delivered") {
+      const created = await recordItemDelivery(customerPoItemId, { deliveredFromOrdered: true });
+      await sendWhatsAppText(
+        phone,
+        created
+          ? `تم تسجيل تسليم البند للعميل في أمر الشراء ${customerPoNo}.`
+          : `تعذر تسجيل التسليم — تأكد أن البند قد استُلم من المورد أولاً.`,
+      );
+      return true;
+    }
+    return true;
+  }
+
+  // work_order_delivery_reason:<customerPoNo>:<customerPoItemId>:<encodedReason>
+  const parts = payload.split(":");
+  const customerPoNo = parts[1];
+  const customerPoItemId = parseInt(parts[2], 10);
+  const reason = decodeURIComponent(parts.slice(3).join(":"));
+  if (!isFinite(customerPoItemId)) {
+    await sendWhatsAppText(phone, "تعذر تحديد البند المرتبط بهذا الرد.");
+    return true;
+  }
+  const created = await recordItemDelivery(customerPoItemId, {
+    customerRejectedFromOrdered: true,
+    rejectionReason: reason,
+  });
+  await sendWhatsAppText(
+    phone,
+    created
+      ? `تم تسجيل رفض العميل للبند في أمر الشراء ${customerPoNo} — السبب: ${reason}.`
+      : `تعذر تسجيل الرفض — تأكد أن البند قد استُلم من المورد أولاً.`,
+  );
+  return true;
+}
+
+/**
+ * Inserts a customer_po_item_deliveries row and re-aggregates the customer
+ * PO item's delivery totals. Uses the ordered qty as the basis (full delivery
+ * / full rejection). Returns false when the line is not found OR has not been
+ * received from the supplier yet (no accepted supplier receipt on a linked
+ * purchase_order_item).
+ */
+async function recordItemDelivery(
+  customerPoItemId: number,
+  opts: {
+    deliveredFromOrdered?: boolean;
+    customerRejectedFromOrdered?: boolean;
+    rejectionReason?: string;
+  },
+): Promise<boolean> {
+  const [cpi] = await db
+    .select({
+      id: customerPoItemsTable.id,
+      customerPoId: customerPoItemsTable.customerPoId,
+      qty: customerPoItemsTable.qty,
+      deliveryStatus: customerPoItemsTable.deliveryStatus,
+    })
+    .from(customerPoItemsTable)
+    .where(eq(customerPoItemsTable.id, customerPoItemId));
+  if (!cpi) return false;
+
+  // Guard: confirm a linked supplier PO item was *accepted* (received).
+  const [linked] = await db
+    .select({
+      lineStatus: purchaseOrderItemsTable.lineStatus,
+      totalAcceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
+    })
+    .from(purchaseOrderItemsTable)
+    .where(eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemId));
+  if (!linked) return false;
+  const accepted = linked.totalAcceptedQty ? Number(linked.totalAcceptedQty) : 0;
+  if (accepted <= 0 || linked.lineStatus === "rejected") return false;
+
+  const ordered = cpi.qty ? String(cpi.qty) : null;
+  await db.insert(customerPoItemDeliveriesTable).values({
+    customerPoItemId: cpi.id,
+    customerPoId: cpi.customerPoId,
+    deliveredQty: opts.deliveredFromOrdered ? ordered : null,
+    rejectedByCustomerQty: opts.customerRejectedFromOrdered ? ordered : null,
+    rejectionReason: opts.rejectionReason ?? null,
+    deliveryStatus: opts.customerRejectedFromOrdered ? "rejected" : "delivered",
+    deliveredBy: "واتساب",
+  });
+
+  // Re-aggregate (mirrors the deliveries endpoint logic).
+  const rows = await db
+    .select()
+    .from(customerPoItemDeliveriesTable)
+    .where(eq(customerPoItemDeliveriesTable.customerPoItemId, cpi.id));
+  const sum = (sel: (r: (typeof rows)[number]) => string | null) =>
+    rows.reduce((acc, r) => acc + (sel(r) ? Number(sel(r)) : 0), 0);
+  const delivered = sum((r) => r.deliveredQty);
+  const rejected = sum((r) => r.rejectedByCustomerQty);
+
+  let status = "pending";
+  if (rejected > 0 && delivered === 0) status = "rejected";
+  else if (ordered != null && delivered >= Number(ordered)) status = "delivered";
+  else if (delivered > 0) status = "partial";
+
+  await db
+    .update(customerPoItemsTable)
+    .set({
+      totalDeliveredQty: String(delivered),
+      totalRejectedByCustomerQty: String(rejected),
+      deliveryStatus: status,
+    })
+    .where(eq(customerPoItemsTable.id, cpi.id));
+
+  // Mark the delivery assignment as done.
+  await db
+    .update(workOrderAssignmentsTable)
+    .set({
+      status: opts.customerRejectedFromOrdered ? "rejected" : "delivered",
+      rejectionReason: opts.rejectionReason ?? null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.customerPoItemId, cpi.id),
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
+      ),
+    );
   return true;
 }
 
 async function handleWorkOrderButton(phone: string, msg: ServerMessage): Promise<boolean> {
+  // Delivery flow (to customer) — checked first so delivery payloads don't
+  // fall through to the receipt/legacy handlers.
+  if (await handleWorkOrderDeliveryButton(phone, msg)) return true;
   // Per-item goods-receipt flow takes precedence over the legacy whole-PO flow.
   if (await handleWorkOrderItemButton(phone, msg)) return true;
 
