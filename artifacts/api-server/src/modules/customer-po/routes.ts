@@ -141,7 +141,10 @@ async function resolvePoIssuedIds(
   if (customerPoIds.length === 0) return issued;
 
   // 1) Item-level link: dispatched supplier POs whose items reference a
-  //    customer_po_item belonging to one of these customer POs.
+  //    customer_po_item belonging to one of these customer POs. We join
+  //    purchase_order_items → purchase_orders (for the sent filter) AND
+  //    → customer_po_items (so customer_po_items.customer_po_id is available
+  //    to map the hit back to the owning customer PO).
   const linked = await db
     .select({ customerPoId: customerPoItemsTable.customerPoId })
     .from(purchaseOrderItemsTable)
@@ -149,15 +152,15 @@ async function resolvePoIssuedIds(
       purchaseOrdersTable,
       eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id),
     )
+    .innerJoin(
+      customerPoItemsTable,
+      eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
+    )
     .where(
       and(
         eq(purchaseOrdersTable.status, "sent"),
         isNotNull(purchaseOrderItemsTable.customerPoItemId),
-        inArray(purchaseOrderItemsTable.customerPoItemId,
-          // Subquery: the customer_po_item ids that belong to these POs. We
-          // resolve them with a separate select to keep the mock-friendly
-          // builder chain simple.
-          await customerPoItemIdsFor(customerPoIds)),
+        inArray(customerPoItemsTable.customerPoId, customerPoIds),
       ),
     );
   for (const r of linked) {
@@ -187,16 +190,6 @@ async function resolvePoIssuedIds(
   }
 
   return issued;
-}
-
-// Select the customer_po_item ids that belong to a set of customer PO ids.
-async function customerPoItemIdsFor(customerPoIds: number[]): Promise<number[]> {
-  if (customerPoIds.length === 0) return [];
-  const rows = await db
-    .select({ id: customerPoItemsTable.id })
-    .from(customerPoItemsTable)
-    .where(inArray(customerPoItemsTable.customerPoId, customerPoIds));
-  return rows.map((r) => r.id);
 }
 
 // For a set of customer PO ids, load all their line items (with deliveryStatus)

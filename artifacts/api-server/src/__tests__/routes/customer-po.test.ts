@@ -91,11 +91,17 @@ const dbMock: any = {
         });
       }
       // Item-level po_issued link: select({customerPoId}).from(purchaseOrderItems)
-      // .innerJoin(purchaseOrders).where(and(...)) — return linkedPoItemRows.
+      // .innerJoin(purchaseOrders).innerJoin(customerPoItems).where(and(...))
+      // — return linkedPoItemRows (each carries the owning customerPoId).
       if (table === purchaseOrderItemsTbl) {
         return chainable(linkedPoItemRows, {
           innerJoin: vi.fn(() =>
-            chainable(linkedPoItemRows, { where: vi.fn(() => chainable(linkedPoItemRows)) }),
+            chainable(linkedPoItemRows, {
+              innerJoin: vi.fn(() =>
+                chainable(linkedPoItemRows, { where: vi.fn(() => chainable(linkedPoItemRows)) }),
+              ),
+              where: vi.fn(() => chainable(linkedPoItemRows)),
+            }),
           ),
           where: vi.fn(() => chainable(linkedPoItemRows)),
         });
