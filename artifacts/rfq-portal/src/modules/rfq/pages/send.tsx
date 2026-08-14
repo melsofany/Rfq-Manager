@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -92,6 +92,15 @@ export default function SendRfqPage() {
 
   // مجموعة معرّفات الموردين الذين أُرسل إليهم هذا الطلب من قبل
   const alreadySentIds = new Set(sentLog.map((s) => s.supplierId));
+
+  // ── تعبئة تاريخ الإغلاق تلقائياً من تاريخ انتهاء الطلب ──────────────────────
+  // تاريخ انتهاء الطلب مأخوذ من تاريخ انتهاء طلب تسعير العميل، فيُحمل هنا
+  // كتاريخ إغلاق افتراضي عند الإرسال للموردين حتى يُغلق الطلب تلقائياً.
+  useEffect(() => {
+    if (!rfq?.expiresAt || closeDate) return;
+    const d = rfq.expiresAt.slice(0, 10);
+    if (d) setCloseDate(d);
+  }, [rfq?.expiresAt, closeDate]);
 
   const sendMutation = useSendRfqToSuppliers({
     mutation: {
@@ -322,7 +331,12 @@ export default function SendRfqPage() {
         <div className="bg-card border border-border rounded-lg p-5">
           <div className="flex items-end gap-4">
             <div className="space-y-1.5">
-              <Label>تاريخ الإغلاق (اختياري)</Label>
+              <Label>
+                تاريخ الإغلاق{" "}
+                <span className="text-muted-foreground font-normal text-xs">
+                  (يُؤخذ من تاريخ انتهاء طلب تسعير العميل)
+                </span>
+              </Label>
               <Input
                 type="date"
                 value={closeDate}
@@ -332,7 +346,7 @@ export default function SendRfqPage() {
               />
             </div>
             <p className="text-muted-foreground text-xs pb-2">
-              لن يستطيع الموردون تقديم عروضهم بعد هذا التاريخ.
+              لن يستطيع الموردون تقديم عروضهم بعد هذا التاريخ، ويُغلق الطلب عند الإرسال.
             </p>
           </div>
         </div>

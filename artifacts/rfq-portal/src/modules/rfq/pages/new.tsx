@@ -252,6 +252,12 @@ export default function NewRfqPage() {
     const hasOnlyBlank = items.length === 1 && !items[0].description && !items[0].partNo;
     setItems(hasOnlyBlank ? newRows : [...items, ...newRows]);
     if (!customerRfqNo) setCustomerRfqNo(lookupQuery);
+    // Carry the customer RFQ's expiry date (requiredResponseDate) into the
+    // supplier RFQ expiry field — only when the user hasn't set one yet.
+    const importedExpiry = chosen
+      .map((p) => p.requiredResponseDate)
+      .find((d) => d && d.trim());
+    if (importedExpiry && !expiresAt) setExpiresAt(importedExpiry.trim().slice(0, 10));
     setShowPicker(false);
     setPendingItems([]);
   };
@@ -493,9 +499,9 @@ export default function NewRfqPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>
-                  Expiry Date{" "}
+                  تاريخ الانتهاء{" "}
                   <span className="text-muted-foreground font-normal text-xs">
-                    (blocks supplier pricing after this date)
+                    (يُؤخذ تلقائياً من طلب تسعير العميل، ويُغلق الطلب بعده)
                   </span>
                 </Label>
                 <Input
