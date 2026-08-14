@@ -399,12 +399,11 @@ function FilterHeader({
           </button>
         </PopoverTrigger>
         <PopoverContent
-          sideOffset={2}
+          sideOffset={4}
           align="start"
-          collisionPadding={8}
-          sticky="always"
-          className="w-64 p-0 max-h-[min(70vh,460px)] overflow-y-auto"
           side="bottom"
+          avoidCollisions={false}
+          className="w-64 p-0 max-h-[min(70vh,460px)] overflow-y-auto"
         >
           <div className="border-b border-border p-2">
             <div className="relative">
@@ -462,17 +461,28 @@ function FilterHeader({
                 const checked = !excludes.has(v.value);
                 const display = v.value === "" ? <span className="text-muted-foreground">(فارغ)</span> : v.value;
                 return (
-                  <label
+                  <div
                     key={v.value || "__blank__"}
-                    className="flex items-center gap-2 px-2 py-1 hover:bg-accent cursor-pointer text-xs"
+                    role="checkbox"
+                    aria-checked={checked}
+                    tabIndex={0}
+                    onClick={() => onToggle(v.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onToggle(v.value);
+                      }
+                    }}
+                    className="flex items-center gap-2 px-2 py-1 hover:bg-accent cursor-pointer text-xs select-none"
                   >
                     <Checkbox
                       checked={checked}
-                      onCheckedChange={() => onToggle(v.value)}
+                      className="pointer-events-none"
+                      tabIndex={-1}
                     />
                     <span className="flex-1 truncate" title={v.value}>{display}</span>
                     <span className="text-[10px] text-muted-foreground/70">{v.count}</span>
-                  </label>
+                  </div>
                 );
               })
             )}
