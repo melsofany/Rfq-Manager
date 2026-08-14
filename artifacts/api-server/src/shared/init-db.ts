@@ -382,6 +382,40 @@ export async function initDb(): Promise<void> {
         ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'receipt';
     `);
 
+    // Normalize stored representative / work-order-assignment phones to the
+    // canonical digits-only international form (no "+", no leading "00",
+    // Egyptian local "01…" → "201…"). The WhatsApp rep-bot lookups compare
+    // canonical forms, so rows stored historically with a leading "+" would
+    // otherwise never match an incoming Meta wa_id ("20…") and the rep bot
+    // would not engage. Idempotent — rows already canonical are unchanged.
+    await client.query(`
+      UPDATE representatives
+        SET phone = regexp_replace(phone, '[^0-9]', '', 'g')
+        WHERE phone ~ '[^0-9]';
+      UPDATE representatives
+        SET phone = substr(phone, 3)
+        WHERE phone LIKE '00%';
+      UPDATE representatives
+        SET phone = '2' || substr(phone, 2)
+        WHERE length(phone) = 11 AND phone LIKE '0%';
+      UPDATE representatives
+        SET phone = '20' || phone
+        WHERE length(phone) = 10 AND phone LIKE '1%';
+
+      UPDATE work_order_assignments
+        SET representative_phone = regexp_replace(representative_phone, '[^0-9]', '', 'g')
+        WHERE representative_phone ~ '[^0-9]';
+      UPDATE work_order_assignments
+        SET representative_phone = substr(representative_phone, 3)
+        WHERE representative_phone LIKE '00%';
+      UPDATE work_order_assignments
+        SET representative_phone = '2' || substr(representative_phone, 2)
+        WHERE length(representative_phone) = 11 AND representative_phone LIKE '0%';
+      UPDATE work_order_assignments
+        SET representative_phone = '20' || representative_phone
+        WHERE length(representative_phone) = 10 AND representative_phone LIKE '1%';
+    `);
+
     // Per-line supplier PO receipt log. A purchase_order_item may have several
     // rows (partial shipments); the aggregated totals mirror onto
     // purchase_order_items, but these rows are the source of truth.

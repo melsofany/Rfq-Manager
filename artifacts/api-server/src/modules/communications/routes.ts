@@ -54,6 +54,26 @@ function normalizePhone(phone: string): string {
   return cleaned;
 }
 
+/**
+ * Canonical phone form: digits only, country code prefixed, no "+", no leading
+ * "00", Egyptian local numbers expanded to international. Used to match a
+ * representative across whatever format their phone was stored in (the
+ * representatives API historically kept the "+", while Meta webhooks send a
+ * bare "20…"). Two phones match iff their canonical forms are equal.
+ */
+function canonicalPhone(phone: string): string {
+  // eslint-disable-next-line no-control-regex
+  let cleaned = phone.replace(
+    /[\u2066\u2067\u2068\u2069\u200e\u200f\u202a\u202b\u202c\u202d\u202e]/g,
+    "",
+  );
+  cleaned = cleaned.replace(/[^\d]/g, "");
+  if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
+  if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
+  if (cleaned.length === 10 && cleaned.startsWith("1")) cleaned = "20" + cleaned;
+  return cleaned;
+}
+
 // ─── SSE: real-time push to connected browser clients ─────────────────────
 const sseClients = new Set<Response>();
 
@@ -340,12 +360,11 @@ async function findAssignment(
   phone: string,
   poItemId?: number,
 ): Promise<typeof workOrderAssignmentsTable.$inferSelect | undefined> {
-  const candidates = await db
-    .select()
-    .from(workOrderAssignmentsTable)
-    .where(eq(workOrderAssignmentsTable.representativePhone, normalizePhone(phone)));
+  const target = canonicalPhone(phone);
+  const candidates = await db.select().from(workOrderAssignmentsTable);
   return (
     candidates
+      .filter((a) => canonicalPhone(a.representativePhone) === target)
       .filter((a) => a.status !== "received" && a.status !== "rejected")
       .filter((a) => (poItemId == null ? true : a.poItemId === poItemId))
       .sort((a, b) => b.id - a.id)[0] ?? undefined
@@ -655,28 +674,28 @@ async function ensureDeliveryAssignment(
 
 /** Is this phone number a registered, active representative? */
 async function findRepresentative(phone: string) {
-  const [rep] = await db
-    .select()
-    .from(representativesTable)
-    .where(eq(representativesTable.phone, normalizePhone(phone)));
+  const target = canonicalPhone(phone);
+  const reps = await db.select().from(representativesTable);
+  const rep = reps.find((r) => canonicalPhone(r.phone) === target);
   return rep && rep.isActive ? rep : undefined;
 }
 
 /** Count pending receipt + delivery assignments for a rep phone. */
 async function countRepTasks(repPhone: string): Promise<{ receipt: number; delivery: number }> {
-  const normalized = normalizePhone(repPhone);
+  const target = canonicalPhone(repPhone);
   const rows = await db
     .select({
       kind: workOrderAssignmentsTable.kind,
       status: workOrderAssignmentsTable.status,
       poItemId: workOrderAssignmentsTable.poItemId,
       customerPoItemId: workOrderAssignmentsTable.customerPoItemId,
+      representativePhone: workOrderAssignmentsTable.representativePhone,
     })
-    .from(workOrderAssignmentsTable)
-    .where(eq(workOrderAssignmentsTable.representativePhone, normalized));
+    .from(workOrderAssignmentsTable);
+  const mine = rows.filter((r) => canonicalPhone(r.representativePhone) === target);
   let receipt = 0;
   let delivery = 0;
-  for (const r of rows) {
+  for (const r of mine) {
     if (r.kind === WORK_ORDER_KIND.DELIVERY) {
       if (r.status === "delivered" || r.status === "rejected") continue;
       delivery++;
@@ -695,21 +714,19 @@ async function countRepTasks(repPhone: string): Promise<{ receipt: number; deliv
 async function repReceiptPoList(repPhone: string): Promise<
   Array<{ id: number; no: string; label: string; pendingItems: number }>
 > {
-  const normalized = normalizePhone(repPhone);
+  const target = canonicalPhone(repPhone);
   const assigns = await db
     .select({
       poItemId: workOrderAssignmentsTable.poItemId,
       poId: workOrderAssignmentsTable.poId,
       status: workOrderAssignmentsTable.status,
+      representativePhone: workOrderAssignmentsTable.representativePhone,
     })
     .from(workOrderAssignmentsTable)
-    .where(
-      and(
-        eq(workOrderAssignmentsTable.representativePhone, normalized),
-        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
-      ),
-    );
-  const active = assigns.filter((a) => a.poItemId && a.status !== "received" && a.status !== "rejected");
+    .where(eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT));
+  const active = assigns
+    .filter((a) => canonicalPhone(a.representativePhone) === target)
+    .filter((a) => a.poItemId && a.status !== "received" && a.status !== "rejected");
   const poIds = [...new Set(active.map((a) => a.poId))];
   if (poIds.length === 0) return [];
   const pos = await db
@@ -732,23 +749,21 @@ async function repReceiptPoList(repPhone: string): Promise<
 async function repDeliveryPoList(repPhone: string): Promise<
   Array<{ id: number; no: string; label: string; pendingItems: number }>
 > {
-  const normalized = normalizePhone(repPhone);
+  const target = canonicalPhone(repPhone);
   const assigns = await db
     .select({
       customerPoId: workOrderAssignmentsTable.customerPoId,
       customerPoItemId: workOrderAssignmentsTable.customerPoItemId,
       status: workOrderAssignmentsTable.status,
+      representativePhone: workOrderAssignmentsTable.representativePhone,
     })
     .from(workOrderAssignmentsTable)
-    .where(
-      and(
-        eq(workOrderAssignmentsTable.representativePhone, normalized),
-        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
-      ),
+    .where(eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY));
+  const active = assigns
+    .filter((a) => canonicalPhone(a.representativePhone) === target)
+    .filter(
+      (a) => a.customerPoId && a.customerPoItemId && a.status !== "delivered" && a.status !== "rejected",
     );
-  const active = assigns.filter(
-    (a) => a.customerPoId && a.customerPoItemId && a.status !== "delivered" && a.status !== "rejected",
-  );
   const poIds = [...new Set(active.map((a) => a.customerPoId!))];
   if (poIds.length === 0) return [];
   const pos = await db
