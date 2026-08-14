@@ -62,13 +62,22 @@ const tables = {
 // Queue of result-sets returned by successive db.select(...).where() calls.
 let selectQueue: any[] = [];
 
-function selectChain(rows: any) {
+// A thenable that is also chainable for `.limit()` / `.orderBy()` — drizzle's
+// query builders can be awaited at any point in the chain.
+function chainableThenable(rows: any): any {
   const api: any = {
     from: vi.fn(() => api),
     leftJoin: vi.fn(() => api),
-    where: vi.fn(() => thenable(rows)),
+    where: vi.fn(() => chainableThenable(rows)),
+    limit: vi.fn(() => chainableThenable(rows)),
+    orderBy: vi.fn(() => chainableThenable(rows)),
+    then: (resolve: any) => Promise.resolve(rows).then(resolve),
   };
   return api;
+}
+
+function selectChain(rows: any) {
+  return chainableThenable(rows);
 }
 
 const insertCalls: any[] = [];
