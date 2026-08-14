@@ -350,6 +350,7 @@ function FilterHeader({
   facetParams: facetParamsProp,
   onToggle,
   onSelectAll,
+  onDeselectAll,
   onClear,
   onClearColumn,
 }: {
@@ -359,6 +360,7 @@ function FilterHeader({
   facetParams: Record<string, string | undefined>;
   onToggle: (value: string) => void;
   onSelectAll: (values: string[]) => void;
+  onDeselectAll: (values: string[]) => void;
   onClear: () => void;
   onClearColumn: () => void;
 }) {
@@ -377,6 +379,8 @@ function FilterHeader({
   // "Select all" currently visible (i.e. none of the visible values excluded).
   const visibleAllChecked =
     excludes.size === 0 || shown.every((v) => !excludes.has(v.value));
+  // "Deselect all" currently visible (i.e. every visible value is excluded).
+  const visibleNoneChecked = shown.length > 0 && shown.every((v) => excludes.has(v.value));
 
   return (
     <div className="inline-flex items-center gap-1">
@@ -396,7 +400,10 @@ function FilterHeader({
         </PopoverTrigger>
         <PopoverContent
           sideOffset={2}
-          className="w-64 p-0"
+          align="start"
+          collisionPadding={8}
+          sticky="always"
+          className="w-64 p-0 max-h-[min(70vh,460px)] overflow-y-auto"
           side="bottom"
         >
           <div className="border-b border-border p-2">
@@ -413,14 +420,24 @@ function FilterHeader({
               />
             </div>
             <div className="mt-2 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => onSelectAll(shown.map((v) => v.value))}
-                className="text-[11px] text-primary hover:underline"
-                disabled={visibleAllChecked}
-              >
-                تحديد الكل
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSelectAll(shown.map((v) => v.value))}
+                  className="text-[11px] text-primary hover:underline"
+                  disabled={visibleAllChecked}
+                >
+                  تحديد الكل
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDeselectAll(shown.map((v) => v.value))}
+                  className="text-[11px] text-primary hover:underline"
+                  disabled={visibleNoneChecked}
+                >
+                  إلغاء تحديد الكل
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={onClear}
@@ -637,6 +654,10 @@ function SheetViewTab() {
                       onSelectAll={(vals) => setColumnExcludes(
                         col,
                         [...(excludes[col] ?? new Set())].filter((v) => !vals.includes(v)),
+                      )}
+                      onDeselectAll={(vals) => setColumnExcludes(
+                        col,
+                        [...new Set([...(excludes[col] ?? new Set())].filter((v) => !vals.includes(v)).concat(vals))],
                       )}
                       onClear={() => clearColumn(col)}
                       onClearColumn={() => clearColumn(col)}
