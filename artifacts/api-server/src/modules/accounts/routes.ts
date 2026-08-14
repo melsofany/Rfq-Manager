@@ -25,6 +25,7 @@ import {
   suppliersTable,
   customersTable,
   taxSettingsTable,
+  poItemChargesTable,
   auditLogTable,
 } from "@workspace/db";
 import { eq, sql, and, desc, gte, lte } from "drizzle-orm";
@@ -77,6 +78,27 @@ function buildConditions(customerName?: string, from?: string, to?: string) {
   return conditions.length ? and(...conditions) : undefined;
 }
 
+/**
+ * Sum of charges for each supplier PO line item, keyed by poItemId. Used to
+ * fold per-line charges (نقل/شحن/جمارك/…) into the realized cost so the true
+ * cost of each line is known precisely.
+ */
+async function loadChargesByPoItem(poItemIds: number[]): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (!poItemIds.length) return map;
+  const rows = await db
+    .select({
+      poItemId: poItemChargesTable.poItemId,
+      amount: poItemChargesTable.amount,
+    })
+    .from(poItemChargesTable);
+  for (const r of rows) {
+    if (!poItemIds.includes(r.poItemId)) continue;
+    map.set(r.poItemId, (map.get(r.poItemId) ?? 0) + (toNum(r.amount) ?? 0));
+  }
+  return map;
+}
+
 // GET /accounts/margins — per-line realized margins.
 //
 // realizedRevenue = customer_po_items.qty × customer_po_items.unitPrice
@@ -123,6 +145,10 @@ router.get("/accounts/margins", requireAuth, async (req, res): Promise<void> => 
     .where(buildConditions(customerName, from, to))
     .orderBy(desc(customerPosTable.createdAt));
 
+  const chargesMap = await loadChargesByPoItem(
+    rows.map((r) => r.supplierPoItemId).filter((x): x is number => x != null),
+  );
+
   const lines = rows.map((r) => {
     const sellQty = toNum(r.sellQty);
     const sellUnit = toNum(r.sellUnitPrice);
@@ -130,7 +156,10 @@ router.get("/accounts/margins", requireAuth, async (req, res): Promise<void> => 
     const actualCost = toNum(r.finalActualCost);
     const revenue = sellQty != null && sellUnit != null ? sellQty * sellUnit : null;
     // Cost is realized on accepted qty only; null when nothing accepted yet.
-    const cost = accepted != null && actualCost != null ? accepted * actualCost : null;
+    // Fold per-line PO charges (نقل/شحن/جمارك/…) into the cost.
+    const lineCharges = r.supplierPoItemId != null ? (chargesMap.get(r.supplierPoItemId) ?? 0) : 0;
+    const cost =
+      accepted != null && actualCost != null ? accepted * actualCost + lineCharges : null;
     const margin = revenue != null && cost != null ? revenue - cost : null;
     const marginPct =
       revenue != null && cost != null && revenue !== 0 ? (margin! / revenue) * 100 : null;
@@ -154,6 +183,7 @@ router.get("/accounts/margins", requireAuth, async (req, res): Promise<void> => 
       supplierPoItemId: r.supplierPoItemId,
       acceptedQty: formatNum(accepted),
       finalActualCost: formatNum(actualCost),
+      lineCharges: formatNum(lineCharges),
       supplierLineStatus: r.supplierLineStatus,
       revenue: formatNum(revenue),
       cost: formatNum(cost),
@@ -178,6 +208,7 @@ router.get("/accounts/margins/summary", requireAuth, async (req, res): Promise<v
       sellUnitPrice: customerPoItemsTable.unitPrice,
       acceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
       finalActualCost: purchaseOrderItemsTable.finalActualCost,
+      supplierPoItemId: purchaseOrderItemsTable.id,
     })
     .from(customerPoItemsTable)
     .innerJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
@@ -187,6 +218,10 @@ router.get("/accounts/margins/summary", requireAuth, async (req, res): Promise<v
       eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
     )
     .where(buildConditions(customerName, from, to));
+
+  const chargesMap = await loadChargesByPoItem(
+    rows.map((r) => r.supplierPoItemId).filter((x): x is number => x != null),
+  );
 
   let totalRevenue = 0;
   let totalCost = 0;
@@ -200,7 +235,10 @@ router.get("/accounts/margins/summary", requireAuth, async (req, res): Promise<v
     const accepted = toNum(r.acceptedQty);
     const actualCost = toNum(r.finalActualCost);
     const revenue = sellQty != null && sellUnit != null ? sellQty * sellUnit : 0;
-    const cost = accepted != null && actualCost != null ? accepted * actualCost : 0;
+    const lineCharges =
+      r.supplierPoItemId != null ? (chargesMap.get(r.supplierPoItemId) ?? 0) : 0;
+    const cost =
+      accepted != null && actualCost != null ? accepted * actualCost + lineCharges : 0;
     if (cost > 0) pricedLines++;
     totalRevenue += revenue;
     totalCost += cost;

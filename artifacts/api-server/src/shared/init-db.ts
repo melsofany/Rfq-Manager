@@ -442,6 +442,81 @@ export async function initDb(): Promise<void> {
       ON CONFLICT (key) DO NOTHING;
     `);
 
+    // ── PO line-item charges (مصاريف مرتبطة ببند أمر الشراء) ───────────────
+    // Charges attached to a single supplier PO line (نقل/شحن/جمارك/تحميل/…)
+    // so the true cost of each line is known. Summed into the realized cost in
+    // the accounts margin computation.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS po_item_charges (
+        id          SERIAL PRIMARY KEY,
+        po_item_id  INTEGER NOT NULL REFERENCES purchase_order_items(id) ON DELETE CASCADE,
+        po_id       INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+        charge_type TEXT NOT NULL,
+        description TEXT,
+        amount      NUMERIC(15,4) NOT NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // ── Company operating expenses (مصروفات الشركة التشغيلية) ──────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS operating_expenses (
+        id            SERIAL PRIMARY KEY,
+        category      TEXT NOT NULL,
+        description   TEXT,
+        expense_date  TEXT NOT NULL,
+        amount        NUMERIC(15,4) NOT NULL,
+        notes         TEXT,
+        employee_id   INTEGER REFERENCES employees(id),
+        employee_name TEXT,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS expense_attachments (
+        id            SERIAL PRIMARY KEY,
+        expense_id    INTEGER NOT NULL REFERENCES operating_expenses(id) ON DELETE CASCADE,
+        original_name TEXT NOT NULL,
+        mime_type     TEXT NOT NULL,
+        size          INTEGER NOT NULL,
+        content       TEXT NOT NULL,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // ── Customer collection tracking (تحصيل مستحقات العملاء) ──────────────
+    // 1:1 terms record per customer PO + a payments ledger.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS customer_po_collections (
+        id                    SERIAL PRIMARY KEY,
+        customer_po_id        INTEGER NOT NULL REFERENCES customer_pos(id) ON DELETE CASCADE,
+        collection_start_date TEXT,
+        collection_days       INTEGER NOT NULL DEFAULT 30,
+        due_date              TEXT,
+        notes                 TEXT,
+        created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS customer_po_collections_customer_po_id_uniq
+        ON customer_po_collections (customer_po_id);
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS customer_po_payments (
+        id              SERIAL PRIMARY KEY,
+        customer_po_id  INTEGER NOT NULL REFERENCES customer_pos(id) ON DELETE CASCADE,
+        payment_date    TEXT NOT NULL,
+        amount          NUMERIC(15,4) NOT NULL,
+        method          TEXT,
+        reference       TEXT,
+        notes           TEXT,
+        employee_id     INTEGER REFERENCES employees(id),
+        employee_name   TEXT,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
     // ── ERP Integrations table ─────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS erp_integrations (

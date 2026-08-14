@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calculator, ReceiptText, ShieldCheck, Settings2 } from "lucide-react";
+import { Calculator, ReceiptText, ShieldCheck, Settings2, Wallet, Banknote } from "lucide-react";
 import MarginsTab from "./MarginsTab";
 import VatTab from "./VatTab";
 import WithholdingTab from "./WithholdingTab";
 import TaxSettingsTab from "./TaxSettingsTab";
+import ExpensesSummaryTab from "./ExpensesSummaryTab";
+import CollectionsSummaryTab from "./CollectionsSummaryTab";
 
 export default function AccountsPage() {
   const [tab, setTab] = useState("margins");
@@ -38,6 +40,14 @@ export default function AccountsPage() {
               <ShieldCheck size={14} />
               الخصم تحت حساب المورد
             </TabsTrigger>
+            <TabsTrigger value="expenses" className="text-xs gap-1.5">
+              <Wallet size={14} />
+              المصروفات التشغيلية
+            </TabsTrigger>
+            <TabsTrigger value="collections" className="text-xs gap-1.5">
+              <Banknote size={14} />
+              تحصيل العملاء
+            </TabsTrigger>
             <TabsTrigger value="settings" className="text-xs gap-1.5">
               <Settings2 size={14} />
               إعدادات الضرائب
@@ -52,6 +62,12 @@ export default function AccountsPage() {
           </TabsContent>
           <TabsContent value="withholding" className="mt-5">
             <WithholdingTab />
+          </TabsContent>
+          <TabsContent value="expenses" className="mt-5">
+            <ExpensesSummaryTab />
+          </TabsContent>
+          <TabsContent value="collections" className="mt-5">
+            <CollectionsSummaryTab />
           </TabsContent>
           <TabsContent value="settings" className="mt-5">
             <TaxSettingsTab />

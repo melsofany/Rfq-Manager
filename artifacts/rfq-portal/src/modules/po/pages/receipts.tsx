@@ -1,12 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useListPurchaseOrders, getListPurchaseOrdersQueryKey } from "@workspace/api-client-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, PackageCheck, Truck, Send, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, PackageCheck, Truck, Send, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+
+// PO line charge types — mirrored from lib/db/src/schema/expenses.ts.
+const PO_CHARGE_TYPES: string[] = [
+  "نقل",
+  "شحن",
+  "جمارك",
+  "تحميل",
+  "تنزيل",
+  "تخزين",
+  "تأمين",
+  "أخرى",
+] as const;
+
+interface ChargeRow {
+  id: number;
+  chargeType: string;
+  description: string | null;
+  amount: string | null;
+  createdAt: string;
+}
 
 interface PoItemRow {
   id: number;
@@ -286,6 +306,7 @@ export default function GoodsReceiptPage() {
                               <ReceiptItemRow
                                 key={it.id}
                                 item={it}
+                                poId={po.id}
                                 rows={receipts[it.id] ?? []}
                                 onSave={(d) => saveReceipt(po.id, it.id, d)}
                                 onPostpone={() => postpone(po.id, it.id)}
@@ -320,11 +341,13 @@ interface ReceiptRow {
 
 function ReceiptItemRow({
   item,
+  poId,
   rows,
   onSave,
   onPostpone,
 }: {
   item: PoItemRow;
+  poId: number;
   rows: ReceiptRow[];
   onSave: (d: { receivedQty: string; acceptedQty: string; rejectedQty: string; rejectionReason: string; actualCost: string }) => void;
   onPostpone: () => void;
@@ -335,6 +358,71 @@ function ReceiptItemRow({
   const [rejectedQty, setRejectedQty] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [actualCost, setActualCost] = useState("");
+
+  // Per-line charges (مصاريف البند).
+  const [charges, setCharges] = useState<ChargeRow[]>([]);
+  const [chargeType, setChargeType] = useState(PO_CHARGE_TYPES[0]);
+  const [chargeAmount, setChargeAmount] = useState("");
+  const [chargeDesc, setChargeDesc] = useState("");
+  const [showCharges, setShowCharges] = useState(false);
+  const [chargeLoading, setChargeLoading] = useState(false);
+
+  async function loadCharges() {
+    try {
+      const r = await fetch(`/api/po/items/${item.id}/charges`, { credentials: "include" });
+      if (!r.ok) throw new Error();
+      const d = await r.json();
+      setCharges(d.charges ?? []);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function addCharge() {
+    if (!chargeAmount || Number(chargeAmount) <= 0) {
+      toast.error("أدخل قيمة المصروف");
+      return;
+    }
+    setChargeLoading(true);
+    try {
+      const r = await fetch(`/api/po/items/${item.id}/charges`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ chargeType, description: chargeDesc || null, amount: Number(chargeAmount) }),
+      });
+      if (!r.ok) {
+        const b = await r.json().catch(() => ({}));
+        throw new Error(b.error ?? "فشل إضافة المصروف");
+      }
+      toast.success("تم إضافة المصروف");
+      setChargeAmount("");
+      setChargeDesc("");
+      await loadCharges();
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, "فشل إضافة المصروف"));
+    } finally {
+      setChargeLoading(false);
+    }
+  }
+
+  async function deleteCharge(id: number) {
+    try {
+      const r = await fetch(`/api/po/charges/${id}`, { method: "DELETE", credentials: "include" });
+      if (!r.ok) throw new Error();
+      toast.success("تم حذف المصروف");
+      await loadCharges();
+    } catch {
+      toast.error("فشل حذف المصروف");
+    }
+  }
+
+  useEffect(() => {
+    loadCharges();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const chargesTotal = charges.reduce((s, c) => s + (Number(c.amount) || 0), 0);
 
   return (
     <>
@@ -450,6 +538,91 @@ function ReceiptItemRow({
                 </div>
               </div>
             )}
+
+            {/* Per-line charges (مصاريف البند) */}
+            <div className="mt-3 border-t border-border pt-2">
+              <button
+                onClick={() => setShowCharges((s) => !s)}
+                className="text-xs font-medium text-primary hover:underline flex items-center gap-1.5"
+              >
+                {showCharges ? "إخفاء" : "إظهار"} مصاريف البند
+                {chargesTotal > 0 && (
+                  <span className="text-muted-foreground">
+                    (الإجمالي: {chargesTotal.toLocaleString("ar-EG", { minimumFractionDigits: 2 })})
+                  </span>
+                )}
+              </button>
+              {showCharges && (
+                <div className="mt-2 space-y-2">
+                  {charges.length > 0 && (
+                    <div className="space-y-1">
+                      {charges.map((c) => (
+                        <div
+                          key={c.id}
+                          className="flex items-center justify-between bg-muted/20 rounded px-2 py-1 text-xs"
+                        >
+                          <span className="font-medium">{c.chargeType}</span>
+                          {c.description && (
+                            <span className="text-muted-foreground">— {c.description}</span>
+                          )}
+                          <span className="text-foreground font-semibold">
+                            {Number(c.amount || 0).toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
+                          </span>
+                          <button
+                            onClick={() => deleteCharge(c.id)}
+                            className="text-red-600 hover:text-red-700 p-0.5"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">النوع</label>
+                      <select
+                        value={chargeType}
+                        onChange={(e) => setChargeType(e.target.value)}
+                        className="h-8 w-full text-xs rounded-md border border-border bg-card px-2"
+                      >
+                        {PO_CHARGE_TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">القيمة</label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={chargeAmount}
+                        onChange={(e) => setChargeAmount(e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-xs text-muted-foreground mb-1 block">الوصف</label>
+                      <Input
+                        value={chargeDesc}
+                        onChange={(e) => setChargeDesc(e.target.value)}
+                        placeholder="اختياري"
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <Button onClick={addCharge} disabled={chargeLoading} size="sm" variant="outline" className="h-7 text-xs gap-1">
+                    <Plus size={13} />
+                    {chargeLoading ? "جارٍ الإضافة..." : "إضافة مصروف"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    تُضاف مصاريف البند تلقائياً إلى التكلفة الفعلية في صفحة الحسابات والهامش.
+                  </p>
+                </div>
+              )}
+            </div>
           </td>
         </tr>
       )}
