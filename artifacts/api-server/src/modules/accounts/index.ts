@@ -13,8 +13,14 @@
  */
 import { Router, type IRouter } from "express";
 import accountsRouter from "./routes";
+import ledgerRouter from "./ledger";
+import supplierInvoicesRouter from "./supplier-invoices";
+import salesInvoicesRouter from "./sales-invoices";
 
 const router: IRouter = Router();
 router.use(accountsRouter);
+router.use(ledgerRouter);
+router.use(supplierInvoicesRouter);
+router.use(salesInvoicesRouter);
 
 export default router;
