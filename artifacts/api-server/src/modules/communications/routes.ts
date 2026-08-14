@@ -30,6 +30,7 @@ import {
   sendRepPoPicker,
   sendRepItemPicker,
   sendRepItemAction,
+  sendRepConfirm,
   sendDeliveryRejectionReasonOptions,
   CUSTOMER_REJECTION_REASONS,
 } from "./service";
@@ -354,13 +355,15 @@ async function findAssignment(
 /**
  * Handle per-item goods-receipt buttons and the rejection-reason list.
  * Payloads:
- *   work_order_item:<poNo>:<poItemId>:received
- *   work_order_item:<poNo>:<poItemId>:rejected
+ *   work_order_item:<poNo>:<poItemId>:received   → show confirmation (don't record yet)
+ *   work_order_item:<poNo>:<poItemId>:rejected   → prompt for reason
+ *   work_order_confirm_item:<poNo>:<poItemId>:received → record the receipt (confirm)
+ *   work_order_cancel_item:<poNo>:<poItemId>     → re-send item action buttons (تراجع)
  *   work_order_reason:<poNo>:<poItemId>:<encodedReason>   (from the list reply)
  *
- * "received" creates a po_item_receipts row using the ordered qty as both
- * received and accepted (full receipt). "rejected" prompts for the reason via
- * a list; the chosen reason creates a receipt row with rejectedQty = ordered qty.
+ * "received" (after confirm) creates a po_item_receipts row using the ordered
+ * qty as both received and accepted (full receipt). "rejected" prompts for the
+ * reason via a list; the chosen reason creates a receipt row with rejectedQty.
  */
 async function handleWorkOrderItemButton(
   phone: string,
@@ -369,8 +372,48 @@ async function handleWorkOrderItemButton(
   const buttonId = msg.interactive?.button_reply?.id;
   const listId = msg.interactive?.list_reply?.id;
   const payload = buttonId ?? listId ?? "";
-  if (!payload.startsWith("work_order_item:") && !payload.startsWith("work_order_reason:")) {
+  if (
+    !payload.startsWith("work_order_item:") &&
+    !payload.startsWith("work_order_reason:") &&
+    !payload.startsWith("work_order_confirm_item:") &&
+    !payload.startsWith("work_order_cancel_item:")
+  ) {
     return false;
+  }
+
+  // work_order_cancel_item:<poNo>:<poItemId> → re-send the item action buttons.
+  if (payload.startsWith("work_order_cancel_item:")) {
+    const parts = payload.split(":");
+    const poNo = parts[1];
+    const poItemId = parseInt(parts[2], 10);
+    if (!isFinite(poItemId)) {
+      await sendWhatsAppText(phone, "تعذر تحديد البند المرتبط بهذا الزر.");
+      return true;
+    }
+    await resendItemActionReceipt(phone, poNo, poItemId);
+    return true;
+  }
+
+  // work_order_confirm_item:<poNo>:<poItemId>:received → record the receipt.
+  if (payload.startsWith("work_order_confirm_item:")) {
+    const parts = payload.split(":");
+    const poNo = parts[1];
+    const poItemId = parseInt(parts[2], 10);
+    if (!isFinite(poItemId)) {
+      await sendWhatsAppText(phone, "تعذر تحديد البند المرتبط بهذا الزر.");
+      return true;
+    }
+    const created = await recordItemReceipt(poItemId, {
+      receivedQtyFromOrdered: true,
+      acceptedQtyFromOrdered: true,
+    });
+    await sendWhatsAppText(
+      phone,
+      created
+        ? `تم تسجيل استلام البند في أمر الشراء ${poNo}.`
+        : `تعذر العثور على البند في أمر الشراء ${poNo}.`,
+    );
+    return true;
   }
 
   // work_order_item:<poNo>:<poItemId>:<received|rejected>
@@ -388,16 +431,8 @@ async function handleWorkOrderItemButton(
       return true;
     }
     if (action === "received") {
-      const created = await recordItemReceipt(poItemId, {
-        receivedQtyFromOrdered: true,
-        acceptedQtyFromOrdered: true,
-      });
-      await sendWhatsAppText(
-        phone,
-        created
-          ? `تم تسجيل استلام البند في أمر الشراء ${poNo}.`
-          : `تعذر العثور على البند في أمر الشراء ${poNo}.`,
-      );
+      // Show a confirm/cancel step before recording.
+      await sendRepConfirm(phone, { kind: "receipt", no: poNo, itemId: poItemId, action: "received" });
       return true;
     }
     return true;
@@ -423,6 +458,27 @@ async function handleWorkOrderItemButton(
       : `تعذر العثور على البند في أمر الشراء ${poNo}.`,
   );
   return true;
+}
+
+/** Re-send the item action buttons (استلام/رفض/رجوع) for a receipt item. */
+async function resendItemActionReceipt(phone: string, poNo: string, poItemId: number): Promise<void> {
+  const [line] = await db
+    .select({
+      poId: purchaseOrderItemsTable.poId,
+      description: purchaseOrderItemsTable.description,
+      lineItem: purchaseOrderItemsTable.lineItem,
+      qty: purchaseOrderItemsTable.qty,
+    })
+    .from(purchaseOrderItemsTable)
+    .where(eq(purchaseOrderItemsTable.id, poItemId));
+  await sendRepItemAction(phone, {
+    kind: "receipt",
+    no: poNo,
+    itemId: poItemId,
+    poId: line?.poId ?? 0,
+    label: [line?.lineItem, line?.description].filter(Boolean).join(" - ") || "بند",
+    qty: line?.qty ? String(line.qty) : null,
+  });
 }
 
 /**
@@ -812,13 +868,14 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
   // rep_item:<kind>:<poId>:<itemId> → action buttons
   if (payload.startsWith("rep_item:")) {
     const [, kind, poIdStr, itemIdStr] = payload.split(":");
+    const poId = parseInt(poIdStr, 10);
     const itemId = parseInt(itemIdStr, 10);
     if (kind === "receipt") {
       // Resolve poNo + line label.
       const [po] = await db
         .select({ no: purchaseOrdersTable.sheetPoNo })
         .from(purchaseOrdersTable)
-        .where(eq(purchaseOrdersTable.id, parseInt(poIdStr, 10)));
+        .where(eq(purchaseOrdersTable.id, poId));
       const [it] = await db
         .select({
           description: purchaseOrderItemsTable.description,
@@ -831,6 +888,7 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
         kind: "receipt",
         no: po?.no ?? poIdStr,
         itemId,
+        poId,
         label: [it?.lineItem, it?.description].filter(Boolean).join(" - ") || "بند",
         qty: it?.qty ? String(it.qty) : null,
       });
@@ -838,7 +896,7 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
       const [po] = await db
         .select({ no: customerPosTable.customerPoNo })
         .from(customerPosTable)
-        .where(eq(customerPosTable.id, parseInt(poIdStr, 10)));
+        .where(eq(customerPosTable.id, poId));
       const [it] = await db
         .select({
           description: customerPoItemsTable.description,
@@ -851,9 +909,29 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
         kind: "delivery",
         no: po?.no ?? poIdStr,
         itemId,
+        poId,
         label: [it?.lineItem, it?.description].filter(Boolean).join(" - ") || "بند",
         qty: it?.qty ? String(it.qty) : null,
       });
+    }
+    return true;
+  }
+  // rep_back:<target> — re-send the previous menu so the rep can navigate back.
+  //   rep_back:menu        → main menu
+  //   rep_back:po:<kind>   → PO picker
+  //   rep_back:item:<kind>:<poId> → item picker (back from an item's action)
+  if (payload.startsWith("rep_back:")) {
+    const [, target, kind, poIdStr] = payload.split(":");
+    if (target === "menu") {
+      const counts = await countRepTasks(phone);
+      await sendRepMainMenu(phone, counts);
+    } else if (target === "po" && (kind === "receipt" || kind === "delivery")) {
+      const pos = kind === "receipt" ? await repReceiptPoList(phone) : await repDeliveryPoList(phone);
+      await sendRepPoPicker(phone, kind, pos);
+    } else if (target === "item" && (kind === "receipt" || kind === "delivery")) {
+      const poId = parseInt(poIdStr, 10);
+      const items = kind === "receipt" ? await repReceiptItems(poId) : await repDeliveryItems(poId);
+      await sendRepItemPicker(phone, kind, poId, items);
     }
     return true;
   }
@@ -863,13 +941,15 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
 /**
  * Handle per-item customer-delivery buttons and the customer-rejection list.
  * Payloads:
- *   work_order_delivery:<customerPoNo>:<customerPoItemId>:delivered
- *   work_order_delivery:<customerPoNo>:<customerPoItemId>:customer_rejected
+ *   work_order_delivery:<customerPoNo>:<customerPoItemId>:delivered → show confirmation
+ *   work_order_delivery:<customerPoNo>:<customerPoItemId>:customer_rejected → prompt reason
+ *   work_order_confirm_delivery:<customerPoNo>:<customerPoItemId>:delivered → record delivery (confirm)
+ *   work_order_cancel_delivery:<customerPoNo>:<customerPoItemId> → re-send item action (تراجع)
  *   work_order_delivery_reason:<customerPoNo>:<customerPoItemId>:<reason>
  *
- * "delivered" creates a customer_po_item_deliveries row using the ordered qty
- * (full delivery). "customer_rejected" prompts for the reason; the chosen
- * reason creates a delivery row with rejectedByCustomerQty = ordered qty.
+ * "delivered" (after confirm) creates a customer_po_item_deliveries row using
+ * the ordered qty (full delivery). "customer_rejected" prompts for the reason;
+ * the chosen reason creates a delivery row with rejectedByCustomerQty = ordered qty.
  * Guard: the customer_po_item must be linked to a supplier PO item whose line
  * was *accepted* (received) — no delivering what wasn't received.
  */
@@ -882,9 +962,43 @@ async function handleWorkOrderDeliveryButton(
   const payload = buttonId ?? listId ?? "";
   if (
     !payload.startsWith("work_order_delivery:") &&
-    !payload.startsWith("work_order_delivery_reason:")
+    !payload.startsWith("work_order_delivery_reason:") &&
+    !payload.startsWith("work_order_confirm_delivery:") &&
+    !payload.startsWith("work_order_cancel_delivery:")
   ) {
     return false;
+  }
+
+  // work_order_cancel_delivery:<customerPoNo>:<customerPoItemId> → re-send item action.
+  if (payload.startsWith("work_order_cancel_delivery:")) {
+    const parts = payload.split(":");
+    const customerPoNo = parts[1];
+    const customerPoItemId = parseInt(parts[2], 10);
+    if (!isFinite(customerPoItemId)) {
+      await sendWhatsAppText(phone, "تعذر تحديد البند المرتبط بهذا الزر.");
+      return true;
+    }
+    await resendItemActionDelivery(phone, customerPoNo, customerPoItemId);
+    return true;
+  }
+
+  // work_order_confirm_delivery:<customerPoNo>:<customerPoItemId>:delivered → record.
+  if (payload.startsWith("work_order_confirm_delivery:")) {
+    const parts = payload.split(":");
+    const customerPoNo = parts[1];
+    const customerPoItemId = parseInt(parts[2], 10);
+    if (!isFinite(customerPoItemId)) {
+      await sendWhatsAppText(phone, "تعذر تحديد البند المرتبط بهذا الزر.");
+      return true;
+    }
+    const created = await recordItemDelivery(customerPoItemId, { deliveredFromOrdered: true });
+    await sendWhatsAppText(
+      phone,
+      created
+        ? `تم تسجيل تسليم البند للعميل في أمر الشراء ${customerPoNo}.`
+        : `تعذر تسجيل التسليم — تأكد أن البند قد استُلم من المورد أولاً.`,
+    );
+    return true;
   }
 
   // work_order_delivery:<customerPoNo>:<customerPoItemId>:<delivered|customer_rejected>
@@ -902,13 +1016,8 @@ async function handleWorkOrderDeliveryButton(
       return true;
     }
     if (action === "delivered") {
-      const created = await recordItemDelivery(customerPoItemId, { deliveredFromOrdered: true });
-      await sendWhatsAppText(
-        phone,
-        created
-          ? `تم تسجيل تسليم البند للعميل في أمر الشراء ${customerPoNo}.`
-          : `تعذر تسجيل التسليم — تأكد أن البند قد استُلم من المورد أولاً.`,
-      );
+      // Show a confirm/cancel step before recording.
+      await sendRepConfirm(phone, { kind: "delivery", no: customerPoNo, itemId: customerPoItemId, action: "delivered" });
       return true;
     }
     return true;
@@ -934,6 +1043,27 @@ async function handleWorkOrderDeliveryButton(
       : `تعذر تسجيل الرفض — تأكد أن البند قد استُلم من المورد أولاً.`,
   );
   return true;
+}
+
+/** Re-send the item action buttons (تسليم/رفض العميل/رجوع) for a delivery item. */
+async function resendItemActionDelivery(phone: string, customerPoNo: string, customerPoItemId: number): Promise<void> {
+  const [line] = await db
+    .select({
+      customerPoId: customerPoItemsTable.customerPoId,
+      description: customerPoItemsTable.description,
+      lineItem: customerPoItemsTable.lineItem,
+      qty: customerPoItemsTable.qty,
+    })
+    .from(customerPoItemsTable)
+    .where(eq(customerPoItemsTable.id, customerPoItemId));
+  await sendRepItemAction(phone, {
+    kind: "delivery",
+    no: customerPoNo,
+    itemId: customerPoItemId,
+    poId: line?.customerPoId ?? 0,
+    label: [line?.lineItem, line?.description].filter(Boolean).join(" - ") || "بند",
+    qty: line?.qty ? String(line.qty) : null,
+  });
 }
 
 /**

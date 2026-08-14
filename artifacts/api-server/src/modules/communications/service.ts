@@ -628,30 +628,23 @@ export async function markWhatsAppRead(messageId: string): Promise<void> {
 // (or sends any text), gets a main menu, then drills into POs → items → action.
 // Payloads are prefixed `rep_` so they never collide with work_order_* flows.
 
-/** Main menu shown when a registered representative sends any text/taps the list. */
-export async function sendRepMainMenu(phone: string, counts: {
+/** Main menu shown when a registered representative sends any text/taps the list.
+ * Two action buttons: استلام (receipt from supplier) / تسليم (delivery to customer). */
+export async function sendRepMainMenu(phone: string, counts?: {
   receipt: number;
   delivery: number;
 }): Promise<string | null> {
   requireConfigured();
   const to = normalizePhone(phone);
-  const rows: Row[] = [];
-  if (counts.receipt > 0) {
-    rows.push(new Row("rep_menu:receipt", `استلام من مورد (${counts.receipt})`, "بنود بانتظار الاستلام"));
-  }
-  if (counts.delivery > 0) {
-    rows.push(new Row("rep_menu:delivery", `تسليم لعميل (${counts.delivery})`, "بنود بانتظار التسليم"));
-  }
-  if (rows.length === 0) {
-    return sendWhatsAppText(
-      phone,
-      "لا توجد لديك مهام حالياً.\nعند إسناد أمر شغل جديد سيظهر هنا. اكتب أي رسالة لتحديث القائمة.",
-    );
-  }
-  const [first, ...rest] = rows;
+  const r = counts?.receipt ?? 0;
+  const d = counts?.delivery ?? 0;
+  const body = `مرحباً 👋\nاختر المهمة للبدء.${r || d ? `\nاستلام: ${r} — تسليم: ${d}` : ""}`;
   const message = new Interactive(
-    new ActionList("اختر مهمة", new ListSection("المهام", first, ...rest)),
-    new Body("مرحباً 👋\nهذه قائمة مهامك الحالية. اختر مهمة للبدء."),
+    new ActionButtons(
+      new Button("rep_menu:receipt", "استلام"),
+      new Button("rep_menu:delivery", "تسليم"),
+    ),
+    new Body(body),
   );
   const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
   if ("error" in result && result.error) {
@@ -662,9 +655,8 @@ export async function sendRepMainMenu(phone: string, counts: {
 
 /**
  * List the POs assigned to this representative that still have pending lines
- * of the given kind. Each row opens the item picker for that PO.
- * kind = "receipt" → supplier POs awaiting goods receipt
- * kind = "delivery" → customer POs awaiting delivery to customer
+ * of the given kind. Each row opens the item picker for that PO. A «رجوع» row
+ * returns to the main menu. Uses buttons (≤3 POs) or a list (4–10 POs).
  */
 export async function sendRepPoPicker(
   phone: string,
@@ -673,19 +665,34 @@ export async function sendRepPoPicker(
 ): Promise<string | null> {
   requireConfigured();
   const to = normalizePhone(phone);
+  const emptyMsg = kind === "receipt"
+    ? "لا توجد أوامر شراء بانتظار الاستلام حالياً."
+    : "لا توجد بنود بانتظار التسليم للعميل حالياً.";
   if (pos.length === 0) {
-    return sendWhatsAppText(
-      phone,
-      kind === "receipt"
-        ? "لا توجد أوامر شراء بانتظار الاستلام حالياً."
-        : "لا توجد بنود بانتظار التسليم للعميل حالياً.",
-    );
+    return sendWhatsAppText(phone, emptyMsg);
   }
-  const rows = pos.slice(0, 10).map(
+  const title = kind === "receipt" ? "أوامر شراء بانتظار الاستلام" : "أوامر شراء العميل بانتظار التسليم";
+  // ≤2 POs → buttons (plus a رجوع button = max 3 total WhatsApp allows).
+  if (pos.length <= 2) {
+    const back = new Button("rep_back:menu", "رجوع");
+    const p0 = new Button(`rep_po:${kind}:${pos[0].id}`, pos[0].no.slice(0, 20));
+    const message =
+      pos.length === 1
+        ? new Interactive(new ActionButtons(p0, back), new Body(`${title}:\nاختر الأمر.`))
+        : new Interactive(
+            new ActionButtons(p0, new Button(`rep_po:${kind}:${pos[1].id}`, pos[1].no.slice(0, 20)), back),
+            new Body(`${title}:\nاختر الأمر.`),
+          );
+    const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+    if ("error" in result && result.error) throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+    return result.messages?.[0]?.id ?? null;
+  }
+  // >2 POs → list (each row tappable) + a رجوع row.
+  const rows = pos.slice(0, 9).map(
     (p) => new Row(`rep_po:${kind}:${p.id}`, `${p.no} — ${p.label}`, `${p.pendingItems} بند بانتظار`),
   );
+  rows.push(new Row("rep_back:menu", "رجوع للقائمة الرئيسية", ""));
   const [first, ...rest] = rows;
-  const title = kind === "receipt" ? "أوامر شراء بانتظار الاستلام" : "بنود بانتظار التسليم للعميل";
   const message = new Interactive(
     new ActionList("اختر أمر شغل", new ListSection(title, first, ...rest)),
     new Body(`اختر الأمر الذي تريد العمل عليه:`),
@@ -698,9 +705,8 @@ export async function sendRepPoPicker(
 }
 
 /**
- * List the line items of one PO awaiting the representative's action.
- * kind="receipt": supplier PO items not yet fully received/rejected.
- * kind="delivery": customer PO items not yet fully delivered/rejected.
+ * List the line items of one PO awaiting the representative's action. A «رجوع»
+ * row returns to the PO picker. Buttons (≤2 items) or a list (3–10 items).
  */
 export async function sendRepItemPicker(
   phone: string,
@@ -713,7 +719,22 @@ export async function sendRepItemPicker(
   if (items.length === 0) {
     return sendWhatsAppText(phone, "لا توجد بنود بانتظار الإجراء في هذا الأمر.");
   }
-  const rows = items.slice(0, 10).map(
+  const title = kind === "receipt" ? "بنود بانتظار الاستلام" : "بنود بانتظار التسليم";
+  if (items.length <= 2) {
+    const back = new Button(`rep_back:po:${kind}`, "رجوع");
+    const i0 = new Button(`rep_item:${kind}:${poId}:${items[0].id}`, items[0].label.slice(0, 20));
+    const message =
+      items.length === 1
+        ? new Interactive(new ActionButtons(i0, back), new Body(`${title}:\nاختر البند.`))
+        : new Interactive(
+            new ActionButtons(i0, new Button(`rep_item:${kind}:${poId}:${items[1].id}`, items[1].label.slice(0, 20)), back),
+            new Body(`${title}:\nاختر البند.`),
+          );
+    const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+    if ("error" in result && result.error) throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+    return result.messages?.[0]?.id ?? null;
+  }
+  const rows = items.slice(0, 9).map(
     (it) =>
       new Row(
         `rep_item:${kind}:${poId}:${it.id}`,
@@ -721,8 +742,8 @@ export async function sendRepItemPicker(
         `${it.qty ? `الكمية: ${it.qty} — ` : ""}${it.statusHint}`,
       ),
   );
+  rows.push(new Row(`rep_back:po:${kind}`, "رجوع لقائمة الأوامر", ""));
   const [first, ...rest] = rows;
-  const title = kind === "receipt" ? "بنود بانتظار الاستلام" : "بنود بانتظار التسليم";
   const message = new Interactive(
     new ActionList("اختر بند", new ListSection(title, first, ...rest)),
     new Body("اختر البند الذي تريد تسجيل إجراء له:"),
@@ -736,11 +757,11 @@ export async function sendRepItemPicker(
 
 /**
  * Action buttons for a single line item:
- *  - receipt: «تم الاستلام» / «رفض» → payloads work_order_item:<poNo>:<poItemId>:*
- *  - delivery: «تم التسليم» / «رفض العميل الاستلام» → work_order_delivery:<customerPoNo>:<customerPoItemId>:*
- *
- * We reuse the existing work_order_item: payload for receipts (so the existing
- * handler records it), and introduce work_order_delivery: for deliveries.
+ *  - receipt: «تم الاستلام» / «رفض» / «رجوع»
+ *  - delivery: «تم التسليم» / «رفض العميل» / «رجوع»
+ * Payloads reuse work_order_item: (receipt) / work_order_delivery: (delivery)
+ * so the existing handlers record them. The «رجوع» button re-sends the item
+ * picker for the same PO (payload rep_back:item:<kind>:<poId>).
  */
 export async function sendRepItemAction(
   phone: string,
@@ -748,6 +769,7 @@ export async function sendRepItemAction(
     kind: "receipt" | "delivery";
     no: string;          // poNo (receipt) or customerPoNo (delivery)
     itemId: number;      // poItemId (receipt) or customerPoItemId (delivery)
+    poId: number;        // for the رجوع button (re-send item picker)
     label: string;
     qty?: string | null;
   },
@@ -755,12 +777,14 @@ export async function sendRepItemAction(
   requireConfigured();
   const to = normalizePhone(phone);
   const qtyText = opts.qty ? ` — الكمية: ${opts.qty}` : "";
+  const back = new Button(`rep_back:item:${opts.kind}:${opts.poId}`, "رجوع");
   if (opts.kind === "receipt") {
     const body = `استلام من مورد\nأمر الشراء: ${opts.no}\n${opts.label}${qtyText}\nهل تم الاستلام؟`;
     const message = new Interactive(
       new ActionButtons(
         new Button(`work_order_item:${opts.no}:${opts.itemId}:received`, "تم الاستلام"),
         new Button(`work_order_item:${opts.no}:${opts.itemId}:rejected`, "رفض"),
+        back,
       ),
       new Body(body),
     );
@@ -776,6 +800,51 @@ export async function sendRepItemAction(
     new ActionButtons(
       new Button(`work_order_delivery:${opts.no}:${opts.itemId}:delivered`, "تم التسليم"),
       new Button(`work_order_delivery:${opts.no}:${opts.itemId}:customer_rejected`, "رفض العميل"),
+      back,
+    ),
+    new Body(body),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/**
+ * Confirmation message for a receipt/delivery action: «تأكيد» records the
+ * action, «تراجع» returns to the item's action buttons (re-sent by the
+ * cancel handler, which looks up the PO from the item id).
+ *   receipt:  work_order_confirm_item:<poNo>:<poItemId>:received / work_order_cancel_item:<poNo>:<poItemId>
+ *   delivery: work_order_confirm_delivery:<customerPoNo>:<customerPoItemId>:delivered / work_order_cancel_delivery:<customerPoNo>:<customerPoItemId>
+ */
+export async function sendRepConfirm(
+  phone: string,
+  opts: {
+    kind: "receipt" | "delivery";
+    no: string;
+    itemId: number;
+    action: "received" | "delivered";
+  },
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  const body =
+    opts.kind === "receipt"
+      ? `هل تؤكد استلام البند في أمر الشراء ${opts.no}؟`
+      : `هل تؤكد تسليم البند للعميل في أمر شراء العميل ${opts.no}؟`;
+  const confirmPayload =
+    opts.kind === "receipt"
+      ? `work_order_confirm_item:${opts.no}:${opts.itemId}:${opts.action}`
+      : `work_order_confirm_delivery:${opts.no}:${opts.itemId}:${opts.action}`;
+  const cancelPayload =
+    opts.kind === "receipt"
+      ? `work_order_cancel_item:${opts.no}:${opts.itemId}`
+      : `work_order_cancel_delivery:${opts.no}:${opts.itemId}`;
+  const message = new Interactive(
+    new ActionButtons(
+      new Button(confirmPayload, "تأكيد"),
+      new Button(cancelPayload, "تراجع"),
     ),
     new Body(body),
   );
