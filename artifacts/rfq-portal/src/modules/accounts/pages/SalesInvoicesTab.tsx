@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { FileText, Plus, Eye, Send, XCircle, Download, Trash2 } from "lucide-react";
+import { FileText, Plus, Eye, Send, XCircle, Download, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 
@@ -47,6 +47,7 @@ export default function SalesInvoicesTab() {
   const [customerPos, setCustomerPos] = useState<CustomerPoOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ from: "", to: "", status: "" });
+  const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [detail, setDetail] = useState<SalesInvoiceDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -189,6 +190,16 @@ export default function SalesInvoicesTab() {
         </Button>
       </div>
 
+      <div className="relative">
+        <Search size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="بحث في الفواتير (رقم الفاتورة، العميل، رقم أمر شراء العميل، التاريخ، الحالة...)"
+          className="h-9 text-sm pr-9"
+        />
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-end gap-3">
         <div><Label className="text-xs mb-1 block">من تاريخ</Label><Input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} className="h-8 text-sm w-40" /></div>
         <div><Label className="text-xs mb-1 block">إلى تاريخ</Label><Input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} className="h-8 text-sm w-40" /></div>
@@ -216,6 +227,7 @@ export default function SalesInvoicesTab() {
                 <tr className="border-b border-border bg-muted/30 text-left">
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">رقم الفاتورة</th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">العميل</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">رقم أمر شراء العميل</th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">التاريخ</th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">الصافي</th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">ض.ق.م.</th>
@@ -226,10 +238,29 @@ export default function SalesInvoicesTab() {
                 </tr>
               </thead>
               <tbody>
-                {invoices.map((inv) => (
+                {invoices
+                  .filter((inv) => {
+                    if (!search.trim()) return true;
+                    const q = search.trim().toLowerCase();
+                    return [
+                      inv.invoiceNo,
+                      inv.customerName,
+                      inv.customerPoNo,
+                      inv.invoiceDate,
+                      inv.netAmount,
+                      inv.vatAmount,
+                      inv.grossAmount,
+                      inv.balance,
+                      STATUS_LABELS[inv.status]?.label ?? inv.status,
+                    ]
+                      .filter(Boolean)
+                      .some((v) => String(v).toLowerCase().includes(q));
+                  })
+                  .map((inv) => (
                   <tr key={inv.id} className="border-b border-border last:border-0 hover:bg-muted/20">
                     <td className="px-3 py-2.5 font-mono text-xs text-primary">{inv.invoiceNo}</td>
                     <td className="px-3 py-2.5 text-xs">{inv.customerName}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs">{inv.customerPoNo ?? "—"}</td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{inv.invoiceDate}</td>
                     <td className="px-3 py-2.5 text-xs">{inv.netAmount ?? "-"}</td>
                     <td className="px-3 py-2.5 text-xs">{inv.vatAmount ?? "-"}</td>
@@ -242,7 +273,7 @@ export default function SalesInvoicesTab() {
                       {inv.status === "draft" && <Button size="sm" variant="ghost" onClick={() => post(inv.id)} className="h-7 px-2" title="ترحيل"><Send size={13} className="text-emerald-600" /></Button>}
                     </td>
                   </tr>
-                ))}
+                  ))}
               </tbody>
             </table>
           </div>
