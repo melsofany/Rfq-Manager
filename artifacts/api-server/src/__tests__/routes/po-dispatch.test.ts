@@ -21,7 +21,7 @@ vi.mock("../../shared/google-sheets", () => ({
 }));
 
 const sendPoWhatsAppMock = vi.fn().mockResolvedValue("supplier-wa-id");
-const sendItemReceiptMock = vi.fn().mockResolvedValue("rep-wa-id");
+const sendRepDispatchMock = vi.fn().mockResolvedValue("rep-wa-id");
 // `isWhatsAppConfigured` is a const boolean in the real module, so the mock
 // must expose a value (not a function — a function ref is always truthy).
 // A getter lets tests flip it per-case.
@@ -33,7 +33,9 @@ vi.mock("../../modules/communications/service", () => ({
     return _whatsappConfigured;
   },
   sendRepresentativeWorkOrderWhatsApp: vi.fn().mockResolvedValue({ ok: true }),
-  sendRepresentativeItemReceiptWhatsApp: sendItemReceiptMock,
+  sendRepresentativeItemReceiptWhatsApp: vi.fn().mockResolvedValue("rep-wa-id"),
+  sendRepPoDispatchWhatsApp: sendRepDispatchMock,
+  formatQty: (q: any) => (q == null ? null : String(q).replace(/0+$/, "").replace(/\.$/, "") || "0"),
 }));
 
 vi.mock("../../modules/po/po-pdf", () => ({
@@ -112,8 +114,8 @@ beforeEach(() => {
   _whatsappConfigured = true;
 });
 
-describe("POST /api/po/:id/dispatch — representative per-item receipt prompts", () => {
-  it("sends a per-item interactive receipt prompt to the rep + creates kind=receipt assignments", async () => {
+describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", () => {
+  it("sends ONE consolidated receipt notification per supplier + creates a kind=receipt assignment per pending item", async () => {
     const poRow = {
       po: {
         id: 1,
@@ -134,7 +136,8 @@ describe("POST /api/po/:id/dispatch — representative per-item receipt prompts"
           id: 10,
           lineItem: "1",
           description: "Widget",
-          qty: "5",
+          qty: "5.0000",
+          uom: "pcs",
           lineStatus: "pending",
           supplierId: 7,
         },
@@ -152,7 +155,8 @@ describe("POST /api/po/:id/dispatch — representative per-item receipt prompts"
           id: 11,
           lineItem: "2",
           description: "Gadget",
-          qty: "3",
+          qty: "3.5000",
+          uom: "pcs",
           lineStatus: "pending",
           supplierId: 7,
         },
@@ -165,15 +169,22 @@ describe("POST /api/po/:id/dispatch — representative per-item receipt prompts"
 
     expect(res.status).toBe(200);
     expect(res.body.workOrderSent).toBe(true);
-    // One interactive prompt per (pending) item → 2 calls.
-    expect(sendItemReceiptMock).toHaveBeenCalledTimes(2);
-    expect(sendItemReceiptMock).toHaveBeenCalledWith(
-      expect.objectContaining({ poNo: "CPO-2025-000001", poItemId: 10, lineLabel: "1 — Widget", qty: "5" }),
+    // ONE consolidated message per supplier (both items share supplier 7).
+    expect(sendRepDispatchMock).toHaveBeenCalledTimes(1);
+    expect(sendRepDispatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        poNo: "CPO-2025-000001",
+        supplierName: "Acme",
+        supplierAddress: "Cairo",
+        supplierPhone: "201111111111",
+      }),
     );
-    expect(sendItemReceiptMock).toHaveBeenCalledWith(
-      expect.objectContaining({ poNo: "CPO-2025-000001", poItemId: 11, lineLabel: "2 — Gadget", qty: "3" }),
-    );
-    // Two work-order assignments inserted, both kind=receipt with poItemId set.
+    // Both pending items included with clean quantities ("5", "3.5").
+    const call = sendRepDispatchMock.mock.calls[0][0];
+    expect(call.items).toHaveLength(2);
+    expect(call.items[0]).toMatchObject({ description: "Widget", qty: "5" });
+    expect(call.items[1]).toMatchObject({ description: "Gadget", qty: "3.5" });
+    // Two work-order assignments inserted (one per pending item), kind=receipt.
     const woaInserts = insertCalls.filter((c) => c.table === "woa");
     expect(woaInserts).toHaveLength(2);
     expect(woaInserts[0].vals).toMatchObject({ poId: 1, poItemId: 10, kind: "receipt", status: "sent" });
@@ -214,11 +225,11 @@ describe("POST /api/po/:id/dispatch — representative per-item receipt prompts"
 
     expect(res.status).toBe(200);
     expect(res.body.workOrderSent).toBe(false);
-    expect(sendItemReceiptMock).not.toHaveBeenCalled();
+    expect(sendRepDispatchMock).not.toHaveBeenCalled();
     expect(insertCalls.filter((c) => c.table === "woa")).toHaveLength(0);
   });
 
-  it("skips items already fulfilled/rejected when sending rep prompts", async () => {
+  it("skips items already fulfilled/rejected when building the rep notification", async () => {
     selectQueue = [
       [
         {
@@ -252,9 +263,15 @@ describe("POST /api/po/:id/dispatch — representative per-item receipt prompts"
 
     expect(res.status).toBe(200);
     expect(res.body.workOrderSent).toBe(true);
-    // Only the pending item gets a prompt.
-    expect(sendItemReceiptMock).toHaveBeenCalledTimes(1);
-    expect(sendItemReceiptMock).toHaveBeenCalledWith(expect.objectContaining({ poItemId: 31 }));
+    // Only the pending item is included.
+    expect(sendRepDispatchMock).toHaveBeenCalledTimes(1);
+    const call = sendRepDispatchMock.mock.calls[0][0];
+    expect(call.items).toHaveLength(1);
+    expect(call.items[0]).toMatchObject({ description: "Open" });
+    // Only one assignment for the pending item.
+    const woaInserts = insertCalls.filter((c) => c.table === "woa");
+    expect(woaInserts).toHaveLength(1);
+    expect(woaInserts[0].vals).toMatchObject({ poItemId: 31 });
   });
 
   it("returns 404 when the PO does not exist", async () => {

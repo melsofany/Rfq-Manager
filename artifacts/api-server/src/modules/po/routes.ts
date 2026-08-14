@@ -23,7 +23,8 @@ import { generatePoPdf } from "./po-pdf";
 import {
   sendPoWhatsApp,
   isWhatsAppConfigured,
-  sendRepresentativeItemReceiptWhatsApp,
+  sendRepPoDispatchWhatsApp,
+  formatQty as formatWaQty,
 } from "../communications/service";
 import { sendPoEmail } from "../../shared/email";
 
@@ -588,43 +589,67 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
     if (!isWhatsAppConfigured) {
       workOrderError = "WhatsApp not configured";
     } else {
-      // Send the representative a per-item interactive receipt prompt (the
-      // rep bot's entry point) instead of a single whole-PO template. Each
-      // prompt carries work_order_item:<poNo>:<poItemId>:received/rejected
-      // buttons and creates a kind=receipt work-order assignment with the
-      // poItemId set, so the rep bot menu opens with these items directly.
+      // Send the representative ONE consolidated receipt notification per
+      // supplier (not one message per item). The message lists the supplier
+      // (name / address / phone), the PO number, and ALL pending line items
+      // with clean quantities, plus a «بدء الاستلام» button that opens the rep
+      // bot receipt menu. Assignment rows are created up front for every
+      // pending item so the menu shows all items even if the WhatsApp send
+      // is rate-limited or fails — this was the root cause of items going
+      // missing (a failed second send also skipped its assignment insert).
       const repName = receiverName.trim();
       const repPhone = normalizePhone(receiverPhone.trim());
       let sentCount = 0;
       let firstError: string | null = null;
-      for (const row of itemRows) {
-        const it = row.item;
-        if (it.lineStatus === "fulfilled" || it.lineStatus === "rejected") continue;
-        const lineLabel = `${it.lineItem || "بند"} — ${it.description || ""}`.trim();
-        const qtyText = it.qty != null && it.qty !== "" ? String(it.qty) : null;
+
+      // Group pending items by supplier (reuse the bySupplier map).
+      for (const [supplierId, { supplier, items }] of bySupplier) {
+        const pending = items.filter(
+          (r) => r.item.lineStatus !== "fulfilled" && r.item.lineStatus !== "rejected",
+        );
+        if (pending.length === 0) continue;
+
+        // Create assignment rows for ALL pending items first (independent of WA).
+        for (const r of pending) {
+          try {
+            await db.insert(workOrderAssignmentsTable).values({
+              poId: id,
+              poItemId: r.item.id,
+              representativeName: repName,
+              representativePhone: repPhone,
+              status: "sent",
+              kind: WORK_ORDER_KIND.RECEIPT,
+            });
+          } catch (err) {
+            // A duplicate assignment (same poItemId) is fine — ignore.
+            req.log.warn({ err, poItemId: r.item.id }, "Rep receipt assignment insert failed (may be a duplicate)");
+          }
+        }
+
         try {
-          const waId = await sendRepresentativeItemReceiptWhatsApp({
+          const waId = await sendRepPoDispatchWhatsApp({
             phone: repPhone,
             poNo,
-            poItemId: it.id,
-            lineLabel,
-            qty: qtyText,
+            supplierName: supplier.name,
+            supplierAddress: supplier.address,
+            supplierPhone: supplier.phone,
+            items: pending.map((r) => ({
+              lineItem: r.item.lineItem,
+              description: r.item.description,
+              qty: formatWaQty(r.item.qty),
+              uom: r.item.uom,
+            })),
           });
-          await db.insert(workOrderAssignmentsTable).values({
-            poId: id,
-            poItemId: it.id,
-            representativeName: repName,
-            representativePhone: repPhone,
-            status: "sent",
-            kind: WORK_ORDER_KIND.RECEIPT,
-            waMessageId: waId,
-          });
-          sentCount++;
+          if (waId) {
+            sentCount++;
+          } else {
+            if (!firstError) firstError = "WhatsApp send returned no message id";
+          }
         } catch (err) {
           if (!firstError) firstError = err instanceof Error ? err.message : String(err);
           req.log.warn(
-            { err, poItemId: it.id, poNo },
-            "Representative per-item receipt prompt failed",
+            { err, supplierId, poNo },
+            "Representative consolidated receipt notification failed",
           );
         }
       }

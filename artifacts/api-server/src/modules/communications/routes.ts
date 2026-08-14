@@ -33,6 +33,7 @@ import {
   sendRepConfirm,
   sendDeliveryRejectionReasonOptions,
   CUSTOMER_REJECTION_REASONS,
+  formatQty as formatWaQty,
 } from "./service";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
@@ -496,7 +497,7 @@ async function resendItemActionReceipt(phone: string, poNo: string, poItemId: nu
     itemId: poItemId,
     poId: line?.poId ?? 0,
     label: [line?.lineItem, line?.description].filter(Boolean).join(" - ") || "بند",
-    qty: line?.qty ? String(line.qty) : null,
+    qty: formatWaQty(line?.qty),
   });
 }
 
@@ -798,7 +799,7 @@ async function repReceiptItems(poId: number): Promise<
   return pending.map((r) => ({
     id: r.id,
     label: [r.lineItem, r.description].filter(Boolean).join(" - ") || "بند",
-    qty: r.qty ? String(r.qty) : null,
+    qty: formatWaQty(r.qty),
     statusHint: r.lineStatus === "partial" ? "استلام جزئي" : "بانتظار الاستلام",
   }));
 }
@@ -823,7 +824,7 @@ async function repDeliveryItems(customerPoId: number): Promise<
   return pending.map((r) => ({
     id: r.id,
     label: [r.lineItem, r.description].filter(Boolean).join(" - ") || "بند",
-    qty: r.qty ? String(r.qty) : null,
+    qty: formatWaQty(r.qty),
     statusHint: r.deliveryStatus === "partial" ? "تسليم جزئي" : "بانتظار التسليم",
   }));
 }
@@ -905,7 +906,7 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
         itemId,
         poId,
         label: [it?.lineItem, it?.description].filter(Boolean).join(" - ") || "بند",
-        qty: it?.qty ? String(it.qty) : null,
+        qty: formatWaQty(it?.qty),
       });
     } else {
       const [po] = await db
@@ -926,7 +927,7 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
         itemId,
         poId,
         label: [it?.lineItem, it?.description].filter(Boolean).join(" - ") || "بند",
-        qty: it?.qty ? String(it.qty) : null,
+        qty: formatWaQty(it?.qty),
       });
     }
     return true;
@@ -1077,7 +1078,7 @@ async function resendItemActionDelivery(phone: string, customerPoNo: string, cus
     itemId: customerPoItemId,
     poId: line?.customerPoId ?? 0,
     label: [line?.lineItem, line?.description].filter(Boolean).join(" - ") || "بند",
-    qty: line?.qty ? String(line.qty) : null,
+    qty: formatWaQty(line?.qty),
   });
 }
 
