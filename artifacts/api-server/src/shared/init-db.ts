@@ -415,6 +415,33 @@ export async function initDb(): Promise<void> {
     `);
     logger.info("initDb: all tables created");
 
+    // ── Egyptian tax-compliance settings (single row, keyed 'default') ───────
+    // Defaults follow the Egyptian VAT Law (No. 67 of 2016) and the withholding
+    // schedule (خصم تحت حساب المورد): 14% VAT, 3% services withholding, 1%
+    // purchases withholding. Rates are editable via the /accounts settings tab
+    // so the company can track future amendments without a redeploy.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tax_settings (
+        id                        SERIAL PRIMARY KEY,
+        key                       TEXT NOT NULL UNIQUE DEFAULT 'default',
+        company_name              TEXT,
+        company_tax_id            TEXT,
+        company_address           TEXT,
+        company_phone             TEXT,
+        vat_rate                  NUMERIC(6,4) NOT NULL DEFAULT 14,
+        withholding_rate          NUMERIC(6,4) NOT NULL DEFAULT 3,
+        withholding_rate_services NUMERIC(6,4) NOT NULL DEFAULT 5,
+        withholding_rate_purchases NUMERIC(6,4) NOT NULL DEFAULT 1,
+        created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      INSERT INTO tax_settings (key)
+      VALUES ('default')
+      ON CONFLICT (key) DO NOTHING;
+    `);
+
     // ── ERP Integrations table ─────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS erp_integrations (
