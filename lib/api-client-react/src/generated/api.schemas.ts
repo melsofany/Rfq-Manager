@@ -387,6 +387,41 @@ export type CustomerRfqDetail = CustomerRfq & {
   items?: CustomerRfqLineItem[];
 };
 
+/**
+ * draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items delivered (deliveredPct = 100).
+ */
+export type CustomerPoFulfillmentStatusStage = typeof CustomerPoFulfillmentStatusStage[keyof typeof CustomerPoFulfillmentStatusStage];
+
+
+export const CustomerPoFulfillmentStatusStage = {
+  draft: 'draft',
+  sent: 'sent',
+  po_issued: 'po_issued',
+  delivered: 'delivered',
+  fulfilled: 'fulfilled',
+} as const;
+
+/**
+ * Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders and the customer deliveries. Reflects: whether a supplier PO was issued (dispatched) for this customer PO, and the share of the customer PO's line items that have been delivered to the customer.
+ */
+export interface CustomerPoFulfillmentStatus {
+  /** draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items delivered (deliveredPct = 100). */
+  stage: CustomerPoFulfillmentStatusStage;
+  /** Arabic label ready to display, e.g. "مسودة", "تم الإرسال", "تم إصدار أمر شراء للمورد", "نجح 60% من البنود المسلمة", "تم التسليم بالكامل". */
+  label: string;
+  /** True when at least one dispatched (status=sent) supplier PO is linked to this customer PO. */
+  poIssued?: boolean;
+  /** Total number of line items on this customer PO. */
+  totalItems?: number;
+  /** Number of line items fully delivered to the customer (deliveryStatus = delivered). */
+  deliveredItems?: number;
+  /**
+     * Share (0–100) of line items delivered. Null when the customer PO has no items.
+     * @nullable
+     */
+  deliveredPct?: number | null;
+}
+
 export interface CustomerPo {
   id: number;
   /** Auto-generated internal number (CPO-YYYY-NNNNNN) */
@@ -417,7 +452,9 @@ export interface CustomerPo {
   employeeId?: number | null;
   /** @nullable */
   employeeName?: string | null;
+  /** Stored lifecycle status (draft | sent). The customer-PO finalization flag, NOT the fulfillment progress. */
   status: string;
+  fulfillmentStatus?: CustomerPoFulfillmentStatus;
   /** @nullable */
   notes?: string | null;
   itemCount?: number;

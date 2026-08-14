@@ -1,12 +1,46 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useListCustomerPos, getListCustomerPosQueryKey } from "@workspace/api-client-react";
+import {
+  useListCustomerPos,
+  getListCustomerPosQueryKey,
+  type CustomerPoFulfillmentStatus,
+} from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, ShoppingCart } from "lucide-react";
 import CustomerDeliveriesPage from "./deliveries";
+
+// Colored badge for the derived customer-PO fulfillment status. The stage
+// reflects: draft → sent → po_issued → delivered (partial %) → fulfilled.
+function FulfillmentStatusBadge({ status }: { status?: CustomerPoFulfillmentStatus | null }) {
+  if (!status) {
+    return <span className="text-muted-foreground text-[10px]">—</span>;
+  }
+  const stageStyles: Record<string, string> = {
+    draft: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400",
+    sent: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400",
+    po_issued:
+      "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400",
+    delivered:
+      "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400",
+    fulfilled: "bg-green-200 text-green-800 dark:bg-green-900/50 dark:text-green-300",
+  };
+  const cls = stageStyles[status.stage] ?? stageStyles.draft;
+  return (
+    <span
+      className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${cls}`}
+      title={
+        status.totalItems
+          ? `${status.deliveredItems ?? 0}/${status.totalItems} بنود مسلمة`
+          : status.label
+      }
+    >
+      {status.label}
+    </span>
+  );
+}
 
 export default function CustomerPoPage() {
   const [, navigate] = useLocation();
@@ -139,15 +173,7 @@ export default function CustomerPoPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${
-                            po.status === "sent"
-                              ? "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400"
-                              : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-                          }`}
-                        >
-                          {po.status === "sent" ? "تم الإرسال" : "مسودة"}
-                        </span>
+                        <FulfillmentStatusBadge status={po.fulfillmentStatus} />
                       </td>
                     </tr>
                   ))}

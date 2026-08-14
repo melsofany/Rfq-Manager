@@ -2194,6 +2194,9 @@ components:
           type: ["string", "null"]
         status:
           type: string
+          description: Stored lifecycle status (draft | sent). The customer-PO finalization flag, NOT the fulfillment progress.
+        fulfillmentStatus:
+          $ref: "#/components/schemas/CustomerPoFulfillmentStatus"
         notes:
           type: ["string", "null"]
         itemCount:
@@ -2202,6 +2205,41 @@ components:
           type: string
         updatedAt:
           type: string
+
+    CustomerPoFulfillmentStatus:
+      type: object
+      description: >
+        Derived fulfillment progress for a customer PO, computed by the server
+        from the linked supplier purchase orders and the customer deliveries.
+        Reflects: whether a supplier PO was issued (dispatched) for this customer
+        PO, and the share of the customer PO's line items that have been
+        delivered to the customer.
+      required: [stage, label]
+      properties:
+        stage:
+          type: string
+          enum: [draft, sent, po_issued, delivered, fulfilled]
+          description: >
+            draft — customer PO not yet finalized.
+            sent — finalized but no supplier PO dispatched yet.
+            po_issued — at least one linked supplier PO has been dispatched (sent to the supplier).
+            delivered — deliveries recorded; partial when deliveredPct < 100.
+            fulfilled — all line items delivered (deliveredPct = 100).
+        label:
+          type: string
+          description: Arabic label ready to display, e.g. "مسودة", "تم الإرسال", "تم إصدار أمر شراء للمورد", "نجح 60% من البنود المسلمة", "تم التسليم بالكامل".
+        poIssued:
+          type: boolean
+          description: True when at least one dispatched (status=sent) supplier PO is linked to this customer PO.
+        totalItems:
+          type: integer
+          description: Total number of line items on this customer PO.
+        deliveredItems:
+          type: integer
+          description: Number of line items fully delivered to the customer (deliveryStatus = delivered).
+        deliveredPct:
+          type: ["integer", "null"]
+          description: Share (0–100) of line items delivered. Null when the customer PO has no items.
 
     CustomerPoCustomerRfqOption:
       type: object

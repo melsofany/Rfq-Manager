@@ -6,8 +6,10 @@ import {
   customerRfqsTable,
   employeesTable,
   auditLogTable,
+  purchaseOrdersTable,
+  purchaseOrderItemsTable,
 } from "@workspace/db";
-import { eq, count, inArray, desc, sql } from "drizzle-orm";
+import { eq, count, inArray, desc, sql, and, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
@@ -64,6 +66,183 @@ async function resolveRfqNos(
   return Object.fromEntries(rows.map((r) => [r.id, r.no]));
 }
 
+// ── Fulfillment status ───────────────────────────────────────────────────────
+// A derived, progressive status for a customer PO that reflects the supplier
+// purchase orders issued for it and the deliveries made to the customer. It is
+// computed on every list/detail fetch (never stored), so it advances
+// automatically when a supplier PO is dispatched from /purchase-orders or when a
+// delivery is recorded from the customer-deliveries page.
+//
+// Stages (most advanced wins):
+//   draft      — the customer PO is not yet finalized (status="draft").
+//   sent       — finalized (status="sent") but no supplier PO dispatched yet.
+//   po_issued  — at least one dispatched (status="sent") supplier PO is linked
+//                to this customer PO (via purchase_order_items.customerPoItemId,
+//                or, as a header-level fallback, sheetPoNo = customerPoNo).
+//   delivered  — deliveries recorded; partial when deliveredPct < 100.
+//   fulfilled  — every line item has been delivered (deliveredPct = 100).
+export interface CustomerPoFulfillmentStatus {
+  stage: "draft" | "sent" | "po_issued" | "delivered" | "fulfilled";
+  label: string;
+  poIssued: boolean;
+  totalItems: number;
+  deliveredItems: number;
+  deliveredPct: number | null;
+}
+
+function buildFulfillmentStatus(input: {
+  storedStatus: string;
+  poIssued: boolean;
+  totalItems: number;
+  deliveredItems: number;
+}): CustomerPoFulfillmentStatus {
+  const { storedStatus, poIssued, totalItems, deliveredItems } = input;
+  const deliveredPct =
+    totalItems > 0 ? Math.round((deliveredItems / totalItems) * 100) : null;
+
+  let stage: CustomerPoFulfillmentStatus["stage"] = "draft";
+  let label = "مسودة";
+
+  if (storedStatus === "draft" && !poIssued && deliveredItems === 0) {
+    stage = "draft";
+    label = "مسودة";
+  } else if (deliveredPct != null && deliveredItems > 0) {
+    if (deliveredPct >= 100) {
+      stage = "fulfilled";
+      label = "تم التسليم بالكامل";
+    } else {
+      stage = "delivered";
+      label = `نجح ${deliveredPct}% من البنود المسلمة`;
+    }
+  } else if (poIssued) {
+    stage = "po_issued";
+    label = "تم إصدار أمر شراء للمورد";
+  } else if (storedStatus === "sent") {
+    stage = "sent";
+    label = "تم الإرسال";
+  } else {
+    stage = "draft";
+    label = "مسودة";
+  }
+
+  return { stage, label, poIssued, totalItems, deliveredItems, deliveredPct };
+}
+
+// Resolve, for a set of customer PO ids, the ids that have at least one
+// DISPATCHED (status="sent") supplier PO linked to them. A supplier PO links to
+// a customer PO either through its items (purchase_order_items.customerPoItemId
+// → customer_po_items.customerPoId) or, as a header-level fallback for legacy
+// rows created before the item FK existed, through sheetPoNo = customerPoNo.
+async function resolvePoIssuedIds(
+  customerPoIds: number[],
+  customerPoNoByPoId: Map<number, string>,
+): Promise<Set<number>> {
+  const issued = new Set<number>();
+  if (customerPoIds.length === 0) return issued;
+
+  // 1) Item-level link: dispatched supplier POs whose items reference a
+  //    customer_po_item belonging to one of these customer POs.
+  const linked = await db
+    .select({ customerPoId: customerPoItemsTable.customerPoId })
+    .from(purchaseOrderItemsTable)
+    .innerJoin(
+      purchaseOrdersTable,
+      eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id),
+    )
+    .where(
+      and(
+        eq(purchaseOrdersTable.status, "sent"),
+        isNotNull(purchaseOrderItemsTable.customerPoItemId),
+        inArray(purchaseOrderItemsTable.customerPoItemId,
+          // Subquery: the customer_po_item ids that belong to these POs. We
+          // resolve them with a separate select to keep the mock-friendly
+          // builder chain simple.
+          await customerPoItemIdsFor(customerPoIds)),
+      ),
+    );
+  for (const r of linked) {
+    if (r.customerPoId != null) issued.add(r.customerPoId);
+  }
+
+  // 2) Header-level fallback: dispatched supplier POs whose sheetPoNo matches a
+  //    listed customer PO's customerPoNo (case-insensitive). Covers legacy
+  //    supplier POs created before the item FK was wired.
+  const poNos = new Set(
+    [...customerPoNoByPoId.values()].map((n) => n.toLowerCase()),
+  );
+  if (poNos.size > 0) {
+    const dispatched = await db
+      .select({ sheetPoNo: purchaseOrdersTable.sheetPoNo })
+      .from(purchaseOrdersTable)
+      .where(eq(purchaseOrdersTable.status, "sent"));
+    const matchedPoNos = new Set<string>();
+    for (const r of dispatched) {
+      if (r.sheetPoNo && poNos.has(r.sheetPoNo.toLowerCase())) {
+        matchedPoNos.add(r.sheetPoNo.toLowerCase());
+      }
+    }
+    for (const [poId, no] of customerPoNoByPoId) {
+      if (matchedPoNos.has(no.toLowerCase())) issued.add(poId);
+    }
+  }
+
+  return issued;
+}
+
+// Select the customer_po_item ids that belong to a set of customer PO ids.
+async function customerPoItemIdsFor(customerPoIds: number[]): Promise<number[]> {
+  if (customerPoIds.length === 0) return [];
+  const rows = await db
+    .select({ id: customerPoItemsTable.id })
+    .from(customerPoItemsTable)
+    .where(inArray(customerPoItemsTable.customerPoId, customerPoIds));
+  return rows.map((r) => r.id);
+}
+
+// For a set of customer PO ids, load all their line items (with deliveryStatus)
+// and return per-PO totals: total items + delivered items count.
+async function resolveDeliveryRollup(
+  customerPoIds: number[],
+): Promise<Map<number, { totalItems: number; deliveredItems: number }>> {
+  const map = new Map<number, { totalItems: number; deliveredItems: number }>();
+  if (customerPoIds.length === 0) return map;
+  const rows = await db
+    .select({
+      customerPoId: customerPoItemsTable.customerPoId,
+      deliveryStatus: customerPoItemsTable.deliveryStatus,
+    })
+    .from(customerPoItemsTable)
+    .where(inArray(customerPoItemsTable.customerPoId, customerPoIds));
+  for (const r of rows) {
+    const entry = map.get(r.customerPoId) ?? { totalItems: 0, deliveredItems: 0 };
+    entry.totalItems += 1;
+    if (r.deliveryStatus === "delivered") entry.deliveredItems += 1;
+    map.set(r.customerPoId, entry);
+  }
+  return map;
+}
+
+// Compute the fulfillment status for a single customer PO (detail path).
+async function computeFulfillmentStatus(
+  customerPoId: number,
+  storedStatus: string,
+  customerPoNo: string,
+  items: Array<{ deliveryStatus: string }>,
+): Promise<CustomerPoFulfillmentStatus> {
+  const totalItems = items.length;
+  const deliveredItems = items.filter((i) => i.deliveryStatus === "delivered").length;
+  const poIssuedSet = await resolvePoIssuedIds(
+    [customerPoId],
+    new Map([[customerPoId, customerPoNo]]),
+  );
+  return buildFulfillmentStatus({
+    storedStatus,
+    poIssued: poIssuedSet.has(customerPoId),
+    totalItems,
+    deliveredItems,
+  });
+}
+
 function serializeItem(
   i: typeof customerPoItemsTable.$inferSelect,
   rfqNoMap: Record<number, string>,
@@ -92,6 +271,7 @@ function serializeItem(
 function serialize(
   r: typeof customerPosTable.$inferSelect,
   itemCount: number,
+  fulfillmentStatus?: CustomerPoFulfillmentStatus,
 ) {
   return {
     id: r.id,
@@ -104,6 +284,7 @@ function serialize(
     employeeId: r.employeeId,
     employeeName: r.employeeName,
     status: r.status,
+    fulfillmentStatus: fulfillmentStatus ?? null,
     notes: r.notes,
     itemCount,
     createdAt: r.createdAt.toISOString(),
@@ -144,7 +325,27 @@ router.get("/customer-po", requireAuth, async (req, res): Promise<void> => {
       : [];
   const countMap = Object.fromEntries(counts.map((c) => [c.customerPoId, c.cnt]));
 
-  res.json(filtered.map((r) => serialize(r.po, countMap[r.po.id] ?? 0)));
+  // Derived fulfillment status per PO (po_issued + delivery progress). Computed
+  // in batch: one delivery rollup query + one po-issued resolution for all POs.
+  const customerPoNoByPoId = new Map<number, string>();
+  for (const r of filtered) customerPoNoByPoId.set(r.po.id, r.po.customerPoNo);
+  const [deliveryRollup, poIssuedSet] = await Promise.all([
+    resolveDeliveryRollup(ids),
+    resolvePoIssuedIds(ids, customerPoNoByPoId),
+  ]);
+
+  res.json(
+    filtered.map((r) => {
+      const roll = deliveryRollup.get(r.po.id) ?? { totalItems: 0, deliveredItems: 0 };
+      const fulfillment = buildFulfillmentStatus({
+        storedStatus: r.po.status,
+        poIssued: poIssuedSet.has(r.po.id),
+        totalItems: roll.totalItems,
+        deliveredItems: roll.deliveredItems,
+      });
+      return serialize(r.po, countMap[r.po.id] ?? 0, fulfillment);
+    }),
+  );
 });
 
 // GET /customer-po/customer-rfqs — light list of customer RFQs (id, number,
@@ -255,7 +456,13 @@ router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
     userAgent: req.get("user-agent"),
   });
 
-  res.status(201).json(serialize(po, validItems.length));
+  const fulfillment = buildFulfillmentStatus({
+    storedStatus: po.status,
+    poIssued: false,
+    totalItems: validItems.length,
+    deliveredItems: 0,
+  });
+  res.status(201).json(serialize(po, validItems.length, fulfillment));
 });
 
 // GET /customer-po/:id — detail with items
@@ -272,8 +479,9 @@ router.get("/customer-po/:id", requireAuth, async (req, res): Promise<void> => {
     .from(customerPoItemsTable)
     .where(eq(customerPoItemsTable.customerPoId, id));
   const rfqNoMap = await resolveRfqNos(items);
+  const fulfillment = await computeFulfillmentStatus(id, po.status, po.customerPoNo, items);
   res.json({
-    ...serialize(po, items.length),
+    ...serialize(po, items.length, fulfillment),
     items: items.map((i) => serializeItem(i, rfqNoMap)),
   });
 });
@@ -356,8 +564,14 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
     .from(customerPoItemsTable)
     .where(eq(customerPoItemsTable.customerPoId, id));
   const rfqNoMap = await resolveRfqNos(itemRows);
+  const fulfillment = await computeFulfillmentStatus(
+    id,
+    updated.status,
+    updated.customerPoNo,
+    itemRows,
+  );
   res.json({
-    ...serialize(updated, itemRows.length),
+    ...serialize(updated, itemRows.length, fulfillment),
     items: itemRows.map((i) => serializeItem(i, rfqNoMap)),
   });
 });
