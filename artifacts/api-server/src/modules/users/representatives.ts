@@ -11,12 +11,18 @@ function normalizeDigits(value: string): string {
 }
 
 function normalizePhone(value: string): string {
-  const digits = normalizeDigits(value).trim().replace(/[\s().-]/g, "");
-  return digits.startsWith("00") ? `+${digits.slice(2)}` : digits;
+  const digits = normalizeDigits(value).trim().replace(/[^\d]/g, "");
+  const stripped = digits.startsWith("00") ? digits.slice(2) : digits;
+  // Expand Egyptian local forms to international (digits-only, no "+"), matching
+  // the canonical form used by the WhatsApp rep-bot lookups so a registered rep
+  // is always found regardless of how their number was typed.
+  if (stripped.length === 11 && stripped.startsWith("0")) return "2" + stripped.slice(1);
+  if (stripped.length === 10 && stripped.startsWith("1")) return "20" + stripped;
+  return stripped;
 }
 
 function isValidPhone(phone: string): boolean {
-  return /^\+?[1-9]\d{7,14}$/.test(phone);
+  return /^[1-9]\d{7,14}$/.test(phone);
 }
 
 function normalizeName(value: string): string {
