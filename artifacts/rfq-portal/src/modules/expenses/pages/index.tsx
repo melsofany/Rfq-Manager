@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from "react";
-import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +10,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Receipt, Plus, Wallet, Paperclip, Trash2, Download, X } from "lucide-react";
+import { Receipt, Plus, Paperclip, Trash2, Download, X } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 
@@ -231,25 +230,15 @@ export default function ExpensesPage() {
   }
 
   return (
-    <Layout>
-      <div className="p-4 sm:p-6 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-              <Wallet size={20} className="text-primary" />
-              المصروفات التشغيلية
-            </h1>
-            <p className="text-muted-foreground text-sm">
-              مصروفات الشركة العامة (إيجارات، خدمات تقنية، كهرباء، صيانة، …)
-            </p>
-          </div>
-          <Button onClick={openCreate} size="sm" className="gap-1.5 self-start sm:self-auto">
-            <Plus size={15} />
-            إضافة مصروف
-          </Button>
-        </div>
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <Button onClick={openCreate} size="sm" className="gap-1.5 self-start sm:self-auto">
+          <Plus size={15} />
+          إضافة مصروف
+        </Button>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <div>
             <Label className="text-xs text-muted-foreground mb-1">النوع</Label>
             <select
@@ -341,7 +330,6 @@ export default function ExpensesPage() {
             </div>
           )}
         </div>
-      </div>
 
       {/* Create/Edit dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
@@ -519,6 +507,6 @@ export default function ExpensesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Layout>
+    </div>
   );
 }

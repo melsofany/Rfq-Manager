@@ -6,8 +6,8 @@ import MarginsTab from "./MarginsTab";
 import VatTab from "./VatTab";
 import WithholdingTab from "./WithholdingTab";
 import TaxSettingsTab from "./TaxSettingsTab";
-import ExpensesSummaryTab from "./ExpensesSummaryTab";
-import CollectionsSummaryTab from "./CollectionsSummaryTab";
+import ExpensesPage from "@/modules/expenses/pages";
+import CollectionsPage from "@/modules/collections/pages";
 
 export default function AccountsPage() {
   const [tab, setTab] = useState("margins");
@@ -64,10 +64,10 @@ export default function AccountsPage() {
             <WithholdingTab />
           </TabsContent>
           <TabsContent value="expenses" className="mt-5">
-            <ExpensesSummaryTab />
+            <ExpensesPage />
           </TabsContent>
           <TabsContent value="collections" className="mt-5">
-            <CollectionsSummaryTab />
+            <CollectionsPage />
           </TabsContent>
           <TabsContent value="settings" className="mt-5">
             <TaxSettingsTab />
