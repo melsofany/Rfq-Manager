@@ -1164,4 +1164,140 @@ describe("GET /api/customer-rfq/sheet-view", () => {
     const res = await request(testApp).get("/api/customer-rfq/sheet-view/facets?column=nope");
     expect(res.status).toBe(400);
   });
+
+  it("flag column: surfaces a rejected-delivery reason and a cost overrun, and facets list them", async () => {
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "A1",
+        partNo: "P-100",
+        description: "Widget",
+        uom: "pc",
+        rfqQty: "5",
+        rfqUnitPrice: "120",
+        customerRfqId: 1,
+        customerRfqNo: "26R008464",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: 90,
+        poNo: "PO-55",
+        poDate: "2025-01-20",
+        poQty: "3",
+        poUnitPrice: "130",
+        deliveryStatus: "rejected",
+        poFinalActualCost: "150",
+        poReferencePrice: "130",
+      },
+      {
+        rfqItemId: 2,
+        lineItem: "A2",
+        partNo: "P-200",
+        description: "Clean row",
+        uom: "pc",
+        rfqQty: "1",
+        rfqUnitPrice: "10",
+        customerRfqId: 1,
+        customerRfqNo: "26R008464",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: null,
+        poNo: null,
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+        deliveryStatus: null,
+        poFinalActualCost: null,
+        poReferencePrice: null,
+      },
+    ];
+    sheetRejectedDeliveries = [
+      { customerPoItemId: 90, reason: "تالف", createdAt: new Date("2025-02-01") },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view");
+    expect(res.status).toBe(200);
+    // Row 0: rejected delivery (reason تالف) AND cost overrun (150 > 130).
+    expect(res.body.rows[0].flagged).toBe(true);
+    expect(res.body.rows[0].flagReason).toContain("رفض التسليم: تالف");
+    expect(res.body.rows[0].flagReason).toContain("تجاوزت التكلفة");
+    // Row 1: clean.
+    expect(res.body.rows[1].flagged).toBe(false);
+    expect(res.body.rows[1].flagReason).toBeNull();
+
+    // The «السبب» filter dropdown now lists the computed flag reason(s) — not
+    // "لا توجد قيم" — plus the (فارغ) entry for clean rows.
+    const facets = await request(testApp).get(
+      "/api/customer-rfq/sheet-view/facets?column=flagReason",
+    );
+    expect(facets.status).toBe(200);
+    expect(facets.body.column).toBe("flagReason");
+    const values = facets.body.values.map((v: any) => v.value);
+    expect(values).toContain(res.body.rows[0].flagReason);
+    expect(values).toContain(""); // clean rows → empty
+  });
+
+  it("flag column: the flagReason filter narrows the table to flagged rows only", async () => {
+    const reason = "رفض التسليم: تالف";
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "A1",
+        partNo: "P-1",
+        description: "Bad",
+        uom: "pc",
+        rfqQty: "5",
+        rfqUnitPrice: "120",
+        customerRfqId: 1,
+        customerRfqNo: "26R008464",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: 90,
+        poNo: "PO-55",
+        poDate: null,
+        poQty: "3",
+        poUnitPrice: "130",
+        deliveryStatus: "rejected",
+        poFinalActualCost: null,
+        poReferencePrice: null,
+      },
+      {
+        rfqItemId: 2,
+        lineItem: "A2",
+        partNo: "P-2",
+        description: "Good",
+        uom: "pc",
+        rfqQty: "1",
+        rfqUnitPrice: "10",
+        customerRfqId: 1,
+        customerRfqNo: "26R008464",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: null,
+        poNo: null,
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+        deliveryStatus: null,
+        poFinalActualCost: null,
+        poReferencePrice: null,
+      },
+    ];
+    sheetRejectedDeliveries = [
+      { customerPoItemId: 90, reason: "تالف", createdAt: new Date("2025-02-01") },
+    ];
+    const res = await request(testApp).get(
+      `/api/customer-rfq/sheet-view?flagReasonInclude=${encodeURIComponent(reason)}`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.rows[0].rfqItemId).toBe(1);
+    expect(res.body.rows[0].flagReason).toBe(reason);
+  });
 });
