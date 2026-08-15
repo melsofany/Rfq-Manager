@@ -2037,7 +2037,7 @@ components:
             expired (the close date passed with no item priced — failed).
         label:
           type: string
-          description: Arabic label ready to display, e.g. "طلب وارد", "مُسعَّر من المورد", "مُسعَّر 50%", "صدر أمر شراء", "مُسلَّم 100%".
+          description: Arabic label ready to display, e.g. "طلب وارد", "مُسعَّر من المورد", "مُسعَّر 50%", "صدر أمر شراء", "نجح 60%", "نجح بالكامل".
         supplierPriced:
           type: boolean
           description: True when at least one approved supplier offer exists for an item of this RFQ.
@@ -2054,7 +2054,7 @@ components:
           description: customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).
         deliveredPct:
           type: ["integer", "null"]
-          description: Share (0–100) of PO'd items delivered to the customer. Null when no PO was issued.
+          description: Share (0–100) of PO'd items resolved (delivered to the customer OR rejected by the customer). Null when no PO was issued.
 
     CustomerRfqLineItemInput:
       type: object

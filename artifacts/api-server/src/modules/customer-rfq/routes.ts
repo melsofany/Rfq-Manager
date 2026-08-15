@@ -147,7 +147,7 @@ export interface CustomerRfqRequestStatus {
   // Machine-readable headline stage:
   // received | supplier_priced | customer_priced | po_issued | delivered | expired
   stage: string;
-  // Arabic label ready to display, e.g. "طلب وارد", "مسعَّر من المورد", "مسعَّر 50%", "صدر أمر شراء", "مُسلَّم 100%", "منتهي (فشل)"
+  // Arabic label ready to display, e.g. "طلب وارد", "مسعَّر من المورد", "مسعَّر 50%", "صدر أمر شراء", "نجح 60%", "نجح بالكامل", "منتهي (فشل)"
   label: string;
   // True when at least one approved supplier offer exists for an item of this RFQ.
   supplierPriced: boolean;
@@ -258,6 +258,7 @@ async function computeRequestStatusForRfq(
       .select({
         customerRfqItemId: customerPoItemsTable.customerRfqItemId,
         totalDeliveredQty: customerPoItemsTable.totalDeliveredQty,
+        totalRejectedByCustomerQty: customerPoItemsTable.totalRejectedByCustomerQty,
         deliveryStatus: customerPoItemsTable.deliveryStatus,
         qty: customerPoItemsTable.qty,
       })
@@ -265,23 +266,29 @@ async function computeRequestStatusForRfq(
       .where(and(inArray(customerPoItemsTable.customerRfqItemId, itemIds), isNotNull(customerPoItemsTable.customerRfqItemId)));
 
     const poItemIdSet = new Set<number>();
-    let deliveredItems = 0;
+    let resolvedItems = 0;
     const poCount = poRows.length;
     for (const r of poRows) {
       if (r.customerRfqItemId != null) poItemIdSet.add(r.customerRfqItemId);
-      // Count an item as delivered when its delivery_status is "delivered", or
-      // when the rolled-up delivered qty reaches the ordered qty.
+      // A PO line is "resolved" when it's delivered OR the customer rejected it
+      // (both are terminal outcomes) — or when the rolled-up delivered qty
+      // reaches the ordered qty.
       const ordered = r.qty != null ? Number(r.qty) : 0;
       const delivered = r.totalDeliveredQty != null ? Number(r.totalDeliveredQty) : 0;
-      if (r.deliveryStatus === "delivered" || (ordered > 0 && delivered >= ordered)) {
-        deliveredItems += 1;
+      const rejected = r.totalRejectedByCustomerQty != null ? Number(r.totalRejectedByCustomerQty) : 0;
+      if (
+        r.deliveryStatus === "delivered" ||
+        r.deliveryStatus === "rejected" ||
+        (ordered > 0 && delivered + rejected >= ordered)
+      ) {
+        resolvedItems += 1;
       }
     }
     poItemIds = [...poItemIdSet];
     poIssued = poCount > 0;
     if (poCount > 0) {
-      // Delivered share is computed against the RFQ's items that appear on a PO.
-      deliveredPct = Math.round((deliveredItems / poCount) * 100);
+      // Resolved share is computed against the RFQ's items that appear on a PO.
+      deliveredPct = Math.round((resolvedItems / poCount) * 100);
     }
   }
 
@@ -311,10 +318,10 @@ function buildRequestStatus(input: {
     if (deliveredPct != null) {
       if (deliveredPct >= 100) {
         stage = "delivered";
-        label = "مُسلَّم بالكامل";
+        label = "نجح بالكامل";
       } else if (deliveredPct > 0) {
         stage = "delivered";
-        label = `مُسلَّم ${deliveredPct}%`;
+        label = `نجح ${deliveredPct}%`;
       }
     }
   } else if (customerPricingPct != null && customerPricingPct > 0) {
@@ -411,12 +418,13 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
     : new Set<number>();
 
   // 4) PO issued + delivered share across all listed RFQs (single query).
-  let poRowsByItem = new Map<number, { qty: string | null; totalDeliveredQty: string | null; deliveryStatus: string }>();
+  let poRowsByItem = new Map<number, { qty: string | null; totalDeliveredQty: string | null; totalRejectedByCustomerQty: string | null; deliveryStatus: string }>();
   if (allItemIds.length > 0) {
     const poRows = await db
       .select({
         customerRfqItemId: customerPoItemsTable.customerRfqItemId,
         totalDeliveredQty: customerPoItemsTable.totalDeliveredQty,
+        totalRejectedByCustomerQty: customerPoItemsTable.totalRejectedByCustomerQty,
         deliveryStatus: customerPoItemsTable.deliveryStatus,
         qty: customerPoItemsTable.qty,
       })
@@ -424,10 +432,10 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
       .where(and(inArray(customerPoItemsTable.customerRfqItemId, allItemIds), isNotNull(customerPoItemsTable.customerRfqItemId)));
     for (const r of poRows) {
       if (r.customerRfqItemId == null) continue;
-      // Keep the most-delivered row per item (an item can appear on multiple POs).
+      // Keep the most-resolved row per item (an item can appear on multiple POs).
       const existing = poRowsByItem.get(r.customerRfqItemId);
       if (!existing) {
-        poRowsByItem.set(r.customerRfqItemId, { qty: r.qty, totalDeliveredQty: r.totalDeliveredQty, deliveryStatus: r.deliveryStatus });
+        poRowsByItem.set(r.customerRfqItemId, { qty: r.qty, totalDeliveredQty: r.totalDeliveredQty, totalRejectedByCustomerQty: r.totalRejectedByCustomerQty, deliveryStatus: r.deliveryStatus });
       }
     }
   }
@@ -447,7 +455,7 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
 function computeListRequestStatus(
   rfqItems: Array<{ id: number; unitPrice: string | null }>,
   supplierPricedItemIds: Set<number>,
-  poRowsByItem: Map<number, { qty: string | null; totalDeliveredQty: string | null; deliveryStatus: string }>,
+  poRowsByItem: Map<number, { qty: string | null; totalDeliveredQty: string | null; totalRejectedByCustomerQty: string | null; deliveryStatus: string }>,
   expiryDate: string | null,
 ): CustomerRfqRequestStatus {
   const totalItems = rfqItems.length;
@@ -466,14 +474,21 @@ function computeListRequestStatus(
   if (poItems.length > 0) {
     poIssued = true;
     poItemIds = poItems.map((i) => i.id);
-    let deliveredItems = 0;
+    let resolvedItems = 0;
     for (const i of poItems) {
       const r = poRowsByItem.get(i.id)!;
       const ordered = r.qty != null ? Number(r.qty) : 0;
       const delivered = r.totalDeliveredQty != null ? Number(r.totalDeliveredQty) : 0;
-      if (r.deliveryStatus === "delivered" || (ordered > 0 && delivered >= ordered)) deliveredItems += 1;
+      const rejected = r.totalRejectedByCustomerQty != null ? Number(r.totalRejectedByCustomerQty) : 0;
+      if (
+        r.deliveryStatus === "delivered" ||
+        r.deliveryStatus === "rejected" ||
+        (ordered > 0 && delivered + rejected >= ordered)
+      ) {
+        resolvedItems += 1;
+      }
     }
-    deliveredPct = Math.round((deliveredItems / poItems.length) * 100);
+    deliveredPct = Math.round((resolvedItems / poItems.length) * 100);
   }
 
   return buildRequestStatus({ supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct, expiryDate });
