@@ -44,6 +44,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/whatsapp", label: t("nav.whatsapp"), icon: MessageSquare },
   ];
 
+  // Data-entry clerks may only enter customer RFQs and customer POs (plus the
+  // dashboard and customer list). Other modules are hidden from the sidebar.
+  const DATA_ENTRY_HREFS = new Set(["/dashboard", "/customers", "/customer-rfq", "/customer-po"]);
+  const visibleNavItems =
+    employee?.role === "data_entry" ? navItems.filter((i) => DATA_ENTRY_HREFS.has(i.href)) : navItems;
+
   const adminItems = [
     { href: "/employees", label: t("nav.employees"), icon: UserCog },
     { href: "/audit", label: t("nav.auditLog"), icon: ClipboardList },
@@ -134,7 +140,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = location === item.href || location.startsWith(item.href + "/");
             return (
               <Link key={item.href} href={item.href}>
@@ -229,7 +235,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   {employee?.name}
                 </p>
                 <p className="text-sidebar-foreground/40 text-xs truncate capitalize">
-                  {employee?.role}
+                  {employee?.role ? t(`role.${employee.role}`) ?? employee.role : ""}
                 </p>
               </div>
             )}

@@ -21,6 +21,7 @@ export const EmployeeRole = {
   admin: 'admin',
   manager: 'manager',
   purchasing: 'purchasing',
+  data_entry: 'data_entry',
 } as const;
 
 export interface Employee {
@@ -46,6 +47,7 @@ export const EmployeeInputRole = {
   admin: 'admin',
   manager: 'manager',
   purchasing: 'purchasing',
+  data_entry: 'data_entry',
 } as const;
 
 export interface EmployeeInput {
@@ -63,6 +65,7 @@ export const EmployeeUpdateRole = {
   admin: 'admin',
   manager: 'manager',
   purchasing: 'purchasing',
+  data_entry: 'data_entry',
 } as const;
 
 export interface EmployeeUpdate {

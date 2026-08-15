@@ -24,7 +24,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-const ROLES = ["admin", "manager", "purchasing"];
+const ROLES = ["admin", "manager", "purchasing", "data_entry"];
 
 type EmpForm = { name: string; email: string; password: string; role: string; phone: string };
 const EMPTY_FORM: EmpForm = { name: "", email: "", password: "", role: "purchasing", phone: "" };
@@ -490,7 +490,9 @@ export default function EmployeesPage() {
                                 ? "bg-purple-50 text-purple-700"
                                 : emp.role === "manager"
                                   ? "bg-blue-50 text-blue-700"
-                                  : "bg-muted text-muted-foreground"
+                                  : emp.role === "data_entry"
+                                    ? "bg-teal-50 text-teal-700"
+                                    : "bg-muted text-muted-foreground"
                             }`}
                           >
                             {t(`employees.role.${emp.role}`) || emp.role}

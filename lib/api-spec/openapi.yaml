@@ -1697,7 +1697,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, manager, purchasing]
+          enum: [admin, manager, purchasing, data_entry]
         phone:
           type: ["string", "null"]
         isActive:
@@ -1717,7 +1717,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, manager, purchasing]
+          enum: [admin, manager, purchasing, data_entry]
         phone:
           type: string
 
@@ -1730,7 +1730,7 @@ components:
           type: string
         role:
           type: string
-          enum: [admin, manager, purchasing]
+          enum: [admin, manager, purchasing, data_entry]
         phone:
           type: string
         isActive:

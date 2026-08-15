@@ -97,6 +97,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "employees.role.admin": "Admin",
     "employees.role.manager": "Manager",
     "employees.role.purchasing": "Purchasing",
+    "employees.role.data_entry": "Data Entry",
 
     // RFQ list page
     "rfq.title": "RFQ Management",
@@ -159,6 +160,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "role.admin": "Admin",
     "role.manager": "Manager",
     "role.purchasing": "Purchasing",
+    "role.data_entry": "Data Entry",
 
     // Login page
     "login.title": "Cortoba Supplies",
@@ -432,6 +434,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "employees.role.admin": "مدير النظام",
     "employees.role.manager": "مدير",
     "employees.role.purchasing": "مشتريات",
+    "employees.role.data_entry": "مدخل بيانات",
 
     // RFQ list page
     "rfq.title": "إدارة طلبات العروض",
@@ -494,6 +497,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "role.admin": "مدير النظام",
     "role.manager": "مدير",
     "role.purchasing": "مشتريات",
+    "role.data_entry": "مدخل بيانات",
 
     // Login page
     "login.title": "Cortoba Supplies",
