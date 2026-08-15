@@ -2210,36 +2210,41 @@ components:
       type: object
       description: >
         Derived fulfillment progress for a customer PO, computed by the server
-        from the linked supplier purchase orders and the customer deliveries.
-        Reflects: whether a supplier PO was issued (dispatched) for this customer
-        PO, and the share of the customer PO's line items that have been
-        delivered to the customer.
+        from the linked supplier purchase orders, the receipts recorded from the
+        supplier, and the deliveries made to the customer.
       required: [stage, label]
       properties:
         stage:
           type: string
-          enum: [draft, sent, po_issued, delivered, fulfilled]
+          enum: [draft, sent, po_issued, ready_to_deliver, delivered, fulfilled]
           description: >
             draft — customer PO not yet finalized.
             sent — finalized but no supplier PO dispatched yet.
             po_issued — at least one linked supplier PO has been dispatched (sent to the supplier).
+            ready_to_deliver — some line items received from the supplier but none delivered yet.
             delivered — deliveries recorded; partial when deliveredPct < 100.
-            fulfilled — all line items delivered (deliveredPct = 100).
+            fulfilled — all line items resolved (delivered OR rejected by customer).
         label:
           type: string
-          description: Arabic label ready to display, e.g. "مسودة", "تم الإرسال", "تم إصدار أمر شراء للمورد", "نجح 60% من البنود المسلمة", "تم التسليم بالكامل".
+          description: Arabic label ready to display, e.g. "مسودة", "تم الإرسال", "تم إصدار أمر شراء للمورد", "جاهز للتسليم 50%", "تم تنفيذه 60%", "اكتمل".
         poIssued:
           type: boolean
           description: True when at least one dispatched (status=sent) supplier PO is linked to this customer PO.
         totalItems:
           type: integer
           description: Total number of line items on this customer PO.
+        receivedItems:
+          type: integer
+          description: Number of line items received from the supplier (linked supplier PO item accepted).
+        receivedPct:
+          type: ["integer", "null"]
+          description: Share (0–100) of line items received from the supplier. Null when the customer PO has no items.
         deliveredItems:
           type: integer
           description: Number of line items fully delivered to the customer (deliveryStatus = delivered).
         deliveredPct:
           type: ["integer", "null"]
-          description: Share (0–100) of line items delivered. Null when the customer PO has no items.
+          description: Share (0–100) of line items resolved (delivered OR rejected by the customer). Null when the customer PO has no items.
 
     CustomerPoCustomerRfqOption:
       type: object

@@ -13,7 +13,7 @@ import { Plus, Search, ShoppingCart } from "lucide-react";
 import CustomerDeliveriesPage from "./deliveries";
 
 // Colored badge for the derived customer-PO fulfillment status. The stage
-// reflects: draft → sent → po_issued → delivered (partial %) → fulfilled.
+// reflects: draft → sent → po_issued → ready_to_deliver → delivered → fulfilled.
 function FulfillmentStatusBadge({ status }: { status?: CustomerPoFulfillmentStatus | null }) {
   if (!status) {
     return <span className="text-muted-foreground text-[10px]">—</span>;
@@ -23,19 +23,22 @@ function FulfillmentStatusBadge({ status }: { status?: CustomerPoFulfillmentStat
     sent: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400",
     po_issued:
       "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400",
+    ready_to_deliver:
+      "bg-cyan-100 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-400",
     delivered:
       "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400",
     fulfilled: "bg-green-200 text-green-800 dark:bg-green-900/50 dark:text-green-300",
   };
   const cls = stageStyles[status.stage] ?? stageStyles.draft;
+  const titleParts: string[] = [];
+  if (status.totalItems) {
+    titleParts.push(`${status.receivedItems ?? 0}/${status.totalItems} مُستلَم`);
+    titleParts.push(`${status.deliveredItems ?? 0}/${status.totalItems} مُسلّم`);
+  }
   return (
     <span
       className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${cls}`}
-      title={
-        status.totalItems
-          ? `${status.deliveredItems ?? 0}/${status.totalItems} بنود مسلمة`
-          : status.label
-      }
+      title={titleParts.length ? titleParts.join(" · ") : status.label}
     >
       {status.label}
     </span>

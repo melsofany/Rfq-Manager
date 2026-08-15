@@ -836,13 +836,15 @@ export const ListCustomerPosResponseItem = zod.object({
   "employeeName": zod.string().nullish(),
   "status": zod.string().describe('Stored lifecycle status (draft | sent). The customer-PO finalization flag, NOT the fulfillment progress.'),
   "fulfillmentStatus": zod.object({
-  "stage": zod.enum(['draft', 'sent', 'po_issued', 'delivered', 'fulfilled']).describe('draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items delivered (deliveredPct = 100).\n'),
-  "label": zod.string().describe('Arabic label ready to display, e.g. \"مسودة\", \"تم الإرسال\", \"تم إصدار أمر شراء للمورد\", \"نجح 60% من البنود المسلمة\", \"تم التسليم بالكامل\".'),
+  "stage": zod.enum(['draft', 'sent', 'po_issued', 'ready_to_deliver', 'delivered', 'fulfilled']).describe('draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). ready_to_deliver — some line items received from the supplier but none delivered yet. delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items resolved (delivered OR rejected by customer).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"مسودة\", \"تم الإرسال\", \"تم إصدار أمر شراء للمورد\", \"جاهز للتسليم 50%\", \"تم تنفيذه 60%\", \"اكتمل\".'),
   "poIssued": zod.boolean().optional().describe('True when at least one dispatched (status=sent) supplier PO is linked to this customer PO.'),
   "totalItems": zod.number().optional().describe('Total number of line items on this customer PO.'),
+  "receivedItems": zod.number().optional().describe('Number of line items received from the supplier (linked supplier PO item accepted).'),
+  "receivedPct": zod.number().nullish().describe('Share (0–100) of line items received from the supplier. Null when the customer PO has no items.'),
   "deliveredItems": zod.number().optional().describe('Number of line items fully delivered to the customer (deliveryStatus = delivered).'),
-  "deliveredPct": zod.number().nullish().describe('Share (0–100) of line items delivered. Null when the customer PO has no items.')
-}).optional().describe('Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders and the customer deliveries. Reflects: whether a supplier PO was issued (dispatched) for this customer PO, and the share of the customer PO\'s line items that have been delivered to the customer.\n'),
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of line items resolved (delivered OR rejected by the customer). Null when the customer PO has no items.')
+}).optional().describe('Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders, the receipts recorded from the supplier, and the deliveries made to the customer.\n'),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "createdAt": zod.string(),
@@ -886,13 +888,15 @@ export const CreateCustomerPoResponse = zod.object({
   "employeeName": zod.string().nullish(),
   "status": zod.string().describe('Stored lifecycle status (draft | sent). The customer-PO finalization flag, NOT the fulfillment progress.'),
   "fulfillmentStatus": zod.object({
-  "stage": zod.enum(['draft', 'sent', 'po_issued', 'delivered', 'fulfilled']).describe('draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items delivered (deliveredPct = 100).\n'),
-  "label": zod.string().describe('Arabic label ready to display, e.g. \"مسودة\", \"تم الإرسال\", \"تم إصدار أمر شراء للمورد\", \"نجح 60% من البنود المسلمة\", \"تم التسليم بالكامل\".'),
+  "stage": zod.enum(['draft', 'sent', 'po_issued', 'ready_to_deliver', 'delivered', 'fulfilled']).describe('draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). ready_to_deliver — some line items received from the supplier but none delivered yet. delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items resolved (delivered OR rejected by customer).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"مسودة\", \"تم الإرسال\", \"تم إصدار أمر شراء للمورد\", \"جاهز للتسليم 50%\", \"تم تنفيذه 60%\", \"اكتمل\".'),
   "poIssued": zod.boolean().optional().describe('True when at least one dispatched (status=sent) supplier PO is linked to this customer PO.'),
   "totalItems": zod.number().optional().describe('Total number of line items on this customer PO.'),
+  "receivedItems": zod.number().optional().describe('Number of line items received from the supplier (linked supplier PO item accepted).'),
+  "receivedPct": zod.number().nullish().describe('Share (0–100) of line items received from the supplier. Null when the customer PO has no items.'),
   "deliveredItems": zod.number().optional().describe('Number of line items fully delivered to the customer (deliveryStatus = delivered).'),
-  "deliveredPct": zod.number().nullish().describe('Share (0–100) of line items delivered. Null when the customer PO has no items.')
-}).optional().describe('Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders and the customer deliveries. Reflects: whether a supplier PO was issued (dispatched) for this customer PO, and the share of the customer PO\'s line items that have been delivered to the customer.\n'),
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of line items resolved (delivered OR rejected by the customer). Null when the customer PO has no items.')
+}).optional().describe('Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders, the receipts recorded from the supplier, and the deliveries made to the customer.\n'),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "createdAt": zod.string(),
@@ -933,13 +937,15 @@ export const GetCustomerPoResponse = zod.object({
   "employeeName": zod.string().nullish(),
   "status": zod.string().describe('Stored lifecycle status (draft | sent). The customer-PO finalization flag, NOT the fulfillment progress.'),
   "fulfillmentStatus": zod.object({
-  "stage": zod.enum(['draft', 'sent', 'po_issued', 'delivered', 'fulfilled']).describe('draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items delivered (deliveredPct = 100).\n'),
-  "label": zod.string().describe('Arabic label ready to display, e.g. \"مسودة\", \"تم الإرسال\", \"تم إصدار أمر شراء للمورد\", \"نجح 60% من البنود المسلمة\", \"تم التسليم بالكامل\".'),
+  "stage": zod.enum(['draft', 'sent', 'po_issued', 'ready_to_deliver', 'delivered', 'fulfilled']).describe('draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). ready_to_deliver — some line items received from the supplier but none delivered yet. delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items resolved (delivered OR rejected by customer).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"مسودة\", \"تم الإرسال\", \"تم إصدار أمر شراء للمورد\", \"جاهز للتسليم 50%\", \"تم تنفيذه 60%\", \"اكتمل\".'),
   "poIssued": zod.boolean().optional().describe('True when at least one dispatched (status=sent) supplier PO is linked to this customer PO.'),
   "totalItems": zod.number().optional().describe('Total number of line items on this customer PO.'),
+  "receivedItems": zod.number().optional().describe('Number of line items received from the supplier (linked supplier PO item accepted).'),
+  "receivedPct": zod.number().nullish().describe('Share (0–100) of line items received from the supplier. Null when the customer PO has no items.'),
   "deliveredItems": zod.number().optional().describe('Number of line items fully delivered to the customer (deliveryStatus = delivered).'),
-  "deliveredPct": zod.number().nullish().describe('Share (0–100) of line items delivered. Null when the customer PO has no items.')
-}).optional().describe('Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders and the customer deliveries. Reflects: whether a supplier PO was issued (dispatched) for this customer PO, and the share of the customer PO\'s line items that have been delivered to the customer.\n'),
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of line items resolved (delivered OR rejected by the customer). Null when the customer PO has no items.')
+}).optional().describe('Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders, the receipts recorded from the supplier, and the deliveries made to the customer.\n'),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "createdAt": zod.string(),
@@ -1004,13 +1010,15 @@ export const UpdateCustomerPoResponse = zod.object({
   "employeeName": zod.string().nullish(),
   "status": zod.string().describe('Stored lifecycle status (draft | sent). The customer-PO finalization flag, NOT the fulfillment progress.'),
   "fulfillmentStatus": zod.object({
-  "stage": zod.enum(['draft', 'sent', 'po_issued', 'delivered', 'fulfilled']).describe('draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items delivered (deliveredPct = 100).\n'),
-  "label": zod.string().describe('Arabic label ready to display, e.g. \"مسودة\", \"تم الإرسال\", \"تم إصدار أمر شراء للمورد\", \"نجح 60% من البنود المسلمة\", \"تم التسليم بالكامل\".'),
+  "stage": zod.enum(['draft', 'sent', 'po_issued', 'ready_to_deliver', 'delivered', 'fulfilled']).describe('draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). ready_to_deliver — some line items received from the supplier but none delivered yet. delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items resolved (delivered OR rejected by customer).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"مسودة\", \"تم الإرسال\", \"تم إصدار أمر شراء للمورد\", \"جاهز للتسليم 50%\", \"تم تنفيذه 60%\", \"اكتمل\".'),
   "poIssued": zod.boolean().optional().describe('True when at least one dispatched (status=sent) supplier PO is linked to this customer PO.'),
   "totalItems": zod.number().optional().describe('Total number of line items on this customer PO.'),
+  "receivedItems": zod.number().optional().describe('Number of line items received from the supplier (linked supplier PO item accepted).'),
+  "receivedPct": zod.number().nullish().describe('Share (0–100) of line items received from the supplier. Null when the customer PO has no items.'),
   "deliveredItems": zod.number().optional().describe('Number of line items fully delivered to the customer (deliveryStatus = delivered).'),
-  "deliveredPct": zod.number().nullish().describe('Share (0–100) of line items delivered. Null when the customer PO has no items.')
-}).optional().describe('Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders and the customer deliveries. Reflects: whether a supplier PO was issued (dispatched) for this customer PO, and the share of the customer PO\'s line items that have been delivered to the customer.\n'),
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of line items resolved (delivered OR rejected by the customer). Null when the customer PO has no items.')
+}).optional().describe('Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders, the receipts recorded from the supplier, and the deliveries made to the customer.\n'),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "createdAt": zod.string(),

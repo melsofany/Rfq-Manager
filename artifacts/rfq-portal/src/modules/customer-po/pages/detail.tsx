@@ -332,6 +332,8 @@ export default function CustomerPoDetailPage() {
                     sent: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400",
                     po_issued:
                       "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-400",
+                    ready_to_deliver:
+                      "bg-cyan-100 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-400",
                     delivered:
                       "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400",
                     fulfilled:
@@ -341,7 +343,7 @@ export default function CustomerPoDetailPage() {
                 }`}
                 title={
                   po.fulfillmentStatus.totalItems
-                    ? `${po.fulfillmentStatus.deliveredItems ?? 0}/${po.fulfillmentStatus.totalItems} بنود مسلمة`
+                    ? `${po.fulfillmentStatus.receivedItems ?? 0}/${po.fulfillmentStatus.totalItems} مُستلَم · ${po.fulfillmentStatus.deliveredItems ?? 0}/${po.fulfillmentStatus.totalItems} مُسلّم`
                     : undefined
                 }
               >

@@ -48,6 +48,10 @@ let rfqRows: any[]; // resolveRfqNos: select({id,no}).from(rfqs).where() → [{i
 let dispatchedPoRows: any[]; // [{ sheetPoNo }]
 // Item-level links: dispatched supplier-PO items joined to customer_po_items.
 let linkedPoItemRows: any[]; // [{ customerPoId }]
+// resolveReceivedRollup: item-level link rows (customer_po_items joined to
+// accepted supplier PO items) + supplier-item rows (by poId).
+let receivedItemRows: any[]; // [{ customerPoItemId, lineStatus, acceptedQty, customerPoId }]
+let supplierItemRows: any[]; // [{ poId, lineItem, lineStatus, acceptedQty }]
 // Tracks exact values written to customer_po_items so tests can assert links.
 const insertedItems: any[] = [];
 
@@ -85,14 +89,23 @@ const dbMock: any = {
       }
       // customerPoItemIdsFor / delivery rollup: select({id | customerPoId, deliveryStatus})
       // .from(poItems).where(inArray(...)) — return detailItems (the per-test items).
+      // Also resolveReceivedRollup item-level: select({...}).from(poItems)
+      // .innerJoin(purchaseOrderItems, ...).where(inArray(...)) — return receivedItemRows.
       if (table === poItemsTable) {
         return chainable(detailItems, {
           where: vi.fn(() => chainable(detailItems)),
+          innerJoin: vi.fn(() =>
+            chainable(receivedItemRows, {
+              where: vi.fn(() => chainable(receivedItemRows)),
+            }),
+          ),
         });
       }
       // Item-level po_issued link: select({customerPoId}).from(purchaseOrderItems)
       // .innerJoin(purchaseOrders).innerJoin(customerPoItems).where(and(...))
       // — return linkedPoItemRows (each carries the owning customerPoId).
+      // resolveReceivedRollup supplier-items: select({poId,lineItem,...})
+      // .from(purchaseOrderItems).where(inArray(poId)) — return supplierItemRows.
       if (table === purchaseOrderItemsTbl) {
         return chainable(linkedPoItemRows, {
           innerJoin: vi.fn(() =>
@@ -103,7 +116,7 @@ const dbMock: any = {
               where: vi.fn(() => chainable(linkedPoItemRows)),
             }),
           ),
-          where: vi.fn(() => chainable(linkedPoItemRows)),
+          where: vi.fn(() => chainable(supplierItemRows)),
         });
       }
       // Header-level po_issued fallback: select({sheetPoNo}).from(purchaseOrders)
@@ -205,6 +218,8 @@ beforeEach(() => {
   rfqRows = [];
   dispatchedPoRows = [];
   linkedPoItemRows = [];
+  receivedItemRows = [];
+  supplierItemRows = [];
   sessionState.role = undefined;
   insertedItems.length = 0;
 });
