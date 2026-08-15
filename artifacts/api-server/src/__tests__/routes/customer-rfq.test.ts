@@ -20,9 +20,18 @@ const itemsTable = { _: "customerRfqItems", customerRfqId: "customerRfqId" };
 const customersTable = { _: "customers", id: "id", name: "name" };
 const employeesTbl = { _: "employees", id: "id", name: "name" };
 const auditTable = { _: "audit" };
-const rfqItemsTbl = { _: "rfqItems", customerRfqItemId: "customerRfqItemId", partNo: "partNo", lineItem: "lineItem" };
+const rfqItemsTbl = {
+  _: "rfqItems",
+  customerRfqItemId: "customerRfqItemId",
+  partNo: "partNo",
+  lineItem: "lineItem",
+};
 const offerItemsTbl = { _: "offerItems", isApproved: "isApproved" };
-const customerPoItemsTbl = { _: "customerPoItems", customerRfqItemId: "customerRfqItemId", customerPoId: "customerPoId" };
+const customerPoItemsTbl = {
+  _: "customerPoItems",
+  customerRfqItemId: "customerRfqItemId",
+  customerPoId: "customerPoId",
+};
 const customerPosTbl = { _: "customerPos", customerPoNo: "customerPoNo", id: "id" };
 const tables = {
   customerRfqsTable: rfqTable,
@@ -34,8 +43,19 @@ const tables = {
   offerItemsTable: offerItemsTbl,
   customerPoItemsTable: customerPoItemsTbl,
   customerPosTable: customerPosTbl,
-  customerPoItemDeliveriesTable: { _: "cpoDeliveries", customerPoItemId: "customerPoItemId", deliveryStatus: "deliveryStatus", rejectionReason: "rejectionReason", createdAt: "createdAt" },
-  purchaseOrderItemsTable: { _: "poItems", customerPoItemId: "customerPoItemId", finalActualCost: "finalActualCost", referencePrice: "referencePrice" },
+  customerPoItemDeliveriesTable: {
+    _: "cpoDeliveries",
+    customerPoItemId: "customerPoItemId",
+    deliveryStatus: "deliveryStatus",
+    rejectionReason: "rejectionReason",
+    createdAt: "createdAt",
+  },
+  purchaseOrderItemsTable: {
+    _: "poItems",
+    customerPoItemId: "customerPoItemId",
+    finalActualCost: "finalActualCost",
+    referencePrice: "referencePrice",
+  },
 };
 
 // Per-test state.
@@ -87,7 +107,13 @@ const dbMock: any = {
         // Bare select() (no arg) returns bare rows — used by PATCH to read the
         // existing + updated row directly. select({rfq:...}) wraps in {rfq:...}.
         const bare = arg === undefined;
-        const wrapped = bare ? (detailRow ? [detailRow] : []) : (detailRow ? [{ rfq: detailRow }] : []);
+        const wrapped = bare
+          ? detailRow
+            ? [detailRow]
+            : []
+          : detailRow
+            ? [{ rfq: detailRow }]
+            : [];
         return chainable(wrapped, {
           // list chains .orderBy; detail chains .where
           orderBy: vi.fn(() => chainable(listRows)),
@@ -110,15 +136,23 @@ const dbMock: any = {
         // orderBy is the terminal thenable.
         if (arg && typeof arg === "object" && "rfqItemId" in arg) {
           return chainable(sheetRows, {
-            innerJoin: vi.fn(() => chainable(sheetRows, {
-              leftJoin: vi.fn(() => chainable(sheetRows, {
-                leftJoin: vi.fn(() => chainable(sheetRows, {
-                  leftJoin: vi.fn(() => chainable(sheetRows, {
-                    orderBy: vi.fn(() => chainable(sheetRows)),
-                  })),
-                })),
-              })),
-            })),
+            innerJoin: vi.fn(() =>
+              chainable(sheetRows, {
+                leftJoin: vi.fn(() =>
+                  chainable(sheetRows, {
+                    leftJoin: vi.fn(() =>
+                      chainable(sheetRows, {
+                        leftJoin: vi.fn(() =>
+                          chainable(sheetRows, {
+                            orderBy: vi.fn(() => chainable(sheetRows)),
+                          }),
+                        ),
+                      }),
+                    ),
+                  }),
+                ),
+              }),
+            ),
           });
         }
         return chainable(detailItems, {
@@ -129,9 +163,11 @@ const dbMock: any = {
       // returns the per-test approvedRows.
       if (table === offerItemsTbl) {
         return chainable(approvedRows, {
-          innerJoin: vi.fn(() => chainable(approvedRows, {
-            where: vi.fn(() => chainable(approvedRows)),
-          })),
+          innerJoin: vi.fn(() =>
+            chainable(approvedRows, {
+              where: vi.fn(() => chainable(approvedRows)),
+            }),
+          ),
         });
       }
       // Request-status PO/delivery lookup: select({...}).from(customerPoItems)
@@ -145,9 +181,11 @@ const dbMock: any = {
       // select({...}).from(customerPoItemDeliveries).where(and(inArray, eq)).orderBy()
       if (table === (tables as any).customerPoItemDeliveriesTable) {
         return chainable(sheetRejectedDeliveries, {
-          where: vi.fn(() => chainable(sheetRejectedDeliveries, {
-            orderBy: vi.fn(() => chainable(sheetRejectedDeliveries)),
-          })),
+          where: vi.fn(() =>
+            chainable(sheetRejectedDeliveries, {
+              orderBy: vi.fn(() => chainable(sheetRejectedDeliveries)),
+            }),
+          ),
         });
       }
       // Employee name lookup: select({name}).from(employees).where().limit() —
@@ -189,7 +227,8 @@ const dbMock: any = {
   })),
   delete: vi.fn((table: any) => ({
     where: vi.fn(() => {
-      if (table === rfqTable) return { returning: vi.fn(() => chainable(detailRow ? [detailRow] : [])) };
+      if (table === rfqTable)
+        return { returning: vi.fn(() => chainable(detailRow ? [detailRow] : [])) };
       return chainable(undefined);
     }),
   })),
@@ -246,43 +285,51 @@ beforeEach(() => {
 
 describe("POST /api/customer-rfq (create)", () => {
   it("auto-generates the customer RFQ number when blank and flags it", async () => {
-    const res = await request(testApp).post("/api/customer-rfq").send({
-      customerName: "Acme",
-      customerRfqNo: "",
-      items: [{ partNo: "P1", lineItem: "AB CD", uom: "pc", qty: 5 }],
-    });
+    const res = await request(testApp)
+      .post("/api/customer-rfq")
+      .send({
+        customerName: "Acme",
+        customerRfqNo: "",
+        items: [{ partNo: "P1", lineItem: "AB CD", uom: "pc", qty: 5 }],
+      });
     expect(res.status).toBe(201);
     expect(res.body.numberAutoGenerated).toBe(true);
     expect(res.body.customerRfqNo).toMatch(/^CRFQ-\d{4}-/);
   });
 
   it("keeps the user-provided number and does not flag auto-generation", async () => {
-    const res = await request(testApp).post("/api/customer-rfq").send({
-      customerName: "Acme",
-      customerRfqNo: "RFQ-99",
-      items: [{ partNo: "P1", lineItem: "AB CD", uom: "pc", qty: 5 }],
-    });
+    const res = await request(testApp)
+      .post("/api/customer-rfq")
+      .send({
+        customerName: "Acme",
+        customerRfqNo: "RFQ-99",
+        items: [{ partNo: "P1", lineItem: "AB CD", uom: "pc", qty: 5 }],
+      });
     expect(res.status).toBe(201);
     expect(res.body.numberAutoGenerated).toBe(false);
     expect(res.body.customerRfqNo).toBe("RFQ-99");
   });
 
   it("strips all spaces from lineItem before saving", async () => {
-    await request(testApp).post("/api/customer-rfq").send({
-      customerName: "Acme",
-      customerRfqNo: "RFQ-1",
-      items: [{ partNo: "P1", lineItem: "A B  C D", uom: "pc", qty: 2 }],
-    });
+    await request(testApp)
+      .post("/api/customer-rfq")
+      .send({
+        customerName: "Acme",
+        customerRfqNo: "RFQ-1",
+        items: [{ partNo: "P1", lineItem: "A B  C D", uom: "pc", qty: 2 }],
+      });
     expect(insertedItems).toHaveLength(1);
     expect(insertedItems[0].lineItem).toBe("ABCD");
   });
 
   it("persists the line-item description", async () => {
-    await request(testApp).post("/api/customer-rfq").send({
-      customerName: "Acme",
-      customerRfqNo: "RFQ-2",
-      items: [{ partNo: "P1", lineItem: "AB", description: "  وصف البند  ", uom: "pc", qty: 1 }],
-    });
+    await request(testApp)
+      .post("/api/customer-rfq")
+      .send({
+        customerName: "Acme",
+        customerRfqNo: "RFQ-2",
+        items: [{ partNo: "P1", lineItem: "AB", description: "  وصف البند  ", uom: "pc", qty: 1 }],
+      });
     expect(insertedItems).toHaveLength(1);
     expect(insertedItems[0].description).toBe("وصف البند");
   });
@@ -294,11 +341,13 @@ describe("POST /api/customer-rfq (create)", () => {
 
   it("records the logged-in employee who entered the RFQ", async () => {
     employeeRow = { name: "Ahmed" };
-    const res = await request(testApp).post("/api/customer-rfq").send({
-      customerName: "Acme",
-      customerRfqNo: "RFQ-E1",
-      items: [{ partNo: "P1", uom: "pc", qty: 1 }],
-    });
+    const res = await request(testApp)
+      .post("/api/customer-rfq")
+      .send({
+        customerName: "Acme",
+        customerRfqNo: "RFQ-E1",
+        items: [{ partNo: "P1", uom: "pc", qty: 1 }],
+      });
     expect(res.status).toBe(201);
     expect(res.body.employeeId).toBe(sessionState.employeeId);
     expect(res.body.employeeName).toBe("Ahmed");
@@ -311,8 +360,24 @@ describe("GET /api/customer-rfq (list)", () => {
     // The list now loads the RFQ's actual items (batched) to compute both the
     // item count and the derived request status. Two items, one priced.
     detailItems = [
-      { id: 10, customerRfqId: 1, partNo: "P1", lineItem: "A1", uom: "pc", qty: "3", unitPrice: "10" },
-      { id: 11, customerRfqId: 1, partNo: "P2", lineItem: "A2", uom: "pc", qty: "2", unitPrice: null },
+      {
+        id: 10,
+        customerRfqId: 1,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "3",
+        unitPrice: "10",
+      },
+      {
+        id: 11,
+        customerRfqId: 1,
+        partNo: "P2",
+        lineItem: "A2",
+        uom: "pc",
+        qty: "2",
+        unitPrice: null,
+      },
     ];
     const res = await request(testApp).get("/api/customer-rfq");
     expect(res.status).toBe(200);
@@ -328,7 +393,15 @@ describe("GET /api/customer-rfq (list)", () => {
   it("request status reflects supplier-priced when an approved offer exists", async () => {
     listRows = [{ rfq: { ...insertedRfq, id: 2, internalNo: "CRFQ-2", itemCount: undefined } }];
     detailItems = [
-      { id: 20, customerRfqId: 2, partNo: "P1", lineItem: "A1", uom: "pc", qty: "1", unitPrice: null },
+      {
+        id: 20,
+        customerRfqId: 2,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: null,
+      },
     ];
     // resolveSupplierPricedItemIds queries offerItems (mock returns approvedRows
     // for items with an id in the set). Mark item 20 as approved.
@@ -342,12 +415,28 @@ describe("GET /api/customer-rfq (list)", () => {
 
   it("marks an unpriced RFQ whose close date passed as expired", async () => {
     listRows = [
-      { rfq: { ...insertedRfq, id: 3, internalNo: "CRFQ-3", itemCount: undefined, expiryDate: "2020-01-01" } },
+      {
+        rfq: {
+          ...insertedRfq,
+          id: 3,
+          internalNo: "CRFQ-3",
+          itemCount: undefined,
+          expiryDate: "2020-01-01",
+        },
+      },
     ];
     // One item with no price, no approved offer, no PO → would be "received"
     // except the close date is long past → "expired".
     detailItems = [
-      { id: 30, customerRfqId: 3, partNo: "P1", lineItem: "A1", uom: "pc", qty: "1", unitPrice: null },
+      {
+        id: 30,
+        customerRfqId: 3,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: null,
+      },
     ];
     const res = await request(testApp).get("/api/customer-rfq");
     expect(res.status).toBe(200);
@@ -359,10 +448,7 @@ describe("GET /api/customer-rfq (list)", () => {
 describe("GET /api/customer-rfq/numbers", () => {
   it("returns all customer RFQ numbers for the import combobox", async () => {
     // Reuse the list path mock: select().from(rfqTable).orderBy() returns listRows.
-    listRows = [
-      { customerRfqNo: "RFQ-AAA" },
-      { customerRfqNo: "RFQ-BBB" },
-    ];
+    listRows = [{ customerRfqNo: "RFQ-AAA" }, { customerRfqNo: "RFQ-BBB" }];
     const res = await request(testApp).get("/api/customer-rfq/numbers");
     expect(res.status).toBe(200);
     expect(res.body.rfqNumbers).toEqual(["RFQ-AAA", "RFQ-BBB"]);
@@ -379,7 +465,16 @@ describe("GET /api/customer-rfq/:id", () => {
   it("returns the rfq with items when found", async () => {
     detailRow = insertedRfq;
     detailItems = [
-      { id: 1, customerRfqId: 42, partNo: "P1", lineItem: "ABCD", description: "وصف البند", uom: "pc", qty: "3.0000", createdAt: new Date("2025-01-01") },
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: "وصف البند",
+        uom: "pc",
+        qty: "3.0000",
+        createdAt: new Date("2025-01-01"),
+      },
     ];
     const res = await request(testApp).get("/api/customer-rfq/42");
     expect(res.status).toBe(200);
@@ -395,8 +490,26 @@ describe("GET /api/customer-rfq/:id", () => {
     detailRow = insertedRfq;
     // Two items: id 1 (on a PO, fully delivered) and id 2 (no PO).
     detailItems = [
-      { id: 1, customerRfqId: 42, partNo: "P1", lineItem: "A1", uom: "pc", qty: "3", unitPrice: "10", createdAt: new Date("2025-01-01") },
-      { id: 2, customerRfqId: 42, partNo: "P2", lineItem: "A2", uom: "pc", qty: "5", unitPrice: null, createdAt: new Date("2025-01-01") },
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "3",
+        unitPrice: "10",
+        createdAt: new Date("2025-01-01"),
+      },
+      {
+        id: 2,
+        customerRfqId: 42,
+        partNo: "P2",
+        lineItem: "A2",
+        uom: "pc",
+        qty: "5",
+        unitPrice: null,
+        createdAt: new Date("2025-01-01"),
+      },
     ];
     // Item 1 appears on a customer PO and is fully delivered.
     poItemRows = [
@@ -418,7 +531,16 @@ describe("GET /api/customer-rfq/:id", () => {
     detailRow = { ...insertedRfq, expiryDate: "2020-01-01" };
     // No price, no approved offer, no PO — but the close date is past.
     detailItems = [
-      { id: 5, customerRfqId: 42, partNo: "P1", lineItem: "A1", uom: "pc", qty: "1", unitPrice: null, createdAt: new Date("2025-01-01") },
+      {
+        id: 5,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: null,
+        createdAt: new Date("2025-01-01"),
+      },
     ];
     approvedRows = [];
     poItemRows = [];
@@ -432,7 +554,16 @@ describe("GET /api/customer-rfq/:id", () => {
     detailRow = { ...insertedRfq, expiryDate: "2020-01-01" };
     // Has a customer price → takes precedence over the expired stage.
     detailItems = [
-      { id: 6, customerRfqId: 42, partNo: "P1", lineItem: "A1", uom: "pc", qty: "1", unitPrice: "10", createdAt: new Date("2025-01-01") },
+      {
+        id: 6,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "A1",
+        uom: "pc",
+        qty: "1",
+        unitPrice: "10",
+        createdAt: new Date("2025-01-01"),
+      },
     ];
     approvedRows = [];
     poItemRows = [];
@@ -449,7 +580,9 @@ describe("PATCH /api/customer-rfq/:id", () => {
     const updatedRow = { ...insertedRfq, numberAutoGenerated: false, customerRfqNo: "RFQ-X" };
     detailRow = updatedRow;
     detailItems = [];
-    const res = await request(testApp).patch("/api/customer-rfq/42").send({ customerRfqNo: "RFQ-X" });
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ customerRfqNo: "RFQ-X" });
     expect(res.status).toBe(200);
     expect(res.body.numberAutoGenerated).toBe(false);
     expect(res.body.customerRfqNo).toBe("RFQ-X");
@@ -472,10 +605,12 @@ describe("PATCH /api/customer-rfq/:id", () => {
     ];
     // Approved supplier price (excl tax) = 8 → 1.06 × 8 = 8.48 ≤ 10 ✓
     approvedRows = [{ customerRfqItemId: 1, price: "8", taxIncluded: false }];
-    const res = await request(testApp).patch("/api/customer-rfq/42").send({
-      status: "sent",
-      items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
-    });
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        status: "sent",
+        items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
+      });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("sent");
     expect(res.body.items[0].unitPrice).toBe("10");
@@ -499,10 +634,12 @@ describe("PATCH /api/customer-rfq/:id", () => {
     ];
     // Approved cost = 10 → 1.06 × 10 = 10.6 > 10 → violation
     approvedRows = [{ customerRfqItemId: 1, price: "10", taxIncluded: false }];
-    const res = await request(testApp).patch("/api/customer-rfq/42").send({
-      status: "sent",
-      items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
-    });
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        status: "sent",
+        items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
+      });
     expect(res.status).toBe(400);
     expect(res.body.marginViolations).toBeDefined();
     expect(res.body.error).toContain("الحد الأدنى");
@@ -525,10 +662,12 @@ describe("PATCH /api/customer-rfq/:id", () => {
     ];
     // No approved supplier price at all.
     approvedRows = [];
-    const res = await request(testApp).patch("/api/customer-rfq/42").send({
-      status: "sent",
-      items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
-    });
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        status: "sent",
+        items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
+      });
     expect(res.status).toBe(400);
     expect(res.body.marginViolations).toBeDefined();
     expect(res.body.error).toContain("معتمد");
@@ -551,11 +690,13 @@ describe("PATCH /api/customer-rfq/:id", () => {
     ];
     approvedRows = []; // would normally block
     sessionState.role = "admin";
-    const res = await request(testApp).patch("/api/customer-rfq/42").send({
-      status: "sent",
-      overrideMarginCheck: true,
-      items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
-    });
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        status: "sent",
+        overrideMarginCheck: true,
+        items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
+      });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("sent");
   });
@@ -563,10 +704,12 @@ describe("PATCH /api/customer-rfq/:id", () => {
   it("rejects finalizing when an item has no price", async () => {
     detailRow = { ...insertedRfq };
     detailItems = [];
-    const res = await request(testApp).patch("/api/customer-rfq/42").send({
-      status: "sent",
-      items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3 }],
-    });
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        status: "sent",
+        items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3 }],
+      });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("سعر");
   });
@@ -576,6 +719,48 @@ describe("PATCH /api/customer-rfq/:id", () => {
     const res = await request(testApp)
       .patch("/api/customer-rfq/42")
       .send({ notes: "edited after send" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("بعد إرساله");
+  });
+
+  it("blocks a prices-only update on a sent RFQ before its expiry date", async () => {
+    detailRow = { ...insertedRfq, status: "sent", expiryDate: "2099-12-31" };
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ items: [{ id: 1, unitPrice: 12 }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("بعد إرساله");
+  });
+
+  it("allows re-pricing a sent RFQ after its expiry date (prices-only, no status change)", async () => {
+    detailRow = { ...insertedRfq, status: "sent", expiryDate: "2020-01-01" };
+    detailItems = [
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: null,
+        uom: "pc",
+        qty: "3.0000",
+        unitPrice: "12.0000",
+        createdAt: new Date("2025-01-03"),
+      },
+    ];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ items: [{ id: 1, unitPrice: 12 }] });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("sent");
+    expect(res.body.items[0].unitPrice).toBe("12");
+    expect(res.body.items[0].total).toBe("36");
+  });
+
+  it("blocks a prices-only re-price when header fields are also sent", async () => {
+    detailRow = { ...insertedRfq, status: "sent", expiryDate: "2020-01-01" };
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ notes: "x", items: [{ id: 1, unitPrice: 12 }] });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("بعد إرساله");
   });
@@ -830,9 +1015,7 @@ describe("GET /api/customer-rfq/sheet-view", () => {
       },
     ];
     // Include customerName=Acme → only Acme remains.
-    const res = await request(testApp).get(
-      "/api/customer-rfq/sheet-view?customerNameInclude=Acme",
-    );
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view?customerNameInclude=Acme");
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
     expect(res.body.rows[0].rfqItemId).toBe(1);
@@ -862,9 +1045,7 @@ describe("GET /api/customer-rfq/sheet-view", () => {
       },
     ];
     // Empty include set (deselect all) → show none.
-    const res = await request(testApp).get(
-      "/api/customer-rfq/sheet-view?customerNameInclude=",
-    );
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view?customerNameInclude=");
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(0);
     expect(res.body.rows).toHaveLength(0);

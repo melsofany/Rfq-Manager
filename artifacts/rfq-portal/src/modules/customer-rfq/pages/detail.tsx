@@ -52,6 +52,14 @@ export default function CustomerRfqDetailPage() {
 
   const { data: rfq, isLoading } = useGetCustomerRfq(id);
   const isDraft = rfq?.status === "draft";
+  // A sent (finalized/locked) customer RFQ can still be re-priced after its
+  // close date has passed — pricing entry stays available past expiry.
+  const isSentExpired =
+    rfq?.status === "sent" &&
+    !!rfq.expiryDate &&
+    !Number.isNaN(new Date(rfq.expiryDate).getTime()) &&
+    new Date(rfq.expiryDate).getTime() < new Date().setHours(0, 0, 0, 0);
+  const canPrice = isDraft || isSentExpired;
 
   const [editing, setEditing] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -201,9 +209,26 @@ export default function CustomerRfqDetailPage() {
           description: it.description ?? undefined,
           uom: it.uom ?? undefined,
           qty: it.qty != null ? Number(it.qty) : undefined,
-          unitPrice:
-            it.id != null && priceInputs[it.id] ? Number(priceInputs[it.id]) : undefined,
+          unitPrice: it.id != null && priceInputs[it.id] ? Number(priceInputs[it.id]) : undefined,
         })),
+      } as Parameters<typeof updateMutation.mutate>[0]["data"],
+    });
+  };
+
+  // Prices-only save for a sent RFQ past its expiry: send each item's id +
+  // new unit price. The backend updates unit_price by id (preserving links)
+  // without re-running the margin check or changing the status.
+  const handleSavePrices = () => {
+    if (!rfq?.items) return;
+    updateMutation.mutate({
+      id,
+      data: {
+        items: rfq.items
+          .filter((it) => it.id != null)
+          .map((it) => ({
+            id: it.id,
+            unitPrice: it.id != null && priceInputs[it.id] ? Number(priceInputs[it.id]) : undefined,
+          })),
       } as Parameters<typeof updateMutation.mutate>[0]["data"],
     });
   };
@@ -259,8 +284,9 @@ export default function CustomerRfqDetailPage() {
           <div className="flex items-start gap-2 text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded px-3 py-2">
             <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
             <span>
-              رقم طلب تسعير العميل <span className="font-mono font-semibold">{rfq.customerRfqNo}</span>{" "}
-              تم إنشاؤه تلقائياً لأن الحقل تُرك فارغاً. عدّل الطلب وأدخل الرقم لإزالة هذا التحذير.
+              رقم طلب تسعير العميل{" "}
+              <span className="font-mono font-semibold">{rfq.customerRfqNo}</span> تم إنشاؤه
+              تلقائياً لأن الحقل تُرك فارغاً. عدّل الطلب وأدخل الرقم لإزالة هذا التحذير.
             </span>
           </div>
         )}
@@ -272,19 +298,37 @@ export default function CustomerRfqDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>اسم العميل *</Label>
-                  <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} required />
+                  <Input
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    required
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>رقم طلب تسعير العميل</Label>
-                  <Input value={customerRfqNo} onChange={(e) => setCustomerRfqNo(e.target.value)} dir="ltr" />
+                  <Input
+                    value={customerRfqNo}
+                    onChange={(e) => setCustomerRfqNo(e.target.value)}
+                    dir="ltr"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>تاريخ دخول الطلب</Label>
-                  <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} dir="ltr" />
+                  <Input
+                    type="date"
+                    value={entryDate}
+                    onChange={(e) => setEntryDate(e.target.value)}
+                    dir="ltr"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>تاريخ انتهاء الطلب</Label>
-                  <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} dir="ltr" />
+                  <Input
+                    type="date"
+                    value={expiryDate}
+                    onChange={(e) => setExpiryDate(e.target.value)}
+                    dir="ltr"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>المشتري / الموظف المسئول</Label>
@@ -300,7 +344,13 @@ export default function CustomerRfqDetailPage() {
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="flex items-center justify-between px-5 py-3 border-b border-border">
                 <h2 className="font-semibold text-sm text-foreground">البنود</h2>
-                <Button type="button" onClick={addItem} variant="ghost" size="sm" className="gap-1.5 h-7 text-xs">
+                <Button
+                  type="button"
+                  onClick={addItem}
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1.5 h-7 text-xs"
+                >
                   <Plus size={13} /> إضافة بند
                 </Button>
               </div>
@@ -309,36 +359,79 @@ export default function CustomerRfqDetailPage() {
                   <thead>
                     <tr className="bg-muted/30 border-b border-border text-right">
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-8">#</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">Part No</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">Line Item</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">التوصيف</th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
+                        Part No
+                      </th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
+                        Line Item
+                      </th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
+                        التوصيف
+                      </th>
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium">UOM</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">الكمية</th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
+                        الكمية
+                      </th>
                       <th className="px-3 py-2 w-8" />
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((row, i) => (
-                      <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/20">
-                        <td className="px-3 py-2 text-muted-foreground text-xs text-center">{i + 1}</td>
-                        <td className="px-2 py-1.5">
-                          <Input value={row.partNo} onChange={(e) => updateItem(i, "partNo", e.target.value)} className="h-7 text-xs" dir="ltr" />
+                      <tr
+                        key={i}
+                        className="border-b border-border last:border-0 hover:bg-muted/20"
+                      >
+                        <td className="px-3 py-2 text-muted-foreground text-xs text-center">
+                          {i + 1}
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input value={row.lineItem} onChange={(e) => updateItem(i, "lineItem", e.target.value)} className="h-7 text-xs" dir="ltr" />
+                          <Input
+                            value={row.partNo}
+                            onChange={(e) => updateItem(i, "partNo", e.target.value)}
+                            className="h-7 text-xs"
+                            dir="ltr"
+                          />
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input value={row.description} onChange={(e) => updateItem(i, "description", e.target.value)} className="h-7 text-xs" placeholder="توصيف البند" />
+                          <Input
+                            value={row.lineItem}
+                            onChange={(e) => updateItem(i, "lineItem", e.target.value)}
+                            className="h-7 text-xs"
+                            dir="ltr"
+                          />
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input value={row.uom} onChange={(e) => updateItem(i, "uom", e.target.value)} className="h-7 text-xs" dir="ltr" />
+                          <Input
+                            value={row.description}
+                            onChange={(e) => updateItem(i, "description", e.target.value)}
+                            className="h-7 text-xs"
+                            placeholder="توصيف البند"
+                          />
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input value={row.qty} onChange={(e) => updateItem(i, "qty", e.target.value)} className="h-7 text-xs" type="number" dir="ltr" />
+                          <Input
+                            value={row.uom}
+                            onChange={(e) => updateItem(i, "uom", e.target.value)}
+                            className="h-7 text-xs"
+                            dir="ltr"
+                          />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input
+                            value={row.qty}
+                            onChange={(e) => updateItem(i, "qty", e.target.value)}
+                            className="h-7 text-xs"
+                            type="number"
+                            dir="ltr"
+                          />
                         </td>
                         <td className="px-2 py-1.5 text-center">
                           {items.length > 1 && (
-                            <button type="button" onClick={() => removeItem(i)} className="text-muted-foreground hover:text-destructive">
+                            <button
+                              type="button"
+                              onClick={() => removeItem(i)}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
                               <Trash2 size={14} />
                             </button>
                           )}
@@ -358,7 +451,14 @@ export default function CustomerRfqDetailPage() {
             )}
 
             <div className="flex gap-3 justify-end">
-              <Button type="button" variant="ghost" onClick={() => { setEditing(false); setError(null); }}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setEditing(false);
+                  setError(null);
+                }}
+              >
                 إلغاء
               </Button>
               <Button type="submit" disabled={updateMutation.isPending}>
@@ -371,16 +471,15 @@ export default function CustomerRfqDetailPage() {
             <div className="bg-card border border-border rounded-lg p-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <DetailField label="العميل" value={rfq.customerName} />
-                <DetailField
-                  label="رقم طلب تسعير العميل"
-                  value={rfq.customerRfqNo}
-                  mono
-                />
+                <DetailField label="رقم طلب تسعير العميل" value={rfq.customerRfqNo} mono />
                 <DetailField label="تاريخ دخول الطلب" value={rfq.entryDate ?? "—"} ltr />
                 <DetailField label="تاريخ انتهاء الطلب" value={rfq.expiryDate ?? "—"} ltr />
                 <DetailField label="المشتري / الموظف المسئول" value={rfq.buyerName ?? "—"} />
                 <DetailField label="المدخل" value={rfq.employeeName ?? "—"} />
-                <DetailField label="تاريخ الإنشاء" value={new Date(rfq.createdAt).toLocaleString("ar-EG")} />
+                <DetailField
+                  label="تاريخ الإنشاء"
+                  value={new Date(rfq.createdAt).toLocaleString("ar-EG")}
+                />
                 <div className="space-y-1">
                   <Label className="text-muted-foreground text-xs">حالة الطلب</Label>
                   <RequestStatusBadge status={rfq.requestStatus} />
@@ -397,46 +496,79 @@ export default function CustomerRfqDetailPage() {
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="px-5 py-3 border-b border-border">
                 <h2 className="font-semibold text-sm text-foreground">
-                  البنود <span className="text-muted-foreground font-normal">({rfq.items?.length ?? 0})</span>
+                  البنود{" "}
+                  <span className="text-muted-foreground font-normal">
+                    ({rfq.items?.length ?? 0})
+                  </span>
                 </h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-muted/30 border-b border-border text-right">
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-8">#</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Part No</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Line Item</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">التوصيف</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-8">
+                        #
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Part No
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Line Item
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        التوصيف
+                      </th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">UOM</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الكمية</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">سعر الوحدة</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الإجمالي</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">أمر شراء</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        الكمية
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        سعر الوحدة
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        الإجمالي
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        أمر شراء
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {(rfq.items ?? []).length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="px-4 py-6 text-center text-muted-foreground text-sm">
+                        <td
+                          colSpan={9}
+                          className="px-4 py-6 text-center text-muted-foreground text-sm"
+                        >
                           لا توجد بنود
                         </td>
                       </tr>
                     ) : (
                       (rfq.items ?? []).map((it, i) => {
-                        const price = it.id != null ? priceInputs[it.id] ?? "" : "";
+                        const price = it.id != null ? (priceInputs[it.id] ?? "") : "";
                         // Highlight rows that already have an issued customer PO.
                         const rowTint = it.hasPo ? "bg-green-50/60 dark:bg-green-950/20" : "";
                         return (
-                          <tr key={it.id} className={`border-b border-border last:border-0 hover:bg-muted/20 ${rowTint}`}>
-                            <td className="px-4 py-2.5 text-muted-foreground text-xs text-center">{i + 1}</td>
-                            <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">{it.partNo ?? "—"}</td>
-                            <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">{it.lineItem ?? "—"}</td>
+                          <tr
+                            key={it.id}
+                            className={`border-b border-border last:border-0 hover:bg-muted/20 ${rowTint}`}
+                          >
+                            <td className="px-4 py-2.5 text-muted-foreground text-xs text-center">
+                              {i + 1}
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">
+                              {it.partNo ?? "—"}
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">
+                              {it.lineItem ?? "—"}
+                            </td>
                             <td className="px-4 py-2.5 text-xs">{it.description ?? "—"}</td>
                             <td className="px-4 py-2.5 text-xs">{it.uom ?? "—"}</td>
-                            <td className="px-4 py-2.5 text-xs" dir="ltr">{formatQty(it.qty) || "—"}</td>
+                            <td className="px-4 py-2.5 text-xs" dir="ltr">
+                              {formatQty(it.qty) || "—"}
+                            </td>
                             <td className="px-4 py-2.5 text-xs">
-                              {isDraft ? (
+                              {canPrice ? (
                                 <Input
                                   type="number"
                                   dir="ltr"
@@ -446,7 +578,10 @@ export default function CustomerRfqDetailPage() {
                                   placeholder="0"
                                   onChange={(e) =>
                                     it.id != null &&
-                                    setPriceInputs((prev) => ({ ...prev, [it.id!]: e.target.value }))
+                                    setPriceInputs((prev) => ({
+                                      ...prev,
+                                      [it.id!]: e.target.value,
+                                    }))
                                   }
                                 />
                               ) : (
@@ -454,11 +589,16 @@ export default function CustomerRfqDetailPage() {
                               )}
                             </td>
                             <td className="px-4 py-2.5 text-xs" dir="ltr">
-                              {isDraft ? formatLineTotal(it.qty, price) || "—" : formatQty(it.total) || "—"}
+                              {canPrice
+                                ? formatLineTotal(it.qty, price) || "—"
+                                : formatQty(it.total) || "—"}
                             </td>
                             <td className="px-4 py-2.5 text-center">
                               {it.hasPo ? (
-                                <span title="صدر أمر شراء لهذا البند" className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300">
+                                <span
+                                  title="صدر أمر شراء لهذا البند"
+                                  className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-950/50 dark:text-green-300"
+                                >
                                   أمر شراء
                                 </span>
                               ) : (
@@ -473,10 +613,15 @@ export default function CustomerRfqDetailPage() {
                   {(rfq.items ?? []).length > 0 && (
                     <tfoot>
                       <tr className="bg-muted/20 border-t-2 border-border font-semibold">
-                        <td colSpan={8} className="px-4 py-2.5 text-left text-xs text-muted-foreground">
+                        <td
+                          colSpan={8}
+                          className="px-4 py-2.5 text-left text-xs text-muted-foreground"
+                        >
                           الإجمالي الكلي
                         </td>
-                        <td className="px-4 py-2.5 text-sm" dir="ltr">{grandTotalStr || "—"}</td>
+                        <td className="px-4 py-2.5 text-sm" dir="ltr">
+                          {grandTotalStr || "—"}
+                        </td>
                       </tr>
                     </tfoot>
                   )}
@@ -498,10 +643,29 @@ export default function CustomerRfqDetailPage() {
                       </Button>
                     </div>
                   ) : (
-                    <Button disabled={!allItemsPriced} onClick={() => setConfirmFinalize(true)} className="gap-1.5">
+                    <Button
+                      disabled={!allItemsPriced}
+                      onClick={() => setConfirmFinalize(true)}
+                      className="gap-1.5"
+                    >
                       <Lock size={15} /> حفظ الأسعار وتثبيت الطلب
                     </Button>
                   )}
+                </div>
+              )}
+              {isSentExpired && (rfq.items ?? []).length > 0 && (
+                <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <AlertTriangle size={13} className="text-amber-500" />
+                    انتهت مدة الطلب — يمكن تعديل أسعار البنود.
+                  </p>
+                  <Button
+                    disabled={updateMutation.isPending}
+                    onClick={handleSavePrices}
+                    className="gap-1.5"
+                  >
+                    {updateMutation.isPending ? "جارٍ الحفظ..." : "حفظ الأسعار"}
+                  </Button>
                 </div>
               )}
             </div>
@@ -530,7 +694,11 @@ export default function CustomerRfqDetailPage() {
               ) : (
                 isDraft && (
                   <>
-                    <Button variant="ghost" onClick={() => setConfirmDelete(true)} className="text-destructive hover:text-destructive">
+                    <Button
+                      variant="ghost"
+                      onClick={() => setConfirmDelete(true)}
+                      className="text-destructive hover:text-destructive"
+                    >
                       <Trash2 size={15} className="ml-1" /> حذف
                     </Button>
                     <Button variant="outline" onClick={startEdit} className="gap-1.5">
@@ -573,11 +741,7 @@ function DetailField({
 
 // Colored badge for the derived request status. Each stage gets a distinct
 // color so the status reads at a glance.
-function RequestStatusBadge({
-  status,
-}: {
-  status?: CustomerRfqRequestStatus | null;
-}) {
+function RequestStatusBadge({ status }: { status?: CustomerRfqRequestStatus | null }) {
   if (!status) {
     return <span className="text-xs text-muted-foreground">—</span>;
   }
