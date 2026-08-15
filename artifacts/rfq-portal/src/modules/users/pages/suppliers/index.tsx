@@ -26,6 +26,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { filterTabs } from "@/lib/permissions";
 import ImportSuppliersTab from "./import-tab";
 
 function parseCategories(cat: string | null | undefined): string[] {
@@ -450,35 +451,41 @@ function SuppliersListTab() {
 type Tab = "list" | "import";
 
 export default function SuppliersPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("list");
+  const { employee } = useAuth();
+  const allowedTabs = filterTabs(employee?.role, employee?.permissions, "suppliers", ["list", "import"] as const);
+  const [activeTab, setActiveTab] = useState<Tab>(allowedTabs[0] ?? "list");
 
   return (
     <Layout>
       {/* Tab bar */}
       <div className="border-b border-border px-4 sm:px-6 pt-4 sm:pt-6">
         <div className="flex gap-0">
-          <button
-            onClick={() => setActiveTab("list")}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-              activeTab === "list"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-            }`}
-          >
-            <Users size={14} />
-            الموردون
-          </button>
-          <button
-            onClick={() => setActiveTab("import")}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-              activeTab === "import"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-            }`}
-          >
-            <Upload size={14} />
-            استيراد موردين
-          </button>
+          {allowedTabs.includes("list") && (
+            <button
+              onClick={() => setActiveTab("list")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === "list"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+              }`}
+            >
+              <Users size={14} />
+              الموردون
+            </button>
+          )}
+          {allowedTabs.includes("import") && (
+            <button
+              onClick={() => setActiveTab("import")}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeTab === "import"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+              }`}
+            >
+              <Upload size={14} />
+              استيراد موردين
+            </button>
+          )}
         </div>
       </div>
 

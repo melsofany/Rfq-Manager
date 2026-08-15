@@ -130,7 +130,7 @@ export default function GoodsReceiptPage() {
     es.onmessage = (ev) => {
       try {
         const payload = JSON.parse(ev.data);
-        if (payload?.type === "receipt_recorded" && expandedPo === payload.poId) {
+        if (payload?.type === "receipt_recorded" && expandedPo !== null && expandedPo === payload.poId) {
           void loadItems(expandedPo);
         }
       } catch {

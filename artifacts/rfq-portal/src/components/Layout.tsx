@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { canAccessPath } from "@/lib/permissions";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { employee, logout } = useAuth();
@@ -30,7 +31,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [waUnread, setWaUnread] = useState(0);
   const { t, lang, setLang } = useLanguage();
 
-  const navItems = [
+  const role = employee?.role;
+  const perms = employee?.permissions;
+
+  const mainNavItems = [
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
     { href: "/customers", label: t("nav.customers"), icon: UserRound },
     { href: "/customer-rfq", label: t("nav.customerRfq"), icon: FileText },
@@ -44,17 +48,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/whatsapp", label: t("nav.whatsapp"), icon: MessageSquare },
   ];
 
-  // Data-entry clerks may only enter customer RFQs and customer POs (plus the
-  // dashboard and customer list). Other modules are hidden from the sidebar.
-  const DATA_ENTRY_HREFS = new Set(["/dashboard", "/customers", "/customer-rfq", "/customer-po"]);
-  const visibleNavItems =
-    employee?.role === "data_entry" ? navItems.filter((i) => DATA_ENTRY_HREFS.has(i.href)) : navItems;
-
-  const adminItems = [
+  const adminNavItems = [
     { href: "/employees", label: t("nav.employees"), icon: UserCog },
     { href: "/audit", label: t("nav.auditLog"), icon: ClipboardList },
     { href: "/integrations", label: t("nav.integrations"), icon: Plug },
   ];
+
+  // Filter both groups by the employee's effective permissions.
+  const visibleMain = mainNavItems.filter((i) => canAccessPath(role, perms, i.href));
+  const visibleAdmin = adminNavItems.filter((i) => canAccessPath(role, perms, i.href));
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -140,7 +142,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {visibleNavItems.map((item) => {
+          {visibleMain.map((item) => {
             const active = location === item.href || location.startsWith(item.href + "/");
             return (
               <Link key={item.href} href={item.href}>
@@ -171,14 +173,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
             );
           })}
 
-          {employee?.role === "admin" && (
+          {visibleAdmin.length > 0 && (
             <>
               {(sidebarOpen || mobile) && (
                 <p className="text-sidebar-foreground/30 text-xs px-2 pt-3 pb-1 uppercase tracking-wider">
                   {t("nav.admin")}
                 </p>
               )}
-              {adminItems.map((item) => {
+              {visibleAdmin.map((item) => {
                 const active = location === item.href || location.startsWith(item.href + "/");
                 return (
                   <Link key={item.href} href={item.href}>

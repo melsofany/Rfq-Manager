@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { filterTabs, hasPermission } from "@/lib/permissions";
+import PermissionsEditor, { type PermissionsValue } from "./permissions-editor";
 import {
   Plus,
   X,
@@ -26,15 +28,17 @@ import {
 
 const ROLES = ["admin", "manager", "purchasing", "data_entry"];
 
-type EmpForm = { name: string; email: string; password: string; role: string; phone: string };
-const EMPTY_FORM: EmpForm = { name: "", email: "", password: "", role: "purchasing", phone: "" };
+type EmpForm = { name: string; email: string; password: string; role: string; phone: string; permissions: PermissionsValue };
+const EMPTY_FORM: EmpForm = { name: "", email: "", password: "", role: "purchasing", phone: "", permissions: null };
 
 export default function EmployeesPage() {
   const { employee: me } = useAuth();
   const { t } = useLanguage();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"employees" | "representatives">("employees");
+  const canManageEmps = me?.role === "admin";
+  const allowedTabs = filterTabs(me?.role, me?.permissions, "employees", ["employees", "representatives"] as const);
+  const [activeTab, setActiveTab] = useState<"employees" | "representatives">(allowedTabs[0] ?? "employees");
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState<EmpForm>(EMPTY_FORM);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -90,6 +94,7 @@ export default function EmployeesPage() {
       password: "",
       role: emp.role,
       phone: emp.phone ?? "",
+      permissions: emp.permissions ?? null,
     });
     setEditError(null);
   }
@@ -102,6 +107,7 @@ export default function EmployeesPage() {
       email: editForm.email,
       role: editForm.role,
       phone: editForm.phone || null,
+      permissions: editForm.role === "admin" ? null : editForm.permissions,
     };
     if (editForm.password) payload.password = editForm.password;
     updateMutation.mutate({
@@ -140,7 +146,7 @@ export default function EmployeesPage() {
     }
   }
 
-  if (me?.role !== "admin") {
+  if (!hasPermission(me?.role, me?.permissions, "employees")) {
     return (
       <Layout>
         <div className="p-6 text-muted-foreground text-sm">{t("employees.accessDenied")}</div>
@@ -165,21 +171,27 @@ export default function EmployeesPage() {
             <h1 className="text-xl font-bold text-foreground">{t("employees.title")}</h1>
             <p className="text-muted-foreground text-sm">{t("employees.subtitle")}</p>
           </div>
-          <Button
-            onClick={() => {
-              setShowCreate(true);
-              setCreateError(null);
-            }}
-            size="sm"
-            className="gap-1.5"
-          >
-            <Plus size={15} /> {t("employees.addEmployee")}
-          </Button>
+          {canManageEmps && allowedTabs.includes("employees") && (
+            <Button
+              onClick={() => {
+                setShowCreate(true);
+                setCreateError(null);
+              }}
+              size="sm"
+              className="gap-1.5"
+            >
+              <Plus size={15} /> {t("employees.addEmployee")}
+            </Button>
+          )}
         </div>
 
         <div className="flex gap-2 border-b border-border">
-          <button onClick={() => setActiveTab("employees")} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "employees" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{t("employees.tab")}</button>
-          <button onClick={() => setActiveTab("representatives")} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "representatives" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{t("representatives.tab")}</button>
+          {allowedTabs.includes("employees") && (
+            <button onClick={() => setActiveTab("employees")} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "employees" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{t("employees.tab")}</button>
+          )}
+          {allowedTabs.includes("representatives") && (
+            <button onClick={() => setActiveTab("representatives")} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "representatives" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{t("representatives.tab")}</button>
+          )}
         </div>
         {activeTab === "representatives" ? <RepresentativesPanel /> : <>
         {/* Create Form */}
@@ -202,8 +214,12 @@ export default function EmployeesPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                const payload = {
+                  ...createForm,
+                  permissions: createForm.role === "admin" ? null : createForm.permissions,
+                };
                 createMutation.mutate({
-                  data: createForm as Parameters<typeof createMutation.mutate>[0]["data"],
+                  data: payload as Parameters<typeof createMutation.mutate>[0]["data"],
                 });
               }}
               className="grid grid-cols-1 sm:grid-cols-2 gap-4"
@@ -259,6 +275,13 @@ export default function EmployeesPage() {
                   value={createForm.phone}
                   onChange={(e) => updateCreate("phone", e.target.value)}
                   placeholder="+966-50-000-0000"
+                />
+              </div>
+              <div className="col-span-2">
+                <PermissionsEditor
+                  role={createForm.role}
+                  value={createForm.permissions}
+                  onChange={(v) => setCreateForm((p) => ({ ...p, permissions: v }))}
                 />
               </div>
               <div className="col-span-2 space-y-2">
@@ -354,6 +377,13 @@ export default function EmployeesPage() {
                     value={editForm.phone}
                     onChange={(e) => updateEdit("phone", e.target.value)}
                     placeholder="+966-50-000-0000"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <PermissionsEditor
+                    role={editForm.role}
+                    value={editForm.permissions}
+                    onChange={(v) => setEditForm((p) => ({ ...p, permissions: v }))}
                   />
                 </div>
                 <div className="col-span-2 space-y-2">
@@ -509,28 +539,32 @@ export default function EmployeesPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => openEdit(emp)}
-                              title={t("employees.edit")}
-                              className="p-1.5 rounded hover:bg-blue-50 text-muted-foreground hover:text-blue-600 transition-colors"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              onClick={() => handleToggleActive(emp)}
-                              disabled={isSelf || updateMutation.isPending}
-                              title={
-                                emp.isActive ? t("employees.deactivate") : t("employees.activate")
-                              }
-                              className={`p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                                emp.isActive
-                                  ? "hover:bg-amber-50 text-muted-foreground hover:text-amber-600"
-                                  : "hover:bg-green-50 text-muted-foreground hover:text-green-600"
-                              }`}
-                            >
-                              {emp.isActive ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
-                            </button>
-                            {!isSelf && (
+                            {canManageEmps && (
+                              <button
+                                onClick={() => openEdit(emp)}
+                                title={t("employees.edit")}
+                                className="p-1.5 rounded hover:bg-blue-50 text-muted-foreground hover:text-blue-600 transition-colors"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                            {canManageEmps && (
+                              <button
+                                onClick={() => handleToggleActive(emp)}
+                                disabled={isSelf || updateMutation.isPending}
+                                title={
+                                  emp.isActive ? t("employees.deactivate") : t("employees.activate")
+                                }
+                                className={`p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                                  emp.isActive
+                                    ? "hover:bg-amber-50 text-muted-foreground hover:text-amber-600"
+                                    : "hover:bg-green-50 text-muted-foreground hover:text-green-600"
+                                }`}
+                              >
+                                {emp.isActive ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
+                              </button>
+                            )}
+                            {canManageEmps && !isSelf && (
                               <button
                                 onClick={() => {
                                   setDeleteId(emp.id);

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Layout } from "@/components/Layout";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { filterTabs } from "@/lib/permissions";
 import {
   Search,
   Send,
@@ -289,7 +291,9 @@ function MediaMessage({ msg }: { msg: Message }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────
 export default function WhatsAppPage() {
-  const [activeTab, setActiveTab] = useState<Tab>("chats");
+  const { employee } = useAuth();
+  const allowedTabIds = filterTabs(employee?.role, employee?.permissions, "whatsapp", ["chats", "templates", "broadcast", "settings"]);
+  const [activeTab, setActiveTab] = useState<string>(allowedTabIds[0] ?? "chats");
   const [globalStats, setGlobalStats] = useState<Stats | null>(null);
 
   // Load stats on mount
@@ -303,17 +307,17 @@ export default function WhatsAppPage() {
   }, []);
 
   const { t, dir } = useLanguage();
-  const tabs: Array<{ id: Tab; label: string; icon: React.ElementType; badge?: number }> = [
+  const tabs = [
     {
-      id: "chats",
+      id: "chats" as const,
       label: t("whatsapp.chats"),
       icon: MessageSquare,
       badge: globalStats?.unread || undefined,
     },
-    { id: "templates", label: t("whatsapp.templates"), icon: LayoutIcon },
-    { id: "broadcast", label: t("whatsapp.broadcast"), icon: Users },
-    { id: "settings", label: t("whatsapp.settings"), icon: Settings },
-  ];
+    { id: "templates" as const, label: t("whatsapp.templates"), icon: LayoutIcon },
+    { id: "broadcast" as const, label: t("whatsapp.broadcast"), icon: Users },
+    { id: "settings" as const, label: t("whatsapp.settings"), icon: Settings },
+  ].filter((tab) => allowedTabIds.includes(tab.id));
 
   return (
     <Layout>

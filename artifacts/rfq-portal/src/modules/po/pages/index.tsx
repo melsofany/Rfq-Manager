@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, ShoppingCart } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { filterTabs } from "@/lib/permissions";
 import GoodsReceiptPage from "./receipts";
 
 const STATUSES = ["all", "draft", "sent", "cancelled"];
+const PO_TABS = ["orders", "receipts"] as const;
 
 interface PoProgress {
   poId: number;
@@ -20,9 +23,11 @@ interface PoProgress {
 
 export default function PurchaseOrdersListPage() {
   const [, navigate] = useLocation();
+  const { employee } = useAuth();
+  const allowedTabs = filterTabs(employee?.role, employee?.permissions, "purchase-orders", PO_TABS);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
-  const [tab, setTab] = useState("orders");
+  const [tab, setTab] = useState<string>(allowedTabs[0] ?? "orders");
   const [progress, setProgress] = useState<Record<number, PoProgress>>({});
 
   const { data: purchaseOrders, isLoading } = useListPurchaseOrders(
@@ -90,8 +95,12 @@ export default function PurchaseOrdersListPage() {
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="orders" className="text-xs">أوامر الشراء</TabsTrigger>
-            <TabsTrigger value="receipts" className="text-xs">استلام التوريدات</TabsTrigger>
+            {allowedTabs.includes("orders") && (
+              <TabsTrigger value="orders" className="text-xs">أوامر الشراء</TabsTrigger>
+            )}
+            {allowedTabs.includes("receipts") && (
+              <TabsTrigger value="receipts" className="text-xs">استلام التوريدات</TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
 

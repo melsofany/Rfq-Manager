@@ -32,6 +32,7 @@ export const LoginResponse = zod.object({
   "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
+  "permissions": zod.record(zod.string(), zod.boolean()).nullish().describe('Per-employee permission map { permissionKey: true }. null = role default.'),
   "createdAt": zod.string().optional()
 }),
   "token": zod.string()
@@ -54,6 +55,7 @@ export const GetMeResponse = zod.object({
   "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
+  "permissions": zod.record(zod.string(), zod.boolean()).nullish().describe('Per-employee permission map { permissionKey: true }. null = role default.'),
   "createdAt": zod.string().optional()
 })
 
@@ -68,6 +70,7 @@ export const ListEmployeesResponseItem = zod.object({
   "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
+  "permissions": zod.record(zod.string(), zod.boolean()).nullish().describe('Per-employee permission map { permissionKey: true }. null = role default.'),
   "createdAt": zod.string().optional()
 })
 export const ListEmployeesResponse = zod.array(ListEmployeesResponseItem)
@@ -81,7 +84,8 @@ export const CreateEmployeeBody = zod.object({
   "email": zod.string(),
   "password": zod.string(),
   "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
-  "phone": zod.string().optional()
+  "phone": zod.string().optional(),
+  "permissions": zod.record(zod.string(), zod.boolean()).nullish().describe('Per-employee permission map { permissionKey: true }. null = role default.')
 })
 
 export const CreateEmployeeResponse = zod.object({
@@ -91,6 +95,7 @@ export const CreateEmployeeResponse = zod.object({
   "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
+  "permissions": zod.record(zod.string(), zod.boolean()).nullish().describe('Per-employee permission map { permissionKey: true }. null = role default.'),
   "createdAt": zod.string().optional()
 })
 
@@ -108,7 +113,8 @@ export const UpdateEmployeeBody = zod.object({
   "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']).optional(),
   "phone": zod.string().optional(),
   "isActive": zod.boolean().optional(),
-  "password": zod.string().optional()
+  "password": zod.string().optional(),
+  "permissions": zod.record(zod.string(), zod.boolean()).nullish().describe('Per-employee permission map { permissionKey: true }. null = role default.')
 })
 
 export const UpdateEmployeeResponse = zod.object({
@@ -118,6 +124,7 @@ export const UpdateEmployeeResponse = zod.object({
   "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
+  "permissions": zod.record(zod.string(), zod.boolean()).nullish().describe('Per-employee permission map { permissionKey: true }. null = role default.'),
   "createdAt": zod.string().optional()
 })
 
@@ -2029,6 +2036,7 @@ export const GetEmployeePerformanceResponse = zod.object({
   "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
+  "permissions": zod.record(zod.string(), zod.boolean()).nullish().describe('Per-employee permission map { permissionKey: true }. null = role default.'),
   "createdAt": zod.string().optional()
 }),
   "totalRfqsSent": zod.number().optional(),
