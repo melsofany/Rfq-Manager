@@ -619,6 +619,13 @@ async function recordItemReceipt(
       logger.warn({ err, poItemId: line.id }, "Auto delivery-assignment creation failed");
     }
   }
+  // Notify connected portal clients so the receipts screen live-refreshes.
+  broadcastWaEvent({
+    type: "receipt_recorded",
+    poId: line.poId,
+    poItemId: line.id,
+    lineStatus,
+  });
   return true;
 }
 
