@@ -901,10 +901,42 @@ async function repReceiptItems(poId: number): Promise<
   }));
 }
 
-/** Pending delivery items for a customer PO (not yet delivered/rejected). */
-async function repDeliveryItems(customerPoId: number): Promise<
+/**
+ * Pending delivery items for a customer PO that THIS rep is assigned to deliver
+ * and hasn't yet (not delivered/rejected). Only items with an active delivery
+ * assignment for the rep appear — assignments are created only after the linked
+ * supplier line was accepted, so an item the rep hasn't received is never shown
+ * (no delivering what wasn't received).
+ */
+async function repDeliveryItems(
+  customerPoId: number,
+  repPhone: string,
+): Promise<
   Array<{ id: number; label: string; qty: string | null; statusHint: string }>
 > {
+  const target = canonicalPhone(repPhone);
+  // Pending delivery assignments for this rep + customer PO.
+  const assigns = await db
+    .select({
+      customerPoItemId: workOrderAssignmentsTable.customerPoItemId,
+      status: workOrderAssignmentsTable.status,
+      representativePhone: workOrderAssignmentsTable.representativePhone,
+    })
+    .from(workOrderAssignmentsTable)
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
+        eq(workOrderAssignmentsTable.customerPoId, customerPoId),
+      ),
+    );
+  const assignedItemIds = new Set(
+    assigns
+      .filter((a) => canonicalPhone(a.representativePhone) === target)
+      .filter((a) => a.status !== "delivered" && a.status !== "rejected")
+      .map((a) => a.customerPoItemId),
+  );
+  if (assignedItemIds.size === 0) return [];
+
   const rows = await db
     .select({
       id: customerPoItemsTable.id,
@@ -916,7 +948,9 @@ async function repDeliveryItems(customerPoId: number): Promise<
     .from(customerPoItemsTable)
     .where(eq(customerPoItemsTable.customerPoId, customerPoId));
   const pending = rows.filter(
-    (r) => r.deliveryStatus === "pending" || r.deliveryStatus === "partial",
+    (r) =>
+      assignedItemIds.has(r.id) &&
+      (r.deliveryStatus === "pending" || r.deliveryStatus === "partial"),
   );
   return pending.map((r) => ({
     id: r.id,
@@ -974,7 +1008,7 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
     if (kind === "receipt") {
       await sendRepItemPicker(phone, "receipt", poId, await repReceiptItems(poId));
     } else {
-      await sendRepItemPicker(phone, "delivery", poId, await repDeliveryItems(poId));
+      await sendRepItemPicker(phone, "delivery", poId, await repDeliveryItems(poId, phone));
     }
     return true;
   }
@@ -1050,7 +1084,7 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
       await sendRepPoPicker(phone, kind, pos);
     } else if (target === "item" && (kind === "receipt" || kind === "delivery")) {
       const poId = parseInt(poIdStr, 10);
-      const items = kind === "receipt" ? await repReceiptItems(poId) : await repDeliveryItems(poId);
+      const items = kind === "receipt" ? await repReceiptItems(poId) : await repDeliveryItems(poId, phone);
       await sendRepItemPicker(phone, kind, poId, items);
     }
     return true;
