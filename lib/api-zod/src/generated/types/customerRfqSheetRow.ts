@@ -54,4 +54,11 @@ export interface CustomerRfqSheetRow {
   poQty?: string | null;
   /** @nullable */
   poUnitPrice?: string | null;
+  /** True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price). */
+  flagged?: boolean;
+  /**
+     * Arabic reason for the flag, e.g. 'رفض التسليم: تالف' or 'تجاوزت التكلفة: الفعلي 120 > أمر التوريد 100'.
+     * @nullable
+     */
+  flagReason?: string | null;
 }

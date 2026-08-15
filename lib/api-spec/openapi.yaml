@@ -1939,6 +1939,12 @@ components:
           type: ["string", "null"]
         poUnitPrice:
           type: ["string", "null"]
+        flagged:
+          type: boolean
+          description: True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price).
+        flagReason:
+          type: ["string", "null"]
+          description: "Arabic reason for the flag, e.g. 'رفض التسليم: تالف' or 'تجاوزت التكلفة: الفعلي 120 > أمر التوريد 100'."
 
     CustomerRfqSheetView:
       type: object
