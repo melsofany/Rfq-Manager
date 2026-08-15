@@ -14,9 +14,10 @@ import {
   workOrderAssignmentsTable,
   customerPosTable,
   customerPoItemsTable,
+  poItemReceiptsTable,
   WORK_ORDER_KIND,
 } from "@workspace/db";
-import { eq, count, inArray, sql, and, ilike, ne } from "drizzle-orm";
+import { eq, count, inArray, sql, and, ilike, ne, desc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { lookupPoFromSheet, listSheetPoNumbers } from "../../shared/google-sheets";
 import { generatePoPdf } from "./po-pdf";
@@ -122,6 +123,28 @@ router.get("/po", requireAuth, async (req, res): Promise<void> => {
       createdAt: r.po.createdAt.toISOString(),
       updatedAt: r.po.updatedAt.toISOString(),
     })),
+  );
+});
+
+router.get("/po/progress", requireAuth, async (req, res): Promise<void> => {
+  // Batched receipt progress per PO: total items, fulfilled, rejected.
+  // Used by the PO list tab to show a "received/total" badge + rejected count.
+  const rows = await db
+    .select({
+      poId: purchaseOrderItemsTable.poId,
+      lineStatus: purchaseOrderItemsTable.lineStatus,
+    })
+    .from(purchaseOrderItemsTable);
+  const byPo = new Map<number, { total: number; received: number; rejected: number }>();
+  for (const r of rows) {
+    const e = byPo.get(r.poId) ?? { total: 0, received: 0, rejected: 0 };
+    e.total++;
+    if (r.lineStatus === "fulfilled") e.received++;
+    else if (r.lineStatus === "rejected") e.rejected++;
+    byPo.set(r.poId, e);
+  }
+  res.json(
+    Array.from(byPo.entries()).map(([poId, v]) => ({ poId, ...v })),
   );
 });
 
@@ -1071,22 +1094,53 @@ router.get("/po/:id/items", requireAuth, async (req, res): Promise<void> => {
     .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
     .where(eq(purchaseOrderItemsTable.poId, id));
 
+  // Load the latest receipt row per item so the portal can show the rejection
+  // reason alongside the line status (the item row itself only carries totals).
+  const itemIds = rows.map((r) => r.item.id);
+  const receiptRows =
+    itemIds.length > 0
+      ? await db
+          .select({
+            poItemId: poItemReceiptsTable.poItemId,
+            rejectionReason: poItemReceiptsTable.rejectionReason,
+            receiptStatus: poItemReceiptsTable.receiptStatus,
+            receivedAt: poItemReceiptsTable.receivedAt,
+          })
+          .from(poItemReceiptsTable)
+          .where(inArray(poItemReceiptsTable.poItemId, itemIds))
+          .orderBy(desc(poItemReceiptsTable.receivedAt))
+      : [];
+  // Most recent receipt per item (first after desc ordering).
+  const latestReceipt = new Map<number, (typeof receiptRows)[number]>();
+  for (const rc of receiptRows) {
+    if (!latestReceipt.has(rc.poItemId)) latestReceipt.set(rc.poItemId, rc);
+  }
+
   res.json(
-    rows.map((r) => ({
-      id: r.item.id,
-      poId: r.item.poId,
-      supplierId: r.item.supplierId,
-      supplierName: r.supplierName,
-      itemId: r.item.itemId,
-      customerPoItemId: r.item.customerPoItemId ?? null,
-      lineItem: r.item.lineItem,
-      partNo: r.item.partNo,
-      description: r.item.description,
-      uom: r.item.uom,
-      qty: r.item.qty ? parseFloat(r.item.qty) : null,
-      referencePrice: r.item.referencePrice ? parseFloat(r.item.referencePrice) : null,
-      taxIncluded: r.item.taxIncluded ?? false,
-    })),
+    rows.map((r) => {
+      const rc = latestReceipt.get(r.item.id);
+      return {
+        id: r.item.id,
+        poId: r.item.poId,
+        supplierId: r.item.supplierId,
+        supplierName: r.supplierName,
+        itemId: r.item.itemId,
+        customerPoItemId: r.item.customerPoItemId ?? null,
+        lineItem: r.item.lineItem,
+        partNo: r.item.partNo,
+        description: r.item.description,
+        uom: r.item.uom,
+        qty: r.item.qty ? parseFloat(r.item.qty) : null,
+        referencePrice: r.item.referencePrice ? parseFloat(r.item.referencePrice) : null,
+        taxIncluded: r.item.taxIncluded ?? false,
+        totalReceivedQty: r.item.totalReceivedQty ? parseFloat(r.item.totalReceivedQty) : null,
+        totalAcceptedQty: r.item.totalAcceptedQty ? parseFloat(r.item.totalAcceptedQty) : null,
+        totalRejectedQty: r.item.totalRejectedQty ? parseFloat(r.item.totalRejectedQty) : null,
+        finalActualCost: r.item.finalActualCost ? parseFloat(r.item.finalActualCost) : null,
+        lineStatus: r.item.lineStatus,
+        rejectionReason: rc?.rejectionReason ?? null,
+      };
+    }),
   );
 });
 

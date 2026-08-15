@@ -261,3 +261,11 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Fix 2 (idempotent dispatch assignments)**: the dispatch path now checks for an existing **active** receipt assignment (`status != received/rejected`) for a `poItemId` before inserting — re-dispatch no longer creates duplicate rows.
 - **Test mock**: `po-dispatch.test.ts` `selectChain` upgraded to a `chainableThenable` that supports `.limit()/.orderBy()` (the new idempotency check chains `.where().limit(1)`); a drained `selectQueue` yields `[]` (no existing assignment). 152 tests pass.
 - **Live data cleanup**: reset PO 22's items to `pending`, deleted its conflicting bot receipts + accumulated assignments so the rep can re-test cleanly.
+
+## Receipt status reflects in both /purchase-orders tabs (live)
+- **Problem**: the per-item receipt status was not visible in the portal. Root cause: `GET /po/:id/items` returned only id/lineItem/description/qty/etc. — NOT `lineStatus`/totals/rejectionReason — so the receipts tab's `item.lineStatus` was always `undefined` (status cell blank). The PO list tab showed only a plain item count, no receipt progress. And there was no live update when a rep confirmed a receipt via WhatsApp.
+- **Fix**:
+  - `GET /po/:id/items` now returns `lineStatus`, `totalReceivedQty`/`totalAcceptedQty`/`totalRejectedQty`/`finalActualCost`, and `rejectionReason` (latest receipt row per item, via a batched `poItemReceiptsTable` select ordered desc). The receipts tab status cell now shows the label + the rejection reason («السبب: ...») when rejected.
+  - New `GET /po/progress` endpoint: batched per-PO `{poId, total, received, rejected}` from `purchase_order_items.line_status`. The PO list tab (Tab 1) renders a receipt-progress badge («received/total» + rejected count, colored emerald when all received / amber when any rejected).
+  - **Live refresh**: `recordItemReceipt` now `broadcastWaEvent({type:"receipt_recorded", poId, poItemId, lineStatus})`. Both tabs open an `EventSource` to `/api/whatsapp/events` and refetch (the receipts tab reloads the expanded PO's items; the list tab reloads `/po/progress`) when a `receipt_recorded` frame arrives — so the operator sees the rep's WhatsApp action within seconds, no manual reload.
+- Tests: 152 pass; tsc + portal build clean.

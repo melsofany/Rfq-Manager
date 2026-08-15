@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useListPurchaseOrders, getListPurchaseOrdersQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
@@ -11,11 +11,19 @@ import GoodsReceiptPage from "./receipts";
 
 const STATUSES = ["all", "draft", "sent", "cancelled"];
 
+interface PoProgress {
+  poId: number;
+  total: number;
+  received: number;
+  rejected: number;
+}
+
 export default function PurchaseOrdersListPage() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [tab, setTab] = useState("orders");
+  const [progress, setProgress] = useState<Record<number, PoProgress>>({});
 
   const { data: purchaseOrders, isLoading } = useListPurchaseOrders(
     { status: status !== "all" ? status : undefined, search: search || undefined },
@@ -28,6 +36,37 @@ export default function PurchaseOrdersListPage() {
       },
     },
   );
+
+  // Load per-PO receipt progress (received/rejected/total) for the list badge.
+  // Live-refreshes via the same SSE stream the receipts tab uses.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await fetch("/api/po/progress", { credentials: "include" });
+        if (!r.ok) return;
+        const data: PoProgress[] = await r.json();
+        if (cancelled) return;
+        setProgress(Object.fromEntries(data.map((p) => [p.poId, p])));
+      } catch {
+        /* non-critical */
+      }
+    }
+    void load();
+    const es = new EventSource("/api/whatsapp/events", { withCredentials: true });
+    es.onmessage = (ev) => {
+      try {
+        const payload = JSON.parse(ev.data);
+        if (payload?.type === "receipt_recorded") void load();
+      } catch {
+        /* ignore */
+      }
+    };
+    return () => {
+      cancelled = true;
+      es.close();
+    };
+  }, [purchaseOrders]);
 
   return (
     <Layout>
@@ -122,7 +161,7 @@ export default function PurchaseOrdersListPage() {
                     </th>
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Status</th>
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
-                      Items
+                      الاستلام
                     </th>
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Created</th>
                   </tr>
@@ -154,9 +193,30 @@ export default function PurchaseOrdersListPage() {
                         <StatusBadge status={po.status} />
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-xs font-medium text-foreground">
-                          {po.itemCount}
-                        </span>
+                        {(() => {
+                          const p = progress[po.id];
+                          if (!p || p.total === 0) {
+                            return (
+                              <span className="inline-flex items-center justify-center min-w-6 h-6 px-1.5 bg-muted rounded text-xs font-medium text-foreground">
+                                {po.itemCount}
+                              </span>
+                            );
+                          }
+                          const allDone = p.received + p.rejected >= p.total;
+                          const tone = p.rejected > 0
+                            ? "bg-amber-100 text-amber-700"
+                            : allDone
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-muted text-foreground";
+                          return (
+                            <span className={`inline-flex items-center justify-center min-w-6 h-6 px-1.5 rounded text-xs font-medium ${tone}`}>
+                              {p.received}/{p.total}
+                              {p.rejected > 0 && (
+                                <span className="mr-1 text-red-600">·{p.rejected} رفض</span>
+                              )}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">
                         {new Date(po.createdAt).toLocaleDateString()}

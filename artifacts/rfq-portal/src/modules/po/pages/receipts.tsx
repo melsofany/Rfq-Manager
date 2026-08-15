@@ -45,6 +45,7 @@ interface PoItemRow {
   totalRejectedQty: number | null;
   finalActualCost: number | null;
   lineStatus: string;
+  rejectionReason?: string | null;
 }
 
 const LINE_STATUS_LABEL: Record<string, string> = {
@@ -120,6 +121,25 @@ export default function GoodsReceiptPage() {
       setLoadingItems(false);
     }
   }
+
+  // Live-refresh: when a rep records a receipt via WhatsApp, the backend
+  // broadcasts a `receipt_recorded` SSE event. Reload the expanded PO's items +
+  // receipts so the operator sees the status change instantly.
+  useEffect(() => {
+    const es = new EventSource("/api/whatsapp/events", { withCredentials: true });
+    es.onmessage = (ev) => {
+      try {
+        const payload = JSON.parse(ev.data);
+        if (payload?.type === "receipt_recorded" && expandedPo === payload.poId) {
+          void loadItems(expandedPo);
+        }
+      } catch {
+        /* ignore malformed SSE frames (heartbeats etc.) */
+      }
+    };
+    return () => es.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedPo]);
 
   async function saveReceipt(
     poId: number,
@@ -435,7 +455,10 @@ function ReceiptItemRow({
         </td>
         <td className="px-4 py-3 text-foreground text-xs">{item.qty ?? "-"}</td>
         <td className={`px-4 py-3 text-xs font-medium ${statusTone(item.lineStatus)}`}>
-          {LINE_STATUS_LABEL[item.lineStatus] ?? item.lineStatus}
+          <div>{LINE_STATUS_LABEL[item.lineStatus] ?? item.lineStatus}</div>
+          {item.lineStatus === "rejected" && item.rejectionReason && (
+            <div className="text-red-500 font-normal mt-0.5">السبب: {item.rejectionReason}</div>
+          )}
         </td>
         <td className="px-4 py-3 text-xs text-muted-foreground">
           {item.totalReceivedQty != null && item.totalAcceptedQty != null
