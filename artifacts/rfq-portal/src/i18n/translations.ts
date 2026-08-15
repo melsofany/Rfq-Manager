@@ -29,7 +29,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "perm.resetDefault": "Default",
     "perm.adminNote": "Admins always have full access and cannot be restricted.",
     "perm.usingDefault": "Using the default permissions for this role. Customize below.",
-    "perm.hint": "Check a page to grant access to it; expand a page to grant/revoke its tabs individually.",
+    "perm.hint":
+      "Check a page to grant access to it; expand a page to grant/revoke its tabs individually.",
     "perm.customerPo.orders": "Customer POs",
     "perm.customerPo.deliveries": "Customer deliveries",
     "perm.suppliers.list": "Suppliers list",
@@ -402,7 +403,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "perm.resetDefault": "افتراضي",
     "perm.adminNote": "مدير النظام يملك صلاحية كاملة دائمًا ولا يمكن تقييده.",
     "perm.usingDefault": "تُستخدم الصلاحيات الافتراضية لهذه الوظيفة. خصّصها بالأسفل.",
-    "perm.hint": "ضع علامة صح أمام صفحة لمنح الوصول إليها؛ ووسّع الصفحة لمنح أو سحب صلاحية تبويباتها فرديًا.",
+    "perm.hint":
+      "ضع علامة صح أمام صفحة لمنح الوصول إليها؛ ووسّع الصفحة لمنح أو سحب صلاحية تبويباتها فرديًا.",
     "perm.customerPo.orders": "أوامر شراء العملاء",
     "perm.customerPo.deliveries": "تسليمات العملاء",
     "perm.suppliers.list": "قائمة الموردين",
