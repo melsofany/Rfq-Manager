@@ -2,10 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
-import {
-  useSearchItems,
-  getSearchItemsQueryKey,
-} from "@workspace/api-client-react";
+import { useSearchItems, getSearchItemsQueryKey } from "@workspace/api-client-react";
 import type {
   ItemHistory,
   ItemSupplierResponse,
@@ -346,9 +343,7 @@ function emptyFilter(): ColumnFilter {
 
 // Build the query-string fragment for the active include filters.
 // A column in "only" mode sends `<col>Include=v1,v2` (empty list → `=`).
-function buildIncludeParams(
-  filters: Record<string, ColumnFilter>,
-): Record<string, string> {
+function buildIncludeParams(filters: Record<string, ColumnFilter>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [col, f] of Object.entries(filters)) {
     if (f.mode === "only") out[`${col}Include`] = [...f.set].join(",");
@@ -378,9 +373,7 @@ async function fetchSheetView(
   return res.json();
 }
 
-async function fetchFacets(
-  params: Record<string, string | undefined>,
-): Promise<FacetsResponse> {
+async function fetchFacets(params: Record<string, string | undefined>): Promise<FacetsResponse> {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined) sp.set(k, v);
@@ -444,12 +437,9 @@ function FilterHeader({
     : values;
   const shown = filteredValues.slice(0, MAX_FACET_ROWS);
 
-  const isChecked = (val: string) =>
-    draft.mode === "all" ? true : draft.set.has(val);
-  const visibleAllChecked =
-    draft.mode === "all" || shown.every((v) => isChecked(v.value));
-  const visibleNoneChecked =
-    shown.length > 0 && shown.every((v) => !isChecked(v.value));
+  const isChecked = (val: string) => (draft.mode === "all" ? true : draft.set.has(val));
+  const visibleAllChecked = draft.mode === "all" || shown.every((v) => isChecked(v.value));
+  const visibleNoneChecked = shown.length > 0 && shown.every((v) => !isChecked(v.value));
 
   const handleOpen = (o: boolean) => {
     setOpen(o);
@@ -507,7 +497,7 @@ function FilterHeader({
           sideOffset={4}
           align="start"
           side="bottom"
-          avoidCollisions={false}
+          collisionPadding={8}
           className="w-64 p-0 max-h-[min(70vh,460px)] overflow-y-auto"
         >
           <div className="border-b border-border p-2">
@@ -553,8 +543,8 @@ function FilterHeader({
               )}
             </div>
             <p className="mt-1.5 text-[10px] text-muted-foreground/80 leading-relaxed">
-              اختر البنود المطلوبة ثم اضغط «تطبيق الفلتر». للعرض بند/بضعة بنود فقط:
-              اضغط «إلغاء تحديد الكل» ثم ضع ✓ على المطلوب.
+              اختر البنود المطلوبة ثم اضغط «تطبيق الفلتر». للعرض بند/بضعة بنود فقط: اضغط «إلغاء
+              تحديد الكل» ثم ضع ✓ على المطلوب.
             </p>
           </div>
           <div className="max-h-64 overflow-y-auto">
@@ -563,9 +553,7 @@ function FilterHeader({
                 جارٍ التحميل…
               </div>
             ) : shown.length === 0 ? (
-              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-                لا توجد قيم
-              </div>
+              <div className="px-2 py-6 text-center text-xs text-muted-foreground">لا توجد قيم</div>
             ) : (
               shown.map((v) => {
                 const checked = isChecked(v.value);
@@ -587,7 +575,9 @@ function FilterHeader({
                     className="flex items-center gap-2 px-2 py-1 hover:bg-accent cursor-pointer text-xs select-none"
                   >
                     <Checkbox checked={checked} className="pointer-events-none" tabIndex={-1} />
-                    <span className="flex-1 truncate" title={v.value}>{display}</span>
+                    <span className="flex-1 truncate" title={v.value}>
+                      {display}
+                    </span>
                     <span className="text-[10px] text-muted-foreground/70">{v.count}</span>
                   </div>
                 );
@@ -648,10 +638,7 @@ function SheetViewTab() {
     ...includeParams,
   };
 
-  const queryKey = useMemo(
-    () => ["sheet-view", params] as const,
-    [params],
-  );
+  const queryKey = useMemo(() => ["sheet-view", params] as const, [params]);
 
   const { data, isLoading, isFetching, isError } = useQuery<SheetViewResponse>({
     queryKey,
@@ -737,24 +724,26 @@ function SheetViewTab() {
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="bg-muted/60 border-b border-border text-right">
-                {([
-                  ["lineItem", "Line Item"],
-                  ["partNo", "Part No"],
-                  ["description", "التوصيف"],
-                  ["uom", "UOM"],
-                  ["customerRfqNo", "طلب التسعير"],
-                  ["entryDate", "تاريخ الطلب"],
-                  ["rfqQty", "الكمية"],
-                  ["rfqUnitPrice", "السعر للعميل"],
-                  ["expiryDate", "انتهاء الطلب"],
-                  ["customerName", "العميل"],
-                  ["buyerName", "المشتري"],
-                  ["poNo", "رقم أمر الشراء"],
-                  ["poDate", "تاريخ أمر الشراء"],
-                  ["poQty", "الكمية"],
-                  ["poUnitPrice", "السعر"],
-                  ["flagReason", "السبب"],
-                ] as const).map(([col, label]) => (
+                {(
+                  [
+                    ["lineItem", "Line Item"],
+                    ["partNo", "Part No"],
+                    ["description", "التوصيف"],
+                    ["uom", "UOM"],
+                    ["customerRfqNo", "طلب التسعير"],
+                    ["entryDate", "تاريخ الطلب"],
+                    ["rfqQty", "الكمية"],
+                    ["rfqUnitPrice", "السعر للعميل"],
+                    ["expiryDate", "انتهاء الطلب"],
+                    ["customerName", "العميل"],
+                    ["buyerName", "المشتري"],
+                    ["poNo", "رقم أمر الشراء"],
+                    ["poDate", "تاريخ أمر الشراء"],
+                    ["poQty", "الكمية"],
+                    ["poUnitPrice", "السعر"],
+                    ["flagReason", "السبب"],
+                  ] as const
+                ).map(([col, label]) => (
                   <th
                     key={col}
                     className={cn(
@@ -871,7 +860,8 @@ function SheetViewTab() {
       {total > SHEET_PAGE_SIZE && (
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">
-            {offset + 1}–{Math.min(offset + SHEET_PAGE_SIZE, total)} من {total.toLocaleString("en-US")}
+            {offset + 1}–{Math.min(offset + SHEET_PAGE_SIZE, total)} من{" "}
+            {total.toLocaleString("en-US")}
           </span>
           <div className="flex gap-2">
             <Button
@@ -901,7 +891,10 @@ function SheetViewTab() {
 
 export default function ItemsPage() {
   const { employee } = useAuth();
-  const allowedTabs = filterTabs(employee?.role, employee?.permissions, "items", ["search", "sheet"] as const);
+  const allowedTabs = filterTabs(employee?.role, employee?.permissions, "items", [
+    "search",
+    "sheet",
+  ] as const);
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -933,7 +926,12 @@ export default function ItemsPage() {
 
   return (
     <Layout>
-      <div className={cn("p-4 sm:p-6 space-y-5 mx-auto", tab === "sheet" ? "max-w-[1400px]" : "max-w-5xl")}>
+      <div
+        className={cn(
+          "p-4 sm:p-6 space-y-5 mx-auto",
+          tab === "sheet" ? "max-w-[1400px]" : "max-w-5xl",
+        )}
+      >
         {/* Page header */}
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
@@ -1009,7 +1007,8 @@ export default function ItemsPage() {
                 {/* Summary */}
                 {results && results.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Found <span className="font-semibold text-foreground">{results.length}</span> result
+                    Found <span className="font-semibold text-foreground">{results.length}</span>{" "}
+                    result
                     {results.length !== 1 ? "s" : ""} for{" "}
                     <span className="font-semibold text-foreground">"{submitted}"</span>
                   </p>

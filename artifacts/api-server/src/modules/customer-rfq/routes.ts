@@ -667,7 +667,7 @@ router.get("/customer-rfq/numbers", requireAuth, async (_req, res): Promise<void
 
 // Columns that can be filtered/excluded via the autofilter. Order matches the
 // sheet layout. Each entry maps a query-param name to the row field it reads.
-const SHEET_FILTER_COLUMNS: { param: string; field: keyof SheetRow }[] = [
+const SHEET_FILTER_COLUMNS: { param: string; field: keyof EnrichedSheetRow }[] = [
   { param: "lineItem", field: "lineItem" },
   { param: "partNo", field: "partNo" },
   { param: "description", field: "description" },
@@ -683,9 +683,40 @@ const SHEET_FILTER_COLUMNS: { param: string; field: keyof SheetRow }[] = [
   { param: "rfqUnitPrice", field: "rfqUnitPrice" },
   { param: "poQty", field: "poQty" },
   { param: "poUnitPrice", field: "poUnitPrice" },
+  // flagReason is a computed column (rejection reason + cost overrun), not a
+  // raw DB field — see computeFlagReason. Registered so the facets endpoint
+  // lists its distinct values and the per-column filter applies to it.
+  { param: "flagReason", field: "flagReason" },
 ];
 
 type SheetRow = Awaited<ReturnType<typeof loadSheetRowsRaw>>[number];
+// A SheetRow enriched with the computed flagReason — the shape loadSheetRows
+// returns and the sheet-view/facets handlers consume.
+type EnrichedSheetRow = SheetRow & { flagReason: string | null };
+
+// Compute the red-flag reason for a row: "رفض التسليم: <reason>" when the
+// customer delivery was rejected, and/or "تجاوزت التكلفة: ..." when the actual
+// supplier cost exceeded the PO (supply-order) price. Returns null when the
+// row is clean. `rejectionReasonByPoItemId` maps poItemId → latest reason.
+function computeFlagReason(
+  row: SheetRow,
+  rejectionReasonByPoItemId: Map<number, string>,
+): string | null {
+  const reasons: string[] = [];
+  if (row.deliveryStatus === "rejected" && row.poItemId != null) {
+    reasons.push(`رفض التسليم: ${rejectionReasonByPoItemId.get(row.poItemId) ?? "رفض العميل"}`);
+  }
+  if (row.poFinalActualCost != null && row.poReferencePrice != null) {
+    const actual = Number(row.poFinalActualCost);
+    const poPrice = Number(row.poReferencePrice);
+    if (isFinite(actual) && isFinite(poPrice) && poPrice > 0 && actual > poPrice + 1e-9) {
+      reasons.push(
+        `تجاوزت التكلفة: الفعلي ${formatQty(row.poFinalActualCost)} > أمر التوريد ${formatQty(row.poReferencePrice)}`,
+      );
+    }
+  }
+  return reasons.length > 0 ? reasons.join(" — ") : null;
+}
 
 async function loadSheetRowsRaw() {
   return db
@@ -734,12 +765,45 @@ async function loadSheetRowsRaw() {
 // `exceptColumn` is set, that column's filter is skipped — used by the
 // facets endpoint so the filtered dropdown still lists every value the column
 // could show once the OTHER columns are applied (Excel behavior).
+// Returns rows enriched with the computed `flagReason` so the «السبب» column
+// can be filtered/faceted like any other (it is not a raw DB field).
 async function loadSheetRows(
   query: Record<string, string>,
   exceptColumn?: string,
-): Promise<SheetRow[]> {
+): Promise<EnrichedSheetRow[]> {
   const rows = await loadSheetRowsRaw();
-  let filtered = rows;
+
+  // Batch-load the latest rejected-delivery reason per poItemId across ALL raw
+  // rows (needed to compute flagReason). One query, regardless of pagination.
+  const allPoItemIds = rows.map((r) => r.poItemId).filter((id): id is number => id != null);
+  const rejectionReasonByPoItemId = new Map<number, string>();
+  if (allPoItemIds.length > 0) {
+    const rejectedRows = await db
+      .select({
+        customerPoItemId: customerPoItemDeliveriesTable.customerPoItemId,
+        reason: customerPoItemDeliveriesTable.rejectionReason,
+        createdAt: customerPoItemDeliveriesTable.createdAt,
+      })
+      .from(customerPoItemDeliveriesTable)
+      .where(
+        and(
+          inArray(customerPoItemDeliveriesTable.customerPoItemId, allPoItemIds),
+          eq(customerPoItemDeliveriesTable.deliveryStatus, "rejected"),
+        ),
+      )
+      .orderBy(desc(customerPoItemDeliveriesTable.createdAt));
+    for (const r of rejectedRows) {
+      if (!rejectionReasonByPoItemId.has(r.customerPoItemId)) {
+        rejectionReasonByPoItemId.set(r.customerPoItemId, r.reason ?? "رفض العميل");
+      }
+    }
+  }
+
+  // Enrich once with the computed flagReason so filtering + facets share it.
+  let filtered: EnrichedSheetRow[] = rows.map((r) => ({
+    ...r,
+    flagReason: computeFlagReason(r, rejectionReasonByPoItemId),
+  }));
 
   const search = query.search;
   if (search) {
@@ -801,53 +865,13 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
   const total = filtered.length;
   const page = filtered.slice(offset, offset + limit);
 
-  // Batch-load the latest rejected-delivery reason per customer_po_item for the
-  // page (so a rejected delivery row can show its reason in the flag column).
-  const pagePoItemIds = page.map((r) => r.poItemId).filter((id): id is number => id != null);
-  const rejectionReasonByPoItemId = new Map<number, string>();
-  if (pagePoItemIds.length > 0) {
-    const rejectedRows = await db
-      .select({
-        customerPoItemId: customerPoItemDeliveriesTable.customerPoItemId,
-        reason: customerPoItemDeliveriesTable.rejectionReason,
-        createdAt: customerPoItemDeliveriesTable.createdAt,
-      })
-      .from(customerPoItemDeliveriesTable)
-      .where(
-        and(
-          inArray(customerPoItemDeliveriesTable.customerPoItemId, pagePoItemIds),
-          eq(customerPoItemDeliveriesTable.deliveryStatus, "rejected"),
-        ),
-      )
-      .orderBy(desc(customerPoItemDeliveriesTable.createdAt));
-    for (const r of rejectedRows) {
-      if (!rejectionReasonByPoItemId.has(r.customerPoItemId)) {
-        rejectionReasonByPoItemId.set(r.customerPoItemId, r.reason ?? "رفض العميل");
-      }
-    }
-  }
-
   res.json({
     total,
     limit,
     offset,
     rows: page.map((r) => {
-      // Flag a row red with a reason when: the customer rejected the delivery,
-      // OR the actual supplier cost exceeded the PO (supply-order) price.
-      const reasons: string[] = [];
-      if (r.deliveryStatus === "rejected") {
-        reasons.push(`رفض التسليم: ${rejectionReasonByPoItemId.get(r.poItemId!) ?? "رفض العميل"}`);
-      }
-      if (r.poFinalActualCost != null && r.poReferencePrice != null) {
-        const actual = Number(r.poFinalActualCost);
-        const poPrice = Number(r.poReferencePrice);
-        if (isFinite(actual) && isFinite(poPrice) && poPrice > 0 && actual > poPrice + 1e-9) {
-          reasons.push(
-            `تجاوزت التكلفة: الفعلي ${formatQty(r.poFinalActualCost)} > أمر التوريد ${formatQty(r.poReferencePrice)}`,
-          );
-        }
-      }
-      const flagReason = reasons.length > 0 ? reasons.join(" — ") : null;
+      // flagReason is precomputed by loadSheetRows (rejection reason + cost
+      // overrun) so it is consistent with the «السبب» filter/facets.
       return {
         rfqItemId: r.rfqItemId,
         lineItem: r.lineItem,
@@ -867,8 +891,8 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
         poDate: r.poDate,
         poQty: formatQty(r.poQty),
         poUnitPrice: formatQty(r.poUnitPrice),
-        flagged: flagReason != null,
-        flagReason,
+        flagged: r.flagReason != null,
+        flagReason: r.flagReason,
       };
     }),
   });
