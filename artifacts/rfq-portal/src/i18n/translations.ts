@@ -172,6 +172,12 @@ const translations: Record<Lang, Record<string, string>> = {
     "dashboard.noRfqs": "No RFQs yet",
     "dashboard.offers": "offers",
 
+    // No-access page (employee with no granted pages)
+    "noAccess.title": "No pages assigned",
+    "noAccess.message": "You are signed in, but no pages have been assigned to your account yet.",
+    "noAccess.contactAdmin": "Please contact your administrator to grant access.",
+    "noAccess.signOut": "Sign out",
+
     // Customers pages
     "customers.title": "Customers",
     "customers.subtitle": "Manage your customers directory",
@@ -537,6 +543,12 @@ const translations: Record<Lang, Record<string, string>> = {
     "dashboard.noSupplierData": "لا توجد بيانات موردين",
     "dashboard.noRfqs": "لا توجد طلبات",
     "dashboard.offers": "عروض",
+
+    // No-access page (employee with no granted pages)
+    "noAccess.title": "لا توجد صفحات مُخصصة لك",
+    "noAccess.message": "تم تسجيل دخولك بنجاح، لكن لم يتم تخصيص أي صفحات لحسابك بعد.",
+    "noAccess.contactAdmin": "برجاء التواصل مع المسؤول لمنحك صلاحية الوصول.",
+    "noAccess.signOut": "تسجيل الخروج",
 
     // Customers pages
     "customers.title": "العملاء",

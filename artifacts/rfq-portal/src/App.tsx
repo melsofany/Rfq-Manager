@@ -5,10 +5,11 @@ import { Toaster as Sonner } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
-import { canAccessPath } from "@/lib/permissions";
+import { canAccessPath, firstAccessiblePath } from "@/lib/permissions";
 
 // ── Shared pages (no module home) ─────────────────────────────────────────
 import NotFound from "@/pages/not-found";
+import NoAccess from "@/pages/no-access";
 import DashboardPage from "@/pages/dashboard";
 
 // ── Module: RFQ — طلبات عروض الأسعار ──────────────────────────────────────
@@ -79,9 +80,12 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
   if (!employee) return <Redirect to="/login" />;
   // Route-level permission guard: if the employee lacks the page permission,
-  // bounce them to the dashboard instead of rendering the page.
+  // bounce them to the first page they CAN access (or the no-access screen if
+  // none) instead of rendering the page. Avoids an infinite redirect loop when
+  // the revoked page is the dashboard.
   if (!canAccessPath(employee.role, employee.permissions, location)) {
-    return <Redirect to="/dashboard" />;
+    const fallback = firstAccessiblePath(employee.role, employee.permissions);
+    return <Redirect to={fallback ?? "/no-access"} />;
   }
   return <Component />;
 }
@@ -93,14 +97,27 @@ function Router() {
     <Switch>
       {/* ── Public ─────────────────────────────────────────────────────── */}
       <Route path="/login">
-        {!isLoading && employee ? <Redirect to="/dashboard" /> : <LoginPage />}
+        {!isLoading && employee ? (
+          <Redirect to={firstAccessiblePath(employee.role, employee.permissions) ?? "/no-access"} />
+        ) : (
+          <LoginPage />
+        )}
       </Route>
 
       {/* Supplier token-based pricing page — no auth required */}
       <Route path="/q/:token" component={PricingPage} />
 
       <Route path="/">
-        <Redirect to="/dashboard" />
+        {!isLoading && employee ? (
+          <Redirect to={firstAccessiblePath(employee.role, employee.permissions) ?? "/no-access"} />
+        ) : (
+          <Redirect to="/login" />
+        )}
+      </Route>
+
+      {/* ── No-access screen (signed in but no pages granted) ─────────── */}
+      <Route path="/no-access">
+        {!isLoading && employee ? <NoAccess /> : <Redirect to="/login" />}
       </Route>
 
       {/* ── Protected — Dashboard ──────────────────────────────────────── */}

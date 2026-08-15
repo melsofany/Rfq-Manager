@@ -148,6 +148,25 @@ export function visiblePageKeys(role: string | undefined, permissions: Permissio
 }
 
 /**
+ * The href of the first page (in catalog order) the employee may access,
+ * or `null` if they have no granted page at all (e.g. a user whose
+ * dashboard permission was revoked with nothing else granted). Used as the
+ * post-login landing target so a permission-restricted user never lands on a
+ * page they cannot view (which would otherwise bounce/blank-screen them).
+ */
+export function firstAccessiblePath(
+  role: string | undefined,
+  permissions: PermissionMap,
+): string | null {
+  if (role === "admin") return "/dashboard";
+  const granted = resolvePermissions(role, permissions);
+  for (const node of PERMISSION_CATALOG) {
+    if (node.href && granted.has(node.key)) return node.href;
+  }
+  return null;
+}
+
+/**
  * Given a page key and its full tab list (as rendered in the page),
  * return only the tabs the employee may see. Tabs without a catalog entry
  * (no `${pageKey}:${tabId}` permission defined) are always shown — only
