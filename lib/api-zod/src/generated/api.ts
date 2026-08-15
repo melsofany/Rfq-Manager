@@ -650,7 +650,9 @@ export const ListCustomerRfqSheetViewResponse = zod.object({
   "poNo": zod.string().nullish(),
   "poDate": zod.string().nullish(),
   "poQty": zod.string().nullish(),
-  "poUnitPrice": zod.string().nullish()
+  "poUnitPrice": zod.string().nullish(),
+  "flagged": zod.boolean().optional().describe('True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price).'),
+  "flagReason": zod.string().nullish().describe('Arabic reason for the flag, e.g. \'رفض التسليم: تالف\' or \'تجاوزت التكلفة: الفعلي 120 > أمر التوريد 100\'.')
 }).describe('One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued).'))
 }).describe('Paginated flat sheet-style view (one row per customer RFQ item, with joined PO columns).')
 

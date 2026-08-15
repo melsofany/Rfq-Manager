@@ -34,6 +34,8 @@ const tables = {
   offerItemsTable: offerItemsTbl,
   customerPoItemsTable: customerPoItemsTbl,
   customerPosTable: customerPosTbl,
+  customerPoItemDeliveriesTable: { _: "cpoDeliveries", customerPoItemId: "customerPoItemId", deliveryStatus: "deliveryStatus", rejectionReason: "rejectionReason", createdAt: "createdAt" },
+  purchaseOrderItemsTable: { _: "poItems", customerPoItemId: "customerPoItemId", finalActualCost: "finalActualCost", referencePrice: "referencePrice" },
 };
 
 // Per-test state.
@@ -52,6 +54,9 @@ let approvedRows: any[];
 let poItemRows: any[];
 // Sheet-view flat rows returned by GET /customer-rfq/sheet-view.
 let sheetRows: any[];
+// Sheet-view rejected-delivery rows (for the flag column) returned by the
+// batched lookup on customer_po_item_deliveries.
+let sheetRejectedDeliveries: any[];
 // Employee row returned for the POST "who entered it" lookup: { name }.
 let employeeRow: any;
 // Mutable session so individual tests can flip role=admin for override tests.
@@ -99,7 +104,8 @@ const dbMock: any = {
       }
       // items list for detail (bare select).from(items).where()
       if (table === itemsTable) {
-        // sheet-view: select({...}).from(items).innerJoin(rfq).leftJoin(poItems).leftJoin(po).orderBy()
+        // sheet-view: select({...}).from(items).innerJoin(rfq).leftJoin(poItems)
+        // .leftJoin(po).leftJoin(purchaseOrderItems).orderBy()
         // returns the per-test sheetRows (already flat, multi-column). The
         // orderBy is the terminal thenable.
         if (arg && typeof arg === "object" && "rfqItemId" in arg) {
@@ -107,7 +113,9 @@ const dbMock: any = {
             innerJoin: vi.fn(() => chainable(sheetRows, {
               leftJoin: vi.fn(() => chainable(sheetRows, {
                 leftJoin: vi.fn(() => chainable(sheetRows, {
-                  orderBy: vi.fn(() => chainable(sheetRows)),
+                  leftJoin: vi.fn(() => chainable(sheetRows, {
+                    orderBy: vi.fn(() => chainable(sheetRows)),
+                  })),
                 })),
               })),
             })),
@@ -131,6 +139,15 @@ const dbMock: any = {
       if (table === customerPoItemsTbl) {
         return chainable(poItemRows, {
           where: vi.fn(() => chainable(poItemRows)),
+        });
+      }
+      // Sheet-view rejected-delivery batched lookup:
+      // select({...}).from(customerPoItemDeliveries).where(and(inArray, eq)).orderBy()
+      if (table === (tables as any).customerPoItemDeliveriesTable) {
+        return chainable(sheetRejectedDeliveries, {
+          where: vi.fn(() => chainable(sheetRejectedDeliveries, {
+            orderBy: vi.fn(() => chainable(sheetRejectedDeliveries)),
+          })),
         });
       }
       // Employee name lookup: select({name}).from(employees).where().limit() —
@@ -221,6 +238,7 @@ beforeEach(() => {
   approvedRows = [];
   poItemRows = [];
   sheetRows = [];
+  sheetRejectedDeliveries = [];
   employeeRow = { name: "Tester" };
   sessionState.role = undefined;
   insertedItems.length = 0;

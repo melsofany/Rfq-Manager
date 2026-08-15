@@ -751,6 +751,7 @@ function SheetViewTab() {
                   ["poDate", "تاريخ أمر الشراء"],
                   ["poQty", "الكمية"],
                   ["poUnitPrice", "السعر"],
+                  ["flagReason", "السبب"],
                 ] as const).map(([col, label]) => (
                   <th
                     key={col}
@@ -774,7 +775,7 @@ function SheetViewTab() {
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={15} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={16} className="px-4 py-10 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <div className="h-5 w-5 border-2 border-muted border-t-primary rounded-full animate-spin" />
                       <span>جارٍ التحميل…</span>
@@ -784,14 +785,14 @@ function SheetViewTab() {
               )}
               {isError && (
                 <tr>
-                  <td colSpan={15} className="px-4 py-10 text-center text-destructive">
+                  <td colSpan={16} className="px-4 py-10 text-center text-destructive">
                     فشل تحميل البيانات. حاول مرة أخرى.
                   </td>
                 </tr>
               )}
               {!isLoading && !isError && rows.length === 0 && (
                 <tr>
-                  <td colSpan={15} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={16} className="px-4 py-10 text-center text-muted-foreground">
                     {search ? `لا توجد نتائج لـ «${search}»` : "لا توجد بيانات بعد"}
                   </td>
                 </tr>
@@ -801,7 +802,10 @@ function SheetViewTab() {
                 rows.map((r: CustomerRfqSheetRow) => (
                   <tr
                     key={`${r.rfqItemId}-${r.poItemId ?? "nopo"}`}
-                    className="border-b border-border/40 last:border-0 hover:bg-muted/20"
+                    className={cn(
+                      "border-b border-border/40 last:border-0 hover:bg-muted/20",
+                      r.flagged && "bg-red-50 dark:bg-red-950/30",
+                    )}
                   >
                     <td className="px-2 py-1.5 font-mono whitespace-nowrap" dir="ltr">
                       {cell(r.lineItem)}
@@ -850,6 +854,9 @@ function SheetViewTab() {
                     </td>
                     <td className="px-2 py-1.5 text-center font-mono" dir="ltr">
                       {cell(r.poUnitPrice)}
+                    </td>
+                    <td className="px-2 py-1.5 text-xs text-red-600 dark:text-red-400 font-medium max-w-[220px]">
+                      {r.flagReason ?? ""}
                     </td>
                   </tr>
                 ))}
