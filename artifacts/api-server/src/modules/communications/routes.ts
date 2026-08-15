@@ -15,7 +15,7 @@ import {
   representativesTable,
   WORK_ORDER_KIND,
 } from "@workspace/db";
-import { eq, desc, sql, and, inArray, ne, isNotNull } from "drizzle-orm";
+import { eq, desc, sql, and, inArray, ne, isNotNull, ilike } from "drizzle-orm";
 import {
   Whatsapp,
   PHONE_NUMBER_ID,
@@ -531,6 +531,8 @@ async function recordItemReceipt(
       id: purchaseOrderItemsTable.id,
       poId: purchaseOrderItemsTable.poId,
       qty: purchaseOrderItemsTable.qty,
+      lineItem: purchaseOrderItemsTable.lineItem,
+      partNo: purchaseOrderItemsTable.partNo,
       customerPoItemId: purchaseOrderItemsTable.customerPoItemId,
     })
     .from(purchaseOrderItemsTable)
@@ -608,15 +610,49 @@ async function recordItemReceipt(
     })
     .where(eq(purchaseOrderItemsTable.id, line.id));
 
+  // Mark the receipt work-order assignment as done so the rep menu's receipt
+  // count drops to 0 (it counts assignments still in 'sent' status).
+  const assignmentStatus = opts.acceptedQtyFromOrdered
+    ? "received"
+    : opts.rejectedQtyFromOrdered
+      ? "rejected"
+      : lineStatus;
+  await db
+    .update(workOrderAssignmentsTable)
+    .set({ status: assignmentStatus, updatedAt: new Date() })
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.poItemId, line.id),
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+      ),
+    );
+
   // Auto-create a delivery work-order assignment when this supplier PO line is
   // linked to a customer PO item and the receipt was accepted (not rejected).
   // The representative can then deliver it to the customer via the bot menu.
   // Guarded: never allows delivering something that wasn't received.
-  if (opts.acceptedQtyFromOrdered && line.customerPoItemId) {
-    try {
-      await ensureDeliveryAssignment(line.id, line.poId, line.customerPoItemId);
-    } catch (err) {
-      logger.warn({ err, poItemId: line.id }, "Auto delivery-assignment creation failed");
+  if (opts.acceptedQtyFromOrdered) {
+    let customerPoItemId = line.customerPoItemId;
+    // Fallback: supplier PO items created from a sheet lookup (no direct FK)
+    // may still correspond to a customer PO with the same po number. Resolve
+    // the matching customer_po_item by sheetPoNo + lineItem/partNo so the rep
+    // can still deliver without a manual link.
+    if (!customerPoItemId) {
+      customerPoItemId = await resolveCustomerPoItemId(line.poId, line.lineItem, line.partNo);
+      if (customerPoItemId) {
+        // Persist the link so future receipts chain directly.
+        await db
+          .update(purchaseOrderItemsTable)
+          .set({ customerPoItemId })
+          .where(eq(purchaseOrderItemsTable.id, line.id));
+      }
+    }
+    if (customerPoItemId) {
+      try {
+        await ensureDeliveryAssignment(line.id, line.poId, customerPoItemId);
+      } catch (err) {
+        logger.warn({ err, poItemId: line.id }, "Auto delivery-assignment creation failed");
+      }
     }
   }
   // Notify connected portal clients so the receipts screen live-refreshes.
@@ -627,6 +663,40 @@ async function recordItemReceipt(
     lineStatus,
   });
   return true;
+}
+
+/**
+ * Resolve a customer_po_item for a supplier PO line that has no direct FK link,
+ * by matching the supplier PO's sheetPoNo to a customer PO's customerPoNo and
+ * then matching the line's lineItem (or partNo) to one of that customer PO's
+ * items. Returns the customer_po_item id, or null if no match.
+ */
+async function resolveCustomerPoItemId(
+  poId: number,
+  lineItem: string | null,
+  partNo: string | null,
+): Promise<number | null> {
+  const [po] = await db
+    .select({ sheetPoNo: purchaseOrdersTable.sheetPoNo })
+    .from(purchaseOrdersTable)
+    .where(eq(purchaseOrdersTable.id, poId));
+  if (!po?.sheetPoNo) return null;
+  const [cpo] = await db
+    .select({ id: customerPosTable.id })
+    .from(customerPosTable)
+    .where(ilike(customerPosTable.customerPoNo, po.sheetPoNo));
+  if (!cpo) return null;
+  const items = await db
+    .select({ id: customerPoItemsTable.id, lineItem: customerPoItemsTable.lineItem, partNo: customerPoItemsTable.partNo })
+    .from(customerPoItemsTable)
+    .where(eq(customerPoItemsTable.customerPoId, cpo.id));
+  if (items.length === 0) return null;
+  // Prefer an exact lineItem match, then partNo, then the first item.
+  const byLine = lineItem ? items.find((i) => i.lineItem && i.lineItem.trim() === lineItem.trim()) : undefined;
+  if (byLine) return byLine.id;
+  const byPart = partNo ? items.find((i) => i.partNo && i.partNo.trim() === partNo.trim()) : undefined;
+  if (byPart) return byPart.id;
+  return items[0].id;
 }
 
 /**
