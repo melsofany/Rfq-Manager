@@ -45,7 +45,9 @@ async function resolveApprovedCosts(
     })
     .from(offerItemsTable)
     .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
-    .where(and(inArray(rfqItemsTable.customerRfqItemId, ids), eq(offerItemsTable.isApproved, true)));
+    .where(
+      and(inArray(rfqItemsTable.customerRfqItemId, ids), eq(offerItemsTable.isApproved, true)),
+    );
 
   const byCustomerItem = new Map<number, number[]>();
   for (const row of linked) {
@@ -70,13 +72,9 @@ async function resolveApprovedCosts(
       result.set(ci.id, null);
       continue;
     }
-    const partMatch = ci.partNo?.trim()
-      ? eq(rfqItemsTable.partNo, ci.partNo.trim())
-      : null;
-    const lineMatch = ci.lineItem?.trim()
-      ? eq(rfqItemsTable.lineItem, ci.lineItem.trim())
-      : null;
-    const matchCond = partMatch && lineMatch ? or(partMatch, lineMatch) : partMatch ?? lineMatch;
+    const partMatch = ci.partNo?.trim() ? eq(rfqItemsTable.partNo, ci.partNo.trim()) : null;
+    const lineMatch = ci.lineItem?.trim() ? eq(rfqItemsTable.lineItem, ci.lineItem.trim()) : null;
+    const matchCond = partMatch && lineMatch ? or(partMatch, lineMatch) : (partMatch ?? lineMatch);
     if (!matchCond) {
       result.set(ci.id, null);
       continue;
@@ -85,7 +83,13 @@ async function resolveApprovedCosts(
       .select({ price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
       .from(offerItemsTable)
       .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
-      .where(and(matchCond, isNull(rfqItemsTable.customerRfqItemId), eq(offerItemsTable.isApproved, true)));
+      .where(
+        and(
+          matchCond,
+          isNull(rfqItemsTable.customerRfqItemId),
+          eq(offerItemsTable.isApproved, true),
+        ),
+      );
     if (fallback.length > 0) {
       const excl = fallback.map((f) =>
         f.taxIncluded ? parseFloat(f.price) / (1 + VAT_RATE) : parseFloat(f.price),
@@ -188,7 +192,9 @@ async function resolveSupplierPricedItemIds(
     .select({ customerRfqItemId: rfqItemsTable.customerRfqItemId })
     .from(offerItemsTable)
     .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
-    .where(and(inArray(rfqItemsTable.customerRfqItemId, ids), eq(offerItemsTable.isApproved, true)));
+    .where(
+      and(inArray(rfqItemsTable.customerRfqItemId, ids), eq(offerItemsTable.isApproved, true)),
+    );
   for (const row of linked) {
     if (row.customerRfqItemId != null) priced.add(row.customerRfqItemId);
   }
@@ -202,13 +208,19 @@ async function resolveSupplierPricedItemIds(
     if (!key) continue;
     const partMatch = ci.partNo?.trim() ? eq(rfqItemsTable.partNo, ci.partNo.trim()) : null;
     const lineMatch = ci.lineItem?.trim() ? eq(rfqItemsTable.lineItem, ci.lineItem.trim()) : null;
-    const matchCond = partMatch && lineMatch ? or(partMatch, lineMatch) : partMatch ?? lineMatch;
+    const matchCond = partMatch && lineMatch ? or(partMatch, lineMatch) : (partMatch ?? lineMatch);
     if (!matchCond) continue;
     const fallback = await db
       .select({ id: offerItemsTable.id })
       .from(offerItemsTable)
       .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
-      .where(and(matchCond, isNull(rfqItemsTable.customerRfqItemId), eq(offerItemsTable.isApproved, true)));
+      .where(
+        and(
+          matchCond,
+          isNull(rfqItemsTable.customerRfqItemId),
+          eq(offerItemsTable.isApproved, true),
+        ),
+      );
     if (fallback.length > 0) priced.add(ci.id);
   }
   return priced;
@@ -233,7 +245,10 @@ function hasExpired(expiryDate: string | null): boolean {
 async function computeRequestStatusForRfq(
   rfqId: number,
   expiryDate: string | null = null,
-): Promise<{ status: CustomerRfqRequestStatus; items: typeof customerRfqItemsTable.$inferSelect[] }> {
+): Promise<{
+  status: CustomerRfqRequestStatus;
+  items: (typeof customerRfqItemsTable.$inferSelect)[];
+}> {
   const items = await db
     .select()
     .from(customerRfqItemsTable)
@@ -271,7 +286,12 @@ async function computeRequestStatusForRfq(
         qty: customerPoItemsTable.qty,
       })
       .from(customerPoItemsTable)
-      .where(and(inArray(customerPoItemsTable.customerRfqItemId, itemIds), isNotNull(customerPoItemsTable.customerRfqItemId)));
+      .where(
+        and(
+          inArray(customerPoItemsTable.customerRfqItemId, itemIds),
+          isNotNull(customerPoItemsTable.customerRfqItemId),
+        ),
+      );
 
     // For the supplier-receipt-rejection check: load the linked purchase_order
     // items' line status for these customer_po_items.
@@ -310,7 +330,10 @@ async function computeRequestStatusForRfq(
         deliveredItems += 1;
       }
       // Failed = customer rejected the delivery OR the supplier receipt was rejected.
-      else if (r.deliveryStatus === "rejected" || supplierLineStatusByCpoItemId.get(r.customerPoItemId) === "rejected") {
+      else if (
+        r.deliveryStatus === "rejected" ||
+        supplierLineStatusByCpoItemId.get(r.customerPoItemId) === "rejected"
+      ) {
         rejectedItems += 1;
       }
     }
@@ -325,7 +348,15 @@ async function computeRequestStatusForRfq(
   }
 
   return {
-    status: buildRequestStatus({ supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct, failed, expiryDate }),
+    status: buildRequestStatus({
+      supplierPriced,
+      customerPricingPct,
+      poIssued,
+      poItemIds,
+      deliveredPct,
+      failed,
+      expiryDate,
+    }),
     items,
   };
 }
@@ -340,7 +371,15 @@ function buildRequestStatus(input: {
   failed: boolean;
   expiryDate?: string | null;
 }): CustomerRfqRequestStatus {
-  const { supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct, failed, expiryDate } = input;
+  const {
+    supplierPriced,
+    customerPricingPct,
+    poIssued,
+    poItemIds,
+    deliveredPct,
+    failed,
+    expiryDate,
+  } = input;
 
   let stage = "received";
   let label = "طلب وارد";
@@ -371,9 +410,17 @@ function buildRequestStatus(input: {
     label = "منتهي (فشل)";
   }
 
-  return { stage, label, supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct, failed };
+  return {
+    stage,
+    label,
+    supplierPriced,
+    customerPricingPct,
+    poIssued,
+    poItemIds,
+    deliveredPct,
+    failed,
+  };
 }
-
 
 function serialize(r: typeof customerRfqsTable.$inferSelect, itemCount: number) {
   return {
@@ -444,15 +491,24 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
   // List path uses only the FK-linked batch query — the per-item legacy
   // fallback is O(N) and would hang the page for large lists.
   const allItemIds = allItems.map((i) => i.id);
-  const supplierPricedItemIds = allItemIds.length > 0
-    ? await resolveSupplierPricedItemIds(
-        allItems.map((i) => ({ id: i.id, partNo: i.partNo, lineItem: i.lineItem })),
-        false,
-      )
-    : new Set<number>();
+  const supplierPricedItemIds =
+    allItemIds.length > 0
+      ? await resolveSupplierPricedItemIds(
+          allItems.map((i) => ({ id: i.id, partNo: i.partNo, lineItem: i.lineItem })),
+          false,
+        )
+      : new Set<number>();
 
   // 4) PO issued + delivered share across all listed RFQs (single query).
-  let poRowsByItem = new Map<number, { qty: string | null; totalDeliveredQty: string | null; totalRejectedByCustomerQty: string | null; deliveryStatus: string }>();
+  let poRowsByItem = new Map<
+    number,
+    {
+      qty: string | null;
+      totalDeliveredQty: string | null;
+      totalRejectedByCustomerQty: string | null;
+      deliveryStatus: string;
+    }
+  >();
   const supplierRejectedItemIds = new Set<number>();
   const cpoIdToRfqItem = new Map<number, number>();
   if (allItemIds.length > 0) {
@@ -466,14 +522,24 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
         qty: customerPoItemsTable.qty,
       })
       .from(customerPoItemsTable)
-      .where(and(inArray(customerPoItemsTable.customerRfqItemId, allItemIds), isNotNull(customerPoItemsTable.customerRfqItemId)));
+      .where(
+        and(
+          inArray(customerPoItemsTable.customerRfqItemId, allItemIds),
+          isNotNull(customerPoItemsTable.customerRfqItemId),
+        ),
+      );
     const cpoItemIds: number[] = [];
     for (const r of poRows) {
       if (r.customerRfqItemId == null) continue;
       cpoIdToRfqItem.set(r.customerPoItemId, r.customerRfqItemId);
       const existing = poRowsByItem.get(r.customerRfqItemId);
       if (!existing) {
-        poRowsByItem.set(r.customerRfqItemId, { qty: r.qty, totalDeliveredQty: r.totalDeliveredQty, totalRejectedByCustomerQty: r.totalRejectedByCustomerQty, deliveryStatus: r.deliveryStatus });
+        poRowsByItem.set(r.customerRfqItemId, {
+          qty: r.qty,
+          totalDeliveredQty: r.totalDeliveredQty,
+          totalRejectedByCustomerQty: r.totalRejectedByCustomerQty,
+          deliveryStatus: r.deliveryStatus,
+        });
       }
       cpoItemIds.push(r.customerPoItemId);
     }
@@ -500,7 +566,13 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
   res.json(
     filtered.map((r) => {
       const rfqItems = itemsByRfq.get(r.rfq.id) ?? [];
-      const status = computeListRequestStatus(rfqItems, supplierPricedItemIds, poRowsByItem, supplierRejectedItemIds, r.rfq.expiryDate);
+      const status = computeListRequestStatus(
+        rfqItems,
+        supplierPricedItemIds,
+        poRowsByItem,
+        supplierRejectedItemIds,
+        r.rfq.expiryDate,
+      );
       return { ...serialize(r.rfq, countMap.get(r.rfq.id) ?? 0), requestStatus: status };
     }),
   );
@@ -512,7 +584,15 @@ router.get("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
 function computeListRequestStatus(
   rfqItems: Array<{ id: number; unitPrice: string | null }>,
   supplierPricedItemIds: Set<number>,
-  poRowsByItem: Map<number, { qty: string | null; totalDeliveredQty: string | null; totalRejectedByCustomerQty: string | null; deliveryStatus: string }>,
+  poRowsByItem: Map<
+    number,
+    {
+      qty: string | null;
+      totalDeliveredQty: string | null;
+      totalRejectedByCustomerQty: string | null;
+      deliveryStatus: string;
+    }
+  >,
   supplierRejectedItemIds: Set<number>,
   expiryDate: string | null,
 ): CustomerRfqRequestStatus {
@@ -553,7 +633,15 @@ function computeListRequestStatus(
     failed = deliveredItems === 0 && rejectedItems > 0;
   }
 
-  return buildRequestStatus({ supplierPriced, customerPricingPct, poIssued, poItemIds, deliveredPct, failed, expiryDate });
+  return buildRequestStatus({
+    supplierPriced,
+    customerPricingPct,
+    poIssued,
+    poItemIds,
+    deliveredPct,
+    failed,
+    expiryDate,
+  });
 }
 
 // GET /customer-rfq/numbers — all customer RFQ numbers (for the supplier-RFQ
@@ -754,7 +842,9 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
         const actual = Number(r.poFinalActualCost);
         const poPrice = Number(r.poReferencePrice);
         if (isFinite(actual) && isFinite(poPrice) && poPrice > 0 && actual > poPrice + 1e-9) {
-          reasons.push(`تجاوزت التكلفة: الفعلي ${formatQty(r.poFinalActualCost)} > أمر التوريد ${formatQty(r.poReferencePrice)}`);
+          reasons.push(
+            `تجاوزت التكلفة: الفعلي ${formatQty(r.poFinalActualCost)} > أمر التوريد ${formatQty(r.poReferencePrice)}`,
+          );
         }
       }
       const flagReason = reasons.length > 0 ? reasons.join(" — ") : null;
@@ -967,21 +1057,20 @@ router.get("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => 
 router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
-  const [existing] = await db
-    .select()
-    .from(customerRfqsTable)
-    .where(eq(customerRfqsTable.id, id));
+  const [existing] = await db.select().from(customerRfqsTable).where(eq(customerRfqsTable.id, id));
   if (!existing) {
     res.status(404).json({ error: "Not found" });
     return;
   }
   if (existing.status !== "draft") {
-    res.status(400).json({ error: "لا يمكن تعديل طلب تسعير العميل بعد إرساله" });
-    return;
-  }
-
-  const { customerName, customerRfqNo, entryDate, expiryDate, buyerName, notes, status, items, overrideMarginCheck } =
-    req.body as {
+    // Exception: once the RFQ's close date (expiryDate) has passed, allow
+    // adjusting the customer unit prices on an already-sent (finalized) RFQ.
+    // This is a prices-only update — header fields and item identity are not
+    // touched, item ids (and their offer/PO links) are preserved, and the
+    // margin check is NOT re-run (it already passed at finalize; this is a
+    // manual post-expiry price adjustment, audit-logged).
+    const expired = hasExpired(existing.expiryDate);
+    const body = req.body as {
       customerName?: string;
       customerRfqNo?: string;
       entryDate?: string;
@@ -990,15 +1079,104 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       notes?: string;
       status?: string;
       items?: Array<{
+        id?: number;
         partNo?: string;
         lineItem?: string;
-        description?: string;
-        uom?: string;
-        qty?: string | number | null;
         unitPrice?: string | number | null;
       }>;
-      overrideMarginCheck?: boolean;
     };
+    const headerTouched =
+      body.customerName !== undefined ||
+      body.customerRfqNo !== undefined ||
+      body.entryDate !== undefined ||
+      body.expiryDate !== undefined ||
+      body.buyerName !== undefined ||
+      body.notes !== undefined ||
+      body.status !== undefined;
+    const pricesOnly =
+      expired &&
+      !headerTouched &&
+      Array.isArray(body.items) &&
+      body.items.length > 0 &&
+      body.items.every((it) => it.id != null);
+
+    if (!pricesOnly) {
+      res.status(400).json({ error: "لا يمكن تعديل طلب تسعير العميل بعد إرساله" });
+      return;
+    }
+
+    // Update each item's unit_price by id (preserve identity + links).
+    for (const it of body.items!) {
+      const up = it.unitPrice == null || it.unitPrice === "" ? null : String(it.unitPrice);
+      await db
+        .update(customerRfqItemsTable)
+        .set({ unitPrice: up })
+        .where(eq(customerRfqItemsTable.id, it.id as number));
+    }
+    await db.insert(auditLogTable).values({
+      action: "customer_rfq.reprice_after_expiry",
+      entityType: "customer_rfq",
+      entityId: id,
+      employeeId: req.session.employeeId,
+      description: `Re-priced sent customer RFQ after expiry (${existing.expiryDate}). ${body.items?.length ?? 0} item(s) updated.`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+
+    const [updated] = await db.select().from(customerRfqsTable).where(eq(customerRfqsTable.id, id));
+    const { status: requestStatus, items: itemRows } = await computeRequestStatusForRfq(
+      id,
+      updated.expiryDate,
+    );
+    const poItemIdSet = new Set(requestStatus.poItemIds);
+    res.json({
+      ...serialize(updated, itemRows.length),
+      requestStatus,
+      items: itemRows.map((i) => ({
+        id: i.id,
+        customerRfqId: i.customerRfqId,
+        partNo: i.partNo,
+        lineItem: i.lineItem,
+        description: i.description,
+        uom: i.uom,
+        qty: formatQty(i.qty),
+        unitPrice: formatQty(i.unitPrice),
+        total: computeTotal(i.qty, i.unitPrice),
+        hasPo: poItemIdSet.has(i.id),
+        createdAt: i.createdAt.toISOString(),
+      })),
+    });
+    return;
+  }
+
+  const {
+    customerName,
+    customerRfqNo,
+    entryDate,
+    expiryDate,
+    buyerName,
+    notes,
+    status,
+    items,
+    overrideMarginCheck,
+  } = req.body as {
+    customerName?: string;
+    customerRfqNo?: string;
+    entryDate?: string;
+    expiryDate?: string;
+    buyerName?: string;
+    notes?: string;
+    status?: string;
+    items?: Array<{
+      partNo?: string;
+      lineItem?: string;
+      description?: string;
+      uom?: string;
+      qty?: string | number | null;
+      unitPrice?: string | number | null;
+    }>;
+    overrideMarginCheck?: boolean;
+  };
 
   const updates: Record<string, unknown> = {};
   if (customerName !== undefined) updates.customerName = customerName.trim();
@@ -1024,7 +1202,9 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     ? items.filter((it) => (it.partNo?.trim() || it.lineItem?.trim()) && it.qty)
     : undefined;
   if (status === "sent" && validItems !== undefined) {
-    const unpriced = validItems.filter((it) => it.unitPrice == null || it.unitPrice === "" || Number(it.unitPrice) <= 0);
+    const unpriced = validItems.filter(
+      (it) => it.unitPrice == null || it.unitPrice === "" || Number(it.unitPrice) <= 0,
+    );
     if (unpriced.length > 0) {
       res.status(400).json({ error: "أدخل سعر كل بند قبل تثبيت الطلب" });
       return;
@@ -1041,7 +1221,11 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     // Current DB items carry the original ids that rfq_items link to (the
     // delete+recreate below would invalidate those ids, so resolve first).
     const currentDbItems = await db
-      .select({ id: customerRfqItemsTable.id, partNo: customerRfqItemsTable.partNo, lineItem: customerRfqItemsTable.lineItem })
+      .select({
+        id: customerRfqItemsTable.id,
+        partNo: customerRfqItemsTable.partNo,
+        lineItem: customerRfqItemsTable.lineItem,
+      })
       .from(customerRfqItemsTable)
       .where(eq(customerRfqItemsTable.customerRfqId, id));
     const costs = await resolveApprovedCosts(currentDbItems);
@@ -1122,13 +1306,13 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     }
   }
 
-  const [updated] = await db
-    .select()
-    .from(customerRfqsTable)
-    .where(eq(customerRfqsTable.id, id));
+  const [updated] = await db.select().from(customerRfqsTable).where(eq(customerRfqsTable.id, id));
   // Recompute the derived status + per-item PO flag after the update so the UI
   // reflects the new pricing/PO state immediately.
-  const { status: requestStatus, items: itemRows } = await computeRequestStatusForRfq(id, updated.expiryDate);
+  const { status: requestStatus, items: itemRows } = await computeRequestStatusForRfq(
+    id,
+    updated.expiryDate,
+  );
   const poItemIdSet = new Set(requestStatus.poItemIds);
   res.json({
     ...serialize(updated, itemRows.length),
