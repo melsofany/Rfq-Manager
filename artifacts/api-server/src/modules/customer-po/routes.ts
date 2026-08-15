@@ -70,22 +70,29 @@ async function resolveRfqNos(
 // A derived, progressive status for a customer PO that reflects the supplier
 // purchase orders issued for it and the deliveries made to the customer. It is
 // computed on every list/detail fetch (never stored), so it advances
-// automatically when a supplier PO is dispatched from /purchase-orders or when a
-// delivery is recorded from the customer-deliveries page.
+// automatically when a supplier PO is dispatched from /purchase-orders, when a
+// receipt is recorded from the supplier, or when a delivery is recorded from the
+// customer-deliveries page.
 //
 // Stages (most advanced wins):
-//   draft      — the customer PO is not yet finalized (status="draft").
-//   sent       — finalized (status="sent") but no supplier PO dispatched yet.
-//   po_issued  — at least one dispatched (status="sent") supplier PO is linked
-//                to this customer PO (via purchase_order_items.customerPoItemId,
-//                or, as a header-level fallback, sheetPoNo = customerPoNo).
-//   delivered  — deliveries recorded; partial when deliveredPct < 100.
-//   fulfilled  — every line item has been delivered (deliveredPct = 100).
+//   draft           — the customer PO is not yet finalized (status="draft").
+//   sent            — finalized (status="sent") but no supplier PO dispatched yet.
+//   po_issued       — at least one dispatched (status="sent") supplier PO is linked
+//                     to this customer PO (via purchase_order_items.customerPoItemId,
+//                     or, as a header-level fallback, sheetPoNo = customerPoNo).
+//   ready_to_deliver — some line items have been received from the supplier
+//                     (linked supplier PO item accepted) but none delivered yet.
+//                     receivedPct = receivedItems/totalItems.
+//   delivered       — deliveries recorded; partial when resolvedPct < 100.
+//   fulfilled       — every line item is resolved (delivered OR rejected by the
+//                     customer); resolvedPct = 100.
 export interface CustomerPoFulfillmentStatus {
-  stage: "draft" | "sent" | "po_issued" | "delivered" | "fulfilled";
+  stage: "draft" | "sent" | "po_issued" | "ready_to_deliver" | "delivered" | "fulfilled";
   label: string;
   poIssued: boolean;
   totalItems: number;
+  receivedItems: number;
+  receivedPct: number | null;
   deliveredItems: number;
   deliveredPct: number | null;
 }
@@ -94,26 +101,36 @@ function buildFulfillmentStatus(input: {
   storedStatus: string;
   poIssued: boolean;
   totalItems: number;
+  receivedItems: number;
   deliveredItems: number;
+  rejectedItems: number;
 }): CustomerPoFulfillmentStatus {
-  const { storedStatus, poIssued, totalItems, deliveredItems } = input;
-  const deliveredPct =
-    totalItems > 0 ? Math.round((deliveredItems / totalItems) * 100) : null;
+  const { storedStatus, poIssued, totalItems, receivedItems, deliveredItems, rejectedItems } = input;
+  const receivedPct =
+    totalItems > 0 ? Math.round((receivedItems / totalItems) * 100) : null;
+  // A line is "resolved" when it's either delivered or the customer rejected it
+  // (both are terminal outcomes — the order is settled for that line).
+  const resolvedItems = deliveredItems + rejectedItems;
+  const resolvedPct =
+    totalItems > 0 ? Math.round((resolvedItems / totalItems) * 100) : null;
 
   let stage: CustomerPoFulfillmentStatus["stage"] = "draft";
   let label = "مسودة";
 
-  if (storedStatus === "draft" && !poIssued && deliveredItems === 0) {
+  if (storedStatus === "draft" && !poIssued && receivedItems === 0 && resolvedItems === 0) {
     stage = "draft";
     label = "مسودة";
-  } else if (deliveredPct != null && deliveredItems > 0) {
-    if (deliveredPct >= 100) {
+  } else if (resolvedPct != null && resolvedItems > 0) {
+    if (resolvedPct >= 100) {
       stage = "fulfilled";
-      label = "تم التسليم بالكامل";
+      label = "اكتمل";
     } else {
       stage = "delivered";
-      label = `نجح ${deliveredPct}% من البنود المسلمة`;
+      label = `تم تنفيذه ${resolvedPct}%`;
     }
+  } else if (receivedItems > 0) {
+    stage = "ready_to_deliver";
+    label = `جاهز للتسليم ${receivedPct ?? 0}%`;
   } else if (poIssued) {
     stage = "po_issued";
     label = "تم إصدار أمر شراء للمورد";
@@ -125,7 +142,7 @@ function buildFulfillmentStatus(input: {
     label = "مسودة";
   }
 
-  return { stage, label, poIssued, totalItems, deliveredItems, deliveredPct };
+  return { stage, label, poIssued, totalItems, receivedItems, receivedPct, deliveredItems, deliveredPct: resolvedPct };
 }
 
 // Resolve, for a set of customer PO ids, the ids that have at least one
@@ -193,11 +210,12 @@ async function resolvePoIssuedIds(
 }
 
 // For a set of customer PO ids, load all their line items (with deliveryStatus)
-// and return per-PO totals: total items + delivered items count.
+// and return per-PO totals: total items, delivered items, and customer-rejected
+// items counts.
 async function resolveDeliveryRollup(
   customerPoIds: number[],
-): Promise<Map<number, { totalItems: number; deliveredItems: number }>> {
-  const map = new Map<number, { totalItems: number; deliveredItems: number }>();
+): Promise<Map<number, { totalItems: number; deliveredItems: number; rejectedItems: number }>> {
+  const map = new Map<number, { totalItems: number; deliveredItems: number; rejectedItems: number }>();
   if (customerPoIds.length === 0) return map;
   const rows = await db
     .select({
@@ -207,10 +225,124 @@ async function resolveDeliveryRollup(
     .from(customerPoItemsTable)
     .where(inArray(customerPoItemsTable.customerPoId, customerPoIds));
   for (const r of rows) {
-    const entry = map.get(r.customerPoId) ?? { totalItems: 0, deliveredItems: 0 };
+    const entry = map.get(r.customerPoId) ?? { totalItems: 0, deliveredItems: 0, rejectedItems: 0 };
     entry.totalItems += 1;
     if (r.deliveryStatus === "delivered") entry.deliveredItems += 1;
+    else if (r.deliveryStatus === "rejected") entry.rejectedItems += 1;
     map.set(r.customerPoId, entry);
+  }
+  return map;
+}
+
+/**
+ * For a set of customer PO ids, count how many of each PO's line items have been
+ * RECEIVED from the supplier (i.e. a linked purchase_order_item was accepted —
+ * line_status fulfilled/partial with total_accepted_qty > 0). A customer_po_item
+ * links to a supplier PO item via purchase_order_items.customer_po_item_id, with
+ * a header-level fallback (sheetPoNo = customerPoNo) + lineItem match.
+ * Returns a map of customerPoId → receivedItems count.
+ */
+async function resolveReceivedRollup(
+  customerPoIds: number[],
+  customerPoNoByPoId: Map<number, string>,
+): Promise<Map<number, number>> {
+  const map = new Map<number, number>();
+  if (customerPoIds.length === 0) return map;
+
+  // 1) Item-level link: customer_po_items that have a linked purchase_order_item
+  //    with accepted qty > 0.
+  const linked = await db
+    .select({
+      customerPoId: customerPoItemsTable.customerPoId,
+      customerPoItemId: customerPoItemsTable.id,
+      lineStatus: purchaseOrderItemsTable.lineStatus,
+      acceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
+    })
+    .from(customerPoItemsTable)
+    .innerJoin(
+      purchaseOrderItemsTable,
+      eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
+    )
+    .where(inArray(customerPoItemsTable.customerPoId, customerPoIds));
+  const receivedItemIds = new Set<number>();
+  for (const r of linked) {
+    const accepted = r.acceptedQty ? Number(r.acceptedQty) : 0;
+    if (accepted > 0 && r.lineStatus !== "rejected") {
+      receivedItemIds.add(r.customerPoItemId);
+    }
+  }
+
+  // 2) Header-level fallback: for customer POs whose number matches a dispatched
+  //    supplier PO's sheetPoNo, mark their items as received when a matching
+  //    supplier PO item was accepted (matched by lineItem).
+  const poNos = new Set(
+    [...customerPoNoByPoId.values()].map((n) => n.toLowerCase()),
+  );
+  if (poNos.size > 0) {
+    const dispatched = await db
+      .select({
+        sheetPoNo: purchaseOrdersTable.sheetPoNo,
+        poId: purchaseOrdersTable.id,
+      })
+      .from(purchaseOrdersTable)
+      .where(eq(purchaseOrdersTable.status, "sent"));
+    const matchedPoIds: number[] = [];
+    for (const d of dispatched) {
+      if (d.sheetPoNo && poNos.has(d.sheetPoNo.toLowerCase())) matchedPoIds.push(d.poId);
+    }
+    if (matchedPoIds.length > 0) {
+      const supplierItems = await db
+        .select({
+          poId: purchaseOrderItemsTable.poId,
+          lineItem: purchaseOrderItemsTable.lineItem,
+          lineStatus: purchaseOrderItemsTable.lineStatus,
+          acceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
+        })
+        .from(purchaseOrderItemsTable)
+        .where(inArray(purchaseOrderItemsTable.poId, matchedPoIds));
+      // Map poId → set of accepted lineItems.
+      const acceptedByPo = new Map<number, Set<string>>();
+      for (const si of supplierItems) {
+        const accepted = si.acceptedQty ? Number(si.acceptedQty) : 0;
+        if (accepted > 0 && si.lineStatus !== "rejected" && si.lineItem) {
+          const set = acceptedByPo.get(si.poId) ?? new Set<string>();
+          set.add(si.lineItem.trim());
+          acceptedByPo.set(si.poId, set);
+        }
+      }
+      // Map sheetPoNo(lower) → poId for the matched dispatched POs.
+      const poIdByNo = new Map<string, number>();
+      for (const d of dispatched) {
+        if (d.sheetPoNo) poIdByNo.set(d.sheetPoNo.toLowerCase(), d.poId);
+      }
+      // For each listed customer PO matched by number, load its items and count
+      // those whose lineItem matches an accepted supplier item.
+      for (const [cpoId, cpoNo] of customerPoNoByPoId) {
+        const spoId = poIdByNo.get(cpoNo.toLowerCase());
+        const acceptedLines = spoId != null ? acceptedByPo.get(spoId) : undefined;
+        if (!acceptedLines) continue;
+        const cpoItems = await db
+          .select({ id: customerPoItemsTable.id, lineItem: customerPoItemsTable.lineItem })
+          .from(customerPoItemsTable)
+          .where(eq(customerPoItemsTable.customerPoId, cpoId));
+        for (const ci of cpoItems) {
+          if (ci.lineItem && acceptedLines.has(ci.lineItem.trim())) {
+            receivedItemIds.add(ci.id);
+          }
+        }
+      }
+    }
+  }
+
+  // Tally received items per customer PO from the collected item ids.
+  const itemIdRows = await db
+    .select({ id: customerPoItemsTable.id, customerPoId: customerPoItemsTable.customerPoId })
+    .from(customerPoItemsTable)
+    .where(inArray(customerPoItemsTable.customerPoId, customerPoIds));
+  for (const r of itemIdRows) {
+    if (receivedItemIds.has(r.id)) {
+      map.set(r.customerPoId, (map.get(r.customerPoId) ?? 0) + 1);
+    }
   }
   return map;
 }
@@ -220,11 +352,16 @@ async function computeFulfillmentStatus(
   customerPoId: number,
   storedStatus: string,
   customerPoNo: string,
-  items: Array<{ deliveryStatus: string }>,
+  items: Array<{ deliveryStatus: string; lineItem?: string | null }>,
 ): Promise<CustomerPoFulfillmentStatus> {
   const totalItems = items.length;
   const deliveredItems = items.filter((i) => i.deliveryStatus === "delivered").length;
+  const rejectedItems = items.filter((i) => i.deliveryStatus === "rejected").length;
   const poIssuedSet = await resolvePoIssuedIds(
+    [customerPoId],
+    new Map([[customerPoId, customerPoNo]]),
+  );
+  const receivedMap = await resolveReceivedRollup(
     [customerPoId],
     new Map([[customerPoId, customerPoNo]]),
   );
@@ -232,7 +369,9 @@ async function computeFulfillmentStatus(
     storedStatus,
     poIssued: poIssuedSet.has(customerPoId),
     totalItems,
+    receivedItems: receivedMap.get(customerPoId) ?? 0,
     deliveredItems,
+    rejectedItems,
   });
 }
 
@@ -318,23 +457,27 @@ router.get("/customer-po", requireAuth, async (req, res): Promise<void> => {
       : [];
   const countMap = Object.fromEntries(counts.map((c) => [c.customerPoId, c.cnt]));
 
-  // Derived fulfillment status per PO (po_issued + delivery progress). Computed
-  // in batch: one delivery rollup query + one po-issued resolution for all POs.
+  // Derived fulfillment status per PO (po_issued + receipt progress + delivery
+  // progress). Computed in batch: one delivery rollup + one received rollup +
+  // one po-issued resolution for all POs.
   const customerPoNoByPoId = new Map<number, string>();
   for (const r of filtered) customerPoNoByPoId.set(r.po.id, r.po.customerPoNo);
-  const [deliveryRollup, poIssuedSet] = await Promise.all([
+  const [deliveryRollup, receivedRollup, poIssuedSet] = await Promise.all([
     resolveDeliveryRollup(ids),
+    resolveReceivedRollup(ids, customerPoNoByPoId),
     resolvePoIssuedIds(ids, customerPoNoByPoId),
   ]);
 
   res.json(
     filtered.map((r) => {
-      const roll = deliveryRollup.get(r.po.id) ?? { totalItems: 0, deliveredItems: 0 };
+      const roll = deliveryRollup.get(r.po.id) ?? { totalItems: 0, deliveredItems: 0, rejectedItems: 0 };
       const fulfillment = buildFulfillmentStatus({
         storedStatus: r.po.status,
         poIssued: poIssuedSet.has(r.po.id),
         totalItems: roll.totalItems,
+        receivedItems: receivedRollup.get(r.po.id) ?? 0,
         deliveredItems: roll.deliveredItems,
+        rejectedItems: roll.rejectedItems,
       });
       return serialize(r.po, countMap[r.po.id] ?? 0, fulfillment);
     }),
@@ -453,7 +596,9 @@ router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
     storedStatus: po.status,
     poIssued: false,
     totalItems: validItems.length,
+    receivedItems: 0,
     deliveredItems: 0,
+    rejectedItems: 0,
   });
   res.status(201).json(serialize(po, validItems.length, fulfillment));
 });

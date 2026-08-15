@@ -7,7 +7,7 @@
  */
 
 /**
- * draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items delivered (deliveredPct = 100).
+ * draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). ready_to_deliver — some line items received from the supplier but none delivered yet. delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items resolved (delivered OR rejected by customer).
  */
 export type CustomerPoFulfillmentStatusStage = typeof CustomerPoFulfillmentStatusStage[keyof typeof CustomerPoFulfillmentStatusStage];
 
@@ -16,6 +16,7 @@ export const CustomerPoFulfillmentStatusStage = {
   draft: 'draft',
   sent: 'sent',
   po_issued: 'po_issued',
+  ready_to_deliver: 'ready_to_deliver',
   delivered: 'delivered',
   fulfilled: 'fulfilled',
 } as const;

@@ -8,21 +8,28 @@
 import type { CustomerPoFulfillmentStatusStage } from './customerPoFulfillmentStatusStage';
 
 /**
- * Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders and the customer deliveries. Reflects: whether a supplier PO was issued (dispatched) for this customer PO, and the share of the customer PO's line items that have been delivered to the customer.
+ * Derived fulfillment progress for a customer PO, computed by the server from the linked supplier purchase orders, the receipts recorded from the supplier, and the deliveries made to the customer.
  */
 export interface CustomerPoFulfillmentStatus {
-  /** draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items delivered (deliveredPct = 100). */
+  /** draft — customer PO not yet finalized. sent — finalized but no supplier PO dispatched yet. po_issued — at least one linked supplier PO has been dispatched (sent to the supplier). ready_to_deliver — some line items received from the supplier but none delivered yet. delivered — deliveries recorded; partial when deliveredPct < 100. fulfilled — all line items resolved (delivered OR rejected by customer). */
   stage: CustomerPoFulfillmentStatusStage;
-  /** Arabic label ready to display, e.g. "مسودة", "تم الإرسال", "تم إصدار أمر شراء للمورد", "نجح 60% من البنود المسلمة", "تم التسليم بالكامل". */
+  /** Arabic label ready to display, e.g. "مسودة", "تم الإرسال", "تم إصدار أمر شراء للمورد", "جاهز للتسليم 50%", "تم تنفيذه 60%", "اكتمل". */
   label: string;
   /** True when at least one dispatched (status=sent) supplier PO is linked to this customer PO. */
   poIssued?: boolean;
   /** Total number of line items on this customer PO. */
   totalItems?: number;
+  /** Number of line items received from the supplier (linked supplier PO item accepted). */
+  receivedItems?: number;
+  /**
+     * Share (0–100) of line items received from the supplier. Null when the customer PO has no items.
+     * @nullable
+     */
+  receivedPct?: number | null;
   /** Number of line items fully delivered to the customer (deliveryStatus = delivered). */
   deliveredItems?: number;
   /**
-     * Share (0–100) of line items delivered. Null when the customer PO has no items.
+     * Share (0–100) of line items resolved (delivered OR rejected by the customer). Null when the customer PO has no items.
      * @nullable
      */
   deliveredPct?: number | null;
