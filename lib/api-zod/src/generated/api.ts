@@ -524,13 +524,14 @@ export const ListCustomerRfqsResponseItem = zod.object({
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "requestStatus": zod.object({
-  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed).\n'),
-  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"نجح 60%\", \"نجح بالكامل\".'),
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'failed', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered to the customer — نجح) | failed (items rejected at delivery or supplier receipt and NONE delivered — the request did not succeed) | expired (the close date passed with no item priced — failed).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"نجح 60%\", \"نجح بالكامل\", \"فشل\", \"منتهي (فشل)\".'),
   "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
   "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
   "poIssued": zod.boolean().describe('True when any customer_po_items row links back to an item of this RFQ.'),
   "poItemIds": zod.array(zod.number()).describe('customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).'),
-  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items resolved (delivered to the customer OR rejected by the customer). Null when no PO was issued.')
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items successfully delivered to the customer (rejections excluded). Null when no PO was issued.'),
+  "failed": zod.boolean().optional().describe('True when at least one PO\'d item was rejected (at delivery or supplier receipt) and NONE were delivered → the request failed.')
 }).optional().describe('Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage\/label prefers the most advanced milestone reached.\n'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -575,13 +576,14 @@ export const CreateCustomerRfqResponse = zod.object({
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "requestStatus": zod.object({
-  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed).\n'),
-  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"نجح 60%\", \"نجح بالكامل\".'),
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'failed', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered to the customer — نجح) | failed (items rejected at delivery or supplier receipt and NONE delivered — the request did not succeed) | expired (the close date passed with no item priced — failed).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"نجح 60%\", \"نجح بالكامل\", \"فشل\", \"منتهي (فشل)\".'),
   "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
   "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
   "poIssued": zod.boolean().describe('True when any customer_po_items row links back to an item of this RFQ.'),
   "poItemIds": zod.array(zod.number()).describe('customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).'),
-  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items resolved (delivered to the customer OR rejected by the customer). Null when no PO was issued.')
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items successfully delivered to the customer (rejections excluded). Null when no PO was issued.'),
+  "failed": zod.boolean().optional().describe('True when at least one PO\'d item was rejected (at delivery or supplier receipt) and NONE were delivered → the request failed.')
 }).optional().describe('Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage\/label prefers the most advanced milestone reached.\n'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -712,13 +714,14 @@ export const GetCustomerRfqResponse = zod.object({
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "requestStatus": zod.object({
-  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed).\n'),
-  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"نجح 60%\", \"نجح بالكامل\".'),
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'failed', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered to the customer — نجح) | failed (items rejected at delivery or supplier receipt and NONE delivered — the request did not succeed) | expired (the close date passed with no item priced — failed).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"نجح 60%\", \"نجح بالكامل\", \"فشل\", \"منتهي (فشل)\".'),
   "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
   "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
   "poIssued": zod.boolean().describe('True when any customer_po_items row links back to an item of this RFQ.'),
   "poItemIds": zod.array(zod.number()).describe('customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).'),
-  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items resolved (delivered to the customer OR rejected by the customer). Null when no PO was issued.')
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items successfully delivered to the customer (rejections excluded). Null when no PO was issued.'),
+  "failed": zod.boolean().optional().describe('True when at least one PO\'d item was rejected (at delivery or supplier receipt) and NONE were delivered → the request failed.')
 }).optional().describe('Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage\/label prefers the most advanced milestone reached.\n'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -781,13 +784,14 @@ export const UpdateCustomerRfqResponse = zod.object({
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "requestStatus": zod.object({
-  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed).\n'),
-  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"نجح 60%\", \"نجح بالكامل\".'),
+  "stage": zod.enum(['received', 'supplier_priced', 'customer_priced', 'po_issued', 'delivered', 'failed', 'expired']).describe('received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered to the customer — نجح) | failed (items rejected at delivery or supplier receipt and NONE delivered — the request did not succeed) | expired (the close date passed with no item priced — failed).\n'),
+  "label": zod.string().describe('Arabic label ready to display, e.g. \"طلب وارد\", \"مُسعَّر من المورد\", \"مُسعَّر 50%\", \"صدر أمر شراء\", \"نجح 60%\", \"نجح بالكامل\", \"فشل\", \"منتهي (فشل)\".'),
   "supplierPriced": zod.boolean().describe('True when at least one approved supplier offer exists for an item of this RFQ.'),
   "customerPricingPct": zod.number().nullish().describe('Share (0–100) of this RFQ\'s items priced for the customer (unit_price > 0). Null when the RFQ has no items.'),
   "poIssued": zod.boolean().describe('True when any customer_po_items row links back to an item of this RFQ.'),
   "poItemIds": zod.array(zod.number()).describe('customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).'),
-  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items resolved (delivered to the customer OR rejected by the customer). Null when no PO was issued.')
+  "deliveredPct": zod.number().nullish().describe('Share (0–100) of PO\'d items successfully delivered to the customer (rejections excluded). Null when no PO was issued.'),
+  "failed": zod.boolean().optional().describe('True when at least one PO\'d item was rejected (at delivery or supplier receipt) and NONE were delivered → the request failed.')
 }).optional().describe('Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage\/label prefers the most advanced milestone reached.\n'),
   "createdAt": zod.string(),
   "updatedAt": zod.string()

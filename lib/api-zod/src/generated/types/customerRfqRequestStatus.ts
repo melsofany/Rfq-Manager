@@ -11,9 +11,9 @@ import type { CustomerRfqRequestStatusStage } from './customerRfqRequestStatusSt
  * Derived, progressive request status (حالة الطلب) rolled up across offers, customer pricing, customer POs and deliveries. The headline stage/label prefers the most advanced milestone reached.
  */
 export interface CustomerRfqRequestStatus {
-  /** received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed). */
+  /** received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered to the customer — نجح) | failed (items rejected at delivery or supplier receipt and NONE delivered — the request did not succeed) | expired (the close date passed with no item priced — failed). */
   stage: CustomerRfqRequestStatusStage;
-  /** Arabic label ready to display, e.g. "طلب وارد", "مُسعَّر من المورد", "مُسعَّر 50%", "صدر أمر شراء", "نجح 60%", "نجح بالكامل". */
+  /** Arabic label ready to display, e.g. "طلب وارد", "مُسعَّر من المورد", "مُسعَّر 50%", "صدر أمر شراء", "نجح 60%", "نجح بالكامل", "فشل", "منتهي (فشل)". */
   label: string;
   /** True when at least one approved supplier offer exists for an item of this RFQ. */
   supplierPriced: boolean;
@@ -27,8 +27,10 @@ export interface CustomerRfqRequestStatus {
   /** customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page). */
   poItemIds: number[];
   /**
-     * Share (0–100) of PO'd items resolved (delivered to the customer OR rejected by the customer). Null when no PO was issued.
+     * Share (0–100) of PO'd items successfully delivered to the customer (rejections excluded). Null when no PO was issued.
      * @nullable
      */
   deliveredPct?: number | null;
+  /** True when at least one PO'd item was rejected (at delivery or supplier receipt) and NONE were delivered → the request failed. */
+  failed?: boolean;
 }
