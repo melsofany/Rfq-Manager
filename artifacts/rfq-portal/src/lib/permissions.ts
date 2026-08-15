@@ -35,42 +35,77 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
   { key: "dashboard", href: "/dashboard", labelKey: "nav.dashboard" },
   { key: "customers", href: "/customers", labelKey: "nav.customers" },
   { key: "customer-rfq", href: "/customer-rfq", labelKey: "nav.customerRfq" },
-  { key: "customer-po", href: "/customer-po", labelKey: "nav.customerPo", children: [
-    { key: "customer-po:orders", labelKey: "perm.customerPo.orders" },
-    { key: "customer-po:deliveries", labelKey: "perm.customerPo.deliveries" },
-  ] },
+  {
+    key: "customer-po",
+    href: "/customer-po",
+    labelKey: "nav.customerPo",
+    children: [
+      { key: "customer-po:orders", labelKey: "perm.customerPo.orders" },
+      { key: "customer-po:deliveries", labelKey: "perm.customerPo.deliveries" },
+    ],
+  },
   { key: "rfq", href: "/rfq", labelKey: "nav.rfq" },
-  { key: "suppliers", href: "/suppliers", labelKey: "nav.suppliers", children: [
-    { key: "suppliers:list", labelKey: "perm.suppliers.list" },
-    { key: "suppliers:import", labelKey: "perm.suppliers.import" },
-  ] },
-  { key: "items", href: "/items", labelKey: "nav.items", children: [
-    { key: "items:search", labelKey: "perm.items.search" },
-    { key: "items:sheet", labelKey: "perm.items.sheet" },
-  ] },
-  { key: "purchase-orders", href: "/purchase-orders", labelKey: "nav.purchaseOrders", children: [
-    { key: "purchase-orders:orders", labelKey: "perm.po.orders" },
-    { key: "purchase-orders:receipts", labelKey: "perm.po.receipts" },
-  ] },
-  { key: "accounts", href: "/accounts", labelKey: "nav.accounts", children: [
-    { key: "accounts:journal", labelKey: "perm.accounts.journal" },
-    { key: "accounts:sales", labelKey: "perm.accounts.sales" },
-    { key: "accounts:suppliers", labelKey: "perm.accounts.suppliers" },
-    { key: "accounts:coa", labelKey: "perm.accounts.coa" },
-    { key: "accounts:reports", labelKey: "perm.accounts.reports" },
-    { key: "accounts:taxes", labelKey: "perm.accounts.taxes" },
-  ] },
+  {
+    key: "suppliers",
+    href: "/suppliers",
+    labelKey: "nav.suppliers",
+    children: [
+      { key: "suppliers:list", labelKey: "perm.suppliers.list" },
+      { key: "suppliers:import", labelKey: "perm.suppliers.import" },
+    ],
+  },
+  {
+    key: "items",
+    href: "/items",
+    labelKey: "nav.items",
+    children: [
+      { key: "items:search", labelKey: "perm.items.search" },
+      { key: "items:sheet", labelKey: "perm.items.sheet" },
+    ],
+  },
+  {
+    key: "purchase-orders",
+    href: "/purchase-orders",
+    labelKey: "nav.purchaseOrders",
+    children: [
+      { key: "purchase-orders:orders", labelKey: "perm.po.orders" },
+      { key: "purchase-orders:receipts", labelKey: "perm.po.receipts" },
+    ],
+  },
+  {
+    key: "accounts",
+    href: "/accounts",
+    labelKey: "nav.accounts",
+    children: [
+      { key: "accounts:journal", labelKey: "perm.accounts.journal" },
+      { key: "accounts:sales", labelKey: "perm.accounts.sales" },
+      { key: "accounts:suppliers", labelKey: "perm.accounts.suppliers" },
+      { key: "accounts:coa", labelKey: "perm.accounts.coa" },
+      { key: "accounts:reports", labelKey: "perm.accounts.reports" },
+      { key: "accounts:taxes", labelKey: "perm.accounts.taxes" },
+    ],
+  },
   { key: "analytics", href: "/analytics", labelKey: "nav.analytics" },
-  { key: "whatsapp", href: "/whatsapp", labelKey: "nav.whatsapp", children: [
-    { key: "whatsapp:chats", labelKey: "perm.whatsapp.chats" },
-    { key: "whatsapp:templates", labelKey: "perm.whatsapp.templates" },
-    { key: "whatsapp:broadcast", labelKey: "perm.whatsapp.broadcast" },
-    { key: "whatsapp:settings", labelKey: "perm.whatsapp.settings" },
-  ] },
-  { key: "employees", href: "/employees", labelKey: "nav.employees", children: [
-    { key: "employees:employees", labelKey: "perm.employees.employees" },
-    { key: "employees:representatives", labelKey: "perm.employees.representatives" },
-  ] },
+  {
+    key: "whatsapp",
+    href: "/whatsapp",
+    labelKey: "nav.whatsapp",
+    children: [
+      { key: "whatsapp:chats", labelKey: "perm.whatsapp.chats" },
+      { key: "whatsapp:templates", labelKey: "perm.whatsapp.templates" },
+      { key: "whatsapp:broadcast", labelKey: "perm.whatsapp.broadcast" },
+      { key: "whatsapp:settings", labelKey: "perm.whatsapp.settings" },
+    ],
+  },
+  {
+    key: "employees",
+    href: "/employees",
+    labelKey: "nav.employees",
+    children: [
+      { key: "employees:employees", labelKey: "perm.employees.employees" },
+      { key: "employees:representatives", labelKey: "perm.employees.representatives" },
+    ],
+  },
   { key: "audit", href: "/audit", labelKey: "nav.auditLog" },
   { key: "integrations", href: "/integrations", labelKey: "nav.integrations" },
 ];
@@ -111,9 +146,10 @@ export function resolvePermissions(
 ): Set<string> {
   if (role === "admin") return new Set(ALL_PERMISSION_KEYS);
   const explicit = permissions && typeof permissions === "object" ? permissions : null;
-  const keys = explicit && Object.keys(explicit).length
-    ? Object.keys(explicit).filter((k) => explicit[k] === true)
-    : (ROLE_DEFAULTS as Record<string, string[]>)[role ?? ""] ?? [];
+  const keys =
+    explicit && Object.keys(explicit).length
+      ? Object.keys(explicit).filter((k) => explicit[k] === true)
+      : ((ROLE_DEFAULTS as Record<string, string[]>)[role ?? ""] ?? []);
   return new Set(keys);
 }
 
@@ -145,6 +181,25 @@ export function canAccessPath(
 export function visiblePageKeys(role: string | undefined, permissions: PermissionMap): string[] {
   const granted = resolvePermissions(role, permissions);
   return PAGE_KEYS.filter((k) => granted.has(k));
+}
+
+/**
+ * The href of the first page (in catalog order) the employee may access,
+ * or `null` if they have no granted page at all (e.g. a user whose
+ * dashboard permission was revoked with nothing else granted). Used as the
+ * post-login landing target so a permission-restricted user never lands on a
+ * page they cannot view (which would otherwise bounce/blank-screen them).
+ */
+export function firstAccessiblePath(
+  role: string | undefined,
+  permissions: PermissionMap,
+): string | null {
+  if (role === "admin") return "/dashboard";
+  const granted = resolvePermissions(role, permissions);
+  for (const node of PERMISSION_CATALOG) {
+    if (node.href && granted.has(node.key)) return node.href;
+  }
+  return null;
 }
 
 /**

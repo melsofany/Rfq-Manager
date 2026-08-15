@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Languages } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { firstAccessiblePath } from "@/lib/permissions";
 
 export default function LoginPage() {
   const [, navigate] = useLocation();
@@ -18,9 +19,13 @@ export default function LoginPage() {
 
   const loginMutation = useLogin({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (data) => {
         queryClient.invalidateQueries({ queryKey: getGetMeQueryKey() });
-        navigate("/dashboard");
+        // Land on the first page the employee is permitted to view (instead of
+        // always /dashboard, which blanks for users without that permission).
+        const emp = data?.employee;
+        const target = firstAccessiblePath(emp?.role, emp?.permissions) ?? "/no-access";
+        navigate(target);
       },
       onError: () => {
         setError(t("login.error"));
