@@ -29,7 +29,7 @@ export const LoginResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'manager', 'purchasing']),
+  "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
@@ -51,7 +51,7 @@ export const GetMeResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'manager', 'purchasing']),
+  "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
@@ -65,7 +65,7 @@ export const ListEmployeesResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'manager', 'purchasing']),
+  "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
@@ -80,7 +80,7 @@ export const CreateEmployeeBody = zod.object({
   "name": zod.string(),
   "email": zod.string(),
   "password": zod.string(),
-  "role": zod.enum(['admin', 'manager', 'purchasing']),
+  "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().optional()
 })
 
@@ -88,7 +88,7 @@ export const CreateEmployeeResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'manager', 'purchasing']),
+  "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
@@ -105,7 +105,7 @@ export const UpdateEmployeeParams = zod.object({
 export const UpdateEmployeeBody = zod.object({
   "name": zod.string().optional(),
   "email": zod.string().optional(),
-  "role": zod.enum(['admin', 'manager', 'purchasing']).optional(),
+  "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']).optional(),
   "phone": zod.string().optional(),
   "isActive": zod.boolean().optional(),
   "password": zod.string().optional()
@@ -115,7 +115,7 @@ export const UpdateEmployeeResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'manager', 'purchasing']),
+  "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
@@ -2026,7 +2026,7 @@ export const GetEmployeePerformanceResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "email": zod.string(),
-  "role": zod.enum(['admin', 'manager', 'purchasing']),
+  "role": zod.enum(['admin', 'manager', 'purchasing', 'data_entry']),
   "phone": zod.string().nullish(),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
