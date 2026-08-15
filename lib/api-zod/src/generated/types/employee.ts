@@ -5,6 +5,7 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
+import type { EmployeePermissions } from './employeePermissions';
 import type { EmployeeRole } from './employeeRole';
 
 export interface Employee {
@@ -15,5 +16,10 @@ export interface Employee {
   /** @nullable */
   phone?: string | null;
   isActive?: boolean;
+  /**
+     * Per-employee permission map { permissionKey: true }. null = role default.
+     * @nullable
+     */
+  permissions?: EmployeePermissions;
   createdAt?: string;
 }

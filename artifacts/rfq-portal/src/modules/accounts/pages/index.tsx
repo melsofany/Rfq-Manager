@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Calculator, BookCopy, BookOpen, FileText, Truck, BarChart3, Percent } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { filterTabs } from "@/lib/permissions";
 import JournalTab from "./JournalTab";
 import SalesAndCollectionsTab from "./SalesAndCollectionsTab";
 import SuppliersTab from "./SuppliersTab";
@@ -9,18 +11,32 @@ import ChartOfAccountsTab from "./ChartOfAccountsTab";
 import ReportsTab from "./ReportsTab";
 import TaxesTab from "./TaxesTab";
 
-function readTabParam(): string {
-  return new URLSearchParams(window.location.search).get("tab") || "journal";
+const ACCOUNTS_TABS = ["journal", "sales", "suppliers", "coa", "reports", "taxes"] as const;
+
+const TAB_META: Record<string, { icon: React.ElementType; label: string }> = {
+  journal: { icon: BookCopy, label: "قيود اليومية" },
+  sales: { icon: FileText, label: "المبيعات والتحصيل" },
+  suppliers: { icon: Truck, label: "الموردون" },
+  coa: { icon: BookOpen, label: "دليل الحسابات" },
+  reports: { icon: BarChart3, label: "التقارير المالية" },
+  taxes: { icon: Percent, label: "الضرائب" },
+};
+
+function readTabParam(allowed: readonly string[]): string {
+  const param = new URLSearchParams(window.location.search).get("tab") || "journal";
+  return allowed.includes(param) ? param : (allowed[0] ?? "journal");
 }
 
 export default function AccountsPage() {
-  const [tab, setTab] = useState<string>(readTabParam());
+  const { employee } = useAuth();
+  const allowedTabs = filterTabs(employee?.role, employee?.permissions, "accounts", ACCOUNTS_TABS);
+  const [tab, setTab] = useState<string>(readTabParam(allowedTabs));
 
   useEffect(() => {
-    const onPop = () => setTab(readTabParam());
+    const onPop = () => setTab(readTabParam(allowedTabs));
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  }, [allowedTabs]);
 
   function onTabChange(value: string) {
     setTab(value);
@@ -47,50 +63,49 @@ export default function AccountsPage() {
 
         <Tabs value={tab} onValueChange={onTabChange}>
           <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="journal" className="text-xs gap-1.5">
-              <BookCopy size={14} />
-              قيود اليومية
-            </TabsTrigger>
-            <TabsTrigger value="sales" className="text-xs gap-1.5">
-              <FileText size={14} />
-              المبيعات والتحصيل
-            </TabsTrigger>
-            <TabsTrigger value="suppliers" className="text-xs gap-1.5">
-              <Truck size={14} />
-              الموردون
-            </TabsTrigger>
-            <TabsTrigger value="coa" className="text-xs gap-1.5">
-              <BookOpen size={14} />
-              دليل الحسابات
-            </TabsTrigger>
-            <TabsTrigger value="reports" className="text-xs gap-1.5">
-              <BarChart3 size={14} />
-              التقارير المالية
-            </TabsTrigger>
-            <TabsTrigger value="taxes" className="text-xs gap-1.5">
-              <Percent size={14} />
-              الضرائب
-            </TabsTrigger>
+            {allowedTabs.map((tabId) => {
+              const meta = TAB_META[tabId];
+              if (!meta) return null;
+              const Icon = meta.icon;
+              return (
+                <TabsTrigger key={tabId} value={tabId} className="text-xs gap-1.5">
+                  <Icon size={14} />
+                  {meta.label}
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
 
-          <TabsContent value="journal" className="mt-5">
-            <JournalTab />
-          </TabsContent>
-          <TabsContent value="sales" className="mt-5">
-            <SalesAndCollectionsTab />
-          </TabsContent>
-          <TabsContent value="suppliers" className="mt-5">
-            <SuppliersTab />
-          </TabsContent>
-          <TabsContent value="coa" className="mt-5">
-            <ChartOfAccountsTab />
-          </TabsContent>
-          <TabsContent value="reports" className="mt-5">
-            <ReportsTab />
-          </TabsContent>
-          <TabsContent value="taxes" className="mt-5">
-            <TaxesTab />
-          </TabsContent>
+          {allowedTabs.includes("journal") && (
+            <TabsContent value="journal" className="mt-5">
+              <JournalTab />
+            </TabsContent>
+          )}
+          {allowedTabs.includes("sales") && (
+            <TabsContent value="sales" className="mt-5">
+              <SalesAndCollectionsTab />
+            </TabsContent>
+          )}
+          {allowedTabs.includes("suppliers") && (
+            <TabsContent value="suppliers" className="mt-5">
+              <SuppliersTab />
+            </TabsContent>
+          )}
+          {allowedTabs.includes("coa") && (
+            <TabsContent value="coa" className="mt-5">
+              <ChartOfAccountsTab />
+            </TabsContent>
+          )}
+          {allowedTabs.includes("reports") && (
+            <TabsContent value="reports" className="mt-5">
+              <ReportsTab />
+            </TabsContent>
+          )}
+          {allowedTabs.includes("taxes") && (
+            <TabsContent value="taxes" className="mt-5">
+              <TaxesTab />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </Layout>

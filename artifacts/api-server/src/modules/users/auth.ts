@@ -14,6 +14,21 @@ declare module "express-session" {
   }
 }
 
+/**
+ * Normalize the permissions payload coming from the client into a clean
+ * `{ key: true }` map (only truthy entries are kept). Accepts null/undefined
+ * (→ null, meaning "use the role default") or an object of booleans.
+ */
+function sanitizePermissions(input: unknown): Record<string, boolean> | null {
+  if (input == null) return null;
+  if (typeof input !== "object") return null;
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (typeof k === "string" && k && v === true) out[k] = true;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 router.post("/auth/login", async (req, res): Promise<void> => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) {
@@ -50,6 +65,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       role: employee.role,
       phone: employee.phone,
       isActive: employee.isActive,
+      permissions: employee.permissions ?? null,
       createdAt: employee.createdAt.toISOString(),
     },
     token: req.sessionID,
@@ -84,6 +100,7 @@ router.get("/auth/me", async (req, res): Promise<void> => {
     role: employee.role,
     phone: employee.phone,
     isActive: employee.isActive,
+    permissions: employee.permissions ?? null,
     createdAt: employee.createdAt.toISOString(),
   });
 });
@@ -102,6 +119,7 @@ router.get("/employees", async (req, res): Promise<void> => {
       role: e.role,
       phone: e.phone,
       isActive: e.isActive,
+      permissions: e.permissions ?? null,
       createdAt: e.createdAt.toISOString(),
     })),
   );
@@ -112,7 +130,7 @@ router.post("/employees", async (req, res): Promise<void> => {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  const { name, email, password, role, phone } = req.body as Record<string, string>;
+  const { name, email, password, role, phone, permissions } = req.body as Record<string, unknown>;
   if (!name || !email || !password || !role) {
     res.status(400).json({ error: "Missing required fields" });
     return;
@@ -122,19 +140,21 @@ router.post("/employees", async (req, res): Promise<void> => {
   const [existingEmail] = await db
     .select({ id: employeesTable.id })
     .from(employeesTable)
-    .where(eq(employeesTable.email, email.toLowerCase()))
+    .where(eq(employeesTable.email, (email as string).toLowerCase()))
     .limit(1);
   if (existingEmail) {
     res.status(409).json({ error: "البريد الإلكتروني مستخدم بالفعل من قِبَل موظف آخر" });
     return;
   }
 
+  const phoneStr = typeof phone === "string" ? phone.trim() : "";
+
   // Reject duplicate phone (if provided)
-  if (phone && phone.trim()) {
+  if (phoneStr) {
     const [existingPhone] = await db
       .select({ id: employeesTable.id })
       .from(employeesTable)
-      .where(eq(employeesTable.phone, phone.trim()))
+      .where(eq(employeesTable.phone, phoneStr))
       .limit(1);
     if (existingPhone) {
       res.status(409).json({ error: "رقم الهاتف مستخدم بالفعل من قِبَل موظف آخر" });
@@ -142,15 +162,16 @@ router.post("/employees", async (req, res): Promise<void> => {
     }
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(password as string, 10);
   const [employee] = await db
     .insert(employeesTable)
     .values({
-      name,
-      email: email.toLowerCase(),
+      name: name as string,
+      email: (email as string).toLowerCase(),
       passwordHash,
-      role,
-      phone: phone?.trim() || null,
+      role: role as string,
+      phone: phoneStr || null,
+      permissions: sanitizePermissions(permissions),
     })
     .returning();
 
@@ -162,6 +183,7 @@ router.post("/employees", async (req, res): Promise<void> => {
     role: employee.role,
     phone: employee.phone,
     isActive: employee.isActive,
+    permissions: employee.permissions ?? null,
     createdAt: employee.createdAt.toISOString(),
   });
 });
@@ -173,9 +195,9 @@ router.patch("/employees/:id", async (req, res): Promise<void> => {
   }
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
-  const { name, email, role, phone, isActive, password } = req.body as Record<
+  const { name, email, role, phone, isActive, password, permissions } = req.body as Record<
     string,
-    string | boolean
+    unknown
   >;
 
   const updates: Record<string, unknown> = {};
@@ -185,6 +207,7 @@ router.patch("/employees/:id", async (req, res): Promise<void> => {
   if (phone !== undefined) updates.phone = phone;
   if (isActive !== undefined) updates.isActive = isActive;
   if (password) updates.passwordHash = await bcrypt.hash(password as string, 10);
+  if (permissions !== undefined) updates.permissions = sanitizePermissions(permissions);
 
   const [employee] = await db
     .update(employeesTable)
@@ -203,6 +226,7 @@ router.patch("/employees/:id", async (req, res): Promise<void> => {
     role: employee.role,
     phone: employee.phone,
     isActive: employee.isActive,
+    permissions: employee.permissions ?? null,
     createdAt: employee.createdAt.toISOString(),
   });
 });

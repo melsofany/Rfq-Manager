@@ -33,6 +33,8 @@ import {
   Search as SearchIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { filterTabs } from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -898,10 +900,12 @@ function SheetViewTab() {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ItemsPage() {
+  const { employee } = useAuth();
+  const allowedTabs = filterTabs(employee?.role, employee?.permissions, "items", ["search", "sheet"] as const);
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const [tab, setTab] = useState<"search" | "sheet">("search");
+  const [tab, setTab] = useState<"search" | "sheet">(allowedTabs[0] ?? "search");
 
   const {
     data: results,
@@ -945,30 +949,34 @@ export default function ItemsPage() {
 
         {/* Tab switcher */}
         <div className="flex gap-1 border-b border-border">
-          <button
-            onClick={() => setTab("search")}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-              tab === "search"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Search size={15} />
-            بحث البنود
-          </button>
-          <button
-            onClick={() => setTab("sheet")}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-              tab === "sheet"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Table size={15} />
-            سجل البنود والطلبات
-          </button>
+          {allowedTabs.includes("search") && (
+            <button
+              onClick={() => setTab("search")}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                tab === "search"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Search size={15} />
+              بحث البنود
+            </button>
+          )}
+          {allowedTabs.includes("sheet") && (
+            <button
+              onClick={() => setTab("sheet")}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                tab === "sheet"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Table size={15} />
+              سجل البنود والطلبات
+            </button>
+          )}
         </div>
 
         {tab === "sheet" ? (

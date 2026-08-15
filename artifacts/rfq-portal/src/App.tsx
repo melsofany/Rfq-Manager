@@ -1,10 +1,11 @@
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { canAccessPath } from "@/lib/permissions";
 
 // ── Shared pages (no module home) ─────────────────────────────────────────
 import NotFound from "@/pages/not-found";
@@ -68,6 +69,7 @@ const queryClient = new QueryClient({
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { employee, isLoading } = useAuth();
+  const [location] = useLocation();
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -76,6 +78,11 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
   if (!employee) return <Redirect to="/login" />;
+  // Route-level permission guard: if the employee lacks the page permission,
+  // bounce them to the dashboard instead of rendering the page.
+  if (!canAccessPath(employee.role, employee.permissions, location)) {
+    return <Redirect to="/dashboard" />;
+  }
   return <Component />;
 }
 

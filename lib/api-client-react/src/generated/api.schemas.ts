@@ -24,6 +24,12 @@ export const EmployeeRole = {
   data_entry: 'data_entry',
 } as const;
 
+/**
+ * Per-employee permission map { permissionKey: true }. null = role default.
+ * @nullable
+ */
+export type EmployeePermissions = {[key: string]: boolean} | null;
+
 export interface Employee {
   id: number;
   name: string;
@@ -32,6 +38,11 @@ export interface Employee {
   /** @nullable */
   phone?: string | null;
   isActive?: boolean;
+  /**
+     * Per-employee permission map { permissionKey: true }. null = role default.
+     * @nullable
+     */
+  permissions?: EmployeePermissions;
   createdAt?: string;
 }
 
@@ -50,12 +61,23 @@ export const EmployeeInputRole = {
   data_entry: 'data_entry',
 } as const;
 
+/**
+ * Per-employee permission map { permissionKey: true }. null = role default.
+ * @nullable
+ */
+export type EmployeeInputPermissions = {[key: string]: boolean} | null;
+
 export interface EmployeeInput {
   name: string;
   email: string;
   password: string;
   role: EmployeeInputRole;
   phone?: string;
+  /**
+     * Per-employee permission map { permissionKey: true }. null = role default.
+     * @nullable
+     */
+  permissions?: EmployeeInputPermissions;
 }
 
 export type EmployeeUpdateRole = typeof EmployeeUpdateRole[keyof typeof EmployeeUpdateRole];
@@ -68,6 +90,12 @@ export const EmployeeUpdateRole = {
   data_entry: 'data_entry',
 } as const;
 
+/**
+ * Per-employee permission map { permissionKey: true }. null = role default.
+ * @nullable
+ */
+export type EmployeeUpdatePermissions = {[key: string]: boolean} | null;
+
 export interface EmployeeUpdate {
   name?: string;
   email?: string;
@@ -75,6 +103,11 @@ export interface EmployeeUpdate {
   phone?: string;
   isActive?: boolean;
   password?: string;
+  /**
+     * Per-employee permission map { permissionKey: true }. null = role default.
+     * @nullable
+     */
+  permissions?: EmployeeUpdatePermissions;
 }
 
 export interface SupplierCategory {

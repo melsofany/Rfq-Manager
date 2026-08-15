@@ -1702,6 +1702,11 @@ components:
           type: ["string", "null"]
         isActive:
           type: boolean
+        permissions:
+          type: ["object", "null"]
+          description: "Per-employee permission map { permissionKey: true }. null = role default."
+          additionalProperties:
+            type: boolean
         createdAt:
           type: string
 
@@ -1720,6 +1725,11 @@ components:
           enum: [admin, manager, purchasing, data_entry]
         phone:
           type: string
+        permissions:
+          type: ["object", "null"]
+          description: "Per-employee permission map { permissionKey: true }. null = role default."
+          additionalProperties:
+            type: boolean
 
     EmployeeUpdate:
       type: object
@@ -1737,6 +1747,11 @@ components:
           type: boolean
         password:
           type: string
+        permissions:
+          type: ["object", "null"]
+          description: "Per-employee permission map { permissionKey: true }. null = role default."
+          additionalProperties:
+            type: boolean
 
     # CATEGORIES
     SupplierCategory:

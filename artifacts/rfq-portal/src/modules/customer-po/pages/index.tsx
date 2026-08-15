@@ -10,7 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, ShoppingCart } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { filterTabs } from "@/lib/permissions";
 import CustomerDeliveriesPage from "./deliveries";
+
+const CPO_TABS = ["orders", "deliveries"] as const;
 
 // Colored badge for the derived customer-PO fulfillment status. The stage
 // reflects: draft → sent → po_issued → ready_to_deliver → delivered → fulfilled.
@@ -47,8 +51,10 @@ function FulfillmentStatusBadge({ status }: { status?: CustomerPoFulfillmentStat
 
 export default function CustomerPoPage() {
   const [, navigate] = useLocation();
+  const { employee } = useAuth();
+  const allowedTabs = filterTabs(employee?.role, employee?.permissions, "customer-po", CPO_TABS);
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState("orders");
+  const [tab, setTab] = useState<string>(allowedTabs[0] ?? "orders");
 
   const { data: pos, isLoading } = useListCustomerPos(
     { search: search || undefined },
@@ -75,8 +81,12 @@ export default function CustomerPoPage() {
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="orders" className="text-xs">أوامر شراء العملاء</TabsTrigger>
-            <TabsTrigger value="deliveries" className="text-xs">تسليمات العملاء</TabsTrigger>
+            {allowedTabs.includes("orders") && (
+              <TabsTrigger value="orders" className="text-xs">أوامر شراء العملاء</TabsTrigger>
+            )}
+            {allowedTabs.includes("deliveries") && (
+              <TabsTrigger value="deliveries" className="text-xs">تسليمات العملاء</TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
 

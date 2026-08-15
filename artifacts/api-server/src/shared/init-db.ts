@@ -588,6 +588,8 @@ export async function initDb(): Promise<void> {
       ALTER TABLE rfq_items  ADD COLUMN IF NOT EXISTS uom          TEXT;
       ALTER TABLE rfq_items  ADD COLUMN IF NOT EXISTS qty          NUMERIC(15,4);
       ALTER TABLE rfq_items  ADD COLUMN IF NOT EXISTS reference_price NUMERIC(15,4);
+
+      ALTER TABLE employees ADD COLUMN IF NOT EXISTS permissions JSONB;
     `);
 
     // ══════════════════════════════════════════════════════════════════════
