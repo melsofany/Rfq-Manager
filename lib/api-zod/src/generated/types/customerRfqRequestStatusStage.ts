@@ -7,7 +7,7 @@
  */
 
 /**
- * received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered) | expired (the close date passed with no item priced — failed).
+ * received (default) | supplier_priced (an approved offer exists) | customer_priced (some items priced for the customer) | po_issued (a customer PO was issued for an item) | delivered (items delivered to the customer — نجح) | failed (items rejected at delivery or supplier receipt and NONE delivered — the request did not succeed) | expired (the close date passed with no item priced — failed).
  */
 export type CustomerRfqRequestStatusStage = typeof CustomerRfqRequestStatusStage[keyof typeof CustomerRfqRequestStatusStage];
 
@@ -18,5 +18,6 @@ export const CustomerRfqRequestStatusStage = {
   customer_priced: 'customer_priced',
   po_issued: 'po_issued',
   delivered: 'delivered',
+  failed: 'failed',
   expired: 'expired',
 } as const;

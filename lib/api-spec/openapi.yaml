@@ -2035,15 +2035,17 @@ components:
       properties:
         stage:
           type: string
-          enum: [received, supplier_priced, customer_priced, po_issued, delivered, expired]
+          enum: [received, supplier_priced, customer_priced, po_issued, delivered, failed, expired]
           description: >
             received (default) | supplier_priced (an approved offer exists) |
             customer_priced (some items priced for the customer) | po_issued (a
-            customer PO was issued for an item) | delivered (items delivered) |
-            expired (the close date passed with no item priced — failed).
+            customer PO was issued for an item) | delivered (items delivered to the
+            customer — نجح) | failed (items rejected at delivery or supplier
+            receipt and NONE delivered — the request did not succeed) | expired
+            (the close date passed with no item priced — failed).
         label:
           type: string
-          description: Arabic label ready to display, e.g. "طلب وارد", "مُسعَّر من المورد", "مُسعَّر 50%", "صدر أمر شراء", "نجح 60%", "نجح بالكامل".
+          description: Arabic label ready to display, e.g. "طلب وارد", "مُسعَّر من المورد", "مُسعَّر 50%", "صدر أمر شراء", "نجح 60%", "نجح بالكامل", "فشل", "منتهي (فشل)".
         supplierPriced:
           type: boolean
           description: True when at least one approved supplier offer exists for an item of this RFQ.
@@ -2060,7 +2062,10 @@ components:
           description: customer_rfq_item_ids that already appear on a customer PO (used to highlight rows green in the detail page).
         deliveredPct:
           type: ["integer", "null"]
-          description: Share (0–100) of PO'd items resolved (delivered to the customer OR rejected by the customer). Null when no PO was issued.
+          description: "Share (0–100) of PO'd items successfully delivered to the customer (rejections excluded). Null when no PO was issued."
+        failed:
+          type: boolean
+          description: True when at least one PO'd item was rejected (at delivery or supplier receipt) and NONE were delivered → the request failed.
 
     CustomerRfqLineItemInput:
       type: object
