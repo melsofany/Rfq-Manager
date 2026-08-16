@@ -57,17 +57,17 @@ export default function CustomerRfqDetailPage() {
   const canEdit = canEditCustomerDoc(employee?.role, employee?.permissions, EDIT_PERM.customerRfq);
   const isDraft = rfq?.status === "draft";
   // A sent (finalized/locked) customer RFQ can still be re-priced (customer unit
-  // prices edited) when EITHER its close date has passed OR at least one item
-  // has an approved supplier offer (supplier-priced) — the commercial event
-  // that should open customer pricing. This avoids operators being blocked by a
-  // forgotten/missing expiry date.
-  const isSentExpired =
+  // prices edited) when EITHER its close date has arrived (today or earlier) OR
+  // at least one item has an approved supplier offer (supplier-priced) — the
+  // commercial event that should open customer pricing. The close day itself
+  // counts (inclusive), since that is the natural moment to enter pricing.
+  const sentCloseReached =
     rfq?.status === "sent" &&
     !!rfq.expiryDate &&
     !Number.isNaN(new Date(rfq.expiryDate).getTime()) &&
-    new Date(rfq.expiryDate).getTime() < new Date().setHours(0, 0, 0, 0);
+    new Date(rfq.expiryDate).getTime() <= new Date().setHours(0, 0, 0, 0);
   const sentSupplierPriced = rfq?.status === "sent" && !!rfq.requestStatus?.supplierPriced;
-  const canRepriceSent = isSentExpired || sentSupplierPriced;
+  const canRepriceSent = sentCloseReached || sentSupplierPriced;
   const canPrice = canEdit && (isDraft || canRepriceSent);
 
   const [editing, setEditing] = useState(false);
@@ -668,7 +668,7 @@ export default function CustomerRfqDetailPage() {
                     <AlertTriangle size={13} className="text-amber-500" />
                     {sentSupplierPriced
                       ? "الطلب مُسعَّر من المورد — يمكن تعديل أسعار العميل."
-                      : "انتهت مدة الطلب — يمكن تعديل أسعار البنود."}
+                      : "حان تاريخ إغلاق الطلب — يمكن تعديل أسعار البنود."}
                   </p>
                   <Button
                     disabled={updateMutation.isPending}
