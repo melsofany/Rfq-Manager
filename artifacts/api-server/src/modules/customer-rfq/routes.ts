@@ -771,9 +771,15 @@ async function loadSheetRowsRaw() {
         purchaseOrderItemsTable,
         eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
       )
-      // Chronological: oldest RFQ first, oldest item first within it — so the
-      // sheet log reads top→bottom as oldest→newest (filters preserve this order).
-      .orderBy(asc(customerRfqsTable.createdAt), asc(customerRfqItemsTable.id))
+      // Chronological by the visible request date (entryDate, a YYYY-MM-DD text
+      // field → lexicographic == chronological). Oldest request = row 1 (top),
+      // newest at the bottom; createdAt + item id are stable tie-breakers.
+      // Postgres ASC puts NULL entryDate last (undated requests sink to bottom).
+      .orderBy(
+        asc(customerRfqsTable.entryDate),
+        asc(customerRfqsTable.createdAt),
+        asc(customerRfqItemsTable.id),
+      )
   );
 }
 
