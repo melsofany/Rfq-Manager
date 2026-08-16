@@ -316,3 +316,18 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **sendBeacon gotcha**: `navigator.sendBeacon` only does POST. The abandon endpoint is therefore `POST` (not PATCH), and the hook uses `fetch(...,{keepalive:true})` instead (same page-unload guarantee, supports arbitrary methods). `keepalive` is supported in all modern browsers.
 - Tests: 163 pass (unchanged — data-entry endpoints not yet unit-tested, but tsc + existing suite green). tsc clean for api-server + portal; portal build clean.
 - **Deploy**: PR #71 squash-merged (9769e67); Render deploy `dep-da0go2bl550s73ddonhg` live (clearCache); `/api/healthz` ok; `/api/data-entry-sessions` + `/api/analytics/data-entry` return 401 unauthenticated (mounted behind requireAuth, confirmed not 404).
+
+## Procurement employee KPIs (PR #72)
+- **Goal**: per-procurement-employee productivity across the supplier-RFQ lifecycle — RFQs owned, items, offers received (per RFQ + per item), offers/items that converted to a PO, conversion rate, and failed RFQs.
+- **Backend** (`modules/reports/procurement-kpis.ts`, mounted via `reports/index.ts`):
+  - `GET /analytics/procurement` (behind `requireAuth`) — for each active employee (linked via `rfq.employeeId`):
+    - `rfqCount` / `itemCount` (rfq_items for those rfqs).
+    - `offerCount` (offers on those rfqs) + `avgOffersPerRfq` + `avgOfferItemsPerItem` (offer_items per rfq_item) + `itemsWithOffers`.
+    - `convertedRfqs` / `convertedItems` — an RFQ "converted to PO" when it has a linked `purchase_orders.rfqId` OR `status==="SUCCESS"` (SUCCESS is set explicitly in `POST /po` when a PO is created from the RFQ).
+    - `conversionRate` (convertedRfqs/rfqCount × 100).
+    - `failedRfqs` (`status==="FAILED"` — auto-set by the expiry sweep when an RFQ's closing date passes with no offers).
+  - Company-wide `totals` (rfqCount/itemCount/offerCount/convertedRfqs/convertedItems/failedRfqs). Optional `?from=&to=` filters by `rfq.createdAt`. Batched (no N+1): all rfqs → rfq_items → offers → offer_items → linked POs, then JS aggregation per employee. Sorted by rfqCount desc.
+- **PO↔offer link caveat**: there is NO FK from `purchase_order_items` to an offer or rfq_item — the PO↔RFQ link is header-level (`purchase_orders.rfqId`). So "offer converted to PO" = an offer whose RFQ has a linked PO (RFQ-level success), not a direct offer→PO line trace.
+- **Frontend** (`reports/pages/analytics.tsx`): new **«أداء موظفي المشتريات»** section (`ProcurementPerformanceSection`) inserted before the data-entry section — 6 gradient total cards (RFQs/items/offers/converted/failed/conversion-rate) + per-employee table with a colored conversion-rate pill (green ≥50% / amber ≥20% / red <20%). Uses direct `fetch("/api/analytics/procurement")` (NOT orval — endpoint not in OpenAPI spec).
+- Tests: 163 pass (unchanged — new endpoint not yet unit-tested); tsc clean for api-server + portal; portal build clean.
+- **Deploy**: PR #72 squash-merged (438be2b); Render deploy `dep-da0l6gu7bikc73fd6okg` live (clearCache); `/api/healthz` ok; `/api/analytics/procurement` returns 401 unauthenticated (mounted behind requireAuth, confirmed not 404).
