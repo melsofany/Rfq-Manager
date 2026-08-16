@@ -17,6 +17,7 @@ import {
   ListChecks,
 } from "lucide-react";
 import { Link } from "wouter";
+import { useDataEntrySession } from "@/hooks/use-data-entry-session";
 
 interface ItemRow {
   lineItem: string;
@@ -140,6 +141,7 @@ function RfqNumberCombobox({
 export default function NewRfqPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const { endSession } = useDataEntrySession("supplier_rfq");
 
   const [customerRfqNo, setCustomerRfqNo] = useState("");
   const [lookupQuery, setLookupQuery] = useState("");
@@ -172,6 +174,7 @@ export default function NewRfqPage() {
     mutation: {
       onSuccess: (rfq) => {
         queryClient.invalidateQueries({ queryKey: getListRfqsQueryKey() });
+        endSession(rfq.id);
         navigate(`/rfq/${rfq.id}`);
       },
     },

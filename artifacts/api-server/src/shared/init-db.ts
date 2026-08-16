@@ -758,6 +758,30 @@ export async function initDb(): Promise<void> {
       );
     `);
 
+    // ── data_entry_sessions ──────────────────────────────────────────────
+    // Tracks the time an operator spent filling a "new" form (RFQ / PO)
+    // from form-open (startedAt) to successful save (endedAt), so we can
+    // measure real data-entry time per employee (weekly/monthly).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS data_entry_sessions (
+        id                  SERIAL PRIMARY KEY,
+        employee_id         INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        type                TEXT NOT NULL,
+        started_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ended_at            TIMESTAMPTZ,
+        rfq_id              INTEGER REFERENCES rfq(id) ON DELETE SET NULL,
+        purchase_order_id   INTEGER REFERENCES purchase_orders(id) ON DELETE SET NULL,
+        customer_rfq_id     INTEGER REFERENCES customer_rfqs(id) ON DELETE SET NULL,
+        customer_po_id      INTEGER REFERENCES customer_pos(id) ON DELETE SET NULL,
+        abandoned           BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS data_entry_sessions_employee_started_idx
+       ON data_entry_sessions (employee_id, started_at)`,
+    );
+
     // ── Seed the default Egyptian chart of accounts (idempotent) ───────────
     // Mirrors ACCOUNT_CODES in lib/db/src/schema/accounting.ts.
     const coaSeed: Array<[string, string, string, boolean]> = [
