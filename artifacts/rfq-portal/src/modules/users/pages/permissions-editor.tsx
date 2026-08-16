@@ -27,7 +27,9 @@ interface Props {
  */
 export default function PermissionsEditor({ role, value, onChange }: Props) {
   const { t } = useLanguage();
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(PERMISSION_CATALOG.map((n) => n.key)));
+  const [expanded, setExpanded] = useState<Set<string>>(
+    new Set(PERMISSION_CATALOG.map((n) => n.key)),
+  );
 
   const isAdmin = role === "admin";
   // Effective granted set derived from role + current value (mirrors runtime).
@@ -40,7 +42,8 @@ export default function PermissionsEditor({ role, value, onChange }: Props) {
     else next.delete(key);
     // Persist as an explicit map only when it differs from the role default.
     const defaults = (ROLE_DEFAULTS as Record<string, string[]>)[role as Exclude<Role, "admin">];
-    const isDefault = defaults && defaults.length === next.size && defaults.every((k) => next.has(k));
+    const isDefault =
+      defaults && defaults.length === next.size && defaults.every((k) => next.has(k));
     onChange(isDefault ? null : permissionsFromKeys(next));
   }
 
@@ -55,7 +58,8 @@ export default function PermissionsEditor({ role, value, onChange }: Props) {
       else next.delete(k);
     }
     const defaults = (ROLE_DEFAULTS as Record<string, string[]>)[role as Exclude<Role, "admin">];
-    const isDefault = defaults && defaults.length === next.size && defaults.every((k) => next.has(k));
+    const isDefault =
+      defaults && defaults.length === next.size && defaults.every((k) => next.has(k));
     onChange(isDefault ? null : permissionsFromKeys(next));
   }
 
@@ -88,14 +92,20 @@ export default function PermissionsEditor({ role, value, onChange }: Props) {
           <ShieldCheck size={15} className="text-primary" />
           {t("perm.editorTitle")}
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           <Button type="button" variant="outline" size="sm" onClick={selectAll} disabled={isAdmin}>
             <Check size={13} className="ml-1" /> {t("perm.selectAll")}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={clearAll} disabled={isAdmin}>
             {t("perm.clearAll")}
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={resetToDefault} disabled={isAdmin}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={resetToDefault}
+            disabled={isAdmin}
+          >
             {t("perm.resetDefault")}
           </Button>
         </div>
@@ -113,7 +123,7 @@ export default function PermissionsEditor({ role, value, onChange }: Props) {
         </div>
       )}
 
-      <div className="rounded-lg border border-border max-h-[420px] overflow-y-auto">
+      <div className="rounded-lg border border-border max-h-[55vh] sm:max-h-[420px] overflow-y-auto">
         {PERMISSION_CATALOG.map((node) => {
           const pageGranted = granted.has(node.key);
           const children = node.children ?? [];
@@ -121,13 +131,15 @@ export default function PermissionsEditor({ role, value, onChange }: Props) {
           const grantedChildren = childKeys.filter((k) => granted.has(k));
           // indeterminate when some (but not all) children are granted
           const indeterminate =
-            children.length > 0 && grantedChildren.length > 0 && grantedChildren.length < childKeys.length;
+            children.length > 0 &&
+            grantedChildren.length > 0 &&
+            grantedChildren.length < childKeys.length;
           const isOpen = expanded.has(node.key);
           const checkboxId = `perm-${node.key}`;
 
           return (
             <div key={node.key} className="border-b border-border last:border-0">
-              <div className="flex items-center gap-2 px-3 py-2.5 hover:bg-muted/30">
+              <div className="flex items-center gap-2 px-3 py-3 hover:bg-muted/30">
                 {children.length > 0 ? (
                   <button
                     type="button"
@@ -145,7 +157,10 @@ export default function PermissionsEditor({ role, value, onChange }: Props) {
                   disabled={isAdmin}
                   onCheckedChange={(c) => togglePage(node.key, c === true)}
                 />
-                <label htmlFor={checkboxId} className="text-sm text-foreground cursor-pointer flex-1">
+                <label
+                  htmlFor={checkboxId}
+                  className="text-sm text-foreground cursor-pointer flex-1"
+                >
                   {t(node.labelKey)}
                 </label>
                 {children.length > 0 && (
@@ -168,7 +183,10 @@ export default function PermissionsEditor({ role, value, onChange }: Props) {
                           disabled={isAdmin}
                           onCheckedChange={(c) => toggleKey(child.key, c === true)}
                         />
-                        <label htmlFor={childId} className="text-sm text-muted-foreground cursor-pointer">
+                        <label
+                          htmlFor={childId}
+                          className="text-sm text-muted-foreground cursor-pointer"
+                        >
                           {t(child.labelKey)}
                         </label>
                       </div>
@@ -181,9 +199,7 @@ export default function PermissionsEditor({ role, value, onChange }: Props) {
         })}
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
-        {t("perm.hint")}
-      </p>
+      <p className="text-[11px] text-muted-foreground">{t("perm.hint")}</p>
     </div>
   );
 }
