@@ -13,7 +13,7 @@ import {
   customerPoItemDeliveriesTable,
   purchaseOrderItemsTable,
 } from "@workspace/db";
-import { eq, ilike, count, inArray, desc, and, isNull, or, isNotNull } from "drizzle-orm";
+import { eq, ilike, count, inArray, desc, asc, and, isNull, or, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
@@ -734,43 +734,47 @@ function computeFlagReason(
 }
 
 async function loadSheetRowsRaw() {
-  return db
-    .select({
-      rfqItemId: customerRfqItemsTable.id,
-      lineItem: customerRfqItemsTable.lineItem,
-      partNo: customerRfqItemsTable.partNo,
-      description: customerRfqItemsTable.description,
-      uom: customerRfqItemsTable.uom,
-      rfqQty: customerRfqItemsTable.qty,
-      rfqUnitPrice: customerRfqItemsTable.unitPrice,
-      customerRfqId: customerRfqsTable.id,
-      customerRfqNo: customerRfqsTable.customerRfqNo,
-      customerName: customerRfqsTable.customerName,
-      entryDate: customerRfqsTable.entryDate,
-      expiryDate: customerRfqsTable.expiryDate,
-      buyerName: customerRfqsTable.buyerName,
-      poItemId: customerPoItemsTable.id,
-      poNo: customerPosTable.customerPoNo,
-      poDate: customerPosTable.poDate,
-      poQty: customerPoItemsTable.qty,
-      poUnitPrice: customerPoItemsTable.unitPrice,
-      deliveryStatus: customerPoItemsTable.deliveryStatus,
-      // Linked supplier PO item (for the cost-overrun check).
-      poFinalActualCost: purchaseOrderItemsTable.finalActualCost,
-      poReferencePrice: purchaseOrderItemsTable.referencePrice,
-    })
-    .from(customerRfqItemsTable)
-    .innerJoin(customerRfqsTable, eq(customerRfqItemsTable.customerRfqId, customerRfqsTable.id))
-    .leftJoin(
-      customerPoItemsTable,
-      eq(customerPoItemsTable.customerRfqItemId, customerRfqItemsTable.id),
-    )
-    .leftJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
-    .leftJoin(
-      purchaseOrderItemsTable,
-      eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
-    )
-    .orderBy(desc(customerRfqsTable.createdAt), desc(customerRfqItemsTable.id));
+  return (
+    db
+      .select({
+        rfqItemId: customerRfqItemsTable.id,
+        lineItem: customerRfqItemsTable.lineItem,
+        partNo: customerRfqItemsTable.partNo,
+        description: customerRfqItemsTable.description,
+        uom: customerRfqItemsTable.uom,
+        rfqQty: customerRfqItemsTable.qty,
+        rfqUnitPrice: customerRfqItemsTable.unitPrice,
+        customerRfqId: customerRfqsTable.id,
+        customerRfqNo: customerRfqsTable.customerRfqNo,
+        customerName: customerRfqsTable.customerName,
+        entryDate: customerRfqsTable.entryDate,
+        expiryDate: customerRfqsTable.expiryDate,
+        buyerName: customerRfqsTable.buyerName,
+        poItemId: customerPoItemsTable.id,
+        poNo: customerPosTable.customerPoNo,
+        poDate: customerPosTable.poDate,
+        poQty: customerPoItemsTable.qty,
+        poUnitPrice: customerPoItemsTable.unitPrice,
+        deliveryStatus: customerPoItemsTable.deliveryStatus,
+        // Linked supplier PO item (for the cost-overrun check).
+        poFinalActualCost: purchaseOrderItemsTable.finalActualCost,
+        poReferencePrice: purchaseOrderItemsTable.referencePrice,
+      })
+      .from(customerRfqItemsTable)
+      .innerJoin(customerRfqsTable, eq(customerRfqItemsTable.customerRfqId, customerRfqsTable.id))
+      .leftJoin(
+        customerPoItemsTable,
+        eq(customerPoItemsTable.customerRfqItemId, customerRfqItemsTable.id),
+      )
+      .leftJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
+      .leftJoin(
+        purchaseOrderItemsTable,
+        eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
+      )
+      // Chronological: oldest RFQ first, oldest item first within it — so the
+      // sheet log reads top→bottom as oldest→newest (filters preserve this order).
+      .orderBy(asc(customerRfqsTable.createdAt), asc(customerRfqItemsTable.id))
+  );
 }
 
 // Load all sheet rows and apply the Excel-style filters: a global OR `search`
