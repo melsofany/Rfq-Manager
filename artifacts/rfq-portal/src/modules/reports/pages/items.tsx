@@ -342,11 +342,14 @@ function emptyFilter(): ColumnFilter {
 }
 
 // Build the query-string fragment for the active include filters.
-// A column in "only" mode sends `<col>Include=v1,v2` (empty list → `=`).
+// The selected values are sent as a JSON array so a value containing a comma
+// (e.g. a description "Widget, Blue" or a flagReason with a comma) is preserved
+// as one value — the backend parses it via parseValueList. An empty selection
+// sends "[]" (show none).
 function buildIncludeParams(filters: Record<string, ColumnFilter>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [col, f] of Object.entries(filters)) {
-    if (f.mode === "only") out[`${col}Include`] = [...f.set].join(",");
+    if (f.mode === "only") out[`${col}Include`] = JSON.stringify([...f.set]);
   }
   return out;
 }
