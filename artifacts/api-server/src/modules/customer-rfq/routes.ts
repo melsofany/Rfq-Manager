@@ -777,6 +777,28 @@ async function loadSheetRowsRaw() {
   );
 }
 
+// Parse a column filter value list from the query string. The frontend sends
+// the selected values as a JSON array (robust to commas or any character inside
+// a value — e.g. a description "Widget, Blue" or a flagReason containing a
+// comma). For backward compat, a plain comma-separated string is still accepted.
+function parseValueList(raw: string): string[] {
+  const s = raw.trim();
+  if (s.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) {
+        return parsed.map((v) => String(v)).filter((v) => v.length > 0);
+      }
+    } catch {
+      // fall through to comma-split
+    }
+  }
+  return s
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
+}
+
 // Load all sheet rows and apply the Excel-style filters: a global OR `search`
 // across the main text columns, plus per-column INCLUDE or EXCLUDE lists.
 // `<col>Include=v1,v2` → show ONLY those values (empty → show none). Takes
@@ -843,12 +865,7 @@ async function loadSheetRows(
     const includeRaw = query[`${param}Include`];
     if (includeRaw !== undefined) {
       // Include mode: show only these values. An empty list shows nothing.
-      const includeSet = new Set(
-        includeRaw
-          .split(",")
-          .map((v) => v.trim())
-          .filter((v) => v.length > 0),
-      );
+      const includeSet = new Set(parseValueList(includeRaw));
       filtered = filtered.filter((r) => {
         const v = r[field];
         const cell = v == null ? "" : String(v);
@@ -858,12 +875,7 @@ async function loadSheetRows(
     }
     const excludeRaw = query[`${param}Exclude`];
     if (!excludeRaw) continue;
-    const excludeSet = new Set(
-      excludeRaw
-        .split(",")
-        .map((v) => v.trim())
-        .filter((v) => v.length > 0),
-    );
+    const excludeSet = new Set(parseValueList(excludeRaw));
     if (excludeSet.size === 0) continue;
     filtered = filtered.filter((r) => {
       const v = r[field];
