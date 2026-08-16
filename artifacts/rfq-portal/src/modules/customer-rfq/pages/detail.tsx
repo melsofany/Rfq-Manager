@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Plus, Trash2, AlertCircle, AlertTriangle, Pencil, Lock } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { useAuth } from "@/contexts/AuthContext";
+import { canEditCustomerDoc, EDIT_PERM } from "@/lib/permissions";
 
 interface ItemRow {
   id?: number;
@@ -51,6 +53,8 @@ export default function CustomerRfqDetailPage() {
   const queryClient = useQueryClient();
 
   const { data: rfq, isLoading } = useGetCustomerRfq(id);
+  const { employee } = useAuth();
+  const canEdit = canEditCustomerDoc(employee?.role, employee?.permissions, EDIT_PERM.customerRfq);
   const isDraft = rfq?.status === "draft";
   // A sent (finalized/locked) customer RFQ can still be re-priced after its
   // close date has passed — pricing entry stays available past expiry.
@@ -59,7 +63,7 @@ export default function CustomerRfqDetailPage() {
     !!rfq.expiryDate &&
     !Number.isNaN(new Date(rfq.expiryDate).getTime()) &&
     new Date(rfq.expiryDate).getTime() < new Date().setHours(0, 0, 0, 0);
-  const canPrice = isDraft || isSentExpired;
+  const canPrice = canEdit && (isDraft || isSentExpired);
 
   const [editing, setEditing] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -627,7 +631,7 @@ export default function CustomerRfqDetailPage() {
                   )}
                 </table>
               </div>
-              {isDraft && (rfq.items ?? []).length > 0 && (
+              {isDraft && canEdit && (rfq.items ?? []).length > 0 && (
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <AlertTriangle size={13} className="text-amber-500" />
@@ -653,7 +657,7 @@ export default function CustomerRfqDetailPage() {
                   )}
                 </div>
               )}
-              {isSentExpired && (rfq.items ?? []).length > 0 && (
+              {isSentExpired && canEdit && (rfq.items ?? []).length > 0 && (
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <AlertTriangle size={13} className="text-amber-500" />
@@ -692,7 +696,8 @@ export default function CustomerRfqDetailPage() {
                   </Button>
                 </>
               ) : (
-                isDraft && (
+                isDraft &&
+                canEdit && (
                   <>
                     <Button
                       variant="ghost"

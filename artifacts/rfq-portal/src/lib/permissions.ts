@@ -34,7 +34,12 @@ export interface PermissionNode {
 export const PERMISSION_CATALOG: PermissionNode[] = [
   { key: "dashboard", href: "/dashboard", labelKey: "nav.dashboard" },
   { key: "customers", href: "/customers", labelKey: "nav.customers" },
-  { key: "customer-rfq", href: "/customer-rfq", labelKey: "nav.customerRfq" },
+  {
+    key: "customer-rfq",
+    href: "/customer-rfq",
+    labelKey: "nav.customerRfq",
+    children: [{ key: "customer-rfq:edit", labelKey: "perm.customerRfq.edit" }],
+  },
   {
     key: "customer-po",
     href: "/customer-po",
@@ -42,6 +47,7 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     children: [
       { key: "customer-po:orders", labelKey: "perm.customerPo.orders" },
       { key: "customer-po:deliveries", labelKey: "perm.customerPo.deliveries" },
+      { key: "customer-po:edit", labelKey: "perm.customerPo.edit" },
     ],
   },
   { key: "rfq", href: "/rfq", labelKey: "nav.rfq" },
@@ -126,12 +132,34 @@ export const PAGE_KEYS: string[] = PERMISSION_CATALOG.map((n) => n.key);
 /**
  * Role defaults used when an employee has no explicit `permissions` map.
  * `admin` is always granted everything (handled separately, not listed).
+ *
+ * The `*:edit` action keys (customer-rfq:edit, customer-po:edit) are granted
+ * to every non-admin role by default so introducing them does not regress the
+ * pre-existing ability to edit drafts — an admin can still revoke them per
+ * employee via the permissions editor.
  */
 export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
-  manager: PAGE_KEYS.slice(),
-  purchasing: PAGE_KEYS.filter((k) => k !== "employees" && k !== "audit" && k !== "integrations"),
-  data_entry: ["dashboard", "customers", "customer-rfq", "customer-po"],
+  manager: [...PAGE_KEYS, "customer-rfq:edit", "customer-po:edit"],
+  purchasing: [
+    ...PAGE_KEYS.filter((k) => k !== "employees" && k !== "audit" && k !== "integrations"),
+    "customer-rfq:edit",
+    "customer-po:edit",
+  ],
+  data_entry: [
+    "dashboard",
+    "customers",
+    "customer-rfq",
+    "customer-po",
+    "customer-rfq:edit",
+    "customer-po:edit",
+  ],
 };
+
+/** Action-permission keys that grant editing of a customer document. */
+export const EDIT_PERM = {
+  customerRfq: "customer-rfq:edit",
+  customerPo: "customer-po:edit",
+} as const;
 
 export type PermissionMap = Record<string, boolean> | null | undefined;
 
@@ -160,6 +188,24 @@ export function hasPermission(
   key: string,
 ): boolean {
   return resolvePermissions(role, permissions).has(key);
+}
+
+/**
+ * Whether the employee may EDIT a customer document (RFQ / PO).
+ *
+ * `customer-rfq:edit` / `customer-po:edit` are action permissions granted to
+ * every non-admin role by default (see ROLE_DEFAULTS), so role-default
+ * employees keep the pre-existing ability to edit drafts. An admin can revoke
+ * them per employee via the permissions editor (untick the box under the
+ * page's group) — a revoked employee sees the detail page read-only.
+ */
+export function canEditCustomerDoc(
+  role: string | undefined,
+  permissions: PermissionMap,
+  editKey: string,
+): boolean {
+  if (role === "admin") return true;
+  return resolvePermissions(role, permissions).has(editKey);
 }
 
 /** Is a page (sidebar item) visible/accessible? Accepts a path like "/customer-rfq". */

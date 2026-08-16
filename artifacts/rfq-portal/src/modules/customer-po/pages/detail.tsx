@@ -15,8 +15,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Trash2, AlertCircle, AlertTriangle, Pencil, Lock, ChevronDown } from "lucide-react";
+import {
+  ArrowLeft,
+  Trash2,
+  AlertCircle,
+  AlertTriangle,
+  Pencil,
+  Lock,
+  ChevronDown,
+} from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { useAuth } from "@/contexts/AuthContext";
+import { canEditCustomerDoc, EDIT_PERM } from "@/lib/permissions";
 
 // Per-item combobox to pick a customer RFQ by number. Sets customerRfqId on the
 // row (and clears customerRfqItemId, since the specific rfq line link must be
@@ -27,7 +37,8 @@ function RfqCellPicker({
   rfqNo,
   onPick,
 }: {
-  rfqs: { id: number; customerRfqNo: string; internalNo: string; customerName: string }[] | undefined;
+  rfqs:
+    { id: number; customerRfqNo: string; internalNo: string; customerName: string }[] | undefined;
   rfqId: number | null;
   rfqNo: string;
   onPick: (rfq: { id: number; customerRfqNo: string } | null) => void;
@@ -87,7 +98,9 @@ function RfqCellPicker({
                   setFilter("");
                 }}
               >
-                <div className="font-mono font-medium" dir="ltr">{r.customerRfqNo}</div>
+                <div className="font-mono font-medium" dir="ltr">
+                  {r.customerRfqNo}
+                </div>
                 <div className="text-muted-foreground text-[10px]">{r.internalNo}</div>
               </li>
             ))
@@ -137,6 +150,8 @@ export default function CustomerPoDetailPage() {
 
   const { data: po, isLoading } = useGetCustomerPo(id);
   const { data: rfqOptions } = useListCustomerPosCustomerRfqs();
+  const { employee } = useAuth();
+  const canEdit = canEditCustomerDoc(employee?.role, employee?.permissions, EDIT_PERM.customerPo);
   const isDraft = po?.status === "draft";
 
   const [editing, setEditing] = useState(false);
@@ -238,10 +253,7 @@ export default function CustomerPoDetailPage() {
       return;
     }
     const validItems = items
-      .filter(
-        (it) =>
-          (it.partNo.trim() || it.lineItem.trim() || it.description.trim()) && it.qty,
-      )
+      .filter((it) => (it.partNo.trim() || it.lineItem.trim() || it.description.trim()) && it.qty)
       .map((it) => ({
         customerRfqId: it.customerRfqId,
         customerRfqItemId: it.customerRfqItemId,
@@ -298,7 +310,10 @@ export default function CustomerPoDetailPage() {
   }
 
   const grandTotalStr = (() => {
-    const sum = (po.items ?? []).reduce((acc, it) => acc + Number(formatLineTotal(it.qty, it.unitPrice) || 0), 0);
+    const sum = (po.items ?? []).reduce(
+      (acc, it) => acc + Number(formatLineTotal(it.qty, it.unitPrice) || 0),
+      0,
+    );
     return formatQty(Math.round(sum * 10000) / 10000);
   })();
 
@@ -338,8 +353,7 @@ export default function CustomerPoDetailPage() {
                       "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400",
                     fulfilled:
                       "bg-green-200 text-green-800 dark:bg-green-900/50 dark:text-green-300",
-                  }[po.fulfillmentStatus.stage] ??
-                  "bg-muted text-muted-foreground"
+                  }[po.fulfillmentStatus.stage] ?? "bg-muted text-muted-foreground"
                 }`}
                 title={
                   po.fulfillmentStatus.totalItems
@@ -393,48 +407,91 @@ export default function CustomerPoDetailPage() {
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="px-5 py-3 border-b border-border">
                 <h2 className="font-semibold text-sm text-foreground">
-                  البنود <span className="text-muted-foreground font-normal">({po.items?.length ?? 0})</span>
+                  البنود{" "}
+                  <span className="text-muted-foreground font-normal">
+                    ({po.items?.length ?? 0})
+                  </span>
                 </h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-muted/30 border-b border-border text-right">
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-8">#</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Part No</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Line Item</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">التوصيف</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-8">
+                        #
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Part No
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        Line Item
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        التوصيف
+                      </th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">UOM</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الكمية</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">سعر الوحدة</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الإجمالي</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">تاريخ التسليم</th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">طلب التسعير</th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        الكمية
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        سعر الوحدة
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        الإجمالي
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        تاريخ التسليم
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        طلب التسعير
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {(po.items ?? []).length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-6 text-center text-muted-foreground text-sm">
+                        <td
+                          colSpan={10}
+                          className="px-4 py-6 text-center text-muted-foreground text-sm"
+                        >
                           لا توجد بنود
                         </td>
                       </tr>
                     ) : (
                       (po.items ?? []).map((it, i) => (
-                        <tr key={it.id} className="border-b border-border last:border-0 hover:bg-muted/20">
-                          <td className="px-4 py-2.5 text-muted-foreground text-xs text-center">{i + 1}</td>
-                          <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">{it.partNo ?? "—"}</td>
-                          <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">{it.lineItem ?? "—"}</td>
+                        <tr
+                          key={it.id}
+                          className="border-b border-border last:border-0 hover:bg-muted/20"
+                        >
+                          <td className="px-4 py-2.5 text-muted-foreground text-xs text-center">
+                            {i + 1}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">
+                            {it.partNo ?? "—"}
+                          </td>
+                          <td className="px-4 py-2.5 font-mono text-xs" dir="ltr">
+                            {it.lineItem ?? "—"}
+                          </td>
                           <td className="px-4 py-2.5 text-xs">{it.description ?? "—"}</td>
                           <td className="px-4 py-2.5 text-xs">{it.uom ?? "—"}</td>
-                          <td className="px-4 py-2.5 text-xs" dir="ltr">{formatQty(it.qty) || "—"}</td>
-                          <td className="px-4 py-2.5 text-xs" dir="ltr">{formatQty(it.unitPrice) || "—"}</td>
-                          <td className="px-4 py-2.5 text-xs" dir="ltr">{formatQty(it.total) || "—"}</td>
-                          <td className="px-4 py-2.5 text-xs" dir="ltr">{it.deliveryDate ?? "—"}</td>
+                          <td className="px-4 py-2.5 text-xs" dir="ltr">
+                            {formatQty(it.qty) || "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs" dir="ltr">
+                            {formatQty(it.unitPrice) || "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs" dir="ltr">
+                            {formatQty(it.total) || "—"}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs" dir="ltr">
+                            {it.deliveryDate ?? "—"}
+                          </td>
                           <td className="px-4 py-2.5 text-xs" dir="ltr">
                             {it.customerRfqNo ? (
                               <Link href={`/customer-rfq/${it.customerRfqId}`}>
-                                <a className="text-primary hover:underline font-mono">{it.customerRfqNo}</a>
+                                <a className="text-primary hover:underline font-mono">
+                                  {it.customerRfqNo}
+                                </a>
                               </Link>
                             ) : (
                               "—"
@@ -447,17 +504,22 @@ export default function CustomerPoDetailPage() {
                   {(po.items ?? []).length > 0 && (
                     <tfoot>
                       <tr className="bg-muted/20 border-t-2 border-border font-semibold">
-                        <td colSpan={8} className="px-4 py-2.5 text-left text-xs text-muted-foreground">
+                        <td
+                          colSpan={8}
+                          className="px-4 py-2.5 text-left text-xs text-muted-foreground"
+                        >
                           الإجمالي الكلي
                         </td>
-                        <td className="px-4 py-2.5 text-sm" dir="ltr">{grandTotalStr || "—"}</td>
+                        <td className="px-4 py-2.5 text-sm" dir="ltr">
+                          {grandTotalStr || "—"}
+                        </td>
                         <td />
                       </tr>
                     </tfoot>
                   )}
                 </table>
               </div>
-              {isDraft && (
+              {isDraft && canEdit && (
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <AlertTriangle size={13} className="text-amber-500" />
@@ -488,7 +550,7 @@ export default function CustomerPoDetailPage() {
               </div>
             )}
 
-            {isDraft && (
+            {isDraft && canEdit && (
               <div className="flex gap-3 justify-end">
                 {confirmDelete ? (
                   <>
@@ -568,11 +630,7 @@ export default function CustomerPoDetailPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>ملاحظات</Label>
-                <Textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                />
+                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
               </div>
             </div>
 
@@ -596,14 +654,30 @@ export default function CustomerPoDetailPage() {
                   <thead>
                     <tr className="bg-muted/30 border-b border-border text-right">
                       <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-8">#</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-32">Part No</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-36">Line Item</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">التوصيف</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-20">UOM</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-24">الكمية</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-24">سعر الوحدة</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-32">تاريخ التسليم</th>
-                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-36">طلب التسعير</th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-32">
+                        Part No
+                      </th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-36">
+                        Line Item
+                      </th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
+                        التوصيف
+                      </th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-20">
+                        UOM
+                      </th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-24">
+                        الكمية
+                      </th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-24">
+                        سعر الوحدة
+                      </th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-32">
+                        تاريخ التسليم
+                      </th>
+                      <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-36">
+                        طلب التسعير
+                      </th>
                       <th className="px-3 py-2 w-8" />
                     </tr>
                   </thead>
@@ -611,8 +685,13 @@ export default function CustomerPoDetailPage() {
                     {items.map((row, i) => {
                       const total = formatLineTotal(row.qty, row.unitPrice);
                       return (
-                        <tr key={i} className="border-b border-border last:border-0 hover:bg-muted/20">
-                          <td className="px-3 py-2 text-muted-foreground text-xs text-center">{i + 1}</td>
+                        <tr
+                          key={i}
+                          className="border-b border-border last:border-0 hover:bg-muted/20"
+                        >
+                          <td className="px-3 py-2 text-muted-foreground text-xs text-center">
+                            {i + 1}
+                          </td>
                           <td className="px-2 py-1.5">
                             <Input
                               value={row.partNo}
