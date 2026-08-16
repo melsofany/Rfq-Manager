@@ -756,6 +756,43 @@ describe("PATCH /api/customer-rfq/:id", () => {
     expect(res.body.items[0].total).toBe("36");
   });
 
+  it("allows re-pricing a sent RFQ when supplier-priced, even before its expiry date", async () => {
+    // No expiry date set, but an approved supplier offer exists for item 1 →
+    // the commercial event that opens customer pricing has happened.
+    detailRow = { ...insertedRfq, status: "sent", expiryDate: null };
+    detailItems = [
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: null,
+        uom: "pc",
+        qty: "3.0000",
+        unitPrice: "15.0000",
+        createdAt: new Date("2025-01-03"),
+      },
+    ];
+    approvedRows = [{ customerRfqItemId: 1, price: "8", taxIncluded: false }];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ items: [{ id: 1, unitPrice: 15 }] });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("sent");
+    expect(res.body.items[0].unitPrice).toBe("15");
+    expect(res.body.items[0].total).toBe("45");
+  });
+
+  it("blocks re-pricing a sent RFQ with no supplier pricing and no expiry date", async () => {
+    detailRow = { ...insertedRfq, status: "sent", expiryDate: null };
+    approvedRows = [];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ items: [{ id: 1, unitPrice: 12 }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("بعد إرساله");
+  });
+
   it("blocks a prices-only re-price when header fields are also sent", async () => {
     detailRow = { ...insertedRfq, status: "sent", expiryDate: "2020-01-01" };
     const res = await request(testApp)

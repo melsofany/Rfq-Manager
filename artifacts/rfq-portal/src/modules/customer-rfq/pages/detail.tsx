@@ -56,14 +56,19 @@ export default function CustomerRfqDetailPage() {
   const { employee } = useAuth();
   const canEdit = canEditCustomerDoc(employee?.role, employee?.permissions, EDIT_PERM.customerRfq);
   const isDraft = rfq?.status === "draft";
-  // A sent (finalized/locked) customer RFQ can still be re-priced after its
-  // close date has passed — pricing entry stays available past expiry.
+  // A sent (finalized/locked) customer RFQ can still be re-priced (customer unit
+  // prices edited) when EITHER its close date has passed OR at least one item
+  // has an approved supplier offer (supplier-priced) — the commercial event
+  // that should open customer pricing. This avoids operators being blocked by a
+  // forgotten/missing expiry date.
   const isSentExpired =
     rfq?.status === "sent" &&
     !!rfq.expiryDate &&
     !Number.isNaN(new Date(rfq.expiryDate).getTime()) &&
     new Date(rfq.expiryDate).getTime() < new Date().setHours(0, 0, 0, 0);
-  const canPrice = canEdit && (isDraft || isSentExpired);
+  const sentSupplierPriced = rfq?.status === "sent" && !!rfq.requestStatus?.supplierPriced;
+  const canRepriceSent = isSentExpired || sentSupplierPriced;
+  const canPrice = canEdit && (isDraft || canRepriceSent);
 
   const [editing, setEditing] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -657,11 +662,13 @@ export default function CustomerRfqDetailPage() {
                   )}
                 </div>
               )}
-              {isSentExpired && canEdit && (rfq.items ?? []).length > 0 && (
+              {canRepriceSent && canEdit && (rfq.items ?? []).length > 0 && (
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <AlertTriangle size={13} className="text-amber-500" />
-                    انتهت مدة الطلب — يمكن تعديل أسعار البنود.
+                    {sentSupplierPriced
+                      ? "الطلب مُسعَّر من المورد — يمكن تعديل أسعار العميل."
+                      : "انتهت مدة الطلب — يمكن تعديل أسعار البنود."}
                   </p>
                   <Button
                     disabled={updateMutation.isPending}
