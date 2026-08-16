@@ -1087,13 +1087,20 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     return;
   }
   if (existing.status !== "draft") {
-    // Exception: once the RFQ's close date (expiryDate) has passed, allow
-    // adjusting the customer unit prices on an already-sent (finalized) RFQ.
+    // A sent (finalized) customer RFQ is normally immutable. Re-pricing the
+    // customer unit prices is allowed in TWO commercial situations (so the
+    // operator is never blocked by a forgotten/missing close date):
+    //   1. the close date (expiryDate) has passed, OR
+    //   2. at least one item has an approved supplier offer (supplier-priced),
+    //      i.e. the commercial event that should open customer pricing happened.
     // This is a prices-only update — header fields and item identity are not
     // touched, item ids (and their offer/PO links) are preserved, and the
     // margin check is NOT re-run (it already passed at finalize; this is a
-    // manual post-expiry price adjustment, audit-logged).
+    // manual re-price, audit-logged).
     const expired = hasExpired(existing.expiryDate);
+    const { status: existingStatus } = await computeRequestStatusForRfq(id, existing.expiryDate);
+    const supplierPriced = existingStatus.supplierPriced;
+    const allowReprice = expired || supplierPriced;
     const body = req.body as {
       customerName?: string;
       customerRfqNo?: string;
@@ -1118,7 +1125,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       body.notes !== undefined ||
       body.status !== undefined;
     const pricesOnly =
-      expired &&
+      allowReprice &&
       !headerTouched &&
       Array.isArray(body.items) &&
       body.items.length > 0 &&
@@ -1138,11 +1145,13 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
         .where(eq(customerRfqItemsTable.id, it.id as number));
     }
     await db.insert(auditLogTable).values({
-      action: "customer_rfq.reprice_after_expiry",
+      action: "customer_rfq.reprice",
       entityType: "customer_rfq",
       entityId: id,
       employeeId: req.session.employeeId,
-      description: `Re-priced sent customer RFQ after expiry (${existing.expiryDate}). ${body.items?.length ?? 0} item(s) updated.`,
+      description: `Re-priced sent customer RFQ (reason: ${
+        supplierPriced ? "supplier-priced" : "expired"
+      }). ${body.items?.length ?? 0} item(s) updated.`,
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
