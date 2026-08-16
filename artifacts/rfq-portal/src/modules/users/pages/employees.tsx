@@ -28,8 +28,22 @@ import {
 
 const ROLES = ["admin", "manager", "purchasing", "data_entry"];
 
-type EmpForm = { name: string; email: string; password: string; role: string; phone: string; permissions: PermissionsValue };
-const EMPTY_FORM: EmpForm = { name: "", email: "", password: "", role: "purchasing", phone: "", permissions: null };
+type EmpForm = {
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+  phone: string;
+  permissions: PermissionsValue;
+};
+const EMPTY_FORM: EmpForm = {
+  name: "",
+  email: "",
+  password: "",
+  role: "purchasing",
+  phone: "",
+  permissions: null,
+};
 
 export default function EmployeesPage() {
   const { employee: me } = useAuth();
@@ -37,8 +51,13 @@ export default function EmployeesPage() {
   const queryClient = useQueryClient();
 
   const canManageEmps = me?.role === "admin";
-  const allowedTabs = filterTabs(me?.role, me?.permissions, "employees", ["employees", "representatives"] as const);
-  const [activeTab, setActiveTab] = useState<"employees" | "representatives">(allowedTabs[0] ?? "employees");
+  const allowedTabs = filterTabs(me?.role, me?.permissions, "employees", [
+    "employees",
+    "representatives",
+  ] as const);
+  const [activeTab, setActiveTab] = useState<"employees" | "representatives">(
+    allowedTabs[0] ?? "employees",
+  );
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState<EmpForm>(EMPTY_FORM);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -187,406 +206,441 @@ export default function EmployeesPage() {
 
         <div className="flex gap-2 border-b border-border">
           {allowedTabs.includes("employees") && (
-            <button onClick={() => setActiveTab("employees")} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "employees" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{t("employees.tab")}</button>
+            <button
+              onClick={() => setActiveTab("employees")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "employees" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            >
+              {t("employees.tab")}
+            </button>
           )}
           {allowedTabs.includes("representatives") && (
-            <button onClick={() => setActiveTab("representatives")} className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "representatives" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{t("representatives.tab")}</button>
+            <button
+              onClick={() => setActiveTab("representatives")}
+              className={`px-4 py-2 text-sm font-medium border-b-2 ${activeTab === "representatives" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            >
+              {t("representatives.tab")}
+            </button>
           )}
         </div>
-        {activeTab === "representatives" ? <RepresentativesPanel /> : <>
-        {/* Create Form */}
-        {showCreate && (
-          <div className="bg-card border border-border rounded-lg p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-sm text-foreground">
-                {t("employees.newEmployee")}
-              </h2>
-              <button
-                onClick={() => {
-                  setShowCreate(false);
-                  setCreateError(null);
-                }}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const payload = {
-                  ...createForm,
-                  permissions: createForm.role === "admin" ? null : createForm.permissions,
-                };
-                createMutation.mutate({
-                  data: payload as Parameters<typeof createMutation.mutate>[0]["data"],
-                });
-              }}
-              className="grid grid-cols-1 sm:grid-cols-2 gap-4"
-            >
-              <div className="space-y-1.5">
-                <Label>{t("employees.fullName")}</Label>
-                <Input
-                  value={createForm.name}
-                  onChange={(e) => updateCreate("name", e.target.value)}
-                  placeholder={t("employees.placeholder.name")}
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t("employees.email")}</Label>
-                <Input
-                  value={createForm.email}
-                  onChange={(e) => updateCreate("email", e.target.value)}
-                  type="email"
-                  placeholder="ahmed@cortoba-supplies.com"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t("employees.password")}</Label>
-                <Input
-                  value={createForm.password}
-                  onChange={(e) => updateCreate("password", e.target.value)}
-                  type="password"
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t("employees.role")}</Label>
-                <select
-                  value={createForm.role}
-                  onChange={(e) => updateCreate("role", e.target.value)}
-                  className="w-full h-9 px-3 rounded border border-input bg-background text-sm text-foreground"
-                  required
+        {activeTab === "representatives" ? (
+          <RepresentativesPanel />
+        ) : (
+          <>
+            {/* Create Form */}
+            {showCreate && (
+              <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="font-semibold text-sm text-foreground">
+                    {t("employees.newEmployee")}
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setShowCreate(false);
+                      setCreateError(null);
+                    }}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const payload = {
+                      ...createForm,
+                      permissions: createForm.role === "admin" ? null : createForm.permissions,
+                    };
+                    createMutation.mutate({
+                      data: payload as Parameters<typeof createMutation.mutate>[0]["data"],
+                    });
+                  }}
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-4"
                 >
-                  {ROLES.map((r) => (
-                    <option key={r} value={r}>
-                      {t(`employees.role.${r}`)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>{t("employees.phone")}</Label>
-                <Input
-                  value={createForm.phone}
-                  onChange={(e) => updateCreate("phone", e.target.value)}
-                  placeholder="+966-50-000-0000"
-                />
-              </div>
-              <div className="col-span-2">
-                <PermissionsEditor
-                  role={createForm.role}
-                  value={createForm.permissions}
-                  onChange={(v) => setCreateForm((p) => ({ ...p, permissions: v }))}
-                />
-              </div>
-              <div className="col-span-2 space-y-2">
-                {createError && (
-                  <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-                    ⚠ {createError}
+                  <div className="space-y-1.5">
+                    <Label>{t("employees.fullName")}</Label>
+                    <Input
+                      value={createForm.name}
+                      onChange={(e) => updateCreate("name", e.target.value)}
+                      placeholder={t("employees.placeholder.name")}
+                      required
+                    />
                   </div>
-                )}
-                <div className="flex gap-3 justify-end">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setShowCreate(false)}
-                    size="sm"
-                  >
-                    {t("employees.cancel")}
-                  </Button>
-                  <Button type="submit" size="sm" disabled={createMutation.isPending}>
-                    {createMutation.isPending
-                      ? t("employees.saving")
-                      : t("employees.createEmployee")}
-                  </Button>
-                </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("employees.email")}</Label>
+                    <Input
+                      value={createForm.email}
+                      onChange={(e) => updateCreate("email", e.target.value)}
+                      type="email"
+                      placeholder="ahmed@cortoba-supplies.com"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("employees.password")}</Label>
+                    <Input
+                      value={createForm.password}
+                      onChange={(e) => updateCreate("password", e.target.value)}
+                      type="password"
+                      placeholder="••••••••"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("employees.role")}</Label>
+                    <select
+                      value={createForm.role}
+                      onChange={(e) => updateCreate("role", e.target.value)}
+                      className="w-full h-9 px-3 rounded border border-input bg-background text-sm text-foreground"
+                      required
+                    >
+                      {ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {t(`employees.role.${r}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("employees.phone")}</Label>
+                    <Input
+                      value={createForm.phone}
+                      onChange={(e) => updateCreate("phone", e.target.value)}
+                      placeholder="+966-50-000-0000"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <PermissionsEditor
+                      role={createForm.role}
+                      value={createForm.permissions}
+                      onChange={(v) => setCreateForm((p) => ({ ...p, permissions: v }))}
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-2">
+                    {createError && (
+                      <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                        ⚠ {createError}
+                      </div>
+                    )}
+                    <div className="flex gap-3 justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setShowCreate(false)}
+                        size="sm"
+                      >
+                        {t("employees.cancel")}
+                      </Button>
+                      <Button type="submit" size="sm" disabled={createMutation.isPending}>
+                        {createMutation.isPending
+                          ? t("employees.saving")
+                          : t("employees.createEmployee")}
+                      </Button>
+                    </div>
+                  </div>
+                </form>
               </div>
-            </form>
-          </div>
-        )}
+            )}
 
-        {/* Edit Modal */}
-        {editId !== null && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-foreground">{t("employees.editEmployee")}</h2>
-                <button
-                  onClick={() => setEditId(null)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <form onSubmit={handleEditSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>{t("employees.fullName")}</Label>
-                  <Input
-                    value={editForm.name}
-                    onChange={(e) => updateEdit("name", e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>{t("employees.email")}</Label>
-                  <Input
-                    value={editForm.email}
-                    onChange={(e) => updateEdit("email", e.target.value)}
-                    type="email"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>
-                    {t("employees.newPassword")}{" "}
-                    <span className="text-muted-foreground text-xs">
-                      {t("employees.leaveBlank")}
-                    </span>
-                  </Label>
-                  <Input
-                    value={editForm.password}
-                    onChange={(e) => updateEdit("password", e.target.value)}
-                    type="password"
-                    placeholder="••••••••"
-                    minLength={6}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>{t("employees.role")}</Label>
-                  <select
-                    value={editForm.role}
-                    onChange={(e) => updateEdit("role", e.target.value)}
-                    className="w-full h-9 px-3 rounded border border-input bg-background text-sm text-foreground"
-                    required
+            {/* Edit Modal */}
+            {editId !== null && (
+              <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/40 p-3 sm:p-4 overflow-y-auto">
+                <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-lg my-4 sm:my-0 p-4 sm:p-6 space-y-4 max-h-[92vh] sm:max-h-[88vh] overflow-y-auto">
+                  <div className="flex items-center justify-between gap-3 sticky -top-4 sm:-top-6 bg-card pt-1 z-10">
+                    <h2 className="font-semibold text-foreground">{t("employees.editEmployee")}</h2>
+                    <button
+                      onClick={() => setEditId(null)}
+                      className="text-muted-foreground hover:text-foreground p-1 -mr-1"
+                      aria-label={t("employees.cancel")}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                  <form
+                    onSubmit={handleEditSubmit}
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-4"
                   >
-                    {ROLES.map((r) => (
-                      <option key={r} value={r}>
-                        {t(`employees.role.${r}`)}
-                      </option>
-                    ))}
-                  </select>
+                    <div className="space-y-1.5">
+                      <Label>{t("employees.fullName")}</Label>
+                      <Input
+                        value={editForm.name}
+                        onChange={(e) => updateEdit("name", e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>{t("employees.email")}</Label>
+                      <Input
+                        value={editForm.email}
+                        onChange={(e) => updateEdit("email", e.target.value)}
+                        type="email"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>
+                        {t("employees.newPassword")}{" "}
+                        <span className="text-muted-foreground text-xs">
+                          {t("employees.leaveBlank")}
+                        </span>
+                      </Label>
+                      <Input
+                        value={editForm.password}
+                        onChange={(e) => updateEdit("password", e.target.value)}
+                        type="password"
+                        placeholder="••••••••"
+                        minLength={6}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>{t("employees.role")}</Label>
+                      <select
+                        value={editForm.role}
+                        onChange={(e) => updateEdit("role", e.target.value)}
+                        className="w-full h-9 px-3 rounded border border-input bg-background text-sm text-foreground"
+                        required
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {t(`employees.role.${r}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5 col-span-2">
+                      <Label>{t("employees.phone")}</Label>
+                      <Input
+                        value={editForm.phone}
+                        onChange={(e) => updateEdit("phone", e.target.value)}
+                        placeholder="+966-50-000-0000"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <PermissionsEditor
+                        role={editForm.role}
+                        value={editForm.permissions}
+                        onChange={(v) => setEditForm((p) => ({ ...p, permissions: v }))}
+                      />
+                    </div>
+                    <div className="col-span-2 space-y-2">
+                      {editError && (
+                        <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                          ⚠ {editError}
+                        </div>
+                      )}
+                      <div className="flex gap-3 justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setEditId(null)}
+                          size="sm"
+                        >
+                          {t("employees.cancel")}
+                        </Button>
+                        <Button type="submit" size="sm" disabled={updateMutation.isPending}>
+                          {updateMutation.isPending
+                            ? t("employees.saving")
+                            : t("employees.saveChanges")}
+                        </Button>
+                      </div>
+                    </div>
+                  </form>
                 </div>
-                <div className="space-y-1.5 col-span-2">
-                  <Label>{t("employees.phone")}</Label>
-                  <Input
-                    value={editForm.phone}
-                    onChange={(e) => updateEdit("phone", e.target.value)}
-                    placeholder="+966-50-000-0000"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <PermissionsEditor
-                    role={editForm.role}
-                    value={editForm.permissions}
-                    onChange={(v) => setEditForm((p) => ({ ...p, permissions: v }))}
-                  />
-                </div>
-                <div className="col-span-2 space-y-2">
-                  {editError && (
+              </div>
+            )}
+
+            {/* Delete Confirmation */}
+            {deleteId !== null && (
+              <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/40 p-3 sm:p-4 overflow-y-auto">
+                <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm my-4 sm:my-0 p-4 sm:p-6 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                      <AlertTriangle size={18} className="text-red-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">
+                        {t("employees.confirmDelete")}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {t("employees.deleteWarning")}
+                      </p>
+                    </div>
+                  </div>
+                  {deleteError && (
                     <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-                      ⚠ {editError}
+                      ⚠ {deleteError}
                     </div>
                   )}
-                  <div className="flex gap-3 justify-end">
-                    <Button type="button" variant="ghost" onClick={() => setEditId(null)} size="sm">
+                  <div className="flex gap-2 justify-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDeleteId(null);
+                        setDeleteError(null);
+                      }}
+                    >
                       {t("employees.cancel")}
                     </Button>
-                    <Button type="submit" size="sm" disabled={updateMutation.isPending}>
-                      {updateMutation.isPending
-                        ? t("employees.saving")
-                        : t("employees.saveChanges")}
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleDelete}
+                      disabled={deleteLoading}
+                    >
+                      {deleteLoading ? t("employees.deleting") : t("employees.confirmDeleteBtn")}
                     </Button>
                   </div>
                 </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Delete Confirmation */}
-        {deleteId !== null && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                  <AlertTriangle size={18} className="text-red-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">{t("employees.confirmDelete")}</h3>
-                  <p className="text-sm text-muted-foreground">{t("employees.deleteWarning")}</p>
-                </div>
               </div>
-              {deleteError && (
-                <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-                  ⚠ {deleteError}
-                </div>
-              )}
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setDeleteId(null);
-                    setDeleteError(null);
-                  }}
-                >
-                  {t("employees.cancel")}
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={deleteLoading}
-                >
-                  {deleteLoading ? t("employees.deleting") : t("employees.confirmDeleteBtn")}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* Employees Table */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          {isLoading ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">
-              {t("employees.loading")}
-            </div>
-          ) : !employees?.length ? (
-            <div className="p-12 text-center">
-              <UserCog size={40} className="mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground text-sm">{t("employees.noEmployees")}</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/30 border-b border-border text-left">
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                      {t("employees.name")}
-                    </th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                      {t("employees.emailCol")}
-                    </th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                      {t("employees.phoneCol")}
-                    </th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                      {t("employees.roleCol")}
-                    </th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                      {t("employees.statusCol")}
-                    </th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                      {t("employees.actionsCol")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {employees.map((emp) => {
-                    const isSelf = emp.id === me?.id;
-                    return (
-                      <tr
-                        key={emp.id}
-                        className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
-                              {emp.name[0]?.toUpperCase()}
-                            </div>
-                            <div>
-                              <span className="font-medium text-foreground">{emp.name}</span>
-                              {isSelf && (
-                                <span className="text-xs text-muted-foreground ml-1">
-                                  {t("employees.you")}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">{emp.email}</td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">
-                          {emp.phone ?? "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              emp.role === "admin"
-                                ? "bg-purple-50 text-purple-700"
-                                : emp.role === "manager"
-                                  ? "bg-blue-50 text-blue-700"
-                                  : emp.role === "data_entry"
-                                    ? "bg-teal-50 text-teal-700"
-                                    : "bg-muted text-muted-foreground"
-                            }`}
+            {/* Employees Table */}
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
+              {isLoading ? (
+                <div className="p-8 text-center text-muted-foreground text-sm">
+                  {t("employees.loading")}
+                </div>
+              ) : !employees?.length ? (
+                <div className="p-12 text-center">
+                  <UserCog size={40} className="mx-auto text-muted-foreground/30 mb-3" />
+                  <p className="text-muted-foreground text-sm">{t("employees.noEmployees")}</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/30 border-b border-border text-left">
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                          {t("employees.name")}
+                        </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                          {t("employees.emailCol")}
+                        </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                          {t("employees.phoneCol")}
+                        </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                          {t("employees.roleCol")}
+                        </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                          {t("employees.statusCol")}
+                        </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                          {t("employees.actionsCol")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {employees.map((emp) => {
+                        const isSelf = emp.id === me?.id;
+                        return (
+                          <tr
+                            key={emp.id}
+                            className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
                           >
-                            {t(`employees.role.${emp.role}`) || emp.role}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              emp.isActive ? "bg-green-50 text-green-700" : "bg-red-50 text-red-500"
-                            }`}
-                          >
-                            {emp.isActive ? t("employees.active") : t("employees.suspended")}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-center gap-1">
-                            {canManageEmps && (
-                              <button
-                                onClick={() => openEdit(emp)}
-                                title={t("employees.edit")}
-                                className="p-1.5 rounded hover:bg-blue-50 text-muted-foreground hover:text-blue-600 transition-colors"
-                              >
-                                <Pencil size={14} />
-                              </button>
-                            )}
-                            {canManageEmps && (
-                              <button
-                                onClick={() => handleToggleActive(emp)}
-                                disabled={isSelf || updateMutation.isPending}
-                                title={
-                                  emp.isActive ? t("employees.deactivate") : t("employees.activate")
-                                }
-                                className={`p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                                  emp.isActive
-                                    ? "hover:bg-amber-50 text-muted-foreground hover:text-amber-600"
-                                    : "hover:bg-green-50 text-muted-foreground hover:text-green-600"
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
+                                  {emp.name[0]?.toUpperCase()}
+                                </div>
+                                <div>
+                                  <span className="font-medium text-foreground">{emp.name}</span>
+                                  {isSelf && (
+                                    <span className="text-xs text-muted-foreground ml-1">
+                                      {t("employees.you")}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground text-xs">{emp.email}</td>
+                            <td className="px-4 py-3 text-muted-foreground text-xs">
+                              {emp.phone ?? "—"}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  emp.role === "admin"
+                                    ? "bg-purple-50 text-purple-700"
+                                    : emp.role === "manager"
+                                      ? "bg-blue-50 text-blue-700"
+                                      : emp.role === "data_entry"
+                                        ? "bg-teal-50 text-teal-700"
+                                        : "bg-muted text-muted-foreground"
                                 }`}
                               >
-                                {emp.isActive ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
-                              </button>
-                            )}
-                            {canManageEmps && !isSelf && (
-                              <button
-                                onClick={() => {
-                                  setDeleteId(emp.id);
-                                  setDeleteError(null);
-                                }}
-                                title={t("employees.delete")}
-                                className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+                                {t(`employees.role.${emp.role}`) || emp.role}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  emp.isActive
+                                    ? "bg-green-50 text-green-700"
+                                    : "bg-red-50 text-red-500"
+                                }`}
                               >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                                {emp.isActive ? t("employees.active") : t("employees.suspended")}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center gap-1">
+                                {canManageEmps && (
+                                  <button
+                                    onClick={() => openEdit(emp)}
+                                    title={t("employees.edit")}
+                                    className="p-1.5 rounded hover:bg-blue-50 text-muted-foreground hover:text-blue-600 transition-colors"
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                )}
+                                {canManageEmps && (
+                                  <button
+                                    onClick={() => handleToggleActive(emp)}
+                                    disabled={isSelf || updateMutation.isPending}
+                                    title={
+                                      emp.isActive
+                                        ? t("employees.deactivate")
+                                        : t("employees.activate")
+                                    }
+                                    className={`p-1.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                                      emp.isActive
+                                        ? "hover:bg-amber-50 text-muted-foreground hover:text-amber-600"
+                                        : "hover:bg-green-50 text-muted-foreground hover:text-green-600"
+                                    }`}
+                                  >
+                                    {emp.isActive ? (
+                                      <ToggleRight size={15} />
+                                    ) : (
+                                      <ToggleLeft size={15} />
+                                    )}
+                                  </button>
+                                )}
+                                {canManageEmps && !isSelf && (
+                                  <button
+                                    onClick={() => {
+                                      setDeleteId(emp.id);
+                                      setDeleteError(null);
+                                    }}
+                                    title={t("employees.delete")}
+                                    className="p-1.5 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        </>}
+          </>
+        )}
       </div>
     </Layout>
   );
