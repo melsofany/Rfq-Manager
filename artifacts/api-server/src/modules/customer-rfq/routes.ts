@@ -240,6 +240,21 @@ function hasExpired(expiryDate: string | null): boolean {
   return d.getTime() < today.getTime();
 }
 
+// True when the customer RFQ's close date has ARRIVED — i.e. it is today or in
+// the past (inclusive of the whole close day). This is the gate for re-pricing
+// a sent (finalized) customer RFQ: on the close day itself the operator may
+// already enter/adjust customer prices (the close day is the natural moment to
+// price). Stricter than hasExpired only in that it includes today. A
+// non-parseable or missing expiryDate is never considered reached.
+function closeDateReached(expiryDate: string | null): boolean {
+  if (!expiryDate) return false;
+  const d = new Date(expiryDate);
+  if (Number.isNaN(d.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return d.getTime() <= today.getTime();
+}
+
 // For a single RFQ: load its items + the cross-table milestones and return the
 // derived request status. Used by GET /:id (detail) and as a one-off helper.
 async function computeRequestStatusForRfq(
@@ -1090,17 +1105,17 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     // A sent (finalized) customer RFQ is normally immutable. Re-pricing the
     // customer unit prices is allowed in TWO commercial situations (so the
     // operator is never blocked by a forgotten/missing close date):
-    //   1. the close date (expiryDate) has passed, OR
+    //   1. the close date (expiryDate) has arrived (today or earlier), OR
     //   2. at least one item has an approved supplier offer (supplier-priced),
     //      i.e. the commercial event that should open customer pricing happened.
     // This is a prices-only update — header fields and item identity are not
     // touched, item ids (and their offer/PO links) are preserved, and the
     // margin check is NOT re-run (it already passed at finalize; this is a
     // manual re-price, audit-logged).
-    const expired = hasExpired(existing.expiryDate);
+    const closeReached = closeDateReached(existing.expiryDate);
     const { status: existingStatus } = await computeRequestStatusForRfq(id, existing.expiryDate);
     const supplierPriced = existingStatus.supplierPriced;
-    const allowReprice = expired || supplierPriced;
+    const allowReprice = closeReached || supplierPriced;
     const body = req.body as {
       customerName?: string;
       customerRfqNo?: string;
@@ -1150,7 +1165,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       entityId: id,
       employeeId: req.session.employeeId,
       description: `Re-priced sent customer RFQ (reason: ${
-        supplierPriced ? "supplier-priced" : "expired"
+        supplierPriced ? "supplier-priced" : "close-date-reached"
       }). ${body.items?.length ?? 0} item(s) updated.`,
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),

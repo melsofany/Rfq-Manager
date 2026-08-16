@@ -732,6 +732,33 @@ describe("PATCH /api/customer-rfq/:id", () => {
     expect(res.body.error).toContain("بعد إرساله");
   });
 
+  it("allows re-pricing a sent RFQ on its close date (today, inclusive)", async () => {
+    // The close date is TODAY → closeDateReached is true (the close day itself
+    // opens pricing, not only the day after).
+    const today = new Date().toISOString().slice(0, 10);
+    detailRow = { ...insertedRfq, status: "sent", expiryDate: today };
+    detailItems = [
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: null,
+        uom: "pc",
+        qty: "3.0000",
+        unitPrice: "12.0000",
+        createdAt: new Date("2025-01-03"),
+      },
+    ];
+    approvedRows = []; // no supplier pricing — close date alone opens it
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ items: [{ id: 1, unitPrice: 12 }] });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("sent");
+    expect(res.body.items[0].unitPrice).toBe("12");
+  });
+
   it("allows re-pricing a sent RFQ after its expiry date (prices-only, no status change)", async () => {
     detailRow = { ...insertedRfq, status: "sent", expiryDate: "2020-01-01" };
     detailItems = [
