@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Plus, Trash2, ChevronDown, AlertTriangle, AlertCircle } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { useDataEntrySession } from "@/hooks/use-data-entry-session";
 
 interface ItemRow {
   partNo: string;
@@ -157,6 +158,7 @@ function UomInput({
 export default function NewCustomerRfqPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const { endSession } = useDataEntrySession("customer_rfq");
 
   const [customerName, setCustomerName] = useState("");
   const [customerId, setCustomerId] = useState<number | null>(null);
@@ -182,6 +184,7 @@ export default function NewCustomerRfqPage() {
     mutation: {
       onSuccess: (rfq) => {
         queryClient.invalidateQueries({ queryKey: getListCustomerRfqsQueryKey() });
+        endSession(rfq.id);
         navigate(`/customer-rfq/${rfq.id}`);
       },
       onError: (err: unknown) => {

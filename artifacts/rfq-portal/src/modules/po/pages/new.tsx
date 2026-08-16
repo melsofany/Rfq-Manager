@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, ChevronDown, Loader2, Trash2 } from "lucide-react";
+import { useDataEntrySession } from "@/hooks/use-data-entry-session";
 import {
   SupplierCombobox,
   RepresentativeNameInput,
@@ -176,6 +177,7 @@ function PoNumberCombobox({
 export default function NewPurchaseOrderPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const { endSession } = useDataEntrySession("supplier_po");
 
   const [sheetPoNo, setSheetPoNo] = useState("");
   const [lookupQuery, setLookupQuery] = useState("");
@@ -202,8 +204,9 @@ export default function NewPurchaseOrderPage() {
 
   const createMutation = useCreatePurchaseOrder({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (po) => {
         queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
+        endSession(po.id);
         navigate(`/purchase-orders`);
       },
     },

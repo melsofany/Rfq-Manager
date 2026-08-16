@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Plus, Trash2, ChevronDown, AlertCircle, FileText, UserCircle } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { useDataEntrySession } from "@/hooks/use-data-entry-session";
 
 interface ItemRow {
   // identity
@@ -142,6 +143,7 @@ export default function NewCustomerPoPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const { employee } = useAuth();
+  const { endSession } = useDataEntrySession("customer_po");
 
   // Top-level PO fields
   const [customerPoNo, setCustomerPoNo] = useState("");
@@ -178,6 +180,7 @@ export default function NewCustomerPoPage() {
     mutation: {
       onSuccess: (po) => {
         queryClient.invalidateQueries({ queryKey: getListCustomerPosQueryKey() });
+        endSession(po.id);
         navigate(`/customer-po/${po.id}`);
       },
       onError: (err: unknown) => {
