@@ -17,7 +17,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Plus, Trash2, ChevronDown, AlertCircle, FileText, UserCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  ChevronDown,
+  AlertCircle,
+  FileText,
+  UserCircle,
+} from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useDataEntrySession } from "@/hooks/use-data-entry-session";
 
@@ -62,11 +70,23 @@ function CustomerRfqPicker({
   isLoading,
   selectedId,
   onSelect,
+  onClear,
 }: {
-  rfqs: { id: number; customerRfqNo: string; internalNo: string; customerName: string; status: string }[] | undefined;
+  rfqs:
+    | {
+        id: number;
+        customerRfqNo: string;
+        internalNo: string;
+        customerName: string;
+        status: string;
+      }[]
+    | undefined;
   isLoading: boolean;
   selectedId: number | null;
   onSelect: (rfq: { id: number; customerRfqNo: string; customerName: string }) => void;
+  // Drop the current selection so the user can type a fresh search and pick a
+  // different RFQ (already-imported items stay in the PO items table).
+  onClear: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -90,6 +110,10 @@ function CustomerRfqPicker({
         <Input
           value={selected ? selected.customerRfqNo : filter}
           onChange={(e) => {
+            // If an RFQ is already picked, leaving the selection would lock the
+            // field to its number (value = selected.customerRfqNo). Clear it so
+            // the typed text shows and a different RFQ can be searched/picked.
+            if (selected) onClear();
             setFilter(e.target.value);
             setOpen(true);
           }}
@@ -119,7 +143,11 @@ function CustomerRfqPicker({
                 className="px-3 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  onSelect({ id: r.id, customerRfqNo: r.customerRfqNo, customerName: r.customerName });
+                  onSelect({
+                    id: r.id,
+                    customerRfqNo: r.customerRfqNo,
+                    customerName: r.customerName,
+                  });
                   setOpen(false);
                   setFilter("");
                 }}
@@ -197,14 +225,17 @@ export default function NewCustomerPoPage() {
   // When an RFQ's items are loaded, show them as a checklist; checking an item
   // appends it to the PO items table (with its partNo/desc/uom pre-filled). The
   // user then enters qty/price/deliveryDate on the appended row.
-  const onToggleRfqItem = (it: {
-    id: number;
-    partNo?: string | null;
-    lineItem?: string | null;
-    description?: string | null;
-    uom?: string | null;
-    unitPrice?: number | null;
-  }, checked: boolean) => {
+  const onToggleRfqItem = (
+    it: {
+      id: number;
+      partNo?: string | null;
+      lineItem?: string | null;
+      description?: string | null;
+      uom?: string | null;
+      unitPrice?: number | null;
+    },
+    checked: boolean,
+  ) => {
     if (!selectedRfq) return;
     if (checked) {
       setItems((prev) => [
@@ -223,7 +254,11 @@ export default function NewCustomerPoPage() {
         },
       ]);
     } else {
-      setItems((prev) => prev.filter((row) => row.customerRfqItemId !== it.id || row.fromRfq === false ? true : false));
+      setItems((prev) =>
+        prev.filter((row) =>
+          row.customerRfqItemId !== it.id || row.fromRfq === false ? true : false,
+        ),
+      );
     }
   };
 
@@ -232,10 +267,7 @@ export default function NewCustomerPoPage() {
 
   const buildPayload = () => {
     const validItems = items
-      .filter(
-        (it) =>
-          (it.partNo.trim() || it.lineItem.trim() || it.description.trim()) && it.qty,
-      )
+      .filter((it) => (it.partNo.trim() || it.lineItem.trim() || it.description.trim()) && it.qty)
       .map<CustomerPoLineItemInput>((it) => ({
         customerRfqId: it.customerRfqId ?? null,
         customerRfqItemId: it.customerRfqItemId ?? null,
@@ -270,8 +302,7 @@ export default function NewCustomerPoPage() {
       return;
     }
     const validCount = items.filter(
-      (it) =>
-        (it.partNo.trim() || it.lineItem.trim() || it.description.trim()) && it.qty,
+      (it) => (it.partNo.trim() || it.lineItem.trim() || it.description.trim()) && it.qty,
     ).length;
     if (validCount === 0) {
       setServerError("يجب إدخال بند واحد على الأقل");
@@ -344,12 +375,8 @@ export default function NewCustomerPoPage() {
                 <Label>الموظف المُدخِل</Label>
                 <div className="flex items-center gap-2 h-9 px-3 rounded-md border border-input bg-muted/40 text-sm">
                   <UserCircle size={15} className="text-muted-foreground" />
-                  <span className="text-foreground">
-                    {employee?.name ?? "—"}
-                  </span>
-                  <span className="text-xs text-muted-foreground mr-auto">
-                    (يُسجَّل تلقائيًا)
-                  </span>
+                  <span className="text-foreground">{employee?.name ?? "—"}</span>
+                  <span className="text-xs text-muted-foreground mr-auto">(يُسجَّل تلقائيًا)</span>
                 </div>
               </div>
             </div>
@@ -381,19 +408,24 @@ export default function NewCustomerPoPage() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              اختر رقم طلب تسعير العميل لجلب بنوده ثم حدّد البنود التي صدر لها أمر شراء مع
-              الكمية والسعر وتاريخ التسليم. لأوامر الشراء بدون رقم طلب تسعير، أضف البنود يدوياً
-              بالجدول بالأسفل.
+              اختر رقم طلب تسعير العميل لجلب بنوده ثم حدّد البنود التي صدر لها أمر شراء مع الكمية
+              والسعر وتاريخ التسليم. لأوامر الشراء بدون رقم طلب تسعير، أضف البنود يدوياً بالجدول
+              بالأسفل.
             </p>
             <CustomerRfqPicker
               rfqs={rfqOptions?.rfqs}
               isLoading={rfqsLoading}
               selectedId={selectedRfq?.id ?? null}
               onSelect={(r) => {
-                setSelectedRfq({ id: r.id, customerRfqNo: r.customerRfqNo, customerName: r.customerName });
+                setSelectedRfq({
+                  id: r.id,
+                  customerRfqNo: r.customerRfqNo,
+                  customerName: r.customerName,
+                });
                 // Auto-fill the owning customer from the RFQ if still empty.
                 if (!customerName.trim()) setCustomerName(r.customerName ?? "");
               }}
+              onClear={() => setSelectedRfq(null)}
             />
 
             {selectedRfq && (
@@ -410,7 +442,9 @@ export default function NewCustomerPoPage() {
                         <tr className="border-b border-border text-right">
                           <th className="px-2 py-1.5 w-8"></th>
                           <th className="px-2 py-1.5 text-muted-foreground font-medium">Part No</th>
-                          <th className="px-2 py-1.5 text-muted-foreground font-medium">Line Item</th>
+                          <th className="px-2 py-1.5 text-muted-foreground font-medium">
+                            Line Item
+                          </th>
                           <th className="px-2 py-1.5 text-muted-foreground font-medium">التوصيف</th>
                           <th className="px-2 py-1.5 text-muted-foreground font-medium">السعر</th>
                         </tr>
@@ -485,9 +519,7 @@ export default function NewCustomerPoPage() {
                     <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-36">
                       Line Item
                     </th>
-                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
-                      التوصيف
-                    </th>
+                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium">التوصيف</th>
                     <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-20">
                       UOM
                     </th>
