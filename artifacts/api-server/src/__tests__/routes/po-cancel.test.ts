@@ -202,6 +202,21 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     expect(res.body.error).toMatch(/لا توجد بنود/);
   });
 
+  it("returns 400 when any of the supplier's lines was already received/delivered", async () => {
+    // One line is already fulfilled (received via WhatsApp bot) → cancel blocked.
+    selectQueue = [
+      [{ id: 1, internalPoNo: "PO-2025-000001", status: "sent" }],
+      [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: null, email: null }],
+      [{ id: 10, lineStatus: "fulfilled" }, { id: 11, lineStatus: "pending" }],
+    ];
+    const res = await request(testApp).post("/api/po/1/cancel").send({ supplierId: 7 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/تم استلام أو تسليم/);
+    // Nothing cancelled — no WhatsApp, no audit, no transaction.
+    expect(sendPoCancelMock).not.toHaveBeenCalled();
+    expect(dbMock.transaction).not.toHaveBeenCalled();
+  });
+
   it("cancels one supplier's lines only (other supplier stays active)", async () => {
     // poRow, supplier(7), items-for-7 (2 items), all-items (7's 2 + supplier-8's 2).
     selectQueue = [

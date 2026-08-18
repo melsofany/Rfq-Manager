@@ -865,11 +865,17 @@ export default function PurchaseOrderDetailPage() {
                       )}
                       {downloadingPdf === group.supplierId ? "جاري التحميل..." : "PDF"}
                     </button>
-                    {/* Per-supplier cancel: only for dispatched POs + this supplier
-                        still has active (non-cancelled) lines. */}
+                    {/* Per-supplier cancel: only for dispatched POs + this
+                        supplier has NO received/delivered lines yet (all its
+                        lines must still be pending/postponed — cancelling a
+                        supplier whose items were already received/delivered
+                        would wipe real receipt data). */}
                     {po.status === "sent" &&
                       !editMode &&
-                      group.items.some((it) => it.lineStatus !== "cancelled") && (
+                      group.items.length > 0 &&
+                      group.items.every(
+                        (it) => it.lineStatus === "pending" || it.lineStatus === "postponed" || it.lineStatus == null,
+                      ) && (
                         <button
                           type="button"
                           disabled={cancellingSupplierId === group.supplierId}
