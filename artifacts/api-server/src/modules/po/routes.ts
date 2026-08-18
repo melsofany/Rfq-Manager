@@ -794,6 +794,16 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "لا توجد بنود لهذا المورد في أمر الشراء" });
     return;
   }
+  // Block cancelling a supplier whose lines have already been received/delivered
+  // (fulfilled|partial|rejected) — doing so would wipe real receipt data. Only
+  // pending/postponed lines (no receipt recorded yet) may be cancelled.
+  const RECEIVED_STATES = ["fulfilled", "partial", "rejected"];
+  if (itemRows.some((r) => RECEIVED_STATES.includes((r.lineStatus ?? "pending")))) {
+    res.status(400).json({
+      error: "لا يمكن إلغاء مورد تم استلام أو تسليم بنوده فعلياً — أعد ضبط البنود يدوياً إن لزم",
+    });
+    return;
+  }
   const itemIds = itemRows.map((r) => r.id);
 
   const poNo = poRow.internalPoNo;
