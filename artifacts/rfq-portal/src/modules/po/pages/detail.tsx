@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
   ArrowLeft,
+  Ban,
   Download,
   Loader2,
   Send,
@@ -70,6 +71,7 @@ interface PoItem {
   qty: number | null;
   referencePrice: number | null;
   taxIncluded: boolean;
+  lineStatus?: string;
 }
 
 interface EmployeeOption {
@@ -414,6 +416,48 @@ export default function PurchaseOrderDetailPage() {
     }
   };
 
+  const [cancellingSupplierId, setCancellingSupplierId] = useState<number | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelDone, setCancelDone] = useState<null | { supplierName: string; whatsappError: string | null; wholePo: boolean }>(null);
+
+  const handleCancelSupplier = async (supplierId: number, supplierName: string) => {
+    if (!po) return;
+    const reason = window.prompt(
+      `هل أنت متأكد من إلغاء المورد "${supplierName}" في أمر الشراء "${po.internalPoNo}"؟\nسيتم إشعار هذا المورد فقط عبر واتساب، وإخفاء بنوده من بوت الاستلام/التسليم والإحصائيات.\nأدخل سبب الإلغاء (اختياري):`,
+      "",
+    );
+    // prompt returns null on cancel; empty string means "no reason given".
+    if (reason === null) return;
+    setCancellingSupplierId(supplierId);
+    setCancelError(null);
+    setCancelDone(null);
+    try {
+      const res = await fetch(`/api/po/${id}/cancel`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplierId, reason: reason.trim() || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCancelError(data.error ?? "فشل إلغاء المورد");
+      } else {
+        const wa = (data as { whatsapp?: { whatsappError: string | null } }).whatsapp ?? { whatsappError: null };
+        setCancelDone({
+          supplierName,
+          whatsappError: wa.whatsappError ?? null,
+          wholePo: (data as { poStatus?: string }).poStatus === "cancelled",
+        });
+        queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
+        queryClient.invalidateQueries({ queryKey: ["po", id] });
+      }
+    } catch {
+      setCancelError("خطأ في الشبكة — تعذّر الوصول للخادم");
+    } finally {
+      setCancellingSupplierId(null);
+    }
+  };
+
   const handleLinkRfq = async () => {
     const rfqId = selectedRfqId ? parseInt(selectedRfqId, 10) : null;
     setLinking(true);
@@ -551,7 +595,7 @@ export default function PurchaseOrderDetailPage() {
                 </Button>
               </>
             )}
-            {!editMode && (
+            {!editMode && po.status !== "cancelled" && (
               <Button
                 onClick={handleDispatch}
                 disabled={dispatching || suppliersWithId.length === 0}
@@ -567,6 +611,21 @@ export default function PurchaseOrderDetailPage() {
         {deleteError && (
           <div className="text-destructive text-sm bg-destructive/10 border border-destructive/30 rounded px-3 py-2">
             {deleteError}
+          </div>
+        )}
+        {cancelError && (
+          <div className="text-destructive text-sm bg-destructive/10 border border-destructive/30 rounded px-3 py-2">
+            {cancelError}
+          </div>
+        )}
+        {cancelDone && (
+          <div className="text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-3 py-2">
+            <CheckCircle2 size={15} className="inline ml-1 -mt-0.5" />
+            تم إلغاء المورد «{cancelDone.supplierName}» وإشعاره عبر واتساب.
+            {cancelDone.whatsappError
+              ? ` (تعذّر إرسال واتساب: ${cancelDone.whatsappError})`
+              : ""}
+            {cancelDone.wholePo ? " وأصبح أمر الشراء ملغيًا بالكامل." : ""}
           </div>
         )}
 
@@ -791,20 +850,42 @@ export default function PurchaseOrderDetailPage() {
                   </span>
                 </div>
                 {group.supplierId != null && (
-                  <button
-                    type="button"
-                    disabled={downloadingPdf === group.supplierId}
-                    onClick={() => downloadPdf(group.supplierId!, group.supplierName ?? "Supplier")}
-                    className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="تحميل PDF لهذا المورد"
-                  >
-                    {downloadingPdf === group.supplierId ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <Download size={13} />
-                    )}
-                    {downloadingPdf === group.supplierId ? "جاري التحميل..." : "PDF"}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={downloadingPdf === group.supplierId}
+                      onClick={() => downloadPdf(group.supplierId!, group.supplierName ?? "Supplier")}
+                      className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="تحميل PDF لهذا المورد"
+                    >
+                      {downloadingPdf === group.supplierId ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Download size={13} />
+                      )}
+                      {downloadingPdf === group.supplierId ? "جاري التحميل..." : "PDF"}
+                    </button>
+                    {/* Per-supplier cancel: only for dispatched POs + this supplier
+                        still has active (non-cancelled) lines. */}
+                    {po.status === "sent" &&
+                      !editMode &&
+                      group.items.some((it) => it.lineStatus !== "cancelled") && (
+                        <button
+                          type="button"
+                          disabled={cancellingSupplierId === group.supplierId}
+                          onClick={() => handleCancelSupplier(group.supplierId!, group.supplierName ?? "Supplier")}
+                          className="flex items-center gap-1 text-xs text-destructive hover:text-destructive/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="إلغاء هذا المورد وإشعاره عبر واتساب"
+                        >
+                          {cancellingSupplierId === group.supplierId ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Ban size={13} />
+                          )}
+                          {cancellingSupplierId === group.supplierId ? "إلغاء..." : "إلغاء المورد"}
+                        </button>
+                      )}
+                  </div>
                 )}
               </div>
               <div className="overflow-x-auto">
@@ -829,10 +910,13 @@ export default function PurchaseOrderDetailPage() {
                     {group.items.map((item, idx) => (
                       <tr
                         key={item.id}
-                        className="border-b border-border last:border-0 hover:bg-muted/10"
+                        className={`border-b border-border last:border-0 ${item.lineStatus === "cancelled" ? "bg-red-50 dark:bg-red-950/20 text-muted-foreground line-through opacity-70" : "hover:bg-muted/10"}`}
                       >
                         <td className="px-3 py-2 text-muted-foreground">
                           {item.lineItem ?? idx + 1}
+                          {item.lineStatus === "cancelled" && (
+                            <span className="block text-[10px] text-red-600 not-italic">ملغي</span>
+                          )}
                         </td>
                         <td className="px-3 py-2">{item.partNo ?? "—"}</td>
                         <td className="px-3 py-2 max-w-[260px]">{item.description}</td>

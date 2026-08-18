@@ -43,6 +43,7 @@ const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_a
 const TEMPLATE_PDF = process.env.WHATSAPP_TEMPLATE_PDF || "rfq_pdf_ar";
 const TEMPLATE_PO_PDF = process.env.WHATSAPP_TEMPLATE_PO_PDF || "po_pdf_ar";
 export const TEMPLATE_WORK_ORDER = process.env.WHATSAPP_TEMPLATE_WORK_ORDER || "representative_work_order_ar_v2";
+const TEMPLATE_PO_CANCEL = process.env.WHATSAPP_TEMPLATE_PO_CANCEL || "po_cancel_ar";
 const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
 
 const BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
@@ -88,6 +89,46 @@ export async function ensureWorkOrderTemplate(): Promise<void> {
   });
   if (!response.ok) throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
   logger.info({ template: TEMPLATE_WORK_ORDER }, "WhatsApp work-order template submitted to Meta for approval");
+}
+
+/**
+ * Ensures the approved Meta template `po_cancel_ar` exists so we can notify a
+ * supplier when a dispatched purchase order is cancelled. The template carries
+ * 3 body parameters (supplier name, PO number, optional reason). Idempotent.
+ */
+export async function ensurePoCancelTemplate(): Promise<void> {
+  if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
+    logger.warn("WhatsApp po_cancel template provisioning skipped: missing token or business account id");
+    return;
+  }
+  const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
+  const existing = await fetch(`${base}?name=${encodeURIComponent(TEMPLATE_PO_CANCEL)}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  if (!existing.ok) throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
+  if (found.data?.some((t) => t.name === TEMPLATE_PO_CANCEL)) {
+    logger.info({ template: TEMPLATE_PO_CANCEL }, "WhatsApp po_cancel template already exists");
+    return;
+  }
+  const response = await fetch(base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: TEMPLATE_PO_CANCEL,
+      language: TEMPLATE_LANG,
+      category: "UTILITY",
+      components: [
+        {
+          type: "BODY",
+          text: "تم إلغاء أمر التوريد التالي من قرطبة للتوريدات.\nالمورد: {{1}}\nرقم أمر الشراء: {{2}}\nسبب الإلغاء: {{3}}\nيرجى عدم تنفيذ أو شحن أي بند متعلق بهذا الأمر.",
+          example: { body_text: [["شركة النور", "PO-2026-000001", "إلغاء بناءً على طلب العميل"]] },
+        },
+      ],
+    }),
+  });
+  if (!response.ok) throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info({ template: TEMPLATE_PO_CANCEL }, "WhatsApp po_cancel template submitted to Meta for approval");
 }
 
 export const Whatsapp = APP_SECRET
@@ -475,6 +516,38 @@ export async function sendPoWhatsApp(opts: SendPoOpts): Promise<string | null> {
     // Instead we throw so the UI correctly shows "✗ فشل" with the real error.
     throw new Error(`فشل إرسال واتساب — قالب ${TEMPLATE_PO_PDF} فشل: ${msg}`);
   }
+}
+
+/**
+ * Notifies a supplier that a previously dispatched purchase order has been
+ * cancelled. Uses the approved `po_cancel_ar` Meta template (works outside the
+ * 24h window). Returns the WhatsApp message id (or "" if the send was skipped).
+ */
+export interface SendPoCancelOpts {
+  phone: string;
+  supplierName: string;
+  contactPerson?: string | null;
+  poNo: string;
+  reason?: string | null;
+}
+
+export async function sendPoCancelWhatsApp(opts: SendPoCancelOpts): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(opts.phone);
+  const toName = sanitizeWaParam(opts.contactPerson?.trim() || opts.supplierName);
+  const reason = sanitizeWaParam(opts.reason?.trim() || "إلغاء أمر الشراء");
+  const template = new Template(
+    TEMPLATE_PO_CANCEL,
+    new Language(TEMPLATE_LANG),
+    new BodyComponent(
+      new BodyParameter(toName), // {{1}} supplier / contact name
+      new BodyParameter(opts.poNo), // {{2}} PO number
+      new BodyParameter(reason), // {{3}} cancellation reason
+    ),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, poNo: opts.poNo, waId }, "PO cancellation sent via po_cancel_ar template");
+  return waId || null;
 }
 
 // Returns the WhatsApp message ID (wamid) so callers can store it for later deletion.

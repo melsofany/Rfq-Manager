@@ -197,13 +197,17 @@ router.post("/po/:id/receipts", requireAuth, async (req, res): Promise<void> => 
       res.status(400).json({ error: "معرّف البند غير صالح" });
       return;
     }
-    // Verify the item belongs to this PO.
+    // Verify the item belongs to this PO + is still active (not cancelled).
     const [line] = await db
-      .select({ id: purchaseOrderItemsTable.id })
+      .select({ id: purchaseOrderItemsTable.id, lineStatus: purchaseOrderItemsTable.lineStatus })
       .from(purchaseOrderItemsTable)
       .where(eq(purchaseOrderItemsTable.id, poItemId));
     if (!line) {
       res.status(404).json({ error: "البند غير موجود" });
+      return;
+    }
+    if (line.lineStatus === "cancelled") {
+      res.status(400).json({ error: "لا يمكن تسجيل استلام لبند تم إلغاؤه" });
       return;
     }
 
@@ -388,12 +392,12 @@ router.post("/po/:id/send-receipt-prompts", requireAuth, async (req, res): Promi
   const normalized = normalizePhone(phone);
 
   for (const it of items) {
-    if (it.lineStatus === "fulfilled" || it.lineStatus === "rejected") {
+    if (it.lineStatus === "fulfilled" || it.lineStatus === "rejected" || it.lineStatus === "cancelled") {
       results.push({
         poItemId: it.id,
         lineLabel: `${it.lineItem || ""} ${it.description || ""}`.trim(),
         sent: false,
-        error: "البند تم استلامه/رفضه مسبقاً",
+        error: "البند تم استلامه/رفضه/إلغاؤه مسبقاً",
       });
       continue;
     }

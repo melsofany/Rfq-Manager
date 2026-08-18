@@ -26,6 +26,7 @@ import {
   isWhatsAppConfigured,
   sendRepPoDispatchWhatsApp,
   formatQty as formatWaQty,
+  sendPoCancelWhatsApp,
 } from "../communications/service";
 import { sendPoEmail } from "../../shared/email";
 
@@ -129,15 +130,22 @@ router.get("/po", requireAuth, async (req, res): Promise<void> => {
 router.get("/po/progress", requireAuth, async (req, res): Promise<void> => {
   // Batched receipt progress per PO: total items, fulfilled, rejected.
   // Used by the PO list tab to show a "received/total" badge + rejected count.
+  // Cancelled POs are excluded — their lines were reset to "pending" and a
+  // cancelled order should not surface a (now meaningless) receipt badge.
   const rows = await db
     .select({
       poId: purchaseOrderItemsTable.poId,
       lineStatus: purchaseOrderItemsTable.lineStatus,
     })
-    .from(purchaseOrderItemsTable);
+    .from(purchaseOrderItemsTable)
+    .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .where(ne(purchaseOrdersTable.status, "cancelled"));
   const byPo = new Map<number, { total: number; received: number; rejected: number }>();
   for (const r of rows) {
     const e = byPo.get(r.poId) ?? { total: 0, received: 0, rejected: 0 };
+    // Cancelled supplier lines are excluded from the badge entirely (they no
+    // longer await receipt and are not a success/failure outcome).
+    if (r.lineStatus === "cancelled") continue;
     e.total++;
     if (r.lineStatus === "fulfilled") e.received++;
     else if (r.lineStatus === "rejected") e.rejected++;
@@ -715,6 +723,178 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
   }
 
   res.json({ poNo, results, workOrderSent, workOrderError });
+});
+
+// POST /api/po/:id/cancel — cancel a single supplier's lines within a
+// dispatched ("sent") purchase order (per-supplier cancellation, NOT the
+// whole PO). Marks that supplier's purchase_order_items lines as
+// "cancelled", resets their receipt totals + wipes their work-order
+// assignments so they vanish from the rep bot's receipt/delivery lists and
+// the analytics receipt counters. Sends a WhatsApp cancellation notice to
+// that supplier only (best-effort). If the supplier was the LAST active one
+// (no non-cancelled lines remain), the whole PO is flipped to "cancelled".
+//
+// Body: { supplierId: number, reason?: string | null }
+router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  const { supplierId, reason } = (req.body ?? {}) as { supplierId?: number; reason?: string | null };
+
+  if (supplierId == null || !Number.isFinite(supplierId)) {
+    res.status(400).json({ error: "يجب تحديد المورد المراد إلغاؤه" });
+    return;
+  }
+
+  const [poRow] = await db
+    .select()
+    .from(purchaseOrdersTable)
+    .where(eq(purchaseOrdersTable.id, id));
+  if (!poRow) {
+    res.status(404).json({ error: "Purchase order not found" });
+    return;
+  }
+  if (poRow.status === "draft") {
+    res.status(400).json({ error: "لا يمكن إلغاء أمر شراء في حالة Draft — احذفه بدلاً من ذلك" });
+    return;
+  }
+  if (poRow.status === "cancelled") {
+    res.status(400).json({ error: "أمر الشراء ملغي بالفعل" });
+    return;
+  }
+
+  // The supplier whose lines we are cancelling + the items that belong to it.
+  const [supplier] = await db
+    .select({
+      id: suppliersTable.id,
+      name: suppliersTable.name,
+      phone: suppliersTable.phone,
+      contactPerson: suppliersTable.contactPerson,
+      email: suppliersTable.email,
+    })
+    .from(suppliersTable)
+    .where(eq(suppliersTable.id, supplierId));
+  if (!supplier) {
+    res.status(404).json({ error: "المورد غير موجود" });
+    return;
+  }
+
+  const itemRows = await db
+    .select({
+      id: purchaseOrderItemsTable.id,
+      lineStatus: purchaseOrderItemsTable.lineStatus,
+    })
+    .from(purchaseOrderItemsTable)
+    .where(
+      and(
+        eq(purchaseOrderItemsTable.poId, id),
+        eq(purchaseOrderItemsTable.supplierId, supplierId),
+      ),
+    );
+  if (itemRows.length === 0) {
+    res.status(400).json({ error: "لا توجد بنود لهذا المورد في أمر الشراء" });
+    return;
+  }
+  const itemIds = itemRows.map((r) => r.id);
+
+  const poNo = poRow.internalPoNo;
+  const cancelReason = (reason ?? "").trim() || null;
+
+  // Notify only this supplier via WhatsApp (best-effort — a failed send never
+  // blocks the cancellation itself).
+  let whatsappSent = false;
+  let whatsappError: string | null = null;
+  if (supplier.phone?.trim() && isWhatsAppConfigured) {
+    try {
+      const waId = await sendPoCancelWhatsApp({
+        phone: supplier.phone.trim(),
+        supplierName: supplier.name,
+        contactPerson: supplier.contactPerson,
+        poNo,
+        reason: cancelReason,
+      });
+      whatsappSent = Boolean(waId);
+      if (!waId) whatsappError = "WhatsApp send returned no message id";
+      try {
+        await db.insert(whatsappChatsTable).values({
+          waMessageId: waId ?? null,
+          direction: "outbound",
+          phone: normalizePhone(supplier.phone.trim()),
+          supplierId: supplier.id,
+          body: `[إلغاء أمر شراء: ${poNo} — ${supplier.name}]${cancelReason ? ` — ${cancelReason}` : ""}`,
+          isRead: true,
+        });
+      } catch (saveErr) {
+        req.log.error({ err: saveErr, supplierId: supplier.id, poNo }, "PO cancel: failed to save WhatsApp chat record");
+      }
+    } catch (err) {
+      whatsappError = err instanceof Error ? err.message : String(err);
+      req.log.error({ err, supplierId: supplier.id, phone: supplier.phone }, "PO cancel: WhatsApp failed");
+    }
+  } else {
+    whatsappError = !isWhatsAppConfigured ? "WhatsApp not configured" : "No phone number";
+  }
+
+  try {
+    // If this supplier was the LAST active one (every remaining non-cancelled
+    // line belongs to it), the whole PO becomes "cancelled"; otherwise it stays
+    // "sent" with the other suppliers' lines intact.
+    const allItems = await db
+      .select({ id: purchaseOrderItemsTable.id, lineStatus: purchaseOrderItemsTable.lineStatus, supplierId: purchaseOrderItemsTable.supplierId })
+      .from(purchaseOrderItemsTable)
+      .where(eq(purchaseOrderItemsTable.poId, id));
+    const remainingActive = allItems.filter(
+      (r) => r.lineStatus !== "cancelled" && !(r.supplierId === supplierId && itemIds.includes(r.id)),
+    );
+    const wholePoCancelled = remainingActive.length === 0;
+
+    await db.transaction(async (tx) => {
+      // Reset this supplier's lines to "cancelled" + zeroed receipt totals so
+      // they no longer count as received/success anywhere.
+      await tx
+        .update(purchaseOrderItemsTable)
+        .set({
+          lineStatus: "cancelled",
+          totalReceivedQty: null,
+          totalAcceptedQty: null,
+          totalRejectedQty: null,
+          finalActualCost: null,
+        })
+        .where(inArray(purchaseOrderItemsTable.id, itemIds));
+      // Wipe the rep-bot receipt/delivery assignments for these lines only.
+      await tx
+        .delete(workOrderAssignmentsTable)
+        .where(inArray(workOrderAssignmentsTable.poItemId, itemIds));
+      if (wholePoCancelled) {
+        await tx
+          .update(purchaseOrdersTable)
+          .set({ status: "cancelled", updatedAt: new Date() })
+          .where(eq(purchaseOrdersTable.id, id));
+      }
+
+      await tx.insert(auditLogTable).values({
+        action: "po.supplier_cancelled",
+        entityType: "po",
+        entityId: id,
+        employeeId: req.session.employeeId,
+        description: `Cancelled supplier ${supplier.name} (id ${supplierId}) on PO ${poNo}${cancelReason ? ` — ${cancelReason}` : ""}${wholePoCancelled ? " (whole PO now cancelled)" : ""}`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+    });
+
+    res.json({
+      ok: true,
+      id,
+      poStatus: wholePoCancelled ? "cancelled" : poRow.status,
+      cancelledSupplier: { id: supplier.id, name: supplier.name },
+      cancelledItemIds: itemIds,
+      whatsapp: { whatsappSent, whatsappError },
+    });
+  } catch (err) {
+    req.log.error({ err, id, supplierId }, "Failed to cancel supplier on purchase order");
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Failed to cancel supplier on purchase order", details: message });
+  }
 });
 
 // GET /api/po/:id/pdf/:supplierId — download PO PDF for a specific supplier
