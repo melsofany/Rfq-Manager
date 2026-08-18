@@ -54,6 +54,7 @@ const LINE_STATUS_LABEL: Record<string, string> = {
   fulfilled: "تم الاستلام",
   rejected: "مرفوض",
   postponed: "مؤجّل",
+  cancelled: "ملغي",
 };
 
 function statusTone(status: string): string {
@@ -66,6 +67,8 @@ function statusTone(status: string): string {
       return "text-red-600";
     case "postponed":
       return "text-muted-foreground";
+    case "cancelled":
+      return "text-red-600";
     default:
       return "text-muted-foreground";
   }
@@ -468,9 +471,11 @@ function ReceiptItemRow({
         <td className="px-4 py-3 text-xs text-red-600">{item.totalRejectedQty ?? "-"}</td>
         <td className="px-4 py-3 text-xs text-foreground">{item.finalActualCost ?? "-"}</td>
         <td className="px-4 py-3 text-left">
-          <Button onClick={() => setOpen((o) => !o)} size="sm" variant="outline" className="h-7 text-xs">
-            تسجيل استلام
-          </Button>
+          {item.lineStatus !== "cancelled" && (
+            <Button onClick={() => setOpen((o) => !o)} size="sm" variant="outline" className="h-7 text-xs">
+              تسجيل استلام
+            </Button>
+          )}
           {item.lineStatus === "pending" && (
             <Button onClick={onPostpone} size="sm" variant="ghost" className="h-7 text-xs ml-1">
               تأجيل

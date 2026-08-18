@@ -94,9 +94,9 @@ export async function acceptedQtyFromSupplier(customerPoItemId: number): Promise
     .from(purchaseOrderItemsTable)
     .where(eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemId));
   if (!rows.length) return null; // no supplier link → unguarded
-  // Only count lines that were actually received (not pending/rejected).
+  // Only count lines that were actually received (not pending/rejected/cancelled).
   return rows
-    .filter((r) => r.lineStatus !== "rejected")
+    .filter((r) => r.lineStatus !== "rejected" && r.lineStatus !== "cancelled")
     .reduce((acc, r) => acc + (toNum(r.accepted) ?? 0), 0);
 }
 

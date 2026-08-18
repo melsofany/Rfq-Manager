@@ -6,7 +6,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, ShoppingCart } from "lucide-react";
+import { Plus, Search, ShoppingCart, Ban } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { filterTabs } from "@/lib/permissions";
 import GoodsReceiptPage from "./receipts";
@@ -172,6 +172,9 @@ export default function PurchaseOrdersListPage() {
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
                       الاستلام
                     </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
+                      إجراء
+                    </th>
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Created</th>
                   </tr>
                 </thead>
@@ -226,6 +229,24 @@ export default function PurchaseOrdersListPage() {
                             </span>
                           );
                         })()}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {po.status === "sent" ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/purchase-orders/${po.id}`);
+                            }}
+                            title="إدارة الإلغاء لكل مورد من صفحة التفاصيل"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-destructive border border-destructive/40 hover:bg-destructive/10"
+                          >
+                            <Ban size={13} />
+                            إدارة الإلغاء
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground/40 text-xs">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">
                         {new Date(po.createdAt).toLocaleDateString()}

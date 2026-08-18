@@ -32,6 +32,7 @@ import {
 } from "@workspace/db";
 import {
   eq,
+  ne,
   count,
   countDistinct,
   sql,
@@ -818,10 +819,19 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
   const posByStatus = await db.select({ status: purchaseOrdersTable.status, count: count() }).from(purchaseOrdersTable).groupBy(purchaseOrdersTable.status);
 
   // ── PO receipt progress (batched) ────────────────────────────────────────
-  const poProgressRows = await db.select({ poId: purchaseOrderItemsTable.poId, lineStatus: purchaseOrderItemsTable.lineStatus }).from(purchaseOrderItemsTable);
+  // Cancelled POs are excluded — their lines were reset to "pending" on cancel
+  // and should not count toward the company's receipt progress.
+  const poProgressRows = await db
+    .select({ poId: purchaseOrderItemsTable.poId, lineStatus: purchaseOrderItemsTable.lineStatus })
+    .from(purchaseOrderItemsTable)
+    .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .where(ne(purchaseOrdersTable.status, "cancelled"));
   const poProgressMap = new Map<number, { total: number; received: number; rejected: number }>();
   for (const r of poProgressRows) {
     const e = poProgressMap.get(r.poId) ?? { total: 0, received: 0, rejected: 0 };
+    // Cancelled supplier lines are excluded — they're neither pending nor a
+    // receipt outcome and must not inflate the company totals.
+    if (r.lineStatus === "cancelled") continue;
     e.total++;
     if (r.lineStatus === "fulfilled") e.received++;
     else if (r.lineStatus === "rejected") e.rejected++;

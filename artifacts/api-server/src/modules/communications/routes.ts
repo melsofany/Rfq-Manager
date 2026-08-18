@@ -534,10 +534,15 @@ async function recordItemReceipt(
       lineItem: purchaseOrderItemsTable.lineItem,
       partNo: purchaseOrderItemsTable.partNo,
       customerPoItemId: purchaseOrderItemsTable.customerPoItemId,
+      lineStatus: purchaseOrderItemsTable.lineStatus,
     })
     .from(purchaseOrderItemsTable)
     .where(eq(purchaseOrderItemsTable.id, poItemId));
   if (!line) return false;
+  // A cancelled supplier line cannot be received/delivered. Treat it as a no-op
+  // (the assignment was already wiped on cancel, but a rep could still have a
+  // stale menu open) so the rep's "received"/"rejected" tap doesn't resurrect it.
+  if (line.lineStatus === "cancelled") return false;
 
   const ordered = line.qty ? String(line.qty) : null;
   // The WhatsApp rep flow records a single full-qty event per line. To keep the
@@ -1256,7 +1261,7 @@ async function recordItemDelivery(
     .where(eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemId));
   if (!linked) return false;
   const accepted = linked.totalAcceptedQty ? Number(linked.totalAcceptedQty) : 0;
-  if (accepted <= 0 || linked.lineStatus === "rejected") return false;
+  if (accepted <= 0 || linked.lineStatus === "rejected" || linked.lineStatus === "cancelled") return false;
 
   const ordered = cpi.qty ? String(cpi.qty) : null;
   // Mirror the receipt flow: a WhatsApp delivery action is a single full-qty
