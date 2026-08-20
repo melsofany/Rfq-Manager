@@ -673,6 +673,7 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
     .orderBy(sql`${purchaseOrdersTable.createdAt} DESC`);
 
   const poIds = rows.map((r) => r.id);
+
   const itemCountRows =
     poIds.length > 0
       ? await db
@@ -686,8 +687,30 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
           )
           .groupBy(purchaseOrderItemsTable.poId)
       : [];
-
   const itemMap = Object.fromEntries(itemCountRows.map((r) => [r.poId, Number(r.cnt)]));
+
+  // Batch-load receipt progress for ALL returned POs in one query (line_status
+  // aggregate across the PO's items — same signal as /po/progress).
+  const lineRows =
+    poIds.length > 0
+      ? await db
+          .select({
+            poId: purchaseOrderItemsTable.poId,
+            lineStatus: purchaseOrderItemsTable.lineStatus,
+            supplierId: purchaseOrderItemsTable.supplierId,
+          })
+          .from(purchaseOrderItemsTable)
+          .where(inArray(purchaseOrderItemsTable.poId, poIds))
+      : [];
+
+  const progressMap: Record<number, { total: number; received: number; rejected: number }> = {};
+  for (const r of lineRows) {
+    if (r.supplierId !== supplierId) continue; // count only this supplier's lines
+    const agg = (progressMap[r.poId] ??= { total: 0, received: 0, rejected: 0 });
+    agg.total++;
+    if (r.lineStatus === 'fulfilled' || r.lineStatus === 'received') agg.received++;
+    if (r.lineStatus === 'rejected') agg.rejected++;
+  }
 
   res.json(
     rows.map((r) => ({
@@ -696,6 +719,7 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
       sheetPoNo: r.sheetPoNo,
       status: r.status,
       itemCount: itemMap[r.id] ?? 0,
+      receipt: progressMap[r.id] ?? null,
       createdAt: r.createdAt.toISOString(),
     })),
   );
