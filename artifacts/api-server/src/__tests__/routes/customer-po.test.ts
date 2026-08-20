@@ -527,10 +527,40 @@ describe("PATCH /api/customer-po/:id", () => {
     expect(res.body.status).toBe("sent");
   });
 
-  it("rejects editing a PO that is already sent", async () => {
+  it("rejects editing a PO that is already sent (no session role)", async () => {
     detailRow = { ...insertedPo, status: "sent" };
     const res = await request(testApp).patch("/api/customer-po/7").send({ buyerName: "X" });
     expect(res.status).toBe(400);
+  });
+
+  it("rejects editing a sent PO for a non-privileged role", async () => {
+    sessionState.role = "data_entry";
+    detailRow = { ...insertedPo, status: "sent" };
+    const res = await request(testApp).patch("/api/customer-po/7").send({ buyerName: "X" });
+    expect(res.status).toBe(400);
+  });
+
+  it("allows an admin to fully edit a sent PO", async () => {
+    sessionState.role = "admin";
+    detailRow = { ...insertedPo, status: "sent" };
+    detailItems = [];
+    const res = await request(testApp)
+      .patch("/api/customer-po/7")
+      .send({ buyerName: "X", notes: "n" });
+    expect(res.status).toBe(200);
+    expect(res.body.buyerName).toBe("X");
+    expect(res.body.notes).toBe("n");
+  });
+
+  it("allows a manager to fully edit a sent PO", async () => {
+    sessionState.role = "manager";
+    detailRow = { ...insertedPo, status: "sent" };
+    detailItems = [];
+    const res = await request(testApp)
+      .patch("/api/customer-po/7")
+      .send({ buyerName: "Manager edit" });
+    expect(res.status).toBe(200);
+    expect(res.body.buyerName).toBe("Manager edit");
   });
 
   it("returns 404 when the PO does not exist", async () => {

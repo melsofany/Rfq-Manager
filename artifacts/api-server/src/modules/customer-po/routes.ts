@@ -635,7 +635,10 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
     res.status(404).json({ error: "Not found" });
     return;
   }
-  if (existing.status !== "draft") {
+  // Admins/managers may fully edit a sent PO (the portal gates the edit UI the
+  // same way); everyone else is restricted to drafts.
+  const canFullEditSent = req.session.role === "admin" || req.session.role === "manager";
+  if (existing.status !== "draft" && !canFullEditSent) {
     res.status(400).json({ error: "لا يمكن تعديل أمر شراء العميل بعد إرساله" });
     return;
   }
@@ -696,6 +699,19 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
         })),
       );
     }
+  }
+
+  // Audit a privileged full edit of an already-sent (finalized) PO.
+  if (existing.status !== "draft") {
+    await db.insert(auditLogTable).values({
+      action: "customer_po.sent_edit",
+      entityType: "customer_po",
+      entityId: id,
+      employeeId: req.session.employeeId,
+      description: `Edited sent customer PO (role: ${req.session.role ?? "unknown"}).`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
   }
 
   const [updated] = await db.select().from(customerPosTable).where(eq(customerPosTable.id, id));

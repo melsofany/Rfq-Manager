@@ -1134,7 +1134,10 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     res.status(404).json({ error: "Not found" });
     return;
   }
-  if (existing.status !== "draft") {
+  // Admins/managers may fully edit a sent RFQ (the portal gates the edit UI
+  // the same way). Everyone else falls back to the narrow prices-only branch.
+  const canFullEditSent = req.session.role === "admin" || req.session.role === "manager";
+  if (existing.status !== "draft" && !canFullEditSent) {
     // A sent (finalized) customer RFQ is normally immutable. Re-pricing the
     // customer unit prices is allowed in TWO commercial situations (so the
     // operator is never blocked by a forgotten/missing close date):
@@ -1385,6 +1388,19 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
         })),
       );
     }
+  }
+
+  // Audit a privileged full edit of an already-sent (finalized) RFQ.
+  if (existing.status !== "draft") {
+    await db.insert(auditLogTable).values({
+      action: "customer_rfq.sent_edit",
+      entityType: "customer_rfq",
+      entityId: id,
+      employeeId: req.session.employeeId,
+      description: `Edited sent customer RFQ (role: ${req.session.role ?? "unknown"}).`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
   }
 
   const [updated] = await db.select().from(customerRfqsTable).where(eq(customerRfqsTable.id, id));
