@@ -322,7 +322,8 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
 router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   const { category, search } = req.query as Record<string, string>;
 
-  // إلغاء تفعيل تلقائي: كل مورد وصل إلى N إرسال دون أي رد على الإطلاق
+  // إلغاء تفعيل تلقائي: كل مورد لم يرد على آخر N إرسال متتالي
+  // (يُعاد التفعيل يدويًا بأمان — لو رد على أي إرسال جديد لا يُعاد تعطيله)
   try {
     await db.execute(sql`
       UPDATE suppliers s
@@ -332,10 +333,12 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
         FROM sent_log sl
         WHERE sl.supplier_id IS NOT NULL
         GROUP BY sl.supplier_id
-        HAVING COUNT(*) >= ${AUTO_DEACTIVATE_AFTER}
-           AND NOT EXISTS (
-             SELECT 1 FROM offers o WHERE o.supplier_id = sl.supplier_id
-           )
+        HAVING COUNT(*) FILTER (
+          WHERE sl.created_at > COALESCE((
+            SELECT MAX(o.created_at) FROM offers o
+            WHERE o.supplier_id = sl.supplier_id
+          ), 'epoch'::timestamp)
+        ) >= ${AUTO_DEACTIVATE_AFTER}
       ) dead
       WHERE s.id = dead.supplier_id
         AND s.is_active = true
