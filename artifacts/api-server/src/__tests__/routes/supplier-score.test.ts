@@ -22,6 +22,7 @@ vi.mock("@workspace/db", () => {
     offersTable: { _: "offers" },
     offerItemsTable: { _: "offerItems" },
     purchaseOrderItemsTable: { _: "poItems" },
+    poItemReceiptsTable: { _: "receipts" },
     purchaseOrdersTable: { _: "pos" },
     rfqTable: { _: "rfq" },
   };
@@ -110,8 +111,8 @@ describe("GET /suppliers/:id/score (smoke, real logic)", () => {
     selectQueue.push([{ cnt: 1 }]);
     // 5. receipt sums (accepted 90 / rejected 10 → 90%)
     selectQueue.push([{ accepted: "90", rejected: "10" }]);
-    // 6. avg deliveryDays (5 → 100)
-    selectQueue.push([{ avg: "5.00" }]);
+    // 6. delivery from receipts (none received → null)
+    selectQueue.push([{ avg: null, cnt: 0 }]);
 
     const res = await request(testApp).get("/suppliers/5/score");
     expect(res.status).toBe(200);
@@ -126,8 +127,8 @@ describe("GET /suppliers/:id/score (smoke, real logic)", () => {
     expect(b.priceScore).toBe(85); // 70 + (10/20)*30 = 85
     expect(b.winScore).toBe(50); // 1/2 → 50
     expect(b.receiptQualityScore).toBe(90);
-    expect(b.avgDeliveryDays).toBe(5);
-    expect(b.deliveryScore).toBe(100);
+    expect(b.avgDeliveryDays).toBeNull();
+    expect(b.deliveryScore).toBeNull();
     // Weighted over all 6 components — non-null
     expect(b.totalScore).not.toBeNull();
     expect(b.rating).not.toBeNull();
@@ -177,6 +178,20 @@ describe("GET /suppliers/:id/score (smoke, real logic)", () => {
     selectQueue.push([]); // no supplier
     const res = await request(testApp).get("/suppliers/999/score");
     expect(res.status).toBe(404);
+  });
+
+  it("delivery score is computed from actual receipts (5 days → 100)", async () => {
+    selectQueue.push([supplierRow]);
+    selectQueue.push([{ total: 4, replied: 3 }]);
+    selectQueue.push([{ avgHours: "2" }]);
+    selectQueue.push([{ avg: null }]);           // no competitor prices
+    selectQueue.push([{ wins: 0, total: 0 }]);
+    selectQueue.push([{ avgReceipt: null }]);
+    selectQueue.push([{ avg: "5.00", cnt: 3 }]); // 3 receipts, avg 5 days
+    const res = await request(testApp).get("/suppliers/5/score");
+    expect(res.status).toBe(200);
+    expect(res.body.avgDeliveryDays).toBe(5);
+    expect(res.body.deliveryScore).toBe(100);
   });
 });
 

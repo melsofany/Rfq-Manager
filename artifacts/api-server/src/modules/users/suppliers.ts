@@ -7,9 +7,10 @@ import {
   offerItemsTable,
   purchaseOrderItemsTable,
   purchaseOrdersTable,
+  poItemReceiptsTable,
   rfqTable,
 } from "@workspace/db";
-import { eq, ilike, or, and, ne, count, sql, avg, inArray } from "drizzle-orm";
+import { eq, ilike, or, and, ne, count, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 
 const router = Router();
@@ -151,13 +152,28 @@ async function computeSupplierScore(supplierId: number) {
       ? Math.round((acceptedQty / (acceptedQty + rejectedQty)) * 100)
       : null;
 
-  // ── 6. متوسط مدة التوريد (مؤشر فقط — مهم في التصنيف اليدوي) ──────────────────
+  // ── 6. متوسط مدة التوريد الفعلي (من الاستلامات فقط — لا يُحسب دون استلام) ────
+  // avg(receivedAt - po.createdAt) يومًا من الاستلامات المسجّلة
   const [deliveryRow] = await db
-    .select({ avg: avg(offerItemsTable.deliveryDays) })
-    .from(offerItemsTable)
-    .leftJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
-    .where(eq(offersTable.supplierId, supplierId));
-  const avgDeliveryDays = deliveryRow?.avg ? Math.round(parseFloat(String(deliveryRow.avg))) : null;
+    .select({
+      avg: sql<string | null>`avg(extract(epoch from (${poItemReceiptsTable.receivedAt} - ${purchaseOrdersTable.createdAt})) / 86400)`,
+      cnt: count(),
+    })
+    .from(poItemReceiptsTable)
+    .innerJoin(
+      purchaseOrdersTable,
+      eq(poItemReceiptsTable.poId, purchaseOrdersTable.id),
+    )
+    .innerJoin(
+      purchaseOrderItemsTable,
+      eq(poItemReceiptsTable.poItemId, purchaseOrderItemsTable.id),
+    )
+    .where(eq(purchaseOrderItemsTable.supplierId, supplierId));
+  const receiptCount = Number(deliveryRow?.cnt ?? 0);
+  const avgDeliveryDays =
+    receiptCount > 0 && deliveryRow?.avg
+      ? Math.round(parseFloat(String(deliveryRow.avg)))
+      : null;
 
   let deliveryScore: number | null = null;
   if (avgDeliveryDays !== null) {
