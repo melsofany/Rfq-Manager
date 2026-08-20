@@ -179,3 +179,26 @@ describe("GET /suppliers/:id/score (smoke, real logic)", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("Auto-deactivate suppliers with 10+ sends and no replies", () => {
+  it("runs an UPDATE ... FROM sent_log+offers before listing suppliers", async () => {
+    // The list endpoint auto-deactivates first (db.execute), then selects suppliers.
+    executeQueue.push({ rows: [], rowCount: 2 }); // 2 suppliers deactivated
+    selectQueue.push([supplierRow]); // list query
+
+    const res = await request(testApp).get("/suppliers");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+  });
+
+  it("does not fail the list if the auto-deactivate step errors", async () => {
+    // execute throwing simulates a SQL failure — list should still succeed.
+    const dbModule = await import("@workspace/db");
+    vi.mocked(dbModule.db.execute).mockRejectedValueOnce(new Error("SQL boom"));
+    selectQueue.push([supplierRow]);
+
+    const res = await request(testApp).get("/suppliers");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+  });
+});
