@@ -8,6 +8,12 @@ vi.mock("../../middlewares/auth", () => ({
 }));
 
 // Mock the WhatsApp service so send-delivery-prompts doesn't hit the network.
+vi.mock("../../modules/communications/routes", () => ({
+  applyReceiptSideEffects: vi.fn().mockResolvedValue(undefined),
+  applyDeliverySideEffects: vi.fn().mockResolvedValue(undefined),
+  broadcastWaEvent: vi.fn(),
+}));
+
 vi.mock("../../modules/communications/service", () => ({
   isWhatsAppConfigured: true,
   sendRepMainMenu: vi.fn(async () => "msg-id"),

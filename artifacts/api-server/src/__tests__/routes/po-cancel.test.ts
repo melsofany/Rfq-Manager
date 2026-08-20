@@ -23,6 +23,12 @@ vi.mock("../../shared/google-sheets", () => ({
 const sendPoCancelMock = vi.fn().mockResolvedValue("cancel-wa-id");
 let _whatsappConfigured = true;
 
+vi.mock("../../modules/communications/routes", () => ({
+  applyReceiptSideEffects: vi.fn().mockResolvedValue(undefined),
+  applyDeliverySideEffects: vi.fn().mockResolvedValue(undefined),
+  broadcastWaEvent: vi.fn(),
+}));
+
 vi.mock("../../modules/communications/service", () => ({
   sendPoWhatsApp: vi.fn().mockResolvedValue("supplier-wa-id"),
   get isWhatsAppConfigured() {

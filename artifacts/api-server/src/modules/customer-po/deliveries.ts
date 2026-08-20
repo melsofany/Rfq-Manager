@@ -29,6 +29,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { sendRepMainMenu } from "../communications/service";
+import { applyDeliverySideEffects } from "../communications/routes";
 
 const router = Router();
 
@@ -233,6 +234,17 @@ router.post("/customer-po/:id/deliveries", requireAuth, async (req, res): Promis
     createdIds.push(row.id);
 
     await recomputeItemTotals(customerPoItemId);
+
+    // Mirror the rep bot: mark the delivery assignment done and broadcast.
+    const [updated] = await db
+      .select({ deliveryStatus: customerPoItemsTable.deliveryStatus })
+      .from(customerPoItemsTable)
+      .where(eq(customerPoItemsTable.id, customerPoItemId));
+    try {
+      await applyDeliverySideEffects(customerPoId, customerPoItemId, updated?.deliveryStatus ?? "pending");
+    } catch {
+      // best-effort — never block the delivery if the side-effects fail
+    }
   }
 
   await db.insert(auditLogTable).values({

@@ -20,6 +20,12 @@ vi.mock("../../shared/google-sheets", () => ({
   listSheetPoNumbers: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock("../../modules/communications/routes", () => ({
+  applyReceiptSideEffects: vi.fn().mockResolvedValue(undefined),
+  applyDeliverySideEffects: vi.fn().mockResolvedValue(undefined),
+  broadcastWaEvent: vi.fn(),
+}));
+
 vi.mock("../../modules/communications/service", () => ({
   sendPoWhatsApp: vi.fn().mockResolvedValue({ ok: true }),
   isWhatsAppConfigured: vi.fn().mockReturnValue(false),

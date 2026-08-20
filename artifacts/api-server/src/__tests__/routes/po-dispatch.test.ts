@@ -27,6 +27,12 @@ const sendRepDispatchMock = vi.fn().mockResolvedValue("rep-wa-id");
 // A getter lets tests flip it per-case.
 let _whatsappConfigured = true;
 
+vi.mock("../../modules/communications/routes", () => ({
+  applyReceiptSideEffects: vi.fn().mockResolvedValue(undefined),
+  applyDeliverySideEffects: vi.fn().mockResolvedValue(undefined),
+  broadcastWaEvent: vi.fn(),
+}));
+
 vi.mock("../../modules/communications/service", () => ({
   sendPoWhatsApp: sendPoWhatsAppMock,
   get isWhatsAppConfigured() {

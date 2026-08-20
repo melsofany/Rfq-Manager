@@ -517,7 +517,7 @@ async function resendItemActionReceipt(phone: string, poNo: string, poItemId: nu
  * partial shipments or cost adjustments the operator should use the receipt
  * screen in the portal (POST /po/:id/receipts) where qty/cost are explicit.
  */
-async function recordItemReceipt(
+export async function recordItemReceipt(
   poItemId: number,
   opts: {
     receivedQtyFromOrdered?: boolean;
@@ -676,7 +676,7 @@ async function recordItemReceipt(
  * then matching the line's lineItem (or partNo) to one of that customer PO's
  * items. Returns the customer_po_item id, or null if no match.
  */
-async function resolveCustomerPoItemId(
+export async function resolveCustomerPoItemId(
   poId: number,
   lineItem: string | null,
   partNo: string | null,
@@ -711,7 +711,7 @@ async function resolveCustomerPoItemId(
  * customerPoId from the customer_po_item. Idempotent: skips if an active
  * delivery assignment already exists for this customer_po_item_id.
  */
-async function ensureDeliveryAssignment(
+export async function ensureDeliveryAssignment(
   poItemId: number,
   poId: number,
   customerPoItemId: number,
@@ -1232,7 +1232,7 @@ async function resendItemActionDelivery(phone: string, customerPoNo: string, cus
  * received from the supplier yet (no accepted supplier receipt on a linked
  * purchase_order_item).
  */
-async function recordItemDelivery(
+export async function recordItemDelivery(
   customerPoItemId: number,
   opts: {
     deliveredFromOrdered?: boolean;
@@ -1325,6 +1325,93 @@ async function recordItemDelivery(
       ),
     );
   return true;
+}
+
+
+/**
+ * Apply the same side-effects the rep bot applies after a receipt is recorded:
+ * mark the receipt work-order assignment done, chain a delivery assignment for
+ * linked customer PO items, and broadcast a live-refresh event to portal
+ * clients. Used by the manual POST /po/:id/receipts portal path so a portal
+ * receipt has the same downstream effect as a rep WhatsApp receipt.
+ */
+export async function applyReceiptSideEffects(
+  poId: number,
+  poItemId: number,
+  lineStatus: string,
+): Promise<void> {
+  // Mark the receipt work-order assignment as done so the rep menu count drops.
+  const assignmentStatus =
+    lineStatus === 'fulfilled' ? 'received' : lineStatus === 'rejected' ? 'rejected' : 'received';
+  await db
+    .update(workOrderAssignmentsTable)
+    .set({ status: assignmentStatus, updatedAt: new Date() })
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.poItemId, poItemId),
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+      ),
+    );
+
+  // Chain a delivery assignment when the line was accepted and links to a customer PO item.
+  if (lineStatus === 'fulfilled' || lineStatus === 'partial') {
+    const [line] = await db
+      .select({
+        id: purchaseOrderItemsTable.id,
+        lineItem: purchaseOrderItemsTable.lineItem,
+        partNo: purchaseOrderItemsTable.partNo,
+        customerPoItemId: purchaseOrderItemsTable.customerPoItemId,
+      })
+      .from(purchaseOrderItemsTable)
+      .where(eq(purchaseOrderItemsTable.id, poItemId));
+    if (line) {
+      let customerPoItemId = line.customerPoItemId;
+      if (!customerPoItemId) {
+        customerPoItemId = await resolveCustomerPoItemId(poId, line.lineItem, line.partNo);
+        if (customerPoItemId) {
+          await db
+            .update(purchaseOrderItemsTable)
+            .set({ customerPoItemId })
+            .where(eq(purchaseOrderItemsTable.id, line.id));
+        }
+      }
+      if (customerPoItemId) {
+        try {
+          await ensureDeliveryAssignment(line.id, poId, customerPoItemId);
+        } catch (err) {
+          logger.warn({ err, poItemId }, 'Auto delivery-assignment creation failed (portal)');
+        }
+      }
+    }
+  }
+
+  broadcastWaEvent({ type: 'receipt_recorded', poId, poItemId, lineStatus });
+}
+
+/**
+ * Apply the same side-effects the rep bot applies after a delivery is recorded:
+ * mark the delivery work-order assignment done and broadcast a live event.
+ * Used by the manual POST /customer-po/:id/deliveries portal path so a portal
+ * delivery has the same downstream effect as a rep WhatsApp delivery.
+ */
+export async function applyDeliverySideEffects(
+  customerPoId: number,
+  customerPoItemId: number,
+  deliveryStatus: string,
+): Promise<void> {
+  await db
+    .update(workOrderAssignmentsTable)
+    .set({
+      status: deliveryStatus === 'rejected' ? 'rejected' : 'delivered',
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.customerPoItemId, customerPoItemId),
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
+      ),
+    );
+  broadcastWaEvent({ type: 'delivery_recorded', customerPoId, customerPoItemId, deliveryStatus });
 }
 
 async function handleWorkOrderButton(phone: string, msg: ServerMessage): Promise<boolean> {
