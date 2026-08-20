@@ -714,13 +714,45 @@ describe("PATCH /api/customer-rfq/:id", () => {
     expect(res.body.error).toContain("سعر");
   });
 
-  it("blocks editing once the RFQ is sent", async () => {
+  it("blocks editing once the RFQ is sent (no session role)", async () => {
     detailRow = { ...insertedRfq, status: "sent" };
     const res = await request(testApp)
       .patch("/api/customer-rfq/42")
       .send({ notes: "edited after send" });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("بعد إرساله");
+  });
+
+  it("allows an admin to fully edit a sent RFQ", async () => {
+    sessionState.role = "admin";
+    detailRow = { ...insertedRfq, status: "sent" };
+    detailItems = [];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ notes: "edited after send", buyerName: "New Buyer" });
+    expect(res.status).toBe(200);
+    expect(res.body.notes).toBe("edited after send");
+    expect(res.body.buyerName).toBe("New Buyer");
+  });
+
+  it("allows a manager to fully edit a sent RFQ", async () => {
+    sessionState.role = "manager";
+    detailRow = { ...insertedRfq, status: "sent" };
+    detailItems = [];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ notes: "manager edit" });
+    expect(res.status).toBe(200);
+    expect(res.body.notes).toBe("manager edit");
+  });
+
+  it("blocks a data_entry role from editing a sent RFQ", async () => {
+    sessionState.role = "data_entry";
+    detailRow = { ...insertedRfq, status: "sent" };
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ notes: "edited after send" });
+    expect(res.status).toBe(400);
   });
 
   it("blocks a prices-only update on a sent RFQ before its expiry date", async () => {

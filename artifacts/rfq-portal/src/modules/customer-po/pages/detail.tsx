@@ -168,6 +168,11 @@ export default function CustomerPoDetailPage() {
   const { employee } = useAuth();
   const canEdit = canEditCustomerDoc(employee?.role, employee?.permissions, EDIT_PERM.customerPo);
   const isDraft = po?.status === "draft";
+  // Admins/managers may fully edit a sent (finalized) PO; the PATCH endpoint
+  // enforces the same role gate. Delete stays draft-only.
+  const canEditSent =
+    po?.status === "sent" && (employee?.role === "admin" || employee?.role === "manager");
+  const canFullEdit = isDraft || canEditSent;
 
   const [editing, setEditing] = useState(false);
   const [customerPoNo, setCustomerPoNo] = useState("");
@@ -655,7 +660,7 @@ export default function CustomerPoDetailPage() {
               </div>
             )}
 
-            {isDraft && canEdit && (
+            {canFullEdit && canEdit && (
               <div className="flex gap-3 justify-end">
                 {confirmDelete ? (
                   <>
@@ -672,13 +677,15 @@ export default function CustomerPoDetailPage() {
                   </>
                 ) : (
                   <>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setConfirmDelete(true)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 size={15} className="ml-1" /> حذف
-                    </Button>
+                    {isDraft && (
+                      <Button
+                        variant="ghost"
+                        onClick={() => setConfirmDelete(true)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 size={15} className="ml-1" /> حذف
+                      </Button>
+                    )}
                     <Button variant="outline" onClick={startEdit} className="gap-1.5">
                       <Pencil size={15} /> تعديل
                     </Button>

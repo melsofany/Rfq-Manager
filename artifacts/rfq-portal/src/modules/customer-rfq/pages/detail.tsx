@@ -56,6 +56,11 @@ export default function CustomerRfqDetailPage() {
   const { employee } = useAuth();
   const canEdit = canEditCustomerDoc(employee?.role, employee?.permissions, EDIT_PERM.customerRfq);
   const isDraft = rfq?.status === "draft";
+  // Admins/managers may fully edit a sent (finalized) RFQ; the PATCH endpoint
+  // enforces the same role gate.
+  const canEditSent =
+    rfq?.status === "sent" && (employee?.role === "admin" || employee?.role === "manager");
+  const canFullEdit = isDraft || canEditSent;
   // A sent (finalized/locked) customer RFQ can still be re-priced (customer unit
   // prices edited) when EITHER its close date has arrived (today or earlier) OR
   // at least one item has an approved supplier offer (supplier-priced) — the
@@ -703,16 +708,18 @@ export default function CustomerRfqDetailPage() {
                   </Button>
                 </>
               ) : (
-                isDraft &&
+                canFullEdit &&
                 canEdit && (
                   <>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setConfirmDelete(true)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 size={15} className="ml-1" /> حذف
-                    </Button>
+                    {isDraft && (
+                      <Button
+                        variant="ghost"
+                        onClick={() => setConfirmDelete(true)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 size={15} className="ml-1" /> حذف
+                      </Button>
+                    )}
                     <Button variant="outline" onClick={startEdit} className="gap-1.5">
                       <Pencil size={15} /> تعديل
                     </Button>
