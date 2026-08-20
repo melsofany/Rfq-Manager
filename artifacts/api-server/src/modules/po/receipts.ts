@@ -29,6 +29,7 @@ import {
   isWhatsAppConfigured,
   sendRepresentativeItemReceiptWhatsApp,
 } from "../communications/service";
+import { applyReceiptSideEffects } from "../communications/routes";
 import { normalizePhone } from "./routes";
 
 const router = Router();
@@ -243,6 +244,18 @@ router.post("/po/:id/receipts", requireAuth, async (req, res): Promise<void> => 
     createdIds.push(row.id);
 
     await recomputeItemTotals(poItemId);
+
+    // Mirror the rep bot: mark the receipt assignment done, chain a delivery
+    // assignment for linked customer-PO items, broadcast to portal clients.
+    const [updatedLine] = await db
+      .select({ lineStatus: purchaseOrderItemsTable.lineStatus })
+      .from(purchaseOrderItemsTable)
+      .where(eq(purchaseOrderItemsTable.id, poItemId));
+    try {
+      await applyReceiptSideEffects(poId, poItemId, updatedLine?.lineStatus ?? "pending");
+    } catch {
+      // best-effort — never block the receipt if the side-effects fail
+    }
   }
 
   await db.insert(auditLogTable).values({
