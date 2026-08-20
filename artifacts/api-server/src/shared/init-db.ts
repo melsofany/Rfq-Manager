@@ -371,6 +371,10 @@ export async function initDb(): Promise<void> {
         ADD COLUMN IF NOT EXISTS total_rejected_by_customer_qty NUMERIC(15,4);
       ALTER TABLE customer_po_items
         ADD COLUMN IF NOT EXISTS delivery_status TEXT NOT NULL DEFAULT 'pending';
+      ALTER TABLE customer_po_items
+        ADD COLUMN IF NOT EXISTS highlight_color TEXT;
+      ALTER TABLE customer_po_items
+        ADD COLUMN IF NOT EXISTS highlight_note TEXT;
 
       ALTER TABLE work_order_assignments
         ADD COLUMN IF NOT EXISTS po_item_id INTEGER REFERENCES purchase_order_items(id) ON DELETE SET NULL;

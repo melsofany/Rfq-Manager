@@ -756,6 +756,10 @@ async function loadSheetRowsRaw() {
         poQty: customerPoItemsTable.qty,
         poUnitPrice: customerPoItemsTable.unitPrice,
         deliveryStatus: customerPoItemsTable.deliveryStatus,
+        // Manual highlight set on the customer PO line (admin/accountant):
+        // row tint + note appended to the «السبب» column in the response.
+        highlightColor: customerPoItemsTable.highlightColor,
+        highlightNote: customerPoItemsTable.highlightNote,
         // Linked supplier PO item (for the cost-overrun check).
         poFinalActualCost: purchaseOrderItemsTable.finalActualCost,
         poReferencePrice: purchaseOrderItemsTable.referencePrice,
@@ -907,8 +911,9 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
     limit,
     offset,
     rows: page.map((r) => {
-      // flagReason is precomputed by loadSheetRows (rejection reason + cost
-      // overrun) so it is consistent with the «السبب» filter/facets.
+      // The «السبب» column = computed flags (rejection/cost-overrun) plus the
+      // manually-set highlight note (appended with —).
+      const flagReason = [r.flagReason, r.highlightNote].filter((s) => s != null).join(" — ") || null;
       return {
         rfqItemId: r.rfqItemId,
         lineItem: r.lineItem,
@@ -928,8 +933,9 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
         poDate: r.poDate,
         poQty: formatQty(r.poQty),
         poUnitPrice: formatQty(r.poUnitPrice),
-        flagged: r.flagReason != null,
-        flagReason: r.flagReason,
+        flagged: flagReason != null,
+        flagReason,
+        highlightColor: r.highlightColor ?? null,
       };
     }),
   });
@@ -950,7 +956,12 @@ router.get("/customer-rfq/sheet-view/facets", requireAuth, async (req, res): Pro
 
   const counts = new Map<string, number>();
   for (const r of filtered) {
-    const v = r[field];
+    // For «السبب», facet values must match the rendered cell: computed flag +
+    // highlight note merged, exactly like the sheet-view response.
+    const v =
+      field === "flagReason"
+        ? ([r.flagReason, r.highlightNote].filter((s) => s != null).join(" — ") || null)
+        : r[field];
     const key = v == null ? "" : String(v);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }

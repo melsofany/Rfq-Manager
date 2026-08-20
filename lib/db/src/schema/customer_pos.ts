@@ -58,6 +58,11 @@ export const customerPoItemsTable = pgTable("customer_po_items", {
   totalRejectedByCustomerQty: numeric("total_rejected_by_customer_qty", { precision: 15, scale: 4 }),
   // pending | partial | delivered | rejected
   deliveryStatus: text("delivery_status").notNull().default("pending"),
+  // Manual highlight (admin/accountant): color row tint shown on `/items`
+  // (سجل البنود والطلبات) + free-form note appended to the «السبب» column.
+  // Cleared together (both null) or set together.
+  highlightColor: text("highlight_color"),
+  highlightNote: text("highlight_note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -660,8 +660,9 @@ export const ListCustomerRfqSheetViewResponse = zod.object({
   "poDate": zod.string().nullish(),
   "poQty": zod.string().nullish(),
   "poUnitPrice": zod.string().nullish(),
-  "flagged": zod.boolean().optional().describe('True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price).'),
-  "flagReason": zod.string().nullish().describe('Arabic reason for the flag, e.g. \'رفض التسليم: تالف\' or \'تجاوزت التكلفة: الفعلي 120 > أمر التوريد 100\'.')
+  "flagged": zod.boolean().optional().describe('True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price OR a manual highlight note is set).'),
+  "flagReason": zod.string().nullish().describe('Arabic reason for the flag — computed flags merged with the manual highlight note, e.g. \'رفض التسليم: تالف — مراجعة خاصة\'.'),
+  "highlightColor": zod.union([zod.literal('yellow'),zod.literal('green'),zod.literal('blue'),zod.literal('red'),zod.literal('orange'),zod.literal('purple'),zod.literal(null)]).nullish().describe('Manual row tint color set on the customer PO line (renders the whole row in that color).')
 }).describe('One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued).'))
 }).describe('Paginated flat sheet-style view (one row per customer RFQ item, with joined PO columns).')
 
@@ -978,6 +979,8 @@ export const GetCustomerPoResponse = zod.object({
   "unitPrice": zod.number().nullish(),
   "total": zod.number().nullish().describe('qty \* unitPrice, computed by the server'),
   "deliveryDate": zod.string().nullish(),
+  "highlightColor": zod.union([zod.literal('yellow'),zod.literal('green'),zod.literal('blue'),zod.literal('red'),zod.literal('orange'),zod.literal('purple'),zod.literal(null)]).nullish().describe('Manual row tint on \/items (set via PATCH \/customer-po\/items\/:id\/highlight)'),
+  "highlightNote": zod.string().nullish().describe('Manual note shown in the \/items «السبب» column'),
   "createdAt": zod.string()
 })).optional()
 }))
@@ -1051,6 +1054,8 @@ export const UpdateCustomerPoResponse = zod.object({
   "unitPrice": zod.number().nullish(),
   "total": zod.number().nullish().describe('qty \* unitPrice, computed by the server'),
   "deliveryDate": zod.string().nullish(),
+  "highlightColor": zod.union([zod.literal('yellow'),zod.literal('green'),zod.literal('blue'),zod.literal('red'),zod.literal('orange'),zod.literal('purple'),zod.literal(null)]).nullish().describe('Manual row tint on \/items (set via PATCH \/customer-po\/items\/:id\/highlight)'),
+  "highlightNote": zod.string().nullish().describe('Manual note shown in the \/items «السبب» column'),
   "createdAt": zod.string()
 })).optional()
 }))

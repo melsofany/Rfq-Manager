@@ -10,7 +10,7 @@ import {
   purchaseOrderItemsTable,
 } from "@workspace/db";
 import { eq, count, inArray, desc, sql, and, isNotNull } from "drizzle-orm";
-import { requireAuth } from "../../middlewares/auth";
+import { requireAuth, requireRole } from "../../middlewares/auth";
 
 const router = Router();
 
@@ -394,6 +394,8 @@ function serializeItem(
     total: computeTotal(i.qty, i.unitPrice),
     deliveryDate: i.deliveryDate,
     deliveryStatus: i.deliveryStatus,
+    highlightColor: i.highlightColor,
+    highlightNote: i.highlightNote,
     totalDeliveredQty: formatQty(i.totalDeliveredQty),
     totalRejectedByCustomerQty: formatQty(i.totalRejectedByCustomerQty),
     createdAt: i.createdAt.toISOString(),
@@ -739,5 +741,76 @@ router.delete("/customer-po/:id", requireAuth, async (req, res): Promise<void> =
   });
   res.status(204).end();
 });
+
+// Highlight colors a row may be tinted with on the items sheet (/items).
+// Kept tight so the frontend can map each one to a row background class.
+const HIGHLIGHT_COLORS = ["yellow", "green", "blue", "red", "orange", "purple"] as const;
+type HighlightColor = (typeof HIGHLIGHT_COLORS)[number];
+
+// PATCH /customer-po/items/:itemId/highlight — admin/accountant-only manual
+// flag for a PO line: a row tint shown on `/items` (سجل البنود والطلبات) plus
+// a free-form note surfaced in the «السبب» column there. Works on ANY PO
+// (draft or sent — it is a visual flag, not a PO content change). Pass
+// `{clear: true}` to remove the highlight.
+router.patch(
+  "/customer-po/items/:itemId/highlight",
+  requireRole("admin", "accountant", "manager"),
+  async (req, res): Promise<void> => {
+    const raw = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
+    const itemId = parseInt(raw, 10);
+    if (!Number.isFinite(itemId)) {
+      res.status(400).json({ error: "معرّف بند غير صالح" });
+      return;
+    }
+
+    const body = (req.body ?? {}) as {
+      highlightColor?: string | null;
+      highlightNote?: string | null;
+      clear?: boolean;
+    };
+    const clear = body.clear === true || (body.highlightColor == null && body.highlightNote == null);
+
+    let color: HighlightColor | null = null;
+    let note: string | null = null;
+    if (!clear) {
+      if (!HIGHLIGHT_COLORS.includes(body.highlightColor as HighlightColor)) {
+        res.status(400).json({
+          error: `اللون يجب أن يكون أحد: ${HIGHLIGHT_COLORS.join(", ")}`,
+        });
+        return;
+      }
+      color = body.highlightColor as HighlightColor;
+      note = body.highlightNote?.trim() || null;
+    }
+
+    const [item] = await db
+      .select({ id: customerPoItemsTable.id, customerPoId: customerPoItemsTable.customerPoId })
+      .from(customerPoItemsTable)
+      .where(eq(customerPoItemsTable.id, itemId));
+    if (!item) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    await db
+      .update(customerPoItemsTable)
+      .set({ highlightColor: color, highlightNote: note })
+      .where(eq(customerPoItemsTable.id, itemId));
+
+    await db.insert(auditLogTable).values({
+      action: clear ? "customer_po_item.highlight_cleared" : "customer_po_item.highlighted",
+      entityType: "customer_po_item",
+      entityId: itemId,
+      employeeId: req.session.employeeId,
+      description: clear
+        ? `Cleared highlight on customer PO item ${itemId}`
+        : `Highlighted customer PO item ${itemId} (${color})${note ? `: ${note}` : ""}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+
+    res.json({ ok: true, itemId, highlightColor: color, highlightNote: note });
+  },
+);
 
 export default router;

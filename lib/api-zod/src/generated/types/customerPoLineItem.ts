@@ -5,6 +5,7 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomerPoLineItemHighlightColor } from './customerPoLineItemHighlightColor';
 
 export interface CustomerPoLineItem {
   id: number;
@@ -37,5 +38,15 @@ export interface CustomerPoLineItem {
   total?: number | null;
   /** @nullable */
   deliveryDate?: string | null;
+  /**
+     * Manual row tint on /items (set via PATCH /customer-po/items/:id/highlight)
+     * @nullable
+     */
+  highlightColor?: CustomerPoLineItemHighlightColor;
+  /**
+     * Manual note shown in the /items «السبب» column
+     * @nullable
+     */
+  highlightNote?: string | null;
   createdAt: string;
 }

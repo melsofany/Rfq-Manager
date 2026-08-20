@@ -1956,10 +1956,14 @@ components:
           type: ["string", "null"]
         flagged:
           type: boolean
-          description: True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price).
+          description: True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price OR a manual highlight note is set).
         flagReason:
           type: ["string", "null"]
-          description: "Arabic reason for the flag, e.g. 'رفض التسليم: تالف' or 'تجاوزت التكلفة: الفعلي 120 > أمر التوريد 100'."
+          description: "Arabic reason for the flag — computed flags merged with the manual highlight note, e.g. 'رفض التسليم: تالف — مراجعة خاصة'."
+        highlightColor:
+          type: ["string", "null"]
+          enum: [yellow, green, blue, red, orange, purple, null]
+          description: Manual row tint color set on the customer PO line (renders the whole row in that color).
 
     CustomerRfqSheetView:
       type: object
@@ -2345,6 +2349,13 @@ components:
           description: qty * unitPrice, computed by the server
         deliveryDate:
           type: ["string", "null"]
+        highlightColor:
+          type: ["string", "null"]
+          enum: [yellow, green, blue, red, orange, purple, null]
+          description: Manual row tint on /items (set via PATCH /customer-po/items/:id/highlight)
+        highlightNote:
+          type: ["string", "null"]
+          description: Manual note shown in the /items «السبب» column
         createdAt:
           type: string
 
