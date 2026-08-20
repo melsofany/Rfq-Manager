@@ -104,7 +104,10 @@ export default function GoodsReceiptPage() {
       const r = await fetch(`/api/po/${poId}/items`, { credentials: "include" });
       if (!r.ok) throw new Error("فشل تحميل بنود أمر الشراء");
       const data: PoItemRow[] = await r.json();
-      setItems(data);
+      // Only supplier-assigned, non-cancelled lines are eligible for receipt —
+      // a line with no supplier has no one to receive from, and a cancelled
+      // line (per-supplier cancel) must disappear from this tab entirely.
+      setItems(data.filter((it) => it.supplierId != null && it.lineStatus !== "cancelled"));
       setExpandedPo(poId);
       // Load receipts for each item.
       const recR = await fetch(`/api/po/${poId}/receipts`, { credentials: "include" });
@@ -325,16 +328,24 @@ export default function GoodsReceiptPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {items.map((it) => (
-                              <ReceiptItemRow
-                                key={it.id}
-                                item={it}
-                                poId={po.id}
-                                rows={receipts[it.id] ?? []}
-                                onSave={(d) => saveReceipt(po.id, it.id, d)}
-                                onPostpone={() => postpone(po.id, it.id)}
-                              />
-                            ))}
+                            {items.length === 0 ? (
+                              <tr>
+                                <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground text-sm">
+                                  لا توجد بنود قابلة للاستلام في هذا الأمر
+                                </td>
+                              </tr>
+                            ) : (
+                              items.map((it) => (
+                                <ReceiptItemRow
+                                  key={it.id}
+                                  item={it}
+                                  poId={po.id}
+                                  rows={receipts[it.id] ?? []}
+                                  onSave={(d) => saveReceipt(po.id, it.id, d)}
+                                  onPostpone={() => postpone(po.id, it.id)}
+                                />
+                              ))
+                            )}
                           </tbody>
                         </table>
                       </div>
