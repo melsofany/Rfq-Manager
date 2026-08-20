@@ -23,10 +23,25 @@ import {
   Pencil,
   Lock,
   ChevronDown,
+  Highlighter,
+  Eraser,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
 import { canEditCustomerDoc, EDIT_PERM } from "@/lib/permissions";
+
+// Manual item highlight (admin/accountant/manager only) — tint the row on
+// /items (سجل البنود والطلبات) + show the note in its «السبب» column.
+const HIGHLIGHT_COLORS = [
+  { key: "yellow", label: "أصفر", bg: "bg-yellow-400" },
+  { key: "orange", label: "برتقالي", bg: "bg-orange-400" },
+  { key: "green", label: "أخضر", bg: "bg-green-400" },
+  { key: "blue", label: "أزرق", bg: "bg-blue-400" },
+  { key: "red", label: "أحمر", bg: "bg-red-400" },
+  { key: "purple", label: "بنفسجي", bg: "bg-purple-400" },
+] as const;
 
 // Per-item combobox to pick a customer RFQ by number. Sets customerRfqId on the
 // row (and clears customerRfqItemId, since the specific rfq line link must be
@@ -165,6 +180,57 @@ export default function CustomerPoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
+
+  // Highlight (admin/accountant/manager) — dialog state per selected item.
+  // The backend also recognizes an "accountant" role (accounts module) even
+  // though the frontend Role type only lists admin/manager/purchasing/data_entry.
+  const canHighlight = ["admin", "accountant", "manager"].includes(employee?.role ?? "");
+  const [highlightItem, setHighlightItem] = useState<{
+    id: number;
+    label: string;
+  } | null>(null);
+  const [hlColor, setHlColor] = useState<string | null>(null);
+  const [hlNote, setHlNote] = useState("");
+  const [hlSaving, setHlSaving] = useState(false);
+
+  const openHighlight = (item: {
+    id?: number;
+    partNo?: string | null;
+    lineItem?: string | null;
+    highlightColor?: string | null;
+    highlightNote?: string | null;
+  }) => {
+    if (!item.id) return;
+    setHighlightItem({ id: item.id, label: item.partNo || item.lineItem || `#${item.id}` });
+    setHlColor(item.highlightColor ?? null);
+    setHlNote(item.highlightNote ?? "");
+  };
+
+  const saveHighlight = async (itemId: number, color: string | null, note: string, clear = false) => {
+    setHlSaving(true);
+    try {
+      const res = await fetch(`/api/customer-po/items/${itemId}/highlight`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          clear ? { clear: true } : { highlightColor: color, highlightNote: note },
+        ),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "فشل حفظ التمييز");
+        return;
+      }
+      toast.success(clear ? "تم إزالة التمييز" : "تم تمييز البند");
+      setHighlightItem(null);
+      queryClient.invalidateQueries({ queryKey: getGetCustomerPoQueryKey(id) });
+    } catch {
+      toast.error("فشل حفظ التمييز");
+    } finally {
+      setHlSaving(false);
+    }
+  };
 
   const updateMutation = useUpdateCustomerPo({
     mutation: {
@@ -445,13 +511,18 @@ export default function CustomerPoDetailPage() {
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
                         طلب التسعير
                       </th>
+                      {canHighlight && (
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                          التمييز
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {(po.items ?? []).length === 0 ? (
                       <tr>
                         <td
-                          colSpan={10}
+                          colSpan={canHighlight ? 11 : 10}
                           className="px-4 py-6 text-center text-muted-foreground text-sm"
                         >
                           لا توجد بنود
@@ -497,6 +568,40 @@ export default function CustomerPoDetailPage() {
                               "—"
                             )}
                           </td>
+                          {canHighlight && (
+                            <td className="px-4 py-2.5 text-xs whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => openHighlight(it)}
+                                title={it.highlightNote ?? "تمييز البند بلون"}
+                                className={`inline-flex items-center gap-1.5 rounded px-2 py-1 text-[11px] transition-colors ${
+                                  it.highlightColor
+                                    ? "font-medium"
+                                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                } ${
+                                  it.highlightColor === "yellow"
+                                    ? "bg-yellow-200 text-yellow-900"
+                                    : it.highlightColor === "orange"
+                                      ? "bg-orange-200 text-orange-900"
+                                      : it.highlightColor === "green"
+                                        ? "bg-green-200 text-green-900"
+                                        : it.highlightColor === "blue"
+                                          ? "bg-blue-200 text-blue-900"
+                                          : it.highlightColor === "red"
+                                            ? "bg-red-200 text-red-900"
+                                            : it.highlightColor === "purple"
+                                              ? "bg-purple-200 text-purple-900"
+                                              : ""
+                                }`}
+                              >
+                                <Highlighter size={12} />
+                                {it.highlightColor
+                                  ? (HIGHLIGHT_COLORS.find((c) => c.key === it.highlightColor)
+                                      ?.label ?? it.highlightColor)
+                                  : "تمييز"}
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))
                     )}
@@ -803,6 +908,72 @@ export default function CustomerPoDetailPage() {
             </div>
           </form>
         )}
+
+        {/* Highlight dialog — pick a color + note for the selected item (the
+            note appears on /items in the «السبب» column). */}
+        <Dialog open={highlightItem !== null} onOpenChange={(open) => !open && setHighlightItem(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>تمييز البند {highlightItem?.label}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div>
+                <Label className="mb-2 block text-xs">اللون</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {HIGHLIGHT_COLORS.map((c) => (
+                    <button
+                      key={c.key}
+                      type="button"
+                      onClick={() => setHlColor(hlColor === c.key ? null : c.key)}
+                      className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all ${
+                        hlColor === c.key
+                          ? "border-primary ring-2 ring-primary/30"
+                          : "border-border"
+                      }`}
+                    >
+                      <span className={`h-3 w-3 rounded-full ${c.bg}`} />
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="hl-note" className="mb-1 block text-xs">
+                  ملاحظة (تظهر في عمود «السبب»)
+                </Label>
+                <Textarea
+                  id="hl-note"
+                  value={hlNote}
+                  onChange={(e) => setHlNote(e.target.value)}
+                  placeholder="مثال: متابعة مع العميل بخصوص التسليم"
+                  rows={2}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => saveHighlight(highlightItem!.id, null, "", true)}
+                  disabled={hlSaving}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+                >
+                  <Eraser size={13} /> إزالة التمييز
+                </button>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setHighlightItem(null)}>
+                    إلغاء
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={hlSaving || !hlColor}
+                    onClick={() => saveHighlight(highlightItem!.id, hlColor, hlNote)}
+                  >
+                    {hlSaving ? "جارٍ الحفظ..." : "حفظ التمييز"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

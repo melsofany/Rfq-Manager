@@ -5,6 +5,13 @@ import request from "supertest";
 // ── Mock auth ───────────────────────────────────────────────────────────────
 vi.mock("../../middlewares/auth", () => ({
   requireAuth: (_req: any, _res: any, next: any) => next(),
+  requireRole: (...roles: string[]) => (req: any, res: any, next: any) => {
+    if (!roles.includes(req.session?.role ?? "")) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    next();
+  },
 }));
 
 // ── Chainable + thenable DB mock ─────────────────────────────────────────────
@@ -52,8 +59,10 @@ let linkedPoItemRows: any[]; // [{ customerPoId }]
 // accepted supplier PO items) + supplier-item rows (by poId).
 let receivedItemRows: any[]; // [{ customerPoItemId, lineStatus, acceptedQty, customerPoId }]
 let supplierItemRows: any[]; // [{ poId, lineItem, lineStatus, acceptedQty }]
-// Tracks exact values written to customer_po_items so tests can assert links.
+// Tracks exact values written to customer_po_items so tests can assert
+// links (insert) or updates (update).
 const insertedItems: any[] = [];
+const updateCalls: any[] = [];
 
 // Mutable session so tests can flip role/state.
 const sessionState: { employeeId: number; role?: string } = { employeeId: 1 };
@@ -167,6 +176,7 @@ const dbMock: any = {
   update: vi.fn(() => ({
     // Reflect updates onto detailRow so the post-update re-select sees new values.
     set: vi.fn((vals: any) => {
+      updateCalls.push(vals);
       if (vals && typeof vals === "object" && detailRow) detailRow = { ...detailRow, ...vals };
       return { where: vi.fn(() => chainable(undefined)) };
     }),
@@ -222,6 +232,7 @@ beforeEach(() => {
   supplierItemRows = [];
   sessionState.role = undefined;
   insertedItems.length = 0;
+  updateCalls.length = 0;
 });
 
 describe("POST /api/customer-po (create)", () => {
@@ -548,3 +559,69 @@ describe("DELETE /api/customer-po/:id", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("PATCH /api/customer-po/items/:itemId/highlight", () => {
+  it("sets a highlight color + note (admin)", async () => {
+    sessionState.role = "admin";
+    detailItems = [{ id: 42, customerPoId: 7 }];
+    const res = await request(testApp)
+      .patch("/api/customer-po/items/42/highlight")
+      .send({ highlightColor: "yellow", highlightNote: "متابعة مع العميل" });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      itemId: 42,
+      highlightColor: "yellow",
+      highlightNote: "متابعة مع العميل",
+    });
+    expect(updateCalls).toContainEqual({ highlightColor: "yellow", highlightNote: "متابعة مع العميل" });
+  });
+
+  it("clears the highlight with { clear: true } (accountant)", async () => {
+    sessionState.role = "accountant";
+    detailItems = [{ id: 42, customerPoId: 7 }];
+    const res = await request(testApp)
+      .patch("/api/customer-po/items/42/highlight")
+      .send({ clear: true });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, highlightColor: null, highlightNote: null });
+    expect(updateCalls).toContainEqual({ highlightColor: null, highlightNote: null });
+  });
+
+  it("rejects an unknown color", async () => {
+    sessionState.role = "admin";
+    detailItems = [{ id: 42, customerPoId: 7 }];
+    const res = await request(testApp)
+      .patch("/api/customer-po/items/42/highlight")
+      .send({ highlightColor: "neon" });
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 404 when the item does not exist", async () => {
+    sessionState.role = "admin";
+    detailItems = [];
+    const res = await request(testApp)
+      .patch("/api/customer-po/items/999/highlight")
+      .send({ highlightColor: "yellow" });
+    expect(res.status).toBe(404);
+  });
+
+  it("403 for a role that is not admin/accountant/manager", async () => {
+    sessionState.role = "purchasing";
+    detailItems = [{ id: 42, customerPoId: 7 }];
+    const res = await request(testApp)
+      .patch("/api/customer-po/items/42/highlight")
+      .send({ highlightColor: "yellow" });
+    expect(res.status).toBe(403);
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it("403 without a session role", async () => {
+    sessionState.role = undefined;
+    const res = await request(testApp)
+      .patch("/api/customer-po/items/42/highlight")
+      .send({ highlightColor: "yellow" });
+    expect(res.status).toBe(403);
+  });
+});
+

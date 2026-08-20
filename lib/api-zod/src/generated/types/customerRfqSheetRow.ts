@@ -5,6 +5,7 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomerRfqSheetRowHighlightColor } from './customerRfqSheetRowHighlightColor';
 
 /**
  * One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued).
@@ -54,11 +55,16 @@ export interface CustomerRfqSheetRow {
   poQty?: string | null;
   /** @nullable */
   poUnitPrice?: string | null;
-  /** True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price). */
+  /** True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price OR a manual highlight note is set). */
   flagged?: boolean;
   /**
-     * Arabic reason for the flag, e.g. 'رفض التسليم: تالف' or 'تجاوزت التكلفة: الفعلي 120 > أمر التوريد 100'.
+     * Arabic reason for the flag — computed flags merged with the manual highlight note, e.g. 'رفض التسليم: تالف — مراجعة خاصة'.
      * @nullable
      */
   flagReason?: string | null;
+  /**
+     * Manual row tint color set on the customer PO line (renders the whole row in that color).
+     * @nullable
+     */
+  highlightColor?: CustomerRfqSheetRowHighlightColor;
 }

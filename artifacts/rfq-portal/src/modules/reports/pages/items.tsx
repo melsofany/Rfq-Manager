@@ -31,6 +31,17 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+
+// Row tint per manual highlight color (set from /customer-po detail). Takes
+// precedence over the computed red flag when both apply.
+const HIGHLIGHT_ROW_BG: Record<string, string> = {
+  yellow: "bg-yellow-100 dark:bg-yellow-900/30",
+  orange: "bg-orange-100 dark:bg-orange-900/30",
+  green: "bg-green-100 dark:bg-green-900/30",
+  blue: "bg-blue-100 dark:bg-blue-900/30",
+  red: "bg-red-50 dark:bg-red-950/30",
+  purple: "bg-purple-100 dark:bg-purple-900/30",
+};
 import { filterTabs } from "@/lib/permissions";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -798,7 +809,9 @@ function SheetViewTab() {
                     key={`${r.rfqItemId}-${r.poItemId ?? "nopo"}`}
                     className={cn(
                       "border-b border-border/40 last:border-0 hover:bg-muted/20",
-                      r.flagged && "bg-red-50 dark:bg-red-950/30",
+                      r.highlightColor
+                        ? (HIGHLIGHT_ROW_BG[r.highlightColor] ?? "")
+                        : r.flagged && "bg-red-50 dark:bg-red-950/30",
                     )}
                   >
                     <td className="px-2 py-1.5 font-mono whitespace-nowrap" dir="ltr">

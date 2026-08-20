@@ -983,6 +983,75 @@ describe("GET /api/customer-rfq/sheet-view", () => {
     expect(res.body.rows[0].rfqItemId).toBe(2);
   });
 
+
+  it("merges the manual highlight note into «السبب» and returns the highlight color", async () => {
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "H1",
+        partNo: "P-H",
+        description: "Hilighted",
+        uom: null,
+        rfqQty: null,
+        rfqUnitPrice: null,
+        customerRfqId: 1,
+        customerRfqNo: "CUST-H",
+        customerName: "Acme",
+        entryDate: null,
+        expiryDate: null,
+        buyerName: null,
+        poItemId: 44,
+        poNo: "PO-H",
+        poDate: null,
+        poQty: "1",
+        poUnitPrice: null,
+        highlightColor: "yellow",
+        highlightNote: "متابعة خاصة",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view");
+    expect(res.status).toBe(200);
+    expect(res.body.rows[0].highlightColor).toBe("yellow");
+    expect(res.body.rows[0].flagReason).toBe("متابعة خاصة");
+    expect(res.body.rows[0].flagged).toBe(true);
+  });
+
+  it("merges highlight note with computed flags (rejection/cost overrun) using —", async () => {
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "H2",
+        partNo: null,
+        description: null,
+        uom: null,
+        rfqQty: null,
+        rfqUnitPrice: null,
+        customerRfqId: 1,
+        customerRfqNo: "CUST-H",
+        customerName: "Acme",
+        entryDate: null,
+        expiryDate: null,
+        buyerName: null,
+        poItemId: 45,
+        poNo: "PO-H",
+        poDate: null,
+        poQty: "1",
+        poUnitPrice: null,
+        highlightColor: "red",
+        highlightNote: "ملاحظة إدارية",
+        deliveryStatus: "rejected",
+      },
+    ];
+    sheetRejectedDeliveries = [
+      { customerPoItemId: 45, reason: "تالف", createdAt: new Date() },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view");
+    expect(res.status).toBe(200);
+    const row = res.body.rows[0];
+    expect(row.flagReason).toBe("رفض التسليم: تالف — ملاحظة إدارية");
+    expect(row.highlightColor).toBe("red");
+  });
+
   it("hides rows whose value is in the column's Exclude list (Excel autofilter)", async () => {
     sheetRows = [
       {
