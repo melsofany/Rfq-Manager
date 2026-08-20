@@ -24,6 +24,7 @@ import {
   Trash2,
   X,
   Check,
+  CheckCircle,
   AlertCircle,
   FileText,
   ShoppingCart,
@@ -99,6 +100,7 @@ interface SupplierPo {
   sheetPoNo: string;
   status: string;
   itemCount: number;
+  receipt: { total: number; received: number; rejected: number } | null;
   createdAt: string;
 }
 
@@ -621,6 +623,9 @@ export default function SupplierDetailPage() {
                       الحالة
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      الاستلام
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
                       عرض سعر؟
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
@@ -710,6 +715,9 @@ export default function SupplierDetailPage() {
                       الحالة
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      الاستلام
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
                       عدد البنود
                     </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
@@ -736,6 +744,24 @@ export default function SupplierDetailPage() {
                         >
                           {po.status}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs font-medium">
+                        {po.receipt == null ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center gap-1 ${po.receipt.rejected > 0 ? "text-amber-700" : po.receipt.total > 0 && po.receipt.received === po.receipt.total ? "text-emerald-700" : "text-foreground"}`}
+                            title={`المستلم ${po.receipt.received} من ${po.receipt.total}${po.receipt.rejected > 0 ? ` (+ ${po.receipt.rejected} مرفوض)` : ""}`}
+                          >
+                            {po.receipt.total > 0 && po.receipt.received === po.receipt.total ? (
+                              <CheckCircle className="h-3.5 w-3.5" />
+                            ) : null}
+                            {po.receipt.received}/{po.receipt.total}
+                            {po.receipt.rejected > 0 ? (
+                              <span className="text-amber-600">+{po.receipt.rejected}</span>
+                            ) : null}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center text-xs text-foreground font-medium">
                         {po.itemCount}
