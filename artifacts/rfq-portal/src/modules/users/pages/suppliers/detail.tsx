@@ -506,7 +506,7 @@ export default function SupplierDetailPage() {
           <div className="bg-card border border-border rounded-lg p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-sm text-foreground">Supplier Scorecard</h2>
-              {score && (
+              {score && score.totalScore !== null && score.totalScore !== undefined && (
                 <div
                   className={`text-2xl font-bold ${
                     score.totalScore >= 70
@@ -522,22 +522,56 @@ export default function SupplierDetailPage() {
             </div>
             {score ? (
               <div className="space-y-3">
-                <ScoreBar label="Response Rate" value={score.responseRateScore ?? 0} />
-                <ScoreBar label="Price Competitiveness" value={score.priceScore ?? 0} />
-                <ScoreBar label="On-Time Delivery" value={score.onTimeScore ?? 0} />
-                <ScoreBar label="Quality" value={score.qualityScore ?? 0} />
+                {([
+                  { label: "Response Rate", value: score.commitmentScore },
+                  { label: "Response Speed", value: score.responseSpeedScore },
+                  { label: "Price Competitiveness", value: score.priceScore },
+                  { label: "Win Rate", value: score.winScore },
+                  { label: "Receipt Quality", value: score.receiptQualityScore },
+                  { label: "Delivery Time", value: score.deliveryScore },
+                ].map((m) =>
+                  m.value !== null && m.value !== undefined ? (
+                    <ScoreBar key={m.label} label={m.label} value={m.value ?? 0} />
+                  ) : null,
+                ))}
                 <div className="pt-2 border-t border-border grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <p className="text-muted-foreground">RFQs Received</p>
-                    <p className="font-medium text-foreground">{score.totalRfqsReceived}</p>
+                    <p className="font-medium text-foreground">{score.totalRfqsReceived ?? 0}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Offers Submitted</p>
-                    <p className="font-medium text-foreground">{score.totalOffersSubmitted}</p>
+                    <p className="text-muted-foreground">Offered Items</p>
+                    <p className="font-medium text-foreground">{score.totalItemsOffered ?? 0}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Response Rate</p>
-                    <p className="font-medium text-foreground">{score.responseRate}%</p>
+                    <p className="font-medium text-foreground">
+                      {score.responseRate !== null && score.responseRate !== undefined
+                        ? `${score.responseRate}%`
+                        : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Win Rate</p>
+                    <p className="font-medium text-foreground">
+                      {score.wins ?? 0}/{score.totalItemsOffered ?? 0} items
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Accepted / Rejected</p>
+                    <p className="font-medium text-foreground">
+                      {typeof score.acceptedQty === "number" || typeof score.rejectedQty === "number"
+                        ? `${score.acceptedQty ?? 0} / ${score.rejectedQty ?? 0}`
+                        : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Avg. delivery</p>
+                    <p className="font-medium text-foreground">
+                      {score.avgDeliveryDays !== null && score.avgDeliveryDays !== undefined
+                        ? `${score.avgDeliveryDays} days`
+                        : "—"}
+                    </p>
                   </div>
                 </div>
               </div>
