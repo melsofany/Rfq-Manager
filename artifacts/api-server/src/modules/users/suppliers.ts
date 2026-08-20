@@ -31,6 +31,9 @@ function toStored(cats: string | string[]): string {
   return String(cats).trim();
 }
 
+// إلغاء تفعيل المورد تلقائيًا عند بلوغ هذا العدد من الإرسالات دون أي رد
+const AUTO_DEACTIVATE_AFTER = 10;
+
 // ─── حساب تقييم المورد ─────────────────────────────────────────────────────
 // Every component score is null when the underlying data is missing — no
 // fabricated defaults. The total is a weighted average over only the available
@@ -318,6 +321,28 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
 
 router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   const { category, search } = req.query as Record<string, string>;
+
+  // إلغاء تفعيل تلقائي: كل مورد وصل إلى N إرسال دون أي رد على الإطلاق
+  try {
+    await db.execute(sql`
+      UPDATE suppliers s
+      SET is_active = false
+      FROM (
+        SELECT sl.supplier_id
+        FROM sent_log sl
+        WHERE sl.supplier_id IS NOT NULL
+        GROUP BY sl.supplier_id
+        HAVING COUNT(*) >= ${AUTO_DEACTIVATE_AFTER}
+           AND NOT EXISTS (
+             SELECT 1 FROM offers o WHERE o.supplier_id = sl.supplier_id
+           )
+      ) dead
+      WHERE s.id = dead.supplier_id
+        AND s.is_active = true
+    `);
+  } catch {
+    // best-effort — لا نُعطّل القائمة إن فشلت
+  }
 
   const conditions = [];
   if (category) {
