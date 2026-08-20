@@ -8,6 +8,8 @@ import {
   purchaseOrderItemsTable,
   purchaseOrdersTable,
   poItemReceiptsTable,
+  customerPoItemsTable,
+  customerPosTable,
   rfqTable,
 } from "@workspace/db";
 import { eq, ilike, or, and, ne, count, sql, inArray } from "drizzle-orm";
@@ -698,6 +700,7 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
             poId: purchaseOrderItemsTable.poId,
             lineStatus: purchaseOrderItemsTable.lineStatus,
             supplierId: purchaseOrderItemsTable.supplierId,
+            customerPoItemId: purchaseOrderItemsTable.customerPoItemId,
           })
           .from(purchaseOrderItemsTable)
           .where(inArray(purchaseOrderItemsTable.poId, poIds))
@@ -712,32 +715,102 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
     if (r.lineStatus === 'rejected') agg.rejected++;
   }
 
-  // Derive a progressive status like the customer-PO fulfillmentStatus column:
-  // fully received (all lines fulfilled) → 'مُستَلَم بالكامل' (emerald);
-  // partial → 'مُستَلَم جزئيًا' (amber); nothing → raw header status.
+  // Link each supplier PO to its customer PO: item-level FK first
+  // (purchase_order_items.customerPoItemId → customer_po_items.customerPoId),
+  // then a header-level fallback (sheetPoNo = customer_pos.customerPoNo,
+  // case-insensitive) — same linkage rules as the customer-PO fulfillment.
+  const linkedCustItemIds = [
+    ...new Set(lineRows.map((r) => r.customerPoItemId).filter((x): x is number => x != null)),
+  ];
+  const linkedCustItems =
+    linkedCustItemIds.length > 0
+      ? await db
+          .select({
+            id: customerPoItemsTable.id,
+            customerPoId: customerPoItemsTable.customerPoId,
+          })
+          .from(customerPoItemsTable)
+          .where(inArray(customerPoItemsTable.id, linkedCustItemIds))
+      : [];
+  const custPoIdByItemId = new Map(linkedCustItems.map((r) => [r.id, r.customerPoId]));
+
+  const poToCustomerPo = new Map<number, number>();
+  for (const r of lineRows) {
+    if (r.customerPoItemId != null && !poToCustomerPo.has(r.poId)) {
+      const cid = custPoIdByItemId.get(r.customerPoItemId);
+      if (cid != null) poToCustomerPo.set(r.poId, cid);
+    }
+  }
+  const unlinked = rows.filter((r) => !poToCustomerPo.has(r.id) && r.sheetPoNo);
+  if (unlinked.length > 0) {
+    const headerMatches = await db
+      .select({ id: customerPosTable.id, customerPoNo: customerPosTable.customerPoNo })
+      .from(customerPosTable)
+      .where(or(...unlinked.map((r) => ilike(customerPosTable.customerPoNo, r.sheetPoNo))));
+    const custPoByNo = new Map(headerMatches.map((r) => [r.customerPoNo.toLowerCase(), r.id]));
+    for (const r of unlinked) {
+      const cid = custPoByNo.get(r.sheetPoNo.toLowerCase());
+      if (cid != null) poToCustomerPo.set(r.id, cid);
+    }
+  }
+
+  // Roll up delivery resolution (delivered + rejected are terminal) over the
+  // linked customer PO's items — the same numbers the /customer-po page shows.
+  const custPoIds = [...new Set(poToCustomerPo.values())];
+  const custDeliveryRows =
+    custPoIds.length > 0
+      ? await db
+          .select({
+            customerPoId: customerPoItemsTable.customerPoId,
+            deliveryStatus: customerPoItemsTable.deliveryStatus,
+          })
+          .from(customerPoItemsTable)
+          .where(inArray(customerPoItemsTable.customerPoId, custPoIds))
+      : [];
+  const custRollup = new Map<number, { total: number; resolved: number }>();
+  for (const r of custDeliveryRows) {
+    const e = custRollup.get(r.customerPoId) ?? { total: 0, resolved: 0 };
+    e.total++;
+    if (r.deliveryStatus === "delivered" || r.deliveryStatus === "rejected") e.resolved++;
+    custRollup.set(r.customerPoId, e);
+  }
+
+  // Mirror the customer-PO fulfillmentStatus stages so this column reads
+  // EXACTLY like the «حالة الطلب» column on /customer-po:
+  //   fulfilled          — كل البنود حُسمت (مُسلَّمة أو مرفوضة) → «اكتمل»
+  //   delivered          — بعض البنود حُسمت → «تم تنفيذه X%»
+  //   ready_to_deliver   — استُلم من المورد ولم يُسلَّم بعد → «جاهز للتسليم X%»
+  //   po_issued          — صدر للمورد (sent) ولم يُستلَم → «تم إصدار أمر شراء للمورد»
+  //   draft              — مسودة
+  type DerivedStage = "fulfilled" | "delivered" | "ready_to_deliver" | "po_issued" | "draft";
   function deriveProgressStatus(
     headerStatus: string,
     progress: { total: number; received: number; rejected: number } | undefined,
-  ): { stage: string; label: string; tone: 'default' | 'received' | 'partial' } {
-    if (!progress || progress.total === 0 || (progress.received === 0 && progress.rejected === 0)) {
-      return { stage: headerStatus, label: headerStatus, tone: 'default' };
+    delivery: { total: number; resolved: number } | undefined,
+  ): { stage: DerivedStage; label: string; tone: "fulfilled" | "partial" | "received" | "issued" | "default" } {
+    if (delivery && delivery.total > 0 && delivery.resolved > 0) {
+      const pct = Math.round((delivery.resolved / delivery.total) * 100);
+      if (pct >= 100) return { stage: "fulfilled", label: "اكتمل", tone: "fulfilled" };
+      return { stage: "delivered", label: `تم تنفيذه ${pct}%`, tone: "partial" };
     }
-    if (progress.received === progress.total && progress.total > 0) {
-      return { stage: 'received', label: 'مُستَلَم بالكامل', tone: 'received' };
+    if (progress && progress.total > 0 && progress.received > 0) {
+      const pct = Math.round((progress.received / progress.total) * 100);
+      return { stage: "ready_to_deliver", label: `جاهز للتسليم ${pct}%`, tone: "received" };
     }
-    if (progress.received > 0 || progress.rejected > 0) {
-      return { stage: 'partial', label: `مُستَلَم جزئيًا (${progress.received}/${progress.total})`, tone: 'partial' };
+    if (headerStatus === "sent") {
+      return { stage: "po_issued", label: "تم إصدار أمر شراء للمورد", tone: "issued" };
     }
-    return { stage: headerStatus, label: headerStatus, tone: 'default' };
+    return { stage: "draft", label: headerStatus === "draft" ? "مسودة" : headerStatus, tone: "default" };
   }
 
   res.json(
     rows.map((r) => {
       const receipt = progressMap[r.id];
-      const progress = receipt?.total ?? 0;
+      const custId = poToCustomerPo.get(r.id);
       const derived = deriveProgressStatus(
         r.status,
         receipt,
+        custId != null ? custRollup.get(custId) : undefined,
       );
       return {
         id: r.id,

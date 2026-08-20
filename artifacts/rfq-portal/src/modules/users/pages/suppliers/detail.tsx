@@ -74,8 +74,10 @@ const PO_STATUS_STYLES: Record<string, string> = {
 };
 
 const PO_PROGRESS_TONES: Record<string, string> = {
-  received: "bg-emerald-50 text-emerald-700",
+  fulfilled: "bg-emerald-50 text-emerald-700",
   partial: "bg-amber-50 text-amber-700",
+  received: "bg-cyan-50 text-cyan-700",
+  issued: "bg-blue-50 text-blue-700",
   default: "",
 };
 
@@ -107,7 +109,7 @@ interface SupplierPo {
   status: string;
   progressStatus?: string;
   progressStatusLabel?: string;
-  progressTone?: 'default' | 'received' | 'partial';
+  progressTone?: 'fulfilled' | 'partial' | 'received' | 'issued' | 'default';
   itemCount: number;
   receipt: { total: number; received: number; rejected: number } | null;
   createdAt: string;
