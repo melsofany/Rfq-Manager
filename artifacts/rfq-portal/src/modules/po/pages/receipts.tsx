@@ -74,6 +74,16 @@ function statusTone(status: string): string {
   }
 }
 
+interface PoProgress {
+  poId: number;
+  total: number;
+  received: number;
+  rejected: number;
+  receivable: number;
+  receivableReceived: number;
+  suppliers: string[];
+}
+
 export default function GoodsReceiptPage() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
@@ -84,6 +94,21 @@ export default function GoodsReceiptPage() {
   const [repPhone, setRepPhone] = useState("");
   const [repName, setRepName] = useState("");
   const [sending, setSending] = useState(false);
+  const [progress, setProgress] = useState<Record<number, PoProgress>>({});
+  const [progressLoaded, setProgressLoaded] = useState(false);
+
+  async function loadProgress() {
+    try {
+      const r = await fetch("/api/po/progress", { credentials: "include" });
+      if (!r.ok) return;
+      const data: PoProgress[] = await r.json();
+      setProgress(Object.fromEntries(data.map((p) => [p.poId, p])));
+    } catch {
+      /* progress badges are best-effort */
+    } finally {
+      setProgressLoaded(true);
+    }
+  }
 
   // Only dispatched (sent) POs are eligible for goods receipt.
   const { data: purchaseOrders, isLoading } = useListPurchaseOrders(
@@ -128,16 +153,24 @@ export default function GoodsReceiptPage() {
     }
   }
 
+  useEffect(() => {
+    void loadProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Live-refresh: when a rep records a receipt via WhatsApp, the backend
   // broadcasts a `receipt_recorded` SSE event. Reload the expanded PO's items +
-  // receipts so the operator sees the status change instantly.
+  // receipts + the per-PO progress so the operator sees changes instantly.
   useEffect(() => {
     const es = new EventSource("/api/whatsapp/events", { withCredentials: true });
     es.onmessage = (ev) => {
       try {
         const payload = JSON.parse(ev.data);
-        if (payload?.type === "receipt_recorded" && expandedPo !== null && expandedPo === payload.poId) {
-          void loadItems(expandedPo);
+        if (payload?.type === "receipt_recorded") {
+          void loadProgress();
+          if (expandedPo !== null && expandedPo === payload.poId) {
+            void loadItems(expandedPo);
+          }
         }
       } catch {
         /* ignore malformed SSE frames (heartbeats etc.) */
@@ -172,6 +205,7 @@ export default function GoodsReceiptPage() {
       }
       toast.success("تم حفظ سجل الاستلام");
       await loadItems(poId);
+      void loadProgress();
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل حفظ الاستلام"));
     }
@@ -188,6 +222,7 @@ export default function GoodsReceiptPage() {
       if (!r.ok) throw new Error("فشل تأجيل البند");
       toast.success("تم تأجيل البند");
       await loadItems(poId);
+      void loadProgress();
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل التأجيل"));
     }
@@ -217,6 +252,11 @@ export default function GoodsReceiptPage() {
     }
   }
 
+  // A PO appears here only while it still has receivable lines (supplier-
+  // assigned, non-cancelled). A PO whose lines are all supplier-less or
+  // cancelled has nothing to receive and is hidden from this tab entirely.
+  const visiblePos = (purchaseOrders ?? []).filter((po) => (progress[po.id]?.receivable ?? 0) > 0);
+
   return (
     <div className="space-y-5">
       <div>
@@ -240,21 +280,27 @@ export default function GoodsReceiptPage() {
         </div>
 
         <div className="space-y-3">
-          {isLoading ? (
+          {isLoading || !progressLoaded ? (
             <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
-          ) : purchaseOrders?.length === 0 ? (
+          ) : visiblePos.length === 0 ? (
             <div className="p-12 text-center">
               <Truck size={40} className="mx-auto text-muted-foreground/30 mb-3" />
               <p className="text-muted-foreground text-sm">لا توجد أوامر شراء مُرسلة للاستلام</p>
             </div>
           ) : (
-            purchaseOrders?.map((po) => (
+            visiblePos.map((po) => {
+              const prog = progress[po.id];
+              const pct =
+                prog && prog.receivable > 0
+                  ? Math.round((prog.receivableReceived / prog.receivable) * 100)
+                  : 0;
+              return (
               <div key={po.id} className="bg-card border border-border rounded-lg overflow-hidden">
                 <button
                   onClick={() => (expandedPo === po.id ? setExpandedPo(null) : loadItems(po.id))}
                   className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20"
                 >
-                  <div className="flex items-center gap-3 text-right">
+                  <div className="flex items-center gap-3 text-right flex-wrap">
                     {expandedPo === po.id ? (
                       <ChevronLeft size={16} className="text-muted-foreground" />
                     ) : (
@@ -264,6 +310,11 @@ export default function GoodsReceiptPage() {
                       {po.internalPoNo}
                     </span>
                     <span className="font-mono text-xs text-muted-foreground">{po.sheetPoNo}</span>
+                    {prog && prog.suppliers.length > 0 && (
+                      <span className="text-xs text-foreground">
+                        الموردون: {prog.suppliers.join("، ")}
+                      </span>
+                    )}
                     {po.receiverName && (
                       <span className="text-xs text-muted-foreground">
                         المندوب: {po.receiverName}
@@ -271,10 +322,20 @@ export default function GoodsReceiptPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
+                    {prog && (
+                      <span
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          pct === 100
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400"
+                            : pct > 0
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        استلام {pct}% ({prog.receivableReceived}/{prog.receivable})
+                      </span>
+                    )}
                     <StatusBadge status={po.status} />
-                    <span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-xs font-medium text-foreground">
-                      {po.itemCount}
-                    </span>
                   </div>
                 </button>
 
@@ -353,7 +414,8 @@ export default function GoodsReceiptPage() {
                   </div>
                 )}
               </div>
-            ))
+              );
+            })
           )}
         </div>
     </div>

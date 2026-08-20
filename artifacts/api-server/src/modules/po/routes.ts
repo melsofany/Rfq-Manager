@@ -132,23 +132,43 @@ router.get("/po/progress", requireAuth, async (req, res): Promise<void> => {
   // Used by the PO list tab to show a "received/total" badge + rejected count.
   // Cancelled POs are excluded — their lines were reset to "pending" and a
   // cancelled order should not surface a (now meaningless) receipt badge.
+  //
+  // Also returns `receivable` / `receivableReceived` / `suppliers`: the
+  // goods-receipt tab uses them to hide POs with no receivable lines (all
+  // lines supplier-less or cancelled) and to show supplier names + a receipt
+  // percentage on each PO row before expanding it.
   const rows = await db
     .select({
       poId: purchaseOrderItemsTable.poId,
       lineStatus: purchaseOrderItemsTable.lineStatus,
+      supplierId: purchaseOrderItemsTable.supplierId,
+      supplierName: suppliersTable.name,
     })
     .from(purchaseOrderItemsTable)
     .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
     .where(ne(purchaseOrdersTable.status, "cancelled"));
-  const byPo = new Map<number, { total: number; received: number; rejected: number }>();
+  const byPo = new Map<
+    number,
+    { total: number; received: number; rejected: number; receivable: number; receivableReceived: number; suppliers: string[] }
+  >();
   for (const r of rows) {
-    const e = byPo.get(r.poId) ?? { total: 0, received: 0, rejected: 0 };
+    const e =
+      byPo.get(r.poId) ??
+      { total: 0, received: 0, rejected: 0, receivable: 0, receivableReceived: 0, suppliers: [] };
     // Cancelled supplier lines are excluded from the badge entirely (they no
     // longer await receipt and are not a success/failure outcome).
     if (r.lineStatus === "cancelled") continue;
     e.total++;
     if (r.lineStatus === "fulfilled") e.received++;
     else if (r.lineStatus === "rejected") e.rejected++;
+    // A line is "receivable" only when it has a supplier to receive from.
+    if (r.supplierId != null) {
+      e.receivable++;
+      if (r.lineStatus === "fulfilled") e.receivableReceived++;
+      const name = r.supplierName ?? `#${r.supplierId}`;
+      if (!e.suppliers.includes(name)) e.suppliers.push(name);
+    }
     byPo.set(r.poId, e);
   }
   res.json(
