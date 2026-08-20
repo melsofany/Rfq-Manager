@@ -73,6 +73,12 @@ const PO_STATUS_STYLES: Record<string, string> = {
   confirmed: "bg-green-50 text-green-700",
 };
 
+const PO_PROGRESS_TONES: Record<string, string> = {
+  received: "bg-emerald-50 text-emerald-700",
+  partial: "bg-amber-50 text-amber-700",
+  default: "",
+};
+
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("ar-EG", {
@@ -99,6 +105,9 @@ interface SupplierPo {
   internalPoNo: string;
   sheetPoNo: string;
   status: string;
+  progressStatus?: string;
+  progressStatusLabel?: string;
+  progressTone?: 'default' | 'received' | 'partial';
   itemCount: number;
   receipt: { total: number; received: number; rejected: number } | null;
   createdAt: string;
@@ -740,9 +749,9 @@ export default function SupplierDetailPage() {
                       <td className="px-4 py-3 text-muted-foreground text-xs">{po.sheetPoNo}</td>
                       <td className="px-4 py-3 text-center">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${PO_STATUS_STYLES[po.status] ?? "bg-muted text-muted-foreground"}`}
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${(PO_PROGRESS_TONES[po.progressTone ?? 'default'] || PO_STATUS_STYLES[po.progressStatus ?? po.status]) ?? "bg-muted text-muted-foreground"}`}
                         >
-                          {po.status}
+                          {po.progressStatusLabel ?? po.status}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center text-xs font-medium">

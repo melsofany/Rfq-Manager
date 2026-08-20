@@ -690,7 +690,7 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
   const itemMap = Object.fromEntries(itemCountRows.map((r) => [r.poId, Number(r.cnt)]));
 
   // Batch-load receipt progress for ALL returned POs in one query (line_status
-  // aggregate across the PO's items — same signal as /po/progress).
+  // aggregate across the PO's items owned by this supplier).
   const lineRows =
     poIds.length > 0
       ? await db
@@ -712,16 +712,46 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
     if (r.lineStatus === 'rejected') agg.rejected++;
   }
 
+  // Derive a progressive status like the customer-PO fulfillmentStatus column:
+  // fully received (all lines fulfilled) → 'مُستَلَم بالكامل' (emerald);
+  // partial → 'مُستَلَم جزئيًا' (amber); nothing → raw header status.
+  function deriveProgressStatus(
+    headerStatus: string,
+    progress: { total: number; received: number; rejected: number } | undefined,
+  ): { stage: string; label: string; tone: 'default' | 'received' | 'partial' } {
+    if (!progress || progress.total === 0 || (progress.received === 0 && progress.rejected === 0)) {
+      return { stage: headerStatus, label: headerStatus, tone: 'default' };
+    }
+    if (progress.received === progress.total && progress.total > 0) {
+      return { stage: 'received', label: 'مُستَلَم بالكامل', tone: 'received' };
+    }
+    if (progress.received > 0 || progress.rejected > 0) {
+      return { stage: 'partial', label: `مُستَلَم جزئيًا (${progress.received}/${progress.total})`, tone: 'partial' };
+    }
+    return { stage: headerStatus, label: headerStatus, tone: 'default' };
+  }
+
   res.json(
-    rows.map((r) => ({
-      id: r.id,
-      internalPoNo: r.internalPoNo,
-      sheetPoNo: r.sheetPoNo,
-      status: r.status,
-      itemCount: itemMap[r.id] ?? 0,
-      receipt: progressMap[r.id] ?? null,
-      createdAt: r.createdAt.toISOString(),
-    })),
+    rows.map((r) => {
+      const receipt = progressMap[r.id];
+      const progress = receipt?.total ?? 0;
+      const derived = deriveProgressStatus(
+        r.status,
+        receipt,
+      );
+      return {
+        id: r.id,
+        internalPoNo: r.internalPoNo,
+        sheetPoNo: r.sheetPoNo,
+        status: r.status,
+        progressStatus: derived.stage,
+        progressStatusLabel: derived.label,
+        progressTone: derived.tone,
+        itemCount: itemMap[r.id] ?? 0,
+        receipt,
+        createdAt: r.createdAt.toISOString(),
+      };
+    }),
   );
 });
 
