@@ -9,42 +9,76 @@
 export interface SupplierScore {
   supplierId: number;
   supplierName?: string;
-  /** الدرجة الإجمالية (0-100) */
-  totalScore: number;
-  /** التقييم بالنجوم (0-5) */
-  rating: number;
-  /** سرعة الرد (0-100) */
-  responseSpeedScore?: number;
-  /** الالتزام — نسبة الاستجابة (0-100) */
-  commitmentScore?: number;
-  /** السعر — مقارنةً بمتوسط السوق (0-100) */
-  priceScore?: number;
-  /** جودة المنتج — نسبة الفوز (0-100) */
-  qualityScore?: number;
-  /** مدة التوريد (0-100) */
-  deliveryScore?: number;
+  /**
+     * الدرجة الإجمالية المرجّحة فوق المكونات المتاحة (0-100)، null إن لم توجد بيانات
+     * @nullable
+     */
+  totalScore?: number | null;
+  /**
+     * التقييم بالنجوم (0-5)
+     * @nullable
+     */
+  rating?: number | null;
+  /**
+     * نسبة الاستجابة (0-100)
+     * @nullable
+     */
+  commitmentScore?: number | null;
+  /**
+     * سرعة الرد (0-100)
+     * @nullable
+     */
+  responseSpeedScore?: number | null;
+  /**
+     * السعر — مقارنةً بمتوسط السوق (0-100)
+     * @nullable
+     */
+  priceScore?: number | null;
+  /**
+     * نسبة الفوز — من العروض إلى أوامر الشراء (0-100)
+     * @nullable
+     */
+  winScore?: number | null;
+  /**
+     * جودة الاستلام — مقبل/مرفوض (0-100)
+     * @nullable
+     */
+  receiptQualityScore?: number | null;
+  /**
+     * مدة التوريد (0-100)
+     * @nullable
+     */
+  deliveryScore?: number | null;
   /** إجمالي طلبات عروض الأسعار المستلمة */
   totalRfqsReceived?: number;
   /** إجمالي العروض المقدمة */
   totalOffersSubmitted?: number;
-  /** نسبة الاستجابة (%) */
-  responseRate?: number;
+  /**
+     * نسبة الاستجابة (%)
+     * @nullable
+     */
+  responseRate?: number | null;
   /**
      * متوسط ساعات الرد على الطلب
      * @nullable
      */
   avgResponseHours?: number | null;
-  /** عدد مرات الفوز (بنود أوامر الشراء) */
+  /** إجمالي بنود العروض المقدمة */
+  totalItemsOffered?: number;
+  /** عدد بنود الفوز (تحوّلت إلى أمر شراء) */
   wins?: number;
-  /** عدد مرات الرفض (قدّم عرضاً ولم يُختر) */
-  rejections?: number;
+  /** إجمالي الكمية المقبولة من المورد */
+  acceptedQty?: number;
+  /** إجمالي الكمية المرفوضة من المورد */
+  rejectedQty?: number;
   /**
      * متوسط مدة التوريد بالأيام
      * @nullable
      */
   avgDeliveryDays?: number | null;
-  /** متوسط انحراف السعر عن متوسط السوق (%) */
-  avgPriceDelta?: number;
-  responseRateScore?: number;
-  onTimeScore?: number;
+  /**
+     * متوسط انحراف السعر عن متوسط السوق (%)
+     * @nullable
+     */
+  avgPriceDelta?: number | null;
 }

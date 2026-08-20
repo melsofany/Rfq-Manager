@@ -354,20 +354,31 @@ router.get("/analytics/dashboard", requireAuth, async (req, res): Promise<void> 
     .sort((a, b) => b.totalOffersSubmitted - a.totalOffersSubmitted)
     .slice(0, 10);
 
-  // Legacy topSuppliers field (scorecard format)
-  const topSuppliers = topSuppliersSorted.map((s) => ({
-    supplierId: s.supplierId,
-    supplierName: s.supplierName,
-    totalScore: Math.round(s.responseRate * 0.4 + s.poWinRate * 0.4 + 20),
-    onTimeScore: 80,
-    priceScore: 70,
-    responseRateScore: Math.round(s.responseRate),
-    qualityScore: 75,
-    totalRfqsReceived: s.totalRfqsReceived,
-    totalOffersSubmitted: s.totalOffersSubmitted,
-    responseRate: s.responseRate,
-    avgPriceDelta: 0,
-  }));
+  // Legacy topSuppliers field (scorecard format) — only metrics with real data;
+  // unavailable ones are null instead of the old hardcoded 70/75/80/20-offset.
+  const topSuppliers = topSuppliersSorted.map((s) => {
+    const parts = [
+      { score: s.responseRate != null ? Math.min(100, s.responseRate) : null, w: 0.4 },
+      { score: s.poWinRate != null ? s.poWinRate : null, w: 0.4 },
+    ];
+    const avail = parts.filter((p) => p.score !== null) as { score: number; w: number }[];
+    const wSum = avail.reduce((a, p) => a + p.w, 0);
+    const totalScore =
+      wSum > 0 ? Math.round(avail.reduce((a, p) => a + p.score * p.w, 0) / wSum) : null;
+    return {
+      supplierId: s.supplierId,
+      supplierName: s.supplierName,
+      totalScore,
+      onTimeScore: null,
+      priceScore: null,
+      responseRateScore: s.responseRate != null ? Math.round(s.responseRate) : null,
+      qualityScore: s.poWinRate != null ? Math.round(s.poWinRate) : null,
+      totalRfqsReceived: s.totalRfqsReceived,
+      totalOffersSubmitted: s.totalOffersSubmitted,
+      responseRate: s.responseRate,
+      avgPriceDelta: null,
+    };
+  });
 
   res.json({
     totalRfqs: totalRfqsCount,

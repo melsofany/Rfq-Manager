@@ -2456,36 +2456,38 @@ components:
 
     SupplierScore:
       type: object
-      required: [supplierId, totalScore, rating]
+      required: [supplierId]
       properties:
         supplierId:
           type: integer
         supplierName:
           type: string
-        # الدرجة الإجمالية والتقييم
         totalScore:
-          type: number
-          description: "الدرجة الإجمالية (0-100)"
+          type: ["number", "null"]
+          description: "الدرجة الإجمالية المرجّحة فوق المكونات المتاحة (0-100)، null إن لم توجد بيانات"
         rating:
-          type: number
+          type: ["number", "null"]
           description: "التقييم بالنجوم (0-5)"
-        # درجات المعاملات الفردية (0-100 لكل منها)
-        responseSpeedScore:
-          type: number
-          description: "سرعة الرد (0-100)"
+        # مكونات التقييم — كل منها قابل أن يكون null عندما لا تتوفر بياناته
         commitmentScore:
-          type: number
-          description: "الالتزام — نسبة الاستجابة (0-100)"
+          type: ["number", "null"]
+          description: "نسبة الاستجابة (0-100)"
+        responseSpeedScore:
+          type: ["number", "null"]
+          description: "سرعة الرد (0-100)"
         priceScore:
-          type: number
+          type: ["number", "null"]
           description: "السعر — مقارنةً بمتوسط السوق (0-100)"
-        qualityScore:
-          type: number
-          description: "جودة المنتج — نسبة الفوز (0-100)"
+        winScore:
+          type: ["number", "null"]
+          description: "نسبة الفوز — من العروض إلى أوامر الشراء (0-100)"
+        receiptQualityScore:
+          type: ["number", "null"]
+          description: "جودة الاستلام — مقبل/مرفوض (0-100)"
         deliveryScore:
-          type: number
+          type: ["number", "null"]
           description: "مدة التوريد (0-100)"
-        # إحصاءات مفصّلة
+        # إحصاءات
         totalRfqsReceived:
           type: integer
           description: "إجمالي طلبات عروض الأسعار المستلمة"
@@ -2493,28 +2495,29 @@ components:
           type: integer
           description: "إجمالي العروض المقدمة"
         responseRate:
-          type: number
+          type: ["number", "null"]
           description: "نسبة الاستجابة (%)"
         avgResponseHours:
           type: ["number", "null"]
           description: "متوسط ساعات الرد على الطلب"
+        totalItemsOffered:
+          type: integer
+          description: "إجمالي بنود العروض المقدمة"
         wins:
           type: integer
-          description: "عدد مرات الفوز (بنود أوامر الشراء)"
-        rejections:
-          type: integer
-          description: "عدد مرات الرفض (قدّم عرضاً ولم يُختر)"
+          description: "عدد بنود الفوز (تحوّلت إلى أمر شراء)"
+        acceptedQty:
+          type: number
+          description: "إجمالي الكمية المقبولة من المورد"
+        rejectedQty:
+          type: number
+          description: "إجمالي الكمية المرفوضة من المورد"
         avgDeliveryDays:
           type: ["integer", "null"]
           description: "متوسط مدة التوريد بالأيام"
         avgPriceDelta:
-          type: number
+          type: ["number", "null"]
           description: "متوسط انحراف السعر عن متوسط السوق (%)"
-        # للتوافق مع الحقول القديمة
-        responseRateScore:
-          type: number
-        onTimeScore:
-          type: number
 
     # RFQ
     Rfq:
