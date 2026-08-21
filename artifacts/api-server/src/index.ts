@@ -7,6 +7,7 @@ import { logger } from "./shared/logger";
 import { runFullSync } from "./shared/sheet-sync";
 import { initDb } from "./shared/init-db";
 import { ensureWorkOrderTemplate, ensurePoCancelTemplate } from "./modules/communications/service";
+import { scheduleDailyBackup } from "./modules/backup/service";
 
 const rawPort = process.env["PORT"];
 
@@ -56,6 +57,8 @@ initDb()
         }, 30_000);
         logger.info({ intervalMinutes: 5 }, "Sheet auto-sync scheduled");
       }
+
+      scheduleDailyBackup();
     });
 
     server.on("error", (err: NodeJS.ErrnoException) => {
