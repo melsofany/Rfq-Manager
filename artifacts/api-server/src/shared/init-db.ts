@@ -286,6 +286,13 @@ export async function initDb(): Promise<void> {
       ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS unit_price NUMERIC(15,4);
     `);
 
+    // Add reactivated_at to suppliers — used by the auto-deactivate sweep so a
+    // manual reactivation resets the no-reply counter (needs 10 MORE unanswered
+    // sends to auto-deactivate again).
+    await client.query(`
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS reactivated_at TIMESTAMPTZ;
+    `);
+
     // Add owning customer to customer_pos (safe migration — skipped if already present)
     await client.query(`
       ALTER TABLE customer_pos ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id);

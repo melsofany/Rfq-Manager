@@ -12,6 +12,11 @@ export const suppliersTable = pgTable("suppliers", {
   address: text("address"),
   category: text("category").notNull().default("general"),
   isActive: boolean("is_active").notNull().default(true),
+  // Timestamp of the last manual reactivation (false→true). The auto-deactivate
+  // sweep counts unanswered sends since GREATEST(last_offer, reactivated_at),
+  // so reactivating a supplier resets its no-reply counter and it takes 10
+  // MORE unanswered sends to auto-deactivate again.
+  reactivatedAt: timestamp("reactivated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
