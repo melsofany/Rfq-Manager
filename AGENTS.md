@@ -351,3 +351,14 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Gotchas**: if the dump throws mid-stream, destroy the gzip + PassThrough and swallow the create promise or the Drive upload hangs forever. `lastRun` is set inside `runDatabaseBackup` (success + failure), not by callers.
 - Tests: `__tests__/routes/backup.test.ts` (8) — mocks `googleapis` (drive.files create/list/delete; create mock MUST consume the media body stream or the gzip back-pressures and deadlocks) + `@workspace/db` `pool.query`. 212 tests total.
 - Deploy: pending — branch `feat/daily-db-backup`, not pushed (push/PR only on explicit request).
+
+## Security hardening (branch feat/security-hardening)
+- **Sessions persist in PostgreSQL** via `connect-pg-simple` (`user_sessions` table, created in `init-db.ts`; store also has `createTableIfMissing`). Falls back to MemoryStore only when `DATABASE_URL` is unset (dev). Cookie: `sameSite:"lax"`, `secure` in prod, maxAge stays 7 days.
+- **`SESSION_SECRET` is mandatory in production** — `app.ts` throws at startup if missing (Render must have it set before deploy or the service won't boot).
+- **Login rate limiting** (`modules/users/auth.ts`): `loginIpLimiter` 60/15min per IP + `loginAccountLimiter` 10 failed/15min per IP+email (`ipKeyGenerator(req.ip)+"|"+email`), both `skipSuccessfulRequests:true`. 429s never reach the handler (no audit row). `app.set("trust proxy", 1)` was already set and is required.
+- **CORS**: prod allows only same-origin (Origin host == Host header) + `ALLOWED_ORIGINS` env (comma-separated); no-Origin requests (webhooks/curl) always pass; dev stays permissive.
+- **helmet** enabled with `contentSecurityPolicy:false` + `crossOriginEmbedderPolicy:false` (SPA loads Google Fonts — a strict CSP is a future task).
+- **Login audit**: `auth.login_success`/`auth.login_failed` rows in `audit_log` (entityType `auth`), fire-and-forget (`.then()` on `insert().values()` — test mocks must return a THENABLE from `values()`, with `.returning()` attached for other routes).
+- `lib/db` `getPool()` is now exported and **cached** (previously the `pool` proxy created a NEW pg.Pool on every property access).
+- `init-db.ts` table order matters for fresh DBs: `customers`/`customer_rfqs`/`customer_rfq_items` are created BEFORE `rfq_items` (which FK-references `customer_rfq_items`). Multi-statement `client.query` blocks are one implicit transaction — one failure aborts the whole block.
+- `pnpm-workspace.yaml`: pnpm 11 reads `allowBuilds` — placeholder strings ("set this to true or false") break install; must be booleans. Local env: run `COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install` (corepack otherwise blocks on an interactive prompt).

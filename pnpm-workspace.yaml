@@ -121,6 +121,6 @@ overrides:
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
 
 allowBuilds:
-  bcrypt: set this to true or false
-  core-js: set this to true or false
-  esbuild: set this to true or false
+  bcrypt: true
+  core-js: false
+  esbuild: true

@@ -1,10 +1,55 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import bcrypt from "bcryptjs";
-import { db, employeesTable } from "@workspace/db";
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
+import { db, employeesTable, auditLogTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "../../shared/logger";
 
 const router = Router();
+
+// Per-IP ceiling (generous — a shared office NAT must not trip it) …
+const loginIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: "Too many login attempts — try again later" },
+});
+
+// … and a strict per-account (IP+email) limit against credential stuffing.
+const loginAccountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => {
+    const email = String((req.body as { email?: unknown })?.email ?? "").toLowerCase();
+    return `${ipKeyGenerator(req.ip ?? "")}|${email}`;
+  },
+  message: { error: "Too many login attempts for this account — try again in 15 minutes" },
+});
+
+// Record login attempts in the audit log. Fire-and-forget: an audit failure
+// must never change the login outcome.
+function auditLogin(req: Request, action: string, employeeId: number | null, description: string) {
+  void db
+    .insert(auditLogTable)
+    .values({
+      action,
+      entityType: "auth",
+      entityId: employeeId,
+      employeeId,
+      description,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    })
+    .then(
+      () => {},
+      (err: unknown) => logger.warn({ err }, "Failed to write login audit entry"),
+    );
+}
 
 declare module "express-session" {
   interface SessionData {
@@ -29,7 +74,7 @@ function sanitizePermissions(input: unknown): Record<string, boolean> | null {
   return Object.keys(out).length ? out : null;
 }
 
-router.post("/auth/login", async (req, res): Promise<void> => {
+router.post("/auth/login", loginIpLimiter, loginAccountLimiter, async (req, res): Promise<void> => {
   const { email, password } = req.body as { email?: string; password?: string };
   if (!email || !password) {
     res.status(400).json({ error: "Email and password required" });
@@ -41,12 +86,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     .from(employeesTable)
     .where(eq(employeesTable.email, email.toLowerCase()));
   if (!employee || !employee.isActive) {
+    auditLogin(req, "auth.login_failed", employee?.id ?? null, `Failed login for ${email} (unknown or inactive)`);
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
 
   const valid = await bcrypt.compare(password, employee.passwordHash);
   if (!valid) {
+    auditLogin(req, "auth.login_failed", employee.id, `Failed login for ${email} (bad password)`);
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
@@ -55,6 +102,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   req.session.role = employee.role;
   req.session.employeeName = employee.name;
 
+  auditLogin(req, "auth.login_success", employee.id, `Successful login for ${email}`);
   req.log.info({ employeeId: employee.id }, "Employee logged in");
 
   res.json({

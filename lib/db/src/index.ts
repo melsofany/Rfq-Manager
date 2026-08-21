@@ -4,21 +4,24 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-function getPool(): pg.Pool {
+let _pool: pg.Pool | undefined;
+let _db: ReturnType<typeof drizzle<typeof schema>> | undefined;
+
+export function getPool(): pg.Pool {
   if (!process.env.DATABASE_URL) {
     throw new Error("DATABASE_URL must be set. Did you forget to provision a database?");
   }
-  return new Pool({
-    connectionString: process.env.DATABASE_URL,
-    max: 5,
-    connectionTimeoutMillis: 10_000, // fail fast if pool exhausted
-    idleTimeoutMillis: 30_000,
-    statement_timeout: 20_000, // kill queries that run > 20s
-  });
+  if (!_pool) {
+    _pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 5,
+      connectionTimeoutMillis: 10_000, // fail fast if pool exhausted
+      idleTimeoutMillis: 30_000,
+      statement_timeout: 20_000, // kill queries that run > 20s
+    });
+  }
+  return _pool;
 }
-
-let _pool: pg.Pool | undefined;
-let _db: ReturnType<typeof drizzle<typeof schema>> | undefined;
 
 export function getDb() {
   if (!_db) {

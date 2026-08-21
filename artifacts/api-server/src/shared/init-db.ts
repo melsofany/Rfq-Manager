@@ -8,6 +8,13 @@ export async function initDb(): Promise<void> {
   logger.info("initDb: connected successfully");
   try {
     await client.query(`
+      CREATE TABLE IF NOT EXISTS "user_sessions" (
+        "sid" varchar NOT NULL COLLATE "default",
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL,
+        CONSTRAINT "user_sessions_pkey" PRIMARY KEY ("sid")
+      );
+      CREATE INDEX IF NOT EXISTS "IDX_user_sessions_expire" ON "user_sessions" ("expire");
       CREATE TABLE IF NOT EXISTS representatives (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
@@ -43,6 +50,47 @@ export async function initDb(): Promise<void> {
       CREATE TABLE IF NOT EXISTS supplier_categories (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS customers (
+        id SERIAL PRIMARY KEY,
+        customer_id TEXT,
+        name TEXT NOT NULL,
+        nickname TEXT,
+        contact_person TEXT,
+        email TEXT,
+        phone TEXT,
+        address TEXT,
+        tax_id TEXT,
+        notes TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS customer_rfqs (
+        id SERIAL PRIMARY KEY,
+        internal_no TEXT NOT NULL UNIQUE,
+        customer_id INTEGER REFERENCES customers(id),
+        customer_name TEXT NOT NULL,
+        customer_rfq_no TEXT NOT NULL,
+        number_auto_generated BOOLEAN NOT NULL DEFAULT false,
+        entry_date TEXT,
+        expiry_date TEXT,
+        buyer_name TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS customer_rfq_items (
+        id SERIAL PRIMARY KEY,
+        customer_rfq_id INTEGER NOT NULL REFERENCES customer_rfqs(id) ON DELETE CASCADE,
+        part_no TEXT,
+        line_item TEXT,
+        description TEXT,
+        uom TEXT,
+        qty NUMERIC(15,4),
+        unit_price NUMERIC(15,4),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS rfq (
@@ -202,47 +250,6 @@ export async function initDb(): Promise<void> {
         rejection_reason TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE TABLE IF NOT EXISTS customers (
-        id SERIAL PRIMARY KEY,
-        customer_id TEXT,
-        name TEXT NOT NULL,
-        nickname TEXT,
-        contact_person TEXT,
-        email TEXT,
-        phone TEXT,
-        address TEXT,
-        tax_id TEXT,
-        notes TEXT,
-        is_active BOOLEAN NOT NULL DEFAULT true,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE TABLE IF NOT EXISTS customer_rfqs (
-        id SERIAL PRIMARY KEY,
-        internal_no TEXT NOT NULL UNIQUE,
-        customer_id INTEGER REFERENCES customers(id),
-        customer_name TEXT NOT NULL,
-        customer_rfq_no TEXT NOT NULL,
-        number_auto_generated BOOLEAN NOT NULL DEFAULT false,
-        entry_date TEXT,
-        expiry_date TEXT,
-        buyer_name TEXT,
-        status TEXT NOT NULL DEFAULT 'draft',
-        notes TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE TABLE IF NOT EXISTS customer_rfq_items (
-        id SERIAL PRIMARY KEY,
-        customer_rfq_id INTEGER NOT NULL REFERENCES customer_rfqs(id) ON DELETE CASCADE,
-        part_no TEXT,
-        line_item TEXT,
-        description TEXT,
-        uom TEXT,
-        qty NUMERIC(15,4),
-        unit_price NUMERIC(15,4),
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS customer_pos (
         id SERIAL PRIMARY KEY,

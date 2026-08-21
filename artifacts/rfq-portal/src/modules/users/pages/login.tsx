@@ -27,8 +27,9 @@ export default function LoginPage() {
         const target = firstAccessiblePath(emp?.role, emp?.permissions) ?? "/no-access";
         navigate(target);
       },
-      onError: () => {
-        setError(t("login.error"));
+      onError: (err) => {
+        const status = (err as { status?: number })?.status;
+        setError(status === 429 ? t("login.tooManyAttempts") : t("login.error"));
       },
     },
   });

@@ -210,6 +210,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "login.button": "Sign In",
     "login.signingIn": "Signing in...",
     "login.error": "Invalid email or password",
+    "login.tooManyAttempts": "Too many login attempts — please try again in 15 minutes",
 
     // WhatsApp page
     "whatsapp.title": "WhatsApp Business",
@@ -585,6 +586,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "login.button": "تسجيل الدخول",
     "login.signingIn": "جاري تسجيل الدخول...",
     "login.error": "البريد الإلكتروني أو كلمة المرور غير صحيحة",
+    "login.tooManyAttempts": "محاولات دخول كثيرة جدًا — حاول مرة أخرى بعد 15 دقيقة",
 
     // WhatsApp page
     "whatsapp.title": "واتساب بيزنس",
