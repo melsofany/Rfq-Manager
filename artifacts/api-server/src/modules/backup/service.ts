@@ -2,8 +2,7 @@
  * Daily database backup → Google Drive.
  *
  * Dumps every table in the `public` schema to a gzipped JSON file and uploads
- * it to a Google Drive folder using the same service account as the Sheets
- * integration (GOOGLE_ACCOUNT_BASE_64), with the `drive.file` scope.
+ * it to a Google Drive folder.
  *
  * Env:
  *   GOOGLE_DRIVE_BACKUP_FOLDER_ID  Drive folder to upload into
@@ -11,8 +10,14 @@
  *   BACKUP_HOUR_UTC                Hour of day (UTC) to run, 0-23 (default 3)
  *   BACKUP_RETENTION_DAYS          Delete backups older than this (default 30)
  *
- * NOTE: the Drive folder must be shared with the service account's
- * client_email (Editor) or uploads fail with 404/insufficient permissions.
+ * Auth (two options, OAuth preferred):
+ *   A) OAuth user token (uploads as the user, works with personal My Drive):
+ *      GOOGLE_DRIVE_OAUTH_CLIENT_ID + GOOGLE_DRIVE_OAUTH_CLIENT_SECRET +
+ *      GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN  (scope: drive.file)
+ *   B) Service account (GOOGLE_ACCOUNT_BASE_64, drive.file scope) — NOTE:
+ *      service accounts have NO storage quota on personal Drive; they only
+ *      work with a Shared Drive (Google Workspace). If both are set, OAuth
+ *      wins.
  */
 import { google } from "googleapis";
 import { createGzip, type Gzip } from "zlib";
@@ -38,11 +43,27 @@ export function backupHourUtc(): number {
   return Number.isFinite(n) && n >= 0 && n <= 23 ? n : 3;
 }
 
+function useOAuth(): boolean {
+  return Boolean(
+    process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID &&
+      process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET &&
+      process.env.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN,
+  );
+}
+
 export function isBackupConfigured(): boolean {
-  return Boolean(process.env.DATABASE_URL && process.env.GOOGLE_ACCOUNT_BASE_64);
+  return Boolean(process.env.DATABASE_URL && (useOAuth() || process.env.GOOGLE_ACCOUNT_BASE_64));
 }
 
 function getDrive() {
+  if (useOAuth()) {
+    const auth = new google.auth.OAuth2(
+      process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID,
+      process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET,
+    );
+    auth.setCredentials({ refresh_token: process.env.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN });
+    return google.drive({ version: "v3", auth });
+  }
   const base64 = process.env.GOOGLE_ACCOUNT_BASE_64;
   if (!base64) throw new Error("GOOGLE_ACCOUNT_BASE_64 not set");
   const credentials = JSON.parse(Buffer.from(base64, "base64").toString("utf-8"));
