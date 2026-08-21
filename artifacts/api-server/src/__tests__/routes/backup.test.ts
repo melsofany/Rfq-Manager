@@ -33,7 +33,7 @@ const driveFiles = vi.hoisted(() => ({
 }));
 vi.mock("googleapis", () => ({
   google: {
-    auth: { GoogleAuth: class {} },
+    auth: { GoogleAuth: class {}, OAuth2: class { setCredentials() {} } },
     drive: vi.fn(() => ({ files: driveFiles })),
   },
 }));
@@ -69,6 +69,9 @@ describe("backup routes", () => {
     ).toString("base64");
     delete process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID;
     delete process.env.BACKUP_RETENTION_DAYS;
+    delete process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID;
+    delete process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET;
+    delete process.env.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN;
 
     queryMock.mockImplementation(async (sql: string) => {
       if (sql.includes("information_schema.tables")) {
@@ -156,6 +159,16 @@ describe("backup routes", () => {
     const res = await request(buildApp()).post("/backup/run");
     expect(res.status).toBe(400);
     expect(driveFiles.create).not.toHaveBeenCalled();
+  });
+
+  it("POST /backup/run prefers OAuth credentials over the service account", async () => {
+    process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID = "client-id";
+    process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET = "client-secret";
+    process.env.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN = "refresh-token";
+    const res = await request(buildApp()).post("/backup/run");
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(driveFiles.create).toHaveBeenCalledTimes(1);
   });
 
   it("POST /backup/run returns 500 when the Drive upload fails", async () => {
