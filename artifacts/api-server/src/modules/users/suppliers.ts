@@ -340,8 +340,9 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
 router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   const { category, search } = req.query as Record<string, string>;
 
-  // إلغاء تفعيل تلقائي: كل مورد لم يرد على آخر N إرسال متتالي
-  // (يُعاد التفعيل يدويًا بأمان — لو رد على أي إرسال جديد لا يُعاد تعطيله)
+  // إلغاء تفعيل تلقائي: كل مورد لم يرد على آخر N إرسال متتالي. العدّاد
+  // يبدأ من GREATEST(آخر عرض, تاريخ آخر إعادة تفعيل يدوية) — فإعادة التفعيل
+  // يدويًا تُصفّر العدّاد، ولا يُعاد تعطيل المورد إلا بعد N إرسالات جديدة دون رد.
   try {
     await db.execute(sql`
       UPDATE suppliers s
@@ -352,10 +353,16 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
         WHERE sl.supplier_id IS NOT NULL
         GROUP BY sl.supplier_id
         HAVING COUNT(*) FILTER (
-          WHERE sl.created_at > COALESCE((
-            SELECT MAX(o.created_at) FROM offers o
-            WHERE o.supplier_id = sl.supplier_id
-          ), 'epoch'::timestamp)
+          WHERE sl.created_at > GREATEST(
+            COALESCE((
+              SELECT MAX(o.created_at) FROM offers o
+              WHERE o.supplier_id = sl.supplier_id
+            ), 'epoch'::timestamp),
+            COALESCE((
+              SELECT s2.reactivated_at FROM suppliers s2
+              WHERE s2.id = sl.supplier_id
+            ), 'epoch'::timestamp)
+          )
         ) >= ${AUTO_DEACTIVATE_AFTER}
       ) dead
       WHERE s.id = dead.supplier_id
@@ -554,6 +561,21 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
     if (existing) {
       res.status(409).json({ error: `رقم الهاتف مسجل بالفعل للمورد: ${existing.name}` });
       return;
+    }
+  }
+
+  // Manual reactivation (false → true): stamp reactivated_at = now so the
+  // auto-deactivate sweep resets this supplier's no-reply counter — it now
+  // takes AUTO_DEACTIVATE_AFTER MORE unanswered sends (since this moment) to
+  // auto-deactivate again, instead of re-deactivating on the next page load.
+  if (updates.isActive === true) {
+    const [current] = await db
+      .select({ isActive: suppliersTable.isActive })
+      .from(suppliersTable)
+      .where(eq(suppliersTable.id, id))
+      .limit(1);
+    if (current && !current.isActive) {
+      updates.reactivatedAt = new Date();
     }
   }
 
