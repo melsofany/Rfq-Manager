@@ -10,13 +10,14 @@ pnpm install
 
 ### Environment variables
 
-| Variable         | Description                         |
-| ---------------- | ----------------------------------- |
-| `DATABASE_URL`   | PostgreSQL connection string        |
-| `SESSION_SECRET` | Express session signing key         |
-| `SMTP_HOST`      | SMTP host (default: smtp.gmail.com) |
-| `SMTP_USER`      | SMTP username                       |
-| `SMTP_PASS`      | SMTP password / app password        |
+| Variable         | Description                                                             |
+| ---------------- | ----------------------------------------------------------------------- |
+| `DATABASE_URL`   | PostgreSQL connection string                                            |
+| `SESSION_SECRET` | Express session signing key — **required in production** (server refuses to start without it). Generate with `openssl rand -base64 48` |
+| `ALLOWED_ORIGINS`| Optional comma-separated extra CORS origins (same-origin SPA is always allowed) |
+| `SMTP_HOST`      | SMTP host (default: smtp.gmail.com)                                     |
+| `SMTP_USER`      | SMTP username                                                           |
+| `SMTP_PASS`      | SMTP password / app password                                            |
 
 ## Development
 

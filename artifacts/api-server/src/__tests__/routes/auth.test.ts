@@ -23,6 +23,7 @@ let employeeRow: any | null; // a single employee returned by select().where().l
 let listRows: any[]; // GET /employees
 let insertedRow: any; // POST /employees insert().returning()
 let updatedRow: any | null; // PATCH /employees/:id update().returning()
+const auditInserts: any[] = []; // every db.insert(...).values(vals) payload
 
 // Mutable session so tests can flip role.
 const sessionState: { employeeId: number; role?: string } = { employeeId: 1, role: "admin" };
@@ -44,7 +45,12 @@ vi.mock("@workspace/db", () => {
       }),
     })),
     insert: vi.fn(() => ({
-      values: vi.fn(() => ({ returning: vi.fn(() => chainable([insertedRow])) })),
+      // values() must be BOTH thenable (fire-and-forget audit inserts await
+      // .then()) and expose .returning() (employee creation).
+      values: vi.fn((vals: any) => {
+        auditInserts.push(vals);
+        return chainable(undefined, { returning: vi.fn(() => chainable([insertedRow])) });
+      }),
     })),
     update: vi.fn(() => ({
       set: vi.fn((_vals: any) => ({
@@ -85,6 +91,7 @@ beforeEach(() => {
   listRows = [];
   insertedRow = null;
   updatedRow = null;
+  auditInserts.length = 0;
   sessionState.employeeId = 1;
   sessionState.role = "admin";
 });
@@ -215,5 +222,88 @@ describe("POST /api/auth/login — returns permissions", () => {
       .send({ email: "clerk@cortoba.com", password: "secret123" });
     expect(res.status).toBe(200);
     expect(res.body.employee.permissions).toEqual({ "customer-rfq": true, "customer-po": true });
+  });
+});
+
+describe("POST /api/auth/login — security", () => {
+  it("400 when email or password missing", async () => {
+    const res = await request(testApp).post("/api/auth/login").send({ email: "a@b.com" });
+    expect(res.status).toBe(400);
+  });
+
+  it("401 + audit entry for unknown email", async () => {
+    employeeRow = null;
+    const res = await request(testApp)
+      .post("/api/auth/login")
+      .send({ email: "ghost@example.com", password: "whatever" });
+    expect(res.status).toBe(401);
+    expect(auditInserts).toHaveLength(1);
+    expect(auditInserts[0]).toMatchObject({
+      action: "auth.login_failed",
+      entityType: "auth",
+      employeeId: null,
+    });
+  });
+
+  it("401 + audit entry for wrong password", async () => {
+    employeeRow = {
+      id: 9,
+      name: "WP",
+      email: "wp@example.com",
+      passwordHash: "hashed",
+      role: "purchasing",
+      phone: null,
+      isActive: true,
+      permissions: null,
+      createdAt: new Date("2026-01-01"),
+    };
+    const bcryptMock: any = (await import("bcryptjs")).default;
+    bcryptMock.compare.mockResolvedValueOnce(false);
+    const res = await request(testApp)
+      .post("/api/auth/login")
+      .send({ email: "wp@example.com", password: "nope" });
+    expect(res.status).toBe(401);
+    expect(auditInserts).toHaveLength(1);
+    expect(auditInserts[0]).toMatchObject({ action: "auth.login_failed", employeeId: 9 });
+  });
+
+  it("audits a successful login", async () => {
+    employeeRow = {
+      id: 10,
+      name: "OK",
+      email: "ok@example.com",
+      passwordHash: "hashed",
+      role: "manager",
+      phone: null,
+      isActive: true,
+      permissions: null,
+      createdAt: new Date("2026-01-01"),
+    };
+    const res = await request(testApp)
+      .post("/api/auth/login")
+      .send({ email: "ok@example.com", password: "secret123" });
+    expect(res.status).toBe(200);
+    expect(auditInserts.map((a) => a.action)).toContain("auth.login_success");
+    expect(sessionState.employeeId).toBe(10);
+  });
+
+  it("429 after 10 failed attempts for the same account; other accounts unaffected", async () => {
+    employeeRow = null; // every attempt fails
+    for (let i = 0; i < 10; i++) {
+      const res = await request(testApp)
+        .post("/api/auth/login")
+        .send({ email: "limited@example.com", password: "wrong" });
+      expect(res.status).toBe(401);
+    }
+    const blocked = await request(testApp)
+      .post("/api/auth/login")
+      .send({ email: "limited@example.com", password: "wrong" });
+    expect(blocked.status).toBe(429);
+
+    // A different account from the same IP is still allowed through.
+    const other = await request(testApp)
+      .post("/api/auth/login")
+      .send({ email: "other@example.com", password: "wrong" });
+    expect(other.status).toBe(401);
   });
 });
