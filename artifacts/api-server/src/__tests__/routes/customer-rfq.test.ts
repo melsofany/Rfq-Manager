@@ -1084,6 +1084,48 @@ describe("GET /api/customer-rfq/sheet-view", () => {
     expect(row.highlightColor).toBe("red");
   });
 
+  it("flags a removed-from-PO item as cancelled, keeping the previous rejection reason + highlight note", async () => {
+    // PATCH customer-po removed this item: its row survives detached
+    // (customerPoId → null) with deliveryStatus="cancelled" and the recorded
+    // customer-rejection + admin highlight note intact.
+    sheetRows = [
+      {
+        rfqItemId: 1,
+        lineItem: "C1",
+        partNo: "P-C",
+        description: "Removed item",
+        uom: "pc",
+        rfqQty: "5",
+        rfqUnitPrice: "120",
+        customerRfqId: 1,
+        customerRfqNo: "CUST-001",
+        customerName: "Acme",
+        entryDate: "2025-01-10",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: 46,
+        poNo: "PO-C", // PO header still joins (customerPoId on the ITEM was nulled; the join is via customerPoItems)
+        poDate: "2025-01-15",
+        poQty: null, // wiped
+        poUnitPrice: null, // wiped
+        highlightColor: null,
+        highlightNote: "ملاحظة سابقة",
+        deliveryStatus: "cancelled",
+      },
+    ];
+    sheetRejectedDeliveries = [
+      { customerPoItemId: 46, reason: "تالف", createdAt: new Date() },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view");
+    expect(res.status).toBe(200);
+    const row = res.body.rows[0];
+    expect(row.flagged).toBe(true);
+    // «إلغي» headline; the previous rejection reason + note remain recorded
+    // (the rejection text is superseded by the cancel but the highlight note
+    // still merges into the «السبب» column).
+    expect(row.flagReason).toBe("إلغي — ملاحظة سابقة");
+  });
+
   it("hides rows whose value is in the column's Exclude list (Excel autofilter)", async () => {
     sheetRows = [
       {

@@ -173,11 +173,15 @@ const dbMock: any = {
       return { returning: vi.fn(() => chainable([{ ...insertedPo, ...vals }])) };
     }),
   })),
-  update: vi.fn(() => ({
-    // Reflect updates onto detailRow so the post-update re-select sees new values.
+  update: vi.fn((table: any) => ({
+    // Reflect updates onto detailRow so the post-update re-select sees new
+    // values — but ONLY for PO-header updates (a customer_po_items update,
+    // e.g. the cancel-removed-items pass, must not clobber the header row).
     set: vi.fn((vals: any) => {
       updateCalls.push(vals);
-      if (vals && typeof vals === "object" && detailRow) detailRow = { ...detailRow, ...vals };
+      if (table === poTable && vals && typeof vals === "object" && detailRow) {
+        detailRow = { ...detailRow, ...vals };
+      }
       return { where: vi.fn(() => chainable(undefined)) };
     }),
   })),
@@ -504,6 +508,7 @@ describe("PATCH /api/customer-po/:id", () => {
   it("updates draft fields and replaces items", async () => {
     detailRow = { ...insertedPo };
     detailItems = [];
+
     const res = await request(testApp)
       .patch("/api/customer-po/7")
       .send({
@@ -525,6 +530,48 @@ describe("PATCH /api/customer-po/:id", () => {
     const res = await request(testApp).patch("/api/customer-po/7").send({ status: "sent" });
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("sent");
+  });
+
+  it("soft-cancels removed items instead of hard-deleting them (keeps flag data for the sheet view)", async () => {
+    detailRow = { ...insertedPo };
+    // Two existing RFQ-linked items; the PATCH keeps only item 11 → item 22
+    // (id 55) is detached (customerPoId → null) and marked "cancelled".
+    detailItems = [
+      { id: 42, customerPoId: 7, customerRfqItemId: 11, customerRfqId: 3, qty: "1.0000", unitPrice: "5.0000", createdAt: new Date("2025-01-03"), deliveryStatus: "pending" },
+      { id: 55, customerPoId: 7, customerRfqItemId: 22, customerRfqId: 3, qty: "2.0000", unitPrice: "7.0000", createdAt: new Date("2025-01-04"), deliveryStatus: "pending" },
+    ];
+    const res = await request(testApp)
+      .patch("/api/customer-po/7")
+      .send({
+        items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 1, unitPrice: 5 }],
+      });
+    expect(res.status).toBe(200);
+    // The removed item was UPDATED to a cancelled detached row (not hard-deleted):
+    // its qty/price wiped, deliveryStatus → "cancelled", but its RFQ link,
+    // rejection/highlight history and PO number survive for the items sheet view.
+    expect(updateCalls).toContainEqual(
+      expect.objectContaining({
+        customerPoId: null,
+        qty: null,
+        unitPrice: null,
+        deliveryDate: null,
+        deliveryStatus: "cancelled",
+      }),
+    );
+    // Kept item re-inserted as before.
+    expect(insertedItems).toHaveLength(1);
+    expect(insertedItems[0].customerRfqItemId).toBe(11);
+  });
+
+  it("hard-deletes everything when nothing was already attached (previous rows empty)", async () => {
+    detailRow = { ...insertedPo };
+    detailItems = []; // no previous rows → no cancelled update, plain delete+insert
+    const res = await request(testApp)
+      .patch("/api/customer-po/7")
+      .send({ items: [{ partNo: "P1", qty: 1 }] });
+    expect(res.status).toBe(200);
+    expect(updateCalls.find((u) => u.deliveryStatus === "cancelled")).toBeUndefined();
+    expect(insertedItems).toHaveLength(1);
   });
 
   it("rejects editing a PO that is already sent (no session role)", async () => {

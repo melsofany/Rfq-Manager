@@ -225,6 +225,7 @@ async function resolveDeliveryRollup(
     .from(customerPoItemsTable)
     .where(inArray(customerPoItemsTable.customerPoId, customerPoIds));
   for (const r of rows) {
+    if (r.customerPoId == null) continue; // detached (removed) row — not on any PO
     const entry = map.get(r.customerPoId) ?? { totalItems: 0, deliveredItems: 0, rejectedItems: 0 };
     entry.totalItems += 1;
     if (r.deliveryStatus === "delivered") entry.deliveredItems += 1;
@@ -340,6 +341,7 @@ async function resolveReceivedRollup(
     .from(customerPoItemsTable)
     .where(inArray(customerPoItemsTable.customerPoId, customerPoIds));
   for (const r of itemIdRows) {
+    if (r.customerPoId == null) continue; // detached (removed) row — not on any PO
     if (receivedItemIds.has(r.id)) {
       map.set(r.customerPoId, (map.get(r.customerPoId) ?? 0) + 1);
     }
@@ -682,7 +684,41 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
     const validItems = items.filter(
       (it) => (it.partNo?.trim() || it.lineItem?.trim() || it.description?.trim()) && it.qty,
     );
-    await db.delete(customerPoItemsTable).where(eq(customerPoItemsTable.customerPoId, id));
+
+    // Removed (or no-longer-linked) items are NOT hard-deleted: their order
+    // data (PO number, PO date, delivery status, rejection reason, manual
+    // highlight + any recorded delivery history) must stay visible in the
+    // items sheet view with the red-flag styling. We detach the row from this
+    // PO, zero its qty/price and mark it "cancelled" so the «السبب» column
+    // shows «إلغي» alongside the previously recorded rejection reason /
+    // highlight note, while its quantities stop counting as active order
+    // data. Kept items still get the old delete+re-insert treatment below.
+    const previous = await db
+      .select({
+        id: customerPoItemsTable.id,
+        customerRfqItemId: customerPoItemsTable.customerRfqItemId,
+      })
+      .from(customerPoItemsTable)
+      .where(eq(customerPoItemsTable.customerPoId, id));
+    const keptRfqItemIds = new Set(
+      validItems.map((it) => it.customerRfqItemId).filter((x): x is number => x != null),
+    );
+    const removedIds = previous
+      .filter((r) => r.customerRfqItemId == null || !keptRfqItemIds.has(r.customerRfqItemId))
+      .map((r) => r.id);
+    if (removedIds.length > 0) {
+      await db
+        .update(customerPoItemsTable)
+        .set({
+          customerPoId: null,
+          qty: null,
+          unitPrice: null,
+          deliveryDate: null,
+          deliveryStatus: "cancelled",
+        })
+        .where(inArray(customerPoItemsTable.id, removedIds));
+      await db.delete(customerPoItemsTable).where(eq(customerPoItemsTable.customerPoId, id));
+    }
     if (validItems.length > 0) {
       await db.insert(customerPoItemsTable).values(
         validItems.map((it) => ({

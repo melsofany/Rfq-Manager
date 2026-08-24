@@ -328,8 +328,10 @@ router.get("/analytics/data-entry", requireAuth, async (req, res): Promise<void>
   for (const r of cRfqItemsByRfq)
     cRfqItemCount.set(r.customerRfqId, (cRfqItemCount.get(r.customerRfqId) ?? 0) + 1);
   const cPoItemCount = new Map<number, number>();
-  for (const r of cPoItemsByPo)
+  for (const r of cPoItemsByPo) {
+    if (r.customerPoId == null) continue; // detached (removed) row — not counted on any PO
     cPoItemCount.set(r.customerPoId, (cPoItemCount.get(r.customerPoId) ?? 0) + 1);
+  }
 
   // Map employee → their entity ids
   const rfqsByEmp = new Map<number, typeof rfqs>();

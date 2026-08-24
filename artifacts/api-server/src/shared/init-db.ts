@@ -389,6 +389,10 @@ export async function initDb(): Promise<void> {
         ADD COLUMN IF NOT EXISTS highlight_color TEXT;
       ALTER TABLE customer_po_items
         ADD COLUMN IF NOT EXISTS highlight_note TEXT;
+      // Removed-from-PO items are kept as detached cancelled rows (for the
+      // items sheet view), so the owning-PO link must allow NULL.
+      ALTER TABLE customer_po_items
+        ALTER COLUMN customer_po_id DROP NOT NULL;
 
       ALTER TABLE work_order_assignments
         ADD COLUMN IF NOT EXISTS po_item_id INTEGER REFERENCES purchase_order_items(id) ON DELETE SET NULL;

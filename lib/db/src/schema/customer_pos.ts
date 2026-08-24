@@ -33,9 +33,12 @@ export const customerPosTable = pgTable("customer_pos", {
 
 export const customerPoItemsTable = pgTable("customer_po_items", {
   id: serial("id").primaryKey(),
-  customerPoId: integer("customer_po_id")
-    .notNull()
-    .references(() => customerPosTable.id, { onDelete: "cascade" }),
+  // Nullable: an item REMOVED from its customer PO (PATCH /customer-po/:id)
+  // is kept as a detached, cancelled row so the items sheet view can still
+  // show its order data with the red-flag styling instead of losing it.
+  customerPoId: integer("customer_po_id").references(() => customerPosTable.id, {
+    onDelete: "cascade",
+  }),
   // Link back to the originating customer RFQ (nullable for POs without one).
   customerRfqId: integer("customer_rfq_id").references(() => customerRfqsTable.id),
   // The specific customer RFQ line item this PO line was sourced from. Nullable
