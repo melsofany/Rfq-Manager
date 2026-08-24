@@ -718,7 +718,11 @@ function computeFlagReason(
   rejectionReasonByPoItemId: Map<number, string>,
 ): string | null {
   const reasons: string[] = [];
-  if (row.deliveryStatus === "rejected" && row.poItemId != null) {
+  if (row.deliveryStatus === "cancelled" && row.poItemId != null) {
+    // Item was removed from (or cancelled with) its customer PO — the red
+    // styling + previously recorded reasons (rejection/highlight) carry over.
+    reasons.push("إلغي");
+  } else if (row.deliveryStatus === "rejected" && row.poItemId != null) {
     reasons.push(`رفض التسليم: ${rejectionReasonByPoItemId.get(row.poItemId) ?? "رفض العميل"}`);
   }
   if (row.poFinalActualCost != null && row.poReferencePrice != null) {

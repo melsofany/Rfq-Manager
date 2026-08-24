@@ -922,6 +922,7 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
   const cpoItemRows = await db.select({ customerPoId: customerPoItemsTable.customerPoId, qty: customerPoItemsTable.qty, unitPrice: customerPoItemsTable.unitPrice }).from(customerPoItemsTable);
   const receivableByPo = new Map<number, number>();
   for (const r of cpoItemRows) {
+    if (r.customerPoId == null) continue; // detached (removed) row — no receivable
     const q = toNum(r.qty) ?? 0;
     const p = toNum(r.unitPrice) ?? 0;
     receivableByPo.set(r.customerPoId, (receivableByPo.get(r.customerPoId) ?? 0) + q * p);

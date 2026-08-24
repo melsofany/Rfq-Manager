@@ -1264,6 +1264,9 @@ export async function recordItemDelivery(
   if (accepted <= 0 || linked.lineStatus === "rejected" || linked.lineStatus === "cancelled") return false;
 
   const ordered = cpi.qty ? String(cpi.qty) : null;
+  // A removed-from-PO (detached, customerPoId=null) item can no longer be
+  // delivered to the customer.
+  if (cpi.customerPoId == null) return false;
   // Mirror the receipt flow: a WhatsApp delivery action is a single full-qty
   // event, so remove prior bot deliveries for this line before inserting the
   // new one — the latest action is authoritative and conflicting rows don't

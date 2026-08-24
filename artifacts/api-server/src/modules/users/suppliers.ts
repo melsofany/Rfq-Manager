@@ -791,6 +791,7 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
       : [];
   const custRollup = new Map<number, { total: number; resolved: number }>();
   for (const r of custDeliveryRows) {
+    if (r.customerPoId == null) continue; // detached (removed) row — not on any PO
     const e = custRollup.get(r.customerPoId) ?? { total: 0, resolved: 0 };
     e.total++;
     if (r.deliveryStatus === "delivered" || r.deliveryStatus === "rejected") e.resolved++;
