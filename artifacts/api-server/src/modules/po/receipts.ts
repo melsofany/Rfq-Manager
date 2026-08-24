@@ -86,9 +86,11 @@ async function recomputeItemTotals(poItemId: number): Promise<void> {
 
   // Determine line status from totals vs ordered qty.
   const [item] = await db
-    .select({ qty: purchaseOrderItemsTable.qty })
+    .select({ qty: purchaseOrderItemsTable.qty, lineStatus: purchaseOrderItemsTable.lineStatus })
     .from(purchaseOrderItemsTable)
     .where(eq(purchaseOrderItemsTable.id, poItemId));
+  // A cancelled line stays cancelled — never resurrect it from receipt rows.
+  if (item?.lineStatus === "cancelled") return;
   const ordered = toNum(item?.qty);
   let lineStatus = "pending";
   if (accepted != null && accepted > 0) {

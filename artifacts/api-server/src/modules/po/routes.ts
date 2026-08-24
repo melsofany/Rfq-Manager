@@ -748,11 +748,13 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
 // POST /api/po/:id/cancel — cancel a single supplier's lines within a
 // dispatched ("sent") purchase order (per-supplier cancellation, NOT the
 // whole PO). Marks that supplier's purchase_order_items lines as
-// "cancelled", resets their receipt totals + wipes their work-order
-// assignments so they vanish from the rep bot's receipt/delivery lists and
-// the analytics receipt counters. Sends a WhatsApp cancellation notice to
-// that supplier only (best-effort). If the supplier was the LAST active one
-// (no non-cancelled lines remain), the whole PO is flipped to "cancelled".
+// "cancelled", resets their receipt totals + wipes their receipt rows and
+// work-order assignments so they vanish from the rep bot's receipt/delivery
+// lists and the analytics receipt counters. Allowed even when the lines were
+// already received from the supplier (e.g. the customer then rejected the
+// delivery). Sends a WhatsApp cancellation notice to that supplier only
+// (best-effort). If the supplier was the LAST active one (no non-cancelled
+// lines remain), the whole PO is flipped to "cancelled".
 //
 // Body: { supplierId: number, reason?: string | null }
 router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
@@ -814,16 +816,9 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "لا توجد بنود لهذا المورد في أمر الشراء" });
     return;
   }
-  // Block cancelling a supplier whose lines have already been received/delivered
-  // (fulfilled|partial|rejected) — doing so would wipe real receipt data. Only
-  // pending/postponed lines (no receipt recorded yet) may be cancelled.
-  const RECEIVED_STATES = ["fulfilled", "partial", "rejected"];
-  if (itemRows.some((r) => RECEIVED_STATES.includes((r.lineStatus ?? "pending")))) {
-    res.status(400).json({
-      error: "لا يمكن إلغاء مورد تم استلام أو تسليم بنوده فعلياً — أعد ضبط البنود يدوياً إن لزم",
-    });
-    return;
-  }
+  // Cancelling is allowed even for lines already received from the supplier
+  // (e.g. the customer then rejected the delivery) — the receipt rows are
+  // wiped inside the transaction below so the line is fully reset.
   const itemIds = itemRows.map((r) => r.id);
 
   const poNo = poRow.internalPoNo;
@@ -890,6 +885,11 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
           finalActualCost: null,
         })
         .where(inArray(purchaseOrderItemsTable.id, itemIds));
+      // Wipe the receipt history for these lines so the zeroed totals above
+      // stay consistent (a later receipt edit/delete can't resurrect them).
+      await tx
+        .delete(poItemReceiptsTable)
+        .where(inArray(poItemReceiptsTable.poItemId, itemIds));
       // Wipe the rep-bot receipt/delivery assignments for these lines only.
       await tx
         .delete(workOrderAssignmentsTable)

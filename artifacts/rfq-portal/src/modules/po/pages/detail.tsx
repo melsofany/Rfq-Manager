@@ -423,7 +423,7 @@ export default function PurchaseOrderDetailPage() {
   const handleCancelSupplier = async (supplierId: number, supplierName: string) => {
     if (!po) return;
     const reason = window.prompt(
-      `هل أنت متأكد من إلغاء المورد "${supplierName}" في أمر الشراء "${po.internalPoNo}"؟\nسيتم إشعار هذا المورد فقط عبر واتساب، وإخفاء بنوده من بوت الاستلام/التسليم والإحصائيات.\nأدخل سبب الإلغاء (اختياري):`,
+      `هل أنت متأكد من إلغاء المورد "${supplierName}" في أمر الشراء "${po.internalPoNo}"؟\nسيتم إشعار هذا المورد فقط عبر واتساب، وإخفاء بنوده من بوت الاستلام/التسليم والإحصائيات.\nإن كانت بنوده قد استُلمت من قبل فستُحذف سجلات الاستلام الخاصة بها وتُصفَّر كمياتها.\nأدخل سبب الإلغاء (اختياري):`,
       "",
     );
     // prompt returns null on cancel; empty string means "no reason given".
@@ -865,17 +865,14 @@ export default function PurchaseOrderDetailPage() {
                       )}
                       {downloadingPdf === group.supplierId ? "جاري التحميل..." : "PDF"}
                     </button>
-                    {/* Per-supplier cancel: only for dispatched POs + this
-                        supplier has NO received/delivered lines yet (all its
-                        lines must still be pending/postponed — cancelling a
-                        supplier whose items were already received/delivered
-                        would wipe real receipt data). */}
+                    {/* Per-supplier cancel: for dispatched POs as long as this
+                        supplier still has at least one non-cancelled line —
+                        allowed even after receipt/customer rejection (the
+                        server wipes that supplier's receipt data). */}
                     {po.status === "sent" &&
                       !editMode &&
                       group.items.length > 0 &&
-                      group.items.every(
-                        (it) => it.lineStatus === "pending" || it.lineStatus === "postponed" || it.lineStatus == null,
-                      ) && (
+                      group.items.some((it) => it.lineStatus !== "cancelled") && (
                         <button
                           type="button"
                           disabled={cancellingSupplierId === group.supplierId}
