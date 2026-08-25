@@ -64,6 +64,7 @@ const tables = {
   whatsappChatsTable: { _: "wa" },
   rfqTable: { _: "rfq" },
   workOrderAssignmentsTable: { _: "woa", poItemId: "poItemId" },
+  poItemReceiptsTable: { _: "receipts", poItemId: "poItemId" },
 };
 
 // Queue of result-sets returned by successive db.select(...).where() calls.
@@ -208,19 +209,37 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     expect(res.body.error).toMatch(/لا توجد بنود/);
   });
 
-  it("returns 400 when any of the supplier's lines was already received/delivered", async () => {
-    // One line is already fulfilled (received via WhatsApp bot) → cancel blocked.
+  it("cancels a supplier even when its lines were received from the supplier / rejected by the customer", async () => {
+    // fulfilled (received from supplier) + rejected lines can still be
+    // cancelled — their receipt rows are wiped inside the transaction.
     selectQueue = [
       [{ id: 1, internalPoNo: "PO-2025-000001", status: "sent" }],
       [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: null, email: null }],
-      [{ id: 10, lineStatus: "fulfilled" }, { id: 11, lineStatus: "pending" }],
+      [{ id: 10, lineStatus: "fulfilled" }, { id: 11, lineStatus: "rejected" }], // supplier 7's items
+      [
+        { id: 10, lineStatus: "fulfilled", supplierId: 7 },
+        { id: 11, lineStatus: "rejected", supplierId: 7 },
+        { id: 20, lineStatus: "pending", supplierId: 8 }, // other supplier — stays active
+      ],
     ];
-    const res = await request(testApp).post("/api/po/1/cancel").send({ supplierId: 7 });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/تم استلام أو تسليم/);
-    // Nothing cancelled — no WhatsApp, no audit, no transaction.
-    expect(sendPoCancelMock).not.toHaveBeenCalled();
-    expect(dbMock.transaction).not.toHaveBeenCalled();
+    const res = await request(testApp)
+      .post("/api/po/1/cancel")
+      .send({ supplierId: 7, reason: "رفض العميل الاستلام" });
+    expect(res.status).toBe(200);
+    expect(res.body.cancelledItemIds).toEqual([10, 11]);
+    expect(res.body.poStatus).toBe("sent"); // supplier 8 still active
+    // Items zeroed + cancelled; receipt rows AND assignments wiped in the tx.
+    expect(dbMock.transaction).toHaveBeenCalled();
+    expect(txOps.updates[0]).toMatchObject({
+      lineStatus: "cancelled",
+      totalReceivedQty: null,
+      totalAcceptedQty: null,
+      totalRejectedQty: null,
+      finalActualCost: null,
+    });
+    expect(txOps.deletes).toHaveLength(2); // po_item_receipts + work_order_assignments
+    expect(sendPoCancelMock).toHaveBeenCalledTimes(1);
+    expect(txOps.inserts.find((c) => c.table === "audit")).toBeTruthy();
   });
 
   it("cancels one supplier's lines only (other supplier stays active)", async () => {
@@ -274,7 +293,7 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
       totalRejectedQty: null,
       finalActualCost: null,
     });
-    expect(txOps.deletes).toHaveLength(1); // work_order_assignments for items 10,11
+    expect(txOps.deletes).toHaveLength(2); // po_item_receipts + work_order_assignments for items 10,11
     expect(txOps.inserts.find((c) => c.table === "audit")).toBeTruthy();
     expect(txOps.inserts.find((c) => c.table === "audit").vals.action).toBe("po.supplier_cancelled");
   });
