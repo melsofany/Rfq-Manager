@@ -756,11 +756,17 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
 // (best-effort). If the supplier was the LAST active one (no non-cancelled
 // lines remain), the whole PO is flipped to "cancelled".
 //
-// Body: { supplierId: number, reason?: string | null }
+// Body: { supplierId: number, reason?: string | null, itemIds?: number[] }
+// itemIds cancels ONLY those lines of the supplier (e.g. one line of two);
+// omitted → all of the supplier's lines (the whole-supplier path).
 router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
-  const { supplierId, reason } = (req.body ?? {}) as { supplierId?: number; reason?: string | null };
+  const { supplierId, reason, itemIds } = (req.body ?? {}) as {
+    supplierId?: number;
+    reason?: string | null;
+    itemIds?: number[];
+  };
 
   if (supplierId == null || !Number.isFinite(supplierId)) {
     res.status(400).json({ error: "يجب تحديد المورد المراد إلغاؤه" });
@@ -816,10 +822,24 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "لا توجد بنود لهذا المورد في أمر الشراء" });
     return;
   }
+
+  // When itemIds is given, cancel ONLY those lines of this supplier (e.g. one
+  // line out of two); anything not both in this PO and owned by this supplier
+  // is simply not in the intersection → 400 with a clear message.
+  const requestedIds = Array.isArray(itemIds)
+    ? [...new Set(itemIds.filter((n) => Number.isFinite(n)))]
+    : null;
+  const selectedRows = requestedIds
+    ? itemRows.filter((r) => requestedIds.includes(r.id))
+    : itemRows;
+  if (selectedRows.length === 0) {
+    res.status(400).json({ error: "البنود المحددة لا تتبع هذا المورد في أمر الشراء" });
+    return;
+  }
   // Cancelling is allowed even for lines already received from the supplier
   // (e.g. the customer then rejected the delivery) — the receipt rows are
   // wiped inside the transaction below so the line is fully reset.
-  const itemIds = itemRows.map((r) => r.id);
+  const itemIdsToCancel = selectedRows.map((r) => r.id);
 
   const poNo = poRow.internalPoNo;
   const cancelReason = (reason ?? "").trim() || null;
@@ -840,12 +860,13 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
       whatsappSent = Boolean(waId);
       if (!waId) whatsappError = "WhatsApp send returned no message id";
       try {
+        const partialNote = itemIdsToCancel.length < itemRows.length ? ` (${itemIdsToCancel.length}/${itemRows.length} بنود)` : "";
         await db.insert(whatsappChatsTable).values({
           waMessageId: waId ?? null,
           direction: "outbound",
           phone: normalizePhone(supplier.phone.trim()),
           supplierId: supplier.id,
-          body: `[إلغاء أمر شراء: ${poNo} — ${supplier.name}]${cancelReason ? ` — ${cancelReason}` : ""}`,
+          body: `[إلغاء أمر شراء: ${poNo} — ${supplier.name}${partialNote}]${cancelReason ? ` — ${cancelReason}` : ""}`,
           isRead: true,
         });
       } catch (saveErr) {
@@ -868,12 +889,12 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
       .from(purchaseOrderItemsTable)
       .where(eq(purchaseOrderItemsTable.poId, id));
     const remainingActive = allItems.filter(
-      (r) => r.lineStatus !== "cancelled" && !(r.supplierId === supplierId && itemIds.includes(r.id)),
+      (r) => r.lineStatus !== "cancelled" && !itemIdsToCancel.includes(r.id),
     );
     const wholePoCancelled = remainingActive.length === 0;
 
     await db.transaction(async (tx) => {
-      // Reset this supplier's lines to "cancelled" + zeroed receipt totals so
+      // Reset the cancelled lines to "cancelled" + zeroed receipt totals so
       // they no longer count as received/success anywhere.
       await tx
         .update(purchaseOrderItemsTable)
@@ -884,16 +905,16 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
           totalRejectedQty: null,
           finalActualCost: null,
         })
-        .where(inArray(purchaseOrderItemsTable.id, itemIds));
+        .where(inArray(purchaseOrderItemsTable.id, itemIdsToCancel));
       // Wipe the receipt history for these lines so the zeroed totals above
       // stay consistent (a later receipt edit/delete can't resurrect them).
       await tx
         .delete(poItemReceiptsTable)
-        .where(inArray(poItemReceiptsTable.poItemId, itemIds));
+        .where(inArray(poItemReceiptsTable.poItemId, itemIdsToCancel));
       // Wipe the rep-bot receipt/delivery assignments for these lines only.
       await tx
         .delete(workOrderAssignmentsTable)
-        .where(inArray(workOrderAssignmentsTable.poItemId, itemIds));
+        .where(inArray(workOrderAssignmentsTable.poItemId, itemIdsToCancel));
       if (wholePoCancelled) {
         await tx
           .update(purchaseOrdersTable)
@@ -901,12 +922,13 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
           .where(eq(purchaseOrdersTable.id, id));
       }
 
+      const partialNote = itemIdsToCancel.length < itemRows.length ? ` (${itemIdsToCancel.length}/${itemRows.length} items)` : " (all items)";
       await tx.insert(auditLogTable).values({
         action: "po.supplier_cancelled",
         entityType: "po",
         entityId: id,
         employeeId: req.session.employeeId,
-        description: `Cancelled supplier ${supplier.name} (id ${supplierId}) on PO ${poNo}${cancelReason ? ` — ${cancelReason}` : ""}${wholePoCancelled ? " (whole PO now cancelled)" : ""}`,
+        description: `Cancelled supplier ${supplier.name} (id ${supplierId})${partialNote} on PO ${poNo}${cancelReason ? ` — ${cancelReason}` : ""}${wholePoCancelled ? " (whole PO now cancelled)" : ""}`,
         ipAddress: req.ip,
         userAgent: req.get("user-agent"),
       });
@@ -917,7 +939,7 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
       id,
       poStatus: wholePoCancelled ? "cancelled" : poRow.status,
       cancelledSupplier: { id: supplier.id, name: supplier.name },
-      cancelledItemIds: itemIds,
+      cancelledItemIds: itemIdsToCancel,
       whatsapp: { whatsappSent, whatsappError },
     });
   } catch (err) {

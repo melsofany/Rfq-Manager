@@ -373,5 +373,73 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/ملغي/);
   });
+
+  it("cancels only one of the supplier's items when itemIds is given (per-item cancel)", async () => {
+    // Supplier 7 owns items 10 + 11; cancel ONLY item 10. Item 11 + the other
+    // supplier's lines stay active → PO stays "sent".
+    selectQueue = [
+      [{ id: 1, internalPoNo: "PO-2025-000007", status: "sent" }],
+      [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: "Hassan", email: null }],
+      [{ id: 10, lineStatus: "pending" }, { id: 11, lineStatus: "pending" }], // supplier 7's items
+      [
+        { id: 10, lineStatus: "pending", supplierId: 7 },
+        { id: 11, lineStatus: "pending", supplierId: 7 }, // stays active
+        { id: 20, lineStatus: "pending", supplierId: 8 },
+      ],
+    ];
+
+    const res = await request(testApp)
+      .post("/api/po/1/cancel")
+      .send({ supplierId: 7, reason: "العميل غيّر رأيه", itemIds: [10] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.poStatus).toBe("sent");
+    expect(res.body.cancelledItemIds).toEqual([10]); // ONLY item 10, not 11
+    expect(sendPoCancelMock).toHaveBeenCalledTimes(1);
+    // The chat-record body notes the partial scope (1/2 items).
+    const waInsert = insertCalls.find((c) => c.table === "wa");
+    expect(waInsert?.vals.body).toContain("(1/2 بنود)");
+    // Transaction: 1 items-update + 1 receipts-delete + 1 assignments-delete,
+    // NO po-status update (items 11/20 still active), 1 audit insert.
+    expect(txOps.updates).toHaveLength(1);
+    expect(txOps.updates[0]).toMatchObject({ lineStatus: "cancelled" });
+    expect(txOps.deletes).toHaveLength(2);
+    const audit = txOps.inserts.find((c) => c.table === "audit");
+    expect(audit?.vals.description).toContain("(1/2 items)");
+  });
+
+  it("returns 400 when itemIds do not belong to this supplier in this PO", async () => {
+    selectQueue = [
+      [{ id: 1, internalPoNo: "PO-2025-000008", status: "sent" }],
+      [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: null, email: null }],
+      [{ id: 10, lineStatus: "pending" }, { id: 11, lineStatus: "pending" }],
+    ];
+    const res = await request(testApp)
+      .post("/api/po/1/cancel")
+      .send({ supplierId: 7, itemIds: [99] }); // item 99 belongs to another supplier
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/البنود المحددة لا تتبع/);
+    expect(dbMock.transaction).not.toHaveBeenCalled();
+  });
+
+  it("cancelling ALL of a supplier's items explicitly flips the PO when nothing else is active", async () => {
+    // itemIds covering every line → same as the whole-supplier path.
+    selectQueue = [
+      [{ id: 1, internalPoNo: "PO-2025-000009", status: "sent" }],
+      [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: null, email: null }],
+      [{ id: 10, lineStatus: "pending" }, { id: 11, lineStatus: "pending" }],
+      [
+        { id: 10, lineStatus: "pending", supplierId: 7 },
+        { id: 11, lineStatus: "pending", supplierId: 7 },
+      ],
+    ];
+    const res = await request(testApp)
+      .post("/api/po/1/cancel")
+      .send({ supplierId: 7, itemIds: [10, 11] });
+    expect(res.status).toBe(200);
+    expect(res.body.poStatus).toBe("cancelled");
+    expect(res.body.cancelledItemIds).toEqual([10, 11]);
+    expect(txOps.updates).toHaveLength(2); // items + po-status
+  });
 });
 
