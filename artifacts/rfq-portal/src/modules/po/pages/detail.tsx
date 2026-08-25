@@ -417,18 +417,30 @@ export default function PurchaseOrderDetailPage() {
   };
 
   const [cancellingSupplierId, setCancellingSupplierId] = useState<number | null>(null);
+  const [cancellingItemId, setCancellingItemId] = useState<number | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const [cancelDone, setCancelDone] = useState<null | { supplierName: string; whatsappError: string | null; wholePo: boolean }>(null);
+  const [cancelDone, setCancelDone] = useState<null | { label: string; whatsappError: string | null; wholePo: boolean }>(null);
 
-  const handleCancelSupplier = async (supplierId: number, supplierName: string) => {
+  // itemIds → cancel only those lines of the supplier (e.g. one of two);
+  // omitted → all of the supplier's lines (whole-supplier path).
+  const handleCancelSupplier = async (
+    supplierId: number,
+    supplierName: string,
+    itemIds?: number[],
+    itemLabel?: string,
+  ) => {
     if (!po) return;
+    const itemScope = itemIds?.length === 1;
     const reason = window.prompt(
-      `هل أنت متأكد من إلغاء المورد "${supplierName}" في أمر الشراء "${po.internalPoNo}"؟\nسيتم إشعار هذا المورد فقط عبر واتساب، وإخفاء بنوده من بوت الاستلام/التسليم والإحصائيات.\nإن كانت بنوده قد استُلمت من قبل فستُحذف سجلات الاستلام الخاصة بها وتُصفَّر كمياتها.\nأدخل سبب الإلغاء (اختياري):`,
+      itemScope
+        ? `هل أنت متأكد من إلغاء البند "${itemLabel ?? ""}" للمورد "${supplierName}" في أمر الشراء "${po.internalPoNo}"؟\nسيتم إشعار المورد عبر واتساب، وإخفاء هذا البند من بوت الاستلام/التسليم والإحصائيات.\nإن كان البند قد استُلم فستُحذف سجلات استلامه وتُصفَّر كمياته.\nأدخل سبب الإلغاء (اختياري):`
+        : `هل أنت متأكد من إلغاء المورد "${supplierName}" في أمر الشراء "${po.internalPoNo}"؟\nسيتم إشعار هذا المورد فقط عبر واتساب، وإخفاء بنوده من بوت الاستلام/التسليم والإحصائيات.\nإن كانت بنوده قد استُلمت من قبل فستُحذف سجلات الاستلام الخاصة بها وتُصفَّر كمياتها.\nأدخل سبب الإلغاء (اختياري):`,
       "",
     );
     // prompt returns null on cancel; empty string means "no reason given".
     if (reason === null) return;
     setCancellingSupplierId(supplierId);
+    setCancellingItemId(itemScope ? itemIds![0] : null);
     setCancelError(null);
     setCancelDone(null);
     try {
@@ -436,15 +448,19 @@ export default function PurchaseOrderDetailPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ supplierId, reason: reason.trim() || null }),
+        body: JSON.stringify({
+          supplierId,
+          reason: reason.trim() || null,
+          ...(itemIds?.length ? { itemIds } : {}),
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setCancelError(data.error ?? "فشل إلغاء المورد");
+        setCancelError(data.error ?? "فشل الإلغاء");
       } else {
         const wa = (data as { whatsapp?: { whatsappError: string | null } }).whatsapp ?? { whatsappError: null };
         setCancelDone({
-          supplierName,
+          label: itemScope ? (itemLabel ?? supplierName) : supplierName,
           whatsappError: wa.whatsappError ?? null,
           wholePo: (data as { poStatus?: string }).poStatus === "cancelled",
         });
@@ -455,6 +471,7 @@ export default function PurchaseOrderDetailPage() {
       setCancelError("خطأ في الشبكة — تعذّر الوصول للخادم");
     } finally {
       setCancellingSupplierId(null);
+      setCancellingItemId(null);
     }
   };
 
@@ -621,7 +638,7 @@ export default function PurchaseOrderDetailPage() {
         {cancelDone && (
           <div className="text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-3 py-2">
             <CheckCircle2 size={15} className="inline ml-1 -mt-0.5" />
-            تم إلغاء المورد «{cancelDone.supplierName}» وإشعاره عبر واتساب.
+            تم الإلغاء: «{cancelDone.label}» وإشعار المورد عبر واتساب.
             {cancelDone.whatsappError
               ? ` (تعذّر إرسال واتساب: ${cancelDone.whatsappError})`
               : ""}
@@ -907,6 +924,9 @@ export default function PurchaseOrderDetailPage() {
                       <th className="px-3 py-2 text-muted-foreground font-medium text-right">
                         سعر الوحدة
                       </th>
+                      {po.status === "sent" && !editMode && (
+                        <th className="px-3 py-2 text-muted-foreground font-medium text-center w-16"></th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -928,6 +948,35 @@ export default function PurchaseOrderDetailPage() {
                         <td className="px-3 py-2 text-right font-medium">
                           {fmt(item.referencePrice)}
                         </td>
+                        {po.status === "sent" && !editMode && (
+                          <td className="px-3 py-2 text-center">
+                            {/* Per-item cancel: cancel only this line of the
+                                supplier's, not the whole supplier group. */}
+                            {item.lineStatus !== "cancelled" && group.supplierId != null && (
+                              <button
+                                type="button"
+                                disabled={cancellingItemId === item.id}
+                                onClick={() =>
+                                  handleCancelSupplier(
+                                    group.supplierId!,
+                                    group.supplierName ?? "Supplier",
+                                    [item.id],
+                                    item.partNo ?? item.description ?? `بند ${item.lineItem ?? idx + 1}`,
+                                  )
+                                }
+                                className="inline-flex items-center gap-1 text-[11px] text-destructive hover:text-destructive/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="إلغاء هذا البند فقط"
+                              >
+                                {cancellingItemId === item.id ? (
+                                  <Loader2 size={12} className="animate-spin" />
+                                ) : (
+                                  <Ban size={12} />
+                                )}
+                                إلغاء
+                              </button>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
