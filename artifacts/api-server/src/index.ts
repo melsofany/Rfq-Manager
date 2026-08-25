@@ -6,7 +6,7 @@ import app from "./app";
 import { logger } from "./shared/logger";
 import { runFullSync } from "./shared/sheet-sync";
 import { initDb } from "./shared/init-db";
-import { ensureWorkOrderTemplate, ensurePoCancelTemplate } from "./modules/communications/service";
+import { ensureWorkOrderTemplate, ensurePoCancelTemplate, ensurePoCancelItemTemplate } from "./modules/communications/service";
 import { scheduleDailyBackup } from "./modules/backup/service";
 
 const rawPort = process.env["PORT"];
@@ -36,6 +36,7 @@ initDb()
     try {
       await ensureWorkOrderTemplate();
       await ensurePoCancelTemplate();
+      await ensurePoCancelItemTemplate();
     } catch (err) {
       logger.warn({ err }, "WhatsApp template provisioning failed (non-fatal)");
     }

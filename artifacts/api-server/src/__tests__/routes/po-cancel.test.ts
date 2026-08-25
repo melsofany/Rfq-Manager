@@ -21,6 +21,7 @@ vi.mock("../../shared/google-sheets", () => ({
 }));
 
 const sendPoCancelMock = vi.fn().mockResolvedValue("cancel-wa-id");
+const sendPoCancelItemMock = vi.fn().mockResolvedValue("cancel-item-wa-id");
 let _whatsappConfigured = true;
 
 vi.mock("../../modules/communications/routes", () => ({
@@ -38,6 +39,7 @@ vi.mock("../../modules/communications/service", () => ({
   sendRepresentativeItemReceiptWhatsApp: vi.fn().mockResolvedValue("rep-wa-id"),
   sendRepPoDispatchWhatsApp: vi.fn().mockResolvedValue("rep-wa-id"),
   sendPoCancelWhatsApp: sendPoCancelMock,
+  sendPoCancelItemWhatsApp: sendPoCancelItemMock,
   formatQty: (q: any) => (q == null ? null : String(q).replace(/0+$/, "").replace(/\.$/, "") || "0"),
 }));
 
@@ -381,8 +383,8 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
       [{ id: 1, internalPoNo: "PO-2025-000007", status: "sent" }],
       [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: "Hassan", email: null }],
       [
-        { id: 10, lineStatus: "pending", partNo: "PN-A100", lineItem: "1", description: "قابض هيدروليك" },
-        { id: 11, lineStatus: "pending", partNo: "PN-B200", lineItem: "2", description: "طلمبة مياه" },
+        { id: 10, lineStatus: "pending", partNo: "PN-A100", lineItem: "1", description: "قابض هيدروليك", qty: "5.0000", uom: "قطعة" },
+        { id: 11, lineStatus: "pending", partNo: "PN-B200", lineItem: "2", description: "طلمبة مياه", qty: "2.0000", uom: "قطعة" },
       ],
       [
         { id: 10, lineStatus: "pending", supplierId: 7 },
@@ -398,10 +400,23 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     expect(res.status).toBe(200);
     expect(res.body.poStatus).toBe("sent");
     expect(res.body.cancelledItemIds).toEqual([10]); // ONLY item 10, not 11
-    expect(sendPoCancelMock).toHaveBeenCalledTimes(1);
-    // The WhatsApp reason names the cancelled item so the supplier knows
-    // exactly which line was dropped.
-    expect(sendPoCancelMock.mock.calls[0][0].reason).toBe("العميل غيّر رأيه — البند الملغى: PN-A100");
+    // Partial cancel → the dedicated po_cancel_item_ar template with the
+    // item's full details; the plain po_cancel_ar template is NOT used.
+    expect(sendPoCancelMock).not.toHaveBeenCalled();
+    expect(sendPoCancelItemMock).toHaveBeenCalledTimes(1);
+    expect(sendPoCancelItemMock.mock.calls[0][0]).toMatchObject({
+      poNo: "PO-2025-000007",
+      supplierName: "Acme",
+      contactPerson: "Hassan",
+      reason: "العميل غيّر رأيه",
+      item: {
+        lineItem: "1",
+        partNo: "PN-A100",
+        description: "قابض هيدروليك",
+        qty: "5.0000",
+        uom: "قطعة",
+      },
+    });
     // The chat-record body notes the partial scope (1/2 items).
     const waInsert = insertCalls.find((c) => c.table === "wa");
     expect(waInsert?.vals.body).toContain("(1/2 بنود)");
@@ -412,6 +427,32 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     expect(txOps.deletes).toHaveLength(2);
     const audit = txOps.inserts.find((c) => c.table === "audit");
     expect(audit?.vals.description).toContain("(1/2 items)");
+  });
+
+  it("falls back to the plain po_cancel_ar template when the item template is not approved yet", async () => {
+    sendPoCancelItemMock.mockRejectedValueOnce(new Error("template not approved"));
+    selectQueue = [
+      [{ id: 1, internalPoNo: "PO-2025-000010", status: "sent" }],
+      [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: "Hassan", email: null }],
+      [
+        { id: 10, lineStatus: "pending", partNo: "PN-A100", lineItem: "1", description: "قابض", qty: "5.0000", uom: "قطعة" },
+        { id: 11, lineStatus: "pending", partNo: "PN-B200", lineItem: "2", description: "طلمبة", qty: "2.0000", uom: "قطعة" },
+      ],
+      [
+        { id: 10, lineStatus: "pending", supplierId: 7 },
+        { id: 11, lineStatus: "pending", supplierId: 7 },
+      ],
+    ];
+
+    const res = await request(testApp)
+      .post("/api/po/1/cancel")
+      .send({ supplierId: 7, reason: "العميل غيّر رأيه", itemIds: [10] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.cancelledItemIds).toEqual([10]);
+    // The old template was used as fallback, with the item named in the reason.
+    expect(sendPoCancelMock).toHaveBeenCalledTimes(1);
+    expect(sendPoCancelMock.mock.calls[0][0].reason).toBe("العميل غيّر رأيه — البند الملغى: PN-A100");
   });
 
   it("returns 400 when itemIds do not belong to this supplier in this PO", async () => {

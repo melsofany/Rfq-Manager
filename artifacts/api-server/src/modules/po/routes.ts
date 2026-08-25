@@ -27,6 +27,7 @@ import {
   sendRepPoDispatchWhatsApp,
   formatQty as formatWaQty,
   sendPoCancelWhatsApp,
+  sendPoCancelItemWhatsApp,
 } from "../communications/service";
 import { sendPoEmail } from "../../shared/email";
 
@@ -813,6 +814,8 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
       partNo: purchaseOrderItemsTable.partNo,
       lineItem: purchaseOrderItemsTable.lineItem,
       description: purchaseOrderItemsTable.description,
+      qty: purchaseOrderItemsTable.qty,
+      uom: purchaseOrderItemsTable.uom,
     })
     .from(purchaseOrderItemsTable)
     .where(
@@ -846,16 +849,17 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
 
   const poNo = poRow.internalPoNo;
   const baseReason = (reason ?? "").trim() || null;
-  // On a partial (per-item) cancel, name the cancelled lines in the WhatsApp
-  // reason so the supplier knows exactly which items were dropped — the
-  // po_cancel_ar template has no dedicated items parameter.
+  // Partial (per-item) cancel → the supplier gets the po_cancel_item_ar
+  // template with each cancelled line's full details.
+  const isPartialCancel = selectedRows.length < itemRows.length;
   let itemLabel: string | null = null;
-  if (selectedRows.length < itemRows.length) {
+  if (isPartialCancel) {
     const labels = selectedRows.map(
       (r) => r.partNo?.trim() || r.lineItem?.trim() || `بند ${r.id}`,
     );
     itemLabel = labels.join("، ");
   }
+  // Fallback reason for the plain po_cancel_ar template (names the items).
   const cancelReason = itemLabel
     ? `${baseReason ? `${baseReason} — ` : ""}البند الملغى: ${itemLabel}`
     : baseReason;
@@ -866,13 +870,48 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
   let whatsappError: string | null = null;
   if (supplier.phone?.trim() && isWhatsAppConfigured) {
     try {
-      const waId = await sendPoCancelWhatsApp({
-        phone: supplier.phone.trim(),
-        supplierName: supplier.name,
-        contactPerson: supplier.contactPerson,
-        poNo,
-        reason: cancelReason,
-      });
+      let waId: string | null = null;
+      if (isPartialCancel) {
+        // One po_cancel_item_ar message per cancelled line (full item
+        // details). If the item template isn't approved by Meta yet, fall
+        // back to the plain po_cancel_ar template naming the items.
+        try {
+          for (const it of selectedRows) {
+            const w = await sendPoCancelItemWhatsApp({
+              phone: supplier.phone.trim(),
+              supplierName: supplier.name,
+              contactPerson: supplier.contactPerson,
+              poNo,
+              item: {
+                lineItem: it.lineItem,
+                partNo: it.partNo,
+                description: it.description,
+                qty: it.qty,
+                uom: it.uom,
+              },
+              reason: baseReason,
+            });
+            if (w && !waId) waId = w;
+          }
+        } catch (itemErr) {
+          req.log.warn({ err: itemErr, poNo }, "po_cancel_item_ar template failed — falling back to po_cancel_ar");
+          waId = await sendPoCancelWhatsApp({
+            phone: supplier.phone.trim(),
+            supplierName: supplier.name,
+            contactPerson: supplier.contactPerson,
+            poNo,
+            reason: cancelReason,
+          });
+        }
+      } else {
+        waId = await sendPoCancelWhatsApp({
+          phone: supplier.phone.trim(),
+          supplierName: supplier.name,
+          contactPerson: supplier.contactPerson,
+          poNo,
+          reason: cancelReason,
+        });
+      }
       whatsappSent = Boolean(waId);
       if (!waId) whatsappError = "WhatsApp send returned no message id";
       try {

@@ -44,6 +44,7 @@ const TEMPLATE_PDF = process.env.WHATSAPP_TEMPLATE_PDF || "rfq_pdf_ar";
 const TEMPLATE_PO_PDF = process.env.WHATSAPP_TEMPLATE_PO_PDF || "po_pdf_ar";
 export const TEMPLATE_WORK_ORDER = process.env.WHATSAPP_TEMPLATE_WORK_ORDER || "representative_work_order_ar_v2";
 const TEMPLATE_PO_CANCEL = process.env.WHATSAPP_TEMPLATE_PO_CANCEL || "po_cancel_ar";
+const TEMPLATE_PO_CANCEL_ITEM = process.env.WHATSAPP_TEMPLATE_PO_CANCEL_ITEM || "po_cancel_item_ar";
 const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
 
 const BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
@@ -129,6 +130,59 @@ export async function ensurePoCancelTemplate(): Promise<void> {
   });
   if (!response.ok) throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
   logger.info({ template: TEMPLATE_PO_CANCEL }, "WhatsApp po_cancel template submitted to Meta for approval");
+}
+
+/**
+ * Ensures the Meta template `po_cancel_item_ar` exists — used when only SOME
+ * items of a supplier's PO lines are cancelled (per-item cancel), so the
+ * supplier sees the cancelled items' full details. Body params:
+ * {{1}} supplier/contact name, {{2}} PO number, {{3}} line number,
+ * {{4}} part number, {{5}} description, {{6}} qty+UOM, {{7}} reason.
+ * Idempotent.
+ */
+export async function ensurePoCancelItemTemplate(): Promise<void> {
+  if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
+    logger.warn("WhatsApp po_cancel_item template provisioning skipped: missing token or business account id");
+    return;
+  }
+  const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
+  const existing = await fetch(`${base}?name=${encodeURIComponent(TEMPLATE_PO_CANCEL_ITEM)}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  if (!existing.ok) throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
+  if (found.data?.some((t) => t.name === TEMPLATE_PO_CANCEL_ITEM)) {
+    logger.info({ template: TEMPLATE_PO_CANCEL_ITEM }, "WhatsApp po_cancel_item template already exists");
+    return;
+  }
+  const response = await fetch(base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: TEMPLATE_PO_CANCEL_ITEM,
+      language: TEMPLATE_LANG,
+      category: "UTILITY",
+      components: [
+        {
+          type: "BODY",
+          text: "تنبيه من قرطبة للتوريدات: تم إلغاء بند من أمر توريد.\nالمورد: {{1}}\nرقم أمر الشراء: {{2}}\nرقم البند: {{3}}\nرقم القطعة: {{4}}\nالوصف: {{5}}\nالكمية: {{6}}\nسبب الإلغاء: {{7}}\nيرجى عدم تنفيذ أو شحن هذا البند، والاستمرار في باقي بنود الأمر.",
+          example: {
+            body_text: [[
+              "شركة النور",
+              "PO-2026-000001",
+              "3",
+              "PN-A100",
+              "قابض هيدروليك 2 بوصة",
+              "5 قطعة",
+              "إلغاء بناءً على طلب العميل",
+            ]],
+          },
+        },
+      ],
+    }),
+  });
+  if (!response.ok) throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info({ template: TEMPLATE_PO_CANCEL_ITEM }, "WhatsApp po_cancel_item template submitted to Meta for approval");
 }
 
 export const Whatsapp = APP_SECRET
@@ -547,6 +601,54 @@ export async function sendPoCancelWhatsApp(opts: SendPoCancelOpts): Promise<stri
   );
   const waId = await sendTemplate(to, template);
   logger.info({ to, poNo: opts.poNo, waId }, "PO cancellation sent via po_cancel_ar template");
+  return waId || null;
+}
+
+/**
+ * Notifies a supplier that a specific ITEM of a previously dispatched purchase
+ * order was cancelled (per-item cancel), with the item's full details in the
+ * message body. Uses the approved `po_cancel_item_ar` template (works outside
+ * the 24h window). One item per send — the caller loops for multiple items.
+ */
+export interface SendPoCancelItemOpts {
+  phone: string;
+  supplierName: string;
+  contactPerson?: string | null;
+  poNo: string;
+  item: {
+    lineItem?: string | null;
+    partNo?: string | null;
+    description?: string | null;
+    qty?: string | null;
+    uom?: string | null;
+  };
+  reason?: string | null;
+}
+
+export async function sendPoCancelItemWhatsApp(opts: SendPoCancelItemOpts): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(opts.phone);
+  const toName = sanitizeWaParam(opts.contactPerson?.trim() || opts.supplierName);
+  const reason = sanitizeWaParam(opts.reason?.trim() || "إلغاء البند");
+  const it = opts.item;
+  const qtyUom = sanitizeWaParam(
+    [formatQty(it.qty) ?? "—", it.uom?.trim() || "قطعة"].filter(Boolean).join(" "),
+  );
+  const template = new Template(
+    TEMPLATE_PO_CANCEL_ITEM,
+    new Language(TEMPLATE_LANG),
+    new BodyComponent(
+      new BodyParameter(toName), // {{1}} supplier / contact name
+      new BodyParameter(opts.poNo), // {{2}} PO number
+      new BodyParameter(sanitizeWaParam(it.lineItem?.trim() || "—")), // {{3}} line number
+      new BodyParameter(sanitizeWaParam(it.partNo?.trim() || "—")), // {{4}} part number
+      new BodyParameter(sanitizeWaParam(it.description?.trim() || "—")), // {{5}} description
+      new BodyParameter(qtyUom), // {{6}} qty + UOM
+      new BodyParameter(reason), // {{7}} cancellation reason
+    ),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, poNo: opts.poNo, waId }, "PO item cancellation sent via po_cancel_item_ar template");
   return waId || null;
 }
 
