@@ -380,7 +380,10 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     selectQueue = [
       [{ id: 1, internalPoNo: "PO-2025-000007", status: "sent" }],
       [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: "Hassan", email: null }],
-      [{ id: 10, lineStatus: "pending" }, { id: 11, lineStatus: "pending" }], // supplier 7's items
+      [
+        { id: 10, lineStatus: "pending", partNo: "PN-A100", lineItem: "1", description: "قابض هيدروليك" },
+        { id: 11, lineStatus: "pending", partNo: "PN-B200", lineItem: "2", description: "طلمبة مياه" },
+      ],
       [
         { id: 10, lineStatus: "pending", supplierId: 7 },
         { id: 11, lineStatus: "pending", supplierId: 7 }, // stays active
@@ -396,6 +399,9 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     expect(res.body.poStatus).toBe("sent");
     expect(res.body.cancelledItemIds).toEqual([10]); // ONLY item 10, not 11
     expect(sendPoCancelMock).toHaveBeenCalledTimes(1);
+    // The WhatsApp reason names the cancelled item so the supplier knows
+    // exactly which line was dropped.
+    expect(sendPoCancelMock.mock.calls[0][0].reason).toBe("العميل غيّر رأيه — البند الملغى: PN-A100");
     // The chat-record body notes the partial scope (1/2 items).
     const waInsert = insertCalls.find((c) => c.table === "wa");
     expect(waInsert?.vals.body).toContain("(1/2 بنود)");

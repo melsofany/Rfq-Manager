@@ -810,6 +810,9 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
     .select({
       id: purchaseOrderItemsTable.id,
       lineStatus: purchaseOrderItemsTable.lineStatus,
+      partNo: purchaseOrderItemsTable.partNo,
+      lineItem: purchaseOrderItemsTable.lineItem,
+      description: purchaseOrderItemsTable.description,
     })
     .from(purchaseOrderItemsTable)
     .where(
@@ -842,7 +845,20 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
   const itemIdsToCancel = selectedRows.map((r) => r.id);
 
   const poNo = poRow.internalPoNo;
-  const cancelReason = (reason ?? "").trim() || null;
+  const baseReason = (reason ?? "").trim() || null;
+  // On a partial (per-item) cancel, name the cancelled lines in the WhatsApp
+  // reason so the supplier knows exactly which items were dropped — the
+  // po_cancel_ar template has no dedicated items parameter.
+  let itemLabel: string | null = null;
+  if (selectedRows.length < itemRows.length) {
+    const labels = selectedRows.map(
+      (r) => r.partNo?.trim() || r.lineItem?.trim() || `بند ${r.id}`,
+    );
+    itemLabel = labels.join("، ");
+  }
+  const cancelReason = itemLabel
+    ? `${baseReason ? `${baseReason} — ` : ""}البند الملغى: ${itemLabel}`
+    : baseReason;
 
   // Notify only this supplier via WhatsApp (best-effort — a failed send never
   // blocks the cancellation itself).
