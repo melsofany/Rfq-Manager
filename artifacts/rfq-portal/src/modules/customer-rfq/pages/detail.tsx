@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Plus, Trash2, AlertCircle, AlertTriangle, Pencil, Lock } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, AlertCircle, AlertTriangle, Pencil, Lock, CheckCircle2 } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
 import { canEditCustomerDoc, EDIT_PERM } from "@/lib/permissions";
@@ -84,6 +84,7 @@ export default function CustomerRfqDetailPage() {
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<ItemRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Pricing: map of item id → unit price string. Entered after the RFQ is saved;
@@ -114,8 +115,10 @@ export default function CustomerRfqDetailPage() {
         queryClient.invalidateQueries({ queryKey: getListCustomerRfqsQueryKey() });
         setEditing(false);
         setError(null);
+        setSuccessMsg("تم حفظ التغييرات بنجاح");
       },
       onError: (err: unknown) => {
+        setSuccessMsg(null);
         setError(getApiErrorMessage(err, "فشل تحديث الطلب"));
       },
     },
@@ -213,6 +216,7 @@ export default function CustomerRfqDetailPage() {
 
   const handleFinalize = () => {
     if (!rfq?.items) return;
+    setSuccessMsg(null);
     updateMutation.mutate({
       id,
       data: {
@@ -234,6 +238,7 @@ export default function CustomerRfqDetailPage() {
   // without re-running the margin check or changing the status.
   const handleSavePrices = () => {
     if (!rfq?.items) return;
+    setSuccessMsg(null);
     updateMutation.mutate({
       id,
       data: {
@@ -685,6 +690,13 @@ export default function CustomerRfqDetailPage() {
                 </div>
               )}
             </div>
+
+            {successMsg && !error && (
+              <div className="flex items-center gap-2 text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-3 py-2">
+                <CheckCircle2 size={14} />
+                <span>{successMsg}</span>
+              </div>
+            )}
 
             {error && (
               <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded px-3 py-2">
