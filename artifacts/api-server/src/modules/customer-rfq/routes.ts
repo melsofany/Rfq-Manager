@@ -1191,12 +1191,15 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       return;
     }
 
-    // Update each item's unit_price by id (preserve identity + links).
+    // Update each item's unit_price by id, BUT ONLY when a price was actually
+    // provided: the frontend renders one price input per current item and
+    // sends null/undefined for anything untouched — a null here must NOT
+    // clobber an existing price (the "prices wiped on save" bug on RFQ 2263).
     for (const it of body.items!) {
-      const up = it.unitPrice == null || it.unitPrice === "" ? null : String(it.unitPrice);
+      if (it.unitPrice == null || it.unitPrice === "") continue;
       await db
         .update(customerRfqItemsTable)
-        .set({ unitPrice: up })
+        .set({ unitPrice: String(it.unitPrice) })
         .where(eq(customerRfqItemsTable.id, it.id as number));
     }
     await db.insert(auditLogTable).values({
@@ -1289,6 +1292,27 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   const validItems = items
     ? items.filter((it) => (it.partNo?.trim() || it.lineItem?.trim()) && it.qty)
     : undefined;
+
+  // Prices preserved across the delete+recreate below, keyed by partNo/lineItem
+  // because the request items carry no id (the frontend only fills unitPrice
+  // for inputs it rendered and edited). Without this, any untouched item
+  // comes back with unit_price = NULL (the "prices wiped on save" bug on the
+  // live 2263 RFQ).
+  let currentDbItemsForPricing: Array<{ id: number; partNo: string | null; lineItem: string | null; unitPrice: string | null }> | null = null;
+  const loadCurrentDbItemsForPricing = async () => {
+    if (currentDbItemsForPricing) return currentDbItemsForPricing;
+    currentDbItemsForPricing = await db
+      .select({
+        id: customerRfqItemsTable.id,
+        partNo: customerRfqItemsTable.partNo,
+        lineItem: customerRfqItemsTable.lineItem,
+        unitPrice: customerRfqItemsTable.unitPrice,
+      })
+      .from(customerRfqItemsTable)
+      .where(eq(customerRfqItemsTable.customerRfqId, id));
+    return currentDbItemsForPricing;
+  };
+
   if (status === "sent" && validItems !== undefined) {
     const unpriced = validItems.filter(
       (it) => it.unitPrice == null || it.unitPrice === "" || Number(it.unitPrice) <= 0,
@@ -1308,14 +1332,9 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
 
     // Current DB items carry the original ids that rfq_items link to (the
     // delete+recreate below would invalidate those ids, so resolve first).
-    const currentDbItems = await db
-      .select({
-        id: customerRfqItemsTable.id,
-        partNo: customerRfqItemsTable.partNo,
-        lineItem: customerRfqItemsTable.lineItem,
-      })
-      .from(customerRfqItemsTable)
-      .where(eq(customerRfqItemsTable.customerRfqId, id));
+    // The same rows (with prices) are reused by loadCurrentDbItemsForPricing
+    // to preserve unchanged item prices across the recreate.
+    const currentDbItems = await loadCurrentDbItemsForPricing();
     const costs = await resolveApprovedCosts(currentDbItems);
 
     // Map a req.body item to its current DB item id by partNo (priority) then lineItem.
@@ -1377,21 +1396,41 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     await db.update(customerRfqsTable).set(updates).where(eq(customerRfqsTable.id, id));
   }
 
+  // An empty items list is never valid on PATCH — accepting it would
+  // delete every item of the RFQ (the "items vanished on save" report on
+  // the live 2263 RFQ). Use DELETE /customer-rfq/:id to remove the request.
+  if (items !== undefined && (!validItems || validItems.length === 0)) {
+    res.status(400).json({ error: "لا يمكن حفظ الطلب بدون بنود" });
+    return;
+  }
   if (items !== undefined) {
+    const preservingPrices = await loadCurrentDbItemsForPricing();
+    const preservedPrice = (it: { partNo?: string; lineItem?: string }): string | null => {
+      const p = it.partNo?.trim().toLowerCase();
+      const l = it.lineItem?.replace(/\s+/g, "").trim().toLowerCase();
+      for (const d of preservingPrices) {
+        if (p && (d.partNo ?? "").trim().toLowerCase() === p) return d.unitPrice;
+        if (l && (d.lineItem ?? "").replace(/\s+/g, "").trim().toLowerCase() === l) return d.unitPrice;
+      }
+      return null;
+    };
+
     await db.delete(customerRfqItemsTable).where(eq(customerRfqItemsTable.customerRfqId, id));
-    if (validItems && validItems.length > 0) {
-      await db.insert(customerRfqItemsTable).values(
-        validItems.map((it) => ({
+    await db.insert(customerRfqItemsTable).values(
+      validItems!.map((it) => {
+        const explicitPrice = it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null;
+        const price = explicitPrice ?? preservedPrice(it);
+        return {
           customerRfqId: id,
           partNo: it.partNo?.trim() || null,
           lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : null,
           description: it.description?.trim() || null,
           uom: it.uom?.trim() || null,
           qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
-          unitPrice: it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null,
-        })),
-      );
-    }
+          unitPrice: price,
+        };
+      }),
+    );
   }
 
   // Audit a privileged full edit of an already-sent (finalized) RFQ.
