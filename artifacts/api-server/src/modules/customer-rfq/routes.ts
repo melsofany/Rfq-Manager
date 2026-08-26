@@ -1259,6 +1259,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     notes?: string;
     status?: string;
     items?: Array<{
+      id?: number;
       partNo?: string;
       lineItem?: string;
       description?: string;
@@ -1396,14 +1397,36 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     await db.update(customerRfqsTable).set(updates).where(eq(customerRfqsTable.id, id));
   }
 
-  // An empty items list is never valid on PATCH — accepting it would
-  // delete every item of the RFQ (the "items vanished on save" report on
-  // the live 2263 RFQ). Use DELETE /customer-rfq/:id to remove the request.
-  if (items !== undefined && (!validItems || validItems.length === 0)) {
+  // An admin/manager on a sent RFQ follows the full-edit branch even for a
+  // reprice (they skip the pricesOnly gate above). When the request items are
+  // id-only (each carries id + at most unitPrice — no partNo/lineItem/qty),
+  // the intent is reprice, not replace: update prices by id and skip the
+  // delete+recreate below. Otherwise a full item replacement with an empty
+  // list would delete every row (the 2263 items-vanished bug), so reject it.
+  const itemsAreIdOnly =
+    items !== undefined &&
+    items.length > 0 &&
+    items.every(
+      (it) =>
+        it.id != null &&
+        it.partNo === undefined &&
+        it.lineItem === undefined &&
+        it.qty === undefined,
+    );
+  if (itemsAreIdOnly) {
+    for (const it of items!) {
+      if (it.unitPrice == null || it.unitPrice === "") continue; // untouched — keep the stored price
+      await db
+        .update(customerRfqItemsTable)
+        .set({ unitPrice: String(it.unitPrice) })
+        .where(eq(customerRfqItemsTable.id, it.id as number));
+    }
+  }
+  if (items !== undefined && !itemsAreIdOnly && (!validItems || validItems.length === 0)) {
     res.status(400).json({ error: "لا يمكن حفظ الطلب بدون بنود" });
     return;
   }
-  if (items !== undefined) {
+  if (items !== undefined && !itemsAreIdOnly) {
     const preservingPrices = await loadCurrentDbItemsForPricing();
     const preservedPrice = (it: { partNo?: string; lineItem?: string }): string | null => {
       const p = it.partNo?.trim().toLowerCase();
