@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, Plus, Trash2, ChevronDown, AlertTriangle, AlertCircle } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useDataEntrySession } from "@/hooks/use-data-entry-session";
+import { useCustomerRfqNoAvailability } from "../hooks/use-customer-rfq-no-availability";
 
 interface ItemRow {
   partNo: string;
@@ -175,6 +176,9 @@ export default function NewCustomerRfqPage() {
   // confirmation before auto-generating it.
   const [confirmAutoNumber, setConfirmAutoNumber] = useState(false);
 
+  const rfqNoAvailability = useCustomerRfqNoAvailability(customerRfqNo);
+  const rfqNoDuplicate = rfqNoAvailability.checked && !rfqNoAvailability.available;
+
   const { data: customers, isLoading: customersLoading } = useListCustomers(
     {},
     { query: { queryKey: getListCustomersQueryKey({}) } },
@@ -228,6 +232,10 @@ export default function NewCustomerRfqPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setServerError(null);
+    if (rfqNoDuplicate) {
+      setServerError("رقم طلب تسعير العميل مستخدم بالفعل — اختر رقماً آخر");
+      return;
+    }
     if (!customerName.trim()) {
       setServerError("اسم العميل مطلوب");
       return;
@@ -293,7 +301,15 @@ export default function NewCustomerRfqPage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   إذا تُرك فارغاً ينشئ النظام رقماً تلقائياً مع رسالة تحذيرية عند الحفظ.
+
                 </p>
+                {rfqNoDuplicate && (
+                  <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <AlertCircle size={13} className="flex-shrink-0" />
+                    رقم طلب تسعير العميل مستخدم بالفعل — اختر رقماً آخر.
+
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>تاريخ دخول الطلب</Label>
