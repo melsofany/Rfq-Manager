@@ -18,6 +18,7 @@ import { ArrowLeft, Plus, Trash2, AlertCircle, AlertTriangle, Pencil, Lock, Chec
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
 import { canEditCustomerDoc, EDIT_PERM } from "@/lib/permissions";
+import { useCustomerRfqNoAvailability } from "../hooks/use-customer-rfq-no-availability";
 
 interface ItemRow {
   id?: number;
@@ -86,6 +87,9 @@ export default function CustomerRfqDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const rfqNoAvailability = useCustomerRfqNoAvailability(customerRfqNo, Number.isFinite(id) ? id : undefined);
+  const rfqNoDuplicate = rfqNoAvailability.checked && !rfqNoAvailability.available;
 
   // Pricing: map of item id → unit price string. Entered after the RFQ is saved;
   // saving prices also finalizes (locks) the RFQ (status → sent).
@@ -167,6 +171,10 @@ export default function CustomerRfqDetailPage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (rfqNoDuplicate) {
+      setError("رقم طلب تسعير العميل مستخدم بالفعل — اختر رقماً آخر");
+      return;
+    }
     if (!customerName.trim()) {
       setError("اسم العميل مطلوب");
       return;
@@ -330,6 +338,13 @@ export default function CustomerRfqDetailPage() {
                     onChange={(e) => setCustomerRfqNo(e.target.value)}
                     dir="ltr"
                   />
+                  {rfqNoDuplicate && (
+                    <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                      <AlertCircle size={13} className="flex-shrink-0" />
+                      رقم طلب تسعير العميل مستخدم بالفعل — اختر رقماً آخر.
+
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label>تاريخ دخول الطلب</Label>
