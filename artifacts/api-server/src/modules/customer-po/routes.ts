@@ -9,7 +9,7 @@ import {
   purchaseOrdersTable,
   purchaseOrderItemsTable,
 } from "@workspace/db";
-import { eq, count, inArray, desc, sql, and, isNotNull } from "drizzle-orm";
+import { eq, count, inArray, desc, sql, and, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 
 const router = Router();
@@ -29,6 +29,28 @@ async function generateInternalPoNo(): Promise<string> {
     if (!isNaN(lastSeq) && lastSeq > 0) seq = lastSeq + 1;
   }
   return `${prefix}${String(seq).padStart(6, "0")}`;
+}
+
+// Enforce a unique customer-PO number (رقم أمر شراء العميل): the same number
+// must not belong to two different customer POs． The match is case-insensitive;
+// `excludeId` lets a PATCH ignore the row this update targets．
+async function assertPoNoIsUnique(
+  poNo: string,
+  excludeId?: number,
+): Promise<boolean> {
+  const trimmed = poNo.trim();
+  if (!trimmed) return true;
+  const existing = await db
+    .select({ id: customerPosTable.id })
+    .from(customerPosTable)
+    .where(
+      and(
+        sql`lower(${customerPosTable.customerPoNo}) = ${trimmed.toLowerCase()}`,
+        excludeId !== undefined ? ne(customerPosTable.id, excludeId) : undefined,
+      ),
+    )
+    .limit(1);
+  return existing.length === 0;
 }
 
 // Trim trailing zeros from a NUMERIC value: "3.0000" → "3", "3.5000" → "3.5".
@@ -505,7 +527,17 @@ router.get("/customer-po/customer-rfqs", requireAuth, async (_req, res): Promise
   res.json({ rfqs: rows });
 });
 
-// POST /customer-po — create a customer PO
+// GET /customer-po/check-number — live uniqueness probe fora customer-PO number.
+router.get("/customer-po/check-number", requireAuth, async (req, res): Promise<void> => {
+  const value = typeof req.query.value === "string" ? req.query.value.trim() : "";
+  if (!value) {
+    res.json({ available: true });
+    return;
+  }
+  const excludeId = req.query.excludeId !== undefined ? parseInt(String(req.query.excludeId), 10) : undefined;
+  res.json({ available: await assertPoNoIsUnique(value, Number.isFinite(excludeId) ? excludeId : undefined) });
+});
+
 router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
   const { customerPoNo, customerId, customerName, poDate, buyerName, notes, items } = req.body as {
     customerPoNo?: string;
@@ -529,6 +561,10 @@ router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
 
   if (!customerPoNo?.trim()) {
     res.status(400).json({ error: "رقم أمر شراء العميل مطلوب" });
+    return;
+  }
+  if (!(await assertPoNoIsUnique(customerPoNo))) {
+    res.status(400).json({ error: "رقم أمر شراء العميل مستخدم بالفعل — اختر رقماً آخر" });
     return;
   }
   if (!customerName?.trim() && !customerId) {
@@ -667,7 +703,16 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
   };
 
   const updates: Record<string, unknown> = {};
-  if (customerPoNo !== undefined) updates.customerPoNo = customerPoNo.trim();
+  if (customerPoNo !== undefined) {
+    const trimmed = customerPoNo.trim();
+    if (trimmed) {
+      if (!(await assertPoNoIsUnique(trimmed, id))) {
+        res.status(400).json({ error: "رقم أمر شراء العميل مستخدم بالفعل — اختر رقماً آخر" });
+        return;
+      }
+      updates.customerPoNo = trimmed;
+    }
+  }
   if (customerId !== undefined) updates.customerId = customerId ?? null;
   if (customerName !== undefined) updates.customerName = customerName?.trim() || null;
   if (poDate !== undefined) updates.poDate = poDate || null;
