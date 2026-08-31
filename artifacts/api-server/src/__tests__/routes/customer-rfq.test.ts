@@ -15,7 +15,8 @@ function thenable<T>(value: T, extra: Record<string, any> = {}): any {
 }
 
 // Tables referenced by .from() / eq() / .references() — truthy markers are enough.
-const rfqTable = { _: "customerRfqs", createdAt: "createdAt", id: "id" };
+const customerRfqsTbl = { _: "customerRfqs", customerRfqNo: "customerRfqNo", customerRfqNumber: "customerRfqNo", createdAt: "createdAt", id: "id" };
+const rfqTable = { _: "supplierRfqs", customerRfqNo: "customerRfqNo", id: "id" };
 const itemsTable = { _: "customerRfqItems", customerRfqId: "customerRfqId" };
 const customersTable = { _: "customers", id: "id", name: "name" };
 const employeesTbl = { _: "employees", id: "id", name: "name" };
@@ -34,7 +35,8 @@ const customerPoItemsTbl = {
 };
 const customerPosTbl = { _: "customerPos", customerPoNo: "customerPoNo", id: "id" };
 const tables = {
-  customerRfqsTable: rfqTable,
+  customerRfqsTable: customerRfqsTbl,
+  rfqTable, // supplier rfqs (used by the legacy fallback scope join)
   customerRfqItemsTable: itemsTable,
   customersTable,
   employeesTable: employeesTbl,
@@ -103,28 +105,26 @@ const dbMock: any = {
   // select() builds a chain whose .from(table) decides which data to return.
   select: vi.fn((arg?: any) => ({
     from: vi.fn((table: any) => {
-      // generateInternalNo: select({maxNo: sql`max(...)`}).from(rfqTable).where() — awaited directly.
-      if (table === rfqTable && arg && typeof arg === "object" && "maxNo" in arg) {
+// generateInternalNo: select({maxNo: sql`max(...)`}).from(rfqTable).where() — awaited directly.
+      if (table === customerRfqsTbl && arg && typeof arg === "object" && "maxNo" in arg) {
         return chainable([maxNoRow], {
           where: vi.fn(() => chainable([maxNoRow])),
         });
       }
-      // uniqueness probe: select({id}).from(rfqTable).where(and(...)).limit(1) — awaited directly.
-
-      if (table === rfqTable && arg && typeof arg === "object" && "id" in arg && !("rfq" in arg)) {
-
+      // uniqueness probe: select({id}).from(rfqTable)..where(and(...)).limit(1) — awaited directly.
+      if (table === customerRfqsTbl && arg && typeof arg === "object" && "id" in arg && !("rfq" in arg)) {
         return chainable(existingIdRows, {
           where: vi.fn(() => chainable(existingIdRows, { limit: vi.fn(() => chainable(existingIdRows)) })),
           limit: vi.fn(() => chainable(existingIdRows)),
         });
       }
-      // generateInternalNo (legacy?): select({cnt: count()}).from(rfqTable) — awaited directly.
+      // generateInternalNo: select({cnt: count()}).from(rfqTable).) — awaited directly.
 
-      if (table === rfqTable && arg && typeof arg === "object" && "cnt" in arg) {
+      if (table === customerRfqsTbl && arg && typeof arg === "object" && "cnt" in arg) {
         return chainable([countRow]);
       }
       // rfq list/detail (select {rfq: ...} or bare select)
-      if (table === rfqTable) {
+      if (table === customerRfqsTbl) {
         // Bare select() (no arg) returns bare rows — used by PATCH to read the
         // existing + updated row directly. select({rfq:...}) wraps in {rfq:...}.
         const bare = arg === undefined;
@@ -183,9 +183,20 @@ const dbMock: any = {
       // resolveApprovedCosts: select({...}).from(offerItems).innerJoin(rfqItems).where(...)
       // returns the per-test approvedRows.
       if (table === offerItemsTbl) {
+        // The legacy fallback now ALSO innerJoins the supplier rfqs table (for the
+        // scoping condition) — chain a second .innerJoin before .where里.
+
+        // Single-join (FK path) and double-join (fallback path) must both
+        // resolve — so the first .innerJoin result exposes BOTH .innerJoin
+        // AND .where.
         return chainable(approvedRows, {
           innerJoin: vi.fn(() =>
             chainable(approvedRows, {
+              innerJoin: vi.fn(() =>
+                chainable(approvedRows, {
+                  where: vi.fn(() => chainable(approvedRows)),
+                }),
+              ),
               where: vi.fn(() => chainable(approvedRows)),
             }),
           ),
@@ -248,7 +259,7 @@ const dbMock: any = {
   })),
   delete: vi.fn((table: any) => ({
     where: vi.fn(() => {
-      if (table === rfqTable)
+      if (table === customerRfqsTbl)
         return { returning: vi.fn(() => chainable(detailRow ? [detailRow] : [])) };
       return chainable(undefined);
     }),

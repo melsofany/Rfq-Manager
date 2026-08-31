@@ -5,6 +5,7 @@ import {
   customerRfqItemsTable,
   customersTable,
   employeesTable,
+  rfqTable,
   rfqItemsTable,
   offerItemsTable,
   auditLogTable,
@@ -29,8 +30,16 @@ const MARGIN_FACTOR = 1.06;
 // via the rfq_items.customer_rfq_item_id link, falling back to partNo/lineItem
 // matching for legacy supplier RFQs that lack the FK link. Returns a map
 // customerItemId -> { costExclTax (min approved) | null, hasApproved }.
+//
+// The legacy fallback is scoped to supplier RFQs actually created for THIS
+// customer RFQ (rfq.customer_rfq_no matches). Passing `customerRfqNo`
+// ensures a stale approved price from an unrelated OLD supplier RFQ (same
+// partNo/lineItem) never leaks into a fresh customer RFQ that was never sent
+// to suppliers — the request-status "supplier-priced" and the margin check
+// would otherwise fire without any real pricing request existing.
 async function resolveApprovedCosts(
   customerItems: Array<{ id: number; partNo: string | null; lineItem: string | null }>,
+  customerRfqNo?: string | null,
 ): Promise<Map<number, number | null>> {
   const result = new Map<number, number | null>();
   if (customerItems.length === 0) return result;
@@ -79,14 +88,24 @@ async function resolveApprovedCosts(
       result.set(ci.id, null);
       continue;
     }
-    const fallback = await db
+    // Only supplier RFQs actually created for this customer RFQ qualify for the
+    // fallback — a stale approved price on an unrelated old RFQ must not count.
+
+    const scopeCond = customerRfqNo
+      ? and(
+          eq(rfqTable.customerRfqNo, customerRfqNo),
+          isNull(rfqItemsTable.customerRfqItemId),
+        )
+      : isNull(rfqItemsTable.customerRfqItemId);
+       const fallback = await db
       .select({ price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
       .from(offerItemsTable)
       .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+      .innerJoin(rfqTable, eq(rfqItemsTable.rfqId, rfqTable.id))
       .where(
         and(
           matchCond,
-          isNull(rfqItemsTable.customerRfqItemId),
+          scopeCond,
           eq(offerItemsTable.isApproved, true),
         ),
       );
@@ -214,6 +233,7 @@ export interface CustomerRfqRequestStatus {
 async function resolveSupplierPricedItemIds(
   customerItems: Array<{ id: number; partNo: string | null; lineItem: string | null }>,
   withLegacyFallback = true,
+  customerRfqNo?: string | null,
 ): Promise<Set<number>> {
   const priced = new Set<number>();
   if (customerItems.length === 0) return priced;
@@ -232,7 +252,12 @@ async function resolveSupplierPricedItemIds(
 
   if (!withLegacyFallback) return priced;
 
-  // Legacy fallback: items with no FK link, matched by partNo/lineItem.
+// Legacy fallback: items with no FK link, matched by partNo/lineItem — but
+  // ONLY from supplier RFQs actually created for THIS customer RFQ (rfq.customer_rfq_no. A
+  // stale approved price on an unrelated old RFQ must not count as "supplier-priced"
+  // for a fresh RFQ that was never sent to suppliers. When no customerRfqNo is
+  // known (e.g. a sheet-only RFQ without a DB number)the fallback keeps the old
+  // unscoped behavior.
   const unlinked = customerItems.filter((ci) => !priced.has(ci.id));
   for (const ci of unlinked) {
     const key = ci.partNo?.trim() || ci.lineItem?.trim();
@@ -241,14 +266,21 @@ async function resolveSupplierPricedItemIds(
     const lineMatch = ci.lineItem?.trim() ? eq(rfqItemsTable.lineItem, ci.lineItem.trim()) : null;
     const matchCond = partMatch && lineMatch ? or(partMatch, lineMatch) : (partMatch ?? lineMatch);
     if (!matchCond) continue;
-    const fallback = await db
+    const scopeCond = customerRfqNo
+      ? and(
+          eq(rfqTable.customerRfqNo, customerRfqNo),
+          isNull(rfqItemsTable.customerRfqItemId),
+        )
+      : isNull(rfqItemsTable.customerRfqItemId);
+     const fallback = await db
       .select({ id: offerItemsTable.id })
       .from(offerItemsTable)
       .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+      .innerJoin(rfqTable, eq(rfqItemsTable.rfqId, rfqTable.id))
       .where(
         and(
           matchCond,
-          isNull(rfqItemsTable.customerRfqItemId),
+          scopeCond,
           eq(offerItemsTable.isApproved, true),
         ),
       );
@@ -290,6 +322,7 @@ function closeDateReached(expiryDate: string | null): boolean {
 // derived request status. Used by GET /:id (detail) and as a one-off helper.
 async function computeRequestStatusForRfq(
   rfqId: number,
+  customerRfqNo?: string | null,
   expiryDate: string | null = null,
 ): Promise<{
   status: CustomerRfqRequestStatus;
@@ -306,6 +339,8 @@ async function computeRequestStatusForRfq(
   // 2) supplier-priced: any approved offer for an item of this RFQ.
   const supplierPricedIds = await resolveSupplierPricedItemIds(
     items.map((i) => ({ id: i.id, partNo: i.partNo, lineItem: i.lineItem })),
+    true,
+    customerRfqNo,
   );
   const supplierPriced = supplierPricedIds.size > 0;
 
@@ -1158,7 +1193,11 @@ router.get("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => 
     return;
   }
   // Compute the derived request status (also loads the items for this RFQ).
-  const { status: requestStatus, items } = await computeRequestStatusForRfq(id, row.rfq.expiryDate);
+  const { status: requestStatus, items } = await computeRequestStatusForRfq(
+    id,
+    row.rfq.customerRfqNo,
+    row.rfq.expiryDate,
+  );
   const poItemIdSet = new Set(requestStatus.poItemIds);
   res.json({
     ...serialize(row.rfq, items.length),
@@ -1205,7 +1244,11 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     // margin check is NOT re-run (it already passed at finalize; this is a
     // manual re-price, audit-logged).
     const closeReached = closeDateReached(existing.expiryDate);
-    const { status: existingStatus } = await computeRequestStatusForRfq(id, existing.expiryDate);
+    const { status: existingStatus } = await computeRequestStatusForRfq(
+      id,
+      existing.customerRfqNo,
+      existing.expiryDate,
+    );
     const supplierPriced = existingStatus.supplierPriced;
     const allowReprice = closeReached || supplierPriced;
     const body = req.body as {
@@ -1269,6 +1312,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     const [updated] = await db.select().from(customerRfqsTable).where(eq(customerRfqsTable.id, id));
     const { status: requestStatus, items: itemRows } = await computeRequestStatusForRfq(
       id,
+      updated.customerRfqNo,
       updated.expiryDate,
     );
     const poItemIdSet = new Set(requestStatus.poItemIds);
@@ -1394,7 +1438,10 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     // The same rows (with prices) are reused by loadCurrentDbItemsForPricing
     // to preserve unchanged item prices across the recreate.
     const currentDbItems = await loadCurrentDbItemsForPricing();
-    const costs = await resolveApprovedCosts(currentDbItems);
+    const costs = await resolveApprovedCosts(
+      currentDbItems,
+      existing.customerRfqNo,
+    );
 
     // Map a req.body item to its current DB item id by partNo (priority) then lineItem.
     const findDbId = (it: { partNo?: string; lineItem?: string }): number | null => {
@@ -1532,6 +1579,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   // reflects the new pricing/PO state immediately.
   const { status: requestStatus, items: itemRows } = await computeRequestStatusForRfq(
     id,
+    updated.customerRfqNo,
     updated.expiryDate,
   );
   const poItemIdSet = new Set(requestStatus.poItemIds);
