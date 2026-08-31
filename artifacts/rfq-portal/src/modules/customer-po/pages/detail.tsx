@@ -29,6 +29,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { useCheckNumberAvailability } from "@/hooks/use-check-number-availability";
 import { useAuth } from "@/contexts/AuthContext";
 import { canEditCustomerDoc, EDIT_PERM } from "@/lib/permissions";
 
@@ -186,6 +187,9 @@ export default function CustomerPoDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
 
+  const poNoAvailability = useCheckNumberAvailability(customerPoNo, "/api/customer-po/check-number", po?.id);
+  const poNoDuplicate = poNoAvailability.checked && !poNoAvailability.available;
+
   // Highlight (admin/accountant/manager) — dialog state per selected item.
   // The backend also recognizes an "accountant" role (accounts module) even
   // though the frontend Role type only lists admin/manager/purchasing/data_entry.
@@ -315,6 +319,10 @@ export default function CustomerPoDetailPage() {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (poNoDuplicate) {
+      setError("رقم أمر شراء العميل مستخدم بالفعل — اختر رقماً آخر");
+      return;
+    }
     if (!customerPoNo.trim()) {
       setError("رقم أمر شراء العميل مطلوب");
       return;
@@ -707,6 +715,12 @@ export default function CustomerPoDetailPage() {
                     required
                     dir="ltr"
                   />
+                  {poNoDuplicate && (
+                    <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                      <AlertCircle size={13} className="flex-shrink-0" />
+                      رقم أمر شراء العميل مستخدم بالفعل — اختر رقماً آخر.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label>تاريخ أمر الشراء</Label>

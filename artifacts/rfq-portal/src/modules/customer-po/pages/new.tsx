@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useDataEntrySession } from "@/hooks/use-data-entry-session";
+import { useCheckNumberAvailability } from "@/hooks/use-check-number-availability";
 
 interface ItemRow {
   // identity
@@ -183,6 +184,9 @@ export default function NewCustomerPoPage() {
   const [items, setItems] = useState<ItemRow[]>([makeEmptyRow()]);
   const [serverError, setServerError] = useState<string | null>(null);
 
+  const poNoAvailability = useCheckNumberAvailability(customerPoNo, "/api/customer-po/check-number");
+  const poNoDuplicate = poNoAvailability.checked && !poNoAvailability.available;
+
   // The selected customer RFQ (its items are loaded so the user can check which
   // to include). Cleared selection stops fetching the detail.
   const [selectedRfq, setSelectedRfq] = useState<{
@@ -293,6 +297,10 @@ export default function NewCustomerPoPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setServerError(null);
+    if (poNoDuplicate) {
+      setServerError("رقم أمر شراء العميل مستخدم بالفعل — اختر رقماً آخر");
+      return;
+    }
     if (!customerPoNo.trim()) {
       setServerError("رقم أمر شراء العميل مطلوب");
       return;
@@ -337,6 +345,12 @@ export default function NewCustomerPoPage() {
                   required
                   dir="ltr"
                 />
+                {poNoDuplicate && (
+                  <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                    <AlertCircle size={13} className="flex-shrink-0" />
+                    رقم أمر شراء العميل مستخدم بالفعل — اختر رقماً آخر.
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>تاريخ أمر الشراء</Label>

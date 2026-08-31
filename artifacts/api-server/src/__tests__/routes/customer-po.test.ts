@@ -59,6 +59,7 @@ let linkedPoItemRows: any[]; // [{ customerPoId }]
 // accepted supplier PO items) + supplier-item rows (by poId).
 let receivedItemRows: any[]; // [{ customerPoItemId, lineStatus, acceptedQty, customerPoId }]
 let supplierItemRows: any[]; // [{ poId, lineItem, lineStatus, acceptedQty }]
+let duplicatePoRows: any[]; // uniqueness probe: select({id}).from(poTable).where().limit(1)
 // Tracks exact values written to customer_po_items so tests can assert
 // links (insert) or updates (update).
 const insertedItems: any[] = [];
@@ -76,6 +77,13 @@ const dbMock: any = {
           where: vi.fn(() => chainable([{ maxNo: countRow.maxNo }])),
         });
       }
+      // uniqueness probe: select({id}).from(poTable).where(and(...)).limit(1)
+      if (table === poTable && arg && typeof arg === "object" && "id" in arg) {
+        return chainable(duplicatePoRows, {
+          where: vi.fn(() =>
+            chainable(duplicatePoRows, { limit: vi.fn(() => chainable(duplicatePoRows)) })),
+        });
+      }
       // PO list: select({po}).from(poTable).orderBy()
       if (table === poTable) {
         const bare = arg === undefined;
@@ -86,7 +94,8 @@ const dbMock: any = {
           : listRows;
         return chainable(wrapped, {
           orderBy: vi.fn(() => chainable(listRows)),
-          where: vi.fn(() => chainable(wrapped)),
+          where: vi.fn(() =>
+            chainable(wrapped, { limit: vi.fn(() => chainable(wrapped)) })),
         });
       }
       // item-count aggregate: select({customerPoId, cnt}).from(poItems).where().groupBy()
@@ -211,6 +220,7 @@ beforeEach(() => {
   listRows = [];
   countRows = [];
   countRow = { maxNo: null };
+  duplicatePoRows = [];
   insertedPo = {
     id: 7,
     internalPoNo: "CPO-2025-000001",
@@ -699,6 +709,67 @@ describe("PATCH /api/customer-po/items/:itemId/highlight", () => {
       .patch("/api/customer-po/items/42/highlight")
       .send({ highlightColor: "yellow" });
     expect(res.status).toBe(403);
+  });
+
+  describe("customer PO number uniqueness", () => {
+    const basePo = {
+      customerPoNo: "CPO-UNIQ-1",
+      customerName: "Acme",
+      items: [{ partNo: "P1", lineItem: "L1", qty: 2 }],
+    };
+
+    it("POST rejects an already-used customer PO number (case-insensitive)", async () => {
+      duplicatePoRows = [{ id: 9 }];
+      const res = await request(testApp)
+        .post("/api/customer-po")
+        .send({ ...basePo, customerPoNo: "cpo-uniq-1" });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("رقم أمر شراء العميل مستخدم بالفعل — اختر رقماً آخر");
+    });
+
+    it("POST allows a fresh number when none exists", async () => {
+      duplicatePoRows = [];
+      const res = await request(testApp)
+        .post("/api/customer-po")
+        .send(basePo);
+      expect(res.status).toBe(201);
+    });
+
+    it("PATCH keeps an unchanged (own) number usable", async () => {
+      detailRow = { ...insertedPo, id: 7, customerPoNo: "CPO-UNIQ-1" };
+      duplicatePoRows = [];
+      const res = await request(testApp)
+        .patch("/api/customer-po/7")
+        .send({ customerPoNo: "CPO-UNIQ-1", customerName: "Acme" });
+      expect(res.status).toBe(200);
+    });
+
+    it("PATCH rejects changing to another PO's number", async () => {
+      detailRow = { ...insertedPo, id: 7, customerPoNo: "CPO-UNIQ-1" };
+      duplicatePoRows = [{ id: 9 }];
+      const res = await request(testApp)
+        .patch("/api/customer-po/7")
+        .send({ customerPoNo: "CPO-UNIQ-2", customerName: "Acme" });
+      expect(res.status).toBe(400);
+    });
+
+    it("GET /check-number reports availability", async () => {
+      duplicatePoRows = [];
+      const free = await request(testApp).get("/api/customer-po/check-number?value=PO-X");
+      expect(free.status).toBe(200);
+      expect(free.body.available).toBe(true);
+
+      duplicatePoRows = [{ id: 3 }];
+      const taken = await request(testApp).get("/api/customer-po/check-number?value=po-x");
+      expect(taken.status).toBe(200);
+      expect(taken.body.available).toBe(false);
+    });
+
+    it("GET /check-number with no value is available", async () => {
+      const res = await request(testApp).get("/api/customer-po/check-number");
+      expect(res.status).toBe(200);
+      expect(res.body.available).toBe(true);
+    });
   });
 });
 
