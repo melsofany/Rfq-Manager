@@ -304,6 +304,7 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
           phone: phone || undefined,
           address: row.address ? String(row.address) : undefined,
           category,
+          invoiceHasVat: typeof req.body.invoiceHasVat === "boolean" ? req.body.invoiceHasVat : undefined,
         })
         .returning();
 
@@ -324,6 +325,7 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
           category: supplier.category,
           categories: toArray(supplier.category),
           isActive: supplier.isActive,
+      invoiceHasVat: supplier.invoiceHasVat,
           createdAt: supplier.createdAt.toISOString(),
         },
       });
@@ -409,6 +411,7 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
       category: s.category,
       categories: toArray(s.category),
       isActive: s.isActive,
+      invoiceHasVat: s.invoiceHasVat,
       createdAt: s.createdAt.toISOString(),
     })),
   );
@@ -527,7 +530,7 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const updates: Record<string, unknown> = {};
-  const allowed = ["name", "contactPerson", "email", "phone", "address", "isActive"];
+  const allowed = ["name", "contactPerson", "email", "phone", "address", "isActive", "invoiceHasVat"];
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }

@@ -83,6 +83,11 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     href: "/accounts",
     labelKey: "nav.accounts",
     children: [
+      { key: "accounts:purchase-orders", labelKey: "perm.accounts.purchaseOrders" },
+      { key: "accounts:expenses", labelKey: "perm.accounts.expenses" },
+      { key: "accounts:general-accounting", labelKey: "perm.accounts.generalAccounting" },
+      // Legacy per-tab keys (pre-restructure) kept so existing grants stay
+      // meaningful; filterTabs maps them to the new umbrella tabs.
       { key: "accounts:journal", labelKey: "perm.accounts.journal" },
       { key: "accounts:sales", labelKey: "perm.accounts.sales" },
       { key: "accounts:suppliers", labelKey: "perm.accounts.suppliers" },
@@ -128,6 +133,16 @@ export const ALL_PERMISSION_KEYS: string[] = (() => {
 
 /** Page-level keys only (sidebar items). */
 export const PAGE_KEYS: string[] = PERMISSION_CATALOG.map((n) => n.key);
+
+/**
+ * Backward-compat: an old per-tab grant (pre /accounts restructure) still
+ * unlocks the umbrella tab that contains that view. Used by filterTabs.
+ */
+const TAB_LEGACY_ALIASES: Record<string, readonly string[]> = {
+  "purchase-orders": ["sales", "suppliers", "reports"],
+  "general-accounting": ["journal", "sales", "suppliers", "coa", "reports", "taxes"],
+  expenses: ["journal"],
+};
 
 /**
  * Role defaults used when an employee has no explicit `permissions` map.
@@ -267,7 +282,10 @@ export function filterTabs<T extends string>(
     // If the catalog defines this tab as a permission node, honour it;
     // otherwise leave the tab visible (not every tab is permission-gated).
     const isModelled = ALL_PERMISSION_KEYS.includes(key);
-    return !isModelled || granted.has(key);
+    if (granted.has(key)) return true;
+    const legacy = TAB_LEGACY_ALIASES[tabId];
+    if (legacy && legacy.some((old_entry) => granted.has(pageKey + ':' + old_entry))) return true;
+    return false;
   });
 }
 

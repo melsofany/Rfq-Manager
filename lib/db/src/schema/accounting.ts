@@ -70,11 +70,16 @@ export const ACCOUNT_CODES = {
   SALARIES_EXPENSE: "5200", // رواتب وأجور
   RENT_EXPENSE: "5300", // إيجارات
   UTILITIES_EXPENSE: "5400", // كهرباء ومياه
+  ELECTRICITY_EXPENSE: "5401", // كهرباء
+  WATER_EXPENSE: "5402", // مياه
   TELECOM_EXPENSE: "5410", // اتصالات
+  INTERNET_EXPENSE: "5412", // انترنت
   MAINTENANCE_EXPENSE: "5500", // صيانة
   ADMIN_EXPENSE: "5600", // مصروفات إدارية
   IT_EXPENSE: "5700", // خدمات تقنية واستضافة
+  SUBSCRIPTIONS_EXPENSE: "5750", // اشتراكات ودعم فني
   FREIGHT_CHARGE: "5800", // مصاريف نقل وشحن
+  TRANSPORT_EXPENSE: "5805", // نقل وتنقل
   CUSTOMS_CHARGE: "5810", // مصاريف جمارك
   BANK_CHARGES: "5900", // عمولات ومصاريف بنكية
   MISC_EXPENSE: "5990", // نثريات
@@ -181,6 +186,12 @@ export const supplierInvoicesTable = pgTable("supplier_invoices", {
   invoiceDate: text("invoice_date").notNull(),
   dueDate: text("due_date"),
   netAmount: numeric("net_amount", { precision: 15, scale: 4 }).notNull().default("0"),
+  // Whether this supplier invoice includes VAT (ض.ق.م.). False for deals from
+  // non-VAT suppliers (غير مُسجَّل) — carried NO deductible input VAT, and the
+  // full amount becomes cost; drives the VAT-deficit (عجز ض.ق.م.) computation.
+
+  hasVat: boolean("has_vat").notNull().default(true),
+
   vatAmount: numeric("vat_amount", { precision: 15, scale: 4 }).notNull().default("0"),
   withholdingRate: numeric("withholding_rate", { precision: 6, scale: 4 }).notNull().default("0"),
   withholdingAmount: numeric("withholding_amount", { precision: 15, scale: 4 }).notNull().default("0"),
@@ -352,3 +363,23 @@ export const insertSalesInvoiceItemSchema = createInsertSchema(salesInvoiceItems
 });
 export type InsertSalesInvoiceItem = z.infer<typeof insertSalesInvoiceItemSchema>;
 export type SalesInvoiceItem = typeof salesInvoiceItemsTable.$inferSelect;
+
+// Monthly closing lock — الإقفال الشهري。
+// Once a month (YYYY-MM) is locked, no journal entry may be created
+// (or posted/voided/reviewed) with an entry_date in that month； locking
+// freezes the ledger for closed periods so financial statements stay stable。
+export const accountingClosingsTable = pgTable("accounting_closings", {
+  id: serial("id").primaryKey(),
+  period: text("period").notNull().unique(), // YYYY-MM
+  closedAt: timestamp("closed_at", { withTimezone: true }).notNull().defaultNow(),
+  closedBy: integer("closed_by"),
+  closedByName: text("closed_by_name"),
+  notes: text("notes"),
+});
+
+export const insertAccountingClosingSchema = createInsertSchema(accountingClosingsTable).omit({
+  id: true,
+  closedAt: true,
+});
+export type InsertAccountingClosing = z.infer<typeof insertAccountingClosingSchema>;
+export type AccountingClosing = typeof accountingClosingsTable.$inferSelect;

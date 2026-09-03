@@ -42,6 +42,7 @@ import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { round2 } from "./tax";
 import { postJournalEntry, nextEntryNo, accountBalance } from "./posting";
+import { monthOf, assertMonthOpen } from "./closing";
 
 const router = Router();
 
@@ -322,6 +323,12 @@ router.patch("/accounts/journal/:id", requireRole("accountant", "manager", "admi
     }>;
   };
   if (body.entryDate) {
+    try {
+      await assertMonthOpen(monthOf(body.entryDate)!);
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "الشهر مقفل" });
+      return;
+    }
     await db.update(journalEntriesTable).set({ entryDate: body.entryDate }).where(eq(journalEntriesTable.id, id));
   }
   if (body.description) {
@@ -361,6 +368,20 @@ router.patch("/accounts/journal/:id", requireRole("accountant", "manager", "admi
 router.post("/accounts/journal/:id/review", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
+  const [entry] = await db
+    .select()
+    .from(journalEntriesTable)
+    .where(eq(journalEntriesTable.id, id));
+  if (!entry) {
+    res.status(404).json({ error: "القيد غير موجود" });
+    return;
+  }
+  try {
+    await assertMonthOpen(monthOf(entry.entryDate)!);
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "الشهر مقفل" });
+    return;
+  }
   await db
     .update(journalEntriesTable)
     .set({
@@ -385,6 +406,12 @@ router.post("/accounts/journal/:id/post", requireRole("accountant", "manager", "
   }
   if (entry.status !== "draft") {
     res.status(400).json({ error: "القيد ليس مسودة" });
+    return;
+  }
+  try {
+    await assertMonthOpen(monthOf(entry.entryDate)!);
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "الشهر مقفل" });
     return;
   }
   const lines = await db
@@ -422,6 +449,12 @@ router.post("/accounts/journal/:id/void", requireRole("admin"), async (req, res)
     .where(eq(journalEntriesTable.id, id));
   if (!entry) {
     res.status(404).json({ error: "القيد غير موجود" });
+    return;
+  }
+  try {
+    await assertMonthOpen(monthOf(entry.entryDate)!);
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "الشهر مقفل" });
     return;
   }
   const session = req.session as { employeeId?: number; role?: string };

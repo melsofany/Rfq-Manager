@@ -13,5 +13,6 @@ export interface SupplierUpdate {
   phone?: string;
   address?: string;
   category?: string;
+  invoiceHasVat?: boolean;
   isActive?: boolean;
 }

@@ -19,6 +19,8 @@ export interface Supplier {
   /** @nullable */
   address?: string | null;
   category: string;
+  /** false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات) */
+  invoiceHasVat?: boolean;
   isActive?: boolean;
   createdAt?: string;
 }

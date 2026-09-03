@@ -48,6 +48,7 @@ export default function MarginsTab() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [onlyLoss, setOnlyLoss] = useState(false);
+  const [includeAll, setIncludeAll] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -56,6 +57,7 @@ export default function MarginsTab() {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (onlyLoss) params.set("onlyLoss", "true");
+    if (!includeAll) params.set("deliveries", "received");
     const qs = params.toString();
     try {
       const [mRes, sRes] = await Promise.all([
@@ -150,6 +152,15 @@ export default function MarginsTab() {
               className="accent-primary"
             />
             البنود الخاسرة فقط
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground h-8" title="عرض أوامر الشراء حتى غير المسلَّمة">
+            <input
+              type="checkbox"
+              checked={includeAll}
+              onChange={(e) => setIncludeAll(e.target.checked)}
+              className="accent-primary"
+            />
+            عرض غير المسلَّم أيضًا
           </label>
           <Button onClick={load} size="sm" className="gap-1.5">
             تحديث

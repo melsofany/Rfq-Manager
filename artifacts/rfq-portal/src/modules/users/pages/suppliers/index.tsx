@@ -423,15 +423,22 @@ function SuppliersListTab() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                              s.isActive
-                                ? "bg-green-50 text-green-700"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {s.isActive ? "Active" : "Inactive"}
-                          </span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                s.isActive
+                                  ? "bg-green-50 text-green-700"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {s.isActive ? "Active" : "Inactive"}
+                            </span>
+                            {s.invoiceHasVat === false && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700">
+                                بدون ضريبة
+                              </span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

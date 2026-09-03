@@ -1,30 +1,24 @@
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Calculator, BookCopy, BookOpen, FileText, Truck, BarChart3, Percent } from "lucide-react";
+import { Calculator, PackageCheck, Wallet, BookCopy } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { filterTabs } from "@/lib/permissions";
-import JournalTab from "./JournalTab";
-import SalesAndCollectionsTab from "./SalesAndCollectionsTab";
-import SuppliersTab from "./SuppliersTab";
-import ChartOfAccountsTab from "./ChartOfAccountsTab";
-import ReportsTab from "./ReportsTab";
-import TaxesTab from "./TaxesTab";
+import PurchaseOrderAccountsTab from "./PurchaseOrderAccountsTab";
+import ExpensesAccountsTab from "./ExpensesAccountsTab";
+import GeneralAccountingTab from "./GeneralAccountingTab";
 
-const ACCOUNTS_TABS = ["journal", "sales", "suppliers", "coa", "reports", "taxes"] as const;
+const ACCOUNTS_TABS = ["purchase-orders", "expenses", "general-accounting"] as const;
 
 const TAB_META: Record<string, { icon: React.ElementType; label: string }> = {
-  journal: { icon: BookCopy, label: "قيود اليومية" },
-  sales: { icon: FileText, label: "المبيعات والتحصيل" },
-  suppliers: { icon: Truck, label: "الموردون" },
-  coa: { icon: BookOpen, label: "دليل الحسابات" },
-  reports: { icon: BarChart3, label: "التقارير المالية" },
-  taxes: { icon: Percent, label: "الضرائب" },
+  "purchase-orders": { icon: PackageCheck, label: "أوامر الشراء" },
+  expenses: { icon: Wallet, label: "المصاريف والتكاليف" },
+  "general-accounting": { icon: BookCopy, label: "الحسابات العامة" },
 };
 
 function readTabParam(allowed: readonly string[]): string {
-  const param = new URLSearchParams(window.location.search).get("tab") || "journal";
-  return allowed.includes(param) ? param : (allowed[0] ?? "journal");
+  const param = new URLSearchParams(window.location.search).get("tab") || "purchase-orders";
+  return allowed.includes(param) ? param : (allowed[0] ?? "purchase-orders");
 }
 
 export default function AccountsPage() {
@@ -76,34 +70,19 @@ export default function AccountsPage() {
             })}
           </TabsList>
 
-          {allowedTabs.includes("journal") && (
-            <TabsContent value="journal" className="mt-5">
-              <JournalTab />
+          {allowedTabs.includes("purchase-orders") && (
+            <TabsContent value="purchase-orders" className="mt-5">
+              <PurchaseOrderAccountsTab />
             </TabsContent>
           )}
-          {allowedTabs.includes("sales") && (
-            <TabsContent value="sales" className="mt-5">
-              <SalesAndCollectionsTab />
+          {allowedTabs.includes("expenses") && (
+            <TabsContent value="expenses" className="mt-5">
+              <ExpensesAccountsTab />
             </TabsContent>
           )}
-          {allowedTabs.includes("suppliers") && (
-            <TabsContent value="suppliers" className="mt-5">
-              <SuppliersTab />
-            </TabsContent>
-          )}
-          {allowedTabs.includes("coa") && (
-            <TabsContent value="coa" className="mt-5">
-              <ChartOfAccountsTab />
-            </TabsContent>
-          )}
-          {allowedTabs.includes("reports") && (
-            <TabsContent value="reports" className="mt-5">
-              <ReportsTab />
-            </TabsContent>
-          )}
-          {allowedTabs.includes("taxes") && (
-            <TabsContent value="taxes" className="mt-5">
-              <TaxesTab />
+          {allowedTabs.includes("general-accounting") && (
+            <TabsContent value="general-accounting" className="mt-5">
+              <GeneralAccountingTab />
             </TabsContent>
           )}
         </Tabs>

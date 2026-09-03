@@ -1791,6 +1791,9 @@ components:
           type: ["string", "null"]
         category:
           type: string
+        invoiceHasVat:
+          type: boolean
+          description: false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)
         isActive:
           type: boolean
         createdAt:
@@ -1814,6 +1817,11 @@ components:
           type: string
         category:
           type: string
+        invoiceHasVat:
+          type: boolean
+          description: false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)
+
+
 
     SupplierUpdate:
       type: object
@@ -1830,6 +1838,8 @@ components:
           type: string
         category:
           type: string
+        invoiceHasVat:
+          type: boolean
         isActive:
           type: boolean
 

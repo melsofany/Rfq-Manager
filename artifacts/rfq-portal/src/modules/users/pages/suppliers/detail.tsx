@@ -205,6 +205,7 @@ export default function SupplierDetailPage() {
       phone: supplier.phone ?? "",
       address: supplier.address ?? "",
       isActive: supplier.isActive ?? false,
+      invoiceHasVat: supplier.invoiceHasVat ?? true,
     });
     setSelectedCats(new Set(parseCategories(supplier.category)));
     setServerError(null);
@@ -437,6 +438,7 @@ export default function SupplierDetailPage() {
                     })}
                   </div>
                 </div>
+                <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -446,6 +448,22 @@ export default function SupplierDetailPage() {
                     className="w-4 h-4 accent-primary"
                   />
                   <Label htmlFor="isActive">Active supplier</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="invoiceHasVat"
+                    checked={Boolean(form.invoiceHasVat)}
+                    onChange={(e) => upd("invoiceHasVat", e.target.checked)}
+                    className="w-4 h-4 accent-primary"
+                  />
+                  <Label htmlFor="invoiceHasVat">
+                    فاتورته تحمل ض.ق.م — مورد مسجَّل
+                    <span className="block text-xs text-muted-foreground font-normal">
+                      عند الإلغاء: كامل المبلغ مصروف بدون ضريبة مدخلات (غير مسجَّل)
+                    </span>
+                  </Label>
+                </div>
                 </div>
                 {serverError && (
                   <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-3 py-2">
@@ -510,6 +528,11 @@ export default function SupplierDetailPage() {
                   >
                     {supplier.isActive ? "Active" : "Inactive"}
                   </span>
+                  {supplier.invoiceHasVat === false && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 mt-0.5">
+                      مورد غير مسجَّل — بدون ضريبة (كامل المبلغ مصروف)
+                    </span>
+                  )}
                 </div>
               </div>
             )}

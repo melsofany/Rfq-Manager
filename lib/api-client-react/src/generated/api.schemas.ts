@@ -132,6 +132,8 @@ export interface Supplier {
   /** @nullable */
   address?: string | null;
   category: string;
+  /** false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات) */
+  invoiceHasVat?: boolean;
   isActive?: boolean;
   createdAt?: string;
 }
@@ -144,6 +146,8 @@ export interface SupplierInput {
   phone?: string;
   address?: string;
   category: string;
+  /** false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات) */
+  invoiceHasVat?: boolean;
 }
 
 export interface SupplierUpdate {
@@ -153,6 +157,7 @@ export interface SupplierUpdate {
   phone?: string;
   address?: string;
   category?: string;
+  invoiceHasVat?: boolean;
   isActive?: boolean;
 }
 

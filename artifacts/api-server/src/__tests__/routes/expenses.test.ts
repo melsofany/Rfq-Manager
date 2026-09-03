@@ -33,6 +33,7 @@ const auditTbl = "audit";
 const chartOfAccountsTbl = "chartOfAccounts";
 const journalEntriesTbl = "journalEntries";
 const journalLinesTbl = "journalLines";
+const accountingClosingsTbl = "accountingClosings";
 
 let expenseRows: any[];
 let attachmentRows: any[];
@@ -61,7 +62,7 @@ function selectBuilder() {
 }
 
 const dbMock: any = {
-  select: vi.fn(() => selectBuilder()),
+  select: vi.fn((table: any) => (table === accountingClosingsTbl ? chainable([]) : selectBuilder())),
   insert: vi.fn(() => ({
     values: vi.fn(() => chainable([{ id: 1 }], { returning: vi.fn(() => chainable([{ id: 1 }])) })),
   })),
@@ -90,6 +91,7 @@ vi.mock("@workspace/db", () => ({
   chartOfAccountsTable: chartOfAccountsTbl,
   journalEntriesTable: journalEntriesTbl,
   journalLinesTable: journalLinesTbl,
+  accountingClosingsTable: accountingClosingsTbl,
   ACCOUNT_CODES: ACCOUNT_CODES_MOCK,
 }));
 

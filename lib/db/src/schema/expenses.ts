@@ -90,8 +90,12 @@ export type ExpenseAttachment = typeof expenseAttachmentsTable.$inferSelect;
 
 export const OPERATING_EXPENSE_CATEGORIES = [
   "إيجارات",
+  "كهرباء",
+  "مياه",
+  "انترنت",
   "دومينات واستضافة وخدمات تقنية",
-  "كهرباء ومياه",
+  "اشتراكات ودعم فني",
+  "نقل وتنقل",
   "اتصالات",
   "نثريات",
   "صيانة",

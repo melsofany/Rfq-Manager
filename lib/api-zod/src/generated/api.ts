@@ -196,6 +196,7 @@ export const ListSuppliersResponseItem = zod.object({
   "phone": zod.string().nullish(),
   "address": zod.string().nullish(),
   "category": zod.string(),
+  "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)'),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
 })
@@ -212,7 +213,8 @@ export const CreateSupplierBody = zod.object({
   "email": zod.string().optional(),
   "phone": zod.string().optional(),
   "address": zod.string().optional(),
-  "category": zod.string()
+  "category": zod.string(),
+  "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)')
 })
 
 export const CreateSupplierResponse = zod.object({
@@ -224,6 +226,7 @@ export const CreateSupplierResponse = zod.object({
   "phone": zod.string().nullish(),
   "address": zod.string().nullish(),
   "category": zod.string(),
+  "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)'),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
 })
@@ -245,6 +248,7 @@ export const GetSupplierResponse = zod.object({
   "phone": zod.string().nullish(),
   "address": zod.string().nullish(),
   "category": zod.string(),
+  "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)'),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
 })
@@ -264,6 +268,7 @@ export const UpdateSupplierBody = zod.object({
   "phone": zod.string().optional(),
   "address": zod.string().optional(),
   "category": zod.string().optional(),
+  "invoiceHasVat": zod.boolean().optional(),
   "isActive": zod.boolean().optional()
 })
 
@@ -276,6 +281,7 @@ export const UpdateSupplierResponse = zod.object({
   "phone": zod.string().nullish(),
   "address": zod.string().nullish(),
   "category": zod.string(),
+  "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)'),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
 })
@@ -296,7 +302,8 @@ export const BulkImportSuppliersBody = zod.object({
   "email": zod.string().optional(),
   "phone": zod.string().optional(),
   "address": zod.string().optional(),
-  "category": zod.string()
+  "category": zod.string(),
+  "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)')
 })).min(1)
 })
 
@@ -318,6 +325,7 @@ export const BulkImportSuppliersResponse = zod.object({
   "phone": zod.string().nullish(),
   "address": zod.string().nullish(),
   "category": zod.string(),
+  "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)'),
   "isActive": zod.boolean().optional(),
   "createdAt": zod.string().optional()
 }).optional()

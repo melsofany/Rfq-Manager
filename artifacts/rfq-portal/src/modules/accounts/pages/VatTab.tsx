@@ -20,11 +20,14 @@ interface VatStatement {
   to: string | null;
   output: { net: number; vat: number };
   input: { net: number; vat: number };
+  nonVatNet: number;
+  nonVatDeficit: number;
   netVat: number;
   payable: number;
   credit: number;
   outputLines: VatLine[];
   inputLines: VatLine[];
+  nonVatPurchases: VatLine[];
 }
 
 export default function VatTab() {
@@ -87,6 +90,13 @@ export default function VatTab() {
           value={fmt(data?.credit)}
           icon={<Receipt size={16} className="text-amber-600" />}
         />
+        <SummaryCard
+          label="مشتريات بدون ض.ق.م (عجز التسوية)"
+          value={fmt(data?.nonVatDeficit)}
+          sub={`${fmt(data?.nonVatNet)} صافى بدون ضريبة — يحتاج تسوية ض.ق.م مع المصلحة`}
+          tone={Number(data?.nonVatDeficit ?? 0) > 0 ? "deficit" : "credit"}
+          icon={<Scale size={16} className="text-rose-600" />}
+        />
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-end gap-3">
@@ -125,6 +135,20 @@ export default function VatTab() {
           rows={data?.inputLines ?? []}
           loading={loading}
           total={data?.input.vat}
+        />
+      </div>
+
+      <div className="bg-card border border-dashed border-rose-300 dark:border-rose-900 rounded-lg p-3">
+        <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold mb-2">
+          مشتريات من موردين غير مسجلين (لا ض.ق.م مدخلات محملة على المصروفات) —
+          تُسوَّى مع مصلحة الضرائب كعجز ض.ق.م عند الإقفال الشهري.
+
+        </p>
+        <VatSection
+          title="فواتير بدون ضريبة قيمة مضافة (عجز التسوية)"
+          rows={data?.nonVatPurchases ?? []}
+          loading={loading}
+          total={data?.nonVatDeficit}
         />
       </div>
     </div>
@@ -202,14 +226,16 @@ function SummaryCard({
   value: string;
   sub?: string;
   icon?: React.ReactNode;
-  tone?: "payable" | "credit";
+  tone?: "payable" | "credit" | "deficit";
 }) {
   const toneClass =
     tone === "credit"
       ? "text-amber-600"
       : tone === "payable"
         ? "text-emerald-600"
-        : "text-foreground";
+        : tone === "deficit"
+          ? "text-rose-600"
+          : "text-foreground";
   return (
     <div className="bg-card border border-border rounded-lg p-3">
       <div className="flex items-center justify-between mb-1">

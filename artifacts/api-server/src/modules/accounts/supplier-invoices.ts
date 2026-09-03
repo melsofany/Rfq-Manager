@@ -72,12 +72,15 @@ async function loadTaxLite(): Promise<TaxSettingsLite> {
 // Compute net/vat/gross/withholding for a supplier invoice. `net` is the
 // VAT-exclusive supply value; VAT added on top at 14%; withholding applied to
 // the net (supply value, before VAT) per Egyptian practice.
-function computeInvoice(net: number, vatRate: number, whRate: number) {
-  const vat = vatOnNet(net, vatRate);
+function computeInvoice(net: number, vatRate: number, whRate: number, hasVat = true) {
+  // Purchases from NON-VAT suppliers (غير مُسجَّل) carry NO input VAT — the
+  // full amount becomes cost, creating the VAT deficit the company must absorb。
+ 
+  const vat = hasVat === false ? 0 : vatOnNet(net, vatRate);
   const gross = round2(net + vat);
   const withholding = round2((net * whRate) / 100);
   const balance = round2(gross - withholding); // payable to supplier
-  return { net: round2(net), vat, gross, withholding, whRate, balance };
+  return { net: round2(net), vat, gross, withholding, whRate, balance, hasVat };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -107,6 +110,7 @@ router.get("/accounts/supplier-invoices", requireAuth, async (req, res): Promise
       poNo: r.poNo,
       invoiceDate: r.invoiceDate,
       dueDate: r.dueDate,
+      hasVat: r.hasVat === false ? false : true,
       netAmount: formatNum(toNum(r.netAmount)),
       vatAmount: formatNum(toNum(r.vatAmount)),
       withholdingRate: formatNum(toNum(r.withholdingRate)),
@@ -152,6 +156,7 @@ router.get("/accounts/supplier-invoices/:id", requireAuth, async (req, res): Pro
     poNo: row.poNo,
     invoiceDate: row.invoiceDate,
     dueDate: row.dueDate,
+    hasVat: row.hasVat === false ? false : true,
     netAmount: formatNum(toNum(row.netAmount)),
     vatAmount: formatNum(toNum(row.vatAmount)),
     withholdingRate: formatNum(toNum(row.withholdingRate)),
@@ -185,6 +190,7 @@ router.post("/accounts/supplier-invoices", requireRole("accountant", "manager", 
     invoiceDate: string;
     dueDate?: string | null;
     netAmount: number | string;
+    hasVat?: boolean;
     withholdingRate?: number | string | null;
     applyWithholding?: boolean;
     notes?: string | null;
@@ -197,7 +203,20 @@ router.post("/accounts/supplier-invoices", requireRole("accountant", "manager", 
   const settings = await loadTaxLite();
   const net = toNum(body.netAmount)!;
   const whRate = body.applyWithholding === false ? 0 : rateOf(body.withholdingRate != null ? String(body.withholdingRate) : null, settings.withholdingRate);
-  const c = computeInvoice(net, settings.vatRate, whRate);
+  // Auto-derive VAT treatment from the linked supplier record (غير مُسجَّل suppliers
+  // have invoice_has_vat=false — their invoices carry NO input VAT。 When no
+  // supplier is linked the caller must pass hasVat explicitly.
+  let hasVat = body.hasVat === undefined ? true : body.hasVat === false ? false : true;
+  if (body.hasVat === undefined && body.supplierId) {
+
+    const [sup] = await db
+      .select({ invoiceHasVat: suppliersTable.invoiceHasVat })
+      .from(suppliersTable)
+      .where(eq(suppliersTable.id, body.supplierId))
+      .limit(1);
+    if (sup && sup.invoiceHasVat === false) hasVat = false;
+  }
+  const c = computeInvoice(net, settings.vatRate, whRate, hasVat);
 
   const year = parseInt(body.invoiceDate.slice(0, 4), 10) || new Date().getFullYear();
   const invoiceNo = await nextEntryNo("SI", year);
@@ -223,6 +242,7 @@ router.post("/accounts/supplier-invoices", requireRole("accountant", "manager", 
       dueDate: body.dueDate ?? null,
       netAmount: String(c.net),
       vatAmount: String(c.vat),
+      hasVat: c.hasVat,
       withholdingRate: String(c.whRate),
       withholdingAmount: String(c.withholding),
       grossAmount: String(c.gross),
@@ -265,6 +285,7 @@ router.patch("/accounts/supplier-invoices/:id", requireRole("accountant", "manag
     invoiceDate?: string;
     dueDate?: string | null;
     netAmount?: number | string;
+    hasVat?: boolean;
     withholdingRate?: number | string | null;
     applyWithholding?: boolean;
     notes?: string | null;
@@ -277,7 +298,8 @@ router.patch("/accounts/supplier-invoices/:id", requireRole("accountant", "manag
       : body.withholdingRate != null
         ? rateOf(String(body.withholdingRate), settings.withholdingRate)
         : rateOf(existing.withholdingRate, settings.withholdingRate);
-  const c = computeInvoice(net, settings.vatRate, whRate);
+  const hasVat = body.hasVat === undefined ? (existing.hasVat === false ? false : true) : body.hasVat === false ? false : true;
+  const c = computeInvoice(net, settings.vatRate, whRate, hasVat);
   let poNo = existing.poNo;
   if (body.poId !== undefined) {
     if (body.poId) {
@@ -302,6 +324,7 @@ router.patch("/accounts/supplier-invoices/:id", requireRole("accountant", "manag
       dueDate: body.dueDate ?? existing.dueDate,
       netAmount: String(c.net),
       vatAmount: String(c.vat),
+      hasVat: c.hasVat,
       withholdingRate: String(c.whRate),
       withholdingAmount: String(c.withholding),
       grossAmount: String(c.gross),
@@ -333,6 +356,7 @@ router.post("/accounts/supplier-invoices/:id/post", requireRole("accountant", "m
   const wh = toNum(inv.withholdingAmount)!;
   const gross = toNum(inv.grossAmount)!;
   const payable = round2(gross - wh);
+  const hasVat = inv.hasVat === false ? false : true;
   const party = { partyType: "supplier" as const, partyId: inv.supplierId, partyName: inv.supplierName };
 
   const entryId = await postJournalEntry({
@@ -343,8 +367,11 @@ router.post("/accounts/supplier-invoices/:id/post", requireRole("accountant", "m
     employeeId: session.employeeId,
     employeeName: session.employeeName,
     lines: [
-      { accountCode: ACCOUNT_CODES.INVENTORY, description: `صافي قيمة التوريد — ${inv.invoiceNo}`, debit: net, ...party },
-      { accountCode: ACCOUNT_CODES.INPUT_VAT, description: "ض.ق.م. المدخلات", debit: vat, ...party },
+      { accountCode: ACCOUNT_CODES.INVENTORY, description: `صافي قيمة التوريد — ${inv.invoiceNo}`, debit: hasVat ? net : round2(net + vat), ...party },
+      // No deductible input VAT for purchases from non-VAT suppliers (غير مُسجَّل)
+      ...(hasVat && vat > 0
+        ? [{ accountCode: ACCOUNT_CODES.INPUT_VAT, description: "ض.ق.م. المدخلات", debit: vat, ...party }]
+        : []),
       { accountCode: ACCOUNT_CODES.AP, description: "ذمم الموردين", credit: payable, ...party },
       ...(wh > 0
         ? [{ accountCode: ACCOUNT_CODES.WITHHOLDING_PAYABLE, description: "الخصم تحت حساب الضريبة", credit: wh, ...party }]

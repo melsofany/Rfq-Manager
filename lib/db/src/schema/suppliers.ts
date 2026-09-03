@@ -12,6 +12,11 @@ export const suppliersTable = pgTable("suppliers", {
   address: text("address"),
   category: text("category").notNull().default("general"),
   isActive: boolean("is_active").notNull().default(true),
+  // Whether the supplier issues VAT invoices (ض.ق.م.). Deals from non-VAT
+  // suppliers (غير مُسجَّل‌ين) carry NO deductible input VAT — the full purchase
+  // amount becomes cost (or expense), creating a VAT deficit the company must
+  // absorb. Defaults true (registered suppliers) so existing rows count as VAT.
+  invoiceHasVat: boolean("invoice_has_vat").notNull().default(true),
   // Timestamp of the last manual reactivation (false→true). The auto-deactivate
   // sweep counts unanswered sends since GREATEST(last_offer, reactivated_at),
   // so reactivating a supplier resets its no-reply counter and it takes 10

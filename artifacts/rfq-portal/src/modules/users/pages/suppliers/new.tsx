@@ -29,6 +29,7 @@ export default function NewSupplierPage() {
     phone: "",
     address: "",
   });
+  const [invoiceHasVat, setInvoiceHasVat] = useState(true);
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -65,7 +66,7 @@ export default function NewSupplierPage() {
     }
     const category = Array.from(selectedCats).join(",");
     createMutation.mutate({
-      data: { ...form, category } as Parameters<typeof createMutation.mutate>[0]["data"],
+      data: { ...form, category, invoiceHasVat } as Parameters<typeof createMutation.mutate>[0]["data"],
     });
   };
 
@@ -88,6 +89,32 @@ export default function NewSupplierPage() {
           onSubmit={handleSubmit}
           className="bg-card border border-border rounded-lg p-6 space-y-5"
         >
+          <div className="space-y-1.5 col-span-2">
+              <Label>فاتورة المورد تحمل ضريبة القيمة المضافة؟</Label>
+              <div className="flex gap-4 pt-1">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="invoiceHasVat"
+                    checked={invoiceHasVat === true}
+                    onChange={() => setInvoiceHasVat(true)}
+                    className="accent-primary"
+                  />
+                  نعم — مورد مسجَّل (نتحمل ض.ق.م. مدخلات قابل للخصم)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="invoiceHasVat"
+                    checked={invoiceHasVat === false}
+                    onChange={() => setInvoiceHasVat(false)}
+                    className="accent-primary"
+                  />
+                  لا — غير مسجَّل (كامل المبلغ مصروف بدون ضريبة مدخلات)
+                </label>
+              </div>
+            </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label>Supplier ID</Label>

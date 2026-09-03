@@ -12,8 +12,9 @@
  */
 import { db } from "@workspace/db";
 import { journalEntriesTable, journalLinesTable, chartOfAccountsTable } from "@workspace/db";
-import { eq, sql, and, gte, lte, desc } from "drizzle-orm";
+import { eq, sql,and,gte,lte,desc } from "drizzle-orm";
 import { round2 } from "./tax";
+import { assertMonthOpen } from "./closing";
 
 export interface JournalLineInput {
   accountCode: string;
@@ -83,6 +84,8 @@ export async function postJournalEntry(input: PostJournalInput): Promise<number>
     throw new Error(`القيد غير متوازن: مدين ${totalDebit} ≠ دائن ${totalCredit}`);
   }
   if (totalDebit === 0) throw new Error("القيد صفر — لا قيمة له");
+  // Monthly closing lock — refuse posting into a locked (مقفل) period.。
+  await assertMonthOpen(input.entryDate.slice(0, 7));
 
   const year = parseInt(input.entryDate.slice(0, 4), 10) || new Date().getFullYear();
   const entryNo = await nextEntryNo("JE", year);

@@ -32,7 +32,7 @@ import {
 } from "@workspace/db";
 import { eq, sql, and, desc, gte, lte } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
-import { rateOf, round2 } from "./tax";
+import { rateOf, round2, vatOnNet } from "./tax";
 
 const router = Router();
 
@@ -112,6 +112,10 @@ router.get("/accounts/margins", requireAuth, async (req, res): Promise<void> => 
   const from = (req.query.from as string) || undefined;
   const to = (req.query.to as string) || undefined;
   const onlyLoss = req.query.onlyLoss === "true";
+  // «أوامر الشراء لا تظهر إلا بعد تسليمها» — displays only lines where the
+  // supplier has actually delivered/received goods (cost realized). Pass
+  // ?deliveries=all to include not-yet-received purchase-order lines too.
+  const deliveriesFilter = (req.query.deliveries as string) || "received";
 
   const rows = await db
     .select({
@@ -195,7 +199,13 @@ router.get("/accounts/margins", requireAuth, async (req, res): Promise<void> => 
     };
   });
 
-  res.json(onlyLoss ? lines.filter((l) => l.isLoss) : lines);
+  const visible = lines.filter((l) => {
+    if (onlyLoss && !l.isLoss) return false;
+    if (deliveriesFilter === "all") return true;
+    // default received — السطر يظهر فقط عندما تم استلام البضاعة من المورد
+    return l.supplierPoItemId != null && l.acceptedQty != null;
+  });
+  res.json(visible);
 });
 
 // GET /accounts/margins/summary — aggregated totals across all margin lines.
@@ -346,6 +356,7 @@ router.get("/accounts/vat", requireAuth, async (req, res): Promise<void> => {
       netAmount: supplierInvoicesTable.netAmount,
       vatAmount: supplierInvoicesTable.vatAmount,
       grossAmount: supplierInvoicesTable.grossAmount,
+      hasVat: supplierInvoicesTable.hasVat,
       status: supplierInvoicesTable.status,
     })
     .from(supplierInvoicesTable)
@@ -354,12 +365,31 @@ router.get("/accounts/vat", requireAuth, async (req, res): Promise<void> => {
   const input: VatLine[] = [];
   let inputNet = 0;
   let inputVat = 0;
+  let nonVatNet = 0;
+  let nonVatDeficit = 0;
+  const nonVatPurchases: VatLine[] = [];
   for (const r of buyInvoices) {
     if (from && r.invoiceDate < from) continue;
     if (to && r.invoiceDate > to + " 23:59:59") continue;
     const net = toNum(r.netAmount) ?? 0;
     const vat = toNum(r.vatAmount) ?? 0;
     if (net === 0 && vat === 0) continue;
+    // Purchases from NON-VAT suppliers (غير مُسجَّل) carry NO deductible input
+    // VAT — they become pure cost, creating the VAT deficit the company must absorb.
+
+    if (r.hasVat === false) {
+      nonVatNet += net;
+      nonVatDeficit = round2(nonVatDeficit + vatOnNet(net, vatRate));
+      nonVatPurchases.push({
+        date: dateOf(r.invoiceDate),
+        party: r.supplierName ?? null,
+        document: r.supplierInvoiceNo ?? r.invoiceNo ?? r.poNo,
+        net,
+        vat: 0,
+        gross: net,
+      });
+      continue;
+    }
     inputNet += net;
     inputVat += vat;
     input.push({
@@ -380,6 +410,8 @@ router.get("/accounts/vat", requireAuth, async (req, res): Promise<void> => {
     to: to ?? null,
     output: { net: round2(outputNet), vat: round2(outputVat) },
     input: { net: round2(inputNet), vat: round2(inputVat) },
+    nonVatNet: round2(nonVatNet),
+    nonVatDeficit: round2(nonVatDeficit),
     netVat,
     payable: netVat > 0 ? netVat : 0,
     credit: netVat < 0 ? Math.abs(netVat) : 0,
@@ -390,6 +422,12 @@ router.get("/accounts/vat", requireAuth, async (req, res): Promise<void> => {
       gross: round2(l.gross),
     })),
     inputLines: input.map((l) => ({
+      ...l,
+      net: round2(l.net),
+      vat: round2(l.vat),
+      gross: round2(l.gross),
+    })),
+    nonVatPurchases: nonVatPurchases.map((l) => ({
       ...l,
       net: round2(l.net),
       vat: round2(l.vat),

@@ -14,4 +14,6 @@ export interface SupplierInput {
   phone?: string;
   address?: string;
   category: string;
+  /** false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات) */
+  invoiceHasVat?: boolean;
 }

@@ -300,6 +300,14 @@ export async function initDb(): Promise<void> {
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS reactivated_at TIMESTAMPTZ;
     `);
 
+    // Add invoice_has_vat to suppliers — marks suppliers that DO NOT issue VAT
+    // invoices (غير مُسجَّلin VAT). Purchases from them carry no deductible
+    // input VAT; the full amount becomes cost/expense, enabling the company to
+    // measure the VAT deficit (عجز ض.ق.م.) caused by those deals.
+    await client.query(`
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS invoice_has_vat BOOLEAN NOT NULL DEFAULT true;
+    `);
+
     // Add owning customer to customer_pos (safe migration — skipped if already present)
     await client.query(`
       ALTER TABLE customer_pos ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id);
@@ -685,6 +693,7 @@ export async function initDb(): Promise<void> {
         due_date              TEXT,
         net_amount            NUMERIC(15,4) NOT NULL DEFAULT 0,
         vat_amount            NUMERIC(15,4) NOT NULL DEFAULT 0,
+        has_vat              BOOLEAN NOT NULL DEFAULT true,
         withholding_rate      NUMERIC(6,4) NOT NULL DEFAULT 0,
         withholding_amount    NUMERIC(15,4) NOT NULL DEFAULT 0,
         gross_amount          NUMERIC(15,4) NOT NULL DEFAULT 0,
@@ -780,6 +789,24 @@ export async function initDb(): Promise<void> {
       );
     `);
 
+    // Idempotent column additions for the accounting tables (safe on existing DBs).
+    await client.query(`
+      ALTER TABLE supplier_invoices ADD COLUMN IF NOT EXISTS has_vat BOOLEAN NOT NULL DEFAULT true;
+    `);
+
+    // Monthly closing lock — الإقفال الشهري (one row per YYYY-MM; journal
+    // entries may not be created/posted/voided/reviewed for a locked month).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS accounting_closings (
+        id               SERIAL PRIMARY KEY,
+        period           TEXT NOT NULL UNIQUE,
+        closed_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        closed_by        INTEGER REFERENCES employees(id),
+        closed_by_name   TEXT,
+        notes            TEXT
+      );
+    `);
+
     // ── data_entry_sessions ──────────────────────────────────────────────
     // Tracks the time an operator spent filling a "new" form (RFQ / PO)
     // from form-open (startedAt) to successful save (endedAt), so we can
@@ -833,11 +860,16 @@ export async function initDb(): Promise<void> {
       ["5200", "رواتب وأجور", "expense", false],
       ["5300", "إيجارات", "expense", false],
       ["5400", "كهرباء ومياه", "expense", false],
+      ["5401", "كهرباء", "expense", false],
+      ["5402", "مياه", "expense", false],
       ["5410", "اتصالات", "expense", false],
+      ["5412", "انترنت", "expense", false],
       ["5500", "صيانة", "expense", false],
       ["5600", "مصروفات إدارية", "expense", false],
       ["5700", "خدمات تقنية واستضافة", "expense", false],
+      ["5750", "اشتراكات ودعم فني", "expense", false],
       ["5800", "مصاريف نقل وشحن", "expense", false],
+      ["5805", "نقل وتنقل", "expense", false],
       ["5810", "مصاريف جمارك", "expense", false],
       ["5900", "عمولات ومصاريف بنكية", "expense", false],
       ["5990", "نثريات", "expense", false],

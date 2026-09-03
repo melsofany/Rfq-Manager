@@ -71,8 +71,12 @@ const SOURCE_LABELS: Record<string, string> = {
 /** خريطة أنواع المصروفات إلى أكواد الحسابات (تطابق accounts/integration.ts). */
 const EXPENSE_CATEGORIES: { code: string; label: string }[] = [
   { code: "5300", label: "إيجارات" },
+  { code: "5401", label: "كهرباء" },
+  { code: "5402", label: "مياه" },
+  { code: "5412", label: "انترنت" },
   { code: "5700", label: "دومينات واستضافة وخدمات تقنية" },
-  { code: "5400", label: "كهرباء ومياه" },
+  { code: "5750", label: "اشتراكات ودعم فني" },
+  { code: "5805", label: "نقل وتنقل" },
   { code: "5410", label: "اتصالات" },
   { code: "5990", label: "نثريات" },
   { code: "5500", label: "صيانة" },
