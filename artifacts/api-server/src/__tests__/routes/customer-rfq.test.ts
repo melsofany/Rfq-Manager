@@ -15,7 +15,13 @@ function thenable<T>(value: T, extra: Record<string, any> = {}): any {
 }
 
 // Tables referenced by .from() / eq() / .references() — truthy markers are enough.
-const customerRfqsTbl = { _: "customerRfqs", customerRfqNo: "customerRfqNo", customerRfqNumber: "customerRfqNo", createdAt: "createdAt", id: "id" };
+const customerRfqsTbl = {
+  _: "customerRfqs",
+  customerRfqNo: "customerRfqNo",
+  customerRfqNumber: "customerRfqNo",
+  createdAt: "createdAt",
+  id: "id",
+};
 const rfqTable = { _: "supplierRfqs", customerRfqNo: "customerRfqNo", id: "id" };
 const itemsTable = { _: "customerRfqItems", customerRfqId: "customerRfqId" };
 const customersTable = { _: "customers", id: "id", name: "name" };
@@ -111,16 +117,24 @@ const dbMock: any = {
   // select() builds a chain whose .from(table) decides which data to return.
   select: vi.fn((arg?: any) => ({
     from: vi.fn((table: any) => {
-// generateInternalNo: select({maxNo: sql`max(...)`}).from(rfqTable).where() — awaited directly.
+      // generateInternalNo: select({maxNo: sql`max(...)`}).from(rfqTable).where() — awaited directly.
       if (table === customerRfqsTbl && arg && typeof arg === "object" && "maxNo" in arg) {
         return chainable([maxNoRow], {
           where: vi.fn(() => chainable([maxNoRow])),
         });
       }
       // uniqueness probe: select({id}).from(rfqTable)..where(and(...)).limit(1) — awaited directly.
-      if (table === customerRfqsTbl && arg && typeof arg === "object" && "id" in arg && !("rfq" in arg)) {
+      if (
+        table === customerRfqsTbl &&
+        arg &&
+        typeof arg === "object" &&
+        "id" in arg &&
+        !("rfq" in arg)
+      ) {
         return chainable(existingIdRows, {
-          where: vi.fn(() => chainable(existingIdRows, { limit: vi.fn(() => chainable(existingIdRows)) })),
+          where: vi.fn(() =>
+            chainable(existingIdRows, { limit: vi.fn(() => chainable(existingIdRows)) }),
+          ),
           limit: vi.fn(() => chainable(existingIdRows)),
         });
       }
@@ -198,8 +212,7 @@ const dbMock: any = {
             customerRfqId: r.customerRfqId ?? null,
             // A row may explicitly declare a severed item link (null) while
             // still carrying the RFQ item + partNo it belongs to.
-            customerRfqItemId:
-              "poLinkRfqItemId" in r ? r.poLinkRfqItemId : (r.rfqItemId ?? null),
+            customerRfqItemId: "poLinkRfqItemId" in r ? r.poLinkRfqItemId : (r.rfqItemId ?? null),
             lineItem: r.lineItem ?? null,
             partNo: r.partNo ?? null,
             description: r.description ?? null,
@@ -215,7 +228,12 @@ const dbMock: any = {
         return chainable(poViews, { innerJoin: vi.fn(() => chainable(poViews)) });
       }
       // Sheet-view supplier cost: select({...}).from(purchaseOrderItems).where()
-      if (table === (tables as any).purchaseOrderItemsTable && arg && typeof arg === "object" && "finalActualCost" in arg) {
+      if (
+        table === (tables as any).purchaseOrderItemsTable &&
+        arg &&
+        typeof arg === "object" &&
+        "finalActualCost" in arg
+      ) {
         const costRows = sheetRows
           .filter((r: any) => r.poItemId != null)
           .map((r: any) => ({
@@ -326,7 +344,9 @@ const dbMock: any = {
         return { returning: vi.fn(() => chainable(detailRow ? [detailRow] : [])) };
       if (table === itemsTable) {
         const val = cond?.val;
-        deletedItemIds.push(...(Array.isArray(val) ? val : [val]).filter((v: any) => typeof v === "number"));
+        deletedItemIds.push(
+          ...(Array.isArray(val) ? val : [val]).filter((v: any) => typeof v === "number"),
+        );
       }
       return chainable(undefined);
     }),
@@ -349,7 +369,10 @@ vi.mock("drizzle-orm", () => ({
   or: vi.fn((...a: any[]) => a),
   isNotNull: vi.fn((c: any) => c),
   ne: vi.fn((...a: any[]) => a),
-  sql: Object.assign(vi.fn(() => "sql"), { raw: vi.fn() }),
+  sql: Object.assign(
+    vi.fn(() => "sql"),
+    { raw: vi.fn() },
+  ),
 }));
 
 let testApp: express.Express;
@@ -1015,9 +1038,7 @@ describe("PATCH /api/customer-rfq/:id", () => {
   it("keeps a sent RFQ read-only for an unprivileged employee", async () => {
     sessionState.role = "data_entry";
     detailRow = { ...insertedRfq, status: "sent", expiryDate: "2020-01-01" };
-    const res = await request(testApp)
-      .patch("/api/customer-rfq/42")
-      .send({ notes: "x" });
+    const res = await request(testApp).patch("/api/customer-rfq/42").send({ notes: "x" });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("بعد إرساله");
   });
@@ -1176,7 +1197,6 @@ describe("GET /api/customer-rfq/sheet-view", () => {
     expect(res.body.rows[0].rfqItemId).toBe(2);
   });
 
-
   it("merges the manual highlight note into «السبب» and returns the highlight color", async () => {
     sheetRows = [
       {
@@ -1235,9 +1255,7 @@ describe("GET /api/customer-rfq/sheet-view", () => {
         deliveryStatus: "rejected",
       },
     ];
-    sheetRejectedDeliveries = [
-      { customerPoItemId: 45, reason: "تالف", createdAt: new Date() },
-    ];
+    sheetRejectedDeliveries = [{ customerPoItemId: 45, reason: "تالف", createdAt: new Date() }];
     const res = await request(testApp).get("/api/customer-rfq/sheet-view");
     expect(res.status).toBe(200);
     const row = res.body.rows[0];
@@ -1274,9 +1292,7 @@ describe("GET /api/customer-rfq/sheet-view", () => {
         deliveryStatus: "cancelled",
       },
     ];
-    sheetRejectedDeliveries = [
-      { customerPoItemId: 46, reason: "تالف", createdAt: new Date() },
-    ];
+    sheetRejectedDeliveries = [{ customerPoItemId: 46, reason: "تالف", createdAt: new Date() }];
     const res = await request(testApp).get("/api/customer-rfq/sheet-view");
     expect(res.status).toBe(200);
     const row = res.body.rows[0];
@@ -1754,7 +1770,16 @@ describe("GET /api/customer-rfq/sheet-view — customer PO always visible", () =
     // The stored PO line points at RFQ item 10 by partNo, but its
     // customer_rfq_item_id is NULL (nulled by ON DELETE SET NULL).
     sheetRows = [
-      { ...baseRfqRow, rfqItemId: 10, poItemId: 90, poNo: "877", poDate: "2025-01-20", poQty: "3", poUnitPrice: "130", poLinkRfqItemId: null },
+      {
+        ...baseRfqRow,
+        rfqItemId: 10,
+        poItemId: 90,
+        poNo: "877",
+        poDate: "2025-01-20",
+        poQty: "3",
+        poUnitPrice: "130",
+        poLinkRfqItemId: null,
+      },
     ];
     const res = await request(testApp).get("/api/customer-rfq/sheet-view");
     expect(res.status).toBe(200);
@@ -1808,7 +1833,16 @@ describe("GET /api/customer-rfq/sheet-view — customer PO always visible", () =
 
   it("finds a severed-link PO line when searching by its PO number", async () => {
     sheetRows = [
-      { ...baseRfqRow, rfqItemId: 10, poItemId: 90, poNo: "877", poDate: "2025-01-20", poQty: "3", poUnitPrice: "130", poLinkRfqItemId: null },
+      {
+        ...baseRfqRow,
+        rfqItemId: 10,
+        poItemId: 90,
+        poNo: "877",
+        poDate: "2025-01-20",
+        poQty: "3",
+        poUnitPrice: "130",
+        poLinkRfqItemId: null,
+      },
     ];
     const res = await request(testApp).get("/api/customer-rfq/sheet-view?search=877");
     expect(res.status).toBe(200);

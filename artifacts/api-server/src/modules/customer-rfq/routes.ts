@@ -110,23 +110,14 @@ async function resolveApprovedCosts(
     // fallback — a stale approved price on an unrelated old RFQ must not count.
 
     const scopeCond = customerRfqNo
-      ? and(
-          eq(rfqTable.customerRfqNo, customerRfqNo),
-          isNull(rfqItemsTable.customerRfqItemId),
-        )
+      ? and(eq(rfqTable.customerRfqNo, customerRfqNo), isNull(rfqItemsTable.customerRfqItemId))
       : isNull(rfqItemsTable.customerRfqItemId);
-       const fallback = await db
+    const fallback = await db
       .select({ price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
       .from(offerItemsTable)
       .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
       .innerJoin(rfqTable, eq(rfqItemsTable.rfqId, rfqTable.id))
-      .where(
-        and(
-          matchCond,
-          scopeCond,
-          eq(offerItemsTable.isApproved, true),
-        ),
-      );
+      .where(and(matchCond, scopeCond, eq(offerItemsTable.isApproved, true)));
     if (fallback.length > 0) {
       const excl = fallback.map((f) =>
         f.taxIncluded ? parseFloat(f.price) / (1 + VAT_RATE) : parseFloat(f.price),
@@ -150,10 +141,10 @@ async function generateInternalNo(): Promise<string> {
     .where(sql`${customerRfqsTable.internalNo} like ${prefix + "%"}`);
   let seq = 1;
   if (result?.maxNo) {
-    const lastSeq = parseInt(result.maxNo.slice(prefix.length),10);
+    const lastSeq = parseInt(result.maxNo.slice(prefix.length), 10);
     if (!isNaN(lastSeq) && lastSeq > 0) seq = lastSeq + 1;
   }
-  return `${prefix}${String(seq).padStart(6,"0")}`;
+  return `${prefix}${String(seq).padStart(6, "0")}`;
 }
 
 // Enforce uniqueness of the customer RFQ number (رقم طلب تسعير العميل) — which
@@ -161,10 +152,7 @@ async function generateInternalNo(): Promise<string> {
 // case-insensitive; auto-generated numbers are already unique-so. `excludeId`
 // lets a PATCH ignore the row this update targets.
 
-async function assertRfqNoIsUnique(
-  rfqNo: string,
-  excludeId?: number,
-): Promise<boolean> {
+async function assertRfqNoIsUnique(rfqNo: string, excludeId?: number): Promise<boolean> {
   const trimmed = rfqNo.trim();
   if (!trimmed) return true;
   const existing = await db
@@ -191,7 +179,12 @@ function formatQty(qty: string | null): string | null {
 // by partNo first then lineItem, ignoring case and whitespace. Drives both price
 // preservation and the UPDATE-in-place save.
 function findItemByKey<
-  T extends { id: number; partNo: string | null; lineItem: string | null; unitPrice: string | null },
+  T extends {
+    id: number;
+    partNo: string | null;
+    lineItem: string | null;
+    unitPrice: string | null;
+  },
 >(rows: T[], it: { partNo?: string; lineItem?: string }): T | undefined {
   const key = (v: string | null | undefined) => (v ?? "").replace(/\s+/g, "").trim().toLowerCase();
   const partNo = key(it.partNo);
@@ -286,7 +279,7 @@ async function resolveSupplierPricedItemIds(
 
   if (!withLegacyFallback) return priced;
 
-// Legacy fallback: items with no FK link, matched by partNo/lineItem — but
+  // Legacy fallback: items with no FK link, matched by partNo/lineItem — but
   // ONLY from supplier RFQs actually created for THIS customer RFQ (rfq.customer_rfq_no. A
   // stale approved price on an unrelated old RFQ must not count as "supplier-priced"
   // for a fresh RFQ that was never sent to suppliers. When no customerRfqNo is
@@ -301,23 +294,14 @@ async function resolveSupplierPricedItemIds(
     const matchCond = partMatch && lineMatch ? or(partMatch, lineMatch) : (partMatch ?? lineMatch);
     if (!matchCond) continue;
     const scopeCond = customerRfqNo
-      ? and(
-          eq(rfqTable.customerRfqNo, customerRfqNo),
-          isNull(rfqItemsTable.customerRfqItemId),
-        )
+      ? and(eq(rfqTable.customerRfqNo, customerRfqNo), isNull(rfqItemsTable.customerRfqItemId))
       : isNull(rfqItemsTable.customerRfqItemId);
-     const fallback = await db
+    const fallback = await db
       .select({ id: offerItemsTable.id })
       .from(offerItemsTable)
       .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
       .innerJoin(rfqTable, eq(rfqItemsTable.rfqId, rfqTable.id))
-      .where(
-        and(
-          matchCond,
-          scopeCond,
-          eq(offerItemsTable.isApproved, true),
-        ),
-      );
+      .where(and(matchCond, scopeCond, eq(offerItemsTable.isApproved, true)));
     if (fallback.length > 0) priced.add(ci.id);
   }
   return priced;
@@ -758,8 +742,11 @@ router.get("/customer-rfq/check-number", requireAuth, async (req, res): Promise<
     res.json({ available: true });
     return;
   }
-  const excludeId = req.query.excludeId !== undefined ? parseInt(String(req.query.excludeId), 10) : undefined;
-  res.json({ available: await assertRfqNoIsUnique(value, Number.isFinite(excludeId) ? excludeId : undefined) });
+  const excludeId =
+    req.query.excludeId !== undefined ? parseInt(String(req.query.excludeId), 10) : undefined;
+  res.json({
+    available: await assertRfqNoIsUnique(value, Number.isFinite(excludeId) ? excludeId : undefined),
+  });
 });
 
 router.get("/customer-rfq/numbers", requireAuth, async (_req, res): Promise<void> => {
@@ -1195,7 +1182,8 @@ router.get("/customer-rfq/sheet-view", requireAuth, async (req, res): Promise<vo
     rows: page.map((r) => {
       // The «السبب» column = computed flags (rejection/cost-overrun) plus the
       // manually-set highlight note (appended with —).
-      const flagReason = [r.flagReason, r.highlightNote].filter((s) => s != null).join(" — ") || null;
+      const flagReason =
+        [r.flagReason, r.highlightNote].filter((s) => s != null).join(" — ") || null;
       return {
         rfqItemId: r.rfqItemId,
         lineItem: r.lineItem,
@@ -1242,7 +1230,7 @@ router.get("/customer-rfq/sheet-view/facets", requireAuth, async (req, res): Pro
     // highlight note merged, exactly like the sheet-view response.
     const v =
       field === "flagReason"
-        ? ([r.flagReason, r.highlightNote].filter((s) => s != null).join(" — ") || null)
+        ? [r.flagReason, r.highlightNote].filter((s) => s != null).join(" — ") || null
         : r[field];
     const key = v == null ? "" : String(v);
     counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -1305,7 +1293,6 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
   // A typed customer RFQ number must be unique (case-insensitive) across all
   // customer RFQs.
   if (!autoGenerated && !(await assertRfqNoIsUnique(finalRfqNo))) {
-
     res.status(400).json({ error: "رقم طلب تسعير العميل مستخدم بالفعل — اختر رقماً آخر" });
     return;
   }
@@ -1359,9 +1346,7 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
           uom: it.uom?.trim() || null,
           qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
           unitPrice:
-            mayPrice && it.unitPrice != null && it.unitPrice !== ""
-              ? String(it.unitPrice)
-              : null,
+            mayPrice && it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null,
         })),
       );
       itemCount = validItems.length;
@@ -1457,33 +1442,25 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   // 1.06x floor no longer block them. Header + items are rewritten below, with
   // item prices gathered/preserved by loadCurrentDbItemsForPricing.
 
-  const {
-    customerName,
-    customerRfqNo,
-    entryDate,
-    expiryDate,
-    buyerName,
-    notes,
-    status,
-    items,
-  } = req.body as {
-    customerName?: string;
-    customerRfqNo?: string;
-    entryDate?: string;
-    expiryDate?: string;
-    buyerName?: string;
-    notes?: string;
-    status?: string;
-    items?: Array<{
-      id?: number;
-      partNo?: string;
-      lineItem?: string;
-      description?: string;
-      uom?: string;
-      qty?: string | number | null;
-      unitPrice?: string | number | null;
-    }>;
-  };
+  const { customerName, customerRfqNo, entryDate, expiryDate, buyerName, notes, status, items } =
+    req.body as {
+      customerName?: string;
+      customerRfqNo?: string;
+      entryDate?: string;
+      expiryDate?: string;
+      buyerName?: string;
+      notes?: string;
+      status?: string;
+      items?: Array<{
+        id?: number;
+        partNo?: string;
+        lineItem?: string;
+        description?: string;
+        uom?: string;
+        qty?: string | number | null;
+        unitPrice?: string | number | null;
+      }>;
+    };
 
   const updates: Record<string, unknown> = {};
   if (customerName !== undefined) updates.customerName = customerName.trim();
@@ -1520,7 +1497,12 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   // for inputs it rendered and edited). Without this, any untouched item
   // comes back with unit_price = NULL (the "prices wiped on save" bug on the
   // live 2263 RFQ).
-  let currentDbItemsForPricing: Array<{ id: number; partNo: string | null; lineItem: string | null; unitPrice: string | null }> | null = null;
+  let currentDbItemsForPricing: Array<{
+    id: number;
+    partNo: string | null;
+    lineItem: string | null;
+    unitPrice: string | null;
+  }> | null = null;
   const loadCurrentDbItemsForPricing = async () => {
     if (currentDbItemsForPricing) return currentDbItemsForPricing;
     currentDbItemsForPricing = await db
@@ -1539,8 +1521,10 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   // lineItem (the submitted items carry no id). Used both to preserve prices and
   // to UPDATE in place rather than delete+recreate — the row ids are referenced
   // by customer-PO and supplier-offer links.
-  const findDbItem = (rows: typeof currentDbItemsForPricing, it: { partNo?: string; lineItem?: string }) =>
-    findItemByKey(rows ?? [], it);
+  const findDbItem = (
+    rows: typeof currentDbItemsForPricing,
+    it: { partNo?: string; lineItem?: string },
+  ) => findItemByKey(rows ?? [], it);
 
   if (status === "sent" && validItems !== undefined) {
     const unpriced = validItems.filter(
@@ -1559,10 +1543,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     // with the cost: an item with no approved supplier price, or priced below
     // the margin floor, still finalizes — the deviation is audit-logged.
     const currentDbItems = await loadCurrentDbItemsForPricing();
-    const costs = await resolveApprovedCosts(
-      currentDbItems,
-      existing.customerRfqNo,
-    );
+    const costs = await resolveApprovedCosts(currentDbItems, existing.customerRfqNo);
 
     // Map a req.body item to its current DB item id (partNo first, then lineItem).
     const findDbId = (it: { partNo?: string; lineItem?: string }): number | null =>
