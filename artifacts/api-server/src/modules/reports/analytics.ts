@@ -763,7 +763,10 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
     db.select({ cnt: count() }).from(customerRfqsTable),
     db.select({ cnt: count() }).from(customerPosTable),
     db.select({ cnt: count() }).from(customersTable).where(eq(customersTable.isActive, true)),
-    db.select({ cnt: count() }).from(representativesTable).where(eq(representativesTable.isActive, true)),
+    db
+      .select({ cnt: count() })
+      .from(representativesTable)
+      .where(eq(representativesTable.isActive, true)),
     db.select({ cnt: count() }).from(employeesTable).where(eq(employeesTable.isActive, true)),
     db.select({ cnt: countDistinct(whatsappChatsTable.phone) }).from(whatsappChatsTable),
     db.select({ cnt: count() }).from(auditLogTable),
@@ -774,10 +777,17 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
 
   // ── Open RFQs (pricing deadline not passed) ──────────────────────────────
   const openCandidates = await db
-    .select({ id: rfqTable.id, status: rfqTable.status, expiresAt: rfqTable.expiresAt, requiredResponseDate: rfqTable.requiredResponseDate })
+    .select({
+      id: rfqTable.id,
+      status: rfqTable.status,
+      expiresAt: rfqTable.expiresAt,
+      requiredResponseDate: rfqTable.requiredResponseDate,
+    })
     .from(rfqTable)
     .where(sql`${rfqTable.status} IN ('SENT','QUOTED')`);
-  const closeDates = await db.select({ rfqId: sentLogTable.rfqId, closeDate: sentLogTable.closeDate }).from(sentLogTable);
+  const closeDates = await db
+    .select({ rfqId: sentLogTable.rfqId, closeDate: sentLogTable.closeDate })
+    .from(sentLogTable);
   const latestCloseByRfq = new Map<number, Date>();
   for (const row of closeDates) {
     const deadline = parsePricingDeadline(row.closeDate);
@@ -787,47 +797,102 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
   }
   const openRfqsCount = openCandidates.filter((rfq) => {
     const sentDeadline = latestCloseByRfq.get(rfq.id);
-    const deadline = sentDeadline ?? parsePricingDeadline(rfq.expiresAt) ?? parsePricingDeadline(rfq.requiredResponseDate);
+    const deadline =
+      sentDeadline ??
+      parsePricingDeadline(rfq.expiresAt) ??
+      parsePricingDeadline(rfq.requiredResponseDate);
     return deadline !== null && deadline >= now;
   }).length;
 
   // ── Item pricing analytics ───────────────────────────────────────────────
-  const pricedItemsRows = await db.selectDistinct({ rfqItemId: offerItemsTable.rfqItemId }).from(offerItemsTable);
+  const pricedItemsRows = await db
+    .selectDistinct({ rfqItemId: offerItemsTable.rfqItemId })
+    .from(offerItemsTable);
   const pricedItems = pricedItemsRows.length;
   const totalItems = totalItemsRows[0]?.cnt ?? 0;
   const unpricedItems = Math.max(0, totalItems - pricedItems);
   const [poItemsRow] = await db
     .select({ cnt: countDistinct(rfqItemsTable.id) })
     .from(rfqItemsTable)
-    .innerJoin(purchaseOrderItemsTable, or(
-      and(isNotNull(rfqItemsTable.itemId), isNotNull(purchaseOrderItemsTable.itemId), eq(rfqItemsTable.itemId, purchaseOrderItemsTable.itemId)),
-      and(isNotNull(rfqItemsTable.partNo), isNotNull(purchaseOrderItemsTable.partNo), eq(rfqItemsTable.partNo, purchaseOrderItemsTable.partNo)),
-      and(isNotNull(rfqItemsTable.lineItem), isNotNull(purchaseOrderItemsTable.lineItem), eq(rfqItemsTable.lineItem, purchaseOrderItemsTable.lineItem)),
-    ));
+    .innerJoin(
+      purchaseOrderItemsTable,
+      or(
+        and(
+          isNotNull(rfqItemsTable.itemId),
+          isNotNull(purchaseOrderItemsTable.itemId),
+          eq(rfqItemsTable.itemId, purchaseOrderItemsTable.itemId),
+        ),
+        and(
+          isNotNull(rfqItemsTable.partNo),
+          isNotNull(purchaseOrderItemsTable.partNo),
+          eq(rfqItemsTable.partNo, purchaseOrderItemsTable.partNo),
+        ),
+        and(
+          isNotNull(rfqItemsTable.lineItem),
+          isNotNull(purchaseOrderItemsTable.lineItem),
+          eq(rfqItemsTable.lineItem, purchaseOrderItemsTable.lineItem),
+        ),
+      ),
+    );
   const itemsWithPo = poItemsRow?.cnt ?? 0;
   const pricingRate = totalItems > 0 ? Math.round((pricedItems / totalItems) * 1000) / 10 : 0;
   const poRate = totalItems > 0 ? Math.round((itemsWithPo / totalItems) * 1000) / 10 : 0;
 
   // ── RFQ → PO conversion ──────────────────────────────────────────────────
-  const [rfqsWithPoRow] = await db.select({ cnt: countDistinct(purchaseOrdersTable.rfqId) }).from(purchaseOrdersTable).where(isNotNull(purchaseOrdersTable.rfqId));
+  const [rfqsWithPoRow] = await db
+    .select({ cnt: countDistinct(purchaseOrdersTable.rfqId) })
+    .from(purchaseOrdersTable)
+    .where(isNotNull(purchaseOrdersTable.rfqId));
   const totalRfqsCount = totalRfqsRows[0]?.cnt ?? 0;
   const rfqsWithPo = rfqsWithPoRow?.cnt ?? 0;
-  const rfqToPoRate = totalRfqsCount > 0 ? Math.round((rfqsWithPo / totalRfqsCount) * 1000) / 10 : 0;
+  const rfqToPoRate =
+    totalRfqsCount > 0 ? Math.round((rfqsWithPo / totalRfqsCount) * 1000) / 10 : 0;
 
   // ── Response rate this month ─────────────────────────────────────────────
-  const [totalSentMonth] = await db.select({ cnt: count() }).from(sentLogTable).where(gte(sentLogTable.createdAt, monthStart));
-  const [respondedSentMonth] = await db.select({ cnt: countDistinct(offersTable.sentLogId) }).from(offersTable).innerJoin(sentLogTable, eq(offersTable.sentLogId, sentLogTable.id)).where(and(gte(sentLogTable.createdAt, monthStart), isNotNull(offersTable.sentLogId)));
-  const responseRateThisMonth = (totalSentMonth?.cnt ?? 0) > 0 ? Math.round(((respondedSentMonth?.cnt ?? 0) / (totalSentMonth?.cnt ?? 1)) * 100) : 0;
+  const [totalSentMonth] = await db
+    .select({ cnt: count() })
+    .from(sentLogTable)
+    .where(gte(sentLogTable.createdAt, monthStart));
+  const [respondedSentMonth] = await db
+    .select({ cnt: countDistinct(offersTable.sentLogId) })
+    .from(offersTable)
+    .innerJoin(sentLogTable, eq(offersTable.sentLogId, sentLogTable.id))
+    .where(and(gte(sentLogTable.createdAt, monthStart), isNotNull(offersTable.sentLogId)));
+  const responseRateThisMonth =
+    (totalSentMonth?.cnt ?? 0) > 0
+      ? Math.round(((respondedSentMonth?.cnt ?? 0) / (totalSentMonth?.cnt ?? 1)) * 100)
+      : 0;
 
   // ── Avg response time ────────────────────────────────────────────────────
-  const avgResponseTimeResult = await db.select({ avgHours: sql<string | null>`avg(extract(epoch from (${offersTable.createdAt} - ${sentLogTable.createdAt})) / 3600)` }).from(offersTable).innerJoin(sentLogTable, eq(offersTable.sentLogId, sentLogTable.id));
-  const avgResponseTimeHours = avgResponseTimeResult[0]?.avgHours ? Math.round(parseFloat(avgResponseTimeResult[0].avgHours)) : null;
+  const avgResponseTimeResult = await db
+    .select({
+      avgHours: sql<
+        string | null
+      >`avg(extract(epoch from (${offersTable.createdAt} - ${sentLogTable.createdAt})) / 3600)`,
+    })
+    .from(offersTable)
+    .innerJoin(sentLogTable, eq(offersTable.sentLogId, sentLogTable.id));
+  const avgResponseTimeHours = avgResponseTimeResult[0]?.avgHours
+    ? Math.round(parseFloat(avgResponseTimeResult[0].avgHours))
+    : null;
 
   // ── Status distributions ─────────────────────────────────────────────────
-  const rfqsByStatus = await db.select({ status: rfqTable.status, count: count() }).from(rfqTable).groupBy(rfqTable.status);
-  const customerRfqsByStatus = await db.select({ status: customerRfqsTable.status, count: count() }).from(customerRfqsTable).groupBy(customerRfqsTable.status);
-  const customerPosByStatus = await db.select({ status: customerPosTable.status, count: count() }).from(customerPosTable).groupBy(customerPosTable.status);
-  const posByStatus = await db.select({ status: purchaseOrdersTable.status, count: count() }).from(purchaseOrdersTable).groupBy(purchaseOrdersTable.status);
+  const rfqsByStatus = await db
+    .select({ status: rfqTable.status, count: count() })
+    .from(rfqTable)
+    .groupBy(rfqTable.status);
+  const customerRfqsByStatus = await db
+    .select({ status: customerRfqsTable.status, count: count() })
+    .from(customerRfqsTable)
+    .groupBy(customerRfqsTable.status);
+  const customerPosByStatus = await db
+    .select({ status: customerPosTable.status, count: count() })
+    .from(customerPosTable)
+    .groupBy(customerPosTable.status);
+  const posByStatus = await db
+    .select({ status: purchaseOrdersTable.status, count: count() })
+    .from(purchaseOrdersTable)
+    .groupBy(purchaseOrdersTable.status);
 
   // ── PO receipt progress (batched) ────────────────────────────────────────
   // Cancelled POs are excluded — their lines were reset to "pending" on cancel
@@ -849,13 +914,24 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
     poProgressMap.set(r.poId, e);
   }
   const poReceiptTotals = Array.from(poProgressMap.values()).reduce(
-    (acc, v) => ({ total: acc.total + v.total, received: acc.received + v.received, rejected: acc.rejected + v.rejected }),
+    (acc, v) => ({
+      total: acc.total + v.total,
+      received: acc.received + v.received,
+      rejected: acc.rejected + v.rejected,
+    }),
     { total: 0, received: 0, rejected: 0 },
   );
 
   // ── Customer PO delivery progress ────────────────────────────────────────
-  const cpoDeliveryRows = await db.select({ deliveryStatus: customerPoItemsTable.deliveryStatus }).from(customerPoItemsTable);
-  const cpoDeliverySummary = { total: cpoDeliveryRows.length, delivered: 0, rejected: 0, pending: 0 };
+  const cpoDeliveryRows = await db
+    .select({ deliveryStatus: customerPoItemsTable.deliveryStatus })
+    .from(customerPoItemsTable);
+  const cpoDeliverySummary = {
+    total: cpoDeliveryRows.length,
+    delivered: 0,
+    rejected: 0,
+    pending: 0,
+  };
   for (const r of cpoDeliveryRows) {
     if (r.deliveryStatus === "delivered") cpoDeliverySummary.delivered++;
     else if (r.deliveryStatus === "rejected") cpoDeliverySummary.rejected++;
@@ -864,11 +940,23 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
 
   // ── Margins summary ──────────────────────────────────────────────────────
   const marginRows = await db
-    .select({ sellQty: customerPoItemsTable.qty, sellUnitPrice: customerPoItemsTable.unitPrice, acceptedQty: purchaseOrderItemsTable.totalAcceptedQty, finalActualCost: purchaseOrderItemsTable.finalActualCost })
+    .select({
+      sellQty: customerPoItemsTable.qty,
+      sellUnitPrice: customerPoItemsTable.unitPrice,
+      acceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
+      finalActualCost: purchaseOrderItemsTable.finalActualCost,
+    })
     .from(customerPoItemsTable)
     .innerJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
-    .leftJoin(purchaseOrderItemsTable, eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id));
-  let totalRevenue = 0, totalCost = 0, lossLines = 0, marginLineCount = 0, pricedLines = 0;
+    .leftJoin(
+      purchaseOrderItemsTable,
+      eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
+    );
+  let totalRevenue = 0,
+    totalCost = 0,
+    lossLines = 0,
+    marginLineCount = 0,
+    pricedLines = 0;
   for (const r of marginRows) {
     const sellQty = toNum(r.sellQty);
     const sellUnit = toNum(r.sellUnitPrice);
@@ -887,39 +975,107 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
 
   // ── VAT (from posted invoices) ───────────────────────────────────────────
   const settings = await loadTaxSettings();
-  const sellInvoices = await db.select({ netAmount: salesInvoicesTable.netAmount, vatAmount: salesInvoicesTable.vatAmount, status: salesInvoicesTable.status }).from(salesInvoicesTable).where(eq(salesInvoicesTable.status, "posted"));
-  const buyInvoices = await db.select({ netAmount: supplierInvoicesTable.netAmount, vatAmount: supplierInvoicesTable.vatAmount, status: supplierInvoicesTable.status }).from(supplierInvoicesTable).where(eq(supplierInvoicesTable.status, "posted"));
-  let outputVat = 0, inputVat = 0, outputNet = 0, inputNet = 0;
-  for (const r of sellInvoices) { outputNet += toNum(r.netAmount) ?? 0; outputVat += toNum(r.vatAmount) ?? 0; }
-  for (const r of buyInvoices) { inputNet += toNum(r.netAmount) ?? 0; inputVat += toNum(r.vatAmount) ?? 0; }
+  const sellInvoices = await db
+    .select({
+      netAmount: salesInvoicesTable.netAmount,
+      vatAmount: salesInvoicesTable.vatAmount,
+      status: salesInvoicesTable.status,
+    })
+    .from(salesInvoicesTable)
+    .where(eq(salesInvoicesTable.status, "posted"));
+  const buyInvoices = await db
+    .select({
+      netAmount: supplierInvoicesTable.netAmount,
+      vatAmount: supplierInvoicesTable.vatAmount,
+      status: supplierInvoicesTable.status,
+    })
+    .from(supplierInvoicesTable)
+    .where(eq(supplierInvoicesTable.status, "posted"));
+  let outputVat = 0,
+    inputVat = 0,
+    outputNet = 0,
+    inputNet = 0;
+  for (const r of sellInvoices) {
+    outputNet += toNum(r.netAmount) ?? 0;
+    outputVat += toNum(r.vatAmount) ?? 0;
+  }
+  for (const r of buyInvoices) {
+    inputNet += toNum(r.netAmount) ?? 0;
+    inputVat += toNum(r.vatAmount) ?? 0;
+  }
   const netVat = round2(outputVat - inputVat);
 
   // ── Withholding (from posted supplier invoices) ──────────────────────────
-  const whInvoices = await db.select({ netAmount: supplierInvoicesTable.netAmount, withholdingAmount: supplierInvoicesTable.withholdingAmount }).from(supplierInvoicesTable).where(eq(supplierInvoicesTable.status, "posted"));
-  let totalWithholdingNet = 0, totalWithholding = 0;
-  for (const r of whInvoices) { totalWithholdingNet += toNum(r.netAmount) ?? 0; totalWithholding += toNum(r.withholdingAmount) ?? 0; }
+  const whInvoices = await db
+    .select({
+      netAmount: supplierInvoicesTable.netAmount,
+      withholdingAmount: supplierInvoicesTable.withholdingAmount,
+    })
+    .from(supplierInvoicesTable)
+    .where(eq(supplierInvoicesTable.status, "posted"));
+  let totalWithholdingNet = 0,
+    totalWithholding = 0;
+  for (const r of whInvoices) {
+    totalWithholdingNet += toNum(r.netAmount) ?? 0;
+    totalWithholding += toNum(r.withholdingAmount) ?? 0;
+  }
 
   // ── Accounts dashboard (AP/AR/cash/bank) ─────────────────────────────────
-  const apRows = await db.select({ balance: supplierInvoicesTable.balance, status: supplierInvoicesTable.status }).from(supplierInvoicesTable);
-  const arRows = await db.select({ balance: salesInvoicesTable.balance, status: salesInvoicesTable.status }).from(salesInvoicesTable);
-  const totalAP = apRows.filter((r) => r.status === "posted").reduce((s, r) => s + (toNum(r.balance) ?? 0), 0);
-  const totalAR = arRows.filter((r) => r.status === "posted").reduce((s, r) => s + (toNum(r.balance) ?? 0), 0);
-  const [cashBal, bankBal] = await Promise.all([accountBalance(ACCOUNT_CODES.CASH), accountBalance(ACCOUNT_CODES.BANK)]);
-  const draftEntries = await db.select({ id: journalEntriesTable.id }).from(journalEntriesTable).where(eq(journalEntriesTable.status, "draft"));
+  const apRows = await db
+    .select({ balance: supplierInvoicesTable.balance, status: supplierInvoicesTable.status })
+    .from(supplierInvoicesTable);
+  const arRows = await db
+    .select({ balance: salesInvoicesTable.balance, status: salesInvoicesTable.status })
+    .from(salesInvoicesTable);
+  const totalAP = apRows
+    .filter((r) => r.status === "posted")
+    .reduce((s, r) => s + (toNum(r.balance) ?? 0), 0);
+  const totalAR = arRows
+    .filter((r) => r.status === "posted")
+    .reduce((s, r) => s + (toNum(r.balance) ?? 0), 0);
+  const [cashBal, bankBal] = await Promise.all([
+    accountBalance(ACCOUNT_CODES.CASH),
+    accountBalance(ACCOUNT_CODES.BANK),
+  ]);
+  const draftEntries = await db
+    .select({ id: journalEntriesTable.id })
+    .from(journalEntriesTable)
+    .where(eq(journalEntriesTable.status, "draft"));
 
   // ── Operating expenses summary ───────────────────────────────────────────
-  const expenseRows = await db.select({ category: operatingExpensesTable.category, total: sql<number>`sum(${operatingExpensesTable.amount})`, cnt: sql<number>`count(*)` }).from(operatingExpensesTable).groupBy(operatingExpensesTable.category);
-  const expensesByCategory = expenseRows.map((r) => ({ category: r.category, total: fmt(toNum(r.total)) ?? 0, count: Number(r.cnt) }));
+  const expenseRows = await db
+    .select({
+      category: operatingExpensesTable.category,
+      total: sql<number>`sum(${operatingExpensesTable.amount})`,
+      cnt: sql<number>`count(*)`,
+    })
+    .from(operatingExpensesTable)
+    .groupBy(operatingExpensesTable.category);
+  const expensesByCategory = expenseRows.map((r) => ({
+    category: r.category,
+    total: fmt(toNum(r.total)) ?? 0,
+    count: Number(r.cnt),
+  }));
   const expensesGrandTotal = expensesByCategory.reduce((s, c) => s + (c.total ?? 0), 0);
 
   // ── Collections alerts ───────────────────────────────────────────────────
   const collectionsRows = await db
-    .select({ id: customerPosTable.id, customerName: customerPosTable.customerName, storedName: customersTable.name })
+    .select({
+      id: customerPosTable.id,
+      customerName: customerPosTable.customerName,
+      storedName: customersTable.name,
+    })
     .from(customerPosTable)
     .leftJoin(customersTable, eq(customerPosTable.customerId, customersTable.id))
     .orderBy(desc(customerPosTable.createdAt));
   // receivable per PO = Σ customer_po_items.qty × unitPrice
-  const cpoItemRows = await db.select({ customerPoId: customerPoItemsTable.customerPoId, qty: customerPoItemsTable.qty, unitPrice: customerPoItemsTable.unitPrice }).from(customerPoItemsTable);
+  const cpoItemRows = await db
+    .select({
+      customerPoId: customerPoItemsTable.customerPoId,
+      qty: customerPoItemsTable.qty,
+      unitPrice: customerPoItemsTable.unitPrice,
+    })
+    .from(customerPoItemsTable);
   const receivableByPo = new Map<number, number>();
   for (const r of cpoItemRows) {
     if (r.customerPoId == null) continue; // detached (removed) row — no receivable
@@ -927,10 +1083,22 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
     const p = toNum(r.unitPrice) ?? 0;
     receivableByPo.set(r.customerPoId, (receivableByPo.get(r.customerPoId) ?? 0) + q * p);
   }
-  const paymentRows = await db.select({ customerPoId: customerPoPaymentsTable.customerPoId, amount: customerPoPaymentsTable.amount }).from(customerPoPaymentsTable);
+  const paymentRows = await db
+    .select({
+      customerPoId: customerPoPaymentsTable.customerPoId,
+      amount: customerPoPaymentsTable.amount,
+    })
+    .from(customerPoPaymentsTable);
   const collectedByPo = new Map<number, number>();
-  for (const r of paymentRows) collectedByPo.set(r.customerPoId, (collectedByPo.get(r.customerPoId) ?? 0) + (toNum(r.amount) ?? 0));
-  let totalReceivable = 0, totalCollected = 0, dueSoonCount = 0, overdueCount = 0;
+  for (const r of paymentRows)
+    collectedByPo.set(
+      r.customerPoId,
+      (collectedByPo.get(r.customerPoId) ?? 0) + (toNum(r.amount) ?? 0),
+    );
+  let totalReceivable = 0,
+    totalCollected = 0,
+    dueSoonCount = 0,
+    overdueCount = 0;
   for (const p of collectionsRows) {
     const receivable = receivableByPo.get(p.id) ?? 0;
     const collected = collectedByPo.get(p.id) ?? 0;
@@ -946,11 +1114,24 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
   // ── Monthly trend (last 12 months) ───────────────────────────────────────
   const twelveMonthsAgo = new Date(now);
   twelveMonthsAgo.setMonth(now.getMonth() - 12);
-  const rfqTrendRows = await db.select({ createdAt: rfqTable.createdAt }).from(rfqTable).where(gte(rfqTable.createdAt, twelveMonthsAgo));
-  const poTrendRows = await db.select({ createdAt: purchaseOrdersTable.createdAt }).from(purchaseOrdersTable).where(gte(purchaseOrdersTable.createdAt, twelveMonthsAgo));
-  const cRfqTrendRows = await db.select({ createdAt: customerRfqsTable.createdAt }).from(customerRfqsTable).where(gte(customerRfqsTable.createdAt, twelveMonthsAgo));
+  const rfqTrendRows = await db
+    .select({ createdAt: rfqTable.createdAt })
+    .from(rfqTable)
+    .where(gte(rfqTable.createdAt, twelveMonthsAgo));
+  const poTrendRows = await db
+    .select({ createdAt: purchaseOrdersTable.createdAt })
+    .from(purchaseOrdersTable)
+    .where(gte(purchaseOrdersTable.createdAt, twelveMonthsAgo));
+  const cRfqTrendRows = await db
+    .select({ createdAt: customerRfqsTable.createdAt })
+    .from(customerRfqsTable)
+    .where(gte(customerRfqsTable.createdAt, twelveMonthsAgo));
   const monthlyMap = new Map<string, { rfqs: number; pos: number; customerRfqs: number }>();
-  const addMonth = (map: Map<string, { rfqs: number; pos: number; customerRfqs: number }>, date: Date, key: "rfqs" | "pos" | "customerRfqs") => {
+  const addMonth = (
+    map: Map<string, { rfqs: number; pos: number; customerRfqs: number }>,
+    date: Date,
+    key: "rfqs" | "pos" | "customerRfqs",
+  ) => {
     const m = date.toISOString().substring(0, 7);
     const e = map.get(m) ?? { rfqs: 0, pos: 0, customerRfqs: 0 };
     e[key]++;
@@ -964,22 +1145,52 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
     .map(([month, v]) => ({ month, ...v }));
 
   // ── Top suppliers (deep stats, top 8) ────────────────────────────────────
-  const allSuppliers = await db.select().from(suppliersTable).where(eq(suppliersTable.isActive, true));
+  const allSuppliers = await db
+    .select()
+    .from(suppliersTable)
+    .where(eq(suppliersTable.isActive, true));
   const supplierDeepStats = await Promise.all(
     allSuppliers.map(async (s) => {
-      const [sentStats] = await db.select({ total: count() }).from(sentLogTable).where(eq(sentLogTable.supplierId, s.id));
+      const [sentStats] = await db
+        .select({ total: count() })
+        .from(sentLogTable)
+        .where(eq(sentLogTable.supplierId, s.id));
       const totalSentToSupplier = sentStats?.total ?? 0;
-      const [offerCount] = await db.select({ cnt: countDistinct(offersTable.sentLogId) }).from(offersTable).where(and(eq(offersTable.supplierId, s.id), isNotNull(offersTable.sentLogId)));
+      const [offerCount] = await db
+        .select({ cnt: countDistinct(offersTable.sentLogId) })
+        .from(offersTable)
+        .where(and(eq(offersTable.supplierId, s.id), isNotNull(offersTable.sentLogId)));
       const totalOffersSubmitted = offerCount?.cnt ?? 0;
-      const [poWinRow] = await db.select({ cnt: count() }).from(purchaseOrderItemsTable).where(eq(purchaseOrderItemsTable.supplierId, s.id));
+      const [poWinRow] = await db
+        .select({ cnt: count() })
+        .from(purchaseOrderItemsTable)
+        .where(eq(purchaseOrderItemsTable.supplierId, s.id));
       const totalPoItems = poWinRow?.cnt ?? 0;
-      const [avgPriceRow] = await db.select({ avg: sql<string | null>`avg(${offerItemsTable.price}::numeric)` }).from(offerItemsTable).leftJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id)).where(eq(offersTable.supplierId, s.id));
+      const [avgPriceRow] = await db
+        .select({ avg: sql<string | null>`avg(${offerItemsTable.price}::numeric)` })
+        .from(offerItemsTable)
+        .leftJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+        .where(eq(offersTable.supplierId, s.id));
       const avgPrice = avgPriceRow?.avg ? parseFloat(avgPriceRow.avg) : null;
-      const responseRate = totalSentToSupplier > 0 ? Math.round((totalOffersSubmitted / totalSentToSupplier) * 1000) / 10 : 0;
-      return { supplierId: s.id, supplierName: s.name, category: s.category, totalRfqsReceived: totalSentToSupplier, totalOffersSubmitted, responseRate, totalPoItems, avgPrice };
+      const responseRate =
+        totalSentToSupplier > 0
+          ? Math.round((totalOffersSubmitted / totalSentToSupplier) * 1000) / 10
+          : 0;
+      return {
+        supplierId: s.id,
+        supplierName: s.name,
+        category: s.category,
+        totalRfqsReceived: totalSentToSupplier,
+        totalOffersSubmitted,
+        responseRate,
+        totalPoItems,
+        avgPrice,
+      };
     }),
   );
-  const topSuppliers = supplierDeepStats.sort((a, b) => b.totalOffersSubmitted - a.totalOffersSubmitted).slice(0, 8);
+  const topSuppliers = supplierDeepStats
+    .sort((a, b) => b.totalOffersSubmitted - a.totalOffersSubmitted)
+    .slice(0, 8);
 
   // ── Recent activity (audit log, last 10) ─────────────────────────────────
   const recentAudit = await db
@@ -991,7 +1202,10 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
 
   // ── Financial statements snapshot ────────────────────────────────────────
   const coaRows = await db.select().from(chartOfAccountsTable);
-  let netProfit = 0, totalAssets = 0, totalLiabilities = 0, totalEquity = 0;
+  let netProfit = 0,
+    totalAssets = 0,
+    totalLiabilities = 0,
+    totalEquity = 0;
   for (const a of coaRows) {
     if (!a.isActive) continue;
     const bal = await accountBalance(a.code);

@@ -175,7 +175,10 @@ export default function NewCustomerPage() {
                 إلغاء
               </a>
             </Link>
-            <Button type="submit" disabled={createMutation.isPending || !form.name || !form.phone || !form.address}>
+            <Button
+              type="submit"
+              disabled={createMutation.isPending || !form.name || !form.phone || !form.address}
+            >
               {createMutation.isPending ? "جارٍ الحفظ..." : "إضافة العميل"}
             </Button>
           </div>

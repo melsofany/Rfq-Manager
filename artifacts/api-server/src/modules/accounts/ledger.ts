@@ -63,10 +63,7 @@ function formatNum(n: number | null): string | null {
 // Chart of Accounts — دليل الحسابات
 // ───────────────────────────────────────────────────────────────────────────
 router.get("/accounts/coa", requireAuth, async (_req, res): Promise<void> => {
-  const rows = await db
-    .select()
-    .from(chartOfAccountsTable)
-    .orderBy(chartOfAccountsTable.code);
+  const rows = await db.select().from(chartOfAccountsTable).orderBy(chartOfAccountsTable.code);
   res.json(
     rows.map((r) => ({
       id: r.id,
@@ -81,71 +78,86 @@ router.get("/accounts/coa", requireAuth, async (_req, res): Promise<void> => {
   );
 });
 
-router.post("/accounts/coa", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const body = (req.body ?? {}) as {
-    code: string;
-    nameAr: string;
-    nameEn?: string | null;
-    type: string;
-    parentId?: number | null;
-    isControl?: boolean;
-  };
-  if (!body.code || !body.nameAr || !body.type) {
-    res.status(400).json({ error: "الكود والاسم والنوع مطلوبة" });
-    return;
-  }
-  const session = req.session as { employeeId?: number; role?: string };
-  try {
-    const [row] = await db
-      .insert(chartOfAccountsTable)
-      .values({
-        code: body.code,
-        nameAr: body.nameAr,
-        nameEn: body.nameEn ?? null,
-        type: body.type,
-        parentId: body.parentId ?? null,
-        isControl: !!body.isControl,
-      })
-      .returning();
-    await db.insert(auditLogTable).values({
-      action: "coa.create",
-      entityType: "chart_of_accounts",
-      entityId: row!.id,
-      employeeId: session.employeeId,
-      description: `إنشاء حساب ${body.code} — ${body.nameAr}`,
-    });
-    res.json(row);
-  } catch {
-    res.status(400).json({ error: "كود الحساب مستخدم بالفعل" });
-  }
-});
+router.post(
+  "/accounts/coa",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const body = (req.body ?? {}) as {
+      code: string;
+      nameAr: string;
+      nameEn?: string | null;
+      type: string;
+      parentId?: number | null;
+      isControl?: boolean;
+    };
+    if (!body.code || !body.nameAr || !body.type) {
+      res.status(400).json({ error: "الكود والاسم والنوع مطلوبة" });
+      return;
+    }
+    const session = req.session as { employeeId?: number; role?: string };
+    try {
+      const [row] = await db
+        .insert(chartOfAccountsTable)
+        .values({
+          code: body.code,
+          nameAr: body.nameAr,
+          nameEn: body.nameEn ?? null,
+          type: body.type,
+          parentId: body.parentId ?? null,
+          isControl: !!body.isControl,
+        })
+        .returning();
+      await db.insert(auditLogTable).values({
+        action: "coa.create",
+        entityType: "chart_of_accounts",
+        entityId: row!.id,
+        employeeId: session.employeeId,
+        description: `إنشاء حساب ${body.code} — ${body.nameAr}`,
+      });
+      res.json(row);
+    } catch {
+      res.status(400).json({ error: "كود الحساب مستخدم بالفعل" });
+    }
+  },
+);
 
-router.patch("/accounts/coa/:id", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  const body = (req.body ?? {}) as {
-    nameAr?: string;
-    nameEn?: string | null;
-    type?: string;
-    parentId?: number | null;
-    isControl?: boolean;
-    isActive?: boolean;
-  };
-  const patch: Record<string, unknown> = {};
-  if (body.nameAr != null) patch.nameAr = body.nameAr;
-  if (body.nameEn !== undefined) patch.nameEn = body.nameEn;
-  if (body.type != null) patch.type = body.type;
-  if (body.parentId !== undefined) patch.parentId = body.parentId;
-  if (body.isControl != null) patch.isControl = body.isControl;
-  if (body.isActive != null) patch.isActive = body.isActive;
-  await db.update(chartOfAccountsTable).set(patch).where(eq(chartOfAccountsTable.id, id));
-  res.json({ id, ...patch });
-});
+router.patch(
+  "/accounts/coa/:id",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const body = (req.body ?? {}) as {
+      nameAr?: string;
+      nameEn?: string | null;
+      type?: string;
+      parentId?: number | null;
+      isControl?: boolean;
+      isActive?: boolean;
+    };
+    const patch: Record<string, unknown> = {};
+    if (body.nameAr != null) patch.nameAr = body.nameAr;
+    if (body.nameEn !== undefined) patch.nameEn = body.nameEn;
+    if (body.type != null) patch.type = body.type;
+    if (body.parentId !== undefined) patch.parentId = body.parentId;
+    if (body.isControl != null) patch.isControl = body.isControl;
+    if (body.isActive != null) patch.isActive = body.isActive;
+    await db.update(chartOfAccountsTable).set(patch).where(eq(chartOfAccountsTable.id, id));
+    res.json({ id, ...patch });
+  },
+);
 
-router.delete("/accounts/coa/:id", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  await db.update(chartOfAccountsTable).set({ isActive: false }).where(eq(chartOfAccountsTable.id, id));
-  res.json({ id, deactivated: true });
-});
+router.delete(
+  "/accounts/coa/:id",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    await db
+      .update(chartOfAccountsTable)
+      .set({ isActive: false })
+      .where(eq(chartOfAccountsTable.id, id));
+    res.json({ id, deactivated: true });
+  },
+);
 
 // ───────────────────────────────────────────────────────────────────────────
 // Journal Entries — قيود اليومية
@@ -185,10 +197,7 @@ router.get("/accounts/journal", requireAuth, async (req, res): Promise<void> => 
 
 router.get("/accounts/journal/:id", requireAuth, async (req, res): Promise<void> => {
   const id = Number(req.params.id);
-  const [entry] = await db
-    .select()
-    .from(journalEntriesTable)
-    .where(eq(journalEntriesTable.id, id));
+  const [entry] = await db.select().from(journalEntriesTable).where(eq(journalEntriesTable.id, id));
   if (!entry) {
     res.status(404).json({ error: "القيد غير موجود" });
     return;
@@ -244,209 +253,235 @@ router.get("/accounts/journal/:id", requireAuth, async (req, res): Promise<void>
 
 // Create a manual journal entry (draft by default; can be posted directly by
 // accountant+ role).
-router.post("/accounts/journal", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const body = (req.body ?? {}) as {
-    entryDate: string;
-    description: string;
-    status?: "draft" | "posted";
-    lines: Array<{
-      accountCode: string;
-      description?: string;
-      debit?: number | string;
-      credit?: number | string;
-      partyType?: string;
-      partyId?: number;
-      partyName?: string;
-    }>;
-  };
-  if (!body.entryDate || !body.description || !Array.isArray(body.lines) || body.lines.length < 2) {
-    res.status(400).json({ error: "التاريخ والوصف وبندان على الأقل مطلوبة" });
-    return;
-  }
-  const session = req.session as { employeeId?: number; role?: string };
-  try {
-    const entryId = await postJournalEntry({
-      entryDate: body.entryDate,
-      description: body.description,
-      source: "manual",
-      status: body.status ?? "draft",
-      employeeId: session.employeeId,
-      lines: body.lines.map((l) => ({
-        accountCode: l.accountCode,
-        description: l.description,
-        debit: toNum(l.debit) ?? 0,
-        credit: toNum(l.credit) ?? 0,
-        partyType: l.partyType as "customer" | "supplier" | "none" | null,
-        partyId: l.partyId,
-        partyName: l.partyName,
-      })),
-    });
-    await db.insert(auditLogTable).values({
-      action: "journal.create",
-      entityType: "journal_entries",
-      entityId: entryId,
-      employeeId: session.employeeId,
-      description: `إنشاء قيد يدوي بتاريخ ${body.entryDate}`,
-    });
-    res.json({ id: entryId });
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : "فشل إنشاء القيد" });
-  }
-});
+router.post(
+  "/accounts/journal",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const body = (req.body ?? {}) as {
+      entryDate: string;
+      description: string;
+      status?: "draft" | "posted";
+      lines: Array<{
+        accountCode: string;
+        description?: string;
+        debit?: number | string;
+        credit?: number | string;
+        partyType?: string;
+        partyId?: number;
+        partyName?: string;
+      }>;
+    };
+    if (
+      !body.entryDate ||
+      !body.description ||
+      !Array.isArray(body.lines) ||
+      body.lines.length < 2
+    ) {
+      res.status(400).json({ error: "التاريخ والوصف وبندان على الأقل مطلوبة" });
+      return;
+    }
+    const session = req.session as { employeeId?: number; role?: string };
+    try {
+      const entryId = await postJournalEntry({
+        entryDate: body.entryDate,
+        description: body.description,
+        source: "manual",
+        status: body.status ?? "draft",
+        employeeId: session.employeeId,
+        lines: body.lines.map((l) => ({
+          accountCode: l.accountCode,
+          description: l.description,
+          debit: toNum(l.debit) ?? 0,
+          credit: toNum(l.credit) ?? 0,
+          partyType: l.partyType as "customer" | "supplier" | "none" | null,
+          partyId: l.partyId,
+          partyName: l.partyName,
+        })),
+      });
+      await db.insert(auditLogTable).values({
+        action: "journal.create",
+        entityType: "journal_entries",
+        entityId: entryId,
+        employeeId: session.employeeId,
+        description: `إنشاء قيد يدوي بتاريخ ${body.entryDate}`,
+      });
+      res.json({ id: entryId });
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "فشل إنشاء القيد" });
+    }
+  },
+);
 
 // Edit a DRAFT entry (replace lines). Posted entries are immutable.
-router.patch("/accounts/journal/:id", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  const [entry] = await db
-    .select()
-    .from(journalEntriesTable)
-    .where(eq(journalEntriesTable.id, id));
-  if (!entry) {
-    res.status(404).json({ error: "القيد غير موجود" });
-    return;
-  }
-  if (entry.status !== "draft") {
-    res.status(400).json({ error: "لا يمكن تعديل قيد مُرّحل — استخدم الإلغاء" });
-    return;
-  }
-  const body = (req.body ?? {}) as {
-    entryDate?: string;
-    description?: string;
-    lines?: Array<{
-      accountCode: string;
+router.patch(
+  "/accounts/journal/:id",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const [entry] = await db
+      .select()
+      .from(journalEntriesTable)
+      .where(eq(journalEntriesTable.id, id));
+    if (!entry) {
+      res.status(404).json({ error: "القيد غير موجود" });
+      return;
+    }
+    if (entry.status !== "draft") {
+      res.status(400).json({ error: "لا يمكن تعديل قيد مُرّحل — استخدم الإلغاء" });
+      return;
+    }
+    const body = (req.body ?? {}) as {
+      entryDate?: string;
       description?: string;
-      debit?: number | string;
-      credit?: number | string;
-      partyType?: string;
-      partyId?: number;
-      partyName?: string;
-    }>;
-  };
-  if (body.entryDate) {
+      lines?: Array<{
+        accountCode: string;
+        description?: string;
+        debit?: number | string;
+        credit?: number | string;
+        partyType?: string;
+        partyId?: number;
+        partyName?: string;
+      }>;
+    };
+    if (body.entryDate) {
+      try {
+        await assertMonthOpen(monthOf(body.entryDate)!);
+      } catch (e) {
+        res.status(400).json({ error: e instanceof Error ? e.message : "الشهر مقفل" });
+        return;
+      }
+      await db
+        .update(journalEntriesTable)
+        .set({ entryDate: body.entryDate })
+        .where(eq(journalEntriesTable.id, id));
+    }
+    if (body.description) {
+      await db
+        .update(journalEntriesTable)
+        .set({ description: body.description })
+        .where(eq(journalEntriesTable.id, id));
+    }
+    if (Array.isArray(body.lines)) {
+      await db.delete(journalLinesTable).where(eq(journalLinesTable.entryId, id));
+      let lineNo = 1;
+      const debitTotal = round2(body.lines.reduce((s, l) => s + (toNum(l.debit) ?? 0), 0));
+      const creditTotal = round2(body.lines.reduce((s, l) => s + (toNum(l.credit) ?? 0), 0));
+      if (debitTotal !== creditTotal) {
+        res
+          .status(400)
+          .json({ error: `القيد غير متوازن: مدين ${debitTotal} ≠ دائن ${creditTotal}` });
+        return;
+      }
+      await db.insert(journalLinesTable).values(
+        body.lines.map((l) => ({
+          entryId: id,
+          accountCode: l.accountCode,
+          lineNo: lineNo++,
+          description: l.description ?? null,
+          debit: String(toNum(l.debit) ?? 0),
+          credit: String(toNum(l.credit) ?? 0),
+          partyType: l.partyType ?? null,
+          partyId: l.partyId ?? null,
+          partyName: l.partyName ?? null,
+        })),
+      );
+      await db
+        .update(journalEntriesTable)
+        .set({ totalDebit: String(debitTotal), totalCredit: String(creditTotal) })
+        .where(eq(journalEntriesTable.id, id));
+    }
+    res.json({ id: id, updated: true });
+  },
+);
+
+// Review (approve) a draft entry — records reviewer + timestamp.
+router.post(
+  "/accounts/journal/:id/review",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
+    const [entry] = await db
+      .select()
+      .from(journalEntriesTable)
+      .where(eq(journalEntriesTable.id, id));
+    if (!entry) {
+      res.status(404).json({ error: "القيد غير موجود" });
+      return;
+    }
     try {
-      await assertMonthOpen(monthOf(body.entryDate)!);
+      await assertMonthOpen(monthOf(entry.entryDate)!);
     } catch (e) {
       res.status(400).json({ error: e instanceof Error ? e.message : "الشهر مقفل" });
       return;
     }
-    await db.update(journalEntriesTable).set({ entryDate: body.entryDate }).where(eq(journalEntriesTable.id, id));
-  }
-  if (body.description) {
-    await db.update(journalEntriesTable).set({ description: body.description }).where(eq(journalEntriesTable.id, id));
-  }
-  if (Array.isArray(body.lines)) {
-    await db.delete(journalLinesTable).where(eq(journalLinesTable.entryId, id));
-    let lineNo = 1;
-    const debitTotal = round2(body.lines.reduce((s, l) => s + (toNum(l.debit) ?? 0), 0));
-    const creditTotal = round2(body.lines.reduce((s, l) => s + (toNum(l.credit) ?? 0), 0));
-    if (debitTotal !== creditTotal) {
-      res.status(400).json({ error: `القيد غير متوازن: مدين ${debitTotal} ≠ دائن ${creditTotal}` });
-      return;
-    }
-    await db.insert(journalLinesTable).values(
-      body.lines.map((l) => ({
-        entryId: id,
-        accountCode: l.accountCode,
-        lineNo: lineNo++,
-        description: l.description ?? null,
-        debit: String(toNum(l.debit) ?? 0),
-        credit: String(toNum(l.credit) ?? 0),
-        partyType: l.partyType ?? null,
-        partyId: l.partyId ?? null,
-        partyName: l.partyName ?? null,
-      })),
-    );
     await db
       .update(journalEntriesTable)
-      .set({ totalDebit: String(debitTotal), totalCredit: String(creditTotal) })
+      .set({
+        reviewedBy: session.employeeId,
+        reviewedByName: session.employeeName ?? null,
+        reviewedAt: new Date(),
+      })
       .where(eq(journalEntriesTable.id, id));
-  }
-  res.json({ id: id, updated: true });
-});
-
-// Review (approve) a draft entry — records reviewer + timestamp.
-router.post("/accounts/journal/:id/review", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-  const [entry] = await db
-    .select()
-    .from(journalEntriesTable)
-    .where(eq(journalEntriesTable.id, id));
-  if (!entry) {
-    res.status(404).json({ error: "القيد غير موجود" });
-    return;
-  }
-  try {
-    await assertMonthOpen(monthOf(entry.entryDate)!);
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : "الشهر مقفل" });
-    return;
-  }
-  await db
-    .update(journalEntriesTable)
-    .set({
-      reviewedBy: session.employeeId,
-      reviewedByName: session.employeeName ?? null,
-      reviewedAt: new Date(),
-    })
-    .where(eq(journalEntriesTable.id, id));
-  res.json({ id, reviewed: true });
-});
+    res.json({ id, reviewed: true });
+  },
+);
 
 // Post a reviewed draft entry → immutable, updates GL.
-router.post("/accounts/journal/:id/post", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  const [entry] = await db
-    .select()
-    .from(journalEntriesTable)
-    .where(eq(journalEntriesTable.id, id));
-  if (!entry) {
-    res.status(404).json({ error: "القيد غير موجود" });
-    return;
-  }
-  if (entry.status !== "draft") {
-    res.status(400).json({ error: "القيد ليس مسودة" });
-    return;
-  }
-  try {
-    await assertMonthOpen(monthOf(entry.entryDate)!);
-  } catch (e) {
-    res.status(400).json({ error: e instanceof Error ? e.message : "الشهر مقفل" });
-    return;
-  }
-  const lines = await db
-    .select()
-    .from(journalLinesTable)
-    .where(eq(journalLinesTable.entryId, id));
-  const debit = round2(lines.reduce((s, l) => s + (toNum(l.debit) ?? 0), 0));
-  const credit = round2(lines.reduce((s, l) => s + (toNum(l.credit) ?? 0), 0));
-  if (debit !== credit || debit === 0) {
-    res.status(400).json({ error: "القيد غير متوازن أو صفر — لا يمكن الترحيل" });
-    return;
-  }
-  const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-  await db
-    .update(journalEntriesTable)
-    .set({ status: "posted", postedAt: new Date() })
-    .where(eq(journalEntriesTable.id, id));
-  await db.insert(auditLogTable).values({
-    action: "journal.post",
-    entityType: "journal_entries",
-    entityId: id,
-    employeeId: session.employeeId,
-    description: `ترحيل القيد ${entry.entryNo}`,
-  });
-  res.json({ id, posted: true });
-});
+router.post(
+  "/accounts/journal/:id/post",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const [entry] = await db
+      .select()
+      .from(journalEntriesTable)
+      .where(eq(journalEntriesTable.id, id));
+    if (!entry) {
+      res.status(404).json({ error: "القيد غير موجود" });
+      return;
+    }
+    if (entry.status !== "draft") {
+      res.status(400).json({ error: "القيد ليس مسودة" });
+      return;
+    }
+    try {
+      await assertMonthOpen(monthOf(entry.entryDate)!);
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : "الشهر مقفل" });
+      return;
+    }
+    const lines = await db
+      .select()
+      .from(journalLinesTable)
+      .where(eq(journalLinesTable.entryId, id));
+    const debit = round2(lines.reduce((s, l) => s + (toNum(l.debit) ?? 0), 0));
+    const credit = round2(lines.reduce((s, l) => s + (toNum(l.credit) ?? 0), 0));
+    if (debit !== credit || debit === 0) {
+      res.status(400).json({ error: "القيد غير متوازن أو صفر — لا يمكن الترحيل" });
+      return;
+    }
+    const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
+    await db
+      .update(journalEntriesTable)
+      .set({ status: "posted", postedAt: new Date() })
+      .where(eq(journalEntriesTable.id, id));
+    await db.insert(auditLogTable).values({
+      action: "journal.post",
+      entityType: "journal_entries",
+      entityId: id,
+      employeeId: session.employeeId,
+      description: `ترحيل القيد ${entry.entryNo}`,
+    });
+    res.json({ id, posted: true });
+  },
+);
 
 // Void a posted entry (creates a reversal-style flag — keeps the original for
 // audit, marks it void so it no longer contributes to GL balances).
 router.post("/accounts/journal/:id/void", requireRole("admin"), async (req, res): Promise<void> => {
   const id = Number(req.params.id);
-  const [entry] = await db
-    .select()
-    .from(journalEntriesTable)
-    .where(eq(journalEntriesTable.id, id));
+  const [entry] = await db.select().from(journalEntriesTable).where(eq(journalEntriesTable.id, id));
   if (!entry) {
     res.status(404).json({ error: "القيد غير موجود" });
     return;
@@ -607,7 +642,11 @@ router.get("/accounts/income-statement", requireAuth, async (req, res): Promise<
 router.get("/accounts/balance-sheet", requireAuth, async (req, res): Promise<void> => {
   const asOf = (req.query.asOf as string) || undefined;
   const accounts = await db.select().from(chartOfAccountsTable);
-  const sections: { assets: Array<{ code: string; nameAr: string; amount: string | null }>; liabilities: Array<{ code: string; nameAr: string; amount: string | null }>; equity: Array<{ code: string; nameAr: string; amount: string | null }> } = {
+  const sections: {
+    assets: Array<{ code: string; nameAr: string; amount: string | null }>;
+    liabilities: Array<{ code: string; nameAr: string; amount: string | null }>;
+    equity: Array<{ code: string; nameAr: string; amount: string | null }>;
+  } = {
     assets: [],
     liabilities: [],
     equity: [],
@@ -619,13 +658,25 @@ router.get("/accounts/balance-sheet", requireAuth, async (req, res): Promise<voi
     if (bal.balance === 0) continue;
     if (a.type === "asset") {
       totals.assets += bal.balance;
-      sections.assets.push({ code: a.code, nameAr: a.nameAr, amount: formatNum(round2(bal.balance)) });
+      sections.assets.push({
+        code: a.code,
+        nameAr: a.nameAr,
+        amount: formatNum(round2(bal.balance)),
+      });
     } else if (a.type === "liability") {
       totals.liabilities += Math.abs(bal.balance);
-      sections.liabilities.push({ code: a.code, nameAr: a.nameAr, amount: formatNum(round2(Math.abs(bal.balance))) });
+      sections.liabilities.push({
+        code: a.code,
+        nameAr: a.nameAr,
+        amount: formatNum(round2(Math.abs(bal.balance))),
+      });
     } else if (a.type === "equity") {
       totals.equity += Math.abs(bal.balance);
-      sections.equity.push({ code: a.code, nameAr: a.nameAr, amount: formatNum(round2(Math.abs(bal.balance))) });
+      sections.equity.push({
+        code: a.code,
+        nameAr: a.nameAr,
+        amount: formatNum(round2(Math.abs(bal.balance))),
+      });
     }
   }
   res.json({
@@ -650,8 +701,12 @@ router.get("/accounts/dashboard", requireAuth, async (_req, res): Promise<void> 
   const arRows = await db
     .select({ balance: salesInvoicesTable.balance, status: salesInvoicesTable.status })
     .from(salesInvoicesTable);
-  const totalAP = round2(apRows.filter((r) => r.status === "posted").reduce((s, r) => s + (toNum(r.balance) ?? 0), 0));
-  const totalAR = round2(arRows.filter((r) => r.status === "posted").reduce((s, r) => s + (toNum(r.balance) ?? 0), 0));
+  const totalAP = round2(
+    apRows.filter((r) => r.status === "posted").reduce((s, r) => s + (toNum(r.balance) ?? 0), 0),
+  );
+  const totalAR = round2(
+    arRows.filter((r) => r.status === "posted").reduce((s, r) => s + (toNum(r.balance) ?? 0), 0),
+  );
 
   const cashBal = await accountBalance(ACCOUNT_CODES.CASH);
   const bankBal = await accountBalance(ACCOUNT_CODES.BANK);

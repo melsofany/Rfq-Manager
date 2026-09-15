@@ -19,12 +19,7 @@
  */
 import { Router } from "express";
 import multer from "multer";
-import {
-  db,
-  operatingExpensesTable,
-  expenseAttachmentsTable,
-  auditLogTable,
-} from "@workspace/db";
+import { db, operatingExpensesTable, expenseAttachmentsTable, auditLogTable } from "@workspace/db";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import type { Request } from "express";
@@ -207,8 +202,14 @@ async function validateExpense(body: ExpenseInput): Promise<{
   if (!category) return { ok: false, error: "نوع المصروف مطلوب" };
   if (!expenseDate) return { ok: false, error: "تاريخ المصروف مطلوب" };
   if (amount == null || amount <= 0) return { ok: false, error: "قيمة المصروف غير صالحة" };
-  const paymentMethod = typeof body.paymentMethod === "string" && body.paymentMethod.trim() ? body.paymentMethod.trim() : null;
-  const cashAccountCode = typeof body.cashAccountCode === "string" && body.cashAccountCode.trim() ? body.cashAccountCode.trim() : null;
+  const paymentMethod =
+    typeof body.paymentMethod === "string" && body.paymentMethod.trim()
+      ? body.paymentMethod.trim()
+      : null;
+  const cashAccountCode =
+    typeof body.cashAccountCode === "string" && body.cashAccountCode.trim()
+      ? body.cashAccountCode.trim()
+      : null;
   return {
     ok: true,
     values: {
@@ -248,8 +249,7 @@ router.post("/expenses", requireAuth, async (req, res): Promise<void> => {
 
   // Post to the double-entry ledger.
   const amount = Number(v.values.amount);
-  const cashAccount =
-    v.values.cashAccountCode || cashAccountFor(v.values.paymentMethod);
+  const cashAccount = v.values.cashAccountCode || cashAccountFor(v.values.paymentMethod);
   const expenseAccount = expenseAccountFor(v.values.category);
   try {
     await postJournalEntry({
@@ -301,10 +301,7 @@ router.patch("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: v.error });
     return;
   }
-  await db
-    .update(operatingExpensesTable)
-    .set(v.values)
-    .where(eq(operatingExpensesTable.id, id));
+  await db.update(operatingExpensesTable).set(v.values).where(eq(operatingExpensesTable.id, id));
 
   await db.insert(auditLogTable).values({
     action: "expense.update",

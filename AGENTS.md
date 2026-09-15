@@ -1,9 +1,11 @@
 # Rfq-Manager ‚Äî Repository Notes
 
 ## Overview
+
 Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm workspaces).
 
 ## Structure
+
 - `artifacts/api-server/` ‚Äî Express + Drizzle ORM backend (esbuild bundle ‚Üí `dist/index.mjs`)
 - `artifacts/rfq-portal/` ‚Äî React + Vite SPA frontend
 - `lib/db/` ‚Äî `@workspace/db` Drizzle schema + pool (requires `DATABASE_URL`)
@@ -12,6 +14,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - `lib/api-zod/` ‚Äî generated zod schemas
 
 ## API routing
+
 - API mounted at `/api` (app.ts: `app.use("/api", router)`). SPA fallback serves `index.html` for unmatched routes.
 - PO routes live at `/api/po` and `/api/po/:id` (NOT `/api/purchase-orders` despite the comment in routes/index.ts).
 - `/api/healthz` is the unauthenticated liveness probe (returns `{"status":"ok"}`).
@@ -19,12 +22,15 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Routes use `req.log` (pino-http). Test apps must stub `req.log` and `req.session`.
 
 ## Code generation workflow
+
 1. Edit `lib/api-spec/openapi.yaml`.
 2. Run orval to regenerate `lib/api-client-react/src/generated/*` and `lib/api-zod/src/generated/*`.
 3. Build libs: `tsc --build` (root).
+
 - **orval pitfall (duplicate schema names)**: a duplicate `components/schemas` key in `openapi.yaml` is a YAML "duplicated mapping key" error. orval reports this only as `Failed to resolve input: Please provide a valid string value` ‚Äî **after** it has already `Cleaning output folder`, which deletes the committed generated files. Validate the YAML first with `js-yaml` (`node_modules/.pnpm/js-yaml@*/node_modules/js-yaml`) before running orval. When adding a new sub-item schema, name it distinctly (e.g. `CustomerRfqLineItem`, not `CustomerRfqItem`) to avoid colliding with existing `*Item` schemas.
 
 ## Commands
+
 - Typecheck all libs: `tsc --build` (from repo root)
 - Typecheck api-server: `tsc -p artifacts/api-server/tsconfig.json --noEmit`
 - Typecheck portal: `tsc -p artifacts/rfq-portal/tsconfig.json --noEmit`
@@ -33,12 +39,14 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - portal build: `cd artifacts/rfq-portal && ./node_modules/.bin/vite build --config vite.config.ts`
 
 ## Testing conventions
+
 - Tests in `artifacts/api-server/src/__tests__/` (vitest, `globals: true`, node env).
 - Route tests mock `requireAuth`, `@workspace/db`, and side-effectful modules (email, google-sheets, communications, po-pdf) via `vi.mock` with **paths relative to the test file**.
 - DB mocking: drizzle query builders are chainable + thenable. Use a `thenable(value, extraMethods)` helper (object with `.then` + extra methods like `.returning()`). `vi.clearAllMocks()` clears call history but keeps `vi.fn` implementations.
 - Mock paths must resolve to the same absolute module as the source imports them. Test dir is `src/__tests__/routes/`; source dir is `src/modules/po/` (both 2 levels under `src/`), so `../../middlewares/auth` works from both.
 
 ## Deployment
+
 - Render service `srv-d894ofmq1p3s73fh04vg` (cortoba-rfq), tracks `main` branch, autoDeploy=off.
 - Build: `pnpm install --no-frozen-lockfile && pnpm --filter @workspace/rfq-portal run build && pnpm --filter @workspace/api-server run build`
 - Start: `node artifacts/api-server/dist/index.mjs`
@@ -47,6 +55,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Frontend error extraction**: the orval client (`lib/api-client-react/src/custom-fetch.ts`) throws `ApiError`, where the server JSON body is `err.data.error` (NOT `err.response.data.error` as with Axios). Use the shared `getApiErrorMessage(err)` helper (`artifacts/rfq-portal/src/lib/api-error.ts`) in mutation `onError` handlers so real server messages surface instead of a generic fallback. Older pages (suppliers) still use the broken Axios-style extractor ‚Äî fix them when touched.
 
 ## Conventions
+
 - Arabic UI (RTL) with English code/comments. Field labels in Arabic.
 - PO statuses: `draft` ‚Üí `sent`. Draft POs are fully editable; sent are immutable.
 - Git: use provided GitHub token for push. Co-author commits with `openhands <openhands@all-hands.dev>`.
@@ -54,16 +63,19 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Token caveat: the system-managed `$GITHUB_TOKEN` env var (a `ghu_` OAuth token) has **empty OAuth scopes** and is rejected by git push (403). Use the user-provided `ghp_` classic token literally in the remote URL (e.g. `https://melsofany:<ghp_token>@github.com/...`) for push + PR creation. Reset remote to credential-less URL afterward. The `create_pr` tool also fails (403) because it uses the `ghu_` token ‚Äî create PRs directly via `curl` to `https://api.github.com/repos/<owner>/<repo>/pulls` with the `ghp_` token.
 
 ## Customer module (added in PR #9) ‚Äî `customers` table (id, customerId, name, nickname, contactPerson, email, phone, address, taxId, notes, isActive, createdAt, updatedAt). Drizzle `push` (prebuild) creates the table on deploy when `DATABASE_URL` is set.
+
 - API: `artifacts/api-server/src/modules/users/customers.ts` ‚Äî `GET/POST /customers`, `GET/PATCH/DELETE /customers/:id`. Duplicate email/phone guarded on create + update. Delete is `requireRole("admin","manager")` and FK-aware (409 on linked records). Mounted via `modules/users/index.ts`.
 - Frontend: `artifacts/rfq-portal/src/modules/customers/pages/{index,new,detail}.tsx` (list + search + delete confirm, add form, detail + inline edit + delete modal). Routes `/customers`, `/customers/new`, `/customers/:id` in `App.tsx`.
 - Customers page pattern (in-place edit + delete) mirrors the suppliers module but drops categories/scores/bulk-import.
 
 ## Customer RFQ module (added in PR #11) ‚Äî `customer_rfqs` (id, internalNo, customerId‚Üícustomers, customerName, customerRfqNo, numberAutoGenerated, entryDate, expiryDate, buyerName, status, notes, createdAt, updatedAt) + `customer_rfq_items` (id, customerRfqId‚Üícustomer_rfqs ON DELETE CASCADE, partNo, lineItem, uom, qty NUMERIC(15,4), createdAt). Tables created via `init-db.ts` (NOT drizzle-kit push).
+
 - API: `artifacts/api-server/src/modules/customer-rfq/routes.ts` ‚Äî `GET/POST /customer-rfq`, `GET/PATCH/DELETE /customer-rfq/:id`. Mounted via `modules/customer-rfq/index.ts` ‚Üí `routes/index.ts`. POST auto-generates `customerRfqNo` (`CRFQ-YYYY-NNNNNN`) when blank and sets `numberAutoGenerated=true`; `internalNo` is always generated. `customerId` resolved from a typed customer name (ilike match). `lineItem` spaces stripped server-side (`replace(/\s+/g,"")`). All routes behind `requireAuth`; PATCH is draft-only.
 - Frontend: `artifacts/rfq-portal/src/modules/customer-rfq/pages/{index,new,detail}.tsx`. `new.tsx` has a `CustomerCombobox` (pick existing customer or type name), optional customer-RFQ-no with live auto-generate warning banner, date pickers, buyer, multi-row items (lineItem strips on input via `replace(/\s+/g,"")`, UOM `<datalist>`, qty). `detail.tsx` shows the auto-number warning (via `?warn=auto-number` query or the `numberAutoGenerated` flag). Routes `/customer-rfq`, `/customer-rfq/new`, `/customer-rfq/:id`.
 - Tests: `artifacts/api-server/src/__tests__/routes/customer-rfq.test.ts` (9 tests; uses a `chainable(value, methods)` helper that is both thenable and chainable to model drizzle's await-anywhere builders).
 
 ## Customer RFQ request status (PR #29)
+
 - Adds a derived, progressive **request status** (حالة الطلب) shown on the customer-RFQ list + detail. Four milestones rolled up across offer/pricing/customer-PO/delivery tables:
   1. `received` — طلب وارد (default).
   2. `supplier_priced` — مُسعَّر من المورد: at least one **approved** `offer_item` links to an item of this RFQ (via `rfq_items.customer_rfq_item_id`, with partNo/lineItem fallback for legacy rows). `resolveSupplierPricedItemIds()` (in `customer-rfq/routes.ts`) reuses the same join as `resolveApprovedCosts`.
@@ -77,6 +89,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **List-hang gotcha (PR #30 fix)**: `resolveSupplierPricedItemIds` takes `withLegacyFallback` (default `true`). The per-item partNo/lineItem fallback is O(N) DB queries and **must be disabled** on the list path (passes `false`) — it hung the `/customer-rfq` page (stuck at «جارٍ التحميل...») on Render once many items lacked the FK link. The list path is a fixed set of batched queries (all RFQs → all items → one approved-offer join → one PO rollup); only the detail path keeps the fallback (one RFQ, few items).
 
 ## Customer RFQ pricing + finalize/lock (PR #13)
+
 - DB: `customer_rfq_items.unit_price NUMERIC(15,4)` added in `init-db.ts` (CREATE TABLE + `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration so existing Render tables pick it up on next startup).
 - API (`routes.ts`): `computeTotal(qty, unitPrice)` helper rounds qty×price to 4dp + strips trailing zeros (mirrors `formatQty`). POST/PATCH persist `unitPrice`. GET `/:id` + PATCH responses return `unitPrice` (formatted) + `total` (server-computed). PATCH with `status:"sent"` validates **every** item has a price > 0 else 400 `أدخل سعر كل بند قبل تثبيت الطلب`; once `status="sent"` the RFQ is immutable (non-draft PATCH → 400 `لا يمكن تعديل طلب تسعير العميل بعد إرساله`).
 - Frontend (`detail.tsx`): the read-only items table gains سعر الوحدة / الإجمالي columns. Drafts: price cell = `<Input type=number>`, live line total (`formatLineTotal`), grand-total footer, and a "حفظ الأسعار وتثبيت الطلب" button (confirm dialog, disabled until `allItemsPriced`) that PATCHes prices + `status:"sent"`. Sent RFQs render prices/totals read-only.
@@ -84,9 +97,11 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Tests: the db mock's `update().set(vals)` now merges `vals` onto `detailRow` so the post-update re-select sees the new `status` (needed to assert finalize → "sent"). 46 tests total.
 
 ## Workflow caveat (learned the hard way)
+
 - **Commit before switching branches / `git reset --hard`.** Uncommitted working-tree edits are destroyed by `git reset --hard` (and by `git checkout` if it touches overlapping files). When doing a multi-edit feature, commit incrementally on the feature branch BEFORE fetching/resetting against origin, or you lose all uncommitted work irrecoverably (git never staged the blobs).
 
 ## Purchase-order items from customer POs (PR #20 → simplified PR #21)
+
 - On `/purchase-orders/new`, the PO-number lookup is now **automatic** (no source toggle).
 - Backend (`modules/po/routes.ts`): `GET /api/po/lookup/:poNo` now prefers a matching **customer PO** (entered on `/customer-po`, matched via `ilike(customerPoNo, poNo)` — case-insensitive exact). If a customer PO matches and has items, those are returned in the **SheetItem shape** (`itemId/lineItem/partNo/description/uom/qty/referencePrice/poNo`, `referencePrice` = stored `unit_price`). If no customer PO matches (or it has no items), it **falls back** to `lookupPoFromSheet` (Google Sheets) — so legacy PO numbers still resolve. Google Sheets integration is **untouched**.
 - `GET /api/po/customer-po-numbers` — list `{value,label,internalNo,customerName,status}` for the combobox. (The standalone `/api/po/customer-po-lookup` endpoint from PR #20 was removed in PR #21 — the main lookup subsumes it.)
@@ -94,6 +109,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Imports in `po/routes.ts`: `customerPosTable`/`customerPoItemsTable` + `ilike`.
 
 ## Customer PO module (PR #17 + #18)
+
 - DB: `customer_pos` (id, internalPoNo, customerPoNo, customerId→customers, customerName, poDate, buyerName, notes, employeeId, employeeName, status, createdAt, updatedAt) + `customer_po_items` (id, customerPoId→customer_pos ON DELETE CASCADE, customerRfqId, customerRfqItemId, partNo, lineItem, description, uom, qty NUMERIC(15,4), unitPrice NUMERIC(15,4), deliveryDate, createdAt). Tables created via `init-db.ts`.
 - API: `modules/customer-po/routes.ts` — `GET/POST /customer-po`, `GET/PATCH/DELETE /customer-po/:id`. Mounted via `modules/customer-po/index.ts` → `routes/index.ts`. POST auto-generates `internalPoNo` (`CPO-YYYY-NNNNNN`), records `employeeId`/`employeeName` from `req.session`. `customerId`/`customerName` are explicit input (POST 400s without a customerName). Customer name is stored, NOT derived from a linked RFQ — works for POs without an RFQ number. `lineItem` stripped. PATCH replaces items. `status:sent` finalizes (immutable after). `GET /customer-po/:id` returns items with `unitPrice`/`total` (server-computed).
 - Frontend: `modules/customer-po/pages/{index,new,detail}.tsx`. `new.tsx` has a `CustomerCombobox` (pick existing customer or type name), optional Customer-RFQ picker (pulls checked items into the PO with their qty/price/delivery date; auto-fills owning customer from the RFQ), read-only "الموظف المُدخِل" badge (logged-in employee), buyerName relabeled "المشتري (المرجع من العميل)" to disambiguate. `detail.tsx`: draft edit shows customer picker; read-only renders customerName/buyerName/employeeName. Shared `components/CustomerCombobox.tsx` (reused by new + detail) — uses `useListCustomers`; free-text allowed so a name persists even if not registered.
@@ -101,6 +117,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - orval gotcha: when a PR adds an operation/schema, the merge with main re-triggers orval dup-name TS2308; after merge-resolve, re-run `cd lib/api-spec && orval --config orval.config.ts`, delete any duplicating `approveOfferItem*.ts` type files + their `export *` lines in `generated/types/index.ts`, then `tsc --build`.
 
 ## Offer-item approval + customer-rfq margin check (PR #14)
+
 - DB: `offer_items.is_approved` (boolean) in `lib/db/src/schema/offers.ts`; `rfq_items.customer_rfq_item_id` (FK → `customer_rfq_items.id`, nullable) in `lib/db/src/schema/rfq.ts`. Both created via ALTER TABLE in `init-db.ts` (DDL lives there, schema files define ORM objects).
 - API — approve: `PATCH /api/offers/items/:offerItemId/approve` (`modules/rfq/offers.ts`). Body `{approved?: boolean}` (default `true`). Sets `is_approved` on one offer_item and un-approves the previous approved item for the same `rfq_item_id`. Logs to `audit_log`. Returns `{id, isApproved}`.
 - API — offers detail: `GET /api/rfq/:id/offers` includes `offerItemId` + `isApproved` per offer (both in `analysis.itemAnalysis[].offers[]` and flat `offers.items[]`).
@@ -110,6 +127,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - orval regen gotcha: after adding operations, orval emits a zod const in `generated/api.ts` AND a type file in `generated/types/` (e.g. `approveOfferItemBody.ts`). The zod `index.ts` `export *` from both causes TS2308. Fix: delete the duplicating type files + their `export *` lines in `generated/types/index.ts`.
 
 ## Customer PO module (PR #17)
+
 - DB: `lib/db/src/schema/customer_pos.ts` — `customer_pos` (id, internalPoNo, customerPoNo, poDate, buyerName, employeeId→employees, employeeName, customerName, status, notes, createdAt, updatedAt) + `customer_po_items` (id, customerPoId→customer_pos ON DELETE CASCADE, customerRfqId nullable, customerRfqItemId nullable, partNo, lineItem, description, uom, qty, unitPrice, deliveryDate, createdAt). Tables created via `init-db.ts` (NOT drizzle-kit push). `customer_rfq_item_id` is **not unique** — the same item may be ordered again on a later PO (partial shipment).
 - API (`modules/customer-po/routes.ts`): `GET/POST /customer-po`, `GET/PATCH/DELETE /customer-po/:id`, plus `GET /customer-po/customer-rfqs` (light RFQ picker list). POST auto-generates `internalPoNo` (`CPO-YYYY-NNNNNN`) via `generateInternalPoNo` (select maxNo). `resolveCustomerName(poId)` does `select({name}).from(poItems).innerJoin(rfqs).where(poId).limit()` → sets `customerName` from the first RFQ-linked item (null for manual-only POs). `lineItem` spaces stripped server-side. NUMERIC qty/unitPrice formatted; `total = qty×unitPrice` computed on read. PATCH draft-only; `status:"sent"` finalizes (immutable). DELETE draft-only. All routes behind `requireAuth` + `audit_log`. Employee recorded from `req.session.employeeId` (+ name lookup).
 - Frontend (`customer-po/pages/{index,new,detail}.tsx`): index=list+search; new=PO header + optional **CustomerRfqPicker** (combobox) that loads the RFQ's items via `useGetCustomerRfq` and renders a checklist; checked items are appended as PO rows (partNo/desc/uom pre-filled, qty/price/deliveryDate editable); manual rows for POs with no RFQ. detail=read-only items table with line totals + grand total + draft edit/finalize/delete. Routes `/customer-po`, `/customer-po/new`, `/customer-po/:id`.
@@ -118,6 +136,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - orval regen note: regenerating re-creates the orphan `approveOfferItem{Body,200}.ts` type files (deleted in PR #14 to fix TS2308). After each orval run, delete them + their `export *` lines in `generated/types/index.ts` again, or `tsc --build` fails with TS2308.
 
 ## Goods receipt / delivery / accounts module (receipts & realized margin)
+
 - DB: `lib/db/src/schema/receipts_deliveries.ts` — `po_item_receipts` (id, poItemId→purchase_order_items, poId, receivedQty, acceptedQty, rejectedQty, rejectionReason, actualCost NUMERIC(15,4), receiptStatus, receivedBy, receivedAt) + `customer_po_item_deliveries` (id, customerPoItemId→customer_po_items, customerPoId, deliveredQty, deliveryStatus, deliveredBy, deliveredAt). Added fields: `purchase_order_items` (`customerPoItemId`, `totalReceivedQty`, `totalAcceptedQty`, `totalRejectedQty`, `finalActualCost`, `lineStatus`), `customer_po_items` (`totalDeliveredQty`, `deliveryStatus`), `work_order_assignments.poItemId`. All DDL in `init-db.ts` (CREATE TABLE IF NOT EXISTS + ALTER TABLE … ADD COLUMN IF NOT EXISTS).
 - API receipts (`modules/po/receipts.ts`): `GET /po/:id/receipts` (list), `POST /po/:id/receipts` (create a receipt row; `postpone:true` shortcut sets `lineStatus=postponed`), `PATCH /po/receipts/:receiptId`, `DELETE /po/receipts/:receiptId` (re-aggregates after every write). Aggregation: Σ received/accepted/rejected, weighted-avg `finalActualCost`, `lineStatus` = fulfilled|partial|rejected|postponed|pending. `REJECTION_REASONS` exported here (shared with WhatsApp flow). `POST /po/:id/send-receipt-prompts` sends a per-item interactive WhatsApp button per line to the representative. `normalizePhone` is exported from `po/routes.ts`.
 - API deliveries (`modules/customer-po/deliveries.ts`): `GET /customer-po/:id/deliveries`, `POST /customer-po/:id/deliveries`, `PATCH/DELETE /customer-po/deliveries/:deliveryId`; re-aggregates `totalDeliveredQty`/`deliveryStatus` on `customer_po_items`.
@@ -127,8 +146,8 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Frontend: `/purchase-orders` page now has Tabs — «أوامر الشراء» (existing list) and «استلام التوريدات» (`modules/po/pages/receipts.tsx`): expandable PO rows → per-line receipt form (received/accepted/rejected/actualCost/rejectionReason) + postpone + send-receipt-prompts to representative. `/accounts` page (`modules/accounts/pages/index.tsx`): summary cards (revenue/cost/margin/loss-lines) + filterable margins table (loss rows highlighted red). Sidebar entry `nav.accounts` (Calculator icon) + i18n. These new pages use direct `fetch("/api/...", {credentials:"include"})` (NOT orval) since the endpoints aren't in the OpenAPI spec — same pattern as other non-spec calls.
 - **Tab-embed gotcha (PR #31 fix)**: `deliveries.tsx` (customer-po) and `receipts.tsx` (purchase-orders) are rendered as **Tabs inside their parent index page**, which ALREADY wraps in `<Layout>`. Do NOT wrap these tab pages in `<Layout>` — it produces a nested double sidebar. They are tab-only (no standalone route in App.tsx), so the inner `<Layout>` + its import were removed; the parent page supplies the layout.
 
-
 ## Egyptian tax compliance — accounts rebuild (PR #36)
+
 - `/accounts` rebuilt into a **Tabs** page (`modules/accounts/pages/index.tsx`): الهامش المحقق (margins, preserved) | ضريبة القيمة المضافة (VAT) | الخصم تحت حساب المورد (withholding) | إعدادات الضرائب (settings). The old single margins screen moved to `MarginsTab.tsx` (Layout wrapper + h1 removed — the parent index page supplies `<Layout>` + page title, same tab-embed pattern as `receipts.tsx`/`deliveries.tsx`).
 - Egyptian VAT Law No. 67/2016 → standard rate **14%**; withholding (خصم تحت حساب المورد) schedule → **3%** general, **5%** services/professional, **1%** purchases. References used: `openaccountants/openaccountants` (skills/international/egypt) + `Axentorllc/erpnext_egypt_compliance` (ETA e-invoicing).
 - New `tax_settings` table (single row, `key='default'`): company identity + editable VAT/withholding rates. Schema in `lib/db/src/schema/tax_settings.ts`; DDL + seed in `init-db.ts` (`CREATE TABLE IF NOT EXISTS` + `INSERT ... ON CONFLICT (key) DO NOTHING`) — no drizzle-kit push needed.
@@ -136,8 +155,8 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Frontend tabs use direct `fetch("/api/...", {credentials:"include"})` (NOT orval) — endpoints not in OpenAPI spec, same pattern as receipts/deliveries. Settings PUT restricted to admin/manager (403 otherwise).
 - Tests: `__tests__/routes/accounts.test.ts` (7) — VAT output/input/net, tax-inclusive stripping, withholding per-PO aggregation, settings role guard + manager update. DB mock uses a per-FROM-table `selectBuilder()` that chains innerJoin/leftJoin/where/orderBy and resolves the per-test `sellRows`/`buyRows`/`poRows`/`taxSettingsRow`. 96 tests total pass.
 
-
 ## PO line charges, operating expenses & customer collections (PR #37)
+
 - DB: `lib/db/src/schema/expenses.ts` (exported from `schema/index.ts`):
   - `po_item_charges` (id, poItemId→purchase_order_items ON DELETE CASCADE, poId→purchase_orders ON DELETE CASCADE, chargeType TEXT, description, amount NUMERIC(15,4), createdAt). Per-line charges (نقل/شحن/جمارك/تحميل/تنزيل/تخزين/تأمين/أخرى) so the true cost of each line is known precisely.
   - `operating_expenses` (id, category, description, expenseDate TEXT, amount NUMERIC(15,4), notes, employeeId→employees, employeeName, createdAt) + `expense_attachments` (id, expenseId→operating_expenses ON DELETE CASCADE, originalName, mimeType, size, content base64, createdAt). Company operating expenses NOT tied to a PO (rent/hosting/utilities/maintenance/admin), with file attachments (receipts/invoices).
@@ -153,10 +172,11 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Frontend db-import gotcha**: do NOT import anything from `@workspace/db` in portal code — its `index.ts` eagerly constructs a node-postgres `Pool`/`drizzle` proxy. Mirror small constants (e.g. `PO_CHARGE_TYPES`) locally instead.
 
 ## Comprehensive double-entry accounting system (PR — /accounts rebuild)
+
 - Goal: a full Egyptian-compliant accounting system (ض.ق.م. 14% مخرجات/مدخلات، خصم تحت حساب المورد 3%) on `/accounts`, letting an accountant enter/control/audit/review/post invoices & journal entries and produce financial statements. Research (Tavily) confirmed: Egyptian supply traders post VAT as 14% output on sales / input on purchases, withhold 1–3% under حساب المورد, and run a standard double-entry COA.
 - DB: `lib/db/src/schema/accounting.ts` — `chart_of_accounts` (id, code UNIQUE, nameAr, nameEn, type [asset|liability|equity|revenue|expense], isControl, isActive), `journal_entries` (id, entryNo UNIQUE `JE-YYYY-NNNNNN`, entryDate, description, source [manual|supplier_invoice|supplier_payment|sales_invoice], status [draft|posted|void], employeeId, employeeName, reviewedByName, postedAt), `journal_lines` (id, entryId CASCADE, accountId→chart_of_accounts, lineNo, accountCode snapshot, debit, credit, description), `supplier_invoices` + `supplier_invoice_items` + `supplier_payments` + `supplier_payment_applications`, `sales_invoices` + `sales_invoice_items`. All DDL (CREATE TABLE IF NOT EXISTS + default COA seed of ~30 accounts) lives in `init-db.ts` — NOT drizzle-kit push.
 - Backend `modules/accounts/`:
-  - `posting.ts` — shared `postJournalEntry({entryDate, description, source, lines, employeeId, employeeName})`: validates ≥2 lines + nonzero + balanced (debit==credit), `assertAccountsExist` (select codes via `sql\`code = any(${uniq})\``), `nextEntryNo` (`JE-YYYY-NNNNNN` from `like` max), inserts entry + lines in one tx, stamps status=posted. `ACCOUNT_CODES` const map (e.g. CASH 1001, BANK 1010, AR 1200, INVENTORY 1300, INPUT_VAT 1401, AP 2100, OUTPUT_VAT 2401, WITHHOLDING_PAYABLE 2402, SALES 4100, COGS 5100, BANK_CHARGES 5900). `accountBalance(accountId, {from,to})` joins journal_lines↔entries↔coa.
+  - `posting.ts` — shared `postJournalEntry({entryDate, description, source, lines, employeeId, employeeName})`: validates ≥2 lines + nonzero + balanced (debit==credit), `assertAccountsExist` (select codes via `sql\`code = any(${uniq})\``), `nextEntryNo` (`JE-YYYY-NNNNNN`from`like`max), inserts entry + lines in one tx, stamps status=posted.`ACCOUNT_CODES`const map (e.g. CASH 1001, BANK 1010, AR 1200, INVENTORY 1300, INPUT_VAT 1401, AP 2100, OUTPUT_VAT 2401, WITHHOLDING_PAYABLE 2402, SALES 4100, COGS 5100, BANK_CHARGES 5900).`accountBalance(accountId, {from,to})` joins journal_lines↔entries↔coa.
   - `ledger.ts` — COA CRUD (`GET/POST /coa`, `PATCH/DELETE /coa/:id` accountant-role), journal list+detail+create+review+post+void (`GET/POST /journal`, `GET /journal/:id`, `POST /journal/:id/{review,post,void}`), trial-balance (`GET /trial-balance`), income-statement (`GET /income-statement`), balance-sheet (`GET /balance-sheet`), GL by account (`GET /ledger/:code`), dashboard (`GET /dashboard`).
   - `supplier-invoices.ts` — `GET/POST /supplier-invoices`, `GET/PATCH/DELETE /supplier-invoices/:id`, `POST /supplier-invoices/:id/{post,void}`, `POST /supplier-payments`. POST computes VAT 14% + withholding 3% (configurable via taxSettings) → `computeInvoice`. Post path generates the AP/Inventory/Input-VAT/Withholding-payable journal via `postJournalEntry`. Payments split across invoices (oldest-first) + bank charges.
   - `sales-invoices.ts` — `GET/POST /sales-invoices`, `GET/PATCH/DELETE /sales-invoices/:id`, `POST /sales-invoices/:id/{post,void}`, `GET /sales-invoices/:id/pdf`. POST auto-fills items from a linked customer PO (select renamed `{no,name}`). Post path recognizes COGS from the customer-PO items' linked purchase-order receipts (`acceptedQty × actualCost` + PO charges) and posts AR/Sales/Output-VAT/COGS/Inventory journal. PDF via `pdfkit` (`sales-invoice-pdf.ts`).
@@ -171,6 +191,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
   - New accounting routes are NOT in the OpenAPI spec — the frontend calls them via direct `fetch("/api/accounts/...", {credentials:"include"})`, same pattern as receipts/deliveries/accounts margins.
 
 ## Accounts ledger integration (PR #40) — single source of truth
+
 - **Goal**: the old accounts tabs (Expenses, Collections, VAT, Withholding) computed figures straight from PO/invoice tables and never touched the double-entry ledger, so the new ledger tabs (COA/Journal/Financial Statements) and the old tabs diverged. PR #40 wires the old modules into the ledger.
 - **Expenses** (`modules/expenses/routes.ts`): `POST /expenses` now calls `postJournalEntry()` (from `accounts/posting.ts`) right after the insert — balanced entry: debit the mapped expense-account code (via `accounts/integration.ts` `expenseAccountFor(category)`), credit the cash/bank account (`cashAccountFor(paymentMethod)` or an explicit `cashAccountCode`). Posting failures are caught + logged (never block the 201). The expenses test asserts **4** `db.insert` calls (expense row + journal-entry header + journal lines + audit).
 - **Collections** (`modules/collections/routes.ts`): `POST /collections/:poId/payments` now (1) posts a journal entry (debit cash/bank, credit `ACCOUNT_CODES.AR` with `partyType:"customer"`) and (2) applies the payment to linked **posted** sales invoices for that PO (oldest-first by id), reducing `balance` and flipping `status:"paid"` when settled. Imports `salesInvoicesTable` + `ACCOUNT_CODES` from `@workspace/db` and `cashAccountFor` from integration.
@@ -181,6 +202,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Merge/deploy**: PR #40 squash-merged (84fc6f2), Render deploy triggered via `POST /v1/services/<id>/deploys {"clearCache":"clear"}` (autoDeploy is off). Healthz confirmed live.
 
 ## Accounts UI simplification (PR #42 → PR #43) — 6 main tabs, nested sub-tabs
+
 - **Problem**: the old «المصروفات التشغيلية» tab was a duplicate entry point of «قيود اليومية» (both create journal entries), confusing users. Even after removing it, 11 top-level tabs were still too many/unstructured.
 - **Fix (PR #43)**: collapsed the 11 top-level tabs into **6** using the same nested-sub-tabs pattern that `FinancialStatementsTab` already uses. New structure in `accounts/pages/index.tsx`:
   1. **قيود اليومية** (`journal`) — `JournalTab` (+ «قيد مصروف سريع» button inside).
@@ -195,6 +217,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Backend untouched**: `modules/expenses/*` routes + `operatingExpensesTable` stay mounted (historical rows + attachments still queryable via API). `expenses.test.ts` still passes (132 tests total).
 
 ## Customer PO fulfillment status (PR #47)
+
 - **Goal**: the `/customer-po` page's «الحالة» column should reflect order progress automatically — (1) «تم إصدار أمر شراء للمورد» when a supplier PO is dispatched from `/purchase-orders`, and (2) «نجح X% من البنود المسلمة» as deliveries are recorded against the customer PO's line items.
 - **Approach**: a derived `CustomerPoFulfillmentStatus` computed on every list/detail fetch (never stored), advancing: `draft` → `sent` → `po_issued` → `delivered` (partial %) → `fulfilled` (100%).
 - **po_issued detection**: at least one DISPATCHED (`status="sent"`) supplier PO is linked to the customer PO. Link is via `purchase_order_items.customerPoItemId` → `customer_po_items.customerPoId`; a header-level `sheetPoNo = customerPosTable.customerPoNo` (case-insensitive) fallback covers legacy supplier POs created before the item FK. `resolvePoIssuedIds()` (in `customer-po/routes.ts`) does BOTH checks in batch for the list (no N+1).
@@ -206,9 +229,8 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Frontend**: `customer-po/pages/index.tsx` `FulfillmentStatusBadge` (colored by stage: amber/blue/indigo/emerald/green) in the «الحالة» column; `customer-po/pages/detail.tsx` adds a second badge in the header. `FulfillmentStatusBadge` title shows `deliveredItems/totalItems بنود مسلمة`.
 - **Tests**: `customer-po.test.ts` DB mock gained `purchaseOrdersTable`/`purchaseOrderItemsTable` table handles + branches: `purchaseOrderItemsTbl` (with `innerJoin`), `purchaseOrdersTbl` (`where`), and `poItemsTable` select({id}|{customerPoId,deliveryStatus}) → detailItems. New per-test state: `dispatchedPoRows` (header-level po_issued), `linkedPoItemRows` (item-level po_issued). 6 new fulfillment tests; **141 tests total** pass.
 
-
-
 ## Interactive WhatsApp rep bot for item-level receipts & deliveries (PR #48)
+
 - **Goal**: a menu-driven WhatsApp bot for registered representatives (مندوبين) to confirm receipts (استلام from supplier) and deliveries (تسليم to customer) per item, directly from WhatsApp. Receipt rep and delivery rep may differ; no delivering an item before it's received; non-reps get normal chat.
 - **DB**: `work_order_assignments` gains `kind` (TEXT, `receipt`|`delivery`), `customer_po_id`, `customer_po_item_id` (ALTER TABLE ... ADD COLUMN IF NOT EXISTS in `init-db.ts`; Drizzle in `schema/work_order_assignments.ts` + `WORK_ORDER_KIND` export). One table now tracks both sides of an assignment.
 - **Receipt→Delivery auto-link**: when an accepted WhatsApp receipt lands for a supplier PO item linked to a customer PO item (`purchase_order_items.customer_po_item_id`), `ensureDeliveryAssignment()` auto-creates a `kind=delivery` assignment inheriting the same rep — so they can then deliver to the customer without a separate assignment step.
@@ -221,17 +243,20 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Deploy**: PR #48 squash-merged (cce6bd0); Render deploy `dep-d9vnjv6417fc73ebge90` live; `/api/healthz` ok; new route returns 401 (not 404) confirming it's mounted behind auth.
 
 ## PO dispatch now sends the rep bot's per-item receipt prompts (replaces whole-PO template)
-- **Problem**: dispatching a PO (`POST /api/po/:id/dispatch`) sent the rep a single whole-PO work-order *template* (`sendRepresentativeWorkOrderWhatsApp`, `work_order:<poNo>:received/rejected` buttons) and created a `work_order_assignments` row **without** `poItemId`/`kind`. That legacy template is the wrong entry point for the rep bot: the bot menu's receipt list (`repReceiptPoList`) filters on `a.poItemId &&`, so the whole-PO assignment was invisible to the menu → the rep bot never "opened" after sending the PO. Reps also can't reach the app, so the manual «استلام التوريدات → إرسال مطالبات الاستلام» tab path wasn't usable for them.
+
+- **Problem**: dispatching a PO (`POST /api/po/:id/dispatch`) sent the rep a single whole-PO work-order _template_ (`sendRepresentativeWorkOrderWhatsApp`, `work_order:<poNo>:received/rejected` buttons) and created a `work_order_assignments` row **without** `poItemId`/`kind`. That legacy template is the wrong entry point for the rep bot: the bot menu's receipt list (`repReceiptPoList`) filters on `a.poItemId &&`, so the whole-PO assignment was invisible to the menu → the rep bot never "opened" after sending the PO. Reps also can't reach the app, so the manual «استلام التوريدات → إرسال مطالبات الاستلام» tab path wasn't usable for them.
 - **Fix**: the dispatch route now sends the rep **per-item interactive receipt prompts** (`sendRepresentativeItemReceiptWhatsApp`, `work_order_item:<poNo>:<poItemId>:received/rejected` buttons) for each pending PO item, and inserts a `work_order_assignments` row per item with `poItemId` + `kind: WORK_ORDER_KIND.RECEIPT` + normalized rep phone. This is the exact same flow the manual `POST /po/:id/send-receipt-prompts` uses, so the rep bot menu opens with these items directly when the rep replies, and `ensureDeliveryAssignment` chains receipt→delivery automatically. No template approval needed (interactive buttons, not a pre-approved template).
 - **Code** (`modules/po/routes.ts`): import changed `sendRepresentativeWorkOrderWhatsApp` → `sendRepresentativeItemReceiptWhatsApp` + `WORK_ORDER_KIND` from `@workspace/db`. The whole-PO block was replaced with a per-item loop over `itemRows` (skipping `lineStatus==="fulfilled"|"rejected"`). `workOrderSent`/`workOrderError` response shape kept (boolean + first error) for backwards compat; the frontend doesn't render them.
 - **Tests**: `__tests__/routes/po-dispatch.test.ts` (4) — per-item prompts + kind=receipt assignments, not-configured skips, fulfilled/rejected items skipped, 404. DB mock: `selectQueue` items MUST be **array-wrapped** (each `db.select(...).where()` resolves to an array — wrapping the single poRow as `[poRow]`), and `isWhatsAppConfigured` is a **const boolean** so the mock uses a getter (a `vi.fn` is always truthy and breaks the not-configured case). **152 tests total** pass.
 
 ## Rep bot dispatch-order bug (webhook signature path)
+
 - **Bug**: the inbound webhook has **two** code paths. The signature-verification fallback `dispatchWebhookPayload()` calls `handleRepMessage` (the rep bot) BEFORE `handleWorkOrderButton`. But the **library path** `Whatsapp.on.message` (used when `Whatsapp.post()` signature verification SUCCEEDS — the normal case since `WHATSAPP_APP_SECRET` matches) did NOT call `handleRepMessage` at all — it went `handleReactionWebhook → handleWorkOrderButton → handleInboundMessage`. So a registered rep sending any text to open the bot menu was routed to `handleInboundMessage` (generic normal chat) instead of the rep bot → the bot never engaged. This was the actual reason the rep bot "didn't open" (not the per-item template — the template fix was necessary but insufficient without this).
 - **Fix**: `Whatsapp.on.message` now calls `handleRepMessage` in the SAME order as `dispatchWebhookPayload`: `reaction → handleRepMessage → (interactive && handleWorkOrderButton) → handleInboundMessage`. `handleRepMessage` returns `false` for non-`rep_` payloads and non-text, so `work_order_item:` button taps still fall through to `handleWorkOrderButton`, and rep-bot interactive list/button replies (`rep_*`) are owned by the bot.
 - **Lesson**: BOTH webhook paths (`Whatsapp.on.message` and `dispatchWebhookPayload`) MUST keep identical dispatch ordering — any new handler added to one must be added to the other.
 
 ## Rep bot menu restructure (button-driven flow + back navigation)
+
 - **Goal**: the rep bot opens on ANY text with two buttons (استلام/تسليم), then drills POs → items → action with a confirmation step and a «رجوع» button at every stage; receipts/deliveries recorded from the bot use a confirm-then-record flow so the rep can cancel.
 - **Main menu** (`sendRepMainMenu` in `service.ts`): now **two ActionButtons** (استلام / تسليم) instead of a task-count list. `counts` arg is now optional (shown in body text only).
 - **PO picker** (`sendRepPoPicker`): ≤2 POs → ActionButtons + a «رجوع» (rep_back:menu) button; 3–9 POs → ActionList with a رجوع row. (WhatsApp caps ActionButtons at 3, so >2 options use a list.)
@@ -243,19 +268,22 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Tests**: existing 152 tests still pass (the HTTP-level record/ensureDelivery logic is unchanged; the new interactive payloads are routing-only). The confirm/cancel split is covered by the route handler changes which typecheck cleanly.
 
 ## Rep bot phone-normalization fix (rep bot never engaged)
+
 - **Bug**: the rep bot never opened ("مش بيكمل") because `findRepresentative(phone)` did `eq(representativesTable.phone, normalizePhone(incoming))`. Meta webhooks send the sender as a bare `20…` wa_id, but the representatives API historically stored the phone **with** a leading `+` (`+2010…`) — so the exact-match query returned nothing → `handleRepMessage` returned `false` → the rep's text fell through to `handleInboundMessage` (normal supplier chat) instead of the rep-bot menu. Same class of mismatch affected `countRepTasks`/`repReceiptPoList`/`repDeliveryPoList`/`findAssignment` (they filtered assignments by `eq(representativePhone, normalizePhone(…))`, which missed any `+`-prefixed stored assignment).
 - **Fix**: added `canonicalPhone(phone)` in `communications/routes.ts` (digits-only, strips `+`/`00`, expands Egyptian local `01…`→`201…`, strips bidi marks). `findRepresentative`, `countRepTasks`, `repReceiptPoList`, `repDeliveryPoList`, and `findAssignment` now fetch rows and match by `canonicalPhone(stored) === canonicalPhone(incoming)` — robust to any stored format. The representatives API (`modules/users/representatives.ts`) `normalizePhone` now stores the same canonical digits-only form (so new reps are consistent from the start). `isValidPhone` no longer accepts a leading `+`.
 - **Migration** (`init-db.ts`, idempotent, runs on every startup): `UPDATE representatives`/`work_order_assignments` → `regexp_replace(phone,'[^0-9]','','g')`, then strip `00`, then expand `01…`→`201…`. Existing rows stored with `+` are canonicalized so the rep bot engages immediately after deploy without re-entering the rep.
 - **Why the same number as both rep + supplier is fine**: `handleRepMessage` is tried before `handleInboundMessage`. Once `findRepresentative` matches (now canonical), the rep bot owns that number's text/menu and the supplier-chat path is skipped for them — by design (a rep IS a rep first). If you need the same number to act as a plain supplier chat, deactivate the rep record.
 
 ## Rep dispatch — consolidated notification (all items + supplier info + clean qty)
-- **Problem**: dispatching a PO sent the rep **one interactive message per item** (`sendRepresentativeItemReceiptWhatsApp`, `work_order_item:` buttons). When a PO had multiple items, the rapid second/third send was rate-limited and silently dropped (caught + logged) — and because the assignment `db.insert` was *inside* the same try block (after the send), a failed send also skipped its assignment row → that item never appeared in the rep-bot menu either. The notification also omitted the supplier's name/address/phone and showed raw NUMERIC quantities (`5.0000`).
+
+- **Problem**: dispatching a PO sent the rep **one interactive message per item** (`sendRepresentativeItemReceiptWhatsApp`, `work_order_item:` buttons). When a PO had multiple items, the rapid second/third send was rate-limited and silently dropped (caught + logged) — and because the assignment `db.insert` was _inside_ the same try block (after the send), a failed send also skipped its assignment row → that item never appeared in the rep-bot menu either. The notification also omitted the supplier's name/address/phone and showed raw NUMERIC quantities (`5.0000`).
 - **Fix**: dispatch now sends **ONE consolidated notification per supplier** (`sendRepPoDispatchWhatsApp` in `service.ts`). The body lists: «أمر شراء جديد للمندوب», PO number, supplier name / address / phone, then **all** pending line items (≤20) with `formatQty`-clean quantities (`5.0000`→`5`, `3.50`→`3.5`) + UOM. A single «بدء الاستلام» button (`rep_menu:receipt`) opens the rep-bot receipt menu, where the PO picker → item picker shows every pending item. Assignment rows are created **up front for all pending items** (independent of the WhatsApp send) so the menu always shows all items even if the message is rate-limited/fails. Duplicate-assignment inserts (re-dispatch) are tolerated.
 - **`formatQty`** is now a shared export from `communications/service.ts` (digits-only trim of trailing zeros). Used by the dispatch notification + all rep-bot item pickers (`repReceiptItems`/`repDeliveryItems`) + the `rep_item:`/resend action handlers so quantities render clean everywhere.
 - **`sendRepresentativeItemReceiptWhatsApp`** (the old per-item prompt) is still used by the manual `POST /po/:id/send-receipt-prompts` receipt screen (per-line nudge); only the **dispatch** path switched to the consolidated message.
 - Tests: `po-dispatch.test.ts` rewritten — asserts ONE `sendRepPoDispatchWhatsApp` call per supplier with supplierName/Address/Phone + all items with clean qtys, and N assignment inserts (one per pending item). 152 tests pass.
 
 ## Rep receipts/deliveries — idempotent bot actions (no conflicting rows)
+
 - **Problem (seen on live data, PO P26E11407)**: a PO with 2 items showed only 1 in the rep-bot item picker. Root cause: the rep had confirmed receipt of one item, then also tapped reject on it, creating **two** `po_item_receipts` rows (received 3 + rejected 3) for the same line. The re-aggregation naively summed both (`accepted=3 >= ordered=3`) → `line_status='fulfilled'` → the item was filtered out of the pending list, so the picker showed only 1 item. Separately, **re-dispatching** piled up duplicate `work_order_assignments` rows (9 rows for one PO) because each dispatch inserted without checking for an existing active assignment — inflating the rep menu's task counts.
 - **Fix 1 (authoritative bot receipts)**: `recordItemReceipt` now deletes prior **bot** receipts (`received_by='واتساب'`) for the line before inserting the new full-qty event, so the latest rep action is authoritative and a received+rejected pair never both sum in. Portal-entered receipts (different `receivedBy`) are preserved. `recordItemDelivery` does the same for `customer_po_item_deliveries` (`delivered_by='واتساب'`).
 - **Fix 2 (idempotent dispatch assignments)**: the dispatch path now checks for an existing **active** receipt assignment (`status != received/rejected`) for a `poItemId` before inserting — re-dispatch no longer creates duplicate rows.
@@ -263,6 +291,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Live data cleanup**: reset PO 22's items to `pending`, deleted its conflicting bot receipts + accumulated assignments so the rep can re-test cleanly.
 
 ## Receipt status reflects in both /purchase-orders tabs (live)
+
 - **Problem**: the per-item receipt status was not visible in the portal. Root cause: `GET /po/:id/items` returned only id/lineItem/description/qty/etc. — NOT `lineStatus`/totals/rejectionReason — so the receipts tab's `item.lineStatus` was always `undefined` (status cell blank). The PO list tab showed only a plain item count, no receipt progress. And there was no live update when a rep confirmed a receipt via WhatsApp.
 - **Fix**:
   - `GET /po/:id/items` now returns `lineStatus`, `totalReceivedQty`/`totalAcceptedQty`/`totalRejectedQty`/`finalActualCost`, and `rejectionReason` (latest receipt row per item, via a batched `poItemReceiptsTable` select ordered desc). The receipts tab status cell now shows the label + the rejection reason («السبب: ...») when rejected.
@@ -271,6 +300,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Tests: 152 pass; tsc + portal build clean.
 
 ## Rep bot — receipt→delivery chaining fix + assignment status update
+
 - **Problem (PO P26E11407)**: after the rep confirmed receipt of both items, the main menu still showed «استلام: 2 — تسليم: 0» instead of dropping to 0 / rising to 2, and the delivery list said «لا توجد بنود بانتظار التسليم». Two root causes:
   1. `recordItemReceipt` did NOT update the `work_order_assignments` row's status — it stayed `'sent'`, so `countRepTasks` (which counts assignments still in sent) never decremented → «استلام: 2» stuck.
   2. The supplier PO items had `customer_po_item_id = NULL` (created from a sheet lookup, no FK), so the receipt→delivery chaining (`if (line.customerPoItemId) ensureDeliveryAssignment(...)`) never fired → no delivery assignments created → «تسليم: 0».
@@ -279,6 +309,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Tests: 152 pass; tsc + build clean. PO 22's test data was reset (items → pending, receipts/assignments cleared) for a clean re-test.
 
 ## Customer PO fulfillment — received-from-supplier progress + resolved %
+
 - **Goal**: `/customer-po` (both tabs) should show a progressive status reflecting: items received from the supplier («جاهز للتسليم X%») and items resolved by delivery/rejection to the customer («تم تنفيذه X%» / «اكتمل»).
 - **Backend** (`modules/customer-po/routes.ts`): `CustomerPoFulfillmentStatus` gained `receivedItems`/`receivedPct` and a new `ready_to_deliver` stage. Stage precedence: draft → sent → po_issued → ready_to_deliver (received > 0, none resolved) → delivered (some resolved, < 100%) → fulfilled (all resolved). `deliveredPct` now counts **resolved** items (delivered + customer-rejected) since a rejection is a terminal outcome. New `resolveReceivedRollup()` counts customer_po_items whose linked purchase_order_item was accepted (item-level FK, with a sheetPoNo=customerPoNo + lineItem header-level fallback) — batched for the list.
 - **OpenAPI**: `CustomerPoFulfillmentStatus` schema updated (new stage + `receivedItems`/`receivedPct`); regenerated orval (deleted the recurring `approveOfferItem{Body,200}.ts` dup type files + their `export *` in `generated/types/index.ts` to clear TS2308).
@@ -286,6 +317,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Tests: customer-po mock gained `receivedItemRows`/`supplierItemRows` per-test state + innerJoin support on the poItems/purchaseOrderItems branches; 152 pass; tsc + portal build clean.
 
 ## Items sheet view — red-flag rows + reason column
+
 - **Goal** (`/items` → «سجل البنود والطلبات» tab): any row where the customer delivery was rejected OR the actual supplier cost exceeded the PO (supply-order) price is highlighted **red** across the whole row, with the reason in a new final «السبب» column.
 - **Backend** (`customer-rfq/routes.ts` sheet-view): `loadSheetRowsRaw` now also leftJoins `purchase_order_items` (on `customerPoItemId`) to read `finalActualCost` + `referencePrice`, and selects `customer_po_items.deliveryStatus`. The endpoint batch-loads the latest rejected `customer_po_item_deliveries` row (reason) for the page's poItemIds, then computes per row: `flagged` (bool) + `flagReason` = «رفض التسليم: <reason>» (when deliveryStatus=rejected) and/or «تجاوزت التكلفة: الفعلي X > أمر التوريد Y» (when finalActualCost > referencePrice). Added `flagged`/`flagReason` to the response + OpenAPI `CustomerRfqSheetRow` schema.
 - **Frontend** (`reports/pages/items.tsx`): added «السبب» column header + cell (renders `flagReason` in red), and the row gets `bg-red-50` (dark: `bg-red-950/30`) when `r.flagged`. colSpan bumped 15→16.
@@ -293,6 +325,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Tests: customer-rfq mock gained `sheetRejectedDeliveries` per-test state + a `customerPoItemDeliveriesTable`/`purchaseOrderItemsTable` entry + the 4th sheet-view leftJoin. 152 pass; tsc + portal build clean.
 
 ## Comprehensive analytics overview (PR #70) — /analytics page rebuild
+
 - **Goal**: the `/analytics` page should surface ALL of the project's numbers + data in one comprehensive dashboard.
 - **Backend** (`modules/reports/analytics.ts`): new `GET /api/analytics/overview` endpoint — a single aggregated response (computed on every call, never stored) covering every module. Returns: `counts` (rfqs/openRfqs/customerRfqs/customerPos/pos/items/suppliers/customers/representatives/employees/whatsappChats/supplierInvoices/salesInvoices/journalEntries/auditEntries), `rates` (pricingRate/poRate/rfqToPoRate/responseRateThisMonth/avgResponseTimeHours), `itemAnalytics`, `distributions` (rfqsByStatus/customerRfqsByStatus/customerPosByStatus/posByStatus — groupBy), `operations` (poReceipt totals from `purchase_order_items.lineStatus` + customerPoDelivery totals from `customer_po_items.deliveryStatus`), `financials` (margins join customer_po_items↔purchase_order_items via customerPoItemId; VAT from **posted** sales/supplier invoices; withholding from posted supplier invoices; accounts AP/AR from invoice balances + cash/bank via `accountBalance(ACCOUNT_CODES.CASH/BANK)` from `accounts/posting.ts`; expenses `groupBy(category)`; collections receivable=Σ qty×unitPrice vs collected=Σ payments; statements net profit/total assets/liabilities/equity from `chartOfAccountsTable` balances), `monthlyTrend` (last 12 months rfqs/pos/customerRfqs), `topSuppliers` (top 8 by offers submitted), `recentActivity` (last 10 audit-log rows).
 - **Imports**: the endpoint imports table objects + `ACCOUNT_CODES` from `@workspace/db`, `round2`/`rateOf` from `accounts/tax`, and `accountBalance` from `accounts/posting`. `loadTaxSettings()` is re-declared locally (it's not exported from `tax.ts` — it lives as a local fn in `accounts/routes.ts`). A local `toNum`/`fmt` helper pair casts NUMERIC strings.
@@ -302,7 +335,8 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Deploy**: PR #70 squash-merged (53aeafb); Render deploy `dep-da0gdqdbedkc73ang4ig` live; `/api/healthz` ok; `/api/analytics/overview` returns 401 unauthenticated (mounted behind requireAuth, confirmed not 404).
 
 ## Data-entry employee KPIs — real entry-time tracking (PR #71)
-- **Goal**: measure the *actual* time a data-entry operator spends filling each "new" form (from form open → successful save), not wall-clock estimates, and show per-employee KPIs on the analytics page.
+
+- **Goal**: measure the _actual_ time a data-entry operator spends filling each "new" form (from form open → successful save), not wall-clock estimates, and show per-employee KPIs on the analytics page.
 - **DB**: `lib/db/src/schema/data_entry_sessions.ts` — `data_entry_sessions` (id, employeeId→employees, type TEXT [supplier_rfq|customer_rfq|supplier_po|customer_po], startedAt TEXT, endedAt TEXT, durationMs INTEGER, itemId INTEGER nullable [FK to created entity], saved BOOLEAN default false, abandoned BOOLEAN default false, createdAt). DDL in `init-db.ts` (CREATE TABLE IF NOT EXISTS + index on `employee_id`, `started_at`) — NOT drizzle-kit push.
 - **Backend** (`modules/reports/data-entry.ts`, mounted via `reports/index.ts`):
   - `POST /data-entry-sessions` — start: inserts a row with `startedAt=now`, returns `{id}`. Behind `requireAuth`; uses `req.session.employeeId`.
@@ -318,6 +352,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Deploy**: PR #71 squash-merged (9769e67); Render deploy `dep-da0go2bl550s73ddonhg` live (clearCache); `/api/healthz` ok; `/api/data-entry-sessions` + `/api/analytics/data-entry` return 401 unauthenticated (mounted behind requireAuth, confirmed not 404).
 
 ## Procurement employee KPIs (PR #72)
+
 - **Goal**: per-procurement-employee productivity across the supplier-RFQ lifecycle — RFQs owned, items, offers received (per RFQ + per item), offers/items that converted to a PO, conversion rate, and failed RFQs.
 - **Backend** (`modules/reports/procurement-kpis.ts`, mounted via `reports/index.ts`):
   - `GET /analytics/procurement` (behind `requireAuth`) — for each active employee (linked via `rfq.employeeId`):
@@ -333,6 +368,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Deploy**: PR #72 squash-merged (438be2b); Render deploy `dep-da0l6gu7bikc73fd6okg` live (clearCache); `/api/healthz` ok; `/api/analytics/procurement` returns 401 unauthenticated (mounted behind requireAuth, confirmed not 404).
 
 ## Cancel a dispatched supplier PO + notify supplier via WhatsApp
+
 - **Goal**: allow cancelling an already-dispatched ("sent") supplier PO on a **per-supplier** basis (NOT the whole PO at once) from `/purchase-orders` (the detail page, where items are grouped by supplier). Only that supplier is notified on WhatsApp, only their lines are reset/disappear from the rep bot + receipts + analytics, and the customer-RFQ request-status supplier-receipt success check. If the cancelled supplier was the LAST active one, the whole PO flips to "cancelled".
 - **WhatsApp template**: new `po_cancel_ar` UTILITY template (3 body params: supplier/contact name {{1}}, PO number {{2}}, cancellation reason {{3}}). `ensurePoCancelTemplate()` in `communications/service.ts` provisions it idempotently on startup (same pattern as `ensureWorkOrderTemplate`); `index.ts` calls both under one try/catch. Override name via `WHATSAPP_TEMPLATE_PO_CANCEL`. `sendPoCancelWhatsApp({phone, supplierName, contactPerson, poNo, reason})` sends it (default reason `إلغاء أمر الشراء` when null/empty). Works outside the 24h window (it's a UTILITY template, not free-text).
 - **API** (`modules/po/routes.ts`): `POST /api/po/:id/cancel` (behind `requireAuth`). Body `{supplierId: number, reason?: string|null}` (supplierId REQUIRED — 400 without it). 404 if PO/supplier missing; 400 if PO status is `draft` (use DELETE instead) or already `cancelled`; 400 if the supplier has no items in this PO. Loads that supplier's items (`and(eq(poId), eq(supplierId))`), sends `sendPoCancelWhatsApp` to that ONE supplier with a phone (best-effort: a failed send never blocks the cancellation), records an outbound `whatsapp_chats` row, then in ONE transaction: marks that supplier's `purchase_order_items` rows `lineStatus="cancelled"` + zeroes `totalReceived/Accepted/RejectedQty`+`finalActualCost`, deletes only those lines' `work_order_assignments` (rep bot receipt/delivery lists), and — IF no non-cancelled lines remain (this was the last active supplier) — flips `purchase_orders.status="cancelled"`. Always writes `audit_log` (`action:"po.supplier_cancelled"`). Returns `{ok, id, poStatus, cancelledSupplier:{id,name}, cancelledItemIds, whatsapp:{whatsappSent, whatsappError}}`.
@@ -344,6 +380,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Deploy**: pending — PR not yet created (per instructions, push/PR only on explicit request).
 
 ## Daily DB backup → Google Drive (backup module)
+
 - **Module**: `modules/backup/` (`service.ts` + `routes.ts`), mounted via `routes/index.ts`; scheduler `scheduleDailyBackup()` called from `src/index.ts` on server listen (gated on `DATABASE_URL` + `GOOGLE_ACCOUNT_BASE_64`).
 - **How it works**: streams a gzipped JSON dump of every `public`-schema table (`information_schema.tables` → `SELECT * FROM "public"."<t>"` via the `pool` export) into `drive.files.create` media body (PassThrough). No `pg_dump` binary needed (Render Node image lacks it). File name `rfq-db-backup-<ISO>.json.gz`.
 - **Drive auth**: same service account as Sheets (`GOOGLE_ACCOUNT_BASE_64`) but scope `https://www.googleapis.com/auth/drive.file`. **The target folder must be shared with the service account `client_email` (Editor)** or uploads 404. Folder id from `GOOGLE_DRIVE_BACKUP_FOLDER_ID`, default `1o8uhyrMNcGAh4mVR9ddYPgT-969tyby4`.
@@ -354,6 +391,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Deploy: pending — branch `feat/daily-db-backup`, not pushed (push/PR only on explicit request).
 
 ## Security hardening (branch feat/security-hardening)
+
 - **Sessions persist in PostgreSQL** via `connect-pg-simple` (`user_sessions` table, created in `init-db.ts`; store also has `createTableIfMissing`). Falls back to MemoryStore only when `DATABASE_URL` is unset (dev). Cookie: `sameSite:"lax"`, `secure` in prod, maxAge stays 7 days.
 - **`SESSION_SECRET` is mandatory in production** — `app.ts` throws at startup if missing (Render must have it set before deploy or the service won't boot).
 - **Login rate limiting** (`modules/users/auth.ts`): `loginIpLimiter` 60/15min per IP + `loginAccountLimiter` 10 failed/15min per IP+email (`ipKeyGenerator(req.ip)+"|"+email`), both `skipSuccessfulRequests:true`. 429s never reach the handler (no audit row). `app.set("trust proxy", 1)` was already set and is required.
@@ -365,6 +403,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - `pnpm-workspace.yaml`: pnpm 11 reads `allowBuilds` — placeholder strings ("set this to true or false") break install; must be booleans. Local env: run `COREPACK_ENABLE_DOWNLOAD_PROMPT=0 pnpm install` (corepack otherwise blocks on an interactive prompt).
 
 ## Customer-PO item removal preserves the items sheet view (soft-cancel)
+
 - **Problem**: removing an item from a customer PO (PATCH `/customer-po/:id` items) hard-DELETEd its `customer_po_items` row, so the `/items` «سجل البنود والطلبات» tab lost the row's order data — user expected the red-highlighted row (status «ملغي» + previously recorded rejection reason / highlight note) to remain.
 - **Fix**: `customer_po_items.customer_po_id` is now **nullable** (schema `customer_pos.ts` + `init-db.ts` migration `ALTER TABLE customer_po_items ALTER COLUMN customer_po_id DROP NOT NULL`). PATCH `/customer-po/:id` no longer blanket-deletes the PO's items: it first selects the previous rows, and any row whose `customerRfqItemId` is NOT in the new list is **detached + cancelled** (UPDATE `customerPoId=null, qty=null, unitPrice=null, deliveryDate=null, deliveryStatus="cancelled"` — the RFQ link, PO number/date, rejection reason, highlight color/note and delivery history all survive). Only then are the remaining (kept) rows deleted + re-inserted as before. Manual rows (no RFQ link) are always in `removedIds` (their `customerRfqItemId` is null) → cancelled + re-inserted.
 - **Sheet view**: `computeFlagReason` (customer-rfq/routes.ts) prepends «إلغي» for rows with `deliveryStatus="cancelled"`; the previously recorded rejection reason is superseded by the cancel (the item is no longer rejected — it's cancelled), but the admin highlight note still merges into the «السبب» column (`إلغي — <note>`), and the red row styling + PO number/date data carry over.
@@ -373,11 +412,13 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - Tests: 225 pass (2 new PATCH soft-cancel tests + 1 sheet-view «إلغي» test); tsc clean; portal build OK.
 
 ## Per-item PO cancellation (extend per-supplier cancel)
+
 - `POST /api/po/:id/cancel` now accepts optional `itemIds?: number[]` alongside `supplierId` — when given, only those lines of the supplier are cancelled (e.g. one item of two); omitted → the whole-supplier path as before. 400 «البنود المحددة لا تتبع هذا المورد في أمر الشراء» when the intersection is empty. The WhatsApp chat-record body + the audit description note partial scope (`(1/2 بنود)` / `(1/2 items)`). Transaction + whole-PO-flip logic reuse the filtered `itemIdsToCancel`.
 - Frontend `po/pages/detail.tsx`: `handleCancelSupplier(supplierId, supplierName, itemIds?, itemLabel?)` — item rows on sent POs get a per-row «إلغاء» (Ban) button cancelling just that line; the supplier-header «إلغاء المورد» button still cancels the whole group. The success banner now uses `cancelDone.label` (item label or supplier name).
 - Tests: po-cancel.test.ts 15 tests (per-item cancel, itemIds → 400, explicit-all → whole-PO flip). 228 total.
 
 ## Per-item cancel WhatsApp template (po_cancel_item_ar)
+
 - New Meta template `po_cancel_item_ar` (UTILITY, 7 body params: المورد {{1}}، رقم الأمر {{2}}، رقم البند {{3}}، رقم القطعة {{4}}، الوصف {{5}}، الكمية+الوحدة {{6}}، سبب الإلغاء {{7}}) provisioned idempotently by `ensurePoCancelItemTemplate()` (index.ts startup, alongside the other two templates). Override name via `WHATSAPP_TEMPLATE_PO_CANCEL_ITEM`.
 - `sendPoCancelItemWhatsApp({phone, supplierName, contactPerson, poNo, item:{lineItem,partNo,description,qty,uom}, reason})` in `communications/service.ts` sends ONE message per cancelled line (qty via `formatQty`, UOM default «قطعة»).
 - The cancel route (`POST /po/:id/cancel`) uses the item template ONLY for partial cancels (`selectedRows.length < itemRows.length`); whole-supplier cancels keep `po_cancel_ar`. If the item template isn't approved by Meta yet (send throws), it falls back to `po_cancel_ar` with «البند الملغى: <partNo>» in the reason — so the notification works from day one.

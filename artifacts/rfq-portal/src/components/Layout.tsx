@@ -237,7 +237,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   {employee?.name}
                 </p>
                 <p className="text-sidebar-foreground/40 text-xs truncate capitalize">
-                  {employee?.role ? t(`role.${employee.role}`) ?? employee.role : ""}
+                  {employee?.role ? (t(`role.${employee.role}`) ?? employee.role) : ""}
                 </p>
               </div>
             )}

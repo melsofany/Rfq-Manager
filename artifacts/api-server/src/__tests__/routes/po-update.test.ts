@@ -162,7 +162,9 @@ describe("PUT /api/po/:id (draft-only update)", () => {
 
   it("returns 400 when sheetPoNo is missing", async () => {
     existingPoRow = { ...updatedPoRow };
-    const res = await request(testApp).put("/api/po/1").send({ ...validBody, sheetPoNo: "" });
+    const res = await request(testApp)
+      .put("/api/po/1")
+      .send({ ...validBody, sheetPoNo: "" });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/sheetPoNo/);
   });

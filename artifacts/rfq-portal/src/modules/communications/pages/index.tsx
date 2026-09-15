@@ -269,9 +269,7 @@ function MediaMessage({ msg }: { msg: Message }) {
     return (
       <div className="flex flex-col gap-1">
         <video controls src={url} className="max-w-[260px] rounded-lg" />
-        {msg.body && !msg.body.startsWith("[فيديو") && (
-          <p className="text-sm">{msg.body}</p>
-        )}
+        {msg.body && !msg.body.startsWith("[فيديو") && <p className="text-sm">{msg.body}</p>}
       </div>
     );
   }
@@ -292,7 +290,12 @@ function MediaMessage({ msg }: { msg: Message }) {
 // ─── Main Component ───────────────────────────────────────────────────────
 export default function WhatsAppPage() {
   const { employee } = useAuth();
-  const allowedTabIds = filterTabs(employee?.role, employee?.permissions, "whatsapp", ["chats", "templates", "broadcast", "settings"]);
+  const allowedTabIds = filterTabs(employee?.role, employee?.permissions, "whatsapp", [
+    "chats",
+    "templates",
+    "broadcast",
+    "settings",
+  ]);
   const [activeTab, setActiveTab] = useState<string>(allowedTabIds[0] ?? "chats");
   const [globalStats, setGlobalStats] = useState<Stats | null>(null);
 

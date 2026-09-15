@@ -184,7 +184,10 @@ export default function NewCustomerPoPage() {
   const [items, setItems] = useState<ItemRow[]>([makeEmptyRow()]);
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const poNoAvailability = useCheckNumberAvailability(customerPoNo, "/api/customer-po/check-number");
+  const poNoAvailability = useCheckNumberAvailability(
+    customerPoNo,
+    "/api/customer-po/check-number",
+  );
   const poNoDuplicate = poNoAvailability.checked && !poNoAvailability.available;
 
   // The selected customer RFQ (its items are loaded so the user can check which

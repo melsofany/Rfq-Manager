@@ -190,9 +190,7 @@ export default function CustomerDetailPage() {
           <div>
             <span
               className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                customer.isActive
-                  ? "bg-green-50 text-green-700"
-                  : "bg-muted text-muted-foreground"
+                customer.isActive ? "bg-green-50 text-green-700" : "bg-muted text-muted-foreground"
               }`}
             >
               {customer.isActive ? "نشط" : "غير نشط"}
@@ -219,7 +217,11 @@ export default function CustomerDetailPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>كود العميل</Label>
-                <Input value={form.customerId} onChange={(e) => upd("customerId", e.target.value)} placeholder="CUST-001" />
+                <Input
+                  value={form.customerId}
+                  onChange={(e) => upd("customerId", e.target.value)}
+                  placeholder="CUST-001"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>الاسم *</Label>
@@ -231,19 +233,36 @@ export default function CustomerDetailPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>رقم الهاتف *</Label>
-                <Input value={form.phone} onChange={(e) => upd("phone", e.target.value)} dir="ltr" required />
+                <Input
+                  value={form.phone}
+                  onChange={(e) => upd("phone", e.target.value)}
+                  dir="ltr"
+                  required
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>البريد الإلكتروني</Label>
-                <Input value={form.email} onChange={(e) => upd("email", e.target.value)} type="email" dir="ltr" />
+                <Input
+                  value={form.email}
+                  onChange={(e) => upd("email", e.target.value)}
+                  type="email"
+                  dir="ltr"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>السجل التجاري / الرقم الضريبي</Label>
-                <Input value={form.taxId} onChange={(e) => upd("taxId", e.target.value)} dir="ltr" />
+                <Input
+                  value={form.taxId}
+                  onChange={(e) => upd("taxId", e.target.value)}
+                  dir="ltr"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>مسؤول التواصل</Label>
-                <Input value={form.contactPerson} onChange={(e) => upd("contactPerson", e.target.value)} />
+                <Input
+                  value={form.contactPerson}
+                  onChange={(e) => upd("contactPerson", e.target.value)}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>الحالة</Label>
@@ -258,11 +277,19 @@ export default function CustomerDetailPage() {
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>العنوان *</Label>
-                <Input value={form.address} onChange={(e) => upd("address", e.target.value)} required />
+                <Input
+                  value={form.address}
+                  onChange={(e) => upd("address", e.target.value)}
+                  required
+                />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>ملاحظات</Label>
-                <Textarea value={form.notes} onChange={(e) => upd("notes", e.target.value)} rows={3} />
+                <Textarea
+                  value={form.notes}
+                  onChange={(e) => upd("notes", e.target.value)}
+                  rows={3}
+                />
               </div>
             </div>
             <div className="flex gap-3 justify-end pt-2">
@@ -278,7 +305,12 @@ export default function CustomerDetailPage() {
               >
                 <X size={13} /> إلغاء
               </Button>
-              <Button type="submit" size="sm" className="gap-1.5" disabled={updateMutation.isPending}>
+              <Button
+                type="submit"
+                size="sm"
+                className="gap-1.5"
+                disabled={updateMutation.isPending}
+              >
                 <Check size={13} /> {updateMutation.isPending ? "جارٍ الحفظ..." : "حفظ"}
               </Button>
             </div>
@@ -286,12 +318,31 @@ export default function CustomerDetailPage() {
         ) : (
           <div className="bg-card border border-border rounded-lg p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
-              <InfoRow icon={<Hash size={14} />} label="كود العميل" value={customer.customerId} mono />
+              <InfoRow
+                icon={<Hash size={14} />}
+                label="كود العميل"
+                value={customer.customerId}
+                mono
+              />
               <InfoRow icon={<User size={14} />} label="اسم الشهرة" value={customer.nickname} />
               <InfoRow icon={<Phone size={14} />} label="رقم الهاتف" value={customer.phone} ltr />
-              <InfoRow icon={<Mail size={14} />} label="البريد الإلكتروني" value={customer.email} ltr />
-              <InfoRow icon={<FileText size={14} />} label="السجل التجاري / الرقم الضريبي" value={customer.taxId} ltr />
-              <InfoRow icon={<User size={14} />} label="مسؤول التواصل" value={customer.contactPerson} />
+              <InfoRow
+                icon={<Mail size={14} />}
+                label="البريد الإلكتروني"
+                value={customer.email}
+                ltr
+              />
+              <InfoRow
+                icon={<FileText size={14} />}
+                label="السجل التجاري / الرقم الضريبي"
+                value={customer.taxId}
+                ltr
+              />
+              <InfoRow
+                icon={<User size={14} />}
+                label="مسؤول التواصل"
+                value={customer.contactPerson}
+              />
               <div className="sm:col-span-2">
                 <InfoRow icon={<MapPin size={14} />} label="العنوان" value={customer.address} />
               </div>

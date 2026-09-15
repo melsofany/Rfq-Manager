@@ -25,10 +25,7 @@ export function rateOf(v: string | null | undefined, fallback: number): number {
  *   net   = gross / (1 + vat%)
  *   vat   = gross − net       (= net × vat%)
  */
-export function vatComponents(
-  amountIncl: number,
-  vatRate: number,
-): { net: number; vat: number } {
+export function vatComponents(amountIncl: number, vatRate: number): { net: number; vat: number } {
   if (vatRate <= 0) return { net: amountIncl, vat: 0 };
   const net = amountIncl / (1 + vatRate / 100);
   return { net, vat: amountIncl - net };

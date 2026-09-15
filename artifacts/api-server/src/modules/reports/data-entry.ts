@@ -31,12 +31,7 @@ import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
 
-const VALID_TYPES = new Set([
-  "supplier_rfq",
-  "customer_rfq",
-  "supplier_po",
-  "customer_po",
-]);
+const VALID_TYPES = new Set(["supplier_rfq", "customer_rfq", "supplier_po", "customer_po"]);
 
 /** POST /data-entry-sessions — record that the operator opened a "new" form. */
 router.post("/data-entry-sessions", requireAuth, async (req, res): Promise<void> => {
@@ -101,41 +96,37 @@ router.patch("/data-entry-sessions/:id/end", requireAuth, async (req, res): Prom
 });
 
 /** POST /data-entry-sessions/:id/abandon — mark closed without saving. */
-router.post(
-  "/data-entry-sessions/:id/abandon",
-  requireAuth,
-  async (req, res): Promise<void> => {
-    const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const id = parseInt(raw, 10);
-    if (Number.isNaN(id)) {
-      res.status(400).json({ error: "معرّف غير صالح" });
-      return;
-    }
-    const [existing] = await db
-      .select()
-      .from(dataEntrySessionsTable)
-      .where(eq(dataEntrySessionsTable.id, id))
-      .limit(1);
-    if (!existing) {
-      res.status(404).json({ error: "الجلسة غير موجودة" });
-      return;
-    }
-    if (existing.employeeId !== req.session.employeeId) {
-      res.status(403).json({ error: "غير مصرح" });
-      return;
-    }
-    if (existing.endedAt) {
-      res.json({ id: existing.id, abandoned: existing.abandoned });
-      return;
-    }
-    const [updated] = await db
-      .update(dataEntrySessionsTable)
-      .set({ abandoned: true, endedAt: new Date() })
-      .where(eq(dataEntrySessionsTable.id, id))
-      .returning();
-    res.json({ id: updated.id, abandoned: updated.abandoned });
-  },
-);
+router.post("/data-entry-sessions/:id/abandon", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (Number.isNaN(id)) {
+    res.status(400).json({ error: "معرّف غير صالح" });
+    return;
+  }
+  const [existing] = await db
+    .select()
+    .from(dataEntrySessionsTable)
+    .where(eq(dataEntrySessionsTable.id, id))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "الجلسة غير موجودة" });
+    return;
+  }
+  if (existing.employeeId !== req.session.employeeId) {
+    res.status(403).json({ error: "غير مصرح" });
+    return;
+  }
+  if (existing.endedAt) {
+    res.json({ id: existing.id, abandoned: existing.abandoned });
+    return;
+  }
+  const [updated] = await db
+    .update(dataEntrySessionsTable)
+    .set({ abandoned: true, endedAt: new Date() })
+    .where(eq(dataEntrySessionsTable.id, id))
+    .returning();
+  res.json({ id: updated.id, abandoned: updated.abandoned });
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GET /analytics/data-entry — per-employee data-entry operator KPIs
@@ -157,10 +148,7 @@ router.get("/analytics/data-entry", requireAuth, async (req, res): Promise<void>
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const employees = await db
-    .select()
-    .from(employeesTable)
-    .where(eq(employeesTable.isActive, true));
+  const employees = await db.select().from(employeesTable).where(eq(employeesTable.isActive, true));
 
   // Entity-creation date filter helper
   const inRange = (d: Date): boolean => {
@@ -188,9 +176,7 @@ router.get("/analytics/data-entry", requireAuth, async (req, res): Promise<void>
     ? await db
         .select({ id: rfqTable.id, employeeId: rfqTable.employeeId, createdAt: rfqTable.createdAt })
         .from(rfqTable)
-        .where(
-          sql`${rfqTable.employeeId} = ANY(ARRAY[${sql.raw(empIds.join(",") || "0")}]::int[])`,
-        )
+        .where(sql`${rfqTable.employeeId} = ANY(ARRAY[${sql.raw(empIds.join(",") || "0")}]::int[])`)
     : [];
   const poEntities = empIds.length
     ? await db
@@ -243,9 +229,12 @@ router.get("/analytics/data-entry", requireAuth, async (req, res): Promise<void>
 
   const [rfqItemCountRow, poItemCountRow, cRfqItemCountRow, cPoItemCountRow] = await Promise.all([
     rfqIds.length
-      ? db.select({ cnt: sql<number>`count(*)` }).from(rfqItemsTable).where(
-          sql`${rfqItemsTable.rfqId} = ANY(ARRAY[${sql.raw(rfqIds.join(",") || "0")}]::int[])`,
-        )
+      ? db
+          .select({ cnt: sql<number>`count(*)` })
+          .from(rfqItemsTable)
+          .where(
+            sql`${rfqItemsTable.rfqId} = ANY(ARRAY[${sql.raw(rfqIds.join(",") || "0")}]::int[])`,
+          )
       : Promise.resolve([{ cnt: 0 }]),
     poIds.length
       ? db
@@ -284,9 +273,7 @@ router.get("/analytics/data-entry", requireAuth, async (req, res): Promise<void>
     ? await db
         .select({ rfqId: rfqItemsTable.rfqId })
         .from(rfqItemsTable)
-        .where(
-          sql`${rfqItemsTable.rfqId} = ANY(ARRAY[${sql.raw(rfqIds.join(",") || "0")}]::int[])`,
-        )
+        .where(sql`${rfqItemsTable.rfqId} = ANY(ARRAY[${sql.raw(rfqIds.join(",") || "0")}]::int[])`)
     : [];
   const poItemsByPo = poIds.length
     ? await db
@@ -382,7 +369,13 @@ router.get("/analytics/data-entry", requireAuth, async (req, res): Promise<void>
   };
 
   const employees_kpis = employees
-    .filter((e) => e.role === "data_entry" || e.role === "purchasing" || e.role === "admin" || e.role === "manager")
+    .filter(
+      (e) =>
+        e.role === "data_entry" ||
+        e.role === "purchasing" ||
+        e.role === "admin" ||
+        e.role === "manager",
+    )
     .map((emp) => {
       const myRfqs = rfqsByEmp.get(emp.id) ?? [];
       const myPos = posByEmp.get(emp.id) ?? [];
@@ -446,7 +439,14 @@ router.get("/analytics/data-entry", requireAuth, async (req, res): Promise<void>
         },
       };
     })
-    .filter((e) => e.counts.completedSessions > 0 || e.counts.rfqs > 0 || e.counts.pos > 0 || e.counts.customerRfqs > 0 || e.counts.customerPos > 0);
+    .filter(
+      (e) =>
+        e.counts.completedSessions > 0 ||
+        e.counts.rfqs > 0 ||
+        e.counts.pos > 0 ||
+        e.counts.customerRfqs > 0 ||
+        e.counts.customerPos > 0,
+    );
 
   // ── Company-wide totals ─────────────────────────────────────────────────
   const allCompleted = allSessions.filter((s) => s.endedAt && !s.abandoned);

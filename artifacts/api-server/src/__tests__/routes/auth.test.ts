@@ -70,7 +70,9 @@ vi.mock("@workspace/db", () => {
 });
 
 // Stub logger.
-vi.mock("../../shared/logger", () => ({ logger: { info: () => {}, error: () => {}, warn: () => {}, debug: () => {} } }));
+vi.mock("../../shared/logger", () => ({
+  logger: { info: () => {}, error: () => {}, warn: () => {}, debug: () => {} },
+}));
 
 let testApp: express.Express;
 
@@ -115,7 +117,7 @@ describe("POST /api/employees — permissions persistence", () => {
         email: "clerk@cortoba.com",
         password: "secret123",
         role: "data_entry",
-        permissions: { "customer-rfq": true, "customer-po": true, "rfq": false },
+        permissions: { "customer-rfq": true, "customer-po": true, rfq: false },
       });
     expect(res.status).toBe(201);
     // Falsy entries are stripped; only true ones persist.
@@ -155,7 +157,15 @@ describe("PATCH /api/employees/:id — permissions update", () => {
     };
     const res = await request(testApp)
       .patch("/api/employees/5")
-      .send({ permissions: { dashboard: true, customers: true, "customer-rfq": true, "customer-po": true, accounts: false } });
+      .send({
+        permissions: {
+          dashboard: true,
+          customers: true,
+          "customer-rfq": true,
+          "customer-po": true,
+          accounts: false,
+        },
+      });
     expect(res.status).toBe(200);
     expect(res.body.permissions).toEqual({
       dashboard: true,

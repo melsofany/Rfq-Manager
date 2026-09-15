@@ -61,7 +61,7 @@ async function recomputeItemTotals(poItemId: number): Promise<void> {
     .from(poItemReceiptsTable)
     .where(eq(poItemReceiptsTable.poItemId, poItemId));
 
-  const sum = (sel: (r: typeof rows[number]) => number | null) =>
+  const sum = (sel: (r: (typeof rows)[number]) => number | null) =>
     rows.reduce((acc, r) => acc + (sel(r) ?? 0), 0);
 
   const received = sum((r) => toNum(r.receivedQty));
@@ -130,7 +130,10 @@ router.get("/po/:id/receipts", requireAuth, async (req, res): Promise<void> => {
       uom: purchaseOrderItemsTable.uom,
     })
     .from(poItemReceiptsTable)
-    .innerJoin(purchaseOrderItemsTable, eq(poItemReceiptsTable.poItemId, purchaseOrderItemsTable.id))
+    .innerJoin(
+      purchaseOrderItemsTable,
+      eq(poItemReceiptsTable.poItemId, purchaseOrderItemsTable.id),
+    )
     .where(eq(poItemReceiptsTable.poId, id))
     .orderBy(poItemReceiptsTable.receivedAt);
 
@@ -306,7 +309,8 @@ router.patch("/po/receipts/:receiptId", requireAuth, async (req, res): Promise<v
       acceptedQty: accepted != null ? String(accepted) : null,
       rejectedQty: rejected != null ? String(rejected) : null,
       rejectionReason: body.rejectionReason ?? existing.rejectionReason,
-      actualCost: toNum(body.actualCost) != null ? String(toNum(body.actualCost)) : existing.actualCost,
+      actualCost:
+        toNum(body.actualCost) != null ? String(toNum(body.actualCost)) : existing.actualCost,
       receiptStatus: status,
       receivedBy: body.receivedBy ?? existing.receivedBy,
     })
@@ -373,7 +377,8 @@ router.post("/po/:id/send-receipt-prompts", requireAuth, async (req, res): Promi
     return;
   }
   const phone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
-  const repName = typeof req.body?.representativeName === "string" ? req.body.representativeName.trim() : "";
+  const repName =
+    typeof req.body?.representativeName === "string" ? req.body.representativeName.trim() : "";
   if (!phone || !repName) {
     res.status(400).json({ error: "بيانات المندوب غير مكتملة (الاسم/الهاتف)" });
     return;
@@ -407,7 +412,11 @@ router.post("/po/:id/send-receipt-prompts", requireAuth, async (req, res): Promi
   const normalized = normalizePhone(phone);
 
   for (const it of items) {
-    if (it.lineStatus === "fulfilled" || it.lineStatus === "rejected" || it.lineStatus === "cancelled") {
+    if (
+      it.lineStatus === "fulfilled" ||
+      it.lineStatus === "rejected" ||
+      it.lineStatus === "cancelled"
+    ) {
       results.push({
         poItemId: it.id,
         lineLabel: `${it.lineItem || ""} ${it.description || ""}`.trim(),

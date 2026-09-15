@@ -153,9 +153,7 @@ export default function SendRfqPage() {
     if (!selectedIds.size) return;
 
     // الموردون المحددون الذين أُرسل إليهم هذا الطلب من قبل
-    const alreadySentSelected = Array.from(selectedIds).filter((sid) =>
-      alreadySentIds.has(sid),
-    );
+    const alreadySentSelected = Array.from(selectedIds).filter((sid) => alreadySentIds.has(sid));
 
     if (alreadySentSelected.length > 0) {
       // اجمع أسماء الموردين المسبق إرسالهم
@@ -357,8 +355,10 @@ export default function SendRfqPage() {
             <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
             <span>
               <strong>{selectedAlreadySentCount}</strong>{" "}
-              {selectedAlreadySentCount === 1 ? "مورد محدد سبق إرسال هذا الطلب إليه" : "موردين محددين سبق إرسال هذا الطلب إليهم"} —
-              سيُطلب التأكيد قبل إعادة الإرسال.
+              {selectedAlreadySentCount === 1
+                ? "مورد محدد سبق إرسال هذا الطلب إليه"
+                : "موردين محددين سبق إرسال هذا الطلب إليهم"}{" "}
+              — سيُطلب التأكيد قبل إعادة الإرسال.
             </span>
           </div>
         )}
@@ -407,9 +407,7 @@ export default function SendRfqPage() {
                       )}
                     </button>
                   </th>
-                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                    المورد
-                  </th>
+                  <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">المورد</th>
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">المسؤول</th>
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">الإيميل</th>
                   <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">

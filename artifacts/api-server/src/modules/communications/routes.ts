@@ -152,7 +152,7 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
     } else if (await handleRepMessage(from, msg)) {
       // Registered representative bot owns this message (text or rep_ menu).
       logger.info({ from }, "Representative bot message handled");
-    } else if (msg.type === "interactive" && await handleWorkOrderButton(from, msg)) {
+    } else if (msg.type === "interactive" && (await handleWorkOrderButton(from, msg))) {
       logger.info({ from }, "Work-order interactive button handled");
     } else {
       await handleInboundMessage(phoneID, from, msg, name, reply);
@@ -285,7 +285,7 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
       } else if (await handleRepMessage(from, message)) {
         // Registered representative bot owns this message (text or rep_ menu).
         logger.info({ from }, "Representative bot message handled");
-      } else if (message.type === "interactive" && await handleWorkOrderButton(from, message)) {
+      } else if (message.type === "interactive" && (await handleWorkOrderButton(from, message))) {
         logger.info({ from }, "Work-order interactive button handled");
       } else {
         await handleInboundMessage(phoneID, from, message, name, async () => {});
@@ -346,7 +346,16 @@ interface ServerMessage {
     name?: { formatted_name?: string };
     phones?: Array<{ phone?: string; wa_id?: string }>;
   }>;
-  order?: { catalog_id?: string; text?: string; product_items?: Array<{ product_retailer_id?: string; quantity?: string; item_price?: string; currency?: string }> };
+  order?: {
+    catalog_id?: string;
+    text?: string;
+    product_items?: Array<{
+      product_retailer_id?: string;
+      quantity?: string;
+      item_price?: string;
+      currency?: string;
+    }>;
+  };
   system?: { body?: string; type?: string };
   context?: { id: string; from?: string }; // message being replied to
 }
@@ -385,10 +394,7 @@ async function findAssignment(
  * qty as both received and accepted (full receipt). "rejected" prompts for the
  * reason via a list; the chosen reason creates a receipt row with rejectedQty.
  */
-async function handleWorkOrderItemButton(
-  phone: string,
-  msg: ServerMessage,
-): Promise<boolean> {
+async function handleWorkOrderItemButton(phone: string, msg: ServerMessage): Promise<boolean> {
   const buttonId = msg.interactive?.button_reply?.id;
   const listId = msg.interactive?.list_reply?.id;
   const payload = buttonId ?? listId ?? "";
@@ -452,7 +458,12 @@ async function handleWorkOrderItemButton(
     }
     if (action === "received") {
       // Show a confirm/cancel step before recording.
-      await sendRepConfirm(phone, { kind: "receipt", no: poNo, itemId: poItemId, action: "received" });
+      await sendRepConfirm(phone, {
+        kind: "receipt",
+        no: poNo,
+        itemId: poItemId,
+        action: "received",
+      });
       return true;
     }
     return true;
@@ -481,7 +492,11 @@ async function handleWorkOrderItemButton(
 }
 
 /** Re-send the item action buttons (استلام/رفض/رجوع) for a receipt item. */
-async function resendItemActionReceipt(phone: string, poNo: string, poItemId: number): Promise<void> {
+async function resendItemActionReceipt(
+  phone: string,
+  poNo: string,
+  poItemId: number,
+): Promise<void> {
   const [line] = await db
     .select({
       poId: purchaseOrderItemsTable.poId,
@@ -553,10 +568,7 @@ export async function recordItemReceipt(
   await db
     .delete(poItemReceiptsTable)
     .where(
-      and(
-        eq(poItemReceiptsTable.poItemId, line.id),
-        eq(poItemReceiptsTable.receivedBy, "واتساب"),
-      ),
+      and(eq(poItemReceiptsTable.poItemId, line.id), eq(poItemReceiptsTable.receivedBy, "واتساب")),
     );
   await db.insert(poItemReceiptsTable).values({
     poItemId: line.id,
@@ -692,14 +704,22 @@ export async function resolveCustomerPoItemId(
     .where(ilike(customerPosTable.customerPoNo, po.sheetPoNo));
   if (!cpo) return null;
   const items = await db
-    .select({ id: customerPoItemsTable.id, lineItem: customerPoItemsTable.lineItem, partNo: customerPoItemsTable.partNo })
+    .select({
+      id: customerPoItemsTable.id,
+      lineItem: customerPoItemsTable.lineItem,
+      partNo: customerPoItemsTable.partNo,
+    })
     .from(customerPoItemsTable)
     .where(eq(customerPoItemsTable.customerPoId, cpo.id));
   if (items.length === 0) return null;
   // Prefer an exact lineItem match, then partNo, then the first item.
-  const byLine = lineItem ? items.find((i) => i.lineItem && i.lineItem.trim() === lineItem.trim()) : undefined;
+  const byLine = lineItem
+    ? items.find((i) => i.lineItem && i.lineItem.trim() === lineItem.trim())
+    : undefined;
   if (byLine) return byLine.id;
-  const byPart = partNo ? items.find((i) => i.partNo && i.partNo.trim() === partNo.trim()) : undefined;
+  const byPart = partNo
+    ? items.find((i) => i.partNo && i.partNo.trim() === partNo.trim())
+    : undefined;
   if (byPart) return byPart.id;
   return items[0].id;
 }
@@ -814,9 +834,9 @@ async function countRepTasks(repPhone: string): Promise<{ receipt: number; deliv
  * Group pending receipt assignments for a rep by supplier PO, returning the POs
  * with their pending item counts (for the PO picker list).
  */
-async function repReceiptPoList(repPhone: string): Promise<
-  Array<{ id: number; no: string; label: string; pendingItems: number }>
-> {
+async function repReceiptPoList(
+  repPhone: string,
+): Promise<Array<{ id: number; no: string; label: string; pendingItems: number }>> {
   const target = canonicalPhone(repPhone);
   const assigns = await db
     .select({
@@ -849,9 +869,9 @@ async function repReceiptPoList(repPhone: string): Promise<
  * customer PO with pending delivery items. Only items whose linked supplier PO
  * line was *accepted* appear (no delivering what wasn't received).
  */
-async function repDeliveryPoList(repPhone: string): Promise<
-  Array<{ id: number; no: string; label: string; pendingItems: number }>
-> {
+async function repDeliveryPoList(
+  repPhone: string,
+): Promise<Array<{ id: number; no: string; label: string; pendingItems: number }>> {
   const target = canonicalPhone(repPhone);
   const assigns = await db
     .select({
@@ -865,12 +885,17 @@ async function repDeliveryPoList(repPhone: string): Promise<
   const active = assigns
     .filter((a) => canonicalPhone(a.representativePhone) === target)
     .filter(
-      (a) => a.customerPoId && a.customerPoItemId && a.status !== "delivered" && a.status !== "rejected",
+      (a) =>
+        a.customerPoId && a.customerPoItemId && a.status !== "delivered" && a.status !== "rejected",
     );
   const poIds = [...new Set(active.map((a) => a.customerPoId!))];
   if (poIds.length === 0) return [];
   const pos = await db
-    .select({ id: customerPosTable.id, no: customerPosTable.customerPoNo, name: customerPosTable.customerName })
+    .select({
+      id: customerPosTable.id,
+      no: customerPosTable.customerPoNo,
+      name: customerPosTable.customerName,
+    })
     .from(customerPosTable)
     .where(inArray(customerPosTable.id, poIds));
   return pos.map((po) => ({
@@ -882,9 +907,9 @@ async function repDeliveryPoList(repPhone: string): Promise<
 }
 
 /** Pending receipt items for a supplier PO (not yet received/rejected). */
-async function repReceiptItems(poId: number): Promise<
-  Array<{ id: number; label: string; qty: string | null; statusHint: string }>
-> {
+async function repReceiptItems(
+  poId: number,
+): Promise<Array<{ id: number; label: string; qty: string | null; statusHint: string }>> {
   const rows = await db
     .select({
       id: purchaseOrderItemsTable.id,
@@ -895,9 +920,7 @@ async function repReceiptItems(poId: number): Promise<
     })
     .from(purchaseOrderItemsTable)
     .where(eq(purchaseOrderItemsTable.poId, poId));
-  const pending = rows.filter(
-    (r) => r.lineStatus === "pending" || r.lineStatus === "partial",
-  );
+  const pending = rows.filter((r) => r.lineStatus === "pending" || r.lineStatus === "partial");
   return pending.map((r) => ({
     id: r.id,
     label: [r.lineItem, r.description].filter(Boolean).join(" - ") || "بند",
@@ -916,9 +939,7 @@ async function repReceiptItems(poId: number): Promise<
 async function repDeliveryItems(
   customerPoId: number,
   repPhone: string,
-): Promise<
-  Array<{ id: number; label: string; qty: string | null; statusHint: string }>
-> {
+): Promise<Array<{ id: number; label: string; qty: string | null; statusHint: string }>> {
   const target = canonicalPhone(repPhone);
   // Pending delivery assignments for this rep + customer PO.
   const assigns = await db
@@ -1085,11 +1106,13 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
       const counts = await countRepTasks(phone);
       await sendRepMainMenu(phone, counts);
     } else if (target === "po" && (kind === "receipt" || kind === "delivery")) {
-      const pos = kind === "receipt" ? await repReceiptPoList(phone) : await repDeliveryPoList(phone);
+      const pos =
+        kind === "receipt" ? await repReceiptPoList(phone) : await repDeliveryPoList(phone);
       await sendRepPoPicker(phone, kind, pos);
     } else if (target === "item" && (kind === "receipt" || kind === "delivery")) {
       const poId = parseInt(poIdStr, 10);
-      const items = kind === "receipt" ? await repReceiptItems(poId) : await repDeliveryItems(poId, phone);
+      const items =
+        kind === "receipt" ? await repReceiptItems(poId) : await repDeliveryItems(poId, phone);
       await sendRepItemPicker(phone, kind, poId, items);
     }
     return true;
@@ -1112,10 +1135,7 @@ async function handleRepMessage(phone: string, msg: ServerMessage): Promise<bool
  * Guard: the customer_po_item must be linked to a supplier PO item whose line
  * was *accepted* (received) — no delivering what wasn't received.
  */
-async function handleWorkOrderDeliveryButton(
-  phone: string,
-  msg: ServerMessage,
-): Promise<boolean> {
+async function handleWorkOrderDeliveryButton(phone: string, msg: ServerMessage): Promise<boolean> {
   const buttonId = msg.interactive?.button_reply?.id;
   const listId = msg.interactive?.list_reply?.id;
   const payload = buttonId ?? listId ?? "";
@@ -1171,12 +1191,22 @@ async function handleWorkOrderDeliveryButton(
       return true;
     }
     if (action === "customer_rejected") {
-      await sendDeliveryRejectionReasonOptions(phone, customerPoNo, customerPoItemId, CUSTOMER_REJECTION_REASONS);
+      await sendDeliveryRejectionReasonOptions(
+        phone,
+        customerPoNo,
+        customerPoItemId,
+        CUSTOMER_REJECTION_REASONS,
+      );
       return true;
     }
     if (action === "delivered") {
       // Show a confirm/cancel step before recording.
-      await sendRepConfirm(phone, { kind: "delivery", no: customerPoNo, itemId: customerPoItemId, action: "delivered" });
+      await sendRepConfirm(phone, {
+        kind: "delivery",
+        no: customerPoNo,
+        itemId: customerPoItemId,
+        action: "delivered",
+      });
       return true;
     }
     return true;
@@ -1205,7 +1235,11 @@ async function handleWorkOrderDeliveryButton(
 }
 
 /** Re-send the item action buttons (تسليم/رفض العميل/رجوع) for a delivery item. */
-async function resendItemActionDelivery(phone: string, customerPoNo: string, customerPoItemId: number): Promise<void> {
+async function resendItemActionDelivery(
+  phone: string,
+  customerPoNo: string,
+  customerPoItemId: number,
+): Promise<void> {
   const [line] = await db
     .select({
       customerPoId: customerPoItemsTable.customerPoId,
@@ -1261,7 +1295,8 @@ export async function recordItemDelivery(
     .where(eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemId));
   if (!linked) return false;
   const accepted = linked.totalAcceptedQty ? Number(linked.totalAcceptedQty) : 0;
-  if (accepted <= 0 || linked.lineStatus === "rejected" || linked.lineStatus === "cancelled") return false;
+  if (accepted <= 0 || linked.lineStatus === "rejected" || linked.lineStatus === "cancelled")
+    return false;
 
   const ordered = cpi.qty ? String(cpi.qty) : null;
   // A removed-from-PO (detached, customerPoId=null) item can no longer be
@@ -1330,7 +1365,6 @@ export async function recordItemDelivery(
   return true;
 }
 
-
 /**
  * Apply the same side-effects the rep bot applies after a receipt is recorded:
  * mark the receipt work-order assignment done, chain a delivery assignment for
@@ -1345,7 +1379,7 @@ export async function applyReceiptSideEffects(
 ): Promise<void> {
   // Mark the receipt work-order assignment as done so the rep menu count drops.
   const assignmentStatus =
-    lineStatus === 'fulfilled' ? 'received' : lineStatus === 'rejected' ? 'rejected' : 'received';
+    lineStatus === "fulfilled" ? "received" : lineStatus === "rejected" ? "rejected" : "received";
   await db
     .update(workOrderAssignmentsTable)
     .set({ status: assignmentStatus, updatedAt: new Date() })
@@ -1357,7 +1391,7 @@ export async function applyReceiptSideEffects(
     );
 
   // Chain a delivery assignment when the line was accepted and links to a customer PO item.
-  if (lineStatus === 'fulfilled' || lineStatus === 'partial') {
+  if (lineStatus === "fulfilled" || lineStatus === "partial") {
     const [line] = await db
       .select({
         id: purchaseOrderItemsTable.id,
@@ -1382,13 +1416,13 @@ export async function applyReceiptSideEffects(
         try {
           await ensureDeliveryAssignment(line.id, poId, customerPoItemId);
         } catch (err) {
-          logger.warn({ err, poItemId }, 'Auto delivery-assignment creation failed (portal)');
+          logger.warn({ err, poItemId }, "Auto delivery-assignment creation failed (portal)");
         }
       }
     }
   }
 
-  broadcastWaEvent({ type: 'receipt_recorded', poId, poItemId, lineStatus });
+  broadcastWaEvent({ type: "receipt_recorded", poId, poItemId, lineStatus });
 }
 
 /**
@@ -1405,7 +1439,7 @@ export async function applyDeliverySideEffects(
   await db
     .update(workOrderAssignmentsTable)
     .set({
-      status: deliveryStatus === 'rejected' ? 'rejected' : 'delivered',
+      status: deliveryStatus === "rejected" ? "rejected" : "delivered",
       updatedAt: new Date(),
     })
     .where(
@@ -1414,7 +1448,7 @@ export async function applyDeliverySideEffects(
         eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
       ),
     );
-  broadcastWaEvent({ type: 'delivery_recorded', customerPoId, customerPoItemId, deliveryStatus });
+  broadcastWaEvent({ type: "delivery_recorded", customerPoId, customerPoItemId, deliveryStatus });
 }
 
 async function handleWorkOrderButton(phone: string, msg: ServerMessage): Promise<boolean> {
@@ -1433,18 +1467,32 @@ async function handleWorkOrderButton(phone: string, msg: ServerMessage): Promise
     return true;
   }
   if (action === "received" || action === "rejected") {
-    await db.update(workOrderAssignmentsTable).set({ pendingAction: action, status: `pending_${action}`, updatedAt: new Date() }).where(eq(workOrderAssignmentsTable.id, assignment.id));
+    await db
+      .update(workOrderAssignmentsTable)
+      .set({ pendingAction: action, status: `pending_${action}`, updatedAt: new Date() })
+      .where(eq(workOrderAssignmentsTable.id, assignment.id));
     await sendWhatsAppInteractiveConfirmation(phone, poNo, action);
     return true;
   }
   if (decision === "cancel") {
-    await db.update(workOrderAssignmentsTable).set({ pendingAction: null, status: "sent", updatedAt: new Date() }).where(eq(workOrderAssignmentsTable.id, assignment.id));
+    await db
+      .update(workOrderAssignmentsTable)
+      .set({ pendingAction: null, status: "sent", updatedAt: new Date() })
+      .where(eq(workOrderAssignmentsTable.id, assignment.id));
     await sendWhatsAppText(phone, "تم التراجع، ولم يتم تغيير حالة أمر الشغل.");
     return true;
   }
   if (decision === "confirm" && (action === "received" || action === "rejected")) {
-    await db.update(workOrderAssignmentsTable).set({ pendingAction: null, status: action, updatedAt: new Date() }).where(eq(workOrderAssignmentsTable.id, assignment.id));
-    await sendWhatsAppText(phone, action === "received" ? `تم تأكيد استلام أمر الشغل ${poNo}.` : `تم تأكيد رفض أمر الشغل ${poNo}.`);
+    await db
+      .update(workOrderAssignmentsTable)
+      .set({ pendingAction: null, status: action, updatedAt: new Date() })
+      .where(eq(workOrderAssignmentsTable.id, assignment.id));
+    await sendWhatsAppText(
+      phone,
+      action === "received"
+        ? `تم تأكيد استلام أمر الشغل ${poNo}.`
+        : `تم تأكيد رفض أمر الشغل ${poNo}.`,
+    );
     return true;
   }
   return true;
@@ -1513,15 +1561,20 @@ async function handleInboundMessage(
     body = `🔘 رد على زر: ${msg.button.text ?? msg.button.payload ?? ""}`;
   } else if (msg.type === "interactive" && msg.interactive) {
     const ir = msg.interactive;
-    if (ir.list_reply) body = `📋 ${ir.list_reply.title ?? ""}${ir.list_reply.description ? " — " + ir.list_reply.description : ""}`;
-    else if (ir.nfm_reply) body = `📝 ${ir.nfm_reply.name ?? "نموذج"}: ${ir.nfm_reply.body ?? ir.nfm_reply.response_json ?? ""}`;
+    if (ir.list_reply)
+      body = `📋 ${ir.list_reply.title ?? ""}${ir.list_reply.description ? " — " + ir.list_reply.description : ""}`;
+    else if (ir.nfm_reply)
+      body = `📝 ${ir.nfm_reply.name ?? "نموذج"}: ${ir.nfm_reply.body ?? ir.nfm_reply.response_json ?? ""}`;
     else body = `🔘 رد تفاعلي: ${ir.button_reply?.title ?? ""}`;
   } else if (msg.type === "order" && msg.order) {
     const items = msg.order.product_items ?? [];
     body =
       `🛒 طلب${msg.order.text ? " — " + msg.order.text : ""}:\n` +
       items
-        .map((it) => `${it.quantity ?? "1"} × ${it.product_retailer_id ?? "منتج"}${it.item_price ? ` (${it.currency ?? ""} ${it.item_price})` : ""}`)
+        .map(
+          (it) =>
+            `${it.quantity ?? "1"} × ${it.product_retailer_id ?? "منتج"}${it.item_price ? ` (${it.currency ?? ""} ${it.item_price})` : ""}`,
+        )
         .join("\n");
   } else if (msg.type === "system" && msg.system) {
     body = `ℹ️ ${msg.system.body ?? msg.system.type ?? "رسالة نظام"}`;

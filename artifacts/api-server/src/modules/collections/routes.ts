@@ -436,8 +436,9 @@ router.post("/collections/:poId/payments", requireAuth, async (req, res): Promis
   // 2. Apply the payment to the linked posted sales invoices (oldest-first),
   //    reducing their balance / increasing collectedAmount so AR reconciles.
   const cashAccount =
-    (typeof body.cashAccountCode === "string" && body.cashAccountCode.trim() ? body.cashAccountCode.trim() : null) ||
-    cashAccountFor(method);
+    (typeof body.cashAccountCode === "string" && body.cashAccountCode.trim()
+      ? body.cashAccountCode.trim()
+      : null) || cashAccountFor(method);
   let customerName: string | null = null;
   let remaining = amount;
   const invoices = await db
@@ -461,7 +462,9 @@ router.post("/collections/:poId/payments", requireAuth, async (req, res): Promis
     const settled = newBalance <= 0.001;
     await db
       .update(salesInvoicesTable)
-      .set(settled ? { balance: String(newBalance), status: "paid" } : { balance: String(newBalance) })
+      .set(
+        settled ? { balance: String(newBalance), status: "paid" } : { balance: String(newBalance) },
+      )
       .where(eq(salesInvoicesTable.id, inv.id));
     remaining = round2(remaining - applied);
   }
@@ -482,8 +485,20 @@ router.post("/collections/:poId/payments", requireAuth, async (req, res): Promis
       employeeId: session.employeeId,
       employeeName: session.employeeName,
       lines: [
-        { accountCode: cashAccount, description: "إيداع تحصيل", debit: amount, partyType: "customer", partyName: customerName },
-        { accountCode: ACCOUNT_CODES.AR, description: "تحصيل ذمم عملاء", credit: amount, partyType: "customer", partyName: customerName },
+        {
+          accountCode: cashAccount,
+          description: "إيداع تحصيل",
+          debit: amount,
+          partyType: "customer",
+          partyName: customerName,
+        },
+        {
+          accountCode: ACCOUNT_CODES.AR,
+          description: "تحصيل ذمم عملاء",
+          credit: amount,
+          partyType: "customer",
+          partyName: customerName,
+        },
       ],
     });
   } catch (err) {
@@ -549,32 +564,36 @@ router.patch("/collections/payments/:id", requireAuth, async (req, res): Promise
 });
 
 // DELETE /collections/payments/:id — delete a payment.
-router.delete("/collections/payments/:id", requireRole("admin", "manager"), async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
-  if (!isFinite(id)) {
-    res.status(400).json({ error: "معرّف غير صالح" });
-    return;
-  }
-  const [existing] = await db
-    .select()
-    .from(customerPoPaymentsTable)
-    .where(eq(customerPoPaymentsTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: "الدفعة غير موجودة" });
-    return;
-  }
-  await db.delete(customerPoPaymentsTable).where(eq(customerPoPaymentsTable.id, id));
-  await db.insert(auditLogTable).values({
-    action: "collection.payment.deleted",
-    entityType: "customer_po",
-    entityId: existing.customerPoId,
-    employeeId: req.session.employeeId,
-    description: `Deleted payment ${id} for customer PO ${existing.customerPoId}`,
-    ipAddress: req.ip,
-    userAgent: req.get("user-agent"),
-  });
-  res.json({ ok: true });
-});
+router.delete(
+  "/collections/payments/:id",
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    if (!isFinite(id)) {
+      res.status(400).json({ error: "معرّف غير صالح" });
+      return;
+    }
+    const [existing] = await db
+      .select()
+      .from(customerPoPaymentsTable)
+      .where(eq(customerPoPaymentsTable.id, id));
+    if (!existing) {
+      res.status(404).json({ error: "الدفعة غير موجودة" });
+      return;
+    }
+    await db.delete(customerPoPaymentsTable).where(eq(customerPoPaymentsTable.id, id));
+    await db.insert(auditLogTable).values({
+      action: "collection.payment.deleted",
+      entityType: "customer_po",
+      entityId: existing.customerPoId,
+      employeeId: req.session.employeeId,
+      description: `Deleted payment ${id} for customer PO ${existing.customerPoId}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json({ ok: true });
+  },
+);
 
 export { computeStatus, STATUS_LABEL, STATUS_TONE };
 export default router;

@@ -15,7 +15,9 @@ import { useEffect, useRef, useCallback } from "react";
  *
  * @param type one of "supplier_rfq" | "customer_rfq" | "supplier_po" | "customer_po"
  */
-export function useDataEntrySession(type: "supplier_rfq" | "customer_rfq" | "supplier_po" | "customer_po") {
+export function useDataEntrySession(
+  type: "supplier_rfq" | "customer_rfq" | "supplier_po" | "customer_po",
+) {
   const sessionIdRef = useRef<number | null>(null);
   const endedRef = useRef(false);
   const typeRef = useRef(type);

@@ -166,46 +166,35 @@ async function main() {
               type: mediaRows[0].mime_type || "application/octet-stream",
             });
             const form = new FormData();
-            form.append("content", content || (mediaRows[0].filename || "file"));
-            form.append(
-              "message_type",
-              isIncoming ? "incoming" : "outgoing",
-            );
+            form.append("content", content || mediaRows[0].filename || "file");
+            form.append("message_type", isIncoming ? "incoming" : "outgoing");
             form.append("private", "false");
-            form.append(
-              "attachments[]",
-              blob,
-              mediaRows[0].filename || "attachment",
-            );
+            form.append("attachments[]", blob, mediaRows[0].filename || "attachment");
             try {
-              await cw(
-                `/api/v1/accounts/${CW_ACCOUNT_ID}/conversations/${convoId}/messages`,
-                { method: "POST", body: form, headers: {} },
-              );
+              await cw(`/api/v1/accounts/${CW_ACCOUNT_ID}/conversations/${convoId}/messages`, {
+                method: "POST",
+                body: form,
+                headers: {},
+              });
               totalMedia++;
               totalMessages++;
               continue;
             } catch (err) {
-              console.warn(
-                `  ⚠️ فشل رفع مرفق لـ ${phone} (${m.media_id}): ${err.message}`,
-              );
+              console.warn(`  ⚠️ فشل رفع مرفق لـ ${phone} (${m.media_id}): ${err.message}`);
             }
           }
         }
 
         // رسالة نصية
         try {
-          await cw(
-            `/api/v1/accounts/${CW_ACCOUNT_ID}/conversations/${convoId}/messages`,
-            {
-              method: "POST",
-              body: JSON.stringify({
-                content,
-                message_type: isIncoming ? "incoming" : "outgoing",
-                private: false,
-              }),
-            },
-          );
+          await cw(`/api/v1/accounts/${CW_ACCOUNT_ID}/conversations/${convoId}/messages`, {
+            method: "POST",
+            body: JSON.stringify({
+              content,
+              message_type: isIncoming ? "incoming" : "outgoing",
+              private: false,
+            }),
+          });
           totalMessages++;
         } catch (err) {
           console.warn(`  ⚠️ فشل إرسال رسالة لـ ${phone}: ${err.message}`);

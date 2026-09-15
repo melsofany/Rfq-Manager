@@ -49,7 +49,7 @@ async function recomputeItemTotals(customerPoItemId: number): Promise<void> {
     .from(customerPoItemDeliveriesTable)
     .where(eq(customerPoItemDeliveriesTable.customerPoItemId, customerPoItemId));
 
-  const sum = (sel: (r: typeof rows[number]) => number | null) =>
+  const sum = (sel: (r: (typeof rows)[number]) => number | null) =>
     rows.reduce((acc, r) => acc + (sel(r) ?? 0), 0);
 
   const delivered = sum((r) => toNum(r.deliveredQty));
@@ -73,8 +73,7 @@ async function recomputeItemTotals(customerPoItemId: number): Promise<void> {
     .update(customerPoItemsTable)
     .set({
       totalDeliveredQty: delivered != null ? String(delivered) : null,
-      totalRejectedByCustomerQty:
-        rejectedByCustomer != null ? String(rejectedByCustomer) : null,
+      totalRejectedByCustomerQty: rejectedByCustomer != null ? String(rejectedByCustomer) : null,
       deliveryStatus,
     })
     .where(eq(customerPoItemsTable.id, customerPoItemId));
@@ -241,7 +240,11 @@ router.post("/customer-po/:id/deliveries", requireAuth, async (req, res): Promis
       .from(customerPoItemsTable)
       .where(eq(customerPoItemsTable.id, customerPoItemId));
     try {
-      await applyDeliverySideEffects(customerPoId, customerPoItemId, updated?.deliveryStatus ?? "pending");
+      await applyDeliverySideEffects(
+        customerPoId,
+        customerPoItemId,
+        updated?.deliveryStatus ?? "pending",
+      );
     } catch {
       // best-effort — never block the delivery if the side-effects fail
     }
@@ -267,72 +270,77 @@ router.post("/customer-po/:id/deliveries", requireAuth, async (req, res): Promis
  * { representativePhone, representativeName } to target one rep; otherwise all
  * reps with pending delivery assignments for this PO are pinged.
  */
-router.post("/customer-po/:id/send-delivery-prompts", requireAuth, async (req, res): Promise<void> => {
-  const customerPoId = parseInt(String(req.params.id), 10);
-  if (!isFinite(customerPoId)) {
-    res.status(400).json({ error: "معرّف أمر شراء العميل غير صالح" });
-    return;
-  }
-  const [po] = await db
-    .select({ id: customerPosTable.id, internalPoNo: customerPosTable.internalPoNo })
-    .from(customerPosTable)
-    .where(eq(customerPosTable.id, customerPoId));
-  if (!po) {
-    res.status(404).json({ error: "أمر شراء العميل غير موجود" });
-    return;
-  }
-
-  // Find delivery assignments for this PO that are still pending.
-  const assigns = await db
-    .select({
-      repPhone: workOrderAssignmentsTable.representativePhone,
-      repName: workOrderAssignmentsTable.representativeName,
-      status: workOrderAssignmentsTable.status,
-    })
-    .from(workOrderAssignmentsTable)
-    .where(
-      and(
-        eq(workOrderAssignmentsTable.customerPoId, customerPoId),
-        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
-      ),
-    );
-  const phones = new Set<string>();
-  for (const a of assigns) {
-    if (a.status !== "delivered" && a.status !== "rejected") phones.add(a.repPhone);
-  }
-  // Allow an explicit target rep (e.g. when assigning a delivery to a rep who
-  // has no assignment yet, so the nudge still reaches them).
-  const bodyPhone = typeof req.body?.representativePhone === "string" ? req.body.representativePhone : null;
-  if (bodyPhone) phones.add(bodyPhone);
-
-  if (phones.size === 0) {
-    res.status(400).json({ error: "لا يوجد مندوب مسند لهذا الأمر بعد." });
-    return;
-  }
-
-  let sent = 0;
-  for (const phone of phones) {
-    try {
-      // Send a nudge text + main menu so the rep sees their pending deliveries.
-      await sendRepMainMenu(phone, { receipt: 0, delivery: 1 });
-      sent++;
-    } catch (err) {
-      logger.warn({ err, phone }, "send-delivery-prompts: failed to message rep");
+router.post(
+  "/customer-po/:id/send-delivery-prompts",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const customerPoId = parseInt(String(req.params.id), 10);
+    if (!isFinite(customerPoId)) {
+      res.status(400).json({ error: "معرّف أمر شراء العميل غير صالح" });
+      return;
     }
-  }
+    const [po] = await db
+      .select({ id: customerPosTable.id, internalPoNo: customerPosTable.internalPoNo })
+      .from(customerPosTable)
+      .where(eq(customerPosTable.id, customerPoId));
+    if (!po) {
+      res.status(404).json({ error: "أمر شراء العميل غير موجود" });
+      return;
+    }
 
-  await db.insert(auditLogTable).values({
-    action: "customer_po.send_delivery_prompts",
-    entityType: "customer_po",
-    entityId: customerPoId,
-    employeeId: req.session.employeeId,
-    description: `Sent ${sent} delivery prompt(s) for customer PO ${po.internalPoNo}`,
-    ipAddress: req.ip,
-    userAgent: req.get("user-agent"),
-  });
+    // Find delivery assignments for this PO that are still pending.
+    const assigns = await db
+      .select({
+        repPhone: workOrderAssignmentsTable.representativePhone,
+        repName: workOrderAssignmentsTable.representativeName,
+        status: workOrderAssignmentsTable.status,
+      })
+      .from(workOrderAssignmentsTable)
+      .where(
+        and(
+          eq(workOrderAssignmentsTable.customerPoId, customerPoId),
+          eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
+        ),
+      );
+    const phones = new Set<string>();
+    for (const a of assigns) {
+      if (a.status !== "delivered" && a.status !== "rejected") phones.add(a.repPhone);
+    }
+    // Allow an explicit target rep (e.g. when assigning a delivery to a rep who
+    // has no assignment yet, so the nudge still reaches them).
+    const bodyPhone =
+      typeof req.body?.representativePhone === "string" ? req.body.representativePhone : null;
+    if (bodyPhone) phones.add(bodyPhone);
 
-  res.json({ ok: true, sent });
-});
+    if (phones.size === 0) {
+      res.status(400).json({ error: "لا يوجد مندوب مسند لهذا الأمر بعد." });
+      return;
+    }
+
+    let sent = 0;
+    for (const phone of phones) {
+      try {
+        // Send a nudge text + main menu so the rep sees their pending deliveries.
+        await sendRepMainMenu(phone, { receipt: 0, delivery: 1 });
+        sent++;
+      } catch (err) {
+        logger.warn({ err, phone }, "send-delivery-prompts: failed to message rep");
+      }
+    }
+
+    await db.insert(auditLogTable).values({
+      action: "customer_po.send_delivery_prompts",
+      entityType: "customer_po",
+      entityId: customerPoId,
+      employeeId: req.session.employeeId,
+      description: `Sent ${sent} delivery prompt(s) for customer PO ${po.internalPoNo}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+
+    res.json({ ok: true, sent });
+  },
+);
 
 // PATCH /customer-po/deliveries/:deliveryId — edit a single delivery row.
 router.patch(

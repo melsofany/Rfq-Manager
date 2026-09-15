@@ -64,8 +64,8 @@ export default function VatTab() {
     <div className="space-y-5">
       <p className="text-muted-foreground text-sm">
         إقرار ضريبة القيمة المضافة (القانون 67 لسنة 2016) — مبنيّ على الفواتير المُرحَّلة: ضريبة
-        المبيعات (الإخراج) من فواتير العملاء ناقص ضريبة المشتريات (الإدخال) من فواتير الموردين
-        عند النسبة {data?.vatRate ?? 14}%؜. الفواتير غير المُرحَّلة (مسودة/ملغاة) غير مشمولة.
+        المبيعات (الإخراج) من فواتير العملاء ناقص ضريبة المشتريات (الإدخال) من فواتير الموردين عند
+        النسبة {data?.vatRate ?? 14}%؜. الفواتير غير المُرحَّلة (مسودة/ملغاة) غير مشمولة.
       </p>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -140,9 +140,8 @@ export default function VatTab() {
 
       <div className="bg-card border border-dashed border-rose-300 dark:border-rose-900 rounded-lg p-3">
         <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold mb-2">
-          مشتريات من موردين غير مسجلين (لا ض.ق.م مدخلات محملة على المصروفات) —
-          تُسوَّى مع مصلحة الضرائب كعجز ض.ق.م عند الإقفال الشهري.
-
+          مشتريات من موردين غير مسجلين (لا ض.ق.م مدخلات محملة على المصروفات) — تُسوَّى مع مصلحة
+          الضرائب كعجز ض.ق.م عند الإقفال الشهري.
         </p>
         <VatSection
           title="فواتير بدون ضريبة قيمة مضافة (عجز التسوية)"
@@ -170,9 +169,7 @@ function VatSection({
     <div className="bg-card border border-border rounded-lg overflow-hidden">
       <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center justify-between">
         <span className="text-sm font-semibold text-foreground">{title}</span>
-        <span className="text-xs text-muted-foreground">
-          الإجمالي: {fmt(total)}
-        </span>
+        <span className="text-xs text-muted-foreground">الإجمالي: {fmt(total)}</span>
       </div>
       {loading ? (
         <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>

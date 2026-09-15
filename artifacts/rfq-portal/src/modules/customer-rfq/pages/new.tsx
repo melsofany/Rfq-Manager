@@ -117,9 +117,7 @@ function CustomerCombobox({
                 }}
               >
                 <div className="font-medium">{c.name}</div>
-                {c.nickname && (
-                  <div className="text-xs text-muted-foreground">{c.nickname}</div>
-                )}
+                {c.nickname && <div className="text-xs text-muted-foreground">{c.nickname}</div>}
               </li>
             ))
           )}
@@ -130,13 +128,7 @@ function CustomerCombobox({
 }
 
 // Input with a datalist of common UOMs — lets the user pick or type freely.
-function UomInput({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-}) {
+function UomInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const id = useRef(`uom-${Math.random().toString(36).slice(2, 9)}`).current;
   return (
     <>
@@ -301,13 +293,11 @@ export default function NewCustomerRfqPage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   إذا تُرك فارغاً ينشئ النظام رقماً تلقائياً مع رسالة تحذيرية عند الحفظ.
-
                 </p>
                 {rfqNoDuplicate && (
                   <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
                     <AlertCircle size={13} className="flex-shrink-0" />
                     رقم طلب تسعير العميل مستخدم بالفعل — اختر رقماً آخر.
-
                   </p>
                 )}
               </div>
@@ -384,9 +374,7 @@ export default function NewCustomerRfqPage() {
                     <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-40">
                       Line Item
                     </th>
-                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium">
-                      التوصيف
-                    </th>
+                    <th className="px-3 py-2 text-muted-foreground text-xs font-medium">التوصيف</th>
                     <th className="px-3 py-2 text-muted-foreground text-xs font-medium w-28">
                       UOM
                     </th>
@@ -429,10 +417,7 @@ export default function NewCustomerRfqPage() {
                         />
                       </td>
                       <td className="px-2 py-1.5">
-                        <UomInput
-                          value={row.uom}
-                          onChange={(v) => updateItem(i, "uom", v)}
-                        />
+                        <UomInput value={row.uom} onChange={(v) => updateItem(i, "uom", v)} />
                       </td>
                       <td className="px-2 py-1.5">
                         <Input
@@ -475,10 +460,7 @@ export default function NewCustomerRfqPage() {
                 إلغاء
               </a>
             </Link>
-            <Button
-              type="submit"
-              disabled={createMutation.isPending || !customerName.trim()}
-            >
+            <Button type="submit" disabled={createMutation.isPending || !customerName.trim()}>
               {createMutation.isPending ? "جارٍ الحفظ..." : "حفظ طلب التسعير"}
             </Button>
           </div>
@@ -497,8 +479,8 @@ export default function NewCustomerRfqPage() {
                     رقم طلب تسعير العميل فارغ
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    لم تُدخل رقم طلب تسعير العميل. سيقوم النظام بإنشاء رقم تلقائي عند الحفظ.
-                    هل تريد المتابعة، أم العودة لإدخال الرقم؟
+                    لم تُدخل رقم طلب تسعير العميل. سيقوم النظام بإنشاء رقم تلقائي عند الحفظ. هل تريد
+                    المتابعة، أم العودة لإدخال الرقم؟
                   </p>
                 </div>
               </div>

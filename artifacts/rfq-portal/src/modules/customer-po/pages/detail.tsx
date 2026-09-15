@@ -187,7 +187,11 @@ export default function CustomerPoDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmFinalize, setConfirmFinalize] = useState(false);
 
-  const poNoAvailability = useCheckNumberAvailability(customerPoNo, "/api/customer-po/check-number", po?.id);
+  const poNoAvailability = useCheckNumberAvailability(
+    customerPoNo,
+    "/api/customer-po/check-number",
+    po?.id,
+  );
   const poNoDuplicate = poNoAvailability.checked && !poNoAvailability.available;
 
   // Highlight (admin/accountant/manager) — dialog state per selected item.
@@ -215,7 +219,12 @@ export default function CustomerPoDetailPage() {
     setHlNote(item.highlightNote ?? "");
   };
 
-  const saveHighlight = async (itemId: number, color: string | null, note: string, clear = false) => {
+  const saveHighlight = async (
+    itemId: number,
+    color: string | null,
+    note: string,
+    clear = false,
+  ) => {
     setHlSaving(true);
     try {
       const res = await fetch(`/api/customer-po/items/${itemId}/highlight`, {
@@ -932,7 +941,10 @@ export default function CustomerPoDetailPage() {
 
         {/* Highlight dialog — pick a color + note for the selected item (the
             note appears on /items in the «السبب» column). */}
-        <Dialog open={highlightItem !== null} onOpenChange={(open) => !open && setHighlightItem(null)}>
+        <Dialog
+          open={highlightItem !== null}
+          onOpenChange={(open) => !open && setHighlightItem(null)}
+        >
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>تمييز البند {highlightItem?.label}</DialogTitle>

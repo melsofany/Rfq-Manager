@@ -46,8 +46,8 @@ export function backupHourUtc(): number {
 function useOAuth(): boolean {
   return Boolean(
     process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID &&
-      process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET &&
-      process.env.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN,
+    process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET &&
+    process.env.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN,
   );
 }
 
@@ -98,7 +98,10 @@ async function dumpDatabaseToStream(gz: Gzip): Promise<Record<string, number>> {
     const res = await pool.query(`SELECT * FROM "public"."${table}"`);
     const rows: unknown[] = res.rows ?? [];
     counts[table] = rows.length;
-    await writeChunk(gz, `${t === 0 ? "" : ","}${JSON.stringify(table)}:{"rowCount":${rows.length},"rows":[`);
+    await writeChunk(
+      gz,
+      `${t === 0 ? "" : ","}${JSON.stringify(table)}:{"rowCount":${rows.length},"rows":[`,
+    );
     for (let i = 0; i < rows.length; i++) {
       await writeChunk(gz, `${i === 0 ? "" : ","}${JSON.stringify(rows[i])}`);
     }
@@ -189,10 +192,17 @@ export async function runDatabaseBackup(): Promise<BackupResult> {
     const deletedOld = await cleanupOldBackups(drive);
     const result: BackupResult = { fileId, name, sizeBytes, tables, deletedOld };
     lastRun = { ranAt: new Date().toISOString(), ok: true, result };
-    logger.info({ fileId, name, sizeBytes, tables: Object.keys(tables).length, deletedOld }, "DB backup uploaded to Drive");
+    logger.info(
+      { fileId, name, sizeBytes, tables: Object.keys(tables).length, deletedOld },
+      "DB backup uploaded to Drive",
+    );
     return result;
   } catch (err) {
-    lastRun = { ranAt: new Date().toISOString(), ok: false, error: String((err as Error)?.message ?? err) };
+    lastRun = {
+      ranAt: new Date().toISOString(),
+      ok: false,
+      error: String((err as Error)?.message ?? err),
+    };
     throw err;
   }
 }
@@ -208,7 +218,9 @@ function msUntilNextRun(): number {
 /** Run the backup every day at BACKUP_HOUR_UTC. Failures are logged, never fatal. */
 export function scheduleDailyBackup(): void {
   if (!isBackupConfigured()) {
-    logger.info("Daily DB backup not configured (needs DATABASE_URL + GOOGLE_ACCOUNT_BASE_64) — skipping scheduler");
+    logger.info(
+      "Daily DB backup not configured (needs DATABASE_URL + GOOGLE_ACCOUNT_BASE_64) — skipping scheduler",
+    );
     return;
   }
   const kickOff = () => {
@@ -218,5 +230,8 @@ export function scheduleDailyBackup(): void {
     kickOff();
     setInterval(kickOff, 24 * 60 * 60 * 1000);
   }, msUntilNextRun());
-  logger.info({ hourUtc: backupHourUtc(), folderId: backupFolderId() }, "Daily DB backup scheduled");
+  logger.info(
+    { hourUtc: backupHourUtc(), folderId: backupFolderId() },
+    "Daily DB backup scheduled",
+  );
 }

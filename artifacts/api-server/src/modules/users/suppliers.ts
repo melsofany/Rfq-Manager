@@ -58,8 +58,7 @@ async function computeSupplierScore(supplierId: number) {
     totalRfqsReceived > 0
       ? Math.round((totalOffersSubmitted / totalRfqsReceived) * 1000) / 10
       : null;
-  const commitmentScore =
-    responseRate !== null ? Math.min(100, Math.round(responseRate)) : null;
+  const commitmentScore = responseRate !== null ? Math.min(100, Math.round(responseRate)) : null;
 
   // ── 2. سرعة الرد ───────────────────────────────────────────────────────────
   // متوسط الساعات من إرسال الطلب حتى تقديم العرض
@@ -136,8 +135,7 @@ async function computeSupplierScore(supplierId: number) {
     .from(purchaseOrderItemsTable)
     .where(eq(purchaseOrderItemsTable.supplierId, supplierId));
   const wins = Number(winsRow?.cnt ?? 0);
-  const winScore =
-    totalItemsOffered > 0 ? Math.round((wins / totalItemsOffered) * 100) : null;
+  const winScore = totalItemsOffered > 0 ? Math.round((wins / totalItemsOffered) * 100) : null;
 
   // ── 5. جودة الاستلام (بيانات الوصول الفعلية) ─────────────────────────────────
   const [receiptRow] = await db
@@ -158,14 +156,13 @@ async function computeSupplierScore(supplierId: number) {
   // avg(receivedAt - po.createdAt) يومًا من الاستلامات المسجّلة
   const [deliveryRow] = await db
     .select({
-      avg: sql<string | null>`avg(extract(epoch from (${poItemReceiptsTable.receivedAt} - ${purchaseOrdersTable.createdAt})) / 86400)`,
+      avg: sql<
+        string | null
+      >`avg(extract(epoch from (${poItemReceiptsTable.receivedAt} - ${purchaseOrdersTable.createdAt})) / 86400)`,
       cnt: count(),
     })
     .from(poItemReceiptsTable)
-    .innerJoin(
-      purchaseOrdersTable,
-      eq(poItemReceiptsTable.poId, purchaseOrdersTable.id),
-    )
+    .innerJoin(purchaseOrdersTable, eq(poItemReceiptsTable.poId, purchaseOrdersTable.id))
     .innerJoin(
       purchaseOrderItemsTable,
       eq(poItemReceiptsTable.poItemId, purchaseOrderItemsTable.id),
@@ -173,9 +170,7 @@ async function computeSupplierScore(supplierId: number) {
     .where(eq(purchaseOrderItemsTable.supplierId, supplierId));
   const receiptCount = Number(deliveryRow?.cnt ?? 0);
   const avgDeliveryDays =
-    receiptCount > 0 && deliveryRow?.avg
-      ? Math.round(parseFloat(String(deliveryRow.avg)))
-      : null;
+    receiptCount > 0 && deliveryRow?.avg ? Math.round(parseFloat(String(deliveryRow.avg))) : null;
 
   let deliveryScore: number | null = null;
   if (avgDeliveryDays !== null) {
@@ -197,7 +192,10 @@ async function computeSupplierScore(supplierId: number) {
   ];
   let totalScore: number | null = null;
   let rating: number | null = null;
-  const available = components.filter((c) => c.score !== null) as { score: number; weight: number }[];
+  const available = components.filter((c) => c.score !== null) as {
+    score: number;
+    weight: number;
+  }[];
   const weightSum = available.reduce((a, c) => a + c.weight, 0);
   if (weightSum > 0) {
     totalScore = Math.round(available.reduce((a, c) => a + c.score * c.weight, 0) / weightSum);
@@ -257,7 +255,12 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
 
     if (!name) {
       errors++;
-      details.push({ row: i + 1, name: name || "(بدون اسم)", status: "error", reason: "الاسم مطلوب" });
+      details.push({
+        row: i + 1,
+        name: name || "(بدون اسم)",
+        status: "error",
+        reason: "الاسم مطلوب",
+      });
       continue;
     }
 
@@ -273,7 +276,12 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
         .limit(1);
       if (existingEmail) {
         skipped++;
-        details.push({ row: i + 1, name, status: "skipped", reason: `الإيميل مسجل بالفعل للمورد: ${existingEmail.name}` });
+        details.push({
+          row: i + 1,
+          name,
+          status: "skipped",
+          reason: `الإيميل مسجل بالفعل للمورد: ${existingEmail.name}`,
+        });
         continue;
       }
     }
@@ -288,7 +296,12 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
         .limit(1);
       if (existingPhone) {
         skipped++;
-        details.push({ row: i + 1, name, status: "skipped", reason: `رقم الهاتف مسجل بالفعل للمورد: ${existingPhone.name}` });
+        details.push({
+          row: i + 1,
+          name,
+          status: "skipped",
+          reason: `رقم الهاتف مسجل بالفعل للمورد: ${existingPhone.name}`,
+        });
         continue;
       }
     }
@@ -304,7 +317,8 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
           phone: phone || undefined,
           address: row.address ? String(row.address) : undefined,
           category,
-          invoiceHasVat: typeof req.body.invoiceHasVat === "boolean" ? req.body.invoiceHasVat : undefined,
+          invoiceHasVat:
+            typeof req.body.invoiceHasVat === "boolean" ? req.body.invoiceHasVat : undefined,
         })
         .returning();
 
@@ -325,7 +339,7 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
           category: supplier.category,
           categories: toArray(supplier.category),
           isActive: supplier.isActive,
-      invoiceHasVat: supplier.invoiceHasVat,
+          invoiceHasVat: supplier.invoiceHasVat,
           createdAt: supplier.createdAt.toISOString(),
         },
       });
@@ -530,7 +544,15 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   const updates: Record<string, unknown> = {};
-  const allowed = ["name", "contactPerson", "email", "phone", "address", "isActive", "invoiceHasVat"];
+  const allowed = [
+    "name",
+    "contactPerson",
+    "email",
+    "phone",
+    "address",
+    "isActive",
+    "invoiceHasVat",
+  ];
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
@@ -736,8 +758,8 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
     if (r.supplierId !== supplierId) continue; // count only this supplier's lines
     const agg = (progressMap[r.poId] ??= { total: 0, received: 0, rejected: 0 });
     agg.total++;
-    if (r.lineStatus === 'fulfilled' || r.lineStatus === 'received') agg.received++;
-    if (r.lineStatus === 'rejected') agg.rejected++;
+    if (r.lineStatus === "fulfilled" || r.lineStatus === "received") agg.received++;
+    if (r.lineStatus === "rejected") agg.rejected++;
   }
 
   // Link each supplier PO to its customer PO: item-level FK first
@@ -813,7 +835,11 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
     headerStatus: string,
     progress: { total: number; received: number; rejected: number } | undefined,
     delivery: { total: number; resolved: number } | undefined,
-  ): { stage: DerivedStage; label: string; tone: "fulfilled" | "partial" | "received" | "issued" | "default" } {
+  ): {
+    stage: DerivedStage;
+    label: string;
+    tone: "fulfilled" | "partial" | "received" | "issued" | "default";
+  } {
     if (delivery && delivery.total > 0 && delivery.resolved > 0) {
       const pct = Math.round((delivery.resolved / delivery.total) * 100);
       if (pct >= 100) return { stage: "fulfilled", label: "اكتمل", tone: "fulfilled" };
@@ -826,7 +852,11 @@ router.get("/suppliers/:id/pos", requireAuth, async (req, res): Promise<void> =>
     if (headerStatus === "sent") {
       return { stage: "po_issued", label: "تم إصدار أمر شراء للمورد", tone: "issued" };
     }
-    return { stage: "draft", label: headerStatus === "draft" ? "مسودة" : headerStatus, tone: "default" };
+    return {
+      stage: "draft",
+      label: headerStatus === "draft" ? "مسودة" : headerStatus,
+      tone: "default",
+    };
   }
 
   res.json(

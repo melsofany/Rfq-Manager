@@ -40,7 +40,8 @@ vi.mock("../../modules/communications/service", () => ({
   sendRepPoDispatchWhatsApp: vi.fn().mockResolvedValue("rep-wa-id"),
   sendPoCancelWhatsApp: sendPoCancelMock,
   sendPoCancelItemWhatsApp: sendPoCancelItemMock,
-  formatQty: (q: any) => (q == null ? null : String(q).replace(/0+$/, "").replace(/\.$/, "") || "0"),
+  formatQty: (q: any) =>
+    q == null ? null : String(q).replace(/0+$/, "").replace(/\.$/, "") || "0",
 }));
 
 vi.mock("../../modules/po/po-pdf", () => ({
@@ -89,7 +90,11 @@ function chainableThenable(rows: any): any {
 const insertCalls: any[] = [];
 const updateSets: any[] = [];
 const deleteWheres: any[] = [];
-const txOps: { updates: any[]; deletes: any[]; inserts: any[] } = { updates: [], deletes: [], inserts: [] };
+const txOps: { updates: any[]; deletes: any[]; inserts: any[] } = {
+  updates: [],
+  deletes: [],
+  inserts: [],
+};
 
 const dbMock: any = {
   select: vi.fn(() => chainableThenable(selectQueue.shift() ?? [])),
@@ -217,7 +222,10 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     selectQueue = [
       [{ id: 1, internalPoNo: "PO-2025-000001", status: "sent" }],
       [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: null, email: null }],
-      [{ id: 10, lineStatus: "fulfilled" }, { id: 11, lineStatus: "rejected" }], // supplier 7's items
+      [
+        { id: 10, lineStatus: "fulfilled" },
+        { id: 11, lineStatus: "rejected" },
+      ], // supplier 7's items
       [
         { id: 10, lineStatus: "fulfilled", supplierId: 7 },
         { id: 11, lineStatus: "rejected", supplierId: 7 },
@@ -249,7 +257,10 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     selectQueue = [
       [{ id: 1, internalPoNo: "PO-2025-000001", status: "sent" }],
       [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: "Hassan", email: null }],
-      [{ id: 10, lineStatus: "pending" }, { id: 11, lineStatus: "pending" }], // supplier 7's items
+      [
+        { id: 10, lineStatus: "pending" },
+        { id: 11, lineStatus: "pending" },
+      ], // supplier 7's items
       [
         { id: 10, lineStatus: "pending", supplierId: 7 },
         { id: 11, lineStatus: "pending", supplierId: 7 },
@@ -297,7 +308,9 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     });
     expect(txOps.deletes).toHaveLength(2); // po_item_receipts + work_order_assignments for items 10,11
     expect(txOps.inserts.find((c) => c.table === "audit")).toBeTruthy();
-    expect(txOps.inserts.find((c) => c.table === "audit").vals.action).toBe("po.supplier_cancelled");
+    expect(txOps.inserts.find((c) => c.table === "audit").vals.action).toBe(
+      "po.supplier_cancelled",
+    );
   });
 
   it("flips the whole PO to cancelled when the supplier was the LAST active one", async () => {
@@ -383,8 +396,24 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
       [{ id: 1, internalPoNo: "PO-2025-000007", status: "sent" }],
       [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: "Hassan", email: null }],
       [
-        { id: 10, lineStatus: "pending", partNo: "PN-A100", lineItem: "1", description: "قابض هيدروليك", qty: "5.0000", uom: "قطعة" },
-        { id: 11, lineStatus: "pending", partNo: "PN-B200", lineItem: "2", description: "طلمبة مياه", qty: "2.0000", uom: "قطعة" },
+        {
+          id: 10,
+          lineStatus: "pending",
+          partNo: "PN-A100",
+          lineItem: "1",
+          description: "قابض هيدروليك",
+          qty: "5.0000",
+          uom: "قطعة",
+        },
+        {
+          id: 11,
+          lineStatus: "pending",
+          partNo: "PN-B200",
+          lineItem: "2",
+          description: "طلمبة مياه",
+          qty: "2.0000",
+          uom: "قطعة",
+        },
       ],
       [
         { id: 10, lineStatus: "pending", supplierId: 7 },
@@ -435,8 +464,24 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
       [{ id: 1, internalPoNo: "PO-2025-000010", status: "sent" }],
       [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: "Hassan", email: null }],
       [
-        { id: 10, lineStatus: "pending", partNo: "PN-A100", lineItem: "1", description: "قابض", qty: "5.0000", uom: "قطعة" },
-        { id: 11, lineStatus: "pending", partNo: "PN-B200", lineItem: "2", description: "طلمبة", qty: "2.0000", uom: "قطعة" },
+        {
+          id: 10,
+          lineStatus: "pending",
+          partNo: "PN-A100",
+          lineItem: "1",
+          description: "قابض",
+          qty: "5.0000",
+          uom: "قطعة",
+        },
+        {
+          id: 11,
+          lineStatus: "pending",
+          partNo: "PN-B200",
+          lineItem: "2",
+          description: "طلمبة",
+          qty: "2.0000",
+          uom: "قطعة",
+        },
       ],
       [
         { id: 10, lineStatus: "pending", supplierId: 7 },
@@ -452,14 +497,19 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     expect(res.body.cancelledItemIds).toEqual([10]);
     // The old template was used as fallback, with the item named in the reason.
     expect(sendPoCancelMock).toHaveBeenCalledTimes(1);
-    expect(sendPoCancelMock.mock.calls[0][0].reason).toBe("العميل غيّر رأيه — البند الملغى: PN-A100");
+    expect(sendPoCancelMock.mock.calls[0][0].reason).toBe(
+      "العميل غيّر رأيه — البند الملغى: PN-A100",
+    );
   });
 
   it("returns 400 when itemIds do not belong to this supplier in this PO", async () => {
     selectQueue = [
       [{ id: 1, internalPoNo: "PO-2025-000008", status: "sent" }],
       [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: null, email: null }],
-      [{ id: 10, lineStatus: "pending" }, { id: 11, lineStatus: "pending" }],
+      [
+        { id: 10, lineStatus: "pending" },
+        { id: 11, lineStatus: "pending" },
+      ],
     ];
     const res = await request(testApp)
       .post("/api/po/1/cancel")
@@ -474,7 +524,10 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     selectQueue = [
       [{ id: 1, internalPoNo: "PO-2025-000009", status: "sent" }],
       [{ id: 7, name: "Acme", phone: "201111111111", contactPerson: null, email: null }],
-      [{ id: 10, lineStatus: "pending" }, { id: 11, lineStatus: "pending" }],
+      [
+        { id: 10, lineStatus: "pending" },
+        { id: 11, lineStatus: "pending" },
+      ],
       [
         { id: 10, lineStatus: "pending", supplierId: 7 },
         { id: 11, lineStatus: "pending", supplierId: 7 },
@@ -489,4 +542,3 @@ describe("POST /api/po/:id/cancel — per-supplier cancellation", () => {
     expect(txOps.updates).toHaveLength(2); // items + po-status
   });
 });
-

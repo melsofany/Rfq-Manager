@@ -8,17 +8,19 @@ vi.mock("../../middlewares/auth", () => ({
     req.session = { ...sessionState };
     next();
   },
-  requireRole: (...roles: string[]) => (req: any, res: any, next: any) => {
-    if (!sessionState.employeeId) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    if (!roles.includes(sessionState.role)) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-    next();
-  },
+  requireRole:
+    (...roles: string[]) =>
+    (req: any, res: any, next: any) => {
+      if (!sessionState.employeeId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      if (!roles.includes(sessionState.role)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      next();
+    },
 }));
 
 function chainable(value: any, methods: Record<string, any> = {}): any {
@@ -57,7 +59,8 @@ function selectBuilder() {
       else if (table === collectionsTbl) rows = termsRows;
       else if (table === customersTbl) rows = [];
       else if (table === salesInvoicesTbl) rows = salesInvoiceRows;
-      else if (table === chartOfAccountsTbl) rows = [{ code: "1001" }, { code: "1010" }, { code: "1200" }];
+      else if (table === chartOfAccountsTbl)
+        rows = [{ code: "1001" }, { code: "1010" }, { code: "1200" }];
       else if (table === journalEntriesTbl) rows = [];
       const cur: any = {
         innerJoin: vi.fn(() => cur),
@@ -114,7 +117,10 @@ vi.mock("@workspace/db", () => ({
 
 vi.mock("drizzle-orm", () => {
   const sqlTag = (strings: TemplateStringsArray, ...vals: any[]) =>
-    strings.reduce((acc: string, s: string, i: number) => acc + s + (vals[i] != null ? String(vals[i]) : ""), "");
+    strings.reduce(
+      (acc: string, s: string, i: number) => acc + s + (vals[i] != null ? String(vals[i]) : ""),
+      "",
+    );
   (sqlTag as any).raw = (s: any) => s;
   return {
     eq: (a: any, _b: any) => a,
@@ -156,7 +162,17 @@ beforeEach(() => {
 describe("Customer collections API", () => {
   it("GET /api/collections returns POs with computed status (collected)", async () => {
     poListRows = [
-      { id: 1, internalPoNo: "CPO-1", customerPoNo: "C-1", customerId: null, customerName: "عميل أ", storedCustomerName: null, poDate: "2026-08-01", status: "sent", createdAt: new Date() },
+      {
+        id: 1,
+        internalPoNo: "CPO-1",
+        customerPoNo: "C-1",
+        customerId: null,
+        customerName: "عميل أ",
+        storedCustomerName: null,
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date(),
+      },
     ];
     // receivable = 10 × 100 = 1000; collected = 1000
     itemRows = [{ qty: "10", unitPrice: "100" }];
@@ -174,7 +190,17 @@ describe("Customer collections API", () => {
 
   it("GET /api/collections marks overdue when past due date and nothing collected", async () => {
     poListRows = [
-      { id: 2, internalPoNo: "CPO-2", customerPoNo: "C-2", customerId: null, customerName: "عميل ب", storedCustomerName: null, poDate: "2026-01-01", status: "sent", createdAt: new Date() },
+      {
+        id: 2,
+        internalPoNo: "CPO-2",
+        customerPoNo: "C-2",
+        customerId: null,
+        customerName: "عميل ب",
+        storedCustomerName: null,
+        poDate: "2026-01-01",
+        status: "sent",
+        createdAt: new Date(),
+      },
     ];
     itemRows = [{ qty: "5", unitPrice: "200" }]; // receivable 1000
     paymentRows = []; // nothing collected
@@ -187,7 +213,17 @@ describe("Customer collections API", () => {
 
   it("GET /api/collections marks partial when some but not all collected", async () => {
     poListRows = [
-      { id: 3, internalPoNo: "CPO-3", customerPoNo: "C-3", customerId: null, customerName: "عميل ج", storedCustomerName: null, poDate: "2026-08-01", status: "sent", createdAt: new Date() },
+      {
+        id: 3,
+        internalPoNo: "CPO-3",
+        customerPoNo: "C-3",
+        customerId: null,
+        customerName: "عميل ج",
+        storedCustomerName: null,
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date(),
+      },
     ];
     itemRows = [{ qty: "10", unitPrice: "100" }]; // receivable 1000
     paymentRows = [{ amount: "400" }]; // partial
@@ -234,8 +270,22 @@ describe("Customer collections API", () => {
 
   it("GET /api/collections/alerts separates overdue and due-soon", async () => {
     poListRows = [
-      { id: 1, internalPoNo: "CPO-1", customerPoNo: "C-1", customerId: null, customerName: "أ", storedCustomerName: null }, // overdue
-      { id: 2, internalPoNo: "CPO-2", customerPoNo: "C-2", customerId: null, customerName: "ب", storedCustomerName: null }, // due soon
+      {
+        id: 1,
+        internalPoNo: "CPO-1",
+        customerPoNo: "C-1",
+        customerId: null,
+        customerName: "أ",
+        storedCustomerName: null,
+      }, // overdue
+      {
+        id: 2,
+        internalPoNo: "CPO-2",
+        customerPoNo: "C-2",
+        customerId: null,
+        customerName: "ب",
+        storedCustomerName: null,
+      }, // due soon
     ];
     // poId 1: overdue
     itemRows = [{ qty: "10", unitPrice: "100" }];

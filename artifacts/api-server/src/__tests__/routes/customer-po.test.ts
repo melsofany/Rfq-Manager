@@ -5,13 +5,15 @@ import request from "supertest";
 // ── Mock auth ───────────────────────────────────────────────────────────────
 vi.mock("../../middlewares/auth", () => ({
   requireAuth: (_req: any, _res: any, next: any) => next(),
-  requireRole: (...roles: string[]) => (req: any, res: any, next: any) => {
-    if (!roles.includes(req.session?.role ?? "")) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-    next();
-  },
+  requireRole:
+    (...roles: string[]) =>
+    (req: any, res: any, next: any) => {
+      if (!roles.includes(req.session?.role ?? "")) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      next();
+    },
 }));
 
 // ── Chainable + thenable DB mock ─────────────────────────────────────────────
@@ -24,14 +26,29 @@ function chainable(value: any, methods: Record<string, any> = {}): any {
 }
 
 // Tables referenced by .from() / eq() / .references() — truthy markers.
-const poTable = { _: "customerPos", createdAt: "createdAt", id: "id", internalPoNo: "internalPoNo" };
+const poTable = {
+  _: "customerPos",
+  createdAt: "createdAt",
+  id: "id",
+  internalPoNo: "internalPoNo",
+};
 const poItemsTable = { _: "customerPoItems", customerPoId: "customerPoId", id: "id" };
 const rfqsTable = { _: "customerRfqs", customerName: "customerName", createdAt: "createdAt" };
 const employeesTbl = { _: "employees", id: "id", name: "name" };
 const auditTable = { _: "audit" };
 // Supplier-PO tables used by the derived fulfillment status (po_issued check).
-const purchaseOrdersTbl = { _: "purchaseOrders", status: "status", sheetPoNo: "sheetPoNo", id: "id" };
-const purchaseOrderItemsTbl = { _: "purchaseOrderItems", poId: "poId", customerPoItemId: "customerPoItemId", customerPoId: "customerPoId" };
+const purchaseOrdersTbl = {
+  _: "purchaseOrders",
+  status: "status",
+  sheetPoNo: "sheetPoNo",
+  id: "id",
+};
+const purchaseOrderItemsTbl = {
+  _: "purchaseOrderItems",
+  poId: "poId",
+  customerPoItemId: "customerPoItemId",
+  customerPoId: "customerPoId",
+};
 const tables = {
   customerPosTable: poTable,
   customerPoItemsTable: poItemsTable,
@@ -81,21 +98,17 @@ const dbMock: any = {
       if (table === poTable && arg && typeof arg === "object" && "id" in arg) {
         return chainable(duplicatePoRows, {
           where: vi.fn(() =>
-            chainable(duplicatePoRows, { limit: vi.fn(() => chainable(duplicatePoRows)) })),
+            chainable(duplicatePoRows, { limit: vi.fn(() => chainable(duplicatePoRows)) }),
+          ),
         });
       }
       // PO list: select({po}).from(poTable).orderBy()
       if (table === poTable) {
         const bare = arg === undefined;
-        const wrapped = bare
-          ? detailRow
-            ? [detailRow]
-            : []
-          : listRows;
+        const wrapped = bare ? (detailRow ? [detailRow] : []) : listRows;
         return chainable(wrapped, {
           orderBy: vi.fn(() => chainable(listRows)),
-          where: vi.fn(() =>
-            chainable(wrapped, { limit: vi.fn(() => chainable(wrapped)) })),
+          where: vi.fn(() => chainable(wrapped, { limit: vi.fn(() => chainable(wrapped)) })),
         });
       }
       // item-count aggregate: select({customerPoId, cnt}).from(poItems).where().groupBy()
@@ -251,26 +264,28 @@ beforeEach(() => {
 
 describe("POST /api/customer-po (create)", () => {
   it("creates a PO, auto-generates the internal number, records the employee, and links items to RFQ items", async () => {
-    const res = await request(testApp).post("/api/customer-po").send({
-      customerPoNo: "PO-100",
-      customerId: 5,
-      customerName: "Acme",
-      poDate: "2025-02-03",
-      buyerName: "Buyer One",
-      items: [
-        {
-          customerRfqId: 3,
-          customerRfqItemId: 11,
-          partNo: "P1",
-          lineItem: "A B C",
-          description: "  وصف  ",
-          uom: "pc",
-          qty: 5,
-          unitPrice: 12.5,
-          deliveryDate: "2025-03-01",
-        },
-      ],
-    });
+    const res = await request(testApp)
+      .post("/api/customer-po")
+      .send({
+        customerPoNo: "PO-100",
+        customerId: 5,
+        customerName: "Acme",
+        poDate: "2025-02-03",
+        buyerName: "Buyer One",
+        items: [
+          {
+            customerRfqId: 3,
+            customerRfqItemId: 11,
+            partNo: "P1",
+            lineItem: "A B C",
+            description: "  وصف  ",
+            uom: "pc",
+            qty: 5,
+            unitPrice: 12.5,
+            deliveryDate: "2025-03-01",
+          },
+        ],
+      });
     expect(res.status).toBe(201);
     expect(res.body.internalPoNo).toMatch(/^CPO-\d{4}-/);
     expect(res.body.customerPoNo).toBe("PO-100");
@@ -292,37 +307,45 @@ describe("POST /api/customer-po (create)", () => {
   });
 
   it("returns 400 when customerPoNo is missing", async () => {
-    const res = await request(testApp).post("/api/customer-po").send({
-      customerName: "Acme",
-      items: [{ partNo: "P1", qty: 1 }],
-    });
+    const res = await request(testApp)
+      .post("/api/customer-po")
+      .send({
+        customerName: "Acme",
+        items: [{ partNo: "P1", qty: 1 }],
+      });
     expect(res.status).toBe(400);
   });
 
   it("returns 400 when customerName is missing (customer must be selected)", async () => {
-    const res = await request(testApp).post("/api/customer-po").send({
-      customerPoNo: "PO-X",
-      items: [{ partNo: "P1", qty: 1 }],
-    });
+    const res = await request(testApp)
+      .post("/api/customer-po")
+      .send({
+        customerPoNo: "PO-X",
+        items: [{ partNo: "P1", qty: 1 }],
+      });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("العميل");
   });
 
   it("returns 400 when no valid items are provided", async () => {
-    const res = await request(testApp).post("/api/customer-po").send({
-      customerPoNo: "PO-X",
-      customerName: "Acme",
-      items: [{ partNo: "P1" }], // no qty → filtered out
-    });
+    const res = await request(testApp)
+      .post("/api/customer-po")
+      .send({
+        customerPoNo: "PO-X",
+        customerName: "Acme",
+        items: [{ partNo: "P1" }], // no qty → filtered out
+      });
     expect(res.status).toBe(400);
   });
 
   it("accepts manual items with no customer RFQ link (customerName from the picker)", async () => {
-    const res = await request(testApp).post("/api/customer-po").send({
-      customerPoNo: "PO-101",
-      customerName: "Walk-in",
-      items: [{ description: "Manual item", uom: "pc", qty: 2, unitPrice: 5 }],
-    });
+    const res = await request(testApp)
+      .post("/api/customer-po")
+      .send({
+        customerPoNo: "PO-101",
+        customerName: "Walk-in",
+        items: [{ description: "Manual item", uom: "pc", qty: 2, unitPrice: 5 }],
+      });
     expect(res.status).toBe(201);
     expect(res.body.customerName).toBe("Walk-in");
     expect(insertedItems[0].customerRfqId).toBeNull();
@@ -331,11 +354,13 @@ describe("POST /api/customer-po (create)", () => {
   });
 
   it("allows the same customer RFQ item on a second PO (partial shipment — no uniqueness error)", async () => {
-    const res = await request(testApp).post("/api/customer-po").send({
-      customerPoNo: "PO-102",
-      customerName: "Acme",
-      items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 2, unitPrice: 10 }],
-    });
+    const res = await request(testApp)
+      .post("/api/customer-po")
+      .send({
+        customerPoNo: "PO-102",
+        customerName: "Acme",
+        items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 2, unitPrice: 10 }],
+      });
     expect(res.status).toBe(201);
     // The same item id (11) was persisted — the schema does not enforce uniqueness.
     expect(insertedItems[0].customerRfqItemId).toBe(11);
@@ -344,7 +369,11 @@ describe("POST /api/customer-po (create)", () => {
 
 describe("GET /api/customer-po (list)", () => {
   it("returns the list with item counts and stored customer names", async () => {
-    listRows = [{ po: { ...insertedPo, id: 7, customerPoNo: "PO-100", buyerName: "B", customerName: "Acme" } }];
+    listRows = [
+      {
+        po: { ...insertedPo, id: 7, customerPoNo: "PO-100", buyerName: "B", customerName: "Acme" },
+      },
+    ];
     countRows = [{ customerPoId: 7, cnt: 4 }];
     const res = await request(testApp).get("/api/customer-po");
     expect(res.status).toBe(200);
@@ -357,7 +386,9 @@ describe("GET /api/customer-po (list)", () => {
   });
 
   it("filters by search term (client-side) without erroring", async () => {
-    listRows = [{ po: { ...insertedPo, customerPoNo: "PO-100", buyerName: "B", customerName: "Acme" } }];
+    listRows = [
+      { po: { ...insertedPo, customerPoNo: "PO-100", buyerName: "B", customerName: "Acme" } },
+    ];
     countRows = [];
     const res = await request(testApp).get("/api/customer-po?search=PO-100");
     expect(res.status).toBe(200);
@@ -373,7 +404,10 @@ describe("Customer PO fulfillment status (derived)", () => {
   it("shows po_issued when a dispatched supplier PO matches the customerPoNo (header fallback)", async () => {
     listRows = [{ po: { ...insertedPo, id: 7, customerPoNo: "CUST-1", status: "sent" } }];
     countRows = [{ customerPoId: 7, cnt: 2 }];
-    detailItems = [{ id: 1, customerPoId: 7, deliveryStatus: "pending" }, { id: 2, customerPoId: 7, deliveryStatus: "pending" }];
+    detailItems = [
+      { id: 1, customerPoId: 7, deliveryStatus: "pending" },
+      { id: 2, customerPoId: 7, deliveryStatus: "pending" },
+    ];
     // A supplier PO with status=sent and sheetPoNo matching the customer PO.
     dispatchedPoRows = [{ sheetPoNo: "CUST-1" }];
     const res = await request(testApp).get("/api/customer-po");
@@ -448,7 +482,6 @@ describe("Customer PO fulfillment status (derived)", () => {
     expect(res.body.fulfillmentStatus.deliveredPct).toBe(50);
   });
 });
-
 
 describe("GET /api/customer-po/:id", () => {
   it("returns 404 when not found", async () => {
@@ -547,8 +580,26 @@ describe("PATCH /api/customer-po/:id", () => {
     // Two existing RFQ-linked items; the PATCH keeps only item 11 → item 22
     // (id 55) is detached (customerPoId → null) and marked "cancelled".
     detailItems = [
-      { id: 42, customerPoId: 7, customerRfqItemId: 11, customerRfqId: 3, qty: "1.0000", unitPrice: "5.0000", createdAt: new Date("2025-01-03"), deliveryStatus: "pending" },
-      { id: 55, customerPoId: 7, customerRfqItemId: 22, customerRfqId: 3, qty: "2.0000", unitPrice: "7.0000", createdAt: new Date("2025-01-04"), deliveryStatus: "pending" },
+      {
+        id: 42,
+        customerPoId: 7,
+        customerRfqItemId: 11,
+        customerRfqId: 3,
+        qty: "1.0000",
+        unitPrice: "5.0000",
+        createdAt: new Date("2025-01-03"),
+        deliveryStatus: "pending",
+      },
+      {
+        id: 55,
+        customerPoId: 7,
+        customerRfqItemId: 22,
+        customerRfqId: 3,
+        qty: "2.0000",
+        unitPrice: "7.0000",
+        createdAt: new Date("2025-01-04"),
+        deliveryStatus: "pending",
+      },
     ];
     const res = await request(testApp)
       .patch("/api/customer-po/7")
@@ -661,7 +712,10 @@ describe("PATCH /api/customer-po/items/:itemId/highlight", () => {
       highlightColor: "yellow",
       highlightNote: "متابعة مع العميل",
     });
-    expect(updateCalls).toContainEqual({ highlightColor: "yellow", highlightNote: "متابعة مع العميل" });
+    expect(updateCalls).toContainEqual({
+      highlightColor: "yellow",
+      highlightNote: "متابعة مع العميل",
+    });
   });
 
   it("clears the highlight with { clear: true } (accountant)", async () => {
@@ -729,9 +783,7 @@ describe("PATCH /api/customer-po/items/:itemId/highlight", () => {
 
     it("POST allows a fresh number when none exists", async () => {
       duplicatePoRows = [];
-      const res = await request(testApp)
-        .post("/api/customer-po")
-        .send(basePo);
+      const res = await request(testApp).post("/api/customer-po").send(basePo);
       expect(res.status).toBe(201);
     });
 
@@ -772,4 +824,3 @@ describe("PATCH /api/customer-po/items/:itemId/highlight", () => {
     });
   });
 });
-

@@ -10,19 +10,19 @@ import { ACCOUNT_CODES } from "@workspace/db";
 
 /** Map an operating-expense (Arabic) category → expense account code. */
 export const EXPENSE_CATEGORY_ACCOUNT: Record<string, string> = {
-  "إيجارات": ACCOUNT_CODES.RENT_EXPENSE,
+  إيجارات: ACCOUNT_CODES.RENT_EXPENSE,
   "دومينات واستضافة وخدمات تقنية": ACCOUNT_CODES.IT_EXPENSE,
   "اشتراكات ودعم فني": ACCOUNT_CODES.SUBSCRIPTIONS_EXPENSE,
   "كهرباء ومياه": ACCOUNT_CODES.UTILITIES_EXPENSE,
-  "كهرباء": ACCOUNT_CODES.ELECTRICITY_EXPENSE,
-  "مياه": ACCOUNT_CODES.WATER_EXPENSE,
-  "اتصالات": ACCOUNT_CODES.TELECOM_EXPENSE,
-  "انترنت": ACCOUNT_CODES.INTERNET_EXPENSE,
+  كهرباء: ACCOUNT_CODES.ELECTRICITY_EXPENSE,
+  مياه: ACCOUNT_CODES.WATER_EXPENSE,
+  اتصالات: ACCOUNT_CODES.TELECOM_EXPENSE,
+  انترنت: ACCOUNT_CODES.INTERNET_EXPENSE,
   "نقل وتنقل": ACCOUNT_CODES.TRANSPORT_EXPENSE,
-  "نثريات": ACCOUNT_CODES.MISC_EXPENSE,
-  "صيانة": ACCOUNT_CODES.MAINTENANCE_EXPENSE,
+  نثريات: ACCOUNT_CODES.MISC_EXPENSE,
+  صيانة: ACCOUNT_CODES.MAINTENANCE_EXPENSE,
   "مصروفات إدارية": ACCOUNT_CODES.ADMIN_EXPENSE,
-  "رواتب": ACCOUNT_CODES.SALARIES_EXPENSE,
+  رواتب: ACCOUNT_CODES.SALARIES_EXPENSE,
 };
 
 /** Resolve an expense category to its ledger account code (default misc). */

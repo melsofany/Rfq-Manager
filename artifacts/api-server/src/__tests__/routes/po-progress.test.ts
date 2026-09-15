@@ -32,7 +32,8 @@ vi.mock("../../modules/communications/service", () => ({
   sendRepresentativeItemReceiptWhatsApp: vi.fn().mockResolvedValue("rep-wa-id"),
   sendRepPoDispatchWhatsApp: vi.fn().mockResolvedValue("rep-wa-id"),
   sendPoCancelWhatsApp: vi.fn().mockResolvedValue("cancel-wa-id"),
-  formatQty: (q: any) => (q == null ? null : String(q).replace(/0+$/, "").replace(/\.$/, "") || "0"),
+  formatQty: (q: any) =>
+    q == null ? null : String(q).replace(/0+$/, "").replace(/\.$/, "") || "0",
 }));
 
 vi.mock("../../modules/po/po-pdf", () => ({
@@ -138,9 +139,7 @@ describe("GET /api/po/progress — receivable lines + suppliers", () => {
   });
 
   it("falls back to supplier #id when the supplier name is missing", async () => {
-    selectQueue.push([
-      { poId: 2, lineStatus: "pending", supplierId: 9, supplierName: null },
-    ]);
+    selectQueue.push([{ poId: 2, lineStatus: "pending", supplierId: 9, supplierName: null }]);
     const res = await request(testApp).get("/api/po/progress");
     expect(res.status).toBe(200);
     expect(res.body[0].suppliers).toEqual(["#9"]);
@@ -148,9 +147,7 @@ describe("GET /api/po/progress — receivable lines + suppliers", () => {
   });
 
   it("omits a PO whose lines are all cancelled", async () => {
-    selectQueue.push([
-      { poId: 3, lineStatus: "cancelled", supplierId: 5, supplierName: "مورد أ" },
-    ]);
+    selectQueue.push([{ poId: 3, lineStatus: "cancelled", supplierId: 5, supplierName: "مورد أ" }]);
     const res = await request(testApp).get("/api/po/progress");
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);

@@ -149,7 +149,15 @@ export default function NewRfqPage() {
   const [notes, setNotes] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [items, setItems] = useState<ItemRow[]>([
-    { lineItem: "", partNo: "", description: "", uom: "", qty: "", referencePrice: "", customerRfqItemId: null },
+    {
+      lineItem: "",
+      partNo: "",
+      description: "",
+      uom: "",
+      qty: "",
+      referencePrice: "",
+      customerRfqItemId: null,
+    },
   ]);
 
   const [isLookingUp, setIsLookingUp] = useState(false);
@@ -164,10 +172,7 @@ export default function NewRfqPage() {
   // Merge sheet numbers + DB customer RFQ numbers (deduped); sheets stay the
   // primary fallback so legacy sheet-only RFQs remain reachable.
   const suggestions = Array.from(
-    new Set([
-      ...(rfqNumbersData?.rfqNumbers ?? []),
-      ...(customerRfqNumbersData?.rfqNumbers ?? []),
-    ]),
+    new Set([...(rfqNumbersData?.rfqNumbers ?? []), ...(customerRfqNumbersData?.rfqNumbers ?? [])]),
   );
 
   const createMutation = useCreateRfq({
@@ -204,8 +209,7 @@ export default function NewRfqPage() {
           uom: String(item.uom ?? ""),
           qty: item.qty != null ? String(item.qty) : "",
           referencePrice: item.referencePrice != null ? String(item.referencePrice) : "",
-          customerRfqItemId:
-            item.customerRfqItemId != null ? Number(item.customerRfqItemId) : null,
+          customerRfqItemId: item.customerRfqItemId != null ? Number(item.customerRfqItemId) : null,
           rfqNo: String(item.rfqNo ?? ""),
           rfqDate: String(item.rfqDate ?? ""),
           requiredResponseDate: String(item.requiredResponseDate ?? ""),
@@ -257,9 +261,7 @@ export default function NewRfqPage() {
     if (!customerRfqNo) setCustomerRfqNo(lookupQuery);
     // Carry the customer RFQ's expiry date (requiredResponseDate) into the
     // supplier RFQ expiry field — only when the user hasn't set one yet.
-    const importedExpiry = chosen
-      .map((p) => p.requiredResponseDate)
-      .find((d) => d && d.trim());
+    const importedExpiry = chosen.map((p) => p.requiredResponseDate).find((d) => d && d.trim());
     if (importedExpiry && !expiresAt) setExpiresAt(importedExpiry.trim().slice(0, 10));
     setShowPicker(false);
     setPendingItems([]);
@@ -268,7 +270,15 @@ export default function NewRfqPage() {
   const addItem = () =>
     setItems((prev) => [
       ...prev,
-      { lineItem: "", partNo: "", description: "", uom: "", qty: "", referencePrice: "", customerRfqItemId: null },
+      {
+        lineItem: "",
+        partNo: "",
+        description: "",
+        uom: "",
+        qty: "",
+        referencePrice: "",
+        customerRfqItemId: null,
+      },
     ]);
 
   const removeItem = (i: number) => setItems((prev) => prev.filter((_, idx) => idx !== i));

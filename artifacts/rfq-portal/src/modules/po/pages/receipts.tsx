@@ -4,7 +4,16 @@ import { useListPurchaseOrders, getListPurchaseOrdersQueryKey } from "@workspace
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, PackageCheck, Truck, Send, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import {
+  Search,
+  PackageCheck,
+  Truck,
+  Send,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 
@@ -183,7 +192,13 @@ export default function GoodsReceiptPage() {
   async function saveReceipt(
     poId: number,
     poItemId: number,
-    data: { receivedQty: string; acceptedQty: string; rejectedQty: string; rejectionReason: string; actualCost: string },
+    data: {
+      receivedQty: string;
+      acceptedQty: string;
+      rejectedQty: string;
+      rejectionReason: string;
+      actualCost: string;
+    },
   ) {
     try {
       const r = await fetch(`/api/po/${poId}/receipts`, {
@@ -262,39 +277,42 @@ export default function GoodsReceiptPage() {
       <div>
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <PackageCheck size={20} className="text-primary" />
-            استلام التوريدات
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            متابعة استلام بنود أوامر الشراء من الموردين وتسجيل التكلفة الفعلية والرفض
-          </p>
-        </div>
+          استلام التوريدات
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          متابعة استلام بنود أوامر الشراء من الموردين وتسجيل التكلفة الفعلية والرفض
+        </p>
+      </div>
 
-        <div className="relative max-w-xs">
-          <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث برقم أمر الشراء..."
-            className="pl-8 h-8 text-sm"
-          />
-        </div>
+      <div className="relative max-w-xs">
+        <Search
+          size={15}
+          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="بحث برقم أمر الشراء..."
+          className="pl-8 h-8 text-sm"
+        />
+      </div>
 
-        <div className="space-y-3">
-          {isLoading || !progressLoaded ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
-          ) : visiblePos.length === 0 ? (
-            <div className="p-12 text-center">
-              <Truck size={40} className="mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground text-sm">لا توجد أوامر شراء مُرسلة للاستلام</p>
-            </div>
-          ) : (
-            visiblePos.map((po) => {
-              const prog = progress[po.id];
-              const pct =
-                prog && prog.receivable > 0
-                  ? Math.round((prog.receivableReceived / prog.receivable) * 100)
-                  : 0;
-              return (
+      <div className="space-y-3">
+        {isLoading || !progressLoaded ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
+        ) : visiblePos.length === 0 ? (
+          <div className="p-12 text-center">
+            <Truck size={40} className="mx-auto text-muted-foreground/30 mb-3" />
+            <p className="text-muted-foreground text-sm">لا توجد أوامر شراء مُرسلة للاستلام</p>
+          </div>
+        ) : (
+          visiblePos.map((po) => {
+            const prog = progress[po.id];
+            const pct =
+              prog && prog.receivable > 0
+                ? Math.round((prog.receivableReceived / prog.receivable) * 100)
+                : 0;
+            return (
               <div key={po.id} className="bg-card border border-border rounded-lg overflow-hidden">
                 <button
                   onClick={() => (expandedPo === po.id ? setExpandedPo(null) : loadItems(po.id))}
@@ -344,7 +362,9 @@ export default function GoodsReceiptPage() {
                     {/* Representative dispatch controls */}
                     <div className="px-4 py-3 bg-muted/20 flex flex-col sm:flex-row sm:items-end gap-3">
                       <div className="flex-1">
-                        <label className="text-xs text-muted-foreground mb-1 block">اسم المندوب</label>
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          اسم المندوب
+                        </label>
                         <Input
                           value={repName}
                           onChange={(e) => setRepName(e.target.value)}
@@ -353,7 +373,9 @@ export default function GoodsReceiptPage() {
                         />
                       </div>
                       <div className="flex-1">
-                        <label className="text-xs text-muted-foreground mb-1 block">رقم واتساب</label>
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          رقم واتساب
+                        </label>
                         <Input
                           value={repPhone}
                           onChange={(e) => setRepPhone(e.target.value)}
@@ -373,25 +395,42 @@ export default function GoodsReceiptPage() {
                     </div>
 
                     {loadingItems ? (
-                      <div className="p-6 text-center text-muted-foreground text-sm">جارٍ تحميل البنود...</div>
+                      <div className="p-6 text-center text-muted-foreground text-sm">
+                        جارٍ تحميل البنود...
+                      </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-border bg-muted/30 text-left">
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">البند</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">الكمية</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">الحالة</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">مستلم/مقبول</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">مرفوض</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">التكلفة الفعلية</th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                                البند
+                              </th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                                الكمية
+                              </th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                                الحالة
+                              </th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                                مستلم/مقبول
+                              </th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                                مرفوض
+                              </th>
+                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                                التكلفة الفعلية
+                              </th>
                               <th className="px-4 py-2 text-muted-foreground text-xs font-medium"></th>
                             </tr>
                           </thead>
                           <tbody>
                             {items.length === 0 ? (
                               <tr>
-                                <td colSpan={7} className="px-4 py-6 text-center text-muted-foreground text-sm">
+                                <td
+                                  colSpan={7}
+                                  className="px-4 py-6 text-center text-muted-foreground text-sm"
+                                >
                                   لا توجد بنود قابلة للاستلام في هذا الأمر
                                 </td>
                               </tr>
@@ -414,10 +453,10 @@ export default function GoodsReceiptPage() {
                   </div>
                 )}
               </div>
-              );
-            })
-          )}
-        </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
@@ -445,7 +484,13 @@ function ReceiptItemRow({
   item: PoItemRow;
   poId: number;
   rows: ReceiptRow[];
-  onSave: (d: { receivedQty: string; acceptedQty: string; rejectedQty: string; rejectionReason: string; actualCost: string }) => void;
+  onSave: (d: {
+    receivedQty: string;
+    acceptedQty: string;
+    rejectedQty: string;
+    rejectionReason: string;
+    actualCost: string;
+  }) => void;
   onPostpone: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -485,7 +530,11 @@ function ReceiptItemRow({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ chargeType, description: chargeDesc || null, amount: Number(chargeAmount) }),
+        body: JSON.stringify({
+          chargeType,
+          description: chargeDesc || null,
+          amount: Number(chargeAmount),
+        }),
       });
       if (!r.ok) {
         const b = await r.json().catch(() => ({}));
@@ -545,7 +594,12 @@ function ReceiptItemRow({
         <td className="px-4 py-3 text-xs text-foreground">{item.finalActualCost ?? "-"}</td>
         <td className="px-4 py-3 text-left">
           {item.lineStatus !== "cancelled" && (
-            <Button onClick={() => setOpen((o) => !o)} size="sm" variant="outline" className="h-7 text-xs">
+            <Button
+              onClick={() => setOpen((o) => !o)}
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+            >
               تسجيل استلام
             </Button>
           )}
@@ -667,7 +721,9 @@ function ReceiptItemRow({
                             <span className="text-muted-foreground">— {c.description}</span>
                           )}
                           <span className="text-foreground font-semibold">
-                            {Number(c.amount || 0).toLocaleString("ar-EG", { minimumFractionDigits: 2 })}
+                            {Number(c.amount || 0).toLocaleString("ar-EG", {
+                              minimumFractionDigits: 2,
+                            })}
                           </span>
                           <button
                             onClick={() => deleteCharge(c.id)}
@@ -714,7 +770,13 @@ function ReceiptItemRow({
                       />
                     </div>
                   </div>
-                  <Button onClick={addCharge} disabled={chargeLoading} size="sm" variant="outline" className="h-7 text-xs gap-1">
+                  <Button
+                    onClick={addCharge}
+                    disabled={chargeLoading}
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1"
+                  >
                     <Plus size={13} />
                     {chargeLoading ? "جارٍ الإضافة..." : "إضافة مصروف"}
                   </Button>

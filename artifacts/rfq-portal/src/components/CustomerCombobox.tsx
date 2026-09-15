@@ -1,5 +1,9 @@
 import { useState, useRef, useEffect } from "react";
-import { useListCustomers, getListCustomersQueryKey, type Customer } from "@workspace/api-client-react";
+import {
+  useListCustomers,
+  getListCustomersQueryKey,
+  type Customer,
+} from "@workspace/api-client-react";
 import { Input } from "@/components/ui/input";
 import { ChevronDown } from "lucide-react";
 
@@ -91,9 +95,7 @@ export function CustomerCombobox({
                 }}
               >
                 <div className="font-medium">{c.name}</div>
-                {c.nickname && (
-                  <div className="text-xs text-muted-foreground">{c.nickname}</div>
-                )}
+                {c.nickname && <div className="text-xs text-muted-foreground">{c.nickname}</div>}
               </li>
             ))
           )}

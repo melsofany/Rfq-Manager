@@ -13,7 +13,9 @@ export type WorkOrderKind = (typeof WORK_ORDER_KIND)[keyof typeof WORK_ORDER_KIN
 
 export const workOrderAssignmentsTable = pgTable("work_order_assignments", {
   id: serial("id").primaryKey(),
-  poId: integer("po_id").notNull().references(() => purchaseOrdersTable.id, { onDelete: "cascade" }),
+  poId: integer("po_id")
+    .notNull()
+    .references(() => purchaseOrdersTable.id, { onDelete: "cascade" }),
   representativeId: integer("representative_id").references(() => representativesTable.id),
   representativeName: text("representative_name").notNull(),
   representativePhone: text("representative_phone").notNull(),

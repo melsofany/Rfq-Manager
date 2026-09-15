@@ -252,98 +252,106 @@ export default function CollectionsPage() {
       {/* Alert summary */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center gap-2">
-            <AlertCircle size={18} className="text-red-600" />
-            <div>
-              <p className="text-xs text-red-700">متأخرات</p>
-              <p className="text-lg font-bold text-red-700">{alerts.overdueCount}</p>
-            </div>
-          </div>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
-            <Clock size={18} className="text-amber-600" />
-            <div>
-              <p className="text-xs text-amber-700">قريب الاستحقاق</p>
-              <p className="text-lg font-bold text-amber-700">{alerts.dueSoonCount}</p>
-            </div>
+          <AlertCircle size={18} className="text-red-600" />
+          <div>
+            <p className="text-xs text-red-700">متأخرات</p>
+            <p className="text-lg font-bold text-red-700">{alerts.overdueCount}</p>
           </div>
         </div>
-
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <Input
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-            placeholder="بحث باسم العميل..."
-            className="h-8 text-sm max-w-xs"
-          />
-          <div className="flex gap-1 overflow-x-auto pb-0.5 flex-nowrap">
-            {STATUS_FILTERS.map((s) => (
-              <button
-                key={s.value}
-                onClick={() => setStatusFilter(s.value)}
-                className={`px-3 py-1 text-xs rounded-md border whitespace-nowrap ${
-                  statusFilter === s.value
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-card border-border text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2">
+          <Clock size={18} className="text-amber-600" />
+          <div>
+            <p className="text-xs text-amber-700">قريب الاستحقاق</p>
+            <p className="text-lg font-bold text-amber-700">{alerts.dueSoonCount}</p>
           </div>
-          <Button onClick={load} size="sm" className="gap-1.5">
-            تحديث
-          </Button>
         </div>
+      </div>
 
-        {/* List */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
-          ) : rows.length === 0 ? (
-            <div className="p-12 text-center">
-              <Banknote size={40} className="mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground text-sm">لا توجد تحصيلات</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30 text-left">
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">أمر الشراء</th>
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">العميل</th>
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">المستحق</th>
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">المحصّل</th>
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">المتبقي</th>
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">تاريخ الاستحقاق</th>
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">الحالة</th>
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <Input
+          value={customerName}
+          onChange={(e) => setCustomerName(e.target.value)}
+          placeholder="بحث باسم العميل..."
+          className="h-8 text-sm max-w-xs"
+        />
+        <div className="flex gap-1 overflow-x-auto pb-0.5 flex-nowrap">
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s.value}
+              onClick={() => setStatusFilter(s.value)}
+              className={`px-3 py-1 text-xs rounded-md border whitespace-nowrap ${
+                statusFilter === s.value
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card border-border text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <Button onClick={load} size="sm" className="gap-1.5">
+          تحديث
+        </Button>
+      </div>
+
+      {/* List */}
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        {loading ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
+        ) : rows.length === 0 ? (
+          <div className="p-12 text-center">
+            <Banknote size={40} className="mx-auto text-muted-foreground/30 mb-3" />
+            <p className="text-muted-foreground text-sm">لا توجد تحصيلات</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30 text-left">
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">
+                    أمر الشراء
+                  </th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">العميل</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">المستحق</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">المحصّل</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">المتبقي</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">
+                    تاريخ الاستحقاق
+                  </th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">الحالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr
+                    key={r.customerPoId}
+                    className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
+                    onClick={() => openDetail(r.customerPoId)}
+                  >
+                    <td className="px-3 py-3 font-mono text-xs text-primary">{r.internalPoNo}</td>
+                    <td className="px-3 py-3 text-xs">{r.customerName ?? "-"}</td>
+                    <td className="px-3 py-3 text-xs">{fmt(r.receivable)}</td>
+                    <td className="px-3 py-3 text-xs text-emerald-600">{fmt(r.collected)}</td>
+                    <td className="px-3 py-3 text-xs font-medium text-amber-600">
+                      {fmt(r.remaining)}
+                    </td>
+                    <td className="px-3 py-3 text-xs text-muted-foreground">{r.dueDate ?? "-"}</td>
+                    <td className="px-3 py-3">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${r.statusTone}`}
+                      >
+                        {statusIcon(r.status)}
+                        {r.statusLabel}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr
-                      key={r.customerPoId}
-                      className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
-                      onClick={() => openDetail(r.customerPoId)}
-                    >
-                      <td className="px-3 py-3 font-mono text-xs text-primary">{r.internalPoNo}</td>
-                      <td className="px-3 py-3 text-xs">{r.customerName ?? "-"}</td>
-                      <td className="px-3 py-3 text-xs">{fmt(r.receivable)}</td>
-                      <td className="px-3 py-3 text-xs text-emerald-600">{fmt(r.collected)}</td>
-                      <td className="px-3 py-3 text-xs font-medium text-amber-600">{fmt(r.remaining)}</td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground">{r.dueDate ?? "-"}</td>
-                      <td className="px-3 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${r.statusTone}`}>
-                          {statusIcon(r.status)}
-                          {r.statusLabel}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Detail dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
@@ -361,7 +369,9 @@ export default function CollectionsPage() {
                   <p className="font-mono text-sm text-primary">{detail.internalPoNo}</p>
                   <p className="text-xs text-muted-foreground">{detail.customerName ?? "-"}</p>
                 </div>
-                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs ${detail.statusTone}`}>
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs ${detail.statusTone}`}
+                >
                   {statusIcon(detail.status)}
                   {detail.statusLabel}
                 </span>
@@ -392,7 +402,9 @@ export default function CollectionsPage() {
                     <Input
                       type="date"
                       value={termsForm.collectionStartDate}
-                      onChange={(e) => setTermsForm({ ...termsForm, collectionStartDate: e.target.value })}
+                      onChange={(e) =>
+                        setTermsForm({ ...termsForm, collectionStartDate: e.target.value })
+                      }
                       className="h-8 text-sm"
                     />
                   </div>
@@ -401,7 +413,9 @@ export default function CollectionsPage() {
                     <Input
                       type="number"
                       value={termsForm.collectionDays}
-                      onChange={(e) => setTermsForm({ ...termsForm, collectionDays: e.target.value })}
+                      onChange={(e) =>
+                        setTermsForm({ ...termsForm, collectionDays: e.target.value })
+                      }
                       className="h-8 text-sm"
                     />
                   </div>
@@ -420,7 +434,8 @@ export default function CollectionsPage() {
                 </Button>
                 {detail.terms?.dueDate && (
                   <p className="text-xs text-muted-foreground mt-2">
-                    تاريخ الاستحقاق المحسوب: <span className="font-medium">{detail.terms.dueDate}</span>
+                    تاريخ الاستحقاق المحسوب:{" "}
+                    <span className="font-medium">{detail.terms.dueDate}</span>
                   </p>
                 )}
               </div>
@@ -466,7 +481,12 @@ export default function CollectionsPage() {
                     />
                   </div>
                 </div>
-                <Button onClick={addPayment} disabled={savingPay} size="sm" className="mt-2 gap-1.5">
+                <Button
+                  onClick={addPayment}
+                  disabled={savingPay}
+                  size="sm"
+                  className="mt-2 gap-1.5"
+                >
                   <Plus size={14} />
                   {savingPay ? "جارٍ التسجيل..." : "تسجيل الدفعة"}
                 </Button>

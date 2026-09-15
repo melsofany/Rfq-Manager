@@ -75,7 +75,7 @@ async function loadTaxLite(): Promise<TaxSettingsLite> {
 function computeInvoice(net: number, vatRate: number, whRate: number, hasVat = true) {
   // Purchases from NON-VAT suppliers (غير مُسجَّل) carry NO input VAT — the
   // full amount becomes cost, creating the VAT deficit the company must absorb。
- 
+
   const vat = hasVat === false ? 0 : vatOnNet(net, vatRate);
   const gross = round2(net + vat);
   const withholding = round2((net * whRate) / 100);
@@ -144,7 +144,10 @@ router.get("/accounts/supplier-invoices/:id", requireAuth, async (req, res): Pro
       reference: supplierPaymentsTable.reference,
     })
     .from(supplierPaymentApplicationsTable)
-    .innerJoin(supplierPaymentsTable, eq(supplierPaymentApplicationsTable.paymentId, supplierPaymentsTable.id))
+    .innerJoin(
+      supplierPaymentsTable,
+      eq(supplierPaymentApplicationsTable.paymentId, supplierPaymentsTable.id),
+    )
     .where(eq(supplierPaymentApplicationsTable.invoiceId, id));
   res.json({
     id: row.id,
@@ -181,249 +184,300 @@ router.get("/accounts/supplier-invoices/:id", requireAuth, async (req, res): Pro
   });
 });
 
-router.post("/accounts/supplier-invoices", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const body = (req.body ?? {}) as {
-    supplierInvoiceNo?: string | null;
-    supplierId?: number | null;
-    supplierName: string;
-    poId?: number | null;
-    invoiceDate: string;
-    dueDate?: string | null;
-    netAmount: number | string;
-    hasVat?: boolean;
-    withholdingRate?: number | string | null;
-    applyWithholding?: boolean;
-    notes?: string | null;
-  };
-  if (!body.supplierName || !body.invoiceDate || toNum(body.netAmount) == null) {
-    res.status(400).json({ error: "اسم المورد وتاريخ الفاتورة وصافي القيمة مطلوبة" });
-    return;
-  }
-  const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-  const settings = await loadTaxLite();
-  const net = toNum(body.netAmount)!;
-  const whRate = body.applyWithholding === false ? 0 : rateOf(body.withholdingRate != null ? String(body.withholdingRate) : null, settings.withholdingRate);
-  // Auto-derive VAT treatment from the linked supplier record (غير مُسجَّل suppliers
-  // have invoice_has_vat=false — their invoices carry NO input VAT。 When no
-  // supplier is linked the caller must pass hasVat explicitly.
-  let hasVat = body.hasVat === undefined ? true : body.hasVat === false ? false : true;
-  if (body.hasVat === undefined && body.supplierId) {
+router.post(
+  "/accounts/supplier-invoices",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const body = (req.body ?? {}) as {
+      supplierInvoiceNo?: string | null;
+      supplierId?: number | null;
+      supplierName: string;
+      poId?: number | null;
+      invoiceDate: string;
+      dueDate?: string | null;
+      netAmount: number | string;
+      hasVat?: boolean;
+      withholdingRate?: number | string | null;
+      applyWithholding?: boolean;
+      notes?: string | null;
+    };
+    if (!body.supplierName || !body.invoiceDate || toNum(body.netAmount) == null) {
+      res.status(400).json({ error: "اسم المورد وتاريخ الفاتورة وصافي القيمة مطلوبة" });
+      return;
+    }
+    const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
+    const settings = await loadTaxLite();
+    const net = toNum(body.netAmount)!;
+    const whRate =
+      body.applyWithholding === false
+        ? 0
+        : rateOf(
+            body.withholdingRate != null ? String(body.withholdingRate) : null,
+            settings.withholdingRate,
+          );
+    // Auto-derive VAT treatment from the linked supplier record (غير مُسجَّل suppliers
+    // have invoice_has_vat=false — their invoices carry NO input VAT。 When no
+    // supplier is linked the caller must pass hasVat explicitly.
+    let hasVat = body.hasVat === undefined ? true : body.hasVat === false ? false : true;
+    if (body.hasVat === undefined && body.supplierId) {
+      const [sup] = await db
+        .select({ invoiceHasVat: suppliersTable.invoiceHasVat })
+        .from(suppliersTable)
+        .where(eq(suppliersTable.id, body.supplierId))
+        .limit(1);
+      if (sup && sup.invoiceHasVat === false) hasVat = false;
+    }
+    const c = computeInvoice(net, settings.vatRate, whRate, hasVat);
 
-    const [sup] = await db
-      .select({ invoiceHasVat: suppliersTable.invoiceHasVat })
-      .from(suppliersTable)
-      .where(eq(suppliersTable.id, body.supplierId))
-      .limit(1);
-    if (sup && sup.invoiceHasVat === false) hasVat = false;
-  }
-  const c = computeInvoice(net, settings.vatRate, whRate, hasVat);
-
-  const year = parseInt(body.invoiceDate.slice(0, 4), 10) || new Date().getFullYear();
-  const invoiceNo = await nextEntryNo("SI", year);
-  let poNo: string | null = null;
-  if (body.poId) {
-    const [po] = await db
-      .select({ no: purchaseOrdersTable.internalPoNo })
-      .from(purchaseOrdersTable)
-      .where(eq(purchaseOrdersTable.id, body.poId));
-    poNo = po?.no ?? null;
-  }
-
-  const [row] = await db
-    .insert(supplierInvoicesTable)
-    .values({
-      invoiceNo,
-      supplierInvoiceNo: body.supplierInvoiceNo ?? null,
-      supplierId: body.supplierId ?? null,
-      supplierName: body.supplierName,
-      poId: body.poId ?? null,
-      poNo,
-      invoiceDate: body.invoiceDate,
-      dueDate: body.dueDate ?? null,
-      netAmount: String(c.net),
-      vatAmount: String(c.vat),
-      hasVat: c.hasVat,
-      withholdingRate: String(c.whRate),
-      withholdingAmount: String(c.withholding),
-      grossAmount: String(c.gross),
-      balance: String(c.balance),
-      status: "draft",
-      notes: body.notes ?? null,
-      employeeId: session.employeeId,
-      employeeName: session.employeeName ?? null,
-    })
-    .returning();
-  await db.insert(auditLogTable).values({
-    action: "supplier_invoice.create",
-    entityType: "supplier_invoices",
-    entityId: row!.id,
-    employeeId: session.employeeId,
-    description: `إنشاء فاتورة مورد ${invoiceNo} — ${body.supplierName}`,
-  });
-  res.json({ id: row!.id, invoiceNo });
-});
-
-router.patch("/accounts/supplier-invoices/:id", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  const [existing] = await db
-    .select()
-    .from(supplierInvoicesTable)
-    .where(eq(supplierInvoicesTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: "الفاتورة غير موجودة" });
-    return;
-  }
-  if (existing.status !== "draft") {
-    res.status(400).json({ error: "لا يمكن تعديل فاتورة مُرحَّلة — استخدم الإلغاء" });
-    return;
-  }
-  const body = (req.body ?? {}) as {
-    supplierInvoiceNo?: string | null;
-    supplierId?: number | null;
-    supplierName?: string;
-    poId?: number | null;
-    invoiceDate?: string;
-    dueDate?: string | null;
-    netAmount?: number | string;
-    hasVat?: boolean;
-    withholdingRate?: number | string | null;
-    applyWithholding?: boolean;
-    notes?: string | null;
-  };
-  const settings = await loadTaxLite();
-  const net = body.netAmount != null ? toNum(body.netAmount)! : toNum(existing.netAmount)!;
-  const whRate =
-    body.applyWithholding === false
-      ? 0
-      : body.withholdingRate != null
-        ? rateOf(String(body.withholdingRate), settings.withholdingRate)
-        : rateOf(existing.withholdingRate, settings.withholdingRate);
-  const hasVat = body.hasVat === undefined ? (existing.hasVat === false ? false : true) : body.hasVat === false ? false : true;
-  const c = computeInvoice(net, settings.vatRate, whRate, hasVat);
-  let poNo = existing.poNo;
-  if (body.poId !== undefined) {
+    const year = parseInt(body.invoiceDate.slice(0, 4), 10) || new Date().getFullYear();
+    const invoiceNo = await nextEntryNo("SI", year);
+    let poNo: string | null = null;
     if (body.poId) {
       const [po] = await db
         .select({ no: purchaseOrdersTable.internalPoNo })
         .from(purchaseOrdersTable)
         .where(eq(purchaseOrdersTable.id, body.poId));
       poNo = po?.no ?? null;
-    } else {
-      poNo = null;
     }
-  }
-  await db
-    .update(supplierInvoicesTable)
-    .set({
-      supplierInvoiceNo: body.supplierInvoiceNo ?? existing.supplierInvoiceNo,
-      supplierId: body.supplierId ?? existing.supplierId,
-      supplierName: body.supplierName ?? existing.supplierName,
-      poId: body.poId ?? existing.poId,
-      poNo,
-      invoiceDate: body.invoiceDate ?? existing.invoiceDate,
-      dueDate: body.dueDate ?? existing.dueDate,
-      netAmount: String(c.net),
-      vatAmount: String(c.vat),
-      hasVat: c.hasVat,
-      withholdingRate: String(c.whRate),
-      withholdingAmount: String(c.withholding),
-      grossAmount: String(c.gross),
-      balance: String(c.balance),
-      notes: body.notes ?? existing.notes,
-    })
-    .where(eq(supplierInvoicesTable.id, id));
-  res.json({ id, updated: true });
-});
+
+    const [row] = await db
+      .insert(supplierInvoicesTable)
+      .values({
+        invoiceNo,
+        supplierInvoiceNo: body.supplierInvoiceNo ?? null,
+        supplierId: body.supplierId ?? null,
+        supplierName: body.supplierName,
+        poId: body.poId ?? null,
+        poNo,
+        invoiceDate: body.invoiceDate,
+        dueDate: body.dueDate ?? null,
+        netAmount: String(c.net),
+        vatAmount: String(c.vat),
+        hasVat: c.hasVat,
+        withholdingRate: String(c.whRate),
+        withholdingAmount: String(c.withholding),
+        grossAmount: String(c.gross),
+        balance: String(c.balance),
+        status: "draft",
+        notes: body.notes ?? null,
+        employeeId: session.employeeId,
+        employeeName: session.employeeName ?? null,
+      })
+      .returning();
+    await db.insert(auditLogTable).values({
+      action: "supplier_invoice.create",
+      entityType: "supplier_invoices",
+      entityId: row!.id,
+      employeeId: session.employeeId,
+      description: `إنشاء فاتورة مورد ${invoiceNo} — ${body.supplierName}`,
+    });
+    res.json({ id: row!.id, invoiceNo });
+  },
+);
+
+router.patch(
+  "/accounts/supplier-invoices/:id",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const [existing] = await db
+      .select()
+      .from(supplierInvoicesTable)
+      .where(eq(supplierInvoicesTable.id, id));
+    if (!existing) {
+      res.status(404).json({ error: "الفاتورة غير موجودة" });
+      return;
+    }
+    if (existing.status !== "draft") {
+      res.status(400).json({ error: "لا يمكن تعديل فاتورة مُرحَّلة — استخدم الإلغاء" });
+      return;
+    }
+    const body = (req.body ?? {}) as {
+      supplierInvoiceNo?: string | null;
+      supplierId?: number | null;
+      supplierName?: string;
+      poId?: number | null;
+      invoiceDate?: string;
+      dueDate?: string | null;
+      netAmount?: number | string;
+      hasVat?: boolean;
+      withholdingRate?: number | string | null;
+      applyWithholding?: boolean;
+      notes?: string | null;
+    };
+    const settings = await loadTaxLite();
+    const net = body.netAmount != null ? toNum(body.netAmount)! : toNum(existing.netAmount)!;
+    const whRate =
+      body.applyWithholding === false
+        ? 0
+        : body.withholdingRate != null
+          ? rateOf(String(body.withholdingRate), settings.withholdingRate)
+          : rateOf(existing.withholdingRate, settings.withholdingRate);
+    const hasVat =
+      body.hasVat === undefined
+        ? existing.hasVat === false
+          ? false
+          : true
+        : body.hasVat === false
+          ? false
+          : true;
+    const c = computeInvoice(net, settings.vatRate, whRate, hasVat);
+    let poNo = existing.poNo;
+    if (body.poId !== undefined) {
+      if (body.poId) {
+        const [po] = await db
+          .select({ no: purchaseOrdersTable.internalPoNo })
+          .from(purchaseOrdersTable)
+          .where(eq(purchaseOrdersTable.id, body.poId));
+        poNo = po?.no ?? null;
+      } else {
+        poNo = null;
+      }
+    }
+    await db
+      .update(supplierInvoicesTable)
+      .set({
+        supplierInvoiceNo: body.supplierInvoiceNo ?? existing.supplierInvoiceNo,
+        supplierId: body.supplierId ?? existing.supplierId,
+        supplierName: body.supplierName ?? existing.supplierName,
+        poId: body.poId ?? existing.poId,
+        poNo,
+        invoiceDate: body.invoiceDate ?? existing.invoiceDate,
+        dueDate: body.dueDate ?? existing.dueDate,
+        netAmount: String(c.net),
+        vatAmount: String(c.vat),
+        hasVat: c.hasVat,
+        withholdingRate: String(c.whRate),
+        withholdingAmount: String(c.withholding),
+        grossAmount: String(c.gross),
+        balance: String(c.balance),
+        notes: body.notes ?? existing.notes,
+      })
+      .where(eq(supplierInvoicesTable.id, id));
+    res.json({ id, updated: true });
+  },
+);
 
 // Post → immutable + generates the balanced journal entry.
-router.post("/accounts/supplier-invoices/:id/post", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  const [inv] = await db
-    .select()
-    .from(supplierInvoicesTable)
-    .where(eq(supplierInvoicesTable.id, id));
-  if (!inv) {
-    res.status(404).json({ error: "الفاتورة غير موجودة" });
-    return;
-  }
-  if (inv.status !== "draft") {
-    res.status(400).json({ error: "الفاتورة ليست مسودة" });
-    return;
-  }
-  const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-  const net = toNum(inv.netAmount)!;
-  const vat = toNum(inv.vatAmount)!;
-  const wh = toNum(inv.withholdingAmount)!;
-  const gross = toNum(inv.grossAmount)!;
-  const payable = round2(gross - wh);
-  const hasVat = inv.hasVat === false ? false : true;
-  const party = { partyType: "supplier" as const, partyId: inv.supplierId, partyName: inv.supplierName };
+router.post(
+  "/accounts/supplier-invoices/:id/post",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const [inv] = await db
+      .select()
+      .from(supplierInvoicesTable)
+      .where(eq(supplierInvoicesTable.id, id));
+    if (!inv) {
+      res.status(404).json({ error: "الفاتورة غير موجودة" });
+      return;
+    }
+    if (inv.status !== "draft") {
+      res.status(400).json({ error: "الفاتورة ليست مسودة" });
+      return;
+    }
+    const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
+    const net = toNum(inv.netAmount)!;
+    const vat = toNum(inv.vatAmount)!;
+    const wh = toNum(inv.withholdingAmount)!;
+    const gross = toNum(inv.grossAmount)!;
+    const payable = round2(gross - wh);
+    const hasVat = inv.hasVat === false ? false : true;
+    const party = {
+      partyType: "supplier" as const,
+      partyId: inv.supplierId,
+      partyName: inv.supplierName,
+    };
 
-  const entryId = await postJournalEntry({
-    entryDate: inv.invoiceDate,
-    description: `فاتورة مورد ${inv.invoiceNo} — ${inv.supplierName}`,
-    source: "supplier_invoice",
-    sourceRefId: inv.id,
-    employeeId: session.employeeId,
-    employeeName: session.employeeName,
-    lines: [
-      { accountCode: ACCOUNT_CODES.INVENTORY, description: `صافي قيمة التوريد — ${inv.invoiceNo}`, debit: hasVat ? net : round2(net + vat), ...party },
-      // No deductible input VAT for purchases from non-VAT suppliers (غير مُسجَّل)
-      ...(hasVat && vat > 0
-        ? [{ accountCode: ACCOUNT_CODES.INPUT_VAT, description: "ض.ق.م. المدخلات", debit: vat, ...party }]
-        : []),
-      { accountCode: ACCOUNT_CODES.AP, description: "ذمم الموردين", credit: payable, ...party },
-      ...(wh > 0
-        ? [{ accountCode: ACCOUNT_CODES.WITHHOLDING_PAYABLE, description: "الخصم تحت حساب الضريبة", credit: wh, ...party }]
-        : []),
-    ],
-  });
-  await db
-    .update(supplierInvoicesTable)
-    .set({ status: "posted", postedAt: new Date(), journalEntryId: entryId })
-    .where(eq(supplierInvoicesTable.id, id));
-  await db.insert(auditLogTable).values({
-    action: "supplier_invoice.post",
-    entityType: "supplier_invoices",
-    entityId: id,
-    employeeId: session.employeeId,
-    description: `ترحيل فاتورة مورد ${inv.invoiceNo}`,
-  });
-  res.json({ id, posted: true, journalEntryId: entryId });
-});
-
-router.post("/accounts/supplier-invoices/:id/void", requireRole("admin"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  const [inv] = await db
-    .select()
-    .from(supplierInvoicesTable)
-    .where(eq(supplierInvoicesTable.id, id));
-  if (!inv) {
-    res.status(404).json({ error: "الفاتورة غير موجودة" });
-    return;
-  }
-  const session = req.session as { employeeId?: number; role?: string };
-  // void the linked journal entry too
-  if (inv.journalEntryId) {
-    const { journalEntriesTable } = await import("@workspace/db");
+    const entryId = await postJournalEntry({
+      entryDate: inv.invoiceDate,
+      description: `فاتورة مورد ${inv.invoiceNo} — ${inv.supplierName}`,
+      source: "supplier_invoice",
+      sourceRefId: inv.id,
+      employeeId: session.employeeId,
+      employeeName: session.employeeName,
+      lines: [
+        {
+          accountCode: ACCOUNT_CODES.INVENTORY,
+          description: `صافي قيمة التوريد — ${inv.invoiceNo}`,
+          debit: hasVat ? net : round2(net + vat),
+          ...party,
+        },
+        // No deductible input VAT for purchases from non-VAT suppliers (غير مُسجَّل)
+        ...(hasVat && vat > 0
+          ? [
+              {
+                accountCode: ACCOUNT_CODES.INPUT_VAT,
+                description: "ض.ق.م. المدخلات",
+                debit: vat,
+                ...party,
+              },
+            ]
+          : []),
+        { accountCode: ACCOUNT_CODES.AP, description: "ذمم الموردين", credit: payable, ...party },
+        ...(wh > 0
+          ? [
+              {
+                accountCode: ACCOUNT_CODES.WITHHOLDING_PAYABLE,
+                description: "الخصم تحت حساب الضريبة",
+                credit: wh,
+                ...party,
+              },
+            ]
+          : []),
+      ],
+    });
     await db
-      .update(journalEntriesTable)
-      .set({ status: "void" })
-      .where(eq(journalEntriesTable.id, inv.journalEntryId));
-  }
-  await db
-    .update(supplierInvoicesTable)
-    .set({ status: "void", balance: "0" })
-    .where(eq(supplierInvoicesTable.id, id));
-  await db.insert(auditLogTable).values({
-    action: "supplier_invoice.void",
-    entityType: "supplier_invoices",
-    entityId: id,
-    employeeId: session.employeeId,
-    description: `إلغاء فاتورة مورد ${inv.invoiceNo}`,
-  });
-  res.json({ id, voided: true });
-});
+      .update(supplierInvoicesTable)
+      .set({ status: "posted", postedAt: new Date(), journalEntryId: entryId })
+      .where(eq(supplierInvoicesTable.id, id));
+    await db.insert(auditLogTable).values({
+      action: "supplier_invoice.post",
+      entityType: "supplier_invoices",
+      entityId: id,
+      employeeId: session.employeeId,
+      description: `ترحيل فاتورة مورد ${inv.invoiceNo}`,
+    });
+    res.json({ id, posted: true, journalEntryId: entryId });
+  },
+);
+
+router.post(
+  "/accounts/supplier-invoices/:id/void",
+  requireRole("admin"),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const [inv] = await db
+      .select()
+      .from(supplierInvoicesTable)
+      .where(eq(supplierInvoicesTable.id, id));
+    if (!inv) {
+      res.status(404).json({ error: "الفاتورة غير موجودة" });
+      return;
+    }
+    const session = req.session as { employeeId?: number; role?: string };
+    // void the linked journal entry too
+    if (inv.journalEntryId) {
+      const { journalEntriesTable } = await import("@workspace/db");
+      await db
+        .update(journalEntriesTable)
+        .set({ status: "void" })
+        .where(eq(journalEntriesTable.id, inv.journalEntryId));
+    }
+    await db
+      .update(supplierInvoicesTable)
+      .set({ status: "void", balance: "0" })
+      .where(eq(supplierInvoicesTable.id, id));
+    await db.insert(auditLogTable).values({
+      action: "supplier_invoice.void",
+      entityType: "supplier_invoices",
+      entityId: id,
+      employeeId: session.employeeId,
+      description: `إلغاء فاتورة مورد ${inv.invoiceNo}`,
+    });
+    res.json({ id, voided: true });
+  },
+);
 
 // ───────────────────────────────────────────────────────────────────────────
 // Supplier payments
@@ -478,7 +532,10 @@ router.get("/accounts/supplier-payments/:id", requireAuth, async (req, res): Pro
       invoiceNo: supplierInvoicesTable.invoiceNo,
     })
     .from(supplierPaymentApplicationsTable)
-    .leftJoin(supplierInvoicesTable, eq(supplierPaymentApplicationsTable.invoiceId, supplierInvoicesTable.id))
+    .leftJoin(
+      supplierInvoicesTable,
+      eq(supplierPaymentApplicationsTable.invoiceId, supplierInvoicesTable.id),
+    )
     .where(eq(supplierPaymentApplicationsTable.paymentId, id));
   res.json({
     ...row,
@@ -494,121 +551,144 @@ router.get("/accounts/supplier-payments/:id", requireAuth, async (req, res): Pro
 
 // Create a supplier payment. `applications` = [{invoiceId, amount}]. If omitted
 // and a single posted invoice is open, the whole amount applies to it.
-router.post("/accounts/supplier-payments", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const body = (req.body ?? {}) as {
-    supplierId?: number | null;
-    supplierName: string;
-    poId?: number | null;
-    paymentDate: string;
-    method: string;
-    reference?: string | null;
-    amount: number | string;
-    bankCharges?: number | string | null;
-    cashAccountCode?: string;
-    notes?: string | null;
-    applications?: Array<{ invoiceId: number; amount: number | string }>;
-  };
-  if (!body.supplierName || !body.paymentDate || !body.method || toNum(body.amount) == null) {
-    res.status(400).json({ error: "اسم المورد والتاريخ وطريقة الدفع والمبلغ مطلوبة" });
-    return;
-  }
-  const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-  const amount = toNum(body.amount)!;
-  const bankCharges = toNum(body.bankCharges) ?? 0;
-  const cashAccount = body.cashAccountCode || ACCOUNT_CODES.BANK;
-  const party = { partyType: "supplier" as const, partyId: body.supplierId, partyName: body.supplierName };
-
-  const year = parseInt(body.paymentDate.slice(0, 4), 10) || new Date().getFullYear();
-  const paymentNo = await nextEntryNo("SP", year);
-  let poNo: string | null = null;
-  if (body.poId) {
-    const [po] = await db
-      .select({ no: purchaseOrdersTable.internalPoNo })
-      .from(purchaseOrdersTable)
-      .where(eq(purchaseOrdersTable.id, body.poId));
-    poNo = po?.no ?? null;
-  }
-
-  const entryId = await postJournalEntry({
-    entryDate: body.paymentDate,
-    description: `سند صرف للمورد ${body.supplierName}`,
-    source: "supplier_payment",
-    employeeId: session.employeeId,
-    employeeName: session.employeeName,
-    lines: [
-      { accountCode: ACCOUNT_CODES.AP, description: "سداد ذمم مورد", debit: amount, ...party },
-      ...(bankCharges > 0
-        ? [{ accountCode: ACCOUNT_CODES.BANK_CHARGES, description: "مصاريف بنكية", debit: bankCharges, ...party }]
-        : []),
-      {
-        accountCode: cashAccount,
-        description: "صرف نقدي/بنكي",
-        credit: round2(amount + bankCharges),
-        ...party,
-      },
-    ],
-  });
-
-  const [row] = await db
-    .insert(supplierPaymentsTable)
-    .values({
-      paymentNo,
-      supplierId: body.supplierId ?? null,
-      supplierName: body.supplierName,
-      poId: body.poId ?? null,
-      poNo,
-      paymentDate: body.paymentDate,
-      method: body.method,
-      reference: body.reference ?? null,
-      amount: String(amount),
-      bankCharges: String(bankCharges),
-      cashAccountCode: cashAccount,
-      status: "posted",
-      journalEntryId: entryId,
-      notes: body.notes ?? null,
-      employeeId: session.employeeId,
-      employeeName: session.employeeName ?? null,
-    })
-    .returning();
-
-  // Apply to invoices
-  const apps = body.applications ?? [];
-  const appliedTotal = round2(apps.reduce((s, a) => s + (toNum(a.amount) ?? 0), 0));
-  if (apps.length === 0 && appliedTotal === 0) {
-    // no explicit application — leave open; the accountant allocates later.
-  } else if (Math.abs(appliedTotal - amount) > 0.01) {
-    res.status(400).json({ error: `مجموع التطبيقات (${appliedTotal}) لا يساوي مبلغ السند (${amount})` });
-    return;
-  }
-  for (const a of apps) {
-    const am = toNum(a.amount)!;
-    await db.insert(supplierPaymentApplicationsTable).values({ paymentId: row!.id, invoiceId: a.invoiceId, amount: String(am) });
-    const [inv] = await db
-      .select({ paid: supplierInvoicesTable.paidAmount, balance: supplierInvoicesTable.balance, status: supplierInvoicesTable.status })
-      .from(supplierInvoicesTable)
-      .where(eq(supplierInvoicesTable.id, a.invoiceId));
-    if (inv) {
-      const newPaid = round2((toNum(inv.paid) ?? 0) + am);
-      const newBalance = round2((toNum(inv.balance) ?? 0) - am);
-      await db
-        .update(supplierInvoicesTable)
-        .set({
-          paidAmount: String(newPaid),
-          balance: String(newBalance),
-          status: newBalance <= 0.01 && inv.status === "posted" ? "paid" : inv.status,
-        })
-        .where(eq(supplierInvoicesTable.id, a.invoiceId));
+router.post(
+  "/accounts/supplier-payments",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const body = (req.body ?? {}) as {
+      supplierId?: number | null;
+      supplierName: string;
+      poId?: number | null;
+      paymentDate: string;
+      method: string;
+      reference?: string | null;
+      amount: number | string;
+      bankCharges?: number | string | null;
+      cashAccountCode?: string;
+      notes?: string | null;
+      applications?: Array<{ invoiceId: number; amount: number | string }>;
+    };
+    if (!body.supplierName || !body.paymentDate || !body.method || toNum(body.amount) == null) {
+      res.status(400).json({ error: "اسم المورد والتاريخ وطريقة الدفع والمبلغ مطلوبة" });
+      return;
     }
-  }
+    const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
+    const amount = toNum(body.amount)!;
+    const bankCharges = toNum(body.bankCharges) ?? 0;
+    const cashAccount = body.cashAccountCode || ACCOUNT_CODES.BANK;
+    const party = {
+      partyType: "supplier" as const,
+      partyId: body.supplierId,
+      partyName: body.supplierName,
+    };
 
-  await db.insert(auditLogTable).values({
-    action: "supplier_payment.create",
-    entityType: "supplier_payments",
-    entityId: row!.id,
-    employeeId: session.employeeId,
-    description: `سند صرف ${paymentNo} — ${body.supplierName}`,
-  });
-  res.json({ id: row!.id, paymentNo, journalEntryId: entryId });
-});
+    const year = parseInt(body.paymentDate.slice(0, 4), 10) || new Date().getFullYear();
+    const paymentNo = await nextEntryNo("SP", year);
+    let poNo: string | null = null;
+    if (body.poId) {
+      const [po] = await db
+        .select({ no: purchaseOrdersTable.internalPoNo })
+        .from(purchaseOrdersTable)
+        .where(eq(purchaseOrdersTable.id, body.poId));
+      poNo = po?.no ?? null;
+    }
+
+    const entryId = await postJournalEntry({
+      entryDate: body.paymentDate,
+      description: `سند صرف للمورد ${body.supplierName}`,
+      source: "supplier_payment",
+      employeeId: session.employeeId,
+      employeeName: session.employeeName,
+      lines: [
+        { accountCode: ACCOUNT_CODES.AP, description: "سداد ذمم مورد", debit: amount, ...party },
+        ...(bankCharges > 0
+          ? [
+              {
+                accountCode: ACCOUNT_CODES.BANK_CHARGES,
+                description: "مصاريف بنكية",
+                debit: bankCharges,
+                ...party,
+              },
+            ]
+          : []),
+        {
+          accountCode: cashAccount,
+          description: "صرف نقدي/بنكي",
+          credit: round2(amount + bankCharges),
+          ...party,
+        },
+      ],
+    });
+
+    const [row] = await db
+      .insert(supplierPaymentsTable)
+      .values({
+        paymentNo,
+        supplierId: body.supplierId ?? null,
+        supplierName: body.supplierName,
+        poId: body.poId ?? null,
+        poNo,
+        paymentDate: body.paymentDate,
+        method: body.method,
+        reference: body.reference ?? null,
+        amount: String(amount),
+        bankCharges: String(bankCharges),
+        cashAccountCode: cashAccount,
+        status: "posted",
+        journalEntryId: entryId,
+        notes: body.notes ?? null,
+        employeeId: session.employeeId,
+        employeeName: session.employeeName ?? null,
+      })
+      .returning();
+
+    // Apply to invoices
+    const apps = body.applications ?? [];
+    const appliedTotal = round2(apps.reduce((s, a) => s + (toNum(a.amount) ?? 0), 0));
+    if (apps.length === 0 && appliedTotal === 0) {
+      // no explicit application — leave open; the accountant allocates later.
+    } else if (Math.abs(appliedTotal - amount) > 0.01) {
+      res
+        .status(400)
+        .json({ error: `مجموع التطبيقات (${appliedTotal}) لا يساوي مبلغ السند (${amount})` });
+      return;
+    }
+    for (const a of apps) {
+      const am = toNum(a.amount)!;
+      await db
+        .insert(supplierPaymentApplicationsTable)
+        .values({ paymentId: row!.id, invoiceId: a.invoiceId, amount: String(am) });
+      const [inv] = await db
+        .select({
+          paid: supplierInvoicesTable.paidAmount,
+          balance: supplierInvoicesTable.balance,
+          status: supplierInvoicesTable.status,
+        })
+        .from(supplierInvoicesTable)
+        .where(eq(supplierInvoicesTable.id, a.invoiceId));
+      if (inv) {
+        const newPaid = round2((toNum(inv.paid) ?? 0) + am);
+        const newBalance = round2((toNum(inv.balance) ?? 0) - am);
+        await db
+          .update(supplierInvoicesTable)
+          .set({
+            paidAmount: String(newPaid),
+            balance: String(newBalance),
+            status: newBalance <= 0.01 && inv.status === "posted" ? "paid" : inv.status,
+          })
+          .where(eq(supplierInvoicesTable.id, a.invoiceId));
+      }
+    }
+
+    await db.insert(auditLogTable).values({
+      action: "supplier_payment.create",
+      entityType: "supplier_payments",
+      entityId: row!.id,
+      employeeId: session.employeeId,
+      description: `سند صرف ${paymentNo} — ${body.supplierName}`,
+    });
+    res.json({ id: row!.id, paymentNo, journalEntryId: entryId });
+  },
+);
 
 export default router;

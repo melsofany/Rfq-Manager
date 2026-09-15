@@ -53,7 +53,10 @@ dbMock.select = vi.fn(() => ({
         where: vi.fn(() => chainable(offerItemRow ? [offerItemRow] : [])),
       });
     }
-    return chainable([], { leftJoin: vi.fn(() => chainable([])), where: vi.fn(() => chainable([])) });
+    return chainable([], {
+      leftJoin: vi.fn(() => chainable([])),
+      where: vi.fn(() => chainable([])),
+    });
   }),
 }));
 
@@ -82,7 +85,13 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  offerItemRow = { id: 100, rfqItemId: 50, price: "10.0000", taxIncluded: false, isApproved: false };
+  offerItemRow = {
+    id: 100,
+    rfqItemId: 50,
+    price: "10.0000",
+    taxIncluded: false,
+    isApproved: false,
+  };
   lastUpdates = [];
 });
 
@@ -119,13 +128,17 @@ describe("PATCH /api/offers/items/:offerItemId/approve", () => {
   });
 
   it("returns 400 for a non-numeric id", async () => {
-    const res = await request(testApp).patch("/api/offers/items/abc/approve").send({ approved: true });
+    const res = await request(testApp)
+      .patch("/api/offers/items/abc/approve")
+      .send({ approved: true });
     expect(res.status).toBe(400);
   });
 
   it("returns 404 when the offer item does not exist", async () => {
     offerItemRow = null;
-    const res = await request(testApp).patch("/api/offers/items/999/approve").send({ approved: true });
+    const res = await request(testApp)
+      .patch("/api/offers/items/999/approve")
+      .send({ approved: true });
     expect(res.status).toBe(404);
   });
 });

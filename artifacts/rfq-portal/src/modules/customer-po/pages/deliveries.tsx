@@ -157,110 +157,121 @@ export default function CustomerDeliveriesPage() {
         </p>
       </div>
 
-        <div className="relative max-w-xs">
-          <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث برقم أمر الشراء أو العميل..."
-            className="pl-8 h-8 text-sm"
-          />
-        </div>
+      <div className="relative max-w-xs">
+        <Search
+          size={15}
+          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="بحث برقم أمر الشراء أو العميل..."
+          className="pl-8 h-8 text-sm"
+        />
+      </div>
 
-        <div className="space-y-3">
-          {isLoading ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
-          ) : !pos?.length ? (
-            <div className="p-12 text-center">
-              <Truck size={40} className="mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground text-sm">لا توجد أوامر شراء عملاء للتسليم</p>
-            </div>
-          ) : (
-            pos.map((po) => (
-              <div key={po.id} className="bg-card border border-border rounded-lg overflow-hidden">
-                <button
-                  onClick={() => (expandedPo === po.id ? setExpandedPo(null) : loadItems(po.id))}
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20"
-                >
-                  <div className="flex items-center gap-3 text-right">
-                    {expandedPo === po.id ? (
-                      <ChevronLeft size={16} className="text-muted-foreground" />
-                    ) : (
-                      <ChevronRight size={16} className="text-muted-foreground" />
-                    )}
-                    <span className="font-mono text-xs text-primary font-medium">
-                      {po.internalPoNo}
-                    </span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {po.customerPoNo}
-                    </span>
-                    {po.customerName && (
-                      <span className="text-xs text-muted-foreground">{po.customerName}</span>
-                    )}
-                  </div>
-                  <span
-                    className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${
-                      po.status === "sent"
-                        ? "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400"
-                        : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-                    }`}
-                  >
-                    {po.status === "sent" ? "تم الإرسال" : "مسودة"}
-                  </span>
-                  {expandedPo === po.id && (
-                    <Button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        sendDeliveryPrompts(po.id);
-                      }}
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                    >
-                      إرسال مطالبة للمندوب
-                    </Button>
+      <div className="space-y-3">
+        {isLoading ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
+        ) : !pos?.length ? (
+          <div className="p-12 text-center">
+            <Truck size={40} className="mx-auto text-muted-foreground/30 mb-3" />
+            <p className="text-muted-foreground text-sm">لا توجد أوامر شراء عملاء للتسليم</p>
+          </div>
+        ) : (
+          pos.map((po) => (
+            <div key={po.id} className="bg-card border border-border rounded-lg overflow-hidden">
+              <button
+                onClick={() => (expandedPo === po.id ? setExpandedPo(null) : loadItems(po.id))}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/20"
+              >
+                <div className="flex items-center gap-3 text-right">
+                  {expandedPo === po.id ? (
+                    <ChevronLeft size={16} className="text-muted-foreground" />
+                  ) : (
+                    <ChevronRight size={16} className="text-muted-foreground" />
                   )}
-                </button>
-
+                  <span className="font-mono text-xs text-primary font-medium">
+                    {po.internalPoNo}
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground">{po.customerPoNo}</span>
+                  {po.customerName && (
+                    <span className="text-xs text-muted-foreground">{po.customerName}</span>
+                  )}
+                </div>
+                <span
+                  className={`inline-block px-2 py-0.5 rounded text-[10px] font-medium ${
+                    po.status === "sent"
+                      ? "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400"
+                      : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                  }`}
+                >
+                  {po.status === "sent" ? "تم الإرسال" : "مسودة"}
+                </span>
                 {expandedPo === po.id && (
-                  <div className="border-t border-border">
-                    {loadingItems ? (
-                      <div className="p-6 text-center text-muted-foreground text-sm">
-                        جارٍ تحميل البنود...
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b border-border bg-muted/30 text-left">
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">البند</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">الكمية</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">الحالة</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">مسلّم</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium">مرفوض من العميل</th>
-                              <th className="px-4 py-2 text-muted-foreground text-xs font-medium"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {items.map((it) => (
-                              <DeliveryItemRow
-                                key={it.id}
-                                item={it}
-                                rows={deliveries[it.id] ?? []}
-                                onSave={(d) => saveDelivery(po.id, it.id, d)}
-                                onDelete={(deliveryId) => deleteDelivery(po.id, deliveryId)}
-                              />
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
+                  <Button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      sendDeliveryPrompts(po.id);
+                    }}
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                  >
+                    إرسال مطالبة للمندوب
+                  </Button>
                 )}
-              </div>
-            ))
-          )}
-        </div>
+              </button>
+
+              {expandedPo === po.id && (
+                <div className="border-t border-border">
+                  {loadingItems ? (
+                    <div className="p-6 text-center text-muted-foreground text-sm">
+                      جارٍ تحميل البنود...
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/30 text-left">
+                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                              البند
+                            </th>
+                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                              الكمية
+                            </th>
+                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                              الحالة
+                            </th>
+                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                              مسلّم
+                            </th>
+                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium">
+                              مرفوض من العميل
+                            </th>
+                            <th className="px-4 py-2 text-muted-foreground text-xs font-medium"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((it) => (
+                            <DeliveryItemRow
+                              key={it.id}
+                              item={it}
+                              rows={deliveries[it.id] ?? []}
+                              onSave={(d) => saveDelivery(po.id, it.id, d)}
+                              onDelete={(deliveryId) => deleteDelivery(po.id, deliveryId)}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -284,7 +295,11 @@ function DeliveryItemRow({
 }: {
   item: CustomerPoItemRow;
   rows: DeliveryRow[];
-  onSave: (d: { deliveredQty: string; rejectedByCustomerQty: string; rejectionReason: string }) => void;
+  onSave: (d: {
+    deliveredQty: string;
+    rejectedByCustomerQty: string;
+    rejectionReason: string;
+  }) => void;
   onDelete: (deliveryId: number) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -306,11 +321,14 @@ function DeliveryItemRow({
           {DELIVERY_STATUS_LABEL[item.deliveryStatus] ?? item.deliveryStatus}
         </td>
         <td className="px-4 py-3 text-xs text-emerald-600">{item.totalDeliveredQty ?? "-"}</td>
-        <td className="px-4 py-3 text-xs text-red-600">
-          {item.totalRejectedByCustomerQty ?? "-"}
-        </td>
+        <td className="px-4 py-3 text-xs text-red-600">{item.totalRejectedByCustomerQty ?? "-"}</td>
         <td className="px-4 py-3 text-left">
-          <Button onClick={() => setOpen((o) => !o)} size="sm" variant="outline" className="h-7 text-xs">
+          <Button
+            onClick={() => setOpen((o) => !o)}
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+          >
             تسجيل تسليم
           </Button>
         </td>
@@ -353,9 +371,7 @@ function DeliveryItemRow({
                 إلغاء
               </Button>
               <Button
-                onClick={() =>
-                  onSave({ deliveredQty, rejectedByCustomerQty, rejectionReason })
-                }
+                onClick={() => onSave({ deliveredQty, rejectedByCustomerQty, rejectionReason })}
                 size="sm"
                 className="h-8"
               >

@@ -247,10 +247,8 @@ router.get("/accounts/margins/summary", requireAuth, async (req, res): Promise<v
     const accepted = toNum(r.acceptedQty);
     const actualCost = toNum(r.finalActualCost);
     const revenue = sellQty != null && sellUnit != null ? sellQty * sellUnit : 0;
-    const lineCharges =
-      r.supplierPoItemId != null ? (chargesMap.get(r.supplierPoItemId) ?? 0) : 0;
-    const cost =
-      accepted != null && actualCost != null ? accepted * actualCost + lineCharges : 0;
+    const lineCharges = r.supplierPoItemId != null ? (chargesMap.get(r.supplierPoItemId) ?? 0) : 0;
+    const cost = accepted != null && actualCost != null ? accepted * actualCost + lineCharges : 0;
     if (cost > 0) pricedLines++;
     totalRevenue += revenue;
     totalCost += cost;
@@ -537,89 +535,89 @@ router.get("/accounts/tax-settings", requireAuth, async (_req, res): Promise<voi
   res.json(await loadTaxSettings());
 });
 
-router.put("/accounts/tax-settings", requireRole("admin", "manager"), async (req, res): Promise<void> => {
-  const body = (req.body ?? {}) as {
-    companyName?: string | null;
-    companyTaxId?: string | null;
-    companyAddress?: string | null;
-    companyPhone?: string | null;
-    vatRate?: string | number | null;
-    withholdingRate?: string | number | null;
-    withholdingRateServices?: string | number | null;
-    withholdingRatePurchases?: string | number | null;
-  };
-  const session = req.session as { employeeId?: number; role?: string };
-  const settings = await loadTaxSettings();
+router.put(
+  "/accounts/tax-settings",
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const body = (req.body ?? {}) as {
+      companyName?: string | null;
+      companyTaxId?: string | null;
+      companyAddress?: string | null;
+      companyPhone?: string | null;
+      vatRate?: string | number | null;
+      withholdingRate?: string | number | null;
+      withholdingRateServices?: string | number | null;
+      withholdingRatePurchases?: string | number | null;
+    };
+    const session = req.session as { employeeId?: number; role?: string };
+    const settings = await loadTaxSettings();
 
-  const strOrNull = (v: unknown): string | null => (v == null ? null : String(v));
+    const strOrNull = (v: unknown): string | null => (v == null ? null : String(v));
 
-  const next = {
-    companyName: body.companyName ?? settings.companyName,
-    companyTaxId: body.companyTaxId ?? settings.companyTaxId,
-    companyAddress: body.companyAddress ?? settings.companyAddress,
-    companyPhone: body.companyPhone ?? settings.companyPhone,
-    vatRate: rateOf(body.vatRate != null ? String(body.vatRate) : null, settings.vatRate),
-    withholdingRate: rateOf(
-      body.withholdingRate != null ? String(body.withholdingRate) : null,
-      settings.withholdingRate,
-    ),
-    withholdingRateServices: rateOf(
-      body.withholdingRateServices != null ? String(body.withholdingRateServices) : null,
-      settings.withholdingRateServices,
-    ),
-    withholdingRatePurchases: rateOf(
-      body.withholdingRatePurchases != null ? String(body.withholdingRatePurchases) : null,
-      settings.withholdingRatePurchases,
-    ),
-  };
+    const next = {
+      companyName: body.companyName ?? settings.companyName,
+      companyTaxId: body.companyTaxId ?? settings.companyTaxId,
+      companyAddress: body.companyAddress ?? settings.companyAddress,
+      companyPhone: body.companyPhone ?? settings.companyPhone,
+      vatRate: rateOf(body.vatRate != null ? String(body.vatRate) : null, settings.vatRate),
+      withholdingRate: rateOf(
+        body.withholdingRate != null ? String(body.withholdingRate) : null,
+        settings.withholdingRate,
+      ),
+      withholdingRateServices: rateOf(
+        body.withholdingRateServices != null ? String(body.withholdingRateServices) : null,
+        settings.withholdingRateServices,
+      ),
+      withholdingRatePurchases: rateOf(
+        body.withholdingRatePurchases != null ? String(body.withholdingRatePurchases) : null,
+        settings.withholdingRatePurchases,
+      ),
+    };
 
-  if (settings.id == null) {
-    const [inserted] = await db
-      .insert(taxSettingsTable)
-      .values({
-        companyName: next.companyName,
-        companyTaxId: next.companyTaxId,
-        companyAddress: next.companyAddress,
-        companyPhone: next.companyPhone,
-        vatRate: String(next.vatRate),
-        withholdingRate: String(next.withholdingRate),
-        withholdingRateServices: String(next.withholdingRateServices),
-        withholdingRatePurchases: String(next.withholdingRatePurchases),
-      })
-      .returning();
-    await db
-      .insert(auditLogTable)
-      .values({
+    if (settings.id == null) {
+      const [inserted] = await db
+        .insert(taxSettingsTable)
+        .values({
+          companyName: next.companyName,
+          companyTaxId: next.companyTaxId,
+          companyAddress: next.companyAddress,
+          companyPhone: next.companyPhone,
+          vatRate: String(next.vatRate),
+          withholdingRate: String(next.withholdingRate),
+          withholdingRateServices: String(next.withholdingRateServices),
+          withholdingRatePurchases: String(next.withholdingRatePurchases),
+        })
+        .returning();
+      await db.insert(auditLogTable).values({
         action: "tax_settings.update",
         entityType: "tax_settings",
         entityId: inserted.id,
         employeeId: session.employeeId,
         description: "تحديث إعدادات الضرائب المصرية",
       });
-    res.json({ ...next, id: inserted.id });
-  } else {
-    await db
-      .update(taxSettingsTable)
-      .set({
-        companyName: strOrNull(next.companyName),
-        companyTaxId: strOrNull(next.companyTaxId),
-        companyAddress: strOrNull(next.companyAddress),
-        companyPhone: strOrNull(next.companyPhone),
-        vatRate: String(next.vatRate),
-        withholdingRate: String(next.withholdingRate),
-        withholdingRateServices: String(next.withholdingRateServices),
-        withholdingRatePurchases: String(next.withholdingRatePurchases),
-      })
-      .where(eq(taxSettingsTable.id, settings.id));
-    await db
-      .insert(auditLogTable)
-      .values({
+      res.json({ ...next, id: inserted.id });
+    } else {
+      await db
+        .update(taxSettingsTable)
+        .set({
+          companyName: strOrNull(next.companyName),
+          companyTaxId: strOrNull(next.companyTaxId),
+          companyAddress: strOrNull(next.companyAddress),
+          companyPhone: strOrNull(next.companyPhone),
+          vatRate: String(next.vatRate),
+          withholdingRate: String(next.withholdingRate),
+          withholdingRateServices: String(next.withholdingRateServices),
+          withholdingRatePurchases: String(next.withholdingRatePurchases),
+        })
+        .where(eq(taxSettingsTable.id, settings.id));
+      await db.insert(auditLogTable).values({
         action: "tax_settings.update",
         entityType: "tax_settings",
         entityId: settings.id,
         employeeId: session.employeeId,
         description: "تحديث إعدادات الضرائب المصرية",
       });
-    res.json({ ...next, id: settings.id });
-  }
-});
+      res.json({ ...next, id: settings.id });
+    }
+  },
+);

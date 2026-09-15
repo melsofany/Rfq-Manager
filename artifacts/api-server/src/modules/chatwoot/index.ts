@@ -47,9 +47,7 @@ async function chatwootFetch(path: string, init: RequestInit = {}): Promise<Resp
 /** Find a Chatwoot platform user by email. Returns undefined if not found. */
 async function findChatwootUserByEmail(email: string): Promise<ChatwootUser | undefined> {
   // List account users (each row carries the platform user id + email).
-  const res = await chatwootFetch(
-    `/platform/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/account_users`,
-  );
+  const res = await chatwootFetch(`/platform/api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/account_users`);
   if (!res.ok) {
     logger.warn({ status: res.status }, "Chatwoot: list account users failed");
     return undefined;
@@ -59,9 +57,7 @@ async function findChatwootUserByEmail(email: string): Promise<ChatwootUser | un
     email?: string;
     user?: { id: number; email: string; name?: string };
   }>;
-  const match = data.find(
-    (u) => (u.email ?? u.user?.email)?.toLowerCase() === email.toLowerCase(),
-  );
+  const match = data.find((u) => (u.email ?? u.user?.email)?.toLowerCase() === email.toLowerCase());
   if (match) {
     return { id: match.user_id ?? match.user?.id, email, name: match.user?.name };
   }

@@ -41,7 +41,8 @@ vi.mock("../../modules/communications/service", () => ({
   sendRepresentativeWorkOrderWhatsApp: vi.fn().mockResolvedValue({ ok: true }),
   sendRepresentativeItemReceiptWhatsApp: vi.fn().mockResolvedValue("rep-wa-id"),
   sendRepPoDispatchWhatsApp: sendRepDispatchMock,
-  formatQty: (q: any) => (q == null ? null : String(q).replace(/0+$/, "").replace(/\.$/, "") || "0"),
+  formatQty: (q: any) =>
+    q == null ? null : String(q).replace(/0+$/, "").replace(/\.$/, "") || "0",
 }));
 
 vi.mock("../../modules/po/po-pdf", () => ({
@@ -175,7 +176,14 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
           lineStatus: "pending",
           supplierId: 7,
         },
-        supplier: { id: 7, name: "Acme", phone: "201111111111", email: "", contactPerson: null, address: null },
+        supplier: {
+          id: 7,
+          name: "Acme",
+          phone: "201111111111",
+          email: "",
+          contactPerson: null,
+          address: null,
+        },
       },
     ];
     selectQueue = [[poRow], itemRows];
@@ -202,8 +210,18 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
     // Two work-order assignments inserted (one per pending item), kind=receipt.
     const woaInserts = insertCalls.filter((c) => c.table === "woa");
     expect(woaInserts).toHaveLength(2);
-    expect(woaInserts[0].vals).toMatchObject({ poId: 1, poItemId: 10, kind: "receipt", status: "sent" });
-    expect(woaInserts[1].vals).toMatchObject({ poId: 1, poItemId: 11, kind: "receipt", status: "sent" });
+    expect(woaInserts[0].vals).toMatchObject({
+      poId: 1,
+      poItemId: 10,
+      kind: "receipt",
+      status: "sent",
+    });
+    expect(woaInserts[1].vals).toMatchObject({
+      poId: 1,
+      poItemId: 11,
+      kind: "receipt",
+      status: "sent",
+    });
     expect(woaInserts[0].vals.representativeName).toBe("Ahmed");
     // Phone normalized (no leading +).
     expect(woaInserts[0].vals.representativePhone).toBe("201000000000");
@@ -230,8 +248,22 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
       ],
       [
         {
-          item: { id: 20, lineItem: "1", description: "X", qty: "1", lineStatus: "pending", supplierId: 7 },
-          supplier: { id: 7, name: "Acme", phone: "201111111111", email: "", contactPerson: null, address: null },
+          item: {
+            id: 20,
+            lineItem: "1",
+            description: "X",
+            qty: "1",
+            lineStatus: "pending",
+            supplierId: 7,
+          },
+          supplier: {
+            id: 7,
+            name: "Acme",
+            phone: "201111111111",
+            email: "",
+            contactPerson: null,
+            address: null,
+          },
         },
       ],
     ];
@@ -264,12 +296,40 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
       ],
       [
         {
-          item: { id: 30, lineItem: "1", description: "Done", qty: "2", lineStatus: "fulfilled", supplierId: 7 },
-          supplier: { id: 7, name: "Acme", phone: "201111111111", email: "", contactPerson: null, address: null },
+          item: {
+            id: 30,
+            lineItem: "1",
+            description: "Done",
+            qty: "2",
+            lineStatus: "fulfilled",
+            supplierId: 7,
+          },
+          supplier: {
+            id: 7,
+            name: "Acme",
+            phone: "201111111111",
+            email: "",
+            contactPerson: null,
+            address: null,
+          },
         },
         {
-          item: { id: 31, lineItem: "2", description: "Open", qty: "4", lineStatus: "pending", supplierId: 7 },
-          supplier: { id: 7, name: "Acme", phone: "201111111111", email: "", contactPerson: null, address: null },
+          item: {
+            id: 31,
+            lineItem: "2",
+            description: "Open",
+            qty: "4",
+            lineStatus: "pending",
+            supplierId: 7,
+          },
+          supplier: {
+            id: 7,
+            name: "Acme",
+            phone: "201111111111",
+            email: "",
+            contactPerson: null,
+            address: null,
+          },
         },
       ],
     ];

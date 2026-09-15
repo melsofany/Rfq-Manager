@@ -86,7 +86,12 @@ router.post("/auth/login", loginIpLimiter, loginAccountLimiter, async (req, res)
     .from(employeesTable)
     .where(eq(employeesTable.email, email.toLowerCase()));
   if (!employee || !employee.isActive) {
-    auditLogin(req, "auth.login_failed", employee?.id ?? null, `Failed login for ${email} (unknown or inactive)`);
+    auditLogin(
+      req,
+      "auth.login_failed",
+      employee?.id ?? null,
+      `Failed login for ${email} (unknown or inactive)`,
+    );
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }

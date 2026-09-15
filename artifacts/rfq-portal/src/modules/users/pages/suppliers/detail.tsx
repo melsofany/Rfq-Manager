@@ -109,7 +109,7 @@ interface SupplierPo {
   status: string;
   progressStatus?: string;
   progressStatusLabel?: string;
-  progressTone?: 'fulfilled' | 'partial' | 'received' | 'issued' | 'default';
+  progressTone?: "fulfilled" | "partial" | "received" | "issued" | "default";
   itemCount: number;
   receipt: { total: number; received: number; rejected: number } | null;
   createdAt: string;
@@ -439,31 +439,31 @@ export default function SupplierDetailPage() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-3">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isActive"
-                    checked={Boolean(form.isActive)}
-                    onChange={(e) => upd("isActive", e.target.checked)}
-                    className="w-4 h-4 accent-primary"
-                  />
-                  <Label htmlFor="isActive">Active supplier</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="invoiceHasVat"
-                    checked={Boolean(form.invoiceHasVat)}
-                    onChange={(e) => upd("invoiceHasVat", e.target.checked)}
-                    className="w-4 h-4 accent-primary"
-                  />
-                  <Label htmlFor="invoiceHasVat">
-                    فاتورته تحمل ض.ق.م — مورد مسجَّل
-                    <span className="block text-xs text-muted-foreground font-normal">
-                      عند الإلغاء: كامل المبلغ مصروف بدون ضريبة مدخلات (غير مسجَّل)
-                    </span>
-                  </Label>
-                </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="isActive"
+                      checked={Boolean(form.isActive)}
+                      onChange={(e) => upd("isActive", e.target.checked)}
+                      className="w-4 h-4 accent-primary"
+                    />
+                    <Label htmlFor="isActive">Active supplier</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="invoiceHasVat"
+                      checked={Boolean(form.invoiceHasVat)}
+                      onChange={(e) => upd("invoiceHasVat", e.target.checked)}
+                      className="w-4 h-4 accent-primary"
+                    />
+                    <Label htmlFor="invoiceHasVat">
+                      فاتورته تحمل ض.ق.م — مورد مسجَّل
+                      <span className="block text-xs text-muted-foreground font-normal">
+                        عند الإلغاء: كامل المبلغ مصروف بدون ضريبة مدخلات (غير مسجَّل)
+                      </span>
+                    </Label>
+                  </div>
                 </div>
                 {serverError && (
                   <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded px-3 py-2">
@@ -558,7 +558,7 @@ export default function SupplierDetailPage() {
             </div>
             {score ? (
               <div className="space-y-3">
-                {([
+                {[
                   { label: "Response Rate", value: score.commitmentScore },
                   { label: "Response Speed", value: score.responseSpeedScore },
                   { label: "Price Competitiveness", value: score.priceScore },
@@ -569,7 +569,7 @@ export default function SupplierDetailPage() {
                   m.value !== null && m.value !== undefined ? (
                     <ScoreBar key={m.label} label={m.label} value={m.value ?? 0} />
                   ) : null,
-                ))}
+                )}
                 <div className="pt-2 border-t border-border grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <p className="text-muted-foreground">RFQs Received</p>
@@ -596,7 +596,8 @@ export default function SupplierDetailPage() {
                   <div>
                     <p className="text-muted-foreground">Accepted / Rejected</p>
                     <p className="font-medium text-foreground">
-                      {typeof score.acceptedQty === "number" || typeof score.rejectedQty === "number"
+                      {typeof score.acceptedQty === "number" ||
+                      typeof score.rejectedQty === "number"
                         ? `${score.acceptedQty ?? 0} / ${score.rejectedQty ?? 0}`
                         : "—"}
                     </p>
@@ -774,7 +775,7 @@ export default function SupplierDetailPage() {
                       <td className="px-4 py-3 text-muted-foreground text-xs">{po.sheetPoNo}</td>
                       <td className="px-4 py-3 text-center">
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${(PO_PROGRESS_TONES[po.progressTone ?? 'default'] || PO_STATUS_STYLES[po.progressStatus ?? po.status]) ?? "bg-muted text-muted-foreground"}`}
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${(PO_PROGRESS_TONES[po.progressTone ?? "default"] || PO_STATUS_STYLES[po.progressStatus ?? po.status]) ?? "bg-muted text-muted-foreground"}`}
                         >
                           {po.progressStatusLabel ?? po.status}
                         </span>
