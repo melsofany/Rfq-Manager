@@ -10,14 +10,15 @@
 
 ## 1) المكوّنات المُضافة في هذا المشروع
 
-| الملف | الدور |
-|------|-------|
-| `artifacts/api-server/src/modules/chatwoot/index.ts` | جسر SSO: `GET /api/chatwoot/sso` و `GET /api/chatwoot/status` |
-| `artifacts/rfq-portal/src/modules/communications/pages/chatwoot.tsx` | مكوّن iframe الذي يعرض Chatwoot عند `/whatsapp` |
-| `scripts/migrate-whatsapp-to-chatwoot.mjs` | سكربت ترحيل البيانات (قراءة فقط من DB → Chatwoot API) |
+| الملف                                                                | الدور                                                         |
+| -------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `artifacts/api-server/src/modules/chatwoot/index.ts`                 | جسر SSO: `GET /api/chatwoot/sso` و `GET /api/chatwoot/status` |
+| `artifacts/rfq-portal/src/modules/communications/pages/chatwoot.tsx` | مكوّن iframe الذي يعرض Chatwoot عند `/whatsapp`               |
+| `scripts/migrate-whatsapp-to-chatwoot.mjs`                           | سكربت ترحيل البيانات (قراءة فقط من DB → Chatwoot API)         |
 
 جداول الـ WhatsApp القديمة (`whatsapp_chats` / `whatsapp_media` / `whatsapp_reactions`)
-+ مسارات `/api/whatsapp/*` **لم تُحذف ولم تُعدَّل** — تبقى كنسخة احتياطية.
+
+- مسارات `/api/whatsapp/*` **لم تُحذف ولم تُعدَّل** — تبقى كنسخة احتياطية.
 
 ---
 
@@ -114,6 +115,7 @@ node scripts/migrate-whatsapp-to-chatwoot.mjs
 ```
 
 السكربت ينشئ:
+
 - **جهات اتصال** (contacts) للموردين حسب رقم الهاتف.
 - **محادثة** (conversation) لكل رقم هاتف.
 - **رسائل** بالطابع الزمني والمحتوى والاتجاه الأصليين.

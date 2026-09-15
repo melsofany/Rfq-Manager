@@ -74,12 +74,8 @@ export default function CustomerRfqPage() {
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
                       تاريخ الانتهاء
                     </th>
-                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
-                      المشتري
-                    </th>
-                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
-                      المدخل
-                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">المشتري</th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">المدخل</th>
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
                       البنود
                     </th>

@@ -42,7 +42,8 @@ const TEMPLATE_TEXT = process.env.WHATSAPP_TEMPLATE_TEXT || "rfq_send_ar";
 const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";
 const TEMPLATE_PDF = process.env.WHATSAPP_TEMPLATE_PDF || "rfq_pdf_ar";
 const TEMPLATE_PO_PDF = process.env.WHATSAPP_TEMPLATE_PO_PDF || "po_pdf_ar";
-export const TEMPLATE_WORK_ORDER = process.env.WHATSAPP_TEMPLATE_WORK_ORDER || "representative_work_order_ar_v2";
+export const TEMPLATE_WORK_ORDER =
+  process.env.WHATSAPP_TEMPLATE_WORK_ORDER || "representative_work_order_ar_v2";
 const TEMPLATE_PO_CANCEL = process.env.WHATSAPP_TEMPLATE_PO_CANCEL || "po_cancel_ar";
 const TEMPLATE_PO_CANCEL_ITEM = process.env.WHATSAPP_TEMPLATE_PO_CANCEL_ITEM || "po_cancel_item_ar";
 const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
@@ -59,7 +60,8 @@ export async function ensureWorkOrderTemplate(): Promise<void> {
   const existing = await fetch(`${base}?name=${encodeURIComponent(TEMPLATE_WORK_ORDER)}`, {
     headers: { Authorization: `Bearer ${TOKEN}` },
   });
-  if (!existing.ok) throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  if (!existing.ok)
+    throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
   const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
   if (found.data?.some((t) => t.name === TEMPLATE_WORK_ORDER)) {
     logger.info({ template: TEMPLATE_WORK_ORDER }, "WhatsApp work-order template already exists");
@@ -76,7 +78,19 @@ export async function ensureWorkOrderTemplate(): Promise<void> {
         {
           type: "BODY",
           text: "أمر شغل جديد من قرطبة للتوريدات.\nالمندوب: {{1}}\nرقم أمر الشراء: {{2}}\nالمورد: {{3}}\nهاتف المورد: {{4}}\nعنوان المورد: {{5}}\nالأصناف: {{6}}\nموعد الاستلام: {{7}}\nيرجى اختيار أحد الأزرار أدناه لتأكيد الاستلام أو الرفض.",
-          example: { body_text: [["أحمد محمد علي", "PO-2026-000001", "شركة النور", "+201000000000", "القاهرة، مصر", "1. صنف x2", "2026-08-15"]] },
+          example: {
+            body_text: [
+              [
+                "أحمد محمد علي",
+                "PO-2026-000001",
+                "شركة النور",
+                "+201000000000",
+                "القاهرة، مصر",
+                "1. صنف x2",
+                "2026-08-15",
+              ],
+            ],
+          },
         },
         {
           type: "BUTTONS",
@@ -88,8 +102,12 @@ export async function ensureWorkOrderTemplate(): Promise<void> {
       ],
     }),
   });
-  if (!response.ok) throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
-  logger.info({ template: TEMPLATE_WORK_ORDER }, "WhatsApp work-order template submitted to Meta for approval");
+  if (!response.ok)
+    throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info(
+    { template: TEMPLATE_WORK_ORDER },
+    "WhatsApp work-order template submitted to Meta for approval",
+  );
 }
 
 /**
@@ -99,14 +117,17 @@ export async function ensureWorkOrderTemplate(): Promise<void> {
  */
 export async function ensurePoCancelTemplate(): Promise<void> {
   if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
-    logger.warn("WhatsApp po_cancel template provisioning skipped: missing token or business account id");
+    logger.warn(
+      "WhatsApp po_cancel template provisioning skipped: missing token or business account id",
+    );
     return;
   }
   const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
   const existing = await fetch(`${base}?name=${encodeURIComponent(TEMPLATE_PO_CANCEL)}`, {
     headers: { Authorization: `Bearer ${TOKEN}` },
   });
-  if (!existing.ok) throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  if (!existing.ok)
+    throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
   const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
   if (found.data?.some((t) => t.name === TEMPLATE_PO_CANCEL)) {
     logger.info({ template: TEMPLATE_PO_CANCEL }, "WhatsApp po_cancel template already exists");
@@ -128,8 +149,12 @@ export async function ensurePoCancelTemplate(): Promise<void> {
       ],
     }),
   });
-  if (!response.ok) throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
-  logger.info({ template: TEMPLATE_PO_CANCEL }, "WhatsApp po_cancel template submitted to Meta for approval");
+  if (!response.ok)
+    throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info(
+    { template: TEMPLATE_PO_CANCEL },
+    "WhatsApp po_cancel template submitted to Meta for approval",
+  );
 }
 
 /**
@@ -142,17 +167,23 @@ export async function ensurePoCancelTemplate(): Promise<void> {
  */
 export async function ensurePoCancelItemTemplate(): Promise<void> {
   if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
-    logger.warn("WhatsApp po_cancel_item template provisioning skipped: missing token or business account id");
+    logger.warn(
+      "WhatsApp po_cancel_item template provisioning skipped: missing token or business account id",
+    );
     return;
   }
   const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
   const existing = await fetch(`${base}?name=${encodeURIComponent(TEMPLATE_PO_CANCEL_ITEM)}`, {
     headers: { Authorization: `Bearer ${TOKEN}` },
   });
-  if (!existing.ok) throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  if (!existing.ok)
+    throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
   const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
   if (found.data?.some((t) => t.name === TEMPLATE_PO_CANCEL_ITEM)) {
-    logger.info({ template: TEMPLATE_PO_CANCEL_ITEM }, "WhatsApp po_cancel_item template already exists");
+    logger.info(
+      { template: TEMPLATE_PO_CANCEL_ITEM },
+      "WhatsApp po_cancel_item template already exists",
+    );
     return;
   }
   const response = await fetch(base, {
@@ -167,22 +198,28 @@ export async function ensurePoCancelItemTemplate(): Promise<void> {
           type: "BODY",
           text: "تنبيه من قرطبة للتوريدات: تم إلغاء بند من أمر توريد.\nالمورد: {{1}}\nرقم أمر الشراء: {{2}}\nرقم البند: {{3}}\nرقم القطعة: {{4}}\nالوصف: {{5}}\nالكمية: {{6}}\nسبب الإلغاء: {{7}}\nيرجى عدم تنفيذ أو شحن هذا البند، والاستمرار في باقي بنود الأمر.",
           example: {
-            body_text: [[
-              "شركة النور",
-              "PO-2026-000001",
-              "3",
-              "PN-A100",
-              "قابض هيدروليك 2 بوصة",
-              "5 قطعة",
-              "إلغاء بناءً على طلب العميل",
-            ]],
+            body_text: [
+              [
+                "شركة النور",
+                "PO-2026-000001",
+                "3",
+                "PN-A100",
+                "قابض هيدروليك 2 بوصة",
+                "5 قطعة",
+                "إلغاء بناءً على طلب العميل",
+              ],
+            ],
           },
         },
       ],
     }),
   });
-  if (!response.ok) throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
-  logger.info({ template: TEMPLATE_PO_CANCEL_ITEM }, "WhatsApp po_cancel_item template submitted to Meta for approval");
+  if (!response.ok)
+    throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info(
+    { template: TEMPLATE_PO_CANCEL_ITEM },
+    "WhatsApp po_cancel_item template submitted to Meta for approval",
+  );
 }
 
 export const Whatsapp = APP_SECRET
@@ -648,7 +685,10 @@ export async function sendPoCancelItemWhatsApp(opts: SendPoCancelItemOpts): Prom
     ),
   );
   const waId = await sendTemplate(to, template);
-  logger.info({ to, poNo: opts.poNo, waId }, "PO item cancellation sent via po_cancel_item_ar template");
+  logger.info(
+    { to, poNo: opts.poNo, waId },
+    "PO item cancellation sent via po_cancel_item_ar template",
+  );
   return waId || null;
 }
 
@@ -700,9 +740,8 @@ export async function sendWhatsAppInteractiveConfirmation(
   requireConfigured();
   const to = normalizePhone(phone);
   const title = action === "received" ? "تأكيد الاستلام" : "تأكيد الرفض";
-  const body = action === "received"
-    ? `هل تؤكد استلام أمر الشغل ${poNo}؟`
-    : `هل تؤكد رفض أمر الشغل ${poNo}؟`;
+  const body =
+    action === "received" ? `هل تؤكد استلام أمر الشغل ${poNo}؟` : `هل تؤكد رفض أمر الشغل ${poNo}؟`;
   const message = new Interactive(
     new ActionButtons(
       new Button(`work_order:${poNo}:${action}:confirm`, title),
@@ -733,7 +772,12 @@ export async function sendRepPoDispatchWhatsApp(opts: {
   supplierName: string;
   supplierAddress?: string | null;
   supplierPhone?: string | null;
-  items: Array<{ lineItem?: string | null; description?: string | null; qty?: string | null; uom?: string | null }>;
+  items: Array<{
+    lineItem?: string | null;
+    description?: string | null;
+    qty?: string | null;
+    uom?: string | null;
+  }>;
 }): Promise<string | null> {
   requireConfigured();
   const to = normalizePhone(opts.phone);
@@ -746,7 +790,8 @@ export async function sendRepPoDispatchWhatsApp(opts: {
   lines.push("");
   lines.push("البنود:");
   opts.items.slice(0, 20).forEach((it, i) => {
-    const label = [it.lineItem || String(i + 1), it.description].filter(Boolean).join(" — ") || `بند ${i + 1}`;
+    const label =
+      [it.lineItem || String(i + 1), it.description].filter(Boolean).join(" — ") || `بند ${i + 1}`;
     const qty = formatQty(it.qty);
     const qtyText = qty ? ` × ${qty}${it.uom ? " " + it.uom : ""}` : "";
     lines.push(`${i + 1}. ${label}${qtyText}`);
@@ -824,10 +869,7 @@ export async function sendRejectionReasonOptions(
   // non-empty tuple so the spread type-checks.
   const [firstRow, ...restRows] = rows;
   const message = new Interactive(
-    new ActionList(
-      "اختر سبب الرفض",
-      new ListSection("أسباب الرفض", firstRow, ...restRows),
-    ),
+    new ActionList("اختر سبب الرفض", new ListSection("أسباب الرفض", firstRow, ...restRows)),
     new Body(`تم اختيار الرفض لبند في أمر الشراء ${poNo}.\nاختر سبب الرفض:`),
   );
   const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
@@ -864,10 +906,13 @@ export async function markWhatsAppRead(messageId: string): Promise<void> {
 
 /** Main menu shown when a registered representative sends any text/taps the list.
  * Two action buttons: استلام (receipt from supplier) / تسليم (delivery to customer). */
-export async function sendRepMainMenu(phone: string, counts?: {
-  receipt: number;
-  delivery: number;
-}): Promise<string | null> {
+export async function sendRepMainMenu(
+  phone: string,
+  counts?: {
+    receipt: number;
+    delivery: number;
+  },
+): Promise<string | null> {
   requireConfigured();
   const to = normalizePhone(phone);
   const r = counts?.receipt ?? 0;
@@ -899,13 +944,15 @@ export async function sendRepPoPicker(
 ): Promise<string | null> {
   requireConfigured();
   const to = normalizePhone(phone);
-  const emptyMsg = kind === "receipt"
-    ? "لا توجد أوامر شراء بانتظار الاستلام حالياً."
-    : "لا توجد بنود بانتظار التسليم للعميل حالياً.";
+  const emptyMsg =
+    kind === "receipt"
+      ? "لا توجد أوامر شراء بانتظار الاستلام حالياً."
+      : "لا توجد بنود بانتظار التسليم للعميل حالياً.";
   if (pos.length === 0) {
     return sendWhatsAppText(phone, emptyMsg);
   }
-  const title = kind === "receipt" ? "أوامر شراء بانتظار الاستلام" : "أوامر شراء العميل بانتظار التسليم";
+  const title =
+    kind === "receipt" ? "أوامر شراء بانتظار الاستلام" : "أوامر شراء العميل بانتظار التسليم";
   // ≤2 POs → buttons (plus a رجوع button = max 3 total WhatsApp allows).
   if (pos.length <= 2) {
     const back = new Button("rep_back:menu", "رجوع");
@@ -914,17 +961,25 @@ export async function sendRepPoPicker(
       pos.length === 1
         ? new Interactive(new ActionButtons(p0, back), new Body(`${title}:\nاختر الأمر.`))
         : new Interactive(
-            new ActionButtons(p0, new Button(`rep_po:${kind}:${pos[1].id}`, pos[1].no.slice(0, 20)), back),
+            new ActionButtons(
+              p0,
+              new Button(`rep_po:${kind}:${pos[1].id}`, pos[1].no.slice(0, 20)),
+              back,
+            ),
             new Body(`${title}:\nاختر الأمر.`),
           );
     const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
-    if ("error" in result && result.error) throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+    if ("error" in result && result.error)
+      throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
     return result.messages?.[0]?.id ?? null;
   }
   // >2 POs → list (each row tappable) + a رجوع row.
-  const rows = pos.slice(0, 9).map(
-    (p) => new Row(`rep_po:${kind}:${p.id}`, `${p.no} — ${p.label}`, `${p.pendingItems} بند بانتظار`),
-  );
+  const rows = pos
+    .slice(0, 9)
+    .map(
+      (p) =>
+        new Row(`rep_po:${kind}:${p.id}`, `${p.no} — ${p.label}`, `${p.pendingItems} بند بانتظار`),
+    );
   rows.push(new Row("rep_back:menu", "رجوع للقائمة الرئيسية", ""));
   const [first, ...rest] = rows;
   const message = new Interactive(
@@ -961,21 +1016,28 @@ export async function sendRepItemPicker(
       items.length === 1
         ? new Interactive(new ActionButtons(i0, back), new Body(`${title}:\nاختر البند.`))
         : new Interactive(
-            new ActionButtons(i0, new Button(`rep_item:${kind}:${poId}:${items[1].id}`, items[1].label.slice(0, 20)), back),
+            new ActionButtons(
+              i0,
+              new Button(`rep_item:${kind}:${poId}:${items[1].id}`, items[1].label.slice(0, 20)),
+              back,
+            ),
             new Body(`${title}:\nاختر البند.`),
           );
     const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
-    if ("error" in result && result.error) throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+    if ("error" in result && result.error)
+      throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
     return result.messages?.[0]?.id ?? null;
   }
-  const rows = items.slice(0, 9).map(
-    (it) =>
-      new Row(
-        `rep_item:${kind}:${poId}:${it.id}`,
-        it.label.slice(0, 24),
-        `${it.qty ? `الكمية: ${it.qty} — ` : ""}${it.statusHint}`,
-      ),
-  );
+  const rows = items
+    .slice(0, 9)
+    .map(
+      (it) =>
+        new Row(
+          `rep_item:${kind}:${poId}:${it.id}`,
+          it.label.slice(0, 24),
+          `${it.qty ? `الكمية: ${it.qty} — ` : ""}${it.statusHint}`,
+        ),
+    );
   rows.push(new Row(`rep_back:po:${kind}`, "رجوع لقائمة الأوامر", ""));
   const [first, ...rest] = rows;
   const message = new Interactive(
@@ -1001,9 +1063,9 @@ export async function sendRepItemAction(
   phone: string,
   opts: {
     kind: "receipt" | "delivery";
-    no: string;          // poNo (receipt) or customerPoNo (delivery)
-    itemId: number;      // poItemId (receipt) or customerPoItemId (delivery)
-    poId: number;        // for the رجوع button (re-send item picker)
+    no: string; // poNo (receipt) or customerPoNo (delivery)
+    itemId: number; // poItemId (receipt) or customerPoItemId (delivery)
+    poId: number; // for the رجوع button (re-send item picker)
     label: string;
     qty?: string | null;
     supplierName?: string | null;
@@ -1084,10 +1146,7 @@ export async function sendRepConfirm(
       ? `work_order_cancel_item:${opts.no}:${opts.itemId}`
       : `work_order_cancel_delivery:${opts.no}:${opts.itemId}`;
   const message = new Interactive(
-    new ActionButtons(
-      new Button(confirmPayload, "تأكيد"),
-      new Button(cancelPayload, "تراجع"),
-    ),
+    new ActionButtons(new Button(confirmPayload, "تأكيد"), new Button(cancelPayload, "تراجع")),
     new Body(body),
   );
   const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
@@ -1128,10 +1187,7 @@ export async function sendDeliveryRejectionReasonOptions(
   );
   const [firstRow, ...restRows] = rows;
   const message = new Interactive(
-    new ActionList(
-      "اختر سبب الرفض",
-      new ListSection("أسباب رفض العميل", firstRow, ...restRows),
-    ),
+    new ActionList("اختر سبب الرفض", new ListSection("أسباب رفض العميل", firstRow, ...restRows)),
     new Body(`تم اختيار رفض العميل لبند في أمر شراء العميل ${customerPoNo}.\nاختر سبب الرفض:`),
   );
   const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);

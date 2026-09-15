@@ -459,7 +459,10 @@ type Tab = "list" | "import";
 
 export default function SuppliersPage() {
   const { employee } = useAuth();
-  const allowedTabs = filterTabs(employee?.role, employee?.permissions, "suppliers", ["list", "import"] as const);
+  const allowedTabs = filterTabs(employee?.role, employee?.permissions, "suppliers", [
+    "list",
+    "import",
+  ] as const);
   const [activeTab, setActiveTab] = useState<Tab>(allowedTabs[0] ?? "list");
 
   return (

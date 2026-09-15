@@ -36,7 +36,11 @@ const purchaseOrderItemsTable = {
   totalAcceptedQty: "totalAcceptedQty",
   lineStatus: "lineStatus",
 };
-const customerPoItemDeliveriesTable = { _: "customerPoItemDeliveries", id: "id", customerPoItemId: "customerPoItemId" };
+const customerPoItemDeliveriesTable = {
+  _: "customerPoItemDeliveries",
+  id: "id",
+  customerPoItemId: "customerPoItemId",
+};
 const workOrderAssignmentsTable = {
   _: "workOrderAssignments",
   customerPoId: "customerPoId",
@@ -191,9 +195,7 @@ describe("POST /customer-po/:id/send-delivery-prompts", () => {
   it("400s when no representative is assigned to the customer PO", async () => {
     assignmentRows = [];
 
-    const res = await request(testApp)
-      .post("/api/customer-po/5/send-delivery-prompts")
-      .send({});
+    const res = await request(testApp).post("/api/customer-po/5/send-delivery-prompts").send({});
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/لا يوجد مندوب/);
@@ -205,9 +207,7 @@ describe("POST /customer-po/:id/send-delivery-prompts", () => {
       { representativePhone: "+201000000002", status: "delivered" }, // already done → skipped
     ];
 
-    const res = await request(testApp)
-      .post("/api/customer-po/5/send-delivery-prompts")
-      .send({});
+    const res = await request(testApp).post("/api/customer-po/5/send-delivery-prompts").send({});
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);

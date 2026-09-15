@@ -12,12 +12,7 @@
  *   DELETE /accounts/closings/:id    → unlock a month (admin only, audited)
  */
 import { Router } from "express";
-import {
-  db,
-  accountingClosingsTable,
-  journalEntriesTable,
-  auditLogTable,
-} from "@workspace/db";
+import { db, accountingClosingsTable, journalEntriesTable, auditLogTable } from "@workspace/db";
 import { eq, desc, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 
@@ -65,52 +60,64 @@ router.get("/accounts/closings", requireAuth, async (_req, res): Promise<void> =
   );
 });
 
-router.post("/accounts/closings", requireRole("accountant", "manager", "admin"), async (req, res): Promise<void> => {
-  const body = (req.body ?? {}) as { period?: string; notes?: string | null };
-  const period = body.period?.trim() ?? "";
-  if (!/^\d\{4}-\d\{2}$/.test(period) || parseInt(period.slice(5, 7), 10) < 1 || parseInt(period.slice(5, 7), 10) > 12) {
-    res.status(400).json({ error: "الفترة يجب أن تكون بصيغة YYYY-MM" });
-    return;
-  }
-  const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-  // Reject locking a month that still has UNPOSTED (draft/reviewed) journal entries.
+router.post(
+  "/accounts/closings",
+  requireRole("accountant", "manager", "admin"),
+  async (req, res): Promise<void> => {
+    const body = (req.body ?? {}) as { period?: string; notes?: string | null };
+    const period = body.period?.trim() ?? "";
+    if (
+      !/^\d\{4}-\d\{2}$/.test(period) ||
+      parseInt(period.slice(5, 7), 10) < 1 ||
+      parseInt(period.slice(5, 7), 10) > 12
+    ) {
+      res.status(400).json({ error: "الفترة يجب أن تكون بصيغة YYYY-MM" });
+      return;
+    }
+    const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
+    // Reject locking a month that still has UNPOSTED (draft/reviewed) journal entries.
 
-  const openDrafts = await db
-    .select({ id: journalEntriesTable.id })
-    .from(journalEntriesTable)
-    .where(sql`substr(${journalEntriesTable.entryDate}, 1, 7) = ${period} and ${journalEntriesTable.status}} != 'void'`)
-    .limit(1);
-  if (openDrafts.length) {
-    res.status(400).json({ error: `يوجد قيود لم تُرحَّل بعد في شهر ${period} — راجعها ثم أعد المحاولة` });
-    return;
-  }
-  const [existing] = await db
-    .select()
-    .from(accountingClosingsTable)
-    .where(eq(accountingClosingsTable.period, period))
-    .limit(1);
-  if (existing) {
-    res.status(400).json({ error: `شهر ${period} مقفل بالفعل` });
-    return;
-  }
-  const [row] = await db
-    .insert(accountingClosingsTable)
-    .values({
-      period,
-      closedBy: session.employeeId ?? null,
-      closedByName: session.employeeName ?? null,
-      notes: body.notes ?? null,
-    })
-    .returning();
-  await db.insert(auditLogTable).values({
-    action: "closing.create",
-    entityType: "accounting_closings",
-    entityId: row?.id,
-    employeeId: session.employeeId,
-    description: `قفل شهر ${period}`,
-  });
-  res.status(201).json({ id: row?.id, period, closed: true });
-});
+    const openDrafts = await db
+      .select({ id: journalEntriesTable.id })
+      .from(journalEntriesTable)
+      .where(
+        sql`substr(${journalEntriesTable.entryDate}, 1, 7) = ${period} and ${journalEntriesTable.status}} != 'void'`,
+      )
+      .limit(1);
+    if (openDrafts.length) {
+      res
+        .status(400)
+        .json({ error: `يوجد قيود لم تُرحَّل بعد في شهر ${period} — راجعها ثم أعد المحاولة` });
+      return;
+    }
+    const [existing] = await db
+      .select()
+      .from(accountingClosingsTable)
+      .where(eq(accountingClosingsTable.period, period))
+      .limit(1);
+    if (existing) {
+      res.status(400).json({ error: `شهر ${period} مقفل بالفعل` });
+      return;
+    }
+    const [row] = await db
+      .insert(accountingClosingsTable)
+      .values({
+        period,
+        closedBy: session.employeeId ?? null,
+        closedByName: session.employeeName ?? null,
+        notes: body.notes ?? null,
+      })
+      .returning();
+    await db.insert(auditLogTable).values({
+      action: "closing.create",
+      entityType: "accounting_closings",
+      entityId: row?.id,
+      employeeId: session.employeeId,
+      description: `قفل شهر ${period}`,
+    });
+    res.status(201).json({ id: row?.id, period, closed: true });
+  },
+);
 
 router.delete("/accounts/closings/:id", requireRole("admin"), async (req, res): Promise<void> => {
   const id = Number(req.params.id);
@@ -123,9 +130,7 @@ router.delete("/accounts/closings/:id", requireRole("admin"), async (req, res): 
     return;
   }
   const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-  await db
-    .delete(accountingClosingsTable)
-    .where(eq(accountingClosingsTable.id, id));
+  await db.delete(accountingClosingsTable).where(eq(accountingClosingsTable.id, id));
   await db.insert(auditLogTable).values({
     action: "closing.delete",
     entityType: "accounting_closings",

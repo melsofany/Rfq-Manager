@@ -194,7 +194,9 @@ export const supplierInvoicesTable = pgTable("supplier_invoices", {
 
   vatAmount: numeric("vat_amount", { precision: 15, scale: 4 }).notNull().default("0"),
   withholdingRate: numeric("withholding_rate", { precision: 6, scale: 4 }).notNull().default("0"),
-  withholdingAmount: numeric("withholding_amount", { precision: 15, scale: 4 }).notNull().default("0"),
+  withholdingAmount: numeric("withholding_amount", { precision: 15, scale: 4 })
+    .notNull()
+    .default("0"),
   grossAmount: numeric("gross_amount", { precision: 15, scale: 4 }).notNull().default("0"),
   paidAmount: numeric("paid_amount", { precision: 15, scale: 4 }).notNull().default("0"),
   balance: numeric("balance", { precision: 15, scale: 4 }).notNull().default("0"),

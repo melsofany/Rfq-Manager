@@ -243,97 +243,119 @@ export default function ExpensesPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          <div>
-            <Label className="text-xs text-muted-foreground mb-1">النوع</Label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="h-8 w-full text-sm rounded-md border border-border bg-card px-2"
-            >
-              <option value="">الكل</option>
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label className="text-xs text-muted-foreground mb-1">من تاريخ</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-8 text-sm" />
-          </div>
-          <div>
-            <Label className="text-xs text-muted-foreground mb-1">إلى تاريخ</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-8 text-sm" />
-          </div>
-          <div className="flex items-end">
-            <Button onClick={load} size="sm" className="gap-1.5 w-full">
-              تحديث
-            </Button>
-          </div>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1">النوع</Label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="h-8 w-full text-sm rounded-md border border-border bg-card px-2"
+          >
+            <option value="">الكل</option>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </div>
-
-        <div className="bg-card border border-border rounded-lg p-3 flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">إجمالي المصروفات للفترة</span>
-          <span className="text-lg font-bold text-foreground">
-            {grandTotal != null ? fmt(String(grandTotal)) : "-"}
-          </span>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1">من تاريخ</Label>
+          <Input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="h-8 text-sm"
+          />
         </div>
+        <div>
+          <Label className="text-xs text-muted-foreground mb-1">إلى تاريخ</Label>
+          <Input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="h-8 text-sm"
+          />
+        </div>
+        <div className="flex items-end">
+          <Button onClick={load} size="sm" className="gap-1.5 w-full">
+            تحديث
+          </Button>
+        </div>
+      </div>
 
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
-          ) : rows.length === 0 ? (
-            <div className="p-12 text-center">
-              <Receipt size={40} className="mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground text-sm">لا توجد مصروفات مسجّلة</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/30 text-left">
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">التاريخ</th>
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">النوع</th>
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">الوصف</th>
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">القيمة</th>
-                    <th className="px-3 py-3 text-muted-foreground text-xs font-medium">الموظف</th>
-                    <th className="px-3 py-3"></th>
+      <div className="bg-card border border-border rounded-lg p-3 flex items-center justify-between">
+        <span className="text-sm text-muted-foreground">إجمالي المصروفات للفترة</span>
+        <span className="text-lg font-bold text-foreground">
+          {grandTotal != null ? fmt(String(grandTotal)) : "-"}
+        </span>
+      </div>
+
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        {loading ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
+        ) : rows.length === 0 ? (
+          <div className="p-12 text-center">
+            <Receipt size={40} className="mx-auto text-muted-foreground/30 mb-3" />
+            <p className="text-muted-foreground text-sm">لا توجد مصروفات مسجّلة</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30 text-left">
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">التاريخ</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">النوع</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">الوصف</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">القيمة</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">الموظف</th>
+                  <th className="px-3 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                    <td className="px-3 py-3 text-xs text-muted-foreground">{r.expenseDate}</td>
+                    <td className="px-3 py-3 text-xs font-medium">{r.category}</td>
+                    <td className="px-3 py-3 text-xs">{r.description ?? "-"}</td>
+                    <td className="px-3 py-3 text-xs font-semibold">{fmt(r.amount)}</td>
+                    <td className="px-3 py-3 text-xs text-muted-foreground">
+                      {r.employeeName ?? "-"}
+                    </td>
+                    <td className="px-3 py-3 text-left">
+                      <div className="flex gap-1 justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openDetail(r.id)}
+                          className="h-7 px-2 text-xs"
+                        >
+                          تفاصيل
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEdit(r)}
+                          className="h-7 px-2 text-xs"
+                        >
+                          تعديل
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => remove(r.id)}
+                          className="h-7 px-2 text-xs text-red-600 hover:text-red-700"
+                        >
+                          <Trash2 size={13} />
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/20">
-                      <td className="px-3 py-3 text-xs text-muted-foreground">{r.expenseDate}</td>
-                      <td className="px-3 py-3 text-xs font-medium">{r.category}</td>
-                      <td className="px-3 py-3 text-xs">{r.description ?? "-"}</td>
-                      <td className="px-3 py-3 text-xs font-semibold">{fmt(r.amount)}</td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground">{r.employeeName ?? "-"}</td>
-                      <td className="px-3 py-3 text-left">
-                        <div className="flex gap-1 justify-end">
-                          <Button variant="ghost" size="sm" onClick={() => openDetail(r.id)} className="h-7 px-2 text-xs">
-                            تفاصيل
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(r)} className="h-7 px-2 text-xs">
-                            تعديل
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => remove(r.id)}
-                            className="h-7 px-2 text-xs text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 size={13} />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Create/Edit dialog */}
       <Dialog open={open} onOpenChange={setOpen}>

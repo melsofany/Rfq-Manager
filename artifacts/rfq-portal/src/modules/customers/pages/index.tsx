@@ -97,11 +97,7 @@ export default function CustomersPage() {
             <div className="p-12 text-center">
               <Users size={40} className="mx-auto text-muted-foreground/30 mb-3" />
               <p className="text-muted-foreground text-sm">لا يوجد عملاء</p>
-              <Button
-                onClick={() => navigate("/customers/new")}
-                size="sm"
-                className="mt-3 gap-1.5"
-              >
+              <Button onClick={() => navigate("/customers/new")} size="sm" className="mt-3 gap-1.5">
                 <Plus size={14} /> إضافة عميل
               </Button>
             </div>
@@ -110,7 +106,9 @@ export default function CustomersPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/30 border-b border-border text-right">
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">العميل</th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                      العميل
+                    </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
                       اسم الشهرة
                     </th>

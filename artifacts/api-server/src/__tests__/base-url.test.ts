@@ -12,8 +12,9 @@ describe("resolvePublicBaseUrl", () => {
 
   it("prefers BASE_URL env var (trailing slash trimmed)", () => {
     process.env.BASE_URL = "https://cortoba-rfq.onrender.com/";
-    expect(resolvePublicBaseUrl({ protocol: "https", get: () => "other.example" }))
-      .toBe("https://cortoba-rfq.onrender.com");
+    expect(resolvePublicBaseUrl({ protocol: "https", get: () => "other.example" })).toBe(
+      "https://cortoba-rfq.onrender.com",
+    );
   });
 
   it("uses REPLIT_DOMAINS when BASE_URL is absent", () => {
@@ -22,7 +23,10 @@ describe("resolvePublicBaseUrl", () => {
   });
 
   it("derives the origin from the incoming request host (Render proxy)", () => {
-    const req = { protocol: "https", get: (n: string) => (n === "host" ? "cortoba-rfq.onrender.com" : undefined) };
+    const req = {
+      protocol: "https",
+      get: (n: string) => (n === "host" ? "cortoba-rfq.onrender.com" : undefined),
+    };
     expect(resolvePublicBaseUrl(req)).toBe("https://cortoba-rfq.onrender.com");
   });
 

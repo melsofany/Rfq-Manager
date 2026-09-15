@@ -34,10 +34,7 @@ async function generateInternalPoNo(): Promise<string> {
 // Enforce a unique customer-PO number (رقم أمر شراء العميل): the same number
 // must not belong to two different customer POs． The match is case-insensitive;
 // `excludeId` lets a PATCH ignore the row this update targets．
-async function assertPoNoIsUnique(
-  poNo: string,
-  excludeId?: number,
-): Promise<boolean> {
+async function assertPoNoIsUnique(poNo: string, excludeId?: number): Promise<boolean> {
   const trimmed = poNo.trim();
   if (!trimmed) return true;
   const existing = await db
@@ -127,14 +124,13 @@ function buildFulfillmentStatus(input: {
   deliveredItems: number;
   rejectedItems: number;
 }): CustomerPoFulfillmentStatus {
-  const { storedStatus, poIssued, totalItems, receivedItems, deliveredItems, rejectedItems } = input;
-  const receivedPct =
-    totalItems > 0 ? Math.round((receivedItems / totalItems) * 100) : null;
+  const { storedStatus, poIssued, totalItems, receivedItems, deliveredItems, rejectedItems } =
+    input;
+  const receivedPct = totalItems > 0 ? Math.round((receivedItems / totalItems) * 100) : null;
   // A line is "resolved" when it's either delivered or the customer rejected it
   // (both are terminal outcomes — the order is settled for that line).
   const resolvedItems = deliveredItems + rejectedItems;
-  const resolvedPct =
-    totalItems > 0 ? Math.round((resolvedItems / totalItems) * 100) : null;
+  const resolvedPct = totalItems > 0 ? Math.round((resolvedItems / totalItems) * 100) : null;
 
   let stage: CustomerPoFulfillmentStatus["stage"] = "draft";
   let label = "مسودة";
@@ -164,7 +160,16 @@ function buildFulfillmentStatus(input: {
     label = "مسودة";
   }
 
-  return { stage, label, poIssued, totalItems, receivedItems, receivedPct, deliveredItems, deliveredPct: resolvedPct };
+  return {
+    stage,
+    label,
+    poIssued,
+    totalItems,
+    receivedItems,
+    receivedPct,
+    deliveredItems,
+    deliveredPct: resolvedPct,
+  };
 }
 
 // Resolve, for a set of customer PO ids, the ids that have at least one
@@ -187,10 +192,7 @@ async function resolvePoIssuedIds(
   const linked = await db
     .select({ customerPoId: customerPoItemsTable.customerPoId })
     .from(purchaseOrderItemsTable)
-    .innerJoin(
-      purchaseOrdersTable,
-      eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id),
-    )
+    .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
     .innerJoin(
       customerPoItemsTable,
       eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
@@ -209,9 +211,7 @@ async function resolvePoIssuedIds(
   // 2) Header-level fallback: dispatched supplier POs whose sheetPoNo matches a
   //    listed customer PO's customerPoNo (case-insensitive). Covers legacy
   //    supplier POs created before the item FK was wired.
-  const poNos = new Set(
-    [...customerPoNoByPoId.values()].map((n) => n.toLowerCase()),
-  );
+  const poNos = new Set([...customerPoNoByPoId.values()].map((n) => n.toLowerCase()));
   if (poNos.size > 0) {
     const dispatched = await db
       .select({ sheetPoNo: purchaseOrdersTable.sheetPoNo })
@@ -237,7 +237,10 @@ async function resolvePoIssuedIds(
 async function resolveDeliveryRollup(
   customerPoIds: number[],
 ): Promise<Map<number, { totalItems: number; deliveredItems: number; rejectedItems: number }>> {
-  const map = new Map<number, { totalItems: number; deliveredItems: number; rejectedItems: number }>();
+  const map = new Map<
+    number,
+    { totalItems: number; deliveredItems: number; rejectedItems: number }
+  >();
   if (customerPoIds.length === 0) return map;
   const rows = await db
     .select({
@@ -298,9 +301,7 @@ async function resolveReceivedRollup(
   // 2) Header-level fallback: for customer POs whose number matches a dispatched
   //    supplier PO's sheetPoNo, mark their items as received when a matching
   //    supplier PO item was accepted (matched by lineItem).
-  const poNos = new Set(
-    [...customerPoNoByPoId.values()].map((n) => n.toLowerCase()),
-  );
+  const poNos = new Set([...customerPoNoByPoId.values()].map((n) => n.toLowerCase()));
   if (poNos.size > 0) {
     const dispatched = await db
       .select({
@@ -408,7 +409,7 @@ function serializeItem(
     customerPoId: i.customerPoId,
     customerRfqId: i.customerRfqId,
     customerRfqItemId: i.customerRfqItemId,
-    customerRfqNo: (i.customerRfqId != null ? rfqNoMap[i.customerRfqId] ?? null : null),
+    customerRfqNo: i.customerRfqId != null ? (rfqNoMap[i.customerRfqId] ?? null) : null,
     partNo: i.partNo,
     lineItem: i.lineItem,
     description: i.description,
@@ -496,7 +497,11 @@ router.get("/customer-po", requireAuth, async (req, res): Promise<void> => {
 
   res.json(
     filtered.map((r) => {
-      const roll = deliveryRollup.get(r.po.id) ?? { totalItems: 0, deliveredItems: 0, rejectedItems: 0 };
+      const roll = deliveryRollup.get(r.po.id) ?? {
+        totalItems: 0,
+        deliveredItems: 0,
+        rejectedItems: 0,
+      };
       const fulfillment = buildFulfillmentStatus({
         storedStatus: r.po.status,
         poIssued: poIssuedSet.has(r.po.id),
@@ -534,8 +539,11 @@ router.get("/customer-po/check-number", requireAuth, async (req, res): Promise<v
     res.json({ available: true });
     return;
   }
-  const excludeId = req.query.excludeId !== undefined ? parseInt(String(req.query.excludeId), 10) : undefined;
-  res.json({ available: await assertPoNoIsUnique(value, Number.isFinite(excludeId) ? excludeId : undefined) });
+  const excludeId =
+    req.query.excludeId !== undefined ? parseInt(String(req.query.excludeId), 10) : undefined;
+  res.json({
+    available: await assertPoNoIsUnique(value, Number.isFinite(excludeId) ? excludeId : undefined),
+  });
 });
 
 router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
@@ -681,26 +689,27 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
     return;
   }
 
-  const { customerPoNo, customerId, customerName, poDate, buyerName, notes, status, items } = req.body as {
-    customerPoNo?: string;
-    customerId?: number | null;
-    customerName?: string;
-    poDate?: string;
-    buyerName?: string;
-    notes?: string;
-    status?: string;
-    items?: Array<{
-      customerRfqId?: number | null;
-      customerRfqItemId?: number | null;
-      partNo?: string;
-      lineItem?: string;
-      description?: string;
-      uom?: string;
-      qty?: string | number | null;
-      unitPrice?: string | number | null;
-      deliveryDate?: string;
-    }>;
-  };
+  const { customerPoNo, customerId, customerName, poDate, buyerName, notes, status, items } =
+    req.body as {
+      customerPoNo?: string;
+      customerId?: number | null;
+      customerName?: string;
+      poDate?: string;
+      buyerName?: string;
+      notes?: string;
+      status?: string;
+      items?: Array<{
+        customerRfqId?: number | null;
+        customerRfqItemId?: number | null;
+        partNo?: string;
+        lineItem?: string;
+        description?: string;
+        uom?: string;
+        qty?: string | number | null;
+        unitPrice?: string | number | null;
+        deliveryDate?: string;
+      }>;
+    };
 
   const updates: Record<string, unknown> = {};
   if (customerPoNo !== undefined) {
@@ -865,7 +874,8 @@ router.patch(
       highlightNote?: string | null;
       clear?: boolean;
     };
-    const clear = body.clear === true || (body.highlightColor == null && body.highlightNote == null);
+    const clear =
+      body.clear === true || (body.highlightColor == null && body.highlightNote == null);
 
     let color: HighlightColor | null = null;
     let note: string | null = null;

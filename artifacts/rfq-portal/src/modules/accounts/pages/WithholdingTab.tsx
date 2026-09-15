@@ -63,9 +63,10 @@ export default function WithholdingTab() {
   return (
     <div className="space-y-5">
       <p className="text-muted-foreground text-sm">
-        الخصم تحت حساب المورد — مبنيّ على فواتير الموردين المُرحَّلة: يُخصم {data?.withholdingRate ?? 3}%؜
-        من قيمة كل فاتورة للمورد ويُورَّد لمصلحة الضرائب نيابةً عنه. النسبة للخدمات {data?.withholdingRateServices ?? 5}%؜
-        وللمشتريات/التوريدات {data?.withholdingRatePurchases ?? 1}%؜ (جدول الضرائب المصري).
+        الخصم تحت حساب المورد — مبنيّ على فواتير الموردين المُرحَّلة: يُخصم{" "}
+        {data?.withholdingRate ?? 3}%؜ من قيمة كل فاتورة للمورد ويُورَّد لمصلحة الضرائب نيابةً عنه.
+        النسبة للخدمات {data?.withholdingRateServices ?? 5}%؜ وللمشتريات/التوريدات{" "}
+        {data?.withholdingRatePurchases ?? 1}%؜ (جدول الضرائب المصري).
       </p>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
@@ -117,20 +118,28 @@ export default function WithholdingTab() {
         ) : (data?.lines ?? []).length === 0 ? (
           <div className="p-12 text-center">
             <ShieldCheck size={40} className="mx-auto text-muted-foreground/30 mb-3" />
-            <p className="text-muted-foreground text-sm">لا توجد فواتير موردين مُرحَّلة ضمن الفترة</p>
+            <p className="text-muted-foreground text-sm">
+              لا توجد فواتير موردين مُرحَّلة ضمن الفترة
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30 text-left">
-                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">فاتورة المورد</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">
+                    فاتورة المورد
+                  </th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">المورد</th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">التاريخ</th>
-                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">صافي القيمة</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">
+                    صافي القيمة
+                  </th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">النسبة</th>
                   <th className="px-3 py-3 text-muted-foreground text-xs font-medium">الخصم</th>
-                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">المستحق للمورد</th>
+                  <th className="px-3 py-3 text-muted-foreground text-xs font-medium">
+                    المستحق للمورد
+                  </th>
                 </tr>
               </thead>
               <tbody>

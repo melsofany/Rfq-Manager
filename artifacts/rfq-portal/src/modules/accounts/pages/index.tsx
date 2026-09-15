@@ -10,9 +10,7 @@ export default function AccountsPage() {
             <Calculator size={20} className="text-primary" />
             الحسابات
           </h1>
-          <p className="text-muted-foreground text-sm">
-            صفحه الحسابات فارغه حاليا
-          </p>
+          <p className="text-muted-foreground text-sm">صفحه الحسابات فارغه حاليا</p>
         </div>
       </div>
     </Layout>

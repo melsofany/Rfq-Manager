@@ -12,7 +12,7 @@
  */
 import { db } from "@workspace/db";
 import { journalEntriesTable, journalLinesTable, chartOfAccountsTable } from "@workspace/db";
-import { eq, sql,and,gte,lte,desc } from "drizzle-orm";
+import { eq, sql, and, gte, lte, desc } from "drizzle-orm";
 import { round2 } from "./tax";
 import { assertMonthOpen } from "./closing";
 

@@ -51,11 +51,12 @@ export function RepresentativeNameInput({
   const [query, setQuery] = useState(value);
   const containerRef = useRef<HTMLDivElement>(null);
   const activeRepresentatives = representatives.filter((rep) => rep.isActive);
-  const filtered = (query.trim()
-    ? activeRepresentatives.filter((rep) =>
-        `${rep.name} ${rep.phone}`.toLowerCase().includes(query.trim().toLowerCase()),
-      )
-    : activeRepresentatives
+  const filtered = (
+    query.trim()
+      ? activeRepresentatives.filter((rep) =>
+          `${rep.name} ${rep.phone}`.toLowerCase().includes(query.trim().toLowerCase()),
+        )
+      : activeRepresentatives
   ).slice(0, 50);
 
   useEffect(() => {
@@ -269,7 +270,9 @@ export function useRfqOptions() {
       const res = await fetch("/api/rfq", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch RFQs");
       const all: RfqOption[] = await res.json();
-      return all.filter((r) => r.status === "SENT" || r.status === "QUOTED" || r.status === "SUCCESS");
+      return all.filter(
+        (r) => r.status === "SENT" || r.status === "QUOTED" || r.status === "SUCCESS",
+      );
     },
     staleTime: 60 * 1000,
   });
@@ -293,9 +296,7 @@ export function RfqCombobox({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selected = rfqs.find((r) => String(r.id) === value);
-  const selectedLabel = selected
-    ? `${selected.internalRfqNo} (${selected.customerRfqNo})`
-    : "";
+  const selectedLabel = selected ? `${selected.internalRfqNo} (${selected.customerRfqNo})` : "";
   const displayValue = open ? query : selectedLabel;
 
   const filtered = query

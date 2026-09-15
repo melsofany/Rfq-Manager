@@ -151,12 +151,24 @@ router.get("/po/progress", requireAuth, async (req, res): Promise<void> => {
     .where(ne(purchaseOrdersTable.status, "cancelled"));
   const byPo = new Map<
     number,
-    { total: number; received: number; rejected: number; receivable: number; receivableReceived: number; suppliers: string[] }
+    {
+      total: number;
+      received: number;
+      rejected: number;
+      receivable: number;
+      receivableReceived: number;
+      suppliers: string[];
+    }
   >();
   for (const r of rows) {
-    const e =
-      byPo.get(r.poId) ??
-      { total: 0, received: 0, rejected: 0, receivable: 0, receivableReceived: 0, suppliers: [] };
+    const e = byPo.get(r.poId) ?? {
+      total: 0,
+      received: 0,
+      rejected: 0,
+      receivable: 0,
+      receivableReceived: 0,
+      suppliers: [],
+    };
     // Cancelled supplier lines are excluded from the badge entirely (they no
     // longer await receipt and are not a success/failure outcome).
     if (r.lineStatus === "cancelled") continue;
@@ -172,9 +184,7 @@ router.get("/po/progress", requireAuth, async (req, res): Promise<void> => {
     }
     byPo.set(r.poId, e);
   }
-  res.json(
-    Array.from(byPo.entries()).map(([poId, v]) => ({ poId, ...v })),
-  );
+  res.json(Array.from(byPo.entries()).map(([poId, v]) => ({ poId, ...v })));
 });
 
 router.post("/po", requireAuth, async (req, res): Promise<void> => {
@@ -774,10 +784,7 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  const [poRow] = await db
-    .select()
-    .from(purchaseOrdersTable)
-    .where(eq(purchaseOrdersTable.id, id));
+  const [poRow] = await db.select().from(purchaseOrdersTable).where(eq(purchaseOrdersTable.id, id));
   if (!poRow) {
     res.status(404).json({ error: "Purchase order not found" });
     return;
@@ -819,10 +826,7 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
     })
     .from(purchaseOrderItemsTable)
     .where(
-      and(
-        eq(purchaseOrderItemsTable.poId, id),
-        eq(purchaseOrderItemsTable.supplierId, supplierId),
-      ),
+      and(eq(purchaseOrderItemsTable.poId, id), eq(purchaseOrderItemsTable.supplierId, supplierId)),
     );
   if (itemRows.length === 0) {
     res.status(400).json({ error: "لا توجد بنود لهذا المورد في أمر الشراء" });
@@ -854,9 +858,7 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
   const isPartialCancel = selectedRows.length < itemRows.length;
   let itemLabel: string | null = null;
   if (isPartialCancel) {
-    const labels = selectedRows.map(
-      (r) => r.partNo?.trim() || r.lineItem?.trim() || `بند ${r.id}`,
-    );
+    const labels = selectedRows.map((r) => r.partNo?.trim() || r.lineItem?.trim() || `بند ${r.id}`);
     itemLabel = labels.join("، ");
   }
   // Fallback reason for the plain po_cancel_ar template (names the items).
@@ -894,7 +896,10 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
             if (w && !waId) waId = w;
           }
         } catch (itemErr) {
-          req.log.warn({ err: itemErr, poNo }, "po_cancel_item_ar template failed — falling back to po_cancel_ar");
+          req.log.warn(
+            { err: itemErr, poNo },
+            "po_cancel_item_ar template failed — falling back to po_cancel_ar",
+          );
           waId = await sendPoCancelWhatsApp({
             phone: supplier.phone.trim(),
             supplierName: supplier.name,
@@ -915,7 +920,10 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
       whatsappSent = Boolean(waId);
       if (!waId) whatsappError = "WhatsApp send returned no message id";
       try {
-        const partialNote = itemIdsToCancel.length < itemRows.length ? ` (${itemIdsToCancel.length}/${itemRows.length} بنود)` : "";
+        const partialNote =
+          itemIdsToCancel.length < itemRows.length
+            ? ` (${itemIdsToCancel.length}/${itemRows.length} بنود)`
+            : "";
         await db.insert(whatsappChatsTable).values({
           waMessageId: waId ?? null,
           direction: "outbound",
@@ -925,11 +933,17 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
           isRead: true,
         });
       } catch (saveErr) {
-        req.log.error({ err: saveErr, supplierId: supplier.id, poNo }, "PO cancel: failed to save WhatsApp chat record");
+        req.log.error(
+          { err: saveErr, supplierId: supplier.id, poNo },
+          "PO cancel: failed to save WhatsApp chat record",
+        );
       }
     } catch (err) {
       whatsappError = err instanceof Error ? err.message : String(err);
-      req.log.error({ err, supplierId: supplier.id, phone: supplier.phone }, "PO cancel: WhatsApp failed");
+      req.log.error(
+        { err, supplierId: supplier.id, phone: supplier.phone },
+        "PO cancel: WhatsApp failed",
+      );
     }
   } else {
     whatsappError = !isWhatsAppConfigured ? "WhatsApp not configured" : "No phone number";
@@ -940,7 +954,11 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
     // line belongs to it), the whole PO becomes "cancelled"; otherwise it stays
     // "sent" with the other suppliers' lines intact.
     const allItems = await db
-      .select({ id: purchaseOrderItemsTable.id, lineStatus: purchaseOrderItemsTable.lineStatus, supplierId: purchaseOrderItemsTable.supplierId })
+      .select({
+        id: purchaseOrderItemsTable.id,
+        lineStatus: purchaseOrderItemsTable.lineStatus,
+        supplierId: purchaseOrderItemsTable.supplierId,
+      })
       .from(purchaseOrderItemsTable)
       .where(eq(purchaseOrderItemsTable.poId, id));
     const remainingActive = allItems.filter(
@@ -977,7 +995,10 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
           .where(eq(purchaseOrdersTable.id, id));
       }
 
-      const partialNote = itemIdsToCancel.length < itemRows.length ? ` (${itemIdsToCancel.length}/${itemRows.length} items)` : " (all items)";
+      const partialNote =
+        itemIdsToCancel.length < itemRows.length
+          ? ` (${itemIdsToCancel.length}/${itemRows.length} items)`
+          : " (all items)";
       await tx.insert(auditLogTable).values({
         action: "po.supplier_cancelled",
         entityType: "po",
@@ -1000,7 +1021,9 @@ router.post("/po/:id/cancel", requireAuth, async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err, id, supplierId }, "Failed to cancel supplier on purchase order");
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ error: "Failed to cancel supplier on purchase order", details: message });
+    res
+      .status(500)
+      .json({ error: "Failed to cancel supplier on purchase order", details: message });
   }
 });
 
@@ -1172,9 +1195,9 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   if (existing.status !== "draft") {
-    res
-      .status(400)
-      .json({ error: "لا يمكن تعديل أمر الشراء بعد إرساله — فقط الأوامر في حالة Draft قابلة للتعديل" });
+    res.status(400).json({
+      error: "لا يمكن تعديل أمر الشراء بعد إرساله — فقط الأوامر في حالة Draft قابلة للتعديل",
+    });
     return;
   }
 
@@ -1216,7 +1239,9 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
           uom: it.uom || null,
           qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
           referencePrice:
-            it.referencePrice != null && it.referencePrice !== "" ? String(it.referencePrice) : null,
+            it.referencePrice != null && it.referencePrice !== ""
+              ? String(it.referencePrice)
+              : null,
           supplierId: it.supplierId ?? null,
           taxIncluded: it.taxIncluded ?? false,
         })),

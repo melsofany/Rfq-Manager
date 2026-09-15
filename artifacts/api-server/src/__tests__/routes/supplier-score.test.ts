@@ -184,7 +184,7 @@ describe("GET /suppliers/:id/score (smoke, real logic)", () => {
     selectQueue.push([supplierRow]);
     selectQueue.push([{ total: 4, replied: 3 }]);
     selectQueue.push([{ avgHours: "2" }]);
-    selectQueue.push([{ avg: null }]);           // no competitor prices
+    selectQueue.push([{ avg: null }]); // no competitor prices
     selectQueue.push([{ wins: 0, total: 0 }]);
     selectQueue.push([{ avgReceipt: null }]);
     selectQueue.push([{ avg: "5.00", cnt: 3 }]); // 3 receipts, avg 5 days

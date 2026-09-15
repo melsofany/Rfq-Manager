@@ -16,17 +16,19 @@ vi.mock("../../middlewares/auth", () => ({
     req.session.employeeName = sessionState.employeeName;
     next();
   },
-  requireRole: (...roles: string[]) => (req: any, res: any, next: any) => {
-    if (!sessionState.employeeId) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    if (!roles.includes(sessionState.role)) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-    next();
-  },
+  requireRole:
+    (...roles: string[]) =>
+    (req: any, res: any, next: any) => {
+      if (!sessionState.employeeId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      if (!roles.includes(sessionState.role)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      next();
+    },
 }));
 
 // ── Chainable + thenable DB mock ─────────────────────────────────────────────
@@ -140,7 +142,8 @@ let testApp: express.Express;
 
 beforeAll(async () => {
   const { default: ledgerRouter } = await import("../../modules/accounts/ledger");
-  const { default: supplierInvoicesRouter } = await import("../../modules/accounts/supplier-invoices");
+  const { default: supplierInvoicesRouter } =
+    await import("../../modules/accounts/supplier-invoices");
   const { default: salesInvoicesRouter } = await import("../../modules/accounts/sales-invoices");
   testApp = express();
   testApp.use(express.json());
@@ -159,19 +162,113 @@ beforeEach(() => {
   lastInsert = null;
   entryIdSeq = 100;
   sessionState = { employeeId: 7, role: "accountant", employeeName: "المحاسب" };
-  taxSettingsRow = { id: 1, vatRate: "14", withholdingRate: "3", withholdingRateServices: "5", withholdingRatePurchases: "1" };
+  taxSettingsRow = {
+    id: 1,
+    vatRate: "14",
+    withholdingRate: "3",
+    withholdingRateServices: "5",
+    withholdingRatePurchases: "1",
+  };
   coaRows = [
-    { id: 1, code: "1001", nameAr: "النقدية", nameEn: null, type: "asset", isControl: true, isActive: true },
-    { id: 2, code: "1010", nameAr: "البنوك", nameEn: null, type: "asset", isControl: true, isActive: true },
-    { id: 3, code: "1200", nameAr: "ذمم العملاء", nameEn: null, type: "asset", isControl: true, isActive: true },
-    { id: 4, code: "1300", nameAr: "المخزون", nameEn: null, type: "asset", isControl: true, isActive: true },
-    { id: 5, code: "1401", nameAr: "ض.ق.م. المدخلات", nameEn: null, type: "asset", isControl: true, isActive: true },
-    { id: 6, code: "2100", nameAr: "ذمم الموردين", nameEn: null, type: "liability", isControl: true, isActive: true },
-    { id: 7, code: "2401", nameAr: "ض.ق.م. المخرجات", nameEn: null, type: "liability", isControl: true, isActive: true },
-    { id: 8, code: "2402", nameAr: "الخصم تحت حساب الضريبة", nameEn: null, type: "liability", isControl: true, isActive: true },
-    { id: 9, code: "4100", nameAr: "المبيعات", nameEn: null, type: "revenue", isControl: false, isActive: true },
-    { id: 10, code: "5100", nameAr: "تكلفة المبيعات", nameEn: null, type: "expense", isControl: false, isActive: true },
-    { id: 11, code: "5900", nameAr: "مصاريف بنكية", nameEn: null, type: "expense", isControl: false, isActive: true },
+    {
+      id: 1,
+      code: "1001",
+      nameAr: "النقدية",
+      nameEn: null,
+      type: "asset",
+      isControl: true,
+      isActive: true,
+    },
+    {
+      id: 2,
+      code: "1010",
+      nameAr: "البنوك",
+      nameEn: null,
+      type: "asset",
+      isControl: true,
+      isActive: true,
+    },
+    {
+      id: 3,
+      code: "1200",
+      nameAr: "ذمم العملاء",
+      nameEn: null,
+      type: "asset",
+      isControl: true,
+      isActive: true,
+    },
+    {
+      id: 4,
+      code: "1300",
+      nameAr: "المخزون",
+      nameEn: null,
+      type: "asset",
+      isControl: true,
+      isActive: true,
+    },
+    {
+      id: 5,
+      code: "1401",
+      nameAr: "ض.ق.م. المدخلات",
+      nameEn: null,
+      type: "asset",
+      isControl: true,
+      isActive: true,
+    },
+    {
+      id: 6,
+      code: "2100",
+      nameAr: "ذمم الموردين",
+      nameEn: null,
+      type: "liability",
+      isControl: true,
+      isActive: true,
+    },
+    {
+      id: 7,
+      code: "2401",
+      nameAr: "ض.ق.م. المخرجات",
+      nameEn: null,
+      type: "liability",
+      isControl: true,
+      isActive: true,
+    },
+    {
+      id: 8,
+      code: "2402",
+      nameAr: "الخصم تحت حساب الضريبة",
+      nameEn: null,
+      type: "liability",
+      isControl: true,
+      isActive: true,
+    },
+    {
+      id: 9,
+      code: "4100",
+      nameAr: "المبيعات",
+      nameEn: null,
+      type: "revenue",
+      isControl: false,
+      isActive: true,
+    },
+    {
+      id: 10,
+      code: "5100",
+      nameAr: "تكلفة المبيعات",
+      nameEn: null,
+      type: "expense",
+      isControl: false,
+      isActive: true,
+    },
+    {
+      id: 11,
+      code: "5900",
+      nameAr: "مصاريف بنكية",
+      nameEn: null,
+      type: "expense",
+      isControl: false,
+      isActive: true,
+    },
   ];
   journalEntryRows = [];
   journalLineRows = [];
@@ -201,7 +298,9 @@ describe("GET /api/accounts/coa", () => {
 describe("POST /api/accounts/coa", () => {
   it("rejects non-accountant (403)", async () => {
     sessionState = { employeeId: 7, role: "purchasing" };
-    const res = await request(testApp).post("/api/accounts/coa").send({ code: "9999", nameAr: "اختبار", type: "expense" });
+    const res = await request(testApp)
+      .post("/api/accounts/coa")
+      .send({ code: "9999", nameAr: "اختبار", type: "expense" });
     expect(res.status).toBe(403);
   });
 
@@ -257,7 +356,11 @@ describe("POST /api/accounts/journal", () => {
   it("rejects an entry with fewer than 2 lines", async () => {
     const res = await request(testApp)
       .post("/api/accounts/journal")
-      .send({ entryDate: "2026-08-01", description: "بند واحد", lines: [{ accountCode: "1001", debit: 100, credit: 0 }] });
+      .send({
+        entryDate: "2026-08-01",
+        description: "بند واحد",
+        lines: [{ accountCode: "1001", debit: 100, credit: 0 }],
+      });
     expect(res.status).toBe(400);
   });
 
@@ -279,14 +382,12 @@ describe("POST /api/accounts/journal", () => {
 // ── Supplier invoices ──────────────────────────────────────────────────────
 describe("POST /api/accounts/supplier-invoices", () => {
   it("creates a supplier invoice (draft) computing VAT + withholding", async () => {
-    const res = await request(testApp)
-      .post("/api/accounts/supplier-invoices")
-      .send({
-        supplierName: "مورد تجريبي",
-        invoiceDate: "2026-08-01",
-        netAmount: 1000,
-        applyWithholding: true,
-      });
+    const res = await request(testApp).post("/api/accounts/supplier-invoices").send({
+      supplierName: "مورد تجريبي",
+      invoiceDate: "2026-08-01",
+      netAmount: 1000,
+      applyWithholding: true,
+    });
     expect(res.status).toBe(200);
     expect(res.body.invoiceNo).toMatch(/^SI-2026-/);
   });
@@ -333,7 +434,21 @@ describe("POST /api/accounts/supplier-invoices/:id/post", () => {
   });
 
   it("rejects posting a non-draft invoice", async () => {
-    supplierInvoiceRows = [{ id: 2, invoiceNo: "SI-2", supplierName: "م", invoiceDate: "2026-08-01", netAmount: "1000", vatAmount: "140", withholdingRate: "3", withholdingAmount: "30", grossAmount: "1140", balance: "1110", status: "posted" }];
+    supplierInvoiceRows = [
+      {
+        id: 2,
+        invoiceNo: "SI-2",
+        supplierName: "م",
+        invoiceDate: "2026-08-01",
+        netAmount: "1000",
+        vatAmount: "140",
+        withholdingRate: "3",
+        withholdingAmount: "30",
+        grossAmount: "1140",
+        balance: "1110",
+        status: "posted",
+      },
+    ];
     const res = await request(testApp).post("/api/accounts/supplier-invoices/2/post");
     expect(res.status).toBe(400);
   });
@@ -359,7 +474,16 @@ describe("POST /api/accounts/sales-invoices", () => {
   it("auto-fills items from a customer PO", async () => {
     customerPoRows = [{ id: 9, no: "CPO-9", customerId: 3, name: "عميل من PO" }];
     customerPoItemRows = [
-      { id: 1, customerPoId: 9, lineItem: "L1", partNo: "P1", description: "بند PO", uom: "قطعة", qty: "5", unitPrice: "200" },
+      {
+        id: 1,
+        customerPoId: 9,
+        lineItem: "L1",
+        partNo: "P1",
+        description: "بند PO",
+        uom: "قطعة",
+        qty: "5",
+        unitPrice: "200",
+      },
     ];
     const res = await request(testApp)
       .post("/api/accounts/sales-invoices")
@@ -427,7 +551,9 @@ describe("POST /api/accounts/sales-invoices/:id/post", () => {
         notes: null,
       },
     ];
-    customerPoItemRows = [{ id: 11, customerPoId: 7, acceptedQty: "10", actualCost: "60", poItemId: 21 }];
+    customerPoItemRows = [
+      { id: 11, customerPoId: 7, acceptedQty: "10", actualCost: "60", poItemId: 21 },
+    ];
     purchaseOrderItemRows = [];
     poItemChargeRows = [];
     const res = await request(testApp).post("/api/accounts/sales-invoices/2/post");
@@ -437,7 +563,21 @@ describe("POST /api/accounts/sales-invoices/:id/post", () => {
   });
 
   it("rejects posting a non-draft sales invoice", async () => {
-    salesInvoiceRows = [{ id: 3, invoiceNo: "INV-3", customerName: "ع", invoiceDate: "2026-08-01", netAmount: "1000", vatAmount: "140", grossAmount: "1140", cogsAmount: "0", collectedAmount: "0", balance: "1140", status: "posted" }];
+    salesInvoiceRows = [
+      {
+        id: 3,
+        invoiceNo: "INV-3",
+        customerName: "ع",
+        invoiceDate: "2026-08-01",
+        netAmount: "1000",
+        vatAmount: "140",
+        grossAmount: "1140",
+        cogsAmount: "0",
+        collectedAmount: "0",
+        balance: "1140",
+        status: "posted",
+      },
+    ];
     const res = await request(testApp).post("/api/accounts/sales-invoices/3/post");
     expect(res.status).toBe(400);
   });
@@ -446,15 +586,13 @@ describe("POST /api/accounts/sales-invoices/:id/post", () => {
 // ── Supplier payments ─────────────────────────────────────────────────────
 describe("POST /api/accounts/supplier-payments", () => {
   it("creates a supplier payment and generates a journal entry", async () => {
-    const res = await request(testApp)
-      .post("/api/accounts/supplier-payments")
-      .send({
-        supplierName: "مورد تجريبي",
-        paymentDate: "2026-08-05",
-        method: "bank_transfer",
-        amount: 500,
-        bankCharges: 5,
-      });
+    const res = await request(testApp).post("/api/accounts/supplier-payments").send({
+      supplierName: "مورد تجريبي",
+      paymentDate: "2026-08-05",
+      method: "bank_transfer",
+      amount: 500,
+      bankCharges: 5,
+    });
     expect(res.status).toBe(200);
     expect(res.body.paymentNo).toMatch(/^SP-2026-/);
     expect(res.body.journalEntryId).toBeDefined();

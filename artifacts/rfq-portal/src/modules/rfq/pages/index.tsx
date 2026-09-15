@@ -6,7 +6,16 @@ import { Layout } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, FileText, Clock, AlertTriangle, ChevronDown, ChevronUp, Timer } from "lucide-react";
+import {
+  Plus,
+  Search,
+  FileText,
+  Clock,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Timer,
+} from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 
@@ -159,17 +168,9 @@ function ClosingSoonSection({
   return (
     <div>
       {/* SAP-style group header */}
-      <div
-        className={cn(
-          "flex items-center gap-2 px-4 py-1.5",
-          cfg.sectionBg,
-          cfg.sectionBorder,
-        )}
-      >
+      <div className={cn("flex items-center gap-2 px-4 py-1.5", cfg.sectionBg, cfg.sectionBorder)}>
         {cfg.icon}
-        <span className={cn("text-xs font-semibold", cfg.sectionText)}>
-          {cfg.label}
-        </span>
+        <span className={cn("text-xs font-semibold", cfg.sectionText)}>{cfg.label}</span>
         <span
           className={cn(
             "ml-1 text-[10px] font-bold text-white rounded-full px-1.5 py-0.5 leading-none",
@@ -321,11 +322,7 @@ function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
         )}
       </button>
 
-      {open && (
-        <div className="border-t border-border">
-          {renderBody()}
-        </div>
-      )}
+      {open && <div className="border-t border-border">{renderBody()}</div>}
     </div>
   );
 }

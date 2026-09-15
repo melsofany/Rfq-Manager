@@ -102,8 +102,7 @@ export default function PricingPage() {
       },
       onError: (err: unknown) => {
         // Detect 400 "expired" rejection from the server
-        const msg =
-          err instanceof Error ? err.message : typeof err === "string" ? err : "";
+        const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "";
         if (msg.toLowerCase().includes("expired") || msg.includes("400")) {
           setExpiredOnSubmit(true);
         }
@@ -265,9 +264,9 @@ export default function PricingPage() {
                 انتهت مدة تقديم العروض — الصفحة مقفلة للقراءة فقط
               </p>
               <p className="text-muted-foreground text-xs mt-0.5 leading-relaxed">
-                لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>. لم يُسجَّل أي
-                عرض سعر من شركتكم لهذا الطلب. يمكنكم مراجعة البنود أدناه — لا يمكن إدخال أي
-                بيانات أو تقديم عرض.
+                لقد انتهى تاريخ الإغلاق لطلب العرض <strong>{data.rfqNo}</strong>. لم يُسجَّل أي عرض
+                سعر من شركتكم لهذا الطلب. يمكنكم مراجعة البنود أدناه — لا يمكن إدخال أي بيانات أو
+                تقديم عرض.
               </p>
             </div>
           </div>
@@ -414,7 +413,6 @@ export default function PricingPage() {
         <PageHeader />
 
         <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
-
           {/* ── Banner: changes based on expired or not ── */}
           {isClientExpired ? (
             /* Expired + submitted → locked read-only notice */

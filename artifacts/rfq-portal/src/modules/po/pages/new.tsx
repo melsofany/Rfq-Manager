@@ -157,7 +157,9 @@ function PoNumberCombobox({
                 setOpen(false);
               }}
             >
-              <div className="font-medium" dir="ltr">{s.value}</div>
+              <div className="font-medium" dir="ltr">
+                {s.value}
+              </div>
               {s.internalNo || s.customerName ? (
                 <div className="text-xs text-muted-foreground">
                   {s.internalNo}
@@ -172,7 +174,6 @@ function PoNumberCombobox({
     </div>
   );
 }
-
 
 export default function NewPurchaseOrderPage() {
   const [, navigate] = useLocation();
@@ -560,7 +561,10 @@ export default function NewPurchaseOrderPage() {
 
               <div className="bg-card border border-border rounded-lg p-4 grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label>Receiver representative name <span className="text-xs text-muted-foreground">(select or type manually)</span></Label>
+                  <Label>
+                    Receiver representative name{" "}
+                    <span className="text-xs text-muted-foreground">(select or type manually)</span>
+                  </Label>
                   <RepresentativeNameInput
                     value={receiverName}
                     onChange={setReceiverName}

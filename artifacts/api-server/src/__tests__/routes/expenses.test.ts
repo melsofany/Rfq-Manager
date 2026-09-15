@@ -8,17 +8,19 @@ vi.mock("../../middlewares/auth", () => ({
     req.session = { ...sessionState };
     next();
   },
-  requireRole: (...roles: string[]) => (req: any, res: any, next: any) => {
-    if (!sessionState.employeeId) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    if (!roles.includes(sessionState.role)) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-    next();
-  },
+  requireRole:
+    (...roles: string[]) =>
+    (req: any, res: any, next: any) => {
+      if (!sessionState.employeeId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      if (!roles.includes(sessionState.role)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      next();
+    },
 }));
 
 function chainable(value: any, methods: Record<string, any> = {}): any {
@@ -44,7 +46,8 @@ function selectBuilder() {
       let rows: any[] = [];
       if (table === operatingExpensesTbl) rows = expenseRows;
       else if (table === expenseAttachmentsTbl) rows = attachmentRows;
-      else if (table === chartOfAccountsTbl) rows = [{ code: "1001" }, { code: "1010" }, { code: "5300" }, { code: "5990" }];
+      else if (table === chartOfAccountsTbl)
+        rows = [{ code: "1001" }, { code: "1010" }, { code: "5300" }, { code: "5990" }];
       else if (table === journalEntriesTbl) rows = [];
       const cur: any = {
         innerJoin: vi.fn(() => cur),
@@ -62,7 +65,9 @@ function selectBuilder() {
 }
 
 const dbMock: any = {
-  select: vi.fn((table: any) => (table === accountingClosingsTbl ? chainable([]) : selectBuilder())),
+  select: vi.fn((table: any) =>
+    table === accountingClosingsTbl ? chainable([]) : selectBuilder(),
+  ),
   insert: vi.fn(() => ({
     values: vi.fn(() => chainable([{ id: 1 }], { returning: vi.fn(() => chainable([{ id: 1 }])) })),
   })),
@@ -97,7 +102,10 @@ vi.mock("@workspace/db", () => ({
 
 vi.mock("drizzle-orm", () => {
   const sqlTag = (strings: TemplateStringsArray, ...vals: any[]) =>
-    strings.reduce((acc: string, s: string, i: number) => acc + s + (vals[i] != null ? String(vals[i]) : ""), "");
+    strings.reduce(
+      (acc: string, s: string, i: number) => acc + s + (vals[i] != null ? String(vals[i]) : ""),
+      "",
+    );
   (sqlTag as any).raw = (s: any) => s;
   return {
     eq: (a: any, _b: any) => a,
@@ -133,7 +141,16 @@ beforeEach(() => {
 describe("Operating expenses API", () => {
   it("GET /api/expenses returns the list", async () => {
     expenseRows = [
-      { id: 1, category: "إيجارات", description: null, expenseDate: "2026-08-01", amount: "5000", notes: null, employeeName: "Sara", createdAt: new Date() },
+      {
+        id: 1,
+        category: "إيجارات",
+        description: null,
+        expenseDate: "2026-08-01",
+        amount: "5000",
+        notes: null,
+        employeeName: "Sara",
+        createdAt: new Date(),
+      },
     ];
     const res = await request(testApp).get("/api/expenses");
     expect(res.status).toBe(200);
@@ -161,10 +178,25 @@ describe("Operating expenses API", () => {
 
   it("GET /api/expenses/:id returns detail with attachments", async () => {
     expenseRows = [
-      { id: 5, category: "صيانة", description: "تكييف", expenseDate: "2026-07-20", amount: "800", notes: null, employeeName: "Sara", createdAt: new Date() },
+      {
+        id: 5,
+        category: "صيانة",
+        description: "تكييف",
+        expenseDate: "2026-07-20",
+        amount: "800",
+        notes: null,
+        employeeName: "Sara",
+        createdAt: new Date(),
+      },
     ];
     attachmentRows = [
-      { id: 9, originalName: "inv.pdf", mimeType: "application/pdf", size: 1024, createdAt: new Date() },
+      {
+        id: 9,
+        originalName: "inv.pdf",
+        mimeType: "application/pdf",
+        size: 1024,
+        createdAt: new Date(),
+      },
     ];
     const res = await request(testApp).get("/api/expenses/5");
     expect(res.status).toBe(200);

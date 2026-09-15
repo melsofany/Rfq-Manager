@@ -353,7 +353,6 @@ router.get("/rfq/sheets/rfq-numbers", requireAuth, async (req, res): Promise<voi
   }
 });
 
-
 // GET /api/rfq/closing-soon — RFQs closing today, tomorrow, or the day after.
 // Sources checked (in priority order):
 //   A) rfqTable.expiresAt          — set via new-RFQ form or send page
@@ -589,7 +588,6 @@ router.get("/rfq/closing-soon", requireAuth, async (req, res): Promise<void> => 
     res.json({ today: [], tomorrow: [], dayAfterTomorrow: [] });
   }
 });
-
 
 router.get("/rfq/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;

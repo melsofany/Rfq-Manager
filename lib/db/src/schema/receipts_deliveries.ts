@@ -68,7 +68,5 @@ export const insertCustomerPoItemDeliverySchema = createInsertSchema(
   id: true,
   createdAt: true,
 });
-export type InsertCustomerPoItemDelivery = z.infer<
-  typeof insertCustomerPoItemDeliverySchema
->;
+export type InsertCustomerPoItemDelivery = z.infer<typeof insertCustomerPoItemDeliverySchema>;
 export type CustomerPoItemDelivery = typeof customerPoItemDeliveriesTable.$inferSelect;

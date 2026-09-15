@@ -81,11 +81,19 @@ interface OverviewRates {
   responseRateThisMonth: number;
   avgResponseTimeHours: number | null;
 }
-interface StatusDist { status: string; count: number; }
+interface StatusDist {
+  status: string;
+  count: number;
+}
 interface OverviewData {
   counts: OverviewCounts;
   rates: OverviewRates;
-  itemAnalytics: { totalItems: number; pricedItems: number; unpricedItems: number; itemsWithPo: number };
+  itemAnalytics: {
+    totalItems: number;
+    pricedItems: number;
+    unpricedItems: number;
+    itemsWithPo: number;
+  };
   distributions: {
     rfqsByStatus: StatusDist[];
     customerRfqsByStatus: StatusDist[];
@@ -97,17 +105,72 @@ interface OverviewData {
     customerPoDelivery: { total: number; delivered: number; rejected: number; pending: number };
   };
   financials: {
-    margins: { totalRevenue: number | null; totalCost: number | null; totalMargin: number | null; marginPct: number | null; lossLines: number; lineCount: number; pricedLines: number };
-    vat: { vatRate: number; output: { net: number | null; vat: number | null }; input: { net: number | null; vat: number | null }; netVat: number; payable: number; credit: number };
-    withholding: { rate: number; totalNet: number | null; totalWithholding: number | null; totalPayable: number | null };
-    accounts: { totalAP: number | null; totalAR: number | null; cash: number | null; bank: number | null; pendingDrafts: number };
-    expenses: { grandTotal: number | null; byCategory: { category: string; total: number; count: number }[] };
-    collections: { totalReceivable: number | null; totalCollected: number | null; outstandingCount: number; overdueCount: number; dueSoonCount: number };
-    statements: { netProfit: number | null; totalAssets: number | null; totalLiabilities: number | null; totalEquity: number | null };
+    margins: {
+      totalRevenue: number | null;
+      totalCost: number | null;
+      totalMargin: number | null;
+      marginPct: number | null;
+      lossLines: number;
+      lineCount: number;
+      pricedLines: number;
+    };
+    vat: {
+      vatRate: number;
+      output: { net: number | null; vat: number | null };
+      input: { net: number | null; vat: number | null };
+      netVat: number;
+      payable: number;
+      credit: number;
+    };
+    withholding: {
+      rate: number;
+      totalNet: number | null;
+      totalWithholding: number | null;
+      totalPayable: number | null;
+    };
+    accounts: {
+      totalAP: number | null;
+      totalAR: number | null;
+      cash: number | null;
+      bank: number | null;
+      pendingDrafts: number;
+    };
+    expenses: {
+      grandTotal: number | null;
+      byCategory: { category: string; total: number; count: number }[];
+    };
+    collections: {
+      totalReceivable: number | null;
+      totalCollected: number | null;
+      outstandingCount: number;
+      overdueCount: number;
+      dueSoonCount: number;
+    };
+    statements: {
+      netProfit: number | null;
+      totalAssets: number | null;
+      totalLiabilities: number | null;
+      totalEquity: number | null;
+    };
   };
   monthlyTrend: { month: string; rfqs: number; pos: number; customerRfqs: number }[];
-  topSuppliers: { supplierId: number; supplierName: string; category: string; totalRfqsReceived: number; totalOffersSubmitted: number; responseRate: number; totalPoItems: number; avgPrice: number | null }[];
-  recentActivity: { id: number; action: string; description: string; employeeName: string | null; createdAt: string }[];
+  topSuppliers: {
+    supplierId: number;
+    supplierName: string;
+    category: string;
+    totalRfqsReceived: number;
+    totalOffersSubmitted: number;
+    responseRate: number;
+    totalPoItems: number;
+    avgPrice: number | null;
+  }[];
+  recentActivity: {
+    id: number;
+    action: string;
+    description: string;
+    employeeName: string | null;
+    createdAt: string;
+  }[];
 }
 
 function fmtMoney(v: number | null | undefined): string {
@@ -117,7 +180,20 @@ function fmtMoney(v: number | null | undefined): string {
 function fmtMonth(m: string | undefined): string {
   if (!m) return "";
   const [y, mo] = m.split("-");
-  const months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+  const months = [
+    "يناير",
+    "فبراير",
+    "مارس",
+    "أبريل",
+    "مايو",
+    "يونيو",
+    "يوليو",
+    "أغسطس",
+    "سبتمبر",
+    "أكتوبر",
+    "نوفمبر",
+    "ديسمبر",
+  ];
   return `${months[parseInt(mo, 10) - 1]} ${y}`;
 }
 function timeAgo(iso: string): string {
@@ -226,9 +302,26 @@ const DEEP_COLORS = [
 ];
 
 // ────────────────── status distribution card ──────────────────
-function StatusDistCard({ title, data }: { title: string; data: { status: string; count: number }[] }) {
+function StatusDistCard({
+  title,
+  data,
+}: {
+  title: string;
+  data: { status: string; count: number }[];
+}) {
   const total = data.reduce((s, d) => s + d.count, 0);
-  const palette = ["#1e3a5f", "#0ea5e9", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899", "#f97316", "#14b8a6", "#6366f1", "#64748b"];
+  const palette = [
+    "#1e3a5f",
+    "#0ea5e9",
+    "#f59e0b",
+    "#10b981",
+    "#8b5cf6",
+    "#ec4899",
+    "#f97316",
+    "#14b8a6",
+    "#6366f1",
+    "#64748b",
+  ];
   return (
     <div className="bg-card border border-border rounded-lg p-5">
       <h2 className="font-semibold text-sm text-foreground mb-3">{title}</h2>
@@ -236,8 +329,19 @@ function StatusDistCard({ title, data }: { title: string; data: { status: string
         <div className="flex items-center gap-4">
           <ResponsiveContainer width="50%" height={160}>
             <PieChart>
-              <Pie data={data.map((d) => ({ name: d.status, value: d.count }))} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={55} innerRadius={28} paddingAngle={2}>
-                {data.map((_, i) => <Cell key={i} fill={palette[i % palette.length]} />)}
+              <Pie
+                data={data.map((d) => ({ name: d.status, value: d.count }))}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={55}
+                innerRadius={28}
+                paddingAngle={2}
+              >
+                {data.map((_, i) => (
+                  <Cell key={i} fill={palette[i % palette.length]} />
+                ))}
               </Pie>
             </PieChart>
           </ResponsiveContainer>
@@ -245,12 +349,18 @@ function StatusDistCard({ title, data }: { title: string; data: { status: string
             {data.map((d, i) => (
               <div key={d.status} className="flex justify-between items-center">
                 <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <span className="w-2.5 h-2.5 rounded-sm" style={{ background: palette[i % palette.length] }} />
+                  <span
+                    className="w-2.5 h-2.5 rounded-sm"
+                    style={{ background: palette[i % palette.length] }}
+                  />
                   {d.status}
                 </span>
                 <span className="font-medium text-foreground">
                   {d.count}
-                  <span className="text-muted-foreground/60 mr-1"> ({total > 0 ? Math.round((d.count / total) * 100) : 0}%)</span>
+                  <span className="text-muted-foreground/60 mr-1">
+                    {" "}
+                    ({total > 0 ? Math.round((d.count / total) * 100) : 0}%)
+                  </span>
                 </span>
               </div>
             ))}
@@ -345,7 +455,8 @@ function ProcurementPerformanceSection() {
             أداء موظفي المشتريات
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            إنتاجية كل موظف عبر دورة طلبات التسعير: الطلبات، البنود، العروض، التحويل لأمر شراء، والطلبات الفاشلة
+            إنتاجية كل موظف عبر دورة طلبات التسعير: الطلبات، البنود، العروض، التحويل لأمر شراء،
+            والطلبات الفاشلة
           </p>
         </div>
         <button
@@ -383,7 +494,10 @@ function ProcurementPerformanceSection() {
           <div className="bg-gradient-to-br from-amber-500/10 to-orange-600/5 border border-amber-500/20 rounded-lg p-3">
             <p className="text-[11px] text-muted-foreground">نسبة التحويل الكلية</p>
             <p className="text-xl font-bold text-amber-600 mt-0.5">
-              {totals.rfqCount ? Math.round((totals.convertedRfqs / totals.rfqCount) * 1000) / 10 : 0}%
+              {totals.rfqCount
+                ? Math.round((totals.convertedRfqs / totals.rfqCount) * 1000) / 10
+                : 0}
+              %
             </p>
           </div>
         </div>
@@ -395,9 +509,7 @@ function ProcurementPerformanceSection() {
       ) : error ? (
         <p className="text-sm text-red-500 text-center py-8">{error}</p>
       ) : employees.length === 0 ? (
-        <p className="text-sm text-muted-foreground text-center py-8">
-          لا توجد بيانات مشتريات بعد
-        </p>
+        <p className="text-sm text-muted-foreground text-center py-8">لا توجد بيانات مشتريات بعد</p>
       ) : (
         <div className="bg-card border border-border rounded-lg overflow-x-auto">
           <table className="w-full text-xs">
@@ -421,7 +533,9 @@ function ProcurementPerformanceSection() {
                 <tr key={emp.employeeId} className="hover:bg-muted/30">
                   <td className="p-3 font-medium text-foreground">
                     {emp.employeeName}
-                    <span className="block text-[10px] text-muted-foreground font-normal">{emp.role}</span>
+                    <span className="block text-[10px] text-muted-foreground font-normal">
+                      {emp.role}
+                    </span>
                   </td>
                   <td className="text-center p-3 text-foreground font-medium">{emp.rfqCount}</td>
                   <td className="text-center p-3 text-muted-foreground">{emp.itemCount}</td>
@@ -437,7 +551,9 @@ function ProcurementPerformanceSection() {
                       </span>
                     )}
                   </td>
-                  <td className="text-center p-3 text-emerald-600 font-medium">{emp.convertedRfqs}</td>
+                  <td className="text-center p-3 text-emerald-600 font-medium">
+                    {emp.convertedRfqs}
+                  </td>
                   <td className="text-center p-3 text-emerald-600">{emp.convertedItems}</td>
                   <td className="text-center p-3">
                     <span
@@ -566,7 +682,9 @@ function DataEntryPerformanceSection() {
           <div className="bg-gradient-to-br from-sky-500/10 to-blue-600/5 border border-sky-500/20 rounded-lg p-4">
             <p className="text-xs text-muted-foreground">إجمالي الوقت أمام التطبيق</p>
             <p className="text-xl font-bold text-sky-600 mt-1">{totals.totalFormatted}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{totals.completedSessions} جلسة مكتملة</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {totals.completedSessions} جلسة مكتملة
+            </p>
           </div>
           <div className="bg-gradient-to-br from-emerald-500/10 to-green-600/5 border border-emerald-500/20 rounded-lg p-4">
             <p className="text-xs text-muted-foreground">هذا الأسبوع</p>
@@ -620,20 +738,34 @@ function DataEntryPerformanceSection() {
                 <tr key={emp.employeeId} className="hover:bg-muted/30">
                   <td className="p-3 font-medium text-foreground">
                     {emp.employeeName}
-                    <span className="block text-[10px] text-muted-foreground font-normal">{emp.role}</span>
+                    <span className="block text-[10px] text-muted-foreground font-normal">
+                      {emp.role}
+                    </span>
                   </td>
                   <td className="text-center p-3 text-foreground">{emp.counts.rfqs}</td>
                   <td className="text-center p-3 text-muted-foreground">{emp.counts.rfqItems}</td>
                   <td className="text-center p-3 text-foreground">{emp.counts.customerRfqs}</td>
-                  <td className="text-center p-3 text-muted-foreground">{emp.counts.customerRfqItems}</td>
+                  <td className="text-center p-3 text-muted-foreground">
+                    {emp.counts.customerRfqItems}
+                  </td>
                   <td className="text-center p-3 text-foreground">{emp.counts.pos}</td>
                   <td className="text-center p-3 text-muted-foreground">{emp.counts.poItems}</td>
                   <td className="text-center p-3 text-foreground">{emp.counts.customerPos}</td>
-                  <td className="text-center p-3 text-muted-foreground">{emp.counts.customerPoItems}</td>
-                  <td className="text-center p-3 text-sky-600 font-medium">{emp.durations.avgFormatted}</td>
-                  <td className="text-center p-3 text-foreground font-medium">{emp.durations.totalFormatted}</td>
-                  <td className="text-center p-3 text-emerald-600">{emp.durations.weeklyFormatted}</td>
-                  <td className="text-center p-3 text-violet-600">{emp.durations.monthlyFormatted}</td>
+                  <td className="text-center p-3 text-muted-foreground">
+                    {emp.counts.customerPoItems}
+                  </td>
+                  <td className="text-center p-3 text-sky-600 font-medium">
+                    {emp.durations.avgFormatted}
+                  </td>
+                  <td className="text-center p-3 text-foreground font-medium">
+                    {emp.durations.totalFormatted}
+                  </td>
+                  <td className="text-center p-3 text-emerald-600">
+                    {emp.durations.weeklyFormatted}
+                  </td>
+                  <td className="text-center p-3 text-violet-600">
+                    {emp.durations.monthlyFormatted}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1380,30 +1512,117 @@ ${
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                         {[
-                          { label: "طلبات تسعير الموردين", value: overview.counts.rfqs, icon: FileText, color: "bg-blue-100 text-blue-700" },
-                          { label: "طلبات مفتوحة", value: overview.counts.openRfqs, icon: Clock, color: "bg-amber-100 text-amber-700" },
-                          { label: "طلبات تسعير العملاء", value: overview.counts.customerRfqs, icon: FileText, color: "bg-indigo-100 text-indigo-700" },
-                          { label: "أوامر شراء العملاء", value: overview.counts.customerPos, icon: ShoppingCart, color: "bg-emerald-100 text-emerald-700" },
-                          { label: "أوامر شراء الموردين", value: overview.counts.pos, icon: Package, color: "bg-green-100 text-green-700" },
-                          { label: "إجمالي البنود", value: overview.counts.items, icon: Package, color: "bg-slate-100 text-slate-700" },
-                          { label: "الموردون النشطون", value: overview.counts.suppliers, icon: Users, color: "bg-purple-100 text-purple-700" },
-                          { label: "العملاء النشطون", value: overview.counts.customers, icon: Building2, color: "bg-cyan-100 text-cyan-700" },
-                          { label: "العروض المستلمة", value: overview.counts.offers, icon: TrendingUp, color: "bg-teal-100 text-teal-700" },
-                          { label: "المندوبون", value: overview.counts.representatives, icon: UserCheck, color: "bg-orange-100 text-orange-700" },
-                          { label: "الموظفون", value: overview.counts.employees, icon: Users, color: "bg-pink-100 text-pink-700" },
-                          { label: "محادثات واتساب", value: overview.counts.whatsappChats, icon: MessageSquare, color: "bg-green-100 text-green-700" },
-                          { label: "فواتير الموردين", value: overview.counts.supplierInvoices, icon: Receipt, color: "bg-red-100 text-red-700" },
-                          { label: "فواتير البيع", value: overview.counts.salesInvoices, icon: Receipt, color: "bg-blue-100 text-blue-700" },
-                          { label: "قيود اليومية", value: overview.counts.journalEntries, icon: Calculator, color: "bg-violet-100 text-violet-700" },
-                          { label: "سجل التدقيق", value: overview.counts.auditEntries, icon: Activity, color: "bg-gray-100 text-gray-700" },
+                          {
+                            label: "طلبات تسعير الموردين",
+                            value: overview.counts.rfqs,
+                            icon: FileText,
+                            color: "bg-blue-100 text-blue-700",
+                          },
+                          {
+                            label: "طلبات مفتوحة",
+                            value: overview.counts.openRfqs,
+                            icon: Clock,
+                            color: "bg-amber-100 text-amber-700",
+                          },
+                          {
+                            label: "طلبات تسعير العملاء",
+                            value: overview.counts.customerRfqs,
+                            icon: FileText,
+                            color: "bg-indigo-100 text-indigo-700",
+                          },
+                          {
+                            label: "أوامر شراء العملاء",
+                            value: overview.counts.customerPos,
+                            icon: ShoppingCart,
+                            color: "bg-emerald-100 text-emerald-700",
+                          },
+                          {
+                            label: "أوامر شراء الموردين",
+                            value: overview.counts.pos,
+                            icon: Package,
+                            color: "bg-green-100 text-green-700",
+                          },
+                          {
+                            label: "إجمالي البنود",
+                            value: overview.counts.items,
+                            icon: Package,
+                            color: "bg-slate-100 text-slate-700",
+                          },
+                          {
+                            label: "الموردون النشطون",
+                            value: overview.counts.suppliers,
+                            icon: Users,
+                            color: "bg-purple-100 text-purple-700",
+                          },
+                          {
+                            label: "العملاء النشطون",
+                            value: overview.counts.customers,
+                            icon: Building2,
+                            color: "bg-cyan-100 text-cyan-700",
+                          },
+                          {
+                            label: "العروض المستلمة",
+                            value: overview.counts.offers,
+                            icon: TrendingUp,
+                            color: "bg-teal-100 text-teal-700",
+                          },
+                          {
+                            label: "المندوبون",
+                            value: overview.counts.representatives,
+                            icon: UserCheck,
+                            color: "bg-orange-100 text-orange-700",
+                          },
+                          {
+                            label: "الموظفون",
+                            value: overview.counts.employees,
+                            icon: Users,
+                            color: "bg-pink-100 text-pink-700",
+                          },
+                          {
+                            label: "محادثات واتساب",
+                            value: overview.counts.whatsappChats,
+                            icon: MessageSquare,
+                            color: "bg-green-100 text-green-700",
+                          },
+                          {
+                            label: "فواتير الموردين",
+                            value: overview.counts.supplierInvoices,
+                            icon: Receipt,
+                            color: "bg-red-100 text-red-700",
+                          },
+                          {
+                            label: "فواتير البيع",
+                            value: overview.counts.salesInvoices,
+                            icon: Receipt,
+                            color: "bg-blue-100 text-blue-700",
+                          },
+                          {
+                            label: "قيود اليومية",
+                            value: overview.counts.journalEntries,
+                            icon: Calculator,
+                            color: "bg-violet-100 text-violet-700",
+                          },
+                          {
+                            label: "سجل التدقيق",
+                            value: overview.counts.auditEntries,
+                            icon: Activity,
+                            color: "bg-gray-100 text-gray-700",
+                          },
                         ].map((kpi) => (
-                          <div key={kpi.label} className="bg-muted/40 border border-border rounded-lg p-3 flex items-center gap-2.5">
+                          <div
+                            key={kpi.label}
+                            className="bg-muted/40 border border-border rounded-lg p-3 flex items-center gap-2.5"
+                          >
                             <div className={`p-2 rounded-lg ${kpi.color} shrink-0`}>
                               <kpi.icon size={16} />
                             </div>
                             <div className="min-w-0">
-                              <p className="text-lg font-bold text-foreground leading-tight">{kpi.value}</p>
-                              <p className="text-muted-foreground text-[11px] leading-tight truncate">{kpi.label}</p>
+                              <p className="text-lg font-bold text-foreground leading-tight">
+                                {kpi.value}
+                              </p>
+                              <p className="text-muted-foreground text-[11px] leading-tight truncate">
+                                {kpi.label}
+                              </p>
                             </div>
                           </div>
                         ))}
@@ -1419,15 +1638,21 @@ ${
                         </h2>
                         <div className="grid grid-cols-3 gap-3 mb-4">
                           <div className="text-center bg-muted/40 rounded-lg p-3">
-                            <p className="text-2xl font-bold text-foreground">{overview.operations.poReceipt.total}</p>
+                            <p className="text-2xl font-bold text-foreground">
+                              {overview.operations.poReceipt.total}
+                            </p>
                             <p className="text-xs text-muted-foreground">إجمالي البنود</p>
                           </div>
                           <div className="text-center bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-3">
-                            <p className="text-2xl font-bold text-emerald-600">{overview.operations.poReceipt.received}</p>
+                            <p className="text-2xl font-bold text-emerald-600">
+                              {overview.operations.poReceipt.received}
+                            </p>
                             <p className="text-xs text-muted-foreground">تم الاستلام</p>
                           </div>
                           <div className="text-center bg-red-50 dark:bg-red-950/30 rounded-lg p-3">
-                            <p className="text-2xl font-bold text-red-500">{overview.operations.poReceipt.rejected}</p>
+                            <p className="text-2xl font-bold text-red-500">
+                              {overview.operations.poReceipt.rejected}
+                            </p>
                             <p className="text-xs text-muted-foreground">مرفوض</p>
                           </div>
                         </div>
@@ -1436,11 +1661,21 @@ ${
                             <div className="flex justify-between text-xs text-muted-foreground">
                               <span>نسبة الاستلام</span>
                               <span className="font-bold text-foreground">
-                                {Math.round((overview.operations.poReceipt.received / overview.operations.poReceipt.total) * 100)}%
+                                {Math.round(
+                                  (overview.operations.poReceipt.received /
+                                    overview.operations.poReceipt.total) *
+                                    100,
+                                )}
+                                %
                               </span>
                             </div>
                             <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${(overview.operations.poReceipt.received / overview.operations.poReceipt.total) * 100}%` }} />
+                              <div
+                                className="h-full bg-emerald-500 rounded-full transition-all"
+                                style={{
+                                  width: `${(overview.operations.poReceipt.received / overview.operations.poReceipt.total) * 100}%`,
+                                }}
+                              />
                             </div>
                           </div>
                         )}
@@ -1453,19 +1688,27 @@ ${
                         </h2>
                         <div className="grid grid-cols-4 gap-2 mb-4">
                           <div className="text-center bg-muted/40 rounded-lg p-2">
-                            <p className="text-xl font-bold text-foreground">{overview.operations.customerPoDelivery.total}</p>
+                            <p className="text-xl font-bold text-foreground">
+                              {overview.operations.customerPoDelivery.total}
+                            </p>
                             <p className="text-[10px] text-muted-foreground">إجمالي</p>
                           </div>
                           <div className="text-center bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-2">
-                            <p className="text-xl font-bold text-emerald-600">{overview.operations.customerPoDelivery.delivered}</p>
+                            <p className="text-xl font-bold text-emerald-600">
+                              {overview.operations.customerPoDelivery.delivered}
+                            </p>
                             <p className="text-[10px] text-muted-foreground">مُسلّم</p>
                           </div>
                           <div className="text-center bg-red-50 dark:bg-red-950/30 rounded-lg p-2">
-                            <p className="text-xl font-bold text-red-500">{overview.operations.customerPoDelivery.rejected}</p>
+                            <p className="text-xl font-bold text-red-500">
+                              {overview.operations.customerPoDelivery.rejected}
+                            </p>
                             <p className="text-[10px] text-muted-foreground">مرفوض</p>
                           </div>
                           <div className="text-center bg-amber-50 dark:bg-amber-950/30 rounded-lg p-2">
-                            <p className="text-xl font-bold text-amber-600">{overview.operations.customerPoDelivery.pending}</p>
+                            <p className="text-xl font-bold text-amber-600">
+                              {overview.operations.customerPoDelivery.pending}
+                            </p>
                             <p className="text-[10px] text-muted-foreground">منتظر</p>
                           </div>
                         </div>
@@ -1474,11 +1717,21 @@ ${
                             <div className="flex justify-between text-xs text-muted-foreground">
                               <span>نسبة التسليم</span>
                               <span className="font-bold text-foreground">
-                                {Math.round((overview.operations.customerPoDelivery.delivered / overview.operations.customerPoDelivery.total) * 100)}%
+                                {Math.round(
+                                  (overview.operations.customerPoDelivery.delivered /
+                                    overview.operations.customerPoDelivery.total) *
+                                    100,
+                                )}
+                                %
                               </span>
                             </div>
                             <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${(overview.operations.customerPoDelivery.delivered / overview.operations.customerPoDelivery.total) * 100}%` }} />
+                              <div
+                                className="h-full bg-blue-500 rounded-full transition-all"
+                                style={{
+                                  width: `${(overview.operations.customerPoDelivery.delivered / overview.operations.customerPoDelivery.total) * 100}%`,
+                                }}
+                              />
                             </div>
                           </div>
                         )}
@@ -1487,10 +1740,22 @@ ${
 
                     {/* ── Section: Status Distributions ── */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <StatusDistCard title="توزيع طلبات تسعير الموردين" data={overview.distributions.rfqsByStatus} />
-                      <StatusDistCard title="توزيع طلبات تسعير العملاء" data={overview.distributions.customerRfqsByStatus} />
-                      <StatusDistCard title="توزيع أوامر شراء العملاء" data={overview.distributions.customerPosByStatus} />
-                      <StatusDistCard title="توزيع أوامر شراء الموردين" data={overview.distributions.posByStatus} />
+                      <StatusDistCard
+                        title="توزيع طلبات تسعير الموردين"
+                        data={overview.distributions.rfqsByStatus}
+                      />
+                      <StatusDistCard
+                        title="توزيع طلبات تسعير العملاء"
+                        data={overview.distributions.customerRfqsByStatus}
+                      />
+                      <StatusDistCard
+                        title="توزيع أوامر شراء العملاء"
+                        data={overview.distributions.customerPosByStatus}
+                      />
+                      <StatusDistCard
+                        title="توزيع أوامر شراء الموردين"
+                        data={overview.distributions.posByStatus}
+                      />
                     </div>
 
                     {/* ── Section: Financial Summary ── */}
@@ -1506,28 +1771,87 @@ ${
                             <TrendingUp size={13} /> الهامش المحقق
                           </h3>
                           <div className="space-y-1.5 text-xs">
-                            <div className="flex justify-between"><span className="text-muted-foreground">الإيرادات</span><span className="font-medium text-foreground">{fmtMoney(overview.financials.margins.totalRevenue)}</span></div>
-                            <div className="flex justify-between"><span className="text-muted-foreground">التكلفة</span><span className="font-medium text-foreground">{fmtMoney(overview.financials.margins.totalCost)}</span></div>
-                            <div className="flex justify-between border-t border-border pt-1.5"><span className="font-medium text-foreground">صافي الهامش</span><span className={`font-bold ${(overview.financials.margins.totalMargin ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}`}>{fmtMoney(overview.financials.margins.totalMargin)}</span></div>
-                            <div className="flex justify-between"><span className="text-muted-foreground">نسبة الهامش</span><span className="font-medium text-foreground">{overview.financials.margins.marginPct != null ? `${Number(overview.financials.margins.marginPct).toFixed(1)}%` : "—"}</span></div>
-                            <div className="flex justify-between"><span className="text-muted-foreground">بنود خاسرة</span><span className={`font-medium ${overview.financials.margins.lossLines > 0 ? "text-red-500" : "text-foreground"}`}>{overview.financials.margins.lossLines}</span></div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">الإيرادات</span>
+                              <span className="font-medium text-foreground">
+                                {fmtMoney(overview.financials.margins.totalRevenue)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">التكلفة</span>
+                              <span className="font-medium text-foreground">
+                                {fmtMoney(overview.financials.margins.totalCost)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-t border-border pt-1.5">
+                              <span className="font-medium text-foreground">صافي الهامش</span>
+                              <span
+                                className={`font-bold ${(overview.financials.margins.totalMargin ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}`}
+                              >
+                                {fmtMoney(overview.financials.margins.totalMargin)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">نسبة الهامش</span>
+                              <span className="font-medium text-foreground">
+                                {overview.financials.margins.marginPct != null
+                                  ? `${Number(overview.financials.margins.marginPct).toFixed(1)}%`
+                                  : "—"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">بنود خاسرة</span>
+                              <span
+                                className={`font-medium ${overview.financials.margins.lossLines > 0 ? "text-red-500" : "text-foreground"}`}
+                              >
+                                {overview.financials.margins.lossLines}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
                         {/* VAT */}
                         <div className="border border-border rounded-lg p-4 bg-gradient-to-br from-blue-50/50 to-transparent dark:from-blue-950/20">
                           <h3 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
-                            <Receipt size={13} /> ضريبة القيمة المضافة ({overview.financials.vat.vatRate}%)
+                            <Receipt size={13} /> ضريبة القيمة المضافة (
+                            {overview.financials.vat.vatRate}%)
                           </h3>
                           <div className="space-y-1.5 text-xs">
-                            <div className="flex justify-between"><span className="text-muted-foreground">ض.مخرجات</span><span className="font-medium text-foreground">{fmtMoney(overview.financials.vat.output.vat)}</span></div>
-                            <div className="flex justify-between"><span className="text-muted-foreground">ض.مدخلات</span><span className="font-medium text-foreground">{fmtMoney(overview.financials.vat.input.vat)}</span></div>
-                            <div className="flex justify-between border-t border-border pt-1.5"><span className="font-medium text-foreground">صافي المستحق</span><span className={`font-bold ${overview.financials.vat.netVat >= 0 ? "text-blue-600" : "text-emerald-600"}`}>{fmtMoney(overview.financials.vat.netVat)}</span></div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">ض.مخرجات</span>
+                              <span className="font-medium text-foreground">
+                                {fmtMoney(overview.financials.vat.output.vat)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">ض.مدخلات</span>
+                              <span className="font-medium text-foreground">
+                                {fmtMoney(overview.financials.vat.input.vat)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-t border-border pt-1.5">
+                              <span className="font-medium text-foreground">صافي المستحق</span>
+                              <span
+                                className={`font-bold ${overview.financials.vat.netVat >= 0 ? "text-blue-600" : "text-emerald-600"}`}
+                              >
+                                {fmtMoney(overview.financials.vat.netVat)}
+                              </span>
+                            </div>
                             {overview.financials.vat.payable > 0 && (
-                              <div className="flex justify-between"><span className="text-muted-foreground">مستحق للضرائب</span><span className="font-medium text-blue-600">{fmtMoney(overview.financials.vat.payable)}</span></div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">مستحق للضرائب</span>
+                                <span className="font-medium text-blue-600">
+                                  {fmtMoney(overview.financials.vat.payable)}
+                                </span>
+                              </div>
                             )}
                             {overview.financials.vat.credit > 0 && (
-                              <div className="flex justify-between"><span className="text-muted-foreground">ائتمان محمول</span><span className="font-medium text-emerald-600">{fmtMoney(overview.financials.vat.credit)}</span></div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">ائتمان محمول</span>
+                                <span className="font-medium text-emerald-600">
+                                  {fmtMoney(overview.financials.vat.credit)}
+                                </span>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -1535,12 +1859,28 @@ ${
                         {/* Withholding */}
                         <div className="border border-border rounded-lg p-4 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/20">
                           <h3 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
-                            <Receipt size={13} /> خصم تحت حساب المورد ({overview.financials.withholding.rate}%)
+                            <Receipt size={13} /> خصم تحت حساب المورد (
+                            {overview.financials.withholding.rate}%)
                           </h3>
                           <div className="space-y-1.5 text-xs">
-                            <div className="flex justify-between"><span className="text-muted-foreground">صافي المشتريات</span><span className="font-medium text-foreground">{fmtMoney(overview.financials.withholding.totalNet)}</span></div>
-                            <div className="flex justify-between"><span className="text-muted-foreground">إجمالي الخصم</span><span className="font-medium text-amber-600">{fmtMoney(overview.financials.withholding.totalWithholding)}</span></div>
-                            <div className="flex justify-between border-t border-border pt-1.5"><span className="font-medium text-foreground">المستحق للموردين</span><span className="font-bold text-emerald-600">{fmtMoney(overview.financials.withholding.totalPayable)}</span></div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">صافي المشتريات</span>
+                              <span className="font-medium text-foreground">
+                                {fmtMoney(overview.financials.withholding.totalNet)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">إجمالي الخصم</span>
+                              <span className="font-medium text-amber-600">
+                                {fmtMoney(overview.financials.withholding.totalWithholding)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-t border-border pt-1.5">
+                              <span className="font-medium text-foreground">المستحق للموردين</span>
+                              <span className="font-bold text-emerald-600">
+                                {fmtMoney(overview.financials.withholding.totalPayable)}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
@@ -1550,9 +1890,27 @@ ${
                             <Banknote size={13} /> الذمم (موردون / عملاء)
                           </h3>
                           <div className="space-y-1.5 text-xs">
-                            <div className="flex justify-between"><span className="text-muted-foreground">ذمم دائنة (موردين)</span><span className="font-medium text-red-600">{fmtMoney(overview.financials.accounts.totalAP)}</span></div>
-                            <div className="flex justify-between"><span className="text-muted-foreground">ذمم مدينة (عملاء)</span><span className="font-medium text-emerald-600">{fmtMoney(overview.financials.accounts.totalAR)}</span></div>
-                            <div className="flex justify-between border-t border-border pt-1.5"><span className="font-medium text-foreground">صافي الذمم</span><span className="font-bold text-foreground">{fmtMoney((overview.financials.accounts.totalAR ?? 0) - (overview.financials.accounts.totalAP ?? 0))}</span></div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">ذمم دائنة (موردين)</span>
+                              <span className="font-medium text-red-600">
+                                {fmtMoney(overview.financials.accounts.totalAP)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">ذمم مدينة (عملاء)</span>
+                              <span className="font-medium text-emerald-600">
+                                {fmtMoney(overview.financials.accounts.totalAR)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-t border-border pt-1.5">
+                              <span className="font-medium text-foreground">صافي الذمم</span>
+                              <span className="font-bold text-foreground">
+                                {fmtMoney(
+                                  (overview.financials.accounts.totalAR ?? 0) -
+                                    (overview.financials.accounts.totalAP ?? 0),
+                                )}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
@@ -1562,11 +1920,34 @@ ${
                             <Wallet size={13} /> النقدية والبنوك
                           </h3>
                           <div className="space-y-1.5 text-xs">
-                            <div className="flex justify-between"><span className="text-muted-foreground">النقدية بالخزينة</span><span className="font-medium text-foreground">{fmtMoney(overview.financials.accounts.cash)}</span></div>
-                            <div className="flex justify-between"><span className="text-muted-foreground">البنوك</span><span className="font-medium text-foreground">{fmtMoney(overview.financials.accounts.bank)}</span></div>
-                            <div className="flex justify-between border-t border-border pt-1.5"><span className="font-medium text-foreground">إجمالي السيولة</span><span className="font-bold text-emerald-600">{fmtMoney((overview.financials.accounts.cash ?? 0) + (overview.financials.accounts.bank ?? 0))}</span></div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">النقدية بالخزينة</span>
+                              <span className="font-medium text-foreground">
+                                {fmtMoney(overview.financials.accounts.cash)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">البنوك</span>
+                              <span className="font-medium text-foreground">
+                                {fmtMoney(overview.financials.accounts.bank)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-t border-border pt-1.5">
+                              <span className="font-medium text-foreground">إجمالي السيولة</span>
+                              <span className="font-bold text-emerald-600">
+                                {fmtMoney(
+                                  (overview.financials.accounts.cash ?? 0) +
+                                    (overview.financials.accounts.bank ?? 0),
+                                )}
+                              </span>
+                            </div>
                             {overview.financials.accounts.pendingDrafts > 0 && (
-                              <div className="flex justify-between"><span className="text-muted-foreground">قيود بانتظار المراجعة</span><span className="font-medium text-amber-600">{overview.financials.accounts.pendingDrafts}</span></div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">قيود بانتظار المراجعة</span>
+                                <span className="font-medium text-amber-600">
+                                  {overview.financials.accounts.pendingDrafts}
+                                </span>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -1577,10 +1958,32 @@ ${
                             <Scale size={13} /> القوائم المالية
                           </h3>
                           <div className="space-y-1.5 text-xs">
-                            <div className="flex justify-between"><span className="text-muted-foreground">صافي الربح</span><span className={`font-medium ${(overview.financials.statements.netProfit ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}`}>{fmtMoney(overview.financials.statements.netProfit)}</span></div>
-                            <div className="flex justify-between"><span className="text-muted-foreground">إجمالي الأصول</span><span className="font-medium text-foreground">{fmtMoney(overview.financials.statements.totalAssets)}</span></div>
-                            <div className="flex justify-between"><span className="text-muted-foreground">إجمالي الخصوم</span><span className="font-medium text-foreground">{fmtMoney(overview.financials.statements.totalLiabilities)}</span></div>
-                            <div className="flex justify-between border-t border-border pt-1.5"><span className="font-medium text-foreground">حقوق الملكية</span><span className="font-bold text-foreground">{fmtMoney(overview.financials.statements.totalEquity)}</span></div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">صافي الربح</span>
+                              <span
+                                className={`font-medium ${(overview.financials.statements.netProfit ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}`}
+                              >
+                                {fmtMoney(overview.financials.statements.netProfit)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">إجمالي الأصول</span>
+                              <span className="font-medium text-foreground">
+                                {fmtMoney(overview.financials.statements.totalAssets)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">إجمالي الخصوم</span>
+                              <span className="font-medium text-foreground">
+                                {fmtMoney(overview.financials.statements.totalLiabilities)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-t border-border pt-1.5">
+                              <span className="font-medium text-foreground">حقوق الملكية</span>
+                              <span className="font-bold text-foreground">
+                                {fmtMoney(overview.financials.statements.totalEquity)}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1595,24 +1998,35 @@ ${
                         </h2>
                         <div className="mb-3 p-3 bg-muted/40 rounded-lg flex justify-between items-center">
                           <span className="text-xs text-muted-foreground">إجمالي المصروفات</span>
-                          <span className="text-xl font-bold text-foreground">{fmtMoney(overview.financials.expenses.grandTotal)}</span>
+                          <span className="text-xl font-bold text-foreground">
+                            {fmtMoney(overview.financials.expenses.grandTotal)}
+                          </span>
                         </div>
                         {overview.financials.expenses.byCategory.length > 0 ? (
                           <div className="space-y-2">
                             {overview.financials.expenses.byCategory
                               .sort((a, b) => b.total - a.total)
                               .map((c) => (
-                                <div key={c.category} className="flex justify-between items-center text-xs">
+                                <div
+                                  key={c.category}
+                                  className="flex justify-between items-center text-xs"
+                                >
                                   <span className="text-muted-foreground">{c.category}</span>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-[10px] text-muted-foreground/70">({c.count})</span>
-                                    <span className="font-medium text-foreground">{fmtMoney(c.total)}</span>
+                                    <span className="text-[10px] text-muted-foreground/70">
+                                      ({c.count})
+                                    </span>
+                                    <span className="font-medium text-foreground">
+                                      {fmtMoney(c.total)}
+                                    </span>
                                   </div>
                                 </div>
                               ))}
                           </div>
                         ) : (
-                          <p className="text-center text-muted-foreground text-sm py-6">لا توجد مصروفات</p>
+                          <p className="text-center text-muted-foreground text-sm py-6">
+                            لا توجد مصروفات
+                          </p>
                         )}
                       </div>
 
@@ -1623,30 +2037,48 @@ ${
                         </h2>
                         <div className="grid grid-cols-2 gap-3 mb-3">
                           <div className="p-3 bg-muted/40 rounded-lg text-center">
-                            <p className="text-lg font-bold text-foreground">{fmtMoney(overview.financials.collections.totalReceivable)}</p>
+                            <p className="text-lg font-bold text-foreground">
+                              {fmtMoney(overview.financials.collections.totalReceivable)}
+                            </p>
                             <p className="text-[11px] text-muted-foreground">إجمالي المستحقات</p>
                           </div>
                           <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg text-center">
-                            <p className="text-lg font-bold text-emerald-600">{fmtMoney(overview.financials.collections.totalCollected)}</p>
+                            <p className="text-lg font-bold text-emerald-600">
+                              {fmtMoney(overview.financials.collections.totalCollected)}
+                            </p>
                             <p className="text-[11px] text-muted-foreground">تم تحصيله</p>
                           </div>
                         </div>
                         <div className="space-y-2 text-xs">
                           <div className="flex justify-between p-2 bg-amber-50 dark:bg-amber-950/30 rounded">
-                            <span className="text-amber-700 dark:text-amber-400">مستحقات قيد التحصيل</span>
-                            <span className="font-bold text-amber-600">{overview.financials.collections.outstandingCount}</span>
+                            <span className="text-amber-700 dark:text-amber-400">
+                              مستحقات قيد التحصيل
+                            </span>
+                            <span className="font-bold text-amber-600">
+                              {overview.financials.collections.outstandingCount}
+                            </span>
                           </div>
                           <div className="flex justify-between p-2 bg-muted/40 rounded">
                             <span className="text-muted-foreground">نسبة التحصيل</span>
                             <span className="font-bold text-foreground">
                               {(overview.financials.collections.totalReceivable ?? 0) > 0
-                                ? Math.round(((overview.financials.collections.totalCollected ?? 0) / (overview.financials.collections.totalReceivable ?? 1)) * 100)
-                                : 0}%
+                                ? Math.round(
+                                    ((overview.financials.collections.totalCollected ?? 0) /
+                                      (overview.financials.collections.totalReceivable ?? 1)) *
+                                      100,
+                                  )
+                                : 0}
+                              %
                             </span>
                           </div>
                           <div className="flex justify-between p-2 bg-muted/40 rounded">
                             <span className="text-muted-foreground">المتبقي للتحصيل</span>
-                            <span className="font-bold text-foreground">{fmtMoney((overview.financials.collections.totalReceivable ?? 0) - (overview.financials.collections.totalCollected ?? 0))}</span>
+                            <span className="font-bold text-foreground">
+                              {fmtMoney(
+                                (overview.financials.collections.totalReceivable ?? 0) -
+                                  (overview.financials.collections.totalCollected ?? 0),
+                              )}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1660,15 +2092,54 @@ ${
                           الاتجاه الشهري (آخر 12 شهر)
                         </h2>
                         <ResponsiveContainer width="100%" height={300}>
-                          <LineChart data={overview.monthlyTrend.map((m) => ({ ...m, month: fmtMonth(m.month) }))}>
+                          <LineChart
+                            data={overview.monthlyTrend.map((m) => ({
+                              ...m,
+                              month: fmtMonth(m.month),
+                            }))}
+                          >
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-                            <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} allowDecimals={false} />
-                            <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }} />
+                            <XAxis
+                              dataKey="month"
+                              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                            />
+                            <YAxis
+                              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                              allowDecimals={false}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                background: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: 8,
+                                fontSize: 12,
+                              }}
+                            />
                             <Legend />
-                            <Line type="monotone" dataKey="rfqs" name="طلبات تسعير الموردين" stroke="#1e3a5f" strokeWidth={2.5} dot={{ r: 3 }} />
-                            <Line type="monotone" dataKey="customerRfqs" name="طلبات تسعير العملاء" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3 }} />
-                            <Line type="monotone" dataKey="pos" name="أوامر الشراء" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3 }} />
+                            <Line
+                              type="monotone"
+                              dataKey="rfqs"
+                              name="طلبات تسعير الموردين"
+                              stroke="#1e3a5f"
+                              strokeWidth={2.5}
+                              dot={{ r: 3 }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="customerRfqs"
+                              name="طلبات تسعير العملاء"
+                              stroke="#8b5cf6"
+                              strokeWidth={2.5}
+                              dot={{ r: 3 }}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="pos"
+                              name="أوامر الشراء"
+                              stroke="#10b981"
+                              strokeWidth={2.5}
+                              dot={{ r: 3 }}
+                            />
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
@@ -1683,17 +2154,24 @@ ${
                         </h2>
                         <div className="space-y-2 max-h-80 overflow-y-auto">
                           {overview.recentActivity.map((a) => (
-                            <div key={a.id} className="flex items-start gap-3 p-2.5 bg-muted/30 rounded-lg text-xs">
+                            <div
+                              key={a.id}
+                              className="flex items-start gap-3 p-2.5 bg-muted/30 rounded-lg text-xs"
+                            >
                               <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
                               <div className="flex-1 min-w-0">
-                                <p className="text-foreground font-medium truncate">{a.description}</p>
+                                <p className="text-foreground font-medium truncate">
+                                  {a.description}
+                                </p>
                                 <div className="flex items-center gap-2 mt-0.5 text-muted-foreground">
                                   {a.employeeName && <span>{a.employeeName}</span>}
                                   <span>·</span>
                                   <span>{timeAgo(a.createdAt)}</span>
                                 </div>
                               </div>
-                              <span className="text-[10px] text-muted-foreground/70 shrink-0 font-mono">{a.action}</span>
+                              <span className="text-[10px] text-muted-foreground/70 shrink-0 font-mono">
+                                {a.action}
+                              </span>
                             </div>
                           ))}
                         </div>

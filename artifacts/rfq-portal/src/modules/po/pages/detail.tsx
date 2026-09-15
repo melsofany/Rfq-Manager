@@ -419,7 +419,11 @@ export default function PurchaseOrderDetailPage() {
   const [cancellingSupplierId, setCancellingSupplierId] = useState<number | null>(null);
   const [cancellingItemId, setCancellingItemId] = useState<number | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const [cancelDone, setCancelDone] = useState<null | { label: string; whatsappError: string | null; wholePo: boolean }>(null);
+  const [cancelDone, setCancelDone] = useState<null | {
+    label: string;
+    whatsappError: string | null;
+    wholePo: boolean;
+  }>(null);
 
   // itemIds → cancel only those lines of the supplier (e.g. one of two);
   // omitted → all of the supplier's lines (whole-supplier path).
@@ -458,7 +462,9 @@ export default function PurchaseOrderDetailPage() {
       if (!res.ok) {
         setCancelError(data.error ?? "فشل الإلغاء");
       } else {
-        const wa = (data as { whatsapp?: { whatsappError: string | null } }).whatsapp ?? { whatsappError: null };
+        const wa = (data as { whatsapp?: { whatsappError: string | null } }).whatsapp ?? {
+          whatsappError: null,
+        };
         setCancelDone({
           label: itemScope ? (itemLabel ?? supplierName) : supplierName,
           whatsappError: wa.whatsappError ?? null,
@@ -594,19 +600,10 @@ export default function PurchaseOrderDetailPage() {
             )}
             {editMode && (
               <>
-                <Button
-                  variant="outline"
-                  onClick={cancelEdit}
-                  disabled={saving}
-                  className="gap-2"
-                >
+                <Button variant="outline" onClick={cancelEdit} disabled={saving} className="gap-2">
                   <X size={15} /> إلغاء
                 </Button>
-                <Button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="gap-2"
-                >
+                <Button onClick={handleSave} disabled={saving} className="gap-2">
                   {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
                   {saving ? "حفظ..." : "حفظ التعديلات"}
                 </Button>
@@ -639,9 +636,7 @@ export default function PurchaseOrderDetailPage() {
           <div className="text-sm bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-3 py-2">
             <CheckCircle2 size={15} className="inline ml-1 -mt-0.5" />
             تم الإلغاء: «{cancelDone.label}» وإشعار المورد عبر واتساب.
-            {cancelDone.whatsappError
-              ? ` (تعذّر إرسال واتساب: ${cancelDone.whatsappError})`
-              : ""}
+            {cancelDone.whatsappError ? ` (تعذّر إرسال واتساب: ${cancelDone.whatsappError})` : ""}
             {cancelDone.wholePo ? " وأصبح أمر الشراء ملغيًا بالكامل." : ""}
           </div>
         )}
@@ -871,7 +866,9 @@ export default function PurchaseOrderDetailPage() {
                     <button
                       type="button"
                       disabled={downloadingPdf === group.supplierId}
-                      onClick={() => downloadPdf(group.supplierId!, group.supplierName ?? "Supplier")}
+                      onClick={() =>
+                        downloadPdf(group.supplierId!, group.supplierName ?? "Supplier")
+                      }
                       className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="تحميل PDF لهذا المورد"
                     >
@@ -893,7 +890,12 @@ export default function PurchaseOrderDetailPage() {
                         <button
                           type="button"
                           disabled={cancellingSupplierId === group.supplierId}
-                          onClick={() => handleCancelSupplier(group.supplierId!, group.supplierName ?? "Supplier")}
+                          onClick={() =>
+                            handleCancelSupplier(
+                              group.supplierId!,
+                              group.supplierName ?? "Supplier",
+                            )
+                          }
                           className="flex items-center gap-1 text-xs text-destructive hover:text-destructive/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           title="إلغاء هذا المورد وإشعاره عبر واتساب"
                         >
@@ -961,7 +963,9 @@ export default function PurchaseOrderDetailPage() {
                                     group.supplierId!,
                                     group.supplierName ?? "Supplier",
                                     [item.id],
-                                    item.partNo ?? item.description ?? `بند ${item.lineItem ?? idx + 1}`,
+                                    item.partNo ??
+                                      item.description ??
+                                      `بند ${item.lineItem ?? idx + 1}`,
                                   )
                                 }
                                 className="inline-flex items-center gap-1 text-[11px] text-destructive hover:text-destructive/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1082,9 +1086,7 @@ export default function PurchaseOrderDetailPage() {
                             type="number"
                             step="any"
                             value={item.unitPrice}
-                            onChange={(e) =>
-                              updateEditField(item.id, "unitPrice", e.target.value)
-                            }
+                            onChange={(e) => updateEditField(item.id, "unitPrice", e.target.value)}
                             className="h-7 w-20 text-xs rounded border border-border bg-background px-1.5 text-right outline-none focus:ring-1 focus:ring-ring"
                           />
                         </div>
@@ -1125,23 +1127,17 @@ export default function PurchaseOrderDetailPage() {
               <div className="px-4 py-2.5 border-t border-border bg-muted/10 flex flex-wrap justify-end gap-x-6 gap-y-1 text-xs">
                 <span className="text-muted-foreground">
                   الإجمالي قبل الضريبة:{" "}
-                  <span className="font-medium text-foreground">
-                    {editPreTaxTotal.toFixed(2)}
-                  </span>
+                  <span className="font-medium text-foreground">{editPreTaxTotal.toFixed(2)}</span>
                 </span>
                 {editHasTaxItems && (
                   <span className="text-muted-foreground">
                     ض.ق.م:{" "}
-                    <span className="font-medium text-foreground">
-                      {editVatTotal.toFixed(2)}
-                    </span>
+                    <span className="font-medium text-foreground">{editVatTotal.toFixed(2)}</span>
                   </span>
                 )}
                 <span className="text-muted-foreground">
                   الإجمالي:{" "}
-                  <span className="font-medium text-foreground">
-                    {editGrandTotal.toFixed(2)}
-                  </span>
+                  <span className="font-medium text-foreground">{editGrandTotal.toFixed(2)}</span>
                 </span>
               </div>
             )}

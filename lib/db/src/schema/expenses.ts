@@ -129,13 +129,13 @@ export const customerPoCollectionsTable = pgTable("customer_po_collections", {
     .$onUpdate(() => new Date()),
 });
 
-export const insertCustomerPoCollectionSchema = createInsertSchema(
-  customerPoCollectionsTable,
-).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
+export const insertCustomerPoCollectionSchema = createInsertSchema(customerPoCollectionsTable).omit(
+  {
+    id: true,
+    createdAt: true,
+    updatedAt: true,
+  },
+);
 export type InsertCustomerPoCollection = z.infer<typeof insertCustomerPoCollectionSchema>;
 export type CustomerPoCollection = typeof customerPoCollectionsTable.$inferSelect;
 

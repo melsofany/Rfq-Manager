@@ -9,7 +9,12 @@ interface AvailabilityState {
 // endpoint that returns `{ available }`． `excludeId` is appended so PATCH saves
 // don't flag the row they're editing． Returns only after the value has settled
 // for `delayMs` so typing doesn't spam the server．
-export function useCheckNumberAvailability(value: string, endpoint: string, excludeId?: number, delayMs = 450): AvailabilityState {
+export function useCheckNumberAvailability(
+  value: string,
+  endpoint: string,
+  excludeId?: number,
+  delayMs = 450,
+): AvailabilityState {
   const [state, setState] = useState<AvailabilityState>({ checked: false, available: true });
 
   useEffect(() => {
@@ -30,7 +35,6 @@ export function useCheckNumberAvailability(value: string, endpoint: string, excl
       } catch {
         // Network hiccups degrade the probe silently; the server still enforces
         // uniqueness on submit．
-
       }
     }, delayMs);
     return () => {

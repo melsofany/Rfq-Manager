@@ -20,9 +20,7 @@ export const taxSettingsTable = pgTable("tax_settings", {
   // ضريبة القيمة المضافة — نسبة الموحدة 14% (القانون 67 لسنة 2016).
   vatRate: numeric("vat_rate", { precision: 6, scale: 4 }).notNull().default("14"),
   // خصم تحت حساب المورد — نسبة الخصم من كل أمر شراء/توريد (3% افتراضيًا).
-  withholdingRate: numeric("withholding_rate", { precision: 6, scale: 4 })
-    .notNull()
-    .default("3"),
+  withholdingRate: numeric("withholding_rate", { precision: 6, scale: 4 }).notNull().default("3"),
   // نسبة خصم إضافية على الموردين/المقاولين/مقدمي الخدمة (5% جدول الضرائب).
   withholdingRateServices: numeric("withholding_rate_services", { precision: 6, scale: 4 })
     .notNull()

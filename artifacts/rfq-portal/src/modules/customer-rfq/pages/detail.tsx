@@ -14,7 +14,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Plus, Trash2, AlertCircle, AlertTriangle, Pencil, Lock, CheckCircle2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  AlertCircle,
+  AlertTriangle,
+  Pencil,
+  Lock,
+  CheckCircle2,
+} from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
 import { canEditCustomerDoc, EDIT_PERM } from "@/lib/permissions";
@@ -82,7 +91,10 @@ export default function CustomerRfqDetailPage() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const rfqNoAvailability = useCustomerRfqNoAvailability(customerRfqNo, Number.isFinite(id) ? id : undefined);
+  const rfqNoAvailability = useCustomerRfqNoAvailability(
+    customerRfqNo,
+    Number.isFinite(id) ? id : undefined,
+  );
   const rfqNoDuplicate = rfqNoAvailability.checked && !rfqNoAvailability.available;
 
   // Pricing: map of item id → unit price string. Entered after the RFQ is saved;
@@ -336,7 +348,6 @@ export default function CustomerRfqDetailPage() {
                     <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
                       <AlertCircle size={13} className="flex-shrink-0" />
                       رقم طلب تسعير العميل مستخدم بالفعل — اختر رقماً آخر.
-
                     </p>
                   )}
                 </div>
@@ -659,8 +670,8 @@ export default function CustomerRfqDetailPage() {
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <AlertTriangle size={13} className="text-amber-500" />
-                    تثبيت الطلب يحفظ الأسعار ويمنع أي تعديل لاحق للموظفين. يمكن للمدير تعديل
-                    الأسعار وتثبيت الطلب في أي وقت.
+                    تثبيت الطلب يحفظ الأسعار ويمنع أي تعديل لاحق للموظفين. يمكن للمدير تعديل الأسعار
+                    وتثبيت الطلب في أي وقت.
                   </p>
                   {confirmFinalize ? (
                     <div className="flex gap-2">
@@ -686,8 +697,7 @@ export default function CustomerRfqDetailPage() {
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <AlertTriangle size={13} className="text-amber-500" />
-                    الطلب مثبَّت — يمكن للمدير تعديل أسعار العميل في أي وقت، حتى بعد تاريخ
-                    الانتهاء.
+                    الطلب مثبَّت — يمكن للمدير تعديل أسعار العميل في أي وقت، حتى بعد تاريخ الانتهاء.
                   </p>
                   <Button
                     disabled={updateMutation.isPending}

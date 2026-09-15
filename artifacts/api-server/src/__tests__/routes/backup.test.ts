@@ -13,17 +13,19 @@ vi.mock("../../middlewares/auth", () => ({
     req.session = { ...sessionState };
     next();
   },
-  requireRole: (...roles: string[]) => (req: any, res: any, next: any) => {
-    if (!sessionState.employeeId) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    if (!roles.includes(sessionState.role)) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-    next();
-  },
+  requireRole:
+    (...roles: string[]) =>
+    (req: any, res: any, next: any) => {
+      if (!sessionState.employeeId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      if (!roles.includes(sessionState.role)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      next();
+    },
 }));
 
 const driveFiles = vi.hoisted(() => ({
@@ -33,7 +35,12 @@ const driveFiles = vi.hoisted(() => ({
 }));
 vi.mock("googleapis", () => ({
   google: {
-    auth: { GoogleAuth: class {}, OAuth2: class { setCredentials() {} } },
+    auth: {
+      GoogleAuth: class {},
+      OAuth2: class {
+        setCredentials() {}
+      },
+    },
     drive: vi.fn(() => ({ files: driveFiles })),
   },
 }));
@@ -45,7 +52,10 @@ import backupRouter from "../../modules/backup/routes";
 
 const tableRows: Record<string, any[]> = {
   employees: [{ id: 1, name: "Sara" }],
-  suppliers: [{ id: 10, name: "ACME" }, { id: 11, name: "Beta" }],
+  suppliers: [
+    { id: 10, name: "ACME" },
+    { id: 11, name: "Beta" },
+  ],
 };
 
 function buildApp() {

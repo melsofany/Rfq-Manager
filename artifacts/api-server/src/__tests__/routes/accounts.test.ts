@@ -10,17 +10,19 @@ vi.mock("../../middlewares/auth", () => ({
     req.session.employeeId = sessionState.employeeId;
     next();
   },
-  requireRole: (...roles: string[]) => (req: any, res: any, next: any) => {
-    if (!sessionState.employeeId) {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
-    if (!roles.includes(sessionState.role)) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-    next();
-  },
+  requireRole:
+    (...roles: string[]) =>
+    (req: any, res: any, next: any) => {
+      if (!sessionState.employeeId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      if (!roles.includes(sessionState.role)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      next();
+    },
 }));
 
 // ── Chainable + thenable DB mock ─────────────────────────────────────────────
@@ -61,8 +63,10 @@ function selectBuilder() {
       else if (table === purchaseOrderItemsTbl) rows = buyRows;
       else if (table === purchaseOrdersTbl) rows = poRows;
       else if (table === taxSettingsTbl) rows = taxSettingsRow ? [taxSettingsRow] : [];
-      else if (table === salesInvoicesTbl) rows = salesInvoiceRows.filter((r) => r.status === "posted");
-      else if (table === supplierInvoicesTbl) rows = supplierInvoiceRows.filter((r) => r.status === "posted");
+      else if (table === salesInvoicesTbl)
+        rows = salesInvoiceRows.filter((r) => r.status === "posted");
+      else if (table === supplierInvoicesTbl)
+        rows = supplierInvoiceRows.filter((r) => r.status === "posted");
       const cur: any = {
         innerJoin: vi.fn(() => cur),
         leftJoin: vi.fn(() => cur),
@@ -79,7 +83,9 @@ function selectBuilder() {
 
 const dbMock: any = {
   select: vi.fn(() => selectBuilder()),
-  insert: vi.fn(() => ({ values: vi.fn(() => chainable([{ id: 1 }], { returning: vi.fn(() => chainable([{ id: 1 }])) })) })),
+  insert: vi.fn(() => ({
+    values: vi.fn(() => chainable([{ id: 1 }], { returning: vi.fn(() => chainable([{ id: 1 }])) })),
+  })),
   update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => chainable(undefined)) })) })),
 };
 
@@ -123,7 +129,13 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   sessionState = { employeeId: 7, role: "employee" };
-  taxSettingsRow = { id: 1, vatRate: "14", withholdingRate: "3", withholdingRateServices: "5", withholdingRatePurchases: "1" };
+  taxSettingsRow = {
+    id: 1,
+    vatRate: "14",
+    withholdingRate: "3",
+    withholdingRateServices: "5",
+    withholdingRatePurchases: "1",
+  };
   sellRows = [];
   buyRows = [];
   poRows = [];
@@ -153,10 +165,31 @@ describe("GET /api/accounts/tax-settings", () => {
 describe("GET /api/accounts/vat", () => {
   it("computes output VAT (posted sales invoices) and input VAT (posted supplier invoices), returns net payable", async () => {
     salesInvoiceRows = [
-      { id: 1, invoiceNo: "INV-2026-000001", customerName: "عميل أ", customerPoNo: "C-1", invoiceDate: "2026-08-01", netAmount: "1000", vatAmount: "140", grossAmount: "1140", status: "posted" },
+      {
+        id: 1,
+        invoiceNo: "INV-2026-000001",
+        customerName: "عميل أ",
+        customerPoNo: "C-1",
+        invoiceDate: "2026-08-01",
+        netAmount: "1000",
+        vatAmount: "140",
+        grossAmount: "1140",
+        status: "posted",
+      },
     ];
     supplierInvoiceRows = [
-      { id: 2, invoiceNo: "SI-2026-000001", supplierInvoiceNo: "S-1", supplierName: "مورد ب", poNo: "PO-1", invoiceDate: "2026-08-02", netAmount: "600", vatAmount: "84", grossAmount: "684", status: "posted" },
+      {
+        id: 2,
+        invoiceNo: "SI-2026-000001",
+        supplierInvoiceNo: "S-1",
+        supplierName: "مورد ب",
+        poNo: "PO-1",
+        invoiceDate: "2026-08-02",
+        netAmount: "600",
+        vatAmount: "84",
+        grossAmount: "684",
+        status: "posted",
+      },
     ];
 
     const res = await request(testApp).get("/api/accounts/vat");
@@ -177,7 +210,18 @@ describe("GET /api/accounts/vat", () => {
   it("returns a credit when input VAT exceeds output VAT", async () => {
     salesInvoiceRows = [];
     supplierInvoiceRows = [
-      { id: 2, invoiceNo: "SI-2026-000001", supplierInvoiceNo: "S-1", supplierName: "مورد ب", poNo: "PO-1", invoiceDate: "2026-08-02", netAmount: "1052.63", vatAmount: "147.37", grossAmount: "1200", status: "posted" },
+      {
+        id: 2,
+        invoiceNo: "SI-2026-000001",
+        supplierInvoiceNo: "S-1",
+        supplierName: "مورد ب",
+        poNo: "PO-1",
+        invoiceDate: "2026-08-02",
+        netAmount: "1052.63",
+        vatAmount: "147.37",
+        grossAmount: "1200",
+        status: "posted",
+      },
     ];
 
     const res = await request(testApp).get("/api/accounts/vat");
@@ -189,7 +233,17 @@ describe("GET /api/accounts/vat", () => {
 
   it("ignores draft/void invoices", async () => {
     salesInvoiceRows = [
-      { id: 1, invoiceNo: "INV-DRAFT", customerName: "عميل أ", customerPoNo: null, invoiceDate: "2026-08-01", netAmount: "1000", vatAmount: "140", grossAmount: "1140", status: "draft" },
+      {
+        id: 1,
+        invoiceNo: "INV-DRAFT",
+        customerName: "عميل أ",
+        customerPoNo: null,
+        invoiceDate: "2026-08-01",
+        netAmount: "1000",
+        vatAmount: "140",
+        grossAmount: "1140",
+        status: "draft",
+      },
     ];
     supplierInvoiceRows = [];
     const res = await request(testApp).get("/api/accounts/vat");
@@ -203,8 +257,32 @@ describe("GET /api/accounts/vat", () => {
 describe("GET /api/accounts/withholding", () => {
   it("withholds from posted supplier invoices and sums totals", async () => {
     supplierInvoiceRows = [
-      { id: 1, invoiceNo: "SI-2026-000001", supplierInvoiceNo: "S-1", supplierName: "مورد ب", poNo: "PO-2026-000001", invoiceDate: "2026-08-01", netAmount: "1200", withholdingRate: "3", withholdingAmount: "36", grossAmount: "1368", status: "posted" },
-      { id: 2, invoiceNo: "SI-2026-000002", supplierInvoiceNo: "S-2", supplierName: "مورد ج", poNo: "PO-2026-000002", invoiceDate: "2026-08-03", netAmount: "100", withholdingRate: "3", withholdingAmount: "3", grossAmount: "114", status: "posted" },
+      {
+        id: 1,
+        invoiceNo: "SI-2026-000001",
+        supplierInvoiceNo: "S-1",
+        supplierName: "مورد ب",
+        poNo: "PO-2026-000001",
+        invoiceDate: "2026-08-01",
+        netAmount: "1200",
+        withholdingRate: "3",
+        withholdingAmount: "36",
+        grossAmount: "1368",
+        status: "posted",
+      },
+      {
+        id: 2,
+        invoiceNo: "SI-2026-000002",
+        supplierInvoiceNo: "S-2",
+        supplierName: "مورد ج",
+        poNo: "PO-2026-000002",
+        invoiceDate: "2026-08-03",
+        netAmount: "100",
+        withholdingRate: "3",
+        withholdingAmount: "3",
+        grossAmount: "114",
+        status: "posted",
+      },
     ];
 
     const res = await request(testApp).get("/api/accounts/withholding");

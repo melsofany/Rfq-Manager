@@ -30,8 +30,8 @@ interface ParsedSupplier {
   supplierId?: string;
   contactPerson?: string;
   email?: string;
-  phone?: string;       // الرقم الأول (بتنسيق واتساب)
-  phone2?: string;      // الرقم الثاني إن وُجد (بتنسيق واتساب)
+  phone?: string; // الرقم الأول (بتنسيق واتساب)
+  phone2?: string; // الرقم الثاني إن وُجد (بتنسيق واتساب)
   address?: string;
   category: string;
   phoneWarning?: string; // تحذير: أرضي مرفوض أو تنسيق غير معروف
@@ -67,7 +67,7 @@ function normalizeEgyptianMobile(raw: string): string | null {
   if (digits.length === 11 && digits.startsWith("0")) {
     // تحويل 0XXXXXXXXXX -> 20XXXXXXXXXX
     digits = "20" + digits.slice(1);
-  } else if (digits.length === 10 && (digits.startsWith("1"))) {
+  } else if (digits.length === 10 && digits.startsWith("1")) {
     // تحويل 1XXXXXXXXX -> 201XXXXXXXXX (لو بدأ بـ 1x)
     digits = "20" + digits;
   }
@@ -98,15 +98,31 @@ function looksLikeLandline(raw: string): boolean {
   if (digits.startsWith("0")) digits = digits.slice(1);
   if (digits.startsWith("20")) digits = digits.slice(2);
   // أرقام أرضية مصرية تبدأ بـ 2 (القاهرة/الجيزة) أو 3 (الإسكندرية) أو 4X-6X
-  const landlinePrefixes = ["2", "3", "40", "45", "46", "47", "48", "50", "55", "57",
-    "62", "64", "65", "66", "68", "69"];
+  const landlinePrefixes = [
+    "2",
+    "3",
+    "40",
+    "45",
+    "46",
+    "47",
+    "48",
+    "50",
+    "55",
+    "57",
+    "62",
+    "64",
+    "65",
+    "66",
+    "68",
+    "69",
+  ];
   return landlinePrefixes.some((p) => digits.startsWith(p));
 }
 
 interface PhoneParseResult {
-  primary: string | null;   // الرقم الأساسي بتنسيق واتساب
+  primary: string | null; // الرقم الأساسي بتنسيق واتساب
   secondary: string | null; // الرقم الثاني (إن وُجد)
-  warning: string | null;   // رسالة تحذير
+  warning: string | null; // رسالة تحذير
 }
 
 /**
@@ -167,7 +183,7 @@ function parsePhoneField(raw: string): PhoneParseResult {
 const COL_ALIASES: Record<string, keyof ParsedSupplier> = {
   name: "name",
   "اسم المورد": "name",
-  "الاسم": "name",
+  الاسم: "name",
   supplier_name: "name",
   suppliername: "name",
 
@@ -181,39 +197,43 @@ const COL_ALIASES: Record<string, keyof ParsedSupplier> = {
   contact_person: "contactPerson",
   contactperson: "contactPerson",
   "الشخص المسؤول": "contactPerson",
-  "المسؤول": "contactPerson",
+  المسؤول: "contactPerson",
 
   email: "email",
   "البريد الإلكتروني": "email",
-  "الإيميل": "email",
+  الإيميل: "email",
 
   phone: "phone",
   mobile: "phone",
-  "الهاتف": "phone",
-  "الجوال": "phone",
+  الهاتف: "phone",
+  الجوال: "phone",
   "رقم الهاتف": "phone",
-  "الموبايل": "phone",
+  الموبايل: "phone",
   "رقم الجوال": "phone",
 
   // دعم عمود الهاتف الثاني المستقل
   phone2: "phone2",
   mobile2: "phone2",
   "الهاتف 2": "phone2",
-  "الهاتف2": "phone2",
-  "جوال2": "phone2",
+  الهاتف2: "phone2",
+  جوال2: "phone2",
   "رقم ثاني": "phone2",
 
   address: "address",
-  "العنوان": "address",
+  العنوان: "address",
 
   category: "category",
   categories: "category",
-  "التصنيف": "category",
-  "الفئة": "category",
+  التصنيف: "category",
+  الفئة: "category",
 };
 
 function normalizeKey(raw: string): string {
-  return raw.trim().toLowerCase().replace(/[\s_-]+/g, "").replace(/\s/g, "");
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "")
+    .replace(/\s/g, "");
 }
 
 function mapRow(row: Record<string, unknown>): ParsedSupplier | null {
@@ -224,8 +244,7 @@ function mapRow(row: Record<string, unknown>): ParsedSupplier | null {
       COL_ALIASES[rawKey.trim()] ??
       COL_ALIASES[norm] ??
       (Object.entries(COL_ALIASES).find(([k]) => normalizeKey(k) === norm)?.[1] as
-        | keyof ParsedSupplier
-        | undefined);
+        keyof ParsedSupplier | undefined);
     if (field && val !== undefined && val !== null && val !== "") {
       (mapped[field] as unknown) = String(val).trim();
     }
@@ -253,9 +272,7 @@ function mapRow(row: Record<string, unknown>): ParsedSupplier | null {
     if (parsed2.primary) {
       finalPhone2 = parsed2.primary;
     } else if (parsed2.warning) {
-      phoneWarning = phoneWarning
-        ? phoneWarning + " | " + parsed2.warning
-        : parsed2.warning;
+      phoneWarning = phoneWarning ? phoneWarning + " | " + parsed2.warning : parsed2.warning;
     }
   }
 
@@ -281,7 +298,7 @@ async function parseFile(file: File): Promise<ParsedSupplier[]> {
   if (ext === "json") {
     const text = await file.text();
     const json = JSON.parse(text);
-    const arr = Array.isArray(json) ? json : json.suppliers ?? json.data ?? [json];
+    const arr = Array.isArray(json) ? json : (json.suppliers ?? json.data ?? [json]);
     return arr
       .map((row: Record<string, unknown>, i: number) => {
         const s = mapRow(row);
@@ -332,10 +349,7 @@ function downloadTemplate() {
   ];
   const ws = xlsxUtils.json_to_sheet(sampleData);
   xlsxUtils.book_append_sheet(wb, ws, "Suppliers");
-  const blob = new Blob(
-    [xlsxUtils.sheet_to_csv(ws)],
-    { type: "text/csv;charset=utf-8;" },
-  );
+  const blob = new Blob([xlsxUtils.sheet_to_csv(ws)], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -417,7 +431,9 @@ export default function ImportSuppliersTab() {
     try {
       const parsed = await parseFile(file);
       if (parsed.length === 0) {
-        setParseError("لم يتم العثور على بيانات صالحة في الملف. تأكد من وجود عمود 'name' أو 'الاسم'.");
+        setParseError(
+          "لم يتم العثور على بيانات صالحة في الملف. تأكد من وجود عمود 'name' أو 'الاسم'.",
+        );
         return;
       }
       setRows(parsed);
@@ -461,9 +477,7 @@ export default function ImportSuppliersTab() {
 
   function applyBulkCategory() {
     if (!bulkCategory) return;
-    setRows((prev) =>
-      prev.map((r, i) => (selected.has(i) ? { ...r, category: bulkCategory } : r)),
-    );
+    setRows((prev) => prev.map((r, i) => (selected.has(i) ? { ...r, category: bulkCategory } : r)));
   }
 
   // ── Submit ─────────────────────────────────────────────────────────────────
@@ -477,11 +491,7 @@ export default function ImportSuppliersTab() {
         contactPerson: r.contactPerson || undefined,
         email: r.email || undefined,
         // إذا كان هناك رقمان محمول: نضمهما بـ "/" ليراهما المستخدم في التفاصيل
-        phone: r.phone
-          ? r.phone2
-            ? `${r.phone} / ${r.phone2}`
-            : r.phone
-          : undefined,
+        phone: r.phone ? (r.phone2 ? `${r.phone} / ${r.phone2}` : r.phone) : undefined,
         address: r.address || undefined,
         category: r.category || "general",
       }));
@@ -576,9 +586,7 @@ export default function ImportSuppliersTab() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-foreground">
-              مراجعة الموردين المستوردين
-            </h2>
+            <h2 className="text-base font-semibold text-foreground">مراجعة الموردين المستوردين</h2>
             <p className="text-muted-foreground text-xs mt-0.5">
               {fileName} — {rows.length} مورد
             </p>
@@ -645,7 +653,10 @@ export default function ImportSuppliersTab() {
                 </option>
               ))}
             </select>
-            <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <ChevronDown
+              size={11}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+            />
           </div>
           <Button
             size="sm"
@@ -680,11 +691,21 @@ export default function ImportSuppliersTab() {
                       className="rounded border-border"
                     />
                   </th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">#</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">الاسم</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">المسؤول</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">الإيميل</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">الهاتف (واتساب)</th>
+                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">
+                    #
+                  </th>
+                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">
+                    الاسم
+                  </th>
+                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">
+                    المسؤول
+                  </th>
+                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">
+                    الإيميل
+                  </th>
+                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right">
+                    الهاتف (واتساب)
+                  </th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-right min-w-[140px]">
                     التصنيف
                   </th>
@@ -693,7 +714,8 @@ export default function ImportSuppliersTab() {
               <tbody>
                 {rows.map((row, i) => {
                   const hasWarning = !!row.phoneWarning;
-                  const isLandlineOnly = hasWarning && row.phoneWarning?.includes("لن يُستورد") && !row.phone;
+                  const isLandlineOnly =
+                    hasWarning && row.phoneWarning?.includes("لن يُستورد") && !row.phone;
                   return (
                     <tr
                       key={i}
@@ -709,7 +731,9 @@ export default function ImportSuppliersTab() {
                           className="rounded border-border"
                         />
                       </td>
-                      <td className="px-3 py-2 text-muted-foreground text-xs font-mono">{row._rowIndex}</td>
+                      <td className="px-3 py-2 text-muted-foreground text-xs font-mono">
+                        {row._rowIndex}
+                      </td>
                       <td className="px-3 py-2 font-medium text-foreground max-w-[160px] truncate">
                         {row.name}
                       </td>
@@ -723,11 +747,15 @@ export default function ImportSuppliersTab() {
                         {row.phone ? (
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1">
-                              <span className="text-green-700 font-mono font-medium">{row.phone}</span>
+                              <span className="text-green-700 font-mono font-medium">
+                                {row.phone}
+                              </span>
                             </div>
                             {row.phone2 && (
                               <div className="flex items-center gap-1">
-                                <span className="text-blue-600 font-mono text-xs">{row.phone2}</span>
+                                <span className="text-blue-600 font-mono text-xs">
+                                  {row.phone2}
+                                </span>
                                 <span className="text-muted-foreground text-[10px]">(ثاني)</span>
                               </div>
                             )}
@@ -762,7 +790,10 @@ export default function ImportSuppliersTab() {
                               </option>
                             ))}
                           </select>
-                          <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                          <ChevronDown
+                            size={10}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none"
+                          />
                         </div>
                       </td>
                     </tr>
@@ -783,8 +814,7 @@ export default function ImportSuppliersTab() {
         <h2 className="text-base font-semibold text-foreground">استيراد موردين من ملف</h2>
         <p className="text-muted-foreground text-xs mt-1">
           يدعم صيغ <span className="font-medium">.xlsx</span> ،
-          <span className="font-medium"> .xls</span> ،
-          <span className="font-medium"> .csv</span> ،
+          <span className="font-medium"> .xls</span> ،<span className="font-medium"> .csv</span> ،
           <span className="font-medium"> .json</span>
         </p>
       </div>
@@ -795,9 +825,9 @@ export default function ImportSuppliersTab() {
         <div className="space-y-0.5">
           <p className="font-medium">أرقام المحمول فقط — تنسيق واتساب تلقائي</p>
           <p className="text-blue-600">
-            يقبل النظام أرقام المحمول المصرية (010 / 011 / 012 / 015) ويحوّلها تلقائياً
-            لتنسيق واتساب الدولي (+20...). الأرقام الأرضية مرفوضة.
-            يمكنك إدخال رقمين محمول في نفس الخلية مفصولين بـ /.
+            يقبل النظام أرقام المحمول المصرية (010 / 011 / 012 / 015) ويحوّلها تلقائياً لتنسيق
+            واتساب الدولي (+20...). الأرقام الأرضية مرفوضة. يمكنك إدخال رقمين محمول في نفس الخلية
+            مفصولين بـ /.
           </p>
         </div>
       </div>
@@ -816,7 +846,10 @@ export default function ImportSuppliersTab() {
 
       {/* Drop zone */}
       <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
@@ -863,13 +896,16 @@ export default function ImportSuppliersTab() {
                 className={`w-1.5 h-1.5 rounded-full shrink-0 ${req === "مطلوب" ? "bg-primary" : "bg-muted-foreground/40"}`}
               />
               <span className="font-mono">{col}</span>
-              <span className={req === "مطلوب" ? "text-primary font-medium" : ""}>{req === "مطلوب" ? "*" : ""}</span>
+              <span className={req === "مطلوب" ? "text-primary font-medium" : ""}>
+                {req === "مطلوب" ? "*" : ""}
+              </span>
             </div>
           ))}
         </div>
         <p className="text-[11px] text-muted-foreground mt-1 border-t border-border pt-2">
-          💡 يمكن وضع رقمي محمول في عمود phone واحد مفصولين بـ <code className="bg-muted px-1 rounded">/</code>
-          — مثال: <code className="bg-muted px-1 rounded">01012345678/01112345678</code>
+          💡 يمكن وضع رقمي محمول في عمود phone واحد مفصولين بـ{" "}
+          <code className="bg-muted px-1 rounded">/</code>— مثال:{" "}
+          <code className="bg-muted px-1 rounded">01012345678/01112345678</code>
         </p>
       </div>
     </div>

@@ -116,10 +116,13 @@ router.get("/analytics/procurement", requireAuth, async (req, res): Promise<void
           sql`${purchaseOrdersTable.rfqId} = ANY(ARRAY[${sql.raw(rfqIds.join(",") || "0")}]::int[])`,
         )
     : [];
-  const rfqsWithPo = new Set<number>(poRows.map((p) => p.rfqId).filter((x): x is number => x != null));
+  const rfqsWithPo = new Set<number>(
+    poRows.map((p) => p.rfqId).filter((x): x is number => x != null),
+  );
 
   // An RFQ "converted to PO" if it has a linked PO OR status SUCCESS.
-  const converted = (rfqId: number, status: string) => rfqsWithPo.has(rfqId) || status === "SUCCESS";
+  const converted = (rfqId: number, status: string) =>
+    rfqsWithPo.has(rfqId) || status === "SUCCESS";
 
   // ── Per-employee aggregation ────────────────────────────────────────────
   const rows = employees.map((emp) => {
