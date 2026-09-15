@@ -8,10 +8,14 @@
 import type { CustomerRfqSheetRowHighlightColor } from './customerRfqSheetRowHighlightColor';
 
 /**
- * One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued).
+ * One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued). Rows for customer-PO lines that cannot be matched to a customer RFQ item (free/manual lines) carry null RFQ columns.
  */
 export interface CustomerRfqSheetRow {
-  rfqItemId?: number;
+  /**
+     * The customer RFQ line item. Null for a customer-PO line that is not linked to any RFQ item (free/manual line).
+     * @nullable
+     */
+  rfqItemId?: number | null;
   /** @nullable */
   lineItem?: string | null;
   /** @nullable */
@@ -27,9 +31,18 @@ export interface CustomerRfqSheetRow {
      * @nullable
      */
   rfqUnitPrice?: string | null;
-  customerRfqId?: number;
-  customerRfqNo?: string;
-  customerName?: string;
+  /**
+     * The originating customer RFQ header (null for a free/manual PO line)
+     * @nullable
+     */
+  customerRfqId?: number | null;
+  /**
+     * Customer RFQ number (null for a free/manual PO line)
+     * @nullable
+     */
+  customerRfqNo?: string | null;
+  /** @nullable */
+  customerName?: string | null;
   /**
      * Request date (تاريخ الطلب)
      * @nullable

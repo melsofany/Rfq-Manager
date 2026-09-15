@@ -622,6 +622,41 @@ export async function initDb(): Promise<void> {
       ALTER TABLE employees ADD COLUMN IF NOT EXISTS permissions JSONB;
     `);
 
+    // ── Link repair: customer PO lines orphaned by the old save path ─────────
+    // Saving a customer RFQ used to delete + re-insert its items, and
+    // customer_po_items.customer_rfq_item_id is ON DELETE SET NULL — so every
+    // customer-PO line pointing at a recreated RFQ item lost its link and
+    // disappeared from the items sheet view. Re-attach such lines to the RFQ
+    // item that carries the same part number (else the same line item) within
+    // the same customer RFQ. Idempotent: only rows whose link is NULL and that
+    // have an unambiguous match are touched.
+    await client.query(`
+      UPDATE customer_po_items cpi
+         SET customer_rfq_item_id = (
+               SELECT cri.id
+                 FROM customer_rfq_items cri
+                WHERE cri.customer_rfq_id = cpi.customer_rfq_id
+                  AND (
+                    (cpi.part_no IS NOT NULL AND btrim(cri.part_no) = btrim(cpi.part_no))
+                    OR (cpi.line_item IS NOT NULL AND btrim(cri.line_item) = btrim(cpi.line_item))
+                  )
+                ORDER BY (btrim(cri.part_no) = btrim(cpi.part_no)) DESC NULLS LAST, cri.id
+                LIMIT 1
+             )
+       WHERE cpi.customer_rfq_item_id IS NULL
+         AND cpi.customer_rfq_id IS NOT NULL
+         AND (cpi.part_no IS NOT NULL OR cpi.line_item IS NOT NULL)
+         AND EXISTS (
+               SELECT 1
+                 FROM customer_rfq_items cri
+                WHERE cri.customer_rfq_id = cpi.customer_rfq_id
+                  AND (
+                    (cpi.part_no IS NOT NULL AND btrim(cri.part_no) = btrim(cpi.part_no))
+                    OR (cpi.line_item IS NOT NULL AND btrim(cri.line_item) = btrim(cpi.line_item))
+                  )
+             );
+    `);
+
     // ══════════════════════════════════════════════════════════════════════
     // Accounting — القيد المزدوج ودليل الحسابات
     // ══════════════════════════════════════════════════════════════════════

@@ -652,16 +652,16 @@ export const ListCustomerRfqSheetViewResponse = zod.object({
   "limit": zod.number(),
   "offset": zod.number(),
   "rows": zod.array(zod.object({
-  "rfqItemId": zod.number().optional(),
+  "rfqItemId": zod.number().nullish().describe('The customer RFQ line item. Null for a customer-PO line that is not linked to any RFQ item (free\/manual line).'),
   "lineItem": zod.string().nullish(),
   "partNo": zod.string().nullish(),
   "description": zod.string().nullish(),
   "uom": zod.string().nullish(),
   "rfqQty": zod.string().nullish(),
   "rfqUnitPrice": zod.string().nullish().describe('Price offered to the customer (from the customer RFQ item)'),
-  "customerRfqId": zod.number().optional(),
-  "customerRfqNo": zod.string().optional(),
-  "customerName": zod.string().optional(),
+  "customerRfqId": zod.number().nullish().describe('The originating customer RFQ header (null for a free\/manual PO line)'),
+  "customerRfqNo": zod.string().nullish().describe('Customer RFQ number (null for a free\/manual PO line)'),
+  "customerName": zod.string().nullish(),
   "entryDate": zod.string().nullish().describe('Request date (تاريخ الطلب)'),
   "expiryDate": zod.string().nullish().describe('Request expiry date (تاريخ انتهاء الطلب)'),
   "buyerName": zod.string().nullish().describe('Buyer \/ employee at the customer\'s company (recorded with the RFQ)'),
@@ -673,7 +673,7 @@ export const ListCustomerRfqSheetViewResponse = zod.object({
   "flagged": zod.boolean().optional().describe('True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price OR a manual highlight note is set).'),
   "flagReason": zod.string().nullish().describe('Arabic reason for the flag — computed flags merged with the manual highlight note, e.g. \'رفض التسليم: تالف — مراجعة خاصة\'.'),
   "highlightColor": zod.union([zod.literal('yellow'),zod.literal('green'),zod.literal('blue'),zod.literal('red'),zod.literal('orange'),zod.literal('purple'),zod.literal(null)]).nullish().describe('Manual row tint color set on the customer PO line (renders the whole row in that color).')
-}).describe('One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued).'))
+}).describe('One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued). Rows for customer-PO lines that cannot be matched to a customer RFQ item (free\/manual lines) carry null RFQ columns.'))
 }).describe('Paginated flat sheet-style view (one row per customer RFQ item, with joined PO columns).')
 
 
