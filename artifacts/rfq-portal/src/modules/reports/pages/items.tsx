@@ -806,7 +806,7 @@ function SheetViewTab() {
                 !isError &&
                 rows.map((r: CustomerRfqSheetRow) => (
                   <tr
-                    key={`${r.rfqItemId}-${r.poItemId ?? "nopo"}`}
+                    key={`${r.rfqItemId ?? "norfq"}-${r.poItemId ?? "nopo"}`}
                     className={cn(
                       "border-b border-border/40 last:border-0 hover:bg-muted/20",
                       r.highlightColor
@@ -823,11 +823,15 @@ function SheetViewTab() {
                     <td className="px-2 py-1.5">{cell(r.description)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-center">{cell(r.uom)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
-                      <Link href={`/customer-rfq/${r.customerRfqId}`}>
-                        <a className="text-primary hover:underline font-mono" dir="ltr">
-                          {r.customerRfqNo}
-                        </a>
-                      </Link>
+                      {r.customerRfqId != null && r.customerRfqNo ? (
+                        <Link href={`/customer-rfq/${r.customerRfqId}`}>
+                          <a className="text-primary hover:underline font-mono" dir="ltr">
+                            {r.customerRfqNo}
+                          </a>
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-center" dir="ltr">
                       {cell(r.entryDate)}

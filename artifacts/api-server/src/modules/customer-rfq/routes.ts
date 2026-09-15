@@ -14,7 +14,7 @@ import {
   customerPoItemDeliveriesTable,
   purchaseOrderItemsTable,
 } from "@workspace/db";
-import { eq, ilike, count, inArray, desc, asc, and, isNull, or, isNotNull, sql, ne } from "drizzle-orm";
+import { eq, ilike, count, inArray, desc, and, isNull, or, isNotNull, sql, ne } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
@@ -185,6 +185,22 @@ function formatQty(qty: string | null): string | null {
   if (!s.includes(".")) return s;
   const trimmed = s.replace(/0+$/, "").replace(/\.$/, "");
   return trimmed === "" ? "0" : trimmed;
+}
+
+// Match a submitted customer-RFQ item (which carries no id) to its stored row,
+// by partNo first then lineItem, ignoring case and whitespace. Drives both price
+// preservation and the UPDATE-in-place save.
+function findItemByKey<
+  T extends { id: number; partNo: string | null; lineItem: string | null; unitPrice: string | null },
+>(rows: T[], it: { partNo?: string; lineItem?: string }): T | undefined {
+  const key = (v: string | null | undefined) => (v ?? "").replace(/\s+/g, "").trim().toLowerCase();
+  const partNo = key(it.partNo);
+  const lineItem = key(it.lineItem);
+  for (const row of rows) {
+    if (partNo && key(row.partNo) === partNo) return row;
+    if (lineItem && key(row.lineItem) === lineItem) return row;
+  }
+  return undefined;
 }
 
 // Line total = qty * unitPrice, rounded to 4dp and stripped of trailing zeros.
@@ -787,7 +803,37 @@ const SHEET_FILTER_COLUMNS: { param: string; field: keyof EnrichedSheetRow }[] =
   { param: "flagReason", field: "flagReason" },
 ];
 
-type SheetRow = Awaited<ReturnType<typeof loadSheetRowsRaw>>[number];
+// One row of the flat sheet view. The view is anchored on customer-RFQ items,
+// so a customer-PO line with NO customer-RFQ-item link (a PO entered with
+// free/manual lines, or a line orphaned before the link-preserving save) would
+// otherwise be invisible. Such lines are appended as their own rows with the
+// RFQ columns null, so an issued PO is never missing from the sheet.
+interface SheetRow {
+  rfqItemId: number | null;
+  lineItem: string | null;
+  partNo: string | null;
+  description: string | null;
+  uom: string | null;
+  rfqQty: string | null;
+  rfqUnitPrice: string | null;
+  customerRfqId: number | null;
+  customerRfqNo: string | null;
+  customerName: string | null;
+  entryDate: string | null;
+  expiryDate: string | null;
+  buyerName: string | null;
+  poItemId: number | null;
+  poNo: string | null;
+  poDate: string | null;
+  poQty: string | null;
+  poUnitPrice: string | null;
+  deliveryStatus: string | null;
+  highlightColor: string | null;
+  highlightNote: string | null;
+  poFinalActualCost: string | null;
+  poReferencePrice: string | null;
+}
+
 // A SheetRow enriched with the computed flagReason — the shape loadSheetRows
 // returns and the sheet-view/facets handlers consume.
 type EnrichedSheetRow = SheetRow & { flagReason: string | null };
@@ -820,58 +866,207 @@ function computeFlagReason(
   return reasons.length > 0 ? reasons.join(" — ") : null;
 }
 
-async function loadSheetRowsRaw() {
-  return (
-    db
-      .select({
-        rfqItemId: customerRfqItemsTable.id,
-        lineItem: customerRfqItemsTable.lineItem,
-        partNo: customerRfqItemsTable.partNo,
-        description: customerRfqItemsTable.description,
-        uom: customerRfqItemsTable.uom,
-        rfqQty: customerRfqItemsTable.qty,
-        rfqUnitPrice: customerRfqItemsTable.unitPrice,
-        customerRfqId: customerRfqsTable.id,
-        customerRfqNo: customerRfqsTable.customerRfqNo,
-        customerName: customerRfqsTable.customerName,
-        entryDate: customerRfqsTable.entryDate,
-        expiryDate: customerRfqsTable.expiryDate,
-        buyerName: customerRfqsTable.buyerName,
-        poItemId: customerPoItemsTable.id,
-        poNo: customerPosTable.customerPoNo,
-        poDate: customerPosTable.poDate,
-        poQty: customerPoItemsTable.qty,
-        poUnitPrice: customerPoItemsTable.unitPrice,
-        deliveryStatus: customerPoItemsTable.deliveryStatus,
-        // Manual highlight set on the customer PO line (admin/accountant):
-        // row tint + note appended to the «السبب» column in the response.
-        highlightColor: customerPoItemsTable.highlightColor,
-        highlightNote: customerPoItemsTable.highlightNote,
-        // Linked supplier PO item (for the cost-overrun check).
-        poFinalActualCost: purchaseOrderItemsTable.finalActualCost,
-        poReferencePrice: purchaseOrderItemsTable.referencePrice,
-      })
-      .from(customerRfqItemsTable)
-      .innerJoin(customerRfqsTable, eq(customerRfqItemsTable.customerRfqId, customerRfqsTable.id))
-      .leftJoin(
-        customerPoItemsTable,
-        eq(customerPoItemsTable.customerRfqItemId, customerRfqItemsTable.id),
-      )
-      .leftJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
-      .leftJoin(
-        purchaseOrderItemsTable,
-        eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
-      )
-      // Chronological by the visible request date (entryDate, a YYYY-MM-DD text
-      // field → lexicographic == chronological). Oldest request = row 1 (top),
-      // newest at the bottom; createdAt + item id are stable tie-breakers.
-      // Postgres ASC puts NULL entryDate last (undated requests sink to bottom).
-      .orderBy(
-        asc(customerRfqsTable.entryDate),
-        asc(customerRfqsTable.createdAt),
-        asc(customerRfqItemsTable.id),
-      )
+// The flat sheet view: one row per (customer RFQ item × matching customer PO
+// line). The view is anchored on customer RFQ items, so a PO line that cannot
+// be matched to any RFQ item — a PO entered with free/manual lines, or a line
+// whose item FK was severed before the link-preserving save — is emitted as its
+// own row with null RFQ columns. An issued PO is therefore never missing.
+async function loadSheetRowsRaw(): Promise<SheetRow[]> {
+  // Customer RFQ items with their request header. `createdAt` is kept as the
+  // stable tie-breaker the old SQL ordering used.
+  const rfqItems = await db
+    .select({
+      rfqItemId: customerRfqItemsTable.id,
+      lineItem: customerRfqItemsTable.lineItem,
+      partNo: customerRfqItemsTable.partNo,
+      description: customerRfqItemsTable.description,
+      uom: customerRfqItemsTable.uom,
+      rfqQty: customerRfqItemsTable.qty,
+      rfqUnitPrice: customerRfqItemsTable.unitPrice,
+      customerRfqId: customerRfqsTable.id,
+      customerRfqNo: customerRfqsTable.customerRfqNo,
+      customerName: customerRfqsTable.customerName,
+      entryDate: customerRfqsTable.entryDate,
+      expiryDate: customerRfqsTable.expiryDate,
+      buyerName: customerRfqsTable.buyerName,
+      rfqCreatedAt: customerRfqsTable.createdAt,
+    })
+    .from(customerRfqItemsTable)
+    .innerJoin(customerRfqsTable, eq(customerRfqItemsTable.customerRfqId, customerRfqsTable.id));
+
+  // Every customer PO line, with its PO header columns.
+  const poItems = await db
+    .select({
+      poItemId: customerPoItemsTable.id,
+      customerRfqId: customerPoItemsTable.customerRfqId,
+      customerRfqItemId: customerPoItemsTable.customerRfqItemId,
+      lineItem: customerPoItemsTable.lineItem,
+      partNo: customerPoItemsTable.partNo,
+      description: customerPoItemsTable.description,
+      uom: customerPoItemsTable.uom,
+      poQty: customerPoItemsTable.qty,
+      poUnitPrice: customerPoItemsTable.unitPrice,
+      deliveryStatus: customerPoItemsTable.deliveryStatus,
+      // Manual highlight set on the customer PO line (admin/accountant):
+      // row tint + note appended to the «السبب» column in the response.
+      highlightColor: customerPoItemsTable.highlightColor,
+      highlightNote: customerPoItemsTable.highlightNote,
+      poNo: customerPosTable.customerPoNo,
+      poDate: customerPosTable.poDate,
+    })
+    .from(customerPoItemsTable)
+    .innerJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id));
+
+  // Supplier-PO cost per customer-PO line, for the cost-overrun flag. Read by
+  // customer-PO-item id (not a join) so a line ordered again on a later supplier
+  // PO cannot multiply the sheet rows.
+  const poItemIds = poItems.map((p) => p.poItemId);
+  const supplierCosts = poItemIds.length
+    ? await db
+        .select({
+          poItemId: purchaseOrderItemsTable.customerPoItemId,
+          finalActualCost: purchaseOrderItemsTable.finalActualCost,
+          referencePrice: purchaseOrderItemsTable.referencePrice,
+        })
+        .from(purchaseOrderItemsTable)
+        .where(inArray(purchaseOrderItemsTable.customerPoItemId, poItemIds))
+    : [];
+  const costByPoItemId = new Map(
+    supplierCosts.filter((c) => c.poItemId != null).map((c) => [c.poItemId as number, c]),
   );
+
+  // Match each PO line to its RFQ item: by the item FK, falling back (for lines
+  // whose FK was severed, or that were typed by hand against a picked RFQ) to
+  // the RFQ header plus the typed partNo, then lineItem. The SQL LEFT JOIN
+  // could not express that fallback, which is why such PO lines disappeared.
+  const norm = (v: string | null) => (v ?? "").replace(/\s+/g, "").trim().toLowerCase();
+  const rfqItemById = new Map(rfqItems.map((i) => [i.rfqItemId, i]));
+  const byRfqAndPartNo = new Map<string, (typeof rfqItems)[number]>();
+  const byRfqAndLineItem = new Map<string, (typeof rfqItems)[number]>();
+  for (const i of rfqItems) {
+    const partNo = norm(i.partNo);
+    const lineItem = norm(i.lineItem);
+    if (partNo) byRfqAndPartNo.set(`${i.customerRfqId}|${partNo}`, i);
+    if (lineItem) byRfqAndLineItem.set(`${i.customerRfqId}|${lineItem}`, i);
+  }
+  const matchRfqItem = (p: (typeof poItems)[number]) => {
+    if (p.customerRfqItemId != null) {
+      const byId = rfqItemById.get(p.customerRfqItemId);
+      if (byId) return byId;
+    }
+    if (p.customerRfqId == null) return undefined;
+    // A line with neither a part number nor a line item cannot be matched to a
+    // specific RFQ item, so it stays an RFQ-less row rather than guessing.
+    const partNo = norm(p.partNo);
+    const lineItem = norm(p.lineItem);
+    if (partNo) {
+      const byPart = byRfqAndPartNo.get(`${p.customerRfqId}|${partNo}`);
+      if (byPart) return byPart;
+    }
+    if (lineItem) return byRfqAndLineItem.get(`${p.customerRfqId}|${lineItem}`);
+    return undefined;
+  };
+
+  const poItemsByRfqItemId = new Map<number, typeof poItems>();
+  const orphans: typeof poItems = [];
+  for (const p of poItems) {
+    const item = matchRfqItem(p);
+    if (!item) {
+      orphans.push(p);
+      continue;
+    }
+    const list = poItemsByRfqItemId.get(item.rfqItemId) ?? [];
+    list.push(p);
+    poItemsByRfqItemId.set(item.rfqItemId, list);
+  }
+
+  const rows: SheetRow[] = [];
+  // A dated request sorts before an undated one, then by request date and RFQ
+  // id — `ORDER BY entry_date ASC NULLS LAST, created_at, item id` in JS.
+  const rfqOrder = [...rfqItems].sort((a, b) => {
+    const aDated = a.entryDate ? "0" : "1";
+    const bDated = b.entryDate ? "0" : "1";
+    if (aDated !== bDated) return aDated < bDated ? -1 : 1;
+    if ((a.entryDate ?? "") !== (b.entryDate ?? "")) {
+      return (a.entryDate ?? "") < (b.entryDate ?? "") ? -1 : 1;
+    }
+    if (a.rfqCreatedAt.getTime() !== b.rfqCreatedAt.getTime()) {
+      return a.rfqCreatedAt.getTime() - b.rfqCreatedAt.getTime();
+    }
+    return a.rfqItemId - b.rfqItemId;
+  });
+
+  const toRfqRow = (
+    i: (typeof rfqItems)[number],
+    po: (typeof poItems)[number] | undefined,
+  ): SheetRow => {
+    const cost = po ? costByPoItemId.get(po.poItemId) : undefined;
+    return {
+      rfqItemId: i.rfqItemId,
+      lineItem: i.lineItem,
+      partNo: i.partNo,
+      description: i.description,
+      uom: i.uom,
+      rfqQty: i.rfqQty,
+      rfqUnitPrice: i.rfqUnitPrice,
+      customerRfqId: i.customerRfqId,
+      customerRfqNo: i.customerRfqNo,
+      customerName: i.customerName,
+      entryDate: i.entryDate,
+      expiryDate: i.expiryDate,
+      buyerName: i.buyerName,
+      poItemId: po?.poItemId ?? null,
+      poNo: po?.poNo ?? null,
+      poDate: po?.poDate ?? null,
+      poQty: po?.poQty ?? null,
+      poUnitPrice: po?.poUnitPrice ?? null,
+      deliveryStatus: po?.deliveryStatus ?? null,
+      highlightColor: po?.highlightColor ?? null,
+      highlightNote: po?.highlightNote ?? null,
+      poFinalActualCost: cost?.finalActualCost ?? null,
+      poReferencePrice: cost?.referencePrice ?? null,
+    };
+  };
+
+  for (const i of rfqOrder) {
+    const linked = poItemsByRfqItemId.get(i.rfqItemId);
+    // An RFQ item with no PO yet still gets one row with null PO columns.
+    const pos = linked && linked.length > 0 ? linked : [undefined];
+    for (const po of pos) rows.push(toRfqRow(i, po));
+  }
+
+  // PO lines that reach no RFQ item: emitted last, since they carry no request
+  // date to sort by.
+  for (const p of orphans) {
+    const cost = costByPoItemId.get(p.poItemId);
+    rows.push({
+      rfqItemId: null,
+      lineItem: p.lineItem,
+      partNo: p.partNo,
+      description: p.description,
+      uom: p.uom,
+      rfqQty: null,
+      rfqUnitPrice: null,
+      customerRfqId: p.customerRfqId,
+      customerRfqNo: null,
+      customerName: null,
+      entryDate: null,
+      expiryDate: null,
+      buyerName: null,
+      poItemId: p.poItemId,
+      poNo: p.poNo,
+      poDate: p.poDate,
+      poQty: p.poQty,
+      poUnitPrice: p.poUnitPrice,
+      deliveryStatus: p.deliveryStatus,
+      highlightColor: p.highlightColor,
+      highlightNote: p.highlightNote,
+      poFinalActualCost: cost?.finalActualCost ?? null,
+      poReferencePrice: cost?.referencePrice ?? null,
+    });
+  }
+
+  return rows;
 }
 
 // Parse a column filter value list from the query string. The frontend sends
@@ -951,8 +1146,8 @@ async function loadSheetRows(
         (r.lineItem ?? "").toLowerCase().includes(s) ||
         (r.partNo ?? "").toLowerCase().includes(s) ||
         (r.description ?? "").toLowerCase().includes(s) ||
-        r.customerRfqNo.toLowerCase().includes(s) ||
-        r.customerName.toLowerCase().includes(s) ||
+        (r.customerRfqNo ?? "").toLowerCase().includes(s) ||
+        (r.customerName ?? "").toLowerCase().includes(s) ||
         (r.poNo ?? "").toLowerCase().includes(s),
     );
   }
@@ -1340,6 +1535,13 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     return currentDbItemsForPricing;
   };
 
+  // Locate the stored row a submitted item corresponds to, by partNo then
+  // lineItem (the submitted items carry no id). Used both to preserve prices and
+  // to UPDATE in place rather than delete+recreate — the row ids are referenced
+  // by customer-PO and supplier-offer links.
+  const findDbItem = (rows: typeof currentDbItemsForPricing, it: { partNo?: string; lineItem?: string }) =>
+    findItemByKey(rows ?? [], it);
+
   if (status === "sent" && validItems !== undefined) {
     const unpriced = validItems.filter(
       (it) => it.unitPrice == null || it.unitPrice === "" || Number(it.unitPrice) <= 0,
@@ -1362,20 +1564,9 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       existing.customerRfqNo,
     );
 
-    // Map a req.body item to its current DB item id by partNo (priority) then lineItem.
-    const findDbId = (it: { partNo?: string; lineItem?: string }): number | null => {
-      const p = it.partNo?.trim();
-      const l = it.lineItem?.trim();
-      if (p) {
-        const m = currentDbItems.find((d) => (d.partNo ?? "").trim() === p);
-        if (m) return m.id;
-      }
-      if (l) {
-        const m = currentDbItems.find((d) => (d.lineItem ?? "").trim() === l);
-        if (m) return m.id;
-      }
-      return null;
-    };
+    // Map a req.body item to its current DB item id (partNo first, then lineItem).
+    const findDbId = (it: { partNo?: string; lineItem?: string }): number | null =>
+      findDbItem(currentDbItems, it)?.id ?? null;
 
     const violations: string[] = [];
     for (const it of validItems) {
@@ -1441,36 +1632,54 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     return;
   }
   if (items !== undefined && !itemsAreIdOnly) {
-    const preservingPrices = await loadCurrentDbItemsForPricing();
-    const preservedPrice = (it: { partNo?: string; lineItem?: string }): string | null => {
-      const p = it.partNo?.trim().toLowerCase();
-      const l = it.lineItem?.replace(/\s+/g, "").trim().toLowerCase();
-      for (const d of preservingPrices) {
-        if (p && (d.partNo ?? "").trim().toLowerCase() === p) return d.unitPrice;
-        if (l && (d.lineItem ?? "").replace(/\s+/g, "").trim().toLowerCase() === l) return d.unitPrice;
+    // Items are UPDATED in place where possible instead of deleted and
+    // re-inserted: `customer_po_items.customer_rfq_item_id` and
+    // `rfq_items.customer_rfq_item_id` reference these ids, so recreating them
+    // would sever every existing customer-PO / supplier-offer link (the PO then
+    // vanished from the items sheet view).
+    const existingRows = await loadCurrentDbItemsForPricing();
+    const keptIds = new Set<number>();
+    const toInsert: Array<{
+      customerRfqId: number;
+      partNo: string | null;
+      lineItem: string | null;
+      description: string | null;
+      uom: string | null;
+      qty: string | null;
+      unitPrice: string | null;
+    }> = [];
+    for (const it of validItems!) {
+      const explicitPrice =
+        privileged && it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null;
+      const existing = findDbItem(existingRows, it);
+      const price = explicitPrice ?? existing?.unitPrice ?? null;
+      const fields = {
+        partNo: it.partNo?.trim() || null,
+        lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : null,
+        description: it.description?.trim() || null,
+        uom: it.uom?.trim() || null,
+        qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
+        unitPrice: price,
+      };
+      if (existing && !keptIds.has(existing.id)) {
+        keptIds.add(existing.id);
+        await db
+          .update(customerRfqItemsTable)
+          .set(fields)
+          .where(eq(customerRfqItemsTable.id, existing.id));
+      } else {
+        toInsert.push({ customerRfqId: id, ...fields });
       }
-      return null;
-    };
-
-    await db.delete(customerRfqItemsTable).where(eq(customerRfqItemsTable.customerRfqId, id));
-    await db.insert(customerRfqItemsTable).values(
-      validItems!.map((it) => {
-        const explicitPrice =
-          privileged && it.unitPrice != null && it.unitPrice !== ""
-            ? String(it.unitPrice)
-            : null;
-        const price = explicitPrice ?? preservedPrice(it);
-        return {
-          customerRfqId: id,
-          partNo: it.partNo?.trim() || null,
-          lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : null,
-          description: it.description?.trim() || null,
-          uom: it.uom?.trim() || null,
-          qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
-          unitPrice: price,
-        };
-      }),
-    );
+    }
+    // Items the operator removed are deleted LAST, so the PO-link cleanup runs
+    // once the surviving rows are already updated.
+    const removedIds = existingRows.map((d) => d.id).filter((rid) => !keptIds.has(rid));
+    if (removedIds.length > 0) {
+      await db.delete(customerRfqItemsTable).where(inArray(customerRfqItemsTable.id, removedIds));
+    }
+    if (toInsert.length > 0) {
+      await db.insert(customerRfqItemsTable).values(toInsert);
+    }
   }
 
   // Audit a privileged full edit of an already-sent (finalized) RFQ.

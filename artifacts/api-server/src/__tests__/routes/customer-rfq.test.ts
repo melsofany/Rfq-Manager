@@ -92,6 +92,10 @@ const sessionState: { employeeId: number; role?: string } = { employeeId: 1 };
 // Tracks the exact values written to customer_rfq_items so we can assert the
 // lineItem space-stripping behaviour.
 const insertedItems: any[] = [];
+// Ids updated in place on customer_rfq_items (the save preserves ids so the
+// customer-PO / supplier-offer links survive) and ids deleted outright.
+const updatedItemIds: number[] = [];
+const deletedItemIds: number[] = [];
 // Audit-log rows written during a test (e.g. the margin-deviation entry).
 const auditInserts: any[] = [];
 
@@ -153,34 +157,73 @@ const dbMock: any = {
       }
       // items list for detail (bare select).from(items).where()
       if (table === itemsTable) {
-        // sheet-view: select({...}).from(items).innerJoin(rfq).leftJoin(poItems)
-        // .leftJoin(po).leftJoin(purchaseOrderItems).orderBy()
-        // returns the per-test sheetRows (already flat, multi-column). The
-        // orderBy is the terminal thenable.
+        // sheet-view: select({...}).from(items).innerJoin(rfqs) — returns the
+        // RFQ side of the per-test sheetRows (the PO side is served by the
+        // customerPoItems branch below, so the route pairs them itself).
         if (arg && typeof arg === "object" && "rfqItemId" in arg) {
-          return chainable(sheetRows, {
-            innerJoin: vi.fn(() =>
-              chainable(sheetRows, {
-                leftJoin: vi.fn(() =>
-                  chainable(sheetRows, {
-                    leftJoin: vi.fn(() =>
-                      chainable(sheetRows, {
-                        leftJoin: vi.fn(() =>
-                          chainable(sheetRows, {
-                            orderBy: vi.fn(() => chainable(sheetRows)),
-                          }),
-                        ),
-                      }),
-                    ),
-                  }),
-                ),
-              }),
-            ),
+          const rfqViews = sheetRows
+            .filter((r: any) => r.rfqItemId != null)
+            .map((r: any) => ({
+              rfqItemId: r.rfqItemId,
+              lineItem: r.lineItem ?? null,
+              partNo: r.partNo ?? null,
+              description: r.description ?? null,
+              uom: r.uom ?? null,
+              rfqQty: r.rfqQty ?? null,
+              rfqUnitPrice: r.rfqUnitPrice ?? null,
+              customerRfqId: r.customerRfqId ?? null,
+              customerRfqNo: r.customerRfqNo ?? null,
+              customerName: r.customerName ?? null,
+              entryDate: r.entryDate ?? null,
+              expiryDate: r.expiryDate ?? null,
+              buyerName: r.buyerName ?? null,
+              rfqCreatedAt: new Date(0),
+            }));
+          return chainable(rfqViews, {
+            innerJoin: vi.fn(() => chainable(rfqViews)),
           });
         }
         return chainable(detailItems, {
           where: vi.fn(() => chainable(detailItems)),
         });
+      }
+      // Sheet-view PO side: select({...}).from(customerPoItems).innerJoin(
+      // customerPos) — the per-test sheetRows' PO columns, keyed to their RFQ
+      // item by customerRfqItemId (null ⇒ an RFQ-less line).
+      if (table === customerPoItemsTbl && arg && typeof arg === "object" && "poNo" in arg) {
+        const poViews = sheetRows
+          .filter((r: any) => r.poItemId != null)
+          .map((r: any) => ({
+            poItemId: r.poItemId,
+            customerRfqId: r.customerRfqId ?? null,
+            // A row may explicitly declare a severed item link (null) while
+            // still carrying the RFQ item + partNo it belongs to.
+            customerRfqItemId:
+              "poLinkRfqItemId" in r ? r.poLinkRfqItemId : (r.rfqItemId ?? null),
+            lineItem: r.lineItem ?? null,
+            partNo: r.partNo ?? null,
+            description: r.description ?? null,
+            uom: r.uom ?? null,
+            poQty: r.poQty ?? null,
+            poUnitPrice: r.poUnitPrice ?? null,
+            deliveryStatus: r.deliveryStatus ?? null,
+            highlightColor: r.highlightColor ?? null,
+            highlightNote: r.highlightNote ?? null,
+            poNo: r.poNo ?? null,
+            poDate: r.poDate ?? null,
+          }));
+        return chainable(poViews, { innerJoin: vi.fn(() => chainable(poViews)) });
+      }
+      // Sheet-view supplier cost: select({...}).from(purchaseOrderItems).where()
+      if (table === (tables as any).purchaseOrderItemsTable && arg && typeof arg === "object" && "finalActualCost" in arg) {
+        const costRows = sheetRows
+          .filter((r: any) => r.poItemId != null)
+          .map((r: any) => ({
+            poItemId: r.poItemId,
+            finalActualCost: r.poFinalActualCost ?? null,
+            referencePrice: r.poReferencePrice ?? null,
+          }));
+        return chainable(costRows, { where: vi.fn(() => chainable(costRows)) });
       }
       // resolveApprovedCosts: select({...}).from(offerItems).innerJoin(rfqItems).where(...)
       // returns the per-test approvedRows.
@@ -265,7 +308,10 @@ const dbMock: any = {
         if (vals && typeof vals === "object") {
           if (table === itemsTable) {
             const id = cond?.val;
-            detailItems = detailItems.map((it) => (it.id === id ? { ...it, ...vals } : it));
+            // inArray() builds { col, val: [ids] } — a bulk delete of removed items.
+            const ids: number[] = Array.isArray(id) ? id : [id];
+            updatedItemIds.push(...ids.filter((v: any) => typeof v === "number"));
+            detailItems = detailItems.map((it) => (ids.includes(it.id) ? { ...it, ...vals } : it));
           } else if (detailRow) {
             detailRow = { ...detailRow, ...vals };
           }
@@ -275,9 +321,13 @@ const dbMock: any = {
     })),
   })),
   delete: vi.fn((table: any) => ({
-    where: vi.fn(() => {
+    where: vi.fn((cond: any) => {
       if (table === customerRfqsTbl)
         return { returning: vi.fn(() => chainable(detailRow ? [detailRow] : [])) };
+      if (table === itemsTable) {
+        const val = cond?.val;
+        deletedItemIds.push(...(Array.isArray(val) ? val : [val]).filter((v: any) => typeof v === "number"));
+      }
       return chainable(undefined);
     }),
   })),
@@ -349,6 +399,8 @@ beforeEach(() => {
   employeeRow = { name: "Tester" };
   sessionState.role = "admin";
   insertedItems.length = 0;
+  updatedItemIds.length = 0;
+  deletedItemIds.length = 0;
   auditInserts.length = 0;
 });
 
@@ -1671,5 +1723,163 @@ describe("GET /api/customer-rfq/sheet-view", () => {
     expect(res.body.total).toBe(1);
     expect(res.body.rows[0].rfqItemId).toBe(1);
     expect(res.body.rows[0].flagReason).toBe(reason);
+  });
+});
+
+// ── PO visibility in the items sheet view ───────────────────────────────────
+// Reported bug: a customer PO existed at /customer-po/:id but its lines were
+// absent from /items → «سجل البنود والطلبات». The sheet view is anchored on
+// customer-RFQ items and joined the PO line only on
+// `customer_po_items.customer_rfq_item_id`, so a line whose item FK was severed
+// (the old save deleted + re-created the RFQ's items, and that FK is
+// ON DELETE SET NULL) — or a PO entered with free/manual lines — produced no
+// row at all.
+describe("GET /api/customer-rfq/sheet-view — customer PO always visible", () => {
+  const baseRfqRow = {
+    lineItem: "A1",
+    partNo: "P-100",
+    description: "Widget",
+    uom: "pc",
+    rfqQty: "5",
+    rfqUnitPrice: "120",
+    customerRfqId: 7,
+    customerRfqNo: "CUST-001",
+    customerName: "Acme",
+    entryDate: "2025-01-10",
+    expiryDate: null,
+    buyerName: "Sam",
+  };
+
+  it("shows a PO line whose RFQ-item link was severed, matched by partNo", async () => {
+    // The stored PO line points at RFQ item 10 by partNo, but its
+    // customer_rfq_item_id is NULL (nulled by ON DELETE SET NULL).
+    sheetRows = [
+      { ...baseRfqRow, rfqItemId: 10, poItemId: 90, poNo: "877", poDate: "2025-01-20", poQty: "3", poUnitPrice: "130", poLinkRfqItemId: null },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view");
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(1);
+    expect(res.body.rows[0].poNo).toBe("877");
+    expect(res.body.rows[0].rfqItemId).toBe(10);
+    expect(res.body.rows[0].poQty).toBe("3");
+  });
+
+  it("shows a PO entered with free/manual lines that link to no RFQ at all", async () => {
+    // A manual PO line: no RFQ header, no RFQ item — it must still appear.
+    sheetRows = [
+      {
+        rfqItemId: null,
+        lineItem: "FREE-1",
+        partNo: "P-FREE",
+        description: "Manual line",
+        uom: "pc",
+        rfqQty: null,
+        rfqUnitPrice: null,
+        customerRfqId: null,
+        customerRfqNo: null,
+        customerName: null,
+        entryDate: null,
+        expiryDate: null,
+        buyerName: null,
+        poItemId: 91,
+        poNo: "877",
+        poDate: "2025-01-21",
+        poQty: "2",
+        poUnitPrice: "50",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view");
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(1);
+    expect(res.body.rows[0].poNo).toBe("877");
+    expect(res.body.rows[0].rfqItemId).toBeNull();
+    expect(res.body.rows[0].customerRfqNo).toBeNull();
+  });
+
+  it("still lists an RFQ item with no PO yet as a row with null PO columns", async () => {
+    sheetRows = [{ ...baseRfqRow, rfqItemId: 11, poItemId: null }];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view");
+    expect(res.status).toBe(200);
+    expect(res.body.rows).toHaveLength(1);
+    expect(res.body.rows[0].rfqItemId).toBe(11);
+    expect(res.body.rows[0].poNo).toBeNull();
+    expect(res.body.rows[0].poItemId).toBeNull();
+  });
+
+  it("finds a severed-link PO line when searching by its PO number", async () => {
+    sheetRows = [
+      { ...baseRfqRow, rfqItemId: 10, poItemId: 90, poNo: "877", poDate: "2025-01-20", poQty: "3", poUnitPrice: "130", poLinkRfqItemId: null },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view?search=877");
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.rows[0].poNo).toBe("877");
+  });
+});
+
+describe("PATCH /api/customer-rfq/:id — saving preserves item ids", () => {
+  // The save must UPDATE existing rows in place (never delete + re-insert), or
+  // every customer-PO / supplier-offer link pointing at those ids is severed.
+  const storedItem = {
+    id: 1,
+    customerRfqId: 42,
+    partNo: "P1",
+    lineItem: "ABCD",
+    description: null,
+    uom: "pc",
+    qty: "3.0000",
+    unitPrice: "10.0000",
+    createdAt: new Date("2025-01-03"),
+  };
+
+  it("updates an edited item in place instead of recreating it", async () => {
+    sessionState.role = "admin";
+    detailRow = { ...insertedRfq };
+    detailItems = [storedItem];
+    approvedRows = [];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 4, unitPrice: 12 }],
+      });
+    expect(res.status).toBe(200);
+    // Row 1 updated in place; nothing deleted, nothing re-inserted.
+    expect(updatedItemIds).toContain(1);
+    expect(deletedItemIds).toHaveLength(0);
+    expect(insertedItems).toHaveLength(0);
+  });
+
+  it("deletes only the items the operator removed", async () => {
+    sessionState.role = "admin";
+    detailRow = { ...insertedRfq };
+    detailItems = [storedItem, { ...storedItem, id: 2, partNo: "P2", lineItem: "EFGH" }];
+    approvedRows = [];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 4, unitPrice: 12 }] });
+    expect(res.status).toBe(200);
+    expect(updatedItemIds).toContain(1);
+    expect(deletedItemIds).toEqual([2]);
+    expect(insertedItems).toHaveLength(0);
+  });
+
+  it("inserts a genuinely new item without touching the existing one", async () => {
+    sessionState.role = "admin";
+    detailRow = { ...insertedRfq };
+    detailItems = [storedItem];
+    approvedRows = [];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        items: [
+          { partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 4, unitPrice: 12 },
+          { partNo: "P9", lineItem: "ZZZZ", uom: "pc", qty: 1, unitPrice: 99 },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(updatedItemIds).toContain(1);
+    expect(deletedItemIds).toHaveLength(0);
+    expect(insertedItems).toHaveLength(1);
+    expect(insertedItems[0].partNo).toBe("P9");
   });
 });

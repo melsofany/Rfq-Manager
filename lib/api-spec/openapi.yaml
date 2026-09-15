@@ -1922,10 +1922,11 @@ components:
 
     CustomerRfqSheetRow:
       type: object
-      description: One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued).
+      description: One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued). Rows for customer-PO lines that cannot be matched to a customer RFQ item (free/manual lines) carry null RFQ columns.
       properties:
         rfqItemId:
-          type: integer
+          type: ["integer", "null"]
+          description: The customer RFQ line item. Null for a customer-PO line that is not linked to any RFQ item (free/manual line).
         lineItem:
           type: ["string", "null"]
         partNo:
@@ -1940,11 +1941,13 @@ components:
           type: ["string", "null"]
           description: Price offered to the customer (from the customer RFQ item)
         customerRfqId:
-          type: integer
+          type: ["integer", "null"]
+          description: The originating customer RFQ header (null for a free/manual PO line)
         customerRfqNo:
-          type: string
+          type: ["string", "null"]
+          description: Customer RFQ number (null for a free/manual PO line)
         customerName:
-          type: string
+          type: ["string", "null"]
         entryDate:
           type: ["string", "null"]
           description: Request date (تاريخ الطلب)
