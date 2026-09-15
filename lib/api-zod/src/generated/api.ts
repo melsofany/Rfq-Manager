@@ -782,8 +782,7 @@ export const UpdateCustomerRfqBody = zod.object({
   "uom": zod.string().optional(),
   "qty": zod.number().optional(),
   "unitPrice": zod.number().optional().describe('Unit price entered after the RFQ is saved (required to finalize)')
-})).optional(),
-  "overrideMarginCheck": zod.boolean().optional().describe('Admin-only — bypass the 1.06× margin check on finalize (audited).')
+})).optional()
 })
 
 export const UpdateCustomerRfqResponse = zod.object({

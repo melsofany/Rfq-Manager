@@ -57,24 +57,18 @@ export default function CustomerRfqDetailPage() {
   const { employee } = useAuth();
   const canEdit = canEditCustomerDoc(employee?.role, employee?.permissions, EDIT_PERM.customerRfq);
   const isDraft = rfq?.status === "draft";
+  // The customer price is set by the manager ONLY: a single role gate covers
+  // drafts and finalized RFQs alike — the PATCH endpoint enforces the same.
+  const isPricingRole = employee?.role === "admin" || employee?.role === "manager";
   // Admins/managers may fully edit a sent (finalized) RFQ; the PATCH endpoint
   // enforces the same role gate.
-  const canEditSent =
-    rfq?.status === "sent" && (employee?.role === "admin" || employee?.role === "manager");
-  const canFullEdit = isDraft || canEditSent;
-  // A sent (finalized/locked) customer RFQ can still be re-priced (customer unit
-  // prices edited) when EITHER its close date has arrived (today or earlier) OR
-  // at least one item has an approved supplier offer (supplier-priced) — the
-  // commercial event that should open customer pricing. The close day itself
-  // counts (inclusive), since that is the natural moment to enter pricing.
-  const sentCloseReached =
-    rfq?.status === "sent" &&
-    !!rfq.expiryDate &&
-    !Number.isNaN(new Date(rfq.expiryDate).getTime()) &&
-    new Date(rfq.expiryDate).getTime() <= new Date().setHours(0, 0, 0, 0);
-  const sentSupplierPriced = rfq?.status === "sent" && !!rfq.requestStatus?.supplierPriced;
-  const canRepriceSent = sentCloseReached || sentSupplierPriced;
-  const canPrice = canEdit && (isDraft || canRepriceSent);
+  const canEditSent = rfq?.status === "sent" && isPricingRole;
+  const canFullEdit = (isDraft && canEdit) || canEditSent;
+  // A sent (finalized) RFQ is re-priced by writing the item prices alone (the
+  // header stays untouched), so the manager is never blocked by a missing or
+  // long-passed close date. `canPrice` mirrors the same gate.
+  const canRepriceSent = rfq?.status === "sent";
+  const canPrice = isPricingRole && (isDraft || canRepriceSent);
 
   const [editing, setEditing] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -661,11 +655,12 @@ export default function CustomerRfqDetailPage() {
                   )}
                 </table>
               </div>
-              {isDraft && canEdit && (rfq.items ?? []).length > 0 && (
+              {isDraft && isPricingRole && (rfq.items ?? []).length > 0 && (
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <AlertTriangle size={13} className="text-amber-500" />
-                    تثبيت الطلب يحفظ الأسعار ويمنع أي تعديل لاحق.
+                    تثبيت الطلب يحفظ الأسعار ويمنع أي تعديل لاحق للموظفين. يمكن للمدير تعديل
+                    الأسعار وتثبيت الطلب في أي وقت.
                   </p>
                   {confirmFinalize ? (
                     <div className="flex gap-2">
@@ -687,13 +682,12 @@ export default function CustomerRfqDetailPage() {
                   )}
                 </div>
               )}
-              {canRepriceSent && canEdit && (rfq.items ?? []).length > 0 && (
+              {canRepriceSent && isPricingRole && (rfq.items ?? []).length > 0 && (
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <AlertTriangle size={13} className="text-amber-500" />
-                    {sentSupplierPriced
-                      ? "الطلب مُسعَّر من المورد — يمكن تعديل أسعار العميل."
-                      : "حان تاريخ إغلاق الطلب — يمكن تعديل أسعار البنود."}
+                    الطلب مثبَّت — يمكن للمدير تعديل أسعار العميل في أي وقت، حتى بعد تاريخ
+                    الانتهاء.
                   </p>
                   <Button
                     disabled={updateMutation.isPending}
@@ -735,8 +729,7 @@ export default function CustomerRfqDetailPage() {
                   </Button>
                 </>
               ) : (
-                canFullEdit &&
-                canEdit && (
+                canFullEdit && (
                   <>
                     {isDraft && (
                       <Button

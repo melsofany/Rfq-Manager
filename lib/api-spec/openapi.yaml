@@ -2189,9 +2189,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CustomerRfqLineItemInput"
-        overrideMarginCheck:
-          type: boolean
-          description: Admin-only — bypass the 1.06× margin check on finalize (audited).
 
     CustomerRfqDetail:
       allOf:
