@@ -424,3 +424,25 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - The cancel route (`POST /po/:id/cancel`) uses the item template ONLY for partial cancels (`selectedRows.length < itemRows.length`); whole-supplier cancels keep `po_cancel_ar`. If the item template isn't approved by Meta yet (send throws), it falls back to `po_cancel_ar` with «البند الملغى: <partNo>» in the reason — so the notification works from day one.
 - **Gotcha encountered**: a `git reset --hard origin/main` mid-feature wiped the routes.ts import edit; the resulting `ReferenceError` was silently swallowed by the route's try/catch fallback (test caught it). After any reset, re-check ALL edits, not just the ones that error.
 - Tests: po-cancel.test.ts 16 (item-template called with full details; fallback path). 229 total.
+
+## CI format gate blocked ALL deploys (critical deploy gotcha)
+
+- **Symptom**: merged PRs never reached production. Every one of the 231 `Deploy to Render` workflow runs was `skipped`, so no Render deploy was ever triggered by GitHub.
+- **Cause**: `.github/workflows/deploy.yml` gates the deploy on the **whole CI run** succeeding (`workflow_run: workflows: ["CI"]`, `if: conclusion == 'success'`). CI's `format` job (`pnpm run format:check` → `prettier --check "**/*.{ts,tsx,js,mjs,json,css,md}"`) had been failing on `main` with ~99 unformatted files, so CI never concluded `success` and Deploy was always skipped. Formatting just your own files is not enough — the check is repo-wide.
+- **Fix**: run `prettier --write` over the whole repo (PR #108). Verify with `./node_modules/.bin/prettier --check "**/*.{ts,tsx,js,mjs,json,css,md}"`. `.prettierignore` excludes `dist/`, `node_modules/`, `**/generated/**`, `pnpm-lock.yaml`, images — so orval-generated files are never in scope.
+- **Check before assuming an auto-deploy will happen**: list runs and inspect the Deploy run's `conclusion`. `skipped` means CI did not pass.
+- **Manual deploy fallback**: `POST https://api.render.com/v1/services/srv-d894ofmq1p3s73fh04vg/deploys -d '{}'` with `Authorization: Bearer <RENDER_API>`. The `RENDER_API` key is user-supplied and can expire — it returned **401 Unauthorized** while the GitHub `ghp_` token worked. When Render returns 401 the key needs regenerating in the Render dashboard; the CI-gated path is the reliable route.
+
+## Customer-PO rows must never vanish from the items sheet view (PR #107)
+
+- **Symptom**: customer PO 877 existed at `/customer-po/877` but its lines were missing from `/items` → «سجل البنود والطلبات».
+- **Cause**: the sheet view is anchored on `customer_rfq_items` and joined a PO line only on `customer_po_items.customer_rfq_item_id`. That FK is `ON DELETE SET NULL`, and `PATCH /customer-rfq/:id` used to **delete and re-insert** all of its items — so every edit silently severed each existing customer-PO link (and the `rfq_items.customer_rfq_item_id` / offer links too). A PO created with free/manual lines has no RFQ link at all and could never render either.
+- **Fix**:
+  - `PATCH /customer-rfq/:id` now **updates items in place**, matched by partNo then lineItem, and deletes only the rows the operator actually removed (`inArray` delete last). Never reintroduce delete+reinsert here.
+  - The sheet view pairs PO lines to RFQ items by FK **with a partNo/lineItem fallback**, and emits unmatched PO lines as their own rows with null RFQ columns, so an issued PO is always represented. `CustomerRfqSheetRow` RFQ fields are nullable in the OpenAPI spec; the portal guards the RFQ link and row key.
+  - `init-db.ts` runs an **idempotent link repair** on every startup that re-attaches already-orphaned `customer_po_items` to the matching RFQ item (same partNo/lineItem, same RFQ) — recovers rows broken before the fix.
+- **Test-mock note**: the sheet-view mock is split — `customerRfqItemsTable` serves the RFQ side (`innerJoin`), `customerPoItemsTable` serves the PO side (a row with `poLinkRfqItemId: null` simulates a severed link) and `purchaseOrderItemsTable` serves the cost columns. `db.update`/`db.delete` on the items table record into `updatedItemIds`/`deletedItemIds`.
+
+## Customer-RFQ pricing gate (PR #106)
+
+- Only **admin/manager** (`isPrivilegedRole`: `role === "admin" || role === "manager"`) may set a customer price or finalize. `denyNonPricingRole` + `pricingIntent` gating on PATCH; a non-privileged price submission is dropped rather than honoured. Privileged users may re-price a **sent** RFQ at any time — the close date, a missing approved supplier price and the 1.06× floor no longer block them. Margin deviations are **audit-logged only** (never a 400, never leaking the supplier cost); the audit descriptions deliberately omit numbers since every employee can read `audit_log`.
