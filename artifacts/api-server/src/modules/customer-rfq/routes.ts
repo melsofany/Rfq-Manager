@@ -26,6 +26,24 @@ const VAT_RATE = 0.14;
 // times the approved supplier price (excl tax) — prevents pricing at a loss.
 const MARGIN_FACTOR = 1.06;
 
+// Roles trusted with the actual supplier cost. The customer price is the price
+// quoted TO THE CUSTOMER, so anyone else asking the API must never learn what
+// the item costs us — not from an error message, not from a deviation figure
+// derived from the cost, and not from the audit log either.
+export function isPrivilegedRole(role: string | undefined | null): boolean {
+  return role === "admin" || role === "manager";
+}
+
+// Customer pricing gate. Only admins/managers may set/change a customer unit
+// price or finalize (lock) an RFQ — the price quoted to the customer is a
+// management decision. Everyone else keeps full data-entry access (customer,
+// dates, items); any price they submit is dropped rather than honoured.
+export function denyNonPricingRole(req: any, res: any): boolean {
+  if (isPrivilegedRole(req.session?.role)) return false;
+  res.status(403).json({ error: "غير مصرح — تسعير طلبات العملاء متاح للمدير فقط" });
+  return true;
+}
+
 // For each customer RFQ item, resolve the approved supplier price (excl tax)
 // via the rfq_items.customer_rfq_item_id link, falling back to partNo/lineItem
 // matching for legacy supplier RFQs that lack the FK link. Returns a map
@@ -301,21 +319,6 @@ function hasExpired(expiryDate: string | null): boolean {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return d.getTime() < today.getTime();
-}
-
-// True when the customer RFQ's close date has ARRIVED — i.e. it is today or in
-// the past (inclusive of the whole close day). This is the gate for re-pricing
-// a sent (finalized) customer RFQ: on the close day itself the operator may
-// already enter/adjust customer prices (the close day is the natural moment to
-// price). Stricter than hasExpired only in that it includes today. A
-// non-parseable or missing expiryDate is never considered reached.
-function closeDateReached(expiryDate: string | null): boolean {
-  if (!expiryDate) return false;
-  const d = new Date(expiryDate);
-  if (Number.isNaN(d.getTime())) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return d.getTime() <= today.getTime();
 }
 
 // For a single RFQ: load its items + the cross-table milestones and return the
@@ -1149,6 +1152,8 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
   if (items && items.length > 0) {
     const validItems = items.filter((it) => (it.partNo?.trim() || it.lineItem?.trim()) && it.qty);
     if (validItems.length > 0) {
+      // Only admins/managers may seed a customer price.
+      const mayPrice = isPrivilegedRole(req.session.role);
       await db.insert(customerRfqItemsTable).values(
         validItems.map((it) => ({
           customerRfqId: rfq.id,
@@ -1158,7 +1163,10 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
           description: it.description?.trim() || null,
           uom: it.uom?.trim() || null,
           qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
-          unitPrice: it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null,
+          unitPrice:
+            mayPrice && it.unitPrice != null && it.unitPrice !== ""
+              ? String(it.unitPrice)
+              : null,
         })),
       );
       itemCount = validItems.length;
@@ -1229,112 +1237,30 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     res.status(404).json({ error: "Not found" });
     return;
   }
-  // Admins/managers may fully edit a sent RFQ (the portal gates the edit UI
-  // the same way). Everyone else falls back to the narrow prices-only branch.
-  const canFullEditSent = req.session.role === "admin" || req.session.role === "manager";
-  if (existing.status !== "draft" && !canFullEditSent) {
-    // A sent (finalized) customer RFQ is normally immutable. Re-pricing the
-    // customer unit prices is allowed in TWO commercial situations (so the
-    // operator is never blocked by a forgotten/missing close date):
-    //   1. the close date (expiryDate) has arrived (today or earlier), OR
-    //   2. at least one item has an approved supplier offer (supplier-priced),
-    //      i.e. the commercial event that should open customer pricing happened.
-    // This is a prices-only update — header fields and item identity are not
-    // touched, item ids (and their offer/PO links) are preserved, and the
-    // margin check is NOT re-run (it already passed at finalize; this is a
-    // manual re-price, audit-logged).
-    const closeReached = closeDateReached(existing.expiryDate);
-    const { status: existingStatus } = await computeRequestStatusForRfq(
-      id,
-      existing.customerRfqNo,
-      existing.expiryDate,
-    );
-    const supplierPriced = existingStatus.supplierPriced;
-    const allowReprice = closeReached || supplierPriced;
-    const body = req.body as {
-      customerName?: string;
-      customerRfqNo?: string;
-      entryDate?: string;
-      expiryDate?: string;
-      buyerName?: string;
-      notes?: string;
-      status?: string;
-      items?: Array<{
-        id?: number;
-        partNo?: string;
-        lineItem?: string;
-        unitPrice?: string | number | null;
-      }>;
-    };
-    const headerTouched =
-      body.customerName !== undefined ||
-      body.customerRfqNo !== undefined ||
-      body.entryDate !== undefined ||
-      body.expiryDate !== undefined ||
-      body.buyerName !== undefined ||
-      body.notes !== undefined ||
-      body.status !== undefined;
-    const pricesOnly =
-      allowReprice &&
-      !headerTouched &&
-      Array.isArray(body.items) &&
-      body.items.length > 0 &&
-      body.items.every((it) => it.id != null);
-
-    if (!pricesOnly) {
-      res.status(400).json({ error: "لا يمكن تعديل طلب تسعير العميل بعد إرساله" });
-      return;
-    }
-
-    // Update each item's unit_price by id, BUT ONLY when a price was actually
-    // provided: the frontend renders one price input per current item and
-    // sends null/undefined for anything untouched — a null here must NOT
-    // clobber an existing price (the "prices wiped on save" bug on RFQ 2263).
-    for (const it of body.items!) {
-      if (it.unitPrice == null || it.unitPrice === "") continue;
-      await db
-        .update(customerRfqItemsTable)
-        .set({ unitPrice: String(it.unitPrice) })
-        .where(eq(customerRfqItemsTable.id, it.id as number));
-    }
-    await db.insert(auditLogTable).values({
-      action: "customer_rfq.reprice",
-      entityType: "customer_rfq",
-      entityId: id,
-      employeeId: req.session.employeeId,
-      description: `Re-priced sent customer RFQ (reason: ${
-        supplierPriced ? "supplier-priced" : "close-date-reached"
-      }). ${body.items?.length ?? 0} item(s) updated.`,
-      ipAddress: req.ip,
-      userAgent: req.get("user-agent"),
-    });
-
-    const [updated] = await db.select().from(customerRfqsTable).where(eq(customerRfqsTable.id, id));
-    const { status: requestStatus, items: itemRows } = await computeRequestStatusForRfq(
-      id,
-      updated.customerRfqNo,
-      updated.expiryDate,
-    );
-    const poItemIdSet = new Set(requestStatus.poItemIds);
-    res.json({
-      ...serialize(updated, itemRows.length),
-      requestStatus,
-      items: itemRows.map((i) => ({
-        id: i.id,
-        customerRfqId: i.customerRfqId,
-        partNo: i.partNo,
-        lineItem: i.lineItem,
-        description: i.description,
-        uom: i.uom,
-        qty: formatQty(i.qty),
-        unitPrice: formatQty(i.unitPrice),
-        total: computeTotal(i.qty, i.unitPrice),
-        hasPo: poItemIdSet.has(i.id),
-        createdAt: i.createdAt.toISOString(),
-      })),
-    });
+  // Pricing is a management action: only admins/managers may send a unit price
+  // or drive a status transition (finalize/lock). Data-entry edits (customer,
+  // dates, items) stay available to everyone else — but a sent (finalized) RFQ
+  // is immutable to them.
+  const rawBody = req.body as {
+    status?: string;
+    items?: Array<{ unitPrice?: string | number | null }>;
+  };
+  const privileged = isPrivilegedRole(req.session.role);
+  const pricingIntent =
+    rawBody.status !== undefined ||
+    (Array.isArray(rawBody.items) &&
+      rawBody.items.some(
+        (it) => it.unitPrice != null && it.unitPrice !== "" && Number(it.unitPrice) > 0,
+      ));
+  if (pricingIntent && denyNonPricingRole(req, res)) return;
+  if (existing.status !== "draft" && !privileged) {
+    res.status(400).json({ error: "لا يمكن تعديل طلب تسعير العميل بعد إرساله" });
     return;
   }
+  // Admins/managers may edit and re-price a sent (finalized) RFQ at any time:
+  // the close date, a missing approved supplier price and a price below the
+  // 1.06x floor no longer block them. Header + items are rewritten below, with
+  // item prices gathered/preserved by loadCurrentDbItemsForPricing.
 
   const {
     customerName,
@@ -1345,7 +1271,6 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     notes,
     status,
     items,
-    overrideMarginCheck,
   } = req.body as {
     customerName?: string;
     customerRfqNo?: string;
@@ -1363,7 +1288,6 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       qty?: string | number | null;
       unitPrice?: string | number | null;
     }>;
-    overrideMarginCheck?: boolean;
   };
 
   const updates: Record<string, unknown> = {};
@@ -1425,18 +1349,13 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
       return;
     }
 
-    // Margin check: each customer price (excl tax) must be ≥ 1.06 × the
+    // Margin check: each customer price (excl tax) should be ≥ 1.06 × the
     // approved supplier price (excl tax) for the matching item. The approved
     // cost is resolved via the customer_rfq_item_id link on rfq_items, with a
-    // partNo/lineItem fallback for legacy supplier RFQs. An admin may override
-    // (with audit logging); non-admins are blocked.
-    const isAdmin = req.session.role === "admin";
-    const overriding = overrideMarginCheck === true && isAdmin;
-
-    // Current DB items carry the original ids that rfq_items link to (the
-    // delete+recreate below would invalidate those ids, so resolve first).
-    // The same rows (with prices) are reused by loadCurrentDbItemsForPricing
-    // to preserve unchanged item prices across the recreate.
+    // partNo/lineItem fallback for legacy supplier RFQs. Finalizing is a
+    // manager action only (denyNonPricingRole above) and the manager is trusted
+    // with the cost: an item with no approved supplier price, or priced below
+    // the margin floor, still finalizes — the deviation is audit-logged.
     const currentDbItems = await loadCurrentDbItemsForPricing();
     const costs = await resolveApprovedCosts(
       currentDbItems,
@@ -1462,32 +1381,22 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     for (const it of validItems) {
       const dbId = findDbId(it);
       const cost = dbId != null ? (costs.get(dbId) ?? null) : null;
-      const customerPrice = Number(it.unitPrice);
+      // Both notes deliberately omit the numbers: the audit log is readable by
+      // every employee, and the supplier cost must never surface there.
       if (cost == null) {
-        violations.push(`لا يوجد سعر مورد معتمد للبند (${it.partNo || it.lineItem})`);
-      } else if (customerPrice < cost * MARGIN_FACTOR) {
-        const minRequired = cost * MARGIN_FACTOR;
-        violations.push(
-          `سعر البند (${it.partNo || it.lineItem}) ${customerPrice.toFixed(2)} أقل من الحد الأدنى ${minRequired.toFixed(2)} (سعر المورد المعتمد ${cost.toFixed(2)} × 1.06)`,
-        );
+        violations.push(`بند بلا سعر مورد معتمد (${it.partNo || it.lineItem})`);
+      } else if (Number(it.unitPrice) < cost * MARGIN_FACTOR) {
+        violations.push(`سعر أقل من الحد الأدنى للهامش (${it.partNo || it.lineItem})`);
       }
     }
 
-    if (violations.length > 0 && !overriding) {
-      res.status(400).json({
-        error: "تعذّر تثبيت الطلب: " + violations.join(" — "),
-        marginViolations: violations,
-      });
-      return;
-    }
-
-    if (violations.length > 0 && overriding) {
+    if (violations.length > 0) {
       await db.insert(auditLogTable).values({
-        action: "customer_rfq.margin_override",
+        action: "customer_rfq.margin_deviation",
         entityType: "customer_rfq",
         entityId: id,
         employeeId: req.session.employeeId,
-        description: `Admin overrode margin check on finalize: ${violations.join(" | ")}`,
+        description: `Finalized customer RFQ with margin deviations: ${violations.join(" | ")}`,
         ipAddress: req.ip,
         userAgent: req.get("user-agent"),
       });
@@ -1546,7 +1455,10 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     await db.delete(customerRfqItemsTable).where(eq(customerRfqItemsTable.customerRfqId, id));
     await db.insert(customerRfqItemsTable).values(
       validItems!.map((it) => {
-        const explicitPrice = it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null;
+        const explicitPrice =
+          privileged && it.unitPrice != null && it.unitPrice !== ""
+            ? String(it.unitPrice)
+            : null;
         const price = explicitPrice ?? preservedPrice(it);
         return {
           customerRfqId: id,
