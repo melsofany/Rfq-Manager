@@ -87,6 +87,10 @@ let approvedRows: any[];
 let poItemRows: any[];
 // Sheet-view flat rows returned by GET /customer-rfq/sheet-view.
 let sheetRows: any[];
+// RFQ headers for the sheet view's "requests with no items" rows. Left null by
+// default so the mock derives them from the current `sheetRows` (tests assign
+// sheetRows after beforeEach); set it to an array to assert explicitly.
+let sheetRfqHeaders: any[] | null = null;
 // Sheet-view rejected-delivery rows (for the flag column) returned by the
 // batched lookup on customer_po_item_deliveries.
 let sheetRejectedDeliveries: any[];
@@ -142,6 +146,37 @@ const dbMock: any = {
 
       if (table === customerRfqsTbl && arg && typeof arg === "object" && "cnt" in arg) {
         return chainable([countRow]);
+      }
+      // sheet-view: select({customerRfqId,...}).from(customerRfqs) with no join —
+      // every RFQ header, used to surface requests that have no item rows.
+      // Derived from the current sheetRows unless a test set it explicitly.
+      if (
+        table === customerRfqsTbl &&
+        arg &&
+        typeof arg === "object" &&
+        "customerRfqId" in arg &&
+        !("rfq" in arg)
+      ) {
+        const headers =
+          sheetRfqHeaders ??
+          Array.from(
+            new Map(
+              sheetRows
+                .filter((r: any) => r.customerRfqId != null && r.rfqItemId != null)
+                .map((r: any) => [
+                  r.customerRfqId,
+                  {
+                    customerRfqId: r.customerRfqId,
+                    customerRfqNo: r.customerRfqNo ?? null,
+                    customerName: r.customerName ?? null,
+                    entryDate: r.entryDate ?? null,
+                    expiryDate: r.expiryDate ?? null,
+                    buyerName: r.buyerName ?? null,
+                  },
+                ]),
+            ).values(),
+          );
+        return chainable(headers);
       }
       // rfq list/detail (select {rfq: ...} or bare select)
       if (table === customerRfqsTbl) {
@@ -205,27 +240,36 @@ const dbMock: any = {
       // customerPos) — the per-test sheetRows' PO columns, keyed to their RFQ
       // item by customerRfqItemId (null ⇒ an RFQ-less line).
       if (table === customerPoItemsTbl && arg && typeof arg === "object" && "poNo" in arg) {
-        const poViews = sheetRows
-          .filter((r: any) => r.poItemId != null)
-          .map((r: any) => ({
-            poItemId: r.poItemId,
-            customerRfqId: r.customerRfqId ?? null,
-            // A row may explicitly declare a severed item link (null) while
-            // still carrying the RFQ item + partNo it belongs to.
-            customerRfqItemId: "poLinkRfqItemId" in r ? r.poLinkRfqItemId : (r.rfqItemId ?? null),
-            lineItem: r.lineItem ?? null,
-            partNo: r.partNo ?? null,
-            description: r.description ?? null,
-            uom: r.uom ?? null,
-            poQty: r.poQty ?? null,
-            poUnitPrice: r.poUnitPrice ?? null,
-            deliveryStatus: r.deliveryStatus ?? null,
-            highlightColor: r.highlightColor ?? null,
-            highlightNote: r.highlightNote ?? null,
-            poNo: r.poNo ?? null,
-            poDate: r.poDate ?? null,
-          }));
-        return chainable(poViews, { innerJoin: vi.fn(() => chainable(poViews)) });
+        const toPoView = (r: any) => ({
+          poItemId: r.poItemId,
+          customerRfqId: r.customerRfqId ?? null,
+          // A row may explicitly declare a severed item link (null) while
+          // still carrying the RFQ item + partNo it belongs to.
+          customerRfqItemId: "poLinkRfqItemId" in r ? r.poLinkRfqItemId : (r.rfqItemId ?? null),
+          lineItem: r.lineItem ?? null,
+          partNo: r.partNo ?? null,
+          description: r.description ?? null,
+          uom: r.uom ?? null,
+          poQty: r.poQty ?? null,
+          poUnitPrice: r.poUnitPrice ?? null,
+          deliveryStatus: r.deliveryStatus ?? null,
+          highlightColor: r.highlightColor ?? null,
+          highlightNote: r.highlightNote ?? null,
+          poNo: r.poNo ?? null,
+          poDate: r.poDate ?? null,
+        });
+        const allPoViews = sheetRows.filter((r: any) => r.poItemId != null).map(toPoView);
+        // Model the SQL join faithfully. A row detached from its PO
+        // (`poDetached: true` ⇒ customer_po_id IS NULL) is DROPPED by an
+        // innerJoin but survives a leftJoin — which is precisely the
+        // regression that hid removed items from the sheet.
+        const joinedPoViews = sheetRows
+          .filter((r: any) => r.poItemId != null && !r.poDetached)
+          .map(toPoView);
+        return chainable(allPoViews, {
+          innerJoin: vi.fn(() => chainable(joinedPoViews)),
+          leftJoin: vi.fn(() => chainable(allPoViews)),
+        });
       }
       // Sheet-view supplier cost: select({...}).from(purchaseOrderItems).where()
       if (
@@ -418,6 +462,7 @@ beforeEach(() => {
   approvedRows = [];
   poItemRows = [];
   sheetRows = [];
+  sheetRfqHeaders = null;
   sheetRejectedDeliveries = [];
   employeeRow = { name: "Tester" };
   sessionState.role = "admin";
@@ -1301,6 +1346,74 @@ describe("GET /api/customer-rfq/sheet-view", () => {
     // (the rejection text is superseded by the cancel but the highlight note
     // still merges into the «السبب» column).
     expect(row.flagReason).toBe("إلغي — ملاحظة سابقة");
+  });
+
+  it("keeps a detached (customerPoId NULL) cancelled row visible — left join, not inner", async () => {
+    // Removing an item from a PO detaches its row (customer_po_id → NULL) and
+    // marks it cancelled. The row must STILL render, with null PO columns and
+    // the «إلغي» flag. An INNER join on the PO header dropped it entirely,
+    // which is how removed items vanished from the sheet.
+    sheetRows = [
+      {
+        rfqItemId: 7,
+        lineItem: "D1",
+        partNo: "P-D",
+        description: "Detached item",
+        uom: "pc",
+        rfqQty: "3",
+        rfqUnitPrice: "90",
+        customerRfqId: 1,
+        customerRfqNo: "CUST-001",
+        customerName: "Acme",
+        entryDate: "2025-02-01",
+        expiryDate: null,
+        buyerName: "Sam",
+        poItemId: 77,
+        poDetached: true, // customer_po_id IS NULL
+        poNo: null,
+        poDate: null,
+        poQty: null,
+        poUnitPrice: null,
+        deliveryStatus: "cancelled",
+        highlightColor: null,
+        highlightNote: null,
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view");
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    const row = res.body.rows[0];
+    expect(row.poItemId).toBe(77);
+    // The endpoint surfaces the raw status only indirectly: a cancelled row is
+    // reported through the «السبب» column, which is what the UI renders.
+    expect(row.flagged).toBe(true);
+    expect(row.flagReason).toBe("إلغي");
+  });
+
+  it("shows a request saved with no item rows (item-anchored view must not hide it)", async () => {
+    // The entry form only requires a customer name, so a request can be saved
+    // with every item row blank. The sheet is anchored on RFQ items, so such a
+    // request used to appear NOWHERE. It must render as a header-only row.
+    sheetRows = [];
+    sheetRfqHeaders = [
+      {
+        customerRfqId: 99,
+        customerRfqNo: "CUST-EMPTY",
+        customerName: "Empty Co",
+        entryDate: "2025-03-01",
+        expiryDate: null,
+        buyerName: "Sam",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/sheet-view");
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    const row = res.body.rows[0];
+    expect(row.customerRfqId).toBe(99);
+    expect(row.customerRfqNo).toBe("CUST-EMPTY");
+    expect(row.rfqItemId).toBeNull();
+    expect(row.poItemId).toBeNull();
+    expect(row.flagged).toBe(false);
   });
 
   it("hides rows whose value is in the column's Exclude list (Excel autofilter)", async () => {

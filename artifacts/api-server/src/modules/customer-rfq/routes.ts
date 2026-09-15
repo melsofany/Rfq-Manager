@@ -881,7 +881,13 @@ async function loadSheetRowsRaw(): Promise<SheetRow[]> {
     .from(customerRfqItemsTable)
     .innerJoin(customerRfqsTable, eq(customerRfqItemsTable.customerRfqId, customerRfqsTable.id));
 
-  // Every customer PO line, with its PO header columns.
+  // Every customer PO line, with its PO header columns. The PO header must be
+  // a LEFT join: removing an item from a PO (PATCH /customer-po/:id) detaches
+  // the row (`customer_po_id → NULL`) instead of deleting it, so that its
+  // recorded rejection reason and highlight note stay in the sheet. An INNER
+  // join silently dropped exactly those detached rows from the sheet — the
+  // «items disappeared after removing one from its PO» bug. The row survives
+  // with null PO/No/date and deliveryStatus="cancelled" (flagReason «إلغي»).
   const poItems = await db
     .select({
       poItemId: customerPoItemsTable.id,
@@ -902,7 +908,7 @@ async function loadSheetRowsRaw(): Promise<SheetRow[]> {
       poDate: customerPosTable.poDate,
     })
     .from(customerPoItemsTable)
-    .innerJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id));
+    .leftJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id));
 
   // Supplier-PO cost per customer-PO line, for the cost-overrun flag. Read by
   // customer-PO-item id (not a join) so a line ordered again on a later supplier
@@ -967,6 +973,21 @@ async function loadSheetRowsRaw(): Promise<SheetRow[]> {
     poItemsByRfqItemId.set(item.rfqItemId, list);
   }
 
+  // Customer RFQ headers. The view is anchored on RFQ ITEMS, so a request
+  // saved with no usable item rows (the entry form only requires a customer
+  // name; blank rows are filtered out of the payload) would otherwise appear
+  // nowhere. Every header is loaded so such a request still gets one row.
+  const rfqHeaders = await db
+    .select({
+      customerRfqId: customerRfqsTable.id,
+      customerRfqNo: customerRfqsTable.customerRfqNo,
+      customerName: customerRfqsTable.customerName,
+      entryDate: customerRfqsTable.entryDate,
+      expiryDate: customerRfqsTable.expiryDate,
+      buyerName: customerRfqsTable.buyerName,
+    })
+    .from(customerRfqsTable);
+
   const rows: SheetRow[] = [];
   // A dated request sorts before an undated one, then by request date and RFQ
   // id — `ORDER BY entry_date ASC NULLS LAST, created_at, item id` in JS.
@@ -1020,6 +1041,49 @@ async function loadSheetRowsRaw(): Promise<SheetRow[]> {
     // An RFQ item with no PO yet still gets one row with null PO columns.
     const pos = linked && linked.length > 0 ? linked : [undefined];
     for (const po of pos) rows.push(toRfqRow(i, po));
+  }
+
+  // Requests that have no item rows at all: one header-only row (null item +
+  // null PO columns) so an empty request is never invisible. Sorted with the
+  // same dated-first, then entryDate, then id ordering as the item rows.
+  const rfqIdsWithItems = new Set(rfqItems.map((i) => i.customerRfqId));
+  const emptyHeaders = rfqHeaders
+    .filter((h) => !rfqIdsWithItems.has(h.customerRfqId))
+    .sort((a, b) => {
+      const aDated = a.entryDate ? "0" : "1";
+      const bDated = b.entryDate ? "0" : "1";
+      if (aDated !== bDated) return aDated < bDated ? -1 : 1;
+      if ((a.entryDate ?? "") !== (b.entryDate ?? "")) {
+        return (a.entryDate ?? "") < (b.entryDate ?? "") ? -1 : 1;
+      }
+      return a.customerRfqId - b.customerRfqId;
+    });
+  for (const h of emptyHeaders) {
+    rows.push({
+      rfqItemId: null,
+      lineItem: null,
+      partNo: null,
+      description: null,
+      uom: null,
+      rfqQty: null,
+      rfqUnitPrice: null,
+      customerRfqId: h.customerRfqId,
+      customerRfqNo: h.customerRfqNo,
+      customerName: h.customerName,
+      entryDate: h.entryDate,
+      expiryDate: h.expiryDate,
+      buyerName: h.buyerName,
+      poItemId: null,
+      poNo: null,
+      poDate: null,
+      poQty: null,
+      poUnitPrice: null,
+      deliveryStatus: null,
+      highlightColor: null,
+      highlightNote: null,
+      poFinalActualCost: null,
+      poReferencePrice: null,
+    });
   }
 
   // PO lines that reach no RFQ item: emitted last, since they carry no request
