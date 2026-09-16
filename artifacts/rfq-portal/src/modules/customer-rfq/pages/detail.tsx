@@ -186,7 +186,9 @@ export default function CustomerRfqDetailPage() {
       return;
     }
     const validItems = items
-      .filter((it) => (it.partNo.trim() || it.lineItem.trim()) && it.qty)
+      // Keep a row identified by any text field — the form has a description
+      // column, and dropping description-only rows made items vanish on save.
+      .filter((it) => (it.partNo.trim() || it.lineItem.trim() || it.description.trim()) && it.qty)
       .map((it) => ({
         partNo: it.partNo.trim() || undefined,
         lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : undefined,
