@@ -185,13 +185,22 @@ function findItemByKey<
     lineItem: string | null;
     unitPrice: string | null;
   },
->(rows: T[], it: { partNo?: string; lineItem?: string }): T | undefined {
+>(rows: T[], it: { partNo?: string; lineItem?: string; description?: string }): T | undefined {
   const key = (v: string | null | undefined) => (v ?? "").replace(/\s+/g, "").trim().toLowerCase();
   const partNo = key(it.partNo);
   const lineItem = key(it.lineItem);
   for (const row of rows) {
     if (partNo && key(row.partNo) === partNo) return row;
     if (lineItem && key(row.lineItem) === lineItem) return row;
+  }
+  // A row identified only by its description (the form allows that) still needs
+  // to match its stored row, or every save would delete + re-insert it and
+  // sever its customer-PO / supplier-offer links.
+  const description = key(it.description);
+  if (description) {
+    for (const row of rows) {
+      if (key((row as { description?: string | null }).description) === description) return row;
+    }
   }
   return undefined;
 }
@@ -1396,7 +1405,14 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
 
   let itemCount = 0;
   if (items && items.length > 0) {
-    const validItems = items.filter((it) => (it.partNo?.trim() || it.lineItem?.trim()) && it.qty);
+    // A row is kept when it identifies the item by ANY of its text fields.
+    // The form offers a «توصيف البند» (description) column, so requiring a
+    // partNo/lineItem silently discarded description-only rows on save — the
+    // item vanished from the request (and from the items sheet view). Mirrors
+    // the customer-PO filter.
+    const validItems = items.filter(
+      (it) => (it.partNo?.trim() || it.lineItem?.trim() || it.description?.trim()) && it.qty,
+    );
     if (validItems.length > 0) {
       // Only admins/managers may seed a customer price.
       const mayPrice = isPrivilegedRole(req.session.role);
@@ -1553,7 +1569,9 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   // Finalizing (status → sent) requires every item to have a price, and every
   // priced item to clear the margin check against the approved supplier price.
   const validItems = items
-    ? items.filter((it) => (it.partNo?.trim() || it.lineItem?.trim()) && it.qty)
+    ? items.filter(
+        (it) => (it.partNo?.trim() || it.lineItem?.trim() || it.description?.trim()) && it.qty,
+      )
     : undefined;
 
   // Prices preserved across the delete+recreate below, keyed by partNo/lineItem
@@ -1565,6 +1583,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     id: number;
     partNo: string | null;
     lineItem: string | null;
+    description: string | null;
     unitPrice: string | null;
   }> | null = null;
   const loadCurrentDbItemsForPricing = async () => {
@@ -1574,6 +1593,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
         id: customerRfqItemsTable.id,
         partNo: customerRfqItemsTable.partNo,
         lineItem: customerRfqItemsTable.lineItem,
+        description: customerRfqItemsTable.description,
         unitPrice: customerRfqItemsTable.unitPrice,
       })
       .from(customerRfqItemsTable)
@@ -1587,7 +1607,7 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
   // by customer-PO and supplier-offer links.
   const findDbItem = (
     rows: typeof currentDbItemsForPricing,
-    it: { partNo?: string; lineItem?: string },
+    it: { partNo?: string; lineItem?: string; description?: string },
   ) => findItemByKey(rows ?? [], it);
 
   if (status === "sent" && validItems !== undefined) {

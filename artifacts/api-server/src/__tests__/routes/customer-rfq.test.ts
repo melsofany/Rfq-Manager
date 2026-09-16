@@ -511,6 +511,33 @@ describe("POST /api/customer-rfq (create)", () => {
     expect(insertedItems[0].lineItem).toBe("ABCD");
   });
 
+  it("keeps an item identified only by its description", async () => {
+    // The form has a «توصيف البند» column, so an operator can identify an item
+    // by description alone. Requiring a partNo/lineItem silently discarded such
+    // rows, making the item disappear from the request on save.
+    await request(testApp)
+      .post("/api/customer-rfq")
+      .send({
+        customerName: "Acme",
+        customerRfqNo: "RFQ-DESC",
+        items: [{ description: "مسمار صلب 8مم", uom: "قطعة", qty: 100 }],
+      });
+    expect(insertedItems).toHaveLength(1);
+    expect(insertedItems[0].description).toBe("مسمار صلب 8مم");
+    expect(insertedItems[0].qty).toBe("100");
+  });
+
+  it("still drops a row with no identifying text at all", async () => {
+    await request(testApp)
+      .post("/api/customer-rfq")
+      .send({
+        customerName: "Acme",
+        customerRfqNo: "RFQ-EMPTYROW",
+        items: [{ uom: "قطعة", qty: 3 }],
+      });
+    expect(insertedItems).toHaveLength(0);
+  });
+
   it("persists the line-item description", async () => {
     await request(testApp)
       .post("/api/customer-rfq")
