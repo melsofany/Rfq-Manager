@@ -446,3 +446,18 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 ## Customer-RFQ pricing gate (PR #106)
 
 - Only **admin/manager** (`isPrivilegedRole`: `role === "admin" || role === "manager"`) may set a customer price or finalize. `denyNonPricingRole` + `pricingIntent` gating on PATCH; a non-privileged price submission is dropped rather than honoured. Privileged users may re-price a **sent** RFQ at any time — the close date, a missing approved supplier price and the 1.06× floor no longer block them. Margin deviations are **audit-logged only** (never a 400, never leaking the supplier cost); the audit descriptions deliberately omit numbers since every employee can read `audit_log`.
+
+## Customer-RFQ items identified only by their description (PR #111)
+
+- **Symptom**: a request saved with items showed «لا توجد بنود» when reopened (e.g. `CRFQ-2026-004116` at `/customer-rfq/4980`), and those items were missing from the items sheet view.
+- **Cause**: the entry form has a **«توصيف البند»** column, so an operator may identify a row by description alone. The save filter on all three layers required `partNo` or `lineItem` — `(it.partNo?.trim() || it.lineItem?.trim()) && it.qty` — so description-only rows were **silently discarded** and the request saved with fewer items than were entered. The customer-**PO** module already accepted `description` as an identifier; the RFQ module did not.
+- **Fix**: all three filters (POST + PATCH in `routes.ts`, plus `new.tsx`/`detail.tsx` payload builders) now accept `description`. `findItemByKey` matches on description too, and the pricing select (`loadCurrentDbItemsForPricing`) loads that column — otherwise a surviving description-only row could never be matched and would be delete+re-inserted on every save, severing its `customer_po_items.customer_rfq_item_id` / `rfq_items.customer_rfq_item_id` links (the PR #107 class of bug). A row with no identifying text at all is still dropped.
+- **Layer-parity rule**: the client payload filter and the server filter must accept the same set of fields. When adding a form field that can identify an item, update the filter in **all** layers listed above, not just the server.
+
+## Items-sheet visibility invariants (PR #110)
+
+Two more ways a row could disappear from `/items` → «سجل البنود والطلبات» while the record still existed:
+
+- **Detached customer-PO rows**: removing an item from a customer PO soft-cancels it (`customer_po_id → NULL`, `deliveryStatus = "cancelled"`) so its rejection reason and highlight note survive. The sheet's `customerPoItemsTable → customerPosTable` lookup must be a **LEFT join** — an INNER join discarded exactly those rows (they render with null PO columns and the «إلغي» flag, which is the point of the soft-cancel). The RFQ-items → RFQs join stays INNER.
+- **Item-less requests**: the view is anchored on `customer_rfq_items`, but `POST /customer-rfq` requires only a customer name and filters blank item rows — so a request could be saved successfully and appear **nowhere**. `loadSheetRowsRaw` now also loads every RFQ header and emits one **header-only row** (null item + null PO columns) for any RFQ with no item rows.
+- **Test-mock note**: `sheetRfqHeaders` is `null` by default so the mock derives headers from the current `sheetRows` (tests assign those after `beforeEach`); set it to an array to assert the item-less case explicitly. The customer-RFQ mock distinguishes join types for the PO-header lookup.
