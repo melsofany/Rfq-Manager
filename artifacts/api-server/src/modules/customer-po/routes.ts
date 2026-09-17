@@ -699,6 +699,7 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
       notes?: string;
       status?: string;
       items?: Array<{
+        id?: number;
         customerRfqId?: number | null;
         customerRfqItemId?: number | null;
         partNo?: string;
@@ -739,27 +740,94 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
       (it) => (it.partNo?.trim() || it.lineItem?.trim() || it.description?.trim()) && it.qty,
     );
 
-    // Removed (or no-longer-linked) items are NOT hard-deleted: their order
-    // data (PO number, PO date, delivery status, rejection reason, manual
-    // highlight + any recorded delivery history) must stay visible in the
-    // items sheet view with the red-flag styling. We detach the row from this
-    // PO, zero its qty/price and mark it "cancelled" so the «السبب» column
-    // shows «إلغي» alongside the previously recorded rejection reason /
-    // highlight note, while its quantities stop counting as active order
-    // data. Kept items still get the old delete+re-insert treatment below.
+    // Items are matched to their stored row and UPDATED in place; only genuinely
+    // new rows are inserted. The old code re-inserted every submitted item and
+    // deleted the PO's rows only when some item had been removed (the DELETE sat
+    // inside `if (removedIds.length > 0)`), so a plain edit that kept all items
+    // left the stored rows attached and appended a duplicate of each one
+    // (2 → 4 → 6 → 8 items on the live PO 917). The re-insert also recreated
+    // every row with a fresh id, severing the links other modules hold by id
+    // (purchase_order_items.customer_po_item_id,
+    // customer_po_item_deliveries.customer_po_item_id,
+    // work_order_assignments.customer_po_item_id).
     const previous = await db
       .select({
         id: customerPoItemsTable.id,
         customerRfqItemId: customerPoItemsTable.customerRfqItemId,
+        partNo: customerPoItemsTable.partNo,
+        lineItem: customerPoItemsTable.lineItem,
+        description: customerPoItemsTable.description,
       })
       .from(customerPoItemsTable)
       .where(eq(customerPoItemsTable.customerPoId, id));
-    const keptRfqItemIds = new Set(
-      validItems.map((it) => it.customerRfqItemId).filter((x): x is number => x != null),
-    );
-    const removedIds = previous
-      .filter((r) => r.customerRfqItemId == null || !keptRfqItemIds.has(r.customerRfqItemId))
-      .map((r) => r.id);
+
+    // Locate the stored row a submitted item corresponds to: by its id when the
+    // client sends one (the portal does), else by customerRfqItemId, else by
+    // partNo / lineItem / description. Greedy — each stored row is claimed once
+    // so a repeated line is matched to a distinct row.
+    const unclaimed = [...previous];
+    const claim = (pred: (r: (typeof previous)[number]) => boolean) => {
+      const idx = unclaimed.findIndex(pred);
+      return idx === -1 ? undefined : unclaimed.splice(idx, 1)[0];
+    };
+    const findStored = (it: (typeof validItems)[number]) => {
+      if (it.id != null) {
+        const byId = claim((r) => r.id === it.id);
+        if (byId) return byId;
+      }
+      if (it.customerRfqItemId != null) {
+        const byLink = claim((r) => r.customerRfqItemId === it.customerRfqItemId);
+        if (byLink) return byLink;
+      }
+      const partNo = it.partNo?.trim();
+      if (partNo) {
+        const byPart = claim((r) => (r.partNo ?? "").trim() === partNo);
+        if (byPart) return byPart;
+      }
+      const lineItem = it.lineItem?.replace(/\s+/g, "");
+      if (lineItem) {
+        const byLine = claim((r) => (r.lineItem ?? "").replace(/\s+/g, "") === lineItem);
+        if (byLine) return byLine;
+      }
+      const description = it.description?.trim();
+      if (description) {
+        const byDesc = claim((r) => (r.description ?? "").trim() === description);
+        if (byDesc) return byDesc;
+      }
+      return undefined;
+    };
+
+    const fields = (it: (typeof validItems)[number]) => ({
+      customerRfqId: it.customerRfqId ?? null,
+      customerRfqItemId: it.customerRfqItemId ?? null,
+      partNo: it.partNo?.trim() || null,
+      lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : null,
+      description: it.description?.trim() || null,
+      uom: it.uom?.trim() || null,
+      qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
+      unitPrice: it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null,
+      deliveryDate: it.deliveryDate || null,
+    });
+
+    const toInsert: Array<Record<string, unknown>> = [];
+    for (const it of validItems) {
+      const stored = findStored(it);
+      if (stored) {
+        await db
+          .update(customerPoItemsTable)
+          .set(fields(it))
+          .where(eq(customerPoItemsTable.id, stored.id));
+      } else {
+        toInsert.push({ customerPoId: id, ...fields(it) });
+      }
+    }
+
+    // Rows the operator actually removed are NOT hard-deleted: their order data
+    // (PO number, PO date, delivery status, rejection reason, manual highlight
+    // + any recorded delivery history) must stay visible in the items sheet view
+    // with the red-flag styling. They are detached from this PO, zeroed and
+    // marked "cancelled" so the «السبب» column shows «إلغي».
+    const removedIds = unclaimed.map((r) => r.id);
     if (removedIds.length > 0) {
       await db
         .update(customerPoItemsTable)
@@ -771,23 +839,9 @@ router.patch("/customer-po/:id", requireAuth, async (req, res): Promise<void> =>
           deliveryStatus: "cancelled",
         })
         .where(inArray(customerPoItemsTable.id, removedIds));
-      await db.delete(customerPoItemsTable).where(eq(customerPoItemsTable.customerPoId, id));
     }
-    if (validItems.length > 0) {
-      await db.insert(customerPoItemsTable).values(
-        validItems.map((it) => ({
-          customerPoId: id,
-          customerRfqId: it.customerRfqId ?? null,
-          customerRfqItemId: it.customerRfqItemId ?? null,
-          partNo: it.partNo?.trim() || null,
-          lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : null,
-          description: it.description?.trim() || null,
-          uom: it.uom?.trim() || null,
-          qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
-          unitPrice: it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null,
-          deliveryDate: it.deliveryDate || null,
-        })),
-      );
+    if (toInsert.length > 0) {
+      await db.insert(customerPoItemsTable).values(toInsert);
     }
   }
 

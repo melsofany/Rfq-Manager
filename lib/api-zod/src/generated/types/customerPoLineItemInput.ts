@@ -7,6 +7,8 @@
  */
 
 export interface CustomerPoLineItemInput {
+  /** Existing line id when editing — the server updates this row in place instead of recreating it */
+  id?: number;
   /**
      * The customer RFQ this line was sourced from (null for free/manual lines)
      * @nullable

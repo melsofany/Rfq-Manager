@@ -25,6 +25,27 @@ function chainable(value: any, methods: Record<string, any> = {}): any {
   return obj;
 }
 
+// drizzle-orm operators, reduced to inspectable sentinels. `eq` keeps both
+// operands so a test can tell WHICH row a `.where(eq(table.id, X))` targeted.
+const eqCalls: Array<{ left: any; right: any }> = [];
+vi.mock("drizzle-orm", () => ({
+  eq: (left: any, right: any) => {
+    eqCalls.push({ left, right });
+    return { __op: "eq", left, right };
+  },
+  and: (...args: any[]) => ({ __op: "and", args }),
+  or: (...args: any[]) => ({ __op: "or", args }),
+  inArray: (left: any, right: any) => ({ __op: "inArray", left, right }),
+  desc: (col: any) => ({ __op: "desc", col }),
+  asc: (col: any) => ({ __op: "asc", col }),
+  ne: (left: any, right: any) => ({ __op: "ne", left, right }),
+  isNotNull: (col: any) => ({ __op: "isNotNull", col }),
+  count: () => ({ __op: "count" }),
+  sql: Object.assign((strings: any, ...values: any[]) => ({ __op: "sql", strings, values }), {
+    raw: (s: string) => ({ __op: "sql.raw", s }),
+  }),
+}));
+
 // Tables referenced by .from() / eq() / .references() — truthy markers.
 const poTable = {
   _: "customerPos",
@@ -81,6 +102,11 @@ let duplicatePoRows: any[]; // uniqueness probe: select({id}).from(poTable).wher
 // links (insert) or updates (update).
 const insertedItems: any[] = [];
 const updateCalls: any[] = [];
+// Row ids targeted by an item UPDATE / DELETE — proves in-place saves.
+const updateItemIds: number[] = [];
+const deleteItemIds: number[] = [];
+// Each item UPDATE paired with the row id it targeted.
+const updateItemCalls: Array<{ id: number; vals: any }> = [];
 
 // Mutable session so tests can flip role/state.
 const sessionState: { employeeId: number; role?: string } = { employeeId: 1 };
@@ -204,11 +230,28 @@ const dbMock: any = {
       if (table === poTable && vals && typeof vals === "object" && detailRow) {
         detailRow = { ...detailRow, ...vals };
       }
-      return { where: vi.fn(() => chainable(undefined)) };
+      return {
+        where: vi.fn((cond: any) => {
+          // Record which row ids an item update targeted so tests can assert a
+          // save UPDATED the stored rows instead of recreating them.
+          const ids = cond?.right;
+          const list = Array.isArray(ids) ? ids : ids != null ? [ids] : [];
+          if (table === poItemsTable) {
+            updateItemIds.push(...list);
+            updateItemCalls.push(...list.map((id: number) => ({ id, vals })));
+          }
+          return chainable(undefined);
+        }),
+      };
     }),
   })),
-  delete: vi.fn((_table: any) => ({
-    where: vi.fn(() => chainable(undefined)),
+  delete: vi.fn((table: any) => ({
+    where: vi.fn((cond: any) => {
+      const ids = cond?.right;
+      const list = Array.isArray(ids) ? ids : ids != null ? [ids] : [];
+      if (table === poItemsTable) deleteItemIds.push(...list);
+      return chainable(undefined);
+    }),
   })),
 };
 
@@ -260,6 +303,10 @@ beforeEach(() => {
   sessionState.role = undefined;
   insertedItems.length = 0;
   updateCalls.length = 0;
+  updateItemIds.length = 0;
+  updateItemCalls.length = 0;
+  deleteItemIds.length = 0;
+  eqCalls.length = 0;
 });
 
 describe("POST /api/customer-po (create)", () => {
@@ -585,6 +632,9 @@ describe("PATCH /api/customer-po/:id", () => {
         customerPoId: 7,
         customerRfqItemId: 11,
         customerRfqId: 3,
+        partNo: "P1",
+        lineItem: null,
+        description: null,
         qty: "1.0000",
         unitPrice: "5.0000",
         createdAt: new Date("2025-01-03"),
@@ -595,6 +645,9 @@ describe("PATCH /api/customer-po/:id", () => {
         customerPoId: 7,
         customerRfqItemId: 22,
         customerRfqId: 3,
+        partNo: "P2",
+        lineItem: null,
+        description: null,
         qty: "2.0000",
         unitPrice: "7.0000",
         createdAt: new Date("2025-01-04"),
@@ -619,14 +672,133 @@ describe("PATCH /api/customer-po/:id", () => {
         deliveryStatus: "cancelled",
       }),
     );
-    // Kept item re-inserted as before.
-    expect(insertedItems).toHaveLength(1);
-    expect(insertedItems[0].customerRfqItemId).toBe(11);
+    // The kept item is UPDATED in place (same id 42) — never re-inserted.
+    expect(updateItemIds).toContain(42);
+    expect(insertedItems).toHaveLength(0);
   });
 
-  it("hard-deletes everything when nothing was already attached (previous rows empty)", async () => {
+  it("does not duplicate items across repeated saves (PO 917: 2 lines stay 2)", async () => {
+    // Reproduces the live bug: every save of an unchanged 2-line PO added two
+    // more rows (2 → 4 → 6 → 8) because the old code only deleted the PO's rows
+    // when an item had been removed, then re-inserted a full copy of every item.
     detailRow = { ...insertedPo };
-    detailItems = []; // no previous rows → no cancelled update, plain delete+insert
+    const makeStored = (id: number, customerRfqItemId: number, partNo: string, qty: string) => ({
+      id,
+      customerPoId: 7,
+      customerRfqItemId,
+      customerRfqId: 3,
+      partNo,
+      lineItem: null,
+      description: null,
+      qty,
+      unitPrice: "5.0000",
+      createdAt: new Date("2025-01-03"),
+      deliveryStatus: "pending",
+    });
+    detailItems = [makeStored(42, 11, "P1", "1.0000"), makeStored(55, 22, "P2", "2.0000")];
+
+    // Three consecutive saves of the same unchanged PO (as the operator did).
+    let nextId = 100;
+    for (let save = 1; save <= 3; save++) {
+      // Rows detached from the PO are no longer returned by the PO-scoped select.
+      const live = detailItems.filter((r) => r.customerPoId === 7);
+      const res = await request(testApp)
+        .patch("/api/customer-po/7")
+        .send({
+          items: live.map((r) => ({
+            id: r.id,
+            customerRfqId: r.customerRfqId,
+            customerRfqItemId: r.customerRfqItemId,
+            partNo: r.partNo,
+            qty: Number(r.qty),
+            unitPrice: 5,
+          })),
+        });
+      expect(res.status).toBe(200);
+
+      // Apply the writes to the in-memory store so the next save sees them.
+      for (const c of updateItemCalls) {
+        const row = detailItems.find((r) => r.id === c.id);
+        if (row) Object.assign(row, c.vals);
+      }
+      for (const v of insertedItems) {
+        detailItems.push({ id: nextId++, createdAt: new Date("2025-01-05"), ...v });
+      }
+      updateItemIds.length = 0;
+      updateItemCalls.length = 0;
+      insertedItems.length = 0;
+
+      // After every save the PO still has exactly its 2 lines.
+      expect(detailItems.filter((r) => r.customerPoId === 7)).toHaveLength(2);
+    }
+    // No row was ever detached or hard-deleted, and ids stayed stable.
+    expect(detailItems.filter((r) => r.customerPoId == null)).toHaveLength(0);
+    expect(deleteItemIds).toHaveLength(0);
+  });
+
+  it("matches an id-less payload to stored rows by partNo and updates them in place", async () => {
+    // Older clients / the WhatsApp flows send no row id: the fallback match must
+    // still resolve the stored row instead of inserting a duplicate.
+    detailRow = { ...insertedPo };
+    detailItems = [
+      {
+        id: 42,
+        customerPoId: 7,
+        customerRfqItemId: null,
+        customerRfqId: null,
+        partNo: "P1",
+        lineItem: null,
+        description: null,
+        qty: "1.0000",
+        unitPrice: "5.0000",
+        createdAt: new Date("2025-01-03"),
+        deliveryStatus: "pending",
+      },
+    ];
+    const res = await request(testApp)
+      .patch("/api/customer-po/7")
+      .send({ items: [{ partNo: "P1", qty: 3, unitPrice: 9 }] });
+    expect(res.status).toBe(200);
+    expect(updateItemIds).toContain(42);
+    expect(insertedItems).toHaveLength(0);
+  });
+
+  it("matches a repeated line to a distinct stored row (one update, one insert)", async () => {
+    detailRow = { ...insertedPo };
+    detailItems = [
+      {
+        id: 42,
+        customerPoId: 7,
+        customerRfqItemId: null,
+        customerRfqId: null,
+        partNo: "P1",
+        lineItem: null,
+        description: null,
+        qty: "1.0000",
+        unitPrice: "5.0000",
+        createdAt: new Date("2025-01-03"),
+        deliveryStatus: "pending",
+      },
+    ];
+    // The operator duplicated the line in the form: the stored row is reused for
+    // the first occurrence and the second becomes a genuinely new row.
+    const res = await request(testApp)
+      .patch("/api/customer-po/7")
+      .send({
+        items: [
+          { partNo: "P1", qty: 1, unitPrice: 5 },
+          { partNo: "P1", qty: 4, unitPrice: 6 },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(updateItemIds).toEqual([42]);
+    expect(insertedItems).toHaveLength(1);
+    expect(insertedItems[0].qty).toBe("4");
+  });
+
+  it("inserts every item when nothing was already attached (previous rows empty)", async () => {
+    detailRow = { ...insertedPo };
+    detailItems = []; // no previous rows → nothing to update or cancel
     const res = await request(testApp)
       .patch("/api/customer-po/7")
       .send({ items: [{ partNo: "P1", qty: 1 }] });

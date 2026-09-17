@@ -2304,6 +2304,9 @@ components:
     CustomerPoLineItemInput:
       type: object
       properties:
+        id:
+          type: integer
+          description: Existing line id when editing — the server updates this row in place instead of recreating it
         customerRfqId:
           type: ["integer", "null"]
           description: The customer RFQ this line was sourced from (null for free/manual lines)
