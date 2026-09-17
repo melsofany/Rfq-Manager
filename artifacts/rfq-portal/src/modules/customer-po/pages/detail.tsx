@@ -343,6 +343,10 @@ export default function CustomerPoDetailPage() {
     const validItems = items
       .filter((it) => (it.partNo.trim() || it.lineItem.trim() || it.description.trim()) && it.qty)
       .map((it) => ({
+        // Send the stored line id so the server updates the row in place rather
+        // than recreating it (a recreated row loses its supplier-PO/delivery
+        // links and was the source of the duplicated-lines bug).
+        id: it.id,
         customerRfqId: it.customerRfqId,
         customerRfqItemId: it.customerRfqItemId,
         partNo: it.partNo.trim() || undefined,

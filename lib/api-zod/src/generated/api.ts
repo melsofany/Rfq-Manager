@@ -887,6 +887,7 @@ export const CreateCustomerPoBody = zod.object({
   "buyerName": zod.string().optional().describe('Optional customer-side buyer\/contact reference'),
   "notes": zod.string().optional(),
   "items": zod.array(zod.object({
+  "id": zod.number().optional().describe('Existing line id when editing — the server updates this row in place instead of recreating it'),
   "customerRfqId": zod.number().nullish().describe('The customer RFQ this line was sourced from (null for free\/manual lines)'),
   "customerRfqItemId": zod.number().nullish().describe('The specific customer RFQ line item. Not unique — the same item may be ordered again on a later PO.'),
   "partNo": zod.string().optional(),
@@ -1011,6 +1012,7 @@ export const UpdateCustomerPoBody = zod.object({
   "notes": zod.string().optional(),
   "status": zod.string().optional(),
   "items": zod.array(zod.object({
+  "id": zod.number().optional().describe('Existing line id when editing — the server updates this row in place instead of recreating it'),
   "customerRfqId": zod.number().nullish().describe('The customer RFQ this line was sourced from (null for free\/manual lines)'),
   "customerRfqItemId": zod.number().nullish().describe('The specific customer RFQ line item. Not unique — the same item may be ordered again on a later PO.'),
   "partNo": zod.string().optional(),
