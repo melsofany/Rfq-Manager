@@ -397,10 +397,6 @@ export async function initDb(): Promise<void> {
         ADD COLUMN IF NOT EXISTS highlight_color TEXT;
       ALTER TABLE customer_po_items
         ADD COLUMN IF NOT EXISTS highlight_note TEXT;
-      // Removed-from-PO items are kept as detached cancelled rows (for the
-      // items sheet view), so the owning-PO link must allow NULL.
-      ALTER TABLE customer_po_items
-        ALTER COLUMN customer_po_id DROP NOT NULL;
 
       ALTER TABLE work_order_assignments
         ADD COLUMN IF NOT EXISTS po_item_id INTEGER REFERENCES purchase_order_items(id) ON DELETE SET NULL;
@@ -410,6 +406,18 @@ export async function initDb(): Promise<void> {
         ADD COLUMN IF NOT EXISTS customer_po_item_id INTEGER REFERENCES customer_po_items(id) ON DELETE SET NULL;
       ALTER TABLE work_order_assignments
         ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'receipt';
+    `);
+
+    // Removed-from-PO items are kept as detached cancelled rows (for the items
+    // sheet view), so the owning-PO link must allow NULL. Runs as its OWN
+    // statement: statements inside one multi-statement client.query share an
+    // implicit transaction, so a failure in any sibling rolls this back too.
+    // (A stray JS-style "//" comment here previously made the whole block a
+    // syntax error, silently leaving the column NOT NULL and breaking every
+    // soft-cancel with a not-null violation.)
+    await client.query(`
+      ALTER TABLE customer_po_items
+        ALTER COLUMN customer_po_id DROP NOT NULL;
     `);
 
     // Normalize stored representative / work-order-assignment phones to the

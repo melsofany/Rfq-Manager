@@ -46,7 +46,11 @@ initDb()
     }
   })
   .catch((err) => {
-    logger.warn({ err }, "DB init failed (non-fatal, tables may already exist)");
+    // The migrations are idempotent, so a failure is never "the tables already
+    // exist" — it is a real problem (e.g. a SQL syntax error rolling back a
+    // whole multi-statement block). Log at error level so it is visible in the
+    // Render logs instead of silently leaving a column in the wrong shape.
+    logger.error({ err }, "DB init FAILED — a migration did not apply");
   })
   .finally(() => {
     const server = app.listen(port, () => {
