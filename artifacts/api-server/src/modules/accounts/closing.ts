@@ -67,7 +67,7 @@ router.post(
     const body = (req.body ?? {}) as { period?: string; notes?: string | null };
     const period = body.period?.trim() ?? "";
     if (
-      !/^\d\{4}-\d\{2}$/.test(period) ||
+      !/^\d{4}-\d{2}$/.test(period) ||
       parseInt(period.slice(5, 7), 10) < 1 ||
       parseInt(period.slice(5, 7), 10) > 12
     ) {
@@ -75,13 +75,13 @@ router.post(
       return;
     }
     const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-    // Reject locking a month that still has UNPOSTED (draft/reviewed) journal entries.
-
+    // Reject locking a month that still has UNPOSTED (draft) journal entries —
+    // posted/void entries are final and must not block the closing.
     const openDrafts = await db
       .select({ id: journalEntriesTable.id })
       .from(journalEntriesTable)
       .where(
-        sql`substr(${journalEntriesTable.entryDate}, 1, 7) = ${period} and ${journalEntriesTable.status}} != 'void'`,
+        sql`substr(${journalEntriesTable.entryDate}, 1, 7) = ${period} and ${journalEntriesTable.status} = 'draft'`,
       )
       .limit(1);
     if (openDrafts.length) {

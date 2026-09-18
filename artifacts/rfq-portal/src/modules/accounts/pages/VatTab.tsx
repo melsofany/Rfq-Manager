@@ -25,6 +25,16 @@ interface VatStatement {
   netVat: number;
   payable: number;
   credit: number;
+  vatEvidence?: {
+    outputVat: number;
+    evidencedInputVat: number;
+    unevidencedInputVat: number;
+    unevidencedNet: number;
+    deficit: number;
+    netPayable: number;
+    carriedCredit: number;
+    fullyEvidenced: boolean;
+  };
   outputLines: VatLine[];
   inputLines: VatLine[];
   nonVatPurchases: VatLine[];
@@ -150,6 +160,71 @@ export default function VatTab() {
           total={data?.nonVatDeficit}
         />
       </div>
+
+      {/* Tax-invoice evidence reconciliation — مطابقة الإثبات الضريبي */}
+      <div className="bg-card border border-border rounded-lg p-4">
+        <h3 className="text-sm font-semibold mb-1">مطابقة الإثبات الضريبي (الإقرار الشهري)</h3>
+        <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+          لا تُخصم ضريبة المدخلات إلا إذا كانت مُثبتة بفاتورة ضريبية. المشتريات من موردين غير مسجلين
+          لا تحمل ض.ق.م، فتتحول قيمتها بالكامل إلى تكلفة ويظهر الفرق كعجز ض.ق.م تتحمله الشركة. هذا
+          الجدول يفصل الضريبة المُثبتة عن العجز لتسهيل التسوية مع المصلحة.
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <EvidenceBox
+            label="ض.ق.م. المخرجات (مبيعات)"
+            value={data?.vatEvidence?.outputVat}
+            tone="normal"
+          />
+          <EvidenceBox
+            label="ض.ق.م. مدخلات مُثبتة"
+            value={data?.vatEvidence?.evidencedInputVat}
+            tone="ok"
+          />
+          <EvidenceBox
+            label="عجز ض.ق.م (غير مُثبت)"
+            value={data?.vatEvidence?.unevidencedInputVat}
+            sub={`على مشتريات ${fmt(data?.vatEvidence?.unevidencedNet)}`}
+            tone="deficit"
+          />
+          <EvidenceBox
+            label="صافي الضريبة المستحقة"
+            value={data?.vatEvidence?.netPayable}
+            tone={Number(data?.vatEvidence?.netPayable ?? 0) > 0 ? "deficit" : "ok"}
+          />
+        </div>
+        {data?.vatEvidence?.fullyEvidenced ? (
+          <p className="mt-3 text-xs text-emerald-600">
+            ✓ كل ضريبة المدخلات مُثبتة بفواتير ضريبية — لا يوجد عجز ض.ق.م لهذه الفترة.
+          </p>
+        ) : (
+          <p className="mt-3 text-xs text-rose-600">
+            ⚠ يوجد عجز ض.ق.م بمقدار {fmt(data?.vatEvidence?.unevidencedInputVat)} ناتج عن مشتريات
+            بدون فاتورة ضريبية — راجع الموردين غير المسجلين قبل تقديم الإقرار.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EvidenceBox({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: number | undefined;
+  sub?: string;
+  tone?: "ok" | "deficit" | "normal";
+}) {
+  const color =
+    tone === "deficit" ? "text-rose-600" : tone === "ok" ? "text-emerald-600" : "text-foreground";
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-3">
+      <div className="text-xs text-muted-foreground mb-1">{label}</div>
+      <div className={`text-base font-bold tabular-nums ${color}`}>{fmt(value)}</div>
+      {sub && <div className="text-[11px] text-muted-foreground mt-0.5">{sub}</div>}
     </div>
   );
 }
