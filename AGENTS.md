@@ -503,3 +503,26 @@ Three home-grown-ledger defects found by an accounting review, fixed + regressio
 - **New ageing reports**: `GET /accounts/aging/receivables` + `/accounts/aging/payables` (behind `requireAuth`) bucket outstanding `balance` (posted invoices only) into `current / d1_30 / d31_60 / d61_90 / d90_plus` by days past `dueDate`, return `overdue` + `count`, and sort oldest-first. UI: new «أعمار الديون» sub-tab in `FinancialStatementsTab.tsx` (receivables/payables toggle + bucket cards + table); the balance sheet shows a red banner when `balanced === false` and a note explaining the period result.
 - **Test-mock gotcha**: `ledger.test.ts`'s `selectBuilder().where()` must honour BOTH a recorded `eq(col,val)` **and** a raw `sql` template containing `= any($1)` (how the control-account/`assertAccountsExist` lookups filter the COA — without it the guard sees the whole chart and rejects every manual entry). Drizzle columns expose snake_case `.name`, so translate to camelCase before matching fixture rows. `innerJoin(journalEntriesTable)` must also merge each line's `entryDate`/`status` onto the line rows or the posted-only filter is never exercised. Also: `eq` now returns `{__eq:[col,val]}` instead of the bare column.
 - Tests: `ledger.test.ts` 32 (up from 21) — contra-revenue, contra-expense, balance-sheet equation, 2× control-account block, cash-allowed, 3× ageing. **275 api-server tests** + 24 portal pass; tsc clean; prettier repo-wide clean; portal build clean. The 9 new tests fail against the pre-fix code (verified by stashing the two source files).
+- **Deploy (verified end-to-end)**: PR #116 squash-merged as `b7074e8`; CI on `main` green; `Deploy to Render` workflow ran `completed/success`; live `/api/healthz` = 200 and the new `/api/accounts/aging/*` return **401 not 404** (mounted behind `requireAuth`) — that 401-vs-404 check is the quickest way to confirm a new route actually shipped.
+
+### Squash-merge history makes a fresh PR show `mergeable_state: "dirty"`
+
+A branch cut from a commit that was squash-merged shows as **conflicting** even when the trees are identical, because the branch's parent is not an ancestor of the new `main` tip (the squash created a different commit object with the same tree). Diagnose, don't panic:
+
+```bash
+git rev-parse origin/main^{tree} <branch-parent>^{tree}   # identical ⇒ no real conflict
+git diff --stat origin/main <branch-tip>                  # confirms the true delta
+```
+
+Fix by replaying only your commit onto the current main tip, then force-pushing:
+
+```bash
+git branch backup-<sha> <sha>                              # safety net
+git rebase --onto origin/main <old-parent> <branch>
+git rev-parse backup-<sha>^{tree} HEAD^{tree}              # MUST match — proves no content change
+git push --force-with-lease=<branch>:<current-remote-sha> <token-url> <branch>
+```
+
+`--force-with-lease` without an explicit `<sha>` fails with `stale info` in this shallow clone; pass the remote SHA from `git ls-remote`. After the rebase the PR flips to `mergeable_state: "clean"` and CI runs.
+
+- **CI polling gotcha**: filtering `actions/runs?head_sha=<short-sha>` returns `total_count: 0` even when the run exists — the API wants a full SHA. Query without the filter and match on `head_sha.startswith(...)`, or use `commits/<sha>/check-runs` (which reported all 3 checks green while the runs query looked empty).
