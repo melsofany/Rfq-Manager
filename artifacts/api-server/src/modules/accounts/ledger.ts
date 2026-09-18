@@ -43,6 +43,16 @@ import { requireAuth, requireRole } from "../../middlewares/auth";
 import { round2 } from "./tax";
 import { postJournalEntry, nextEntryNo, accountBalance } from "./posting";
 import { monthOf, assertMonthOpen } from "./closing";
+import {
+  signedFromRaw,
+  currentPeriodResult,
+  agingBucket,
+  emptyBuckets,
+  daysBetween,
+  AGING_BUCKET_LABELS,
+  AGING_BUCKETS,
+  type AgingBucket,
+} from "./reporting";
 
 const router = Router();
 
@@ -575,7 +585,12 @@ router.get("/accounts/trial-balance", requireAuth, async (req, res): Promise<voi
   for (const a of accounts) {
     if (!a.isActive) continue;
     const bal = await accountBalance(a.code, from, to);
-    // Assets/expenses have natural debit balance; liabilities/equity/revenue credit.
+    // A trial balance shows each account's balance on the side it actually
+    // sits: an account with a raw debit balance belongs in the debit column
+    // even when its type is credit-natured (e.g. a contra account such as
+    // مردود المبيعات that is running a debit balance). Deriving the column
+    // from the raw sign — not from the account type — is what makes the two
+    // columns tie out.
     const debit = bal.balance > 0 ? bal.balance : 0;
     const credit = bal.balance < 0 ? Math.abs(bal.balance) : 0;
     if (debit === 0 && credit === 0) continue;
@@ -603,6 +618,11 @@ router.get("/accounts/trial-balance", requireAuth, async (req, res): Promise<voi
 // Financial Statements — القوائم المالية
 // ───────────────────────────────────────────────────────────────────────────
 // Income statement: revenues − expenses = net profit (over the date range).
+//
+// Amounts are signed in each account's normal direction, so a contra account
+// nets against its section instead of inflating it: مردود المبيعات (revenue
+// type, debit balance) reduces revenue, and خصم مشتريات (expense type, credit
+// balance) reduces expense.
 router.get("/accounts/income-statement", requireAuth, async (req, res): Promise<void> => {
   const from = (req.query.from as string) || undefined;
   const to = (req.query.to as string) || undefined;
@@ -615,13 +635,13 @@ router.get("/accounts/income-statement", requireAuth, async (req, res): Promise<
     if (!a.isActive) continue;
     const bal = await accountBalance(a.code, from, to);
     if (bal.balance === 0) continue;
+    if (a.type !== "revenue" && a.type !== "expense") continue;
+    const amount = signedFromRaw(a.type, bal.balance);
+    if (amount === 0) continue;
     if (a.type === "revenue") {
-      // revenue has natural credit balance (negative in debit-minus-credit)
-      const amount = Math.abs(bal.balance);
       totalRevenue += amount;
       revenue.push({ code: a.code, nameAr: a.nameAr, amount: formatNum(round2(amount)) });
-    } else if (a.type === "expense") {
-      const amount = bal.balance; // expense natural debit (positive)
+    } else {
       totalExpense += amount;
       expenses.push({ code: a.code, nameAr: a.nameAr, amount: formatNum(round2(amount)) });
     }
@@ -639,6 +659,14 @@ router.get("/accounts/income-statement", requireAuth, async (req, res): Promise<
 });
 
 // Balance sheet: assets, liabilities, equity (as-of a date).
+//
+// Assets = Liabilities + Equity only holds once the unclosed period result is
+// included in equity. Revenue and expense accounts are not transferred to
+// retained earnings until year-end, so without folding (revenue − expenses)
+// into equity every profitable company's balance sheet is out by its profit —
+// the single most common way a home-grown ledger produces a statement that
+// does not balance. The result is reported as its own equity line so the
+// accountant can see the figure that will be capitalised at closing.
 router.get("/accounts/balance-sheet", requireAuth, async (req, res): Promise<void> => {
   const asOf = (req.query.asOf as string) || undefined;
   const accounts = await db.select().from(chartOfAccountsTable);
@@ -652,42 +680,172 @@ router.get("/accounts/balance-sheet", requireAuth, async (req, res): Promise<voi
     equity: [],
   };
   const totals = { assets: 0, liabilities: 0, equity: 0 };
+  let totalRevenue = 0;
+  let totalExpense = 0;
   for (const a of accounts) {
     if (!a.isActive) continue;
     const bal = await accountBalance(a.code, undefined, asOf);
     if (bal.balance === 0) continue;
+    // Signed in the account's own normal direction, so a contra account nets
+    // against its section (e.g. a credit balance sitting in an asset account).
+    const amount = signedFromRaw(a.type, bal.balance);
     if (a.type === "asset") {
-      totals.assets += bal.balance;
-      sections.assets.push({
-        code: a.code,
-        nameAr: a.nameAr,
-        amount: formatNum(round2(bal.balance)),
-      });
+      totals.assets += amount;
+      sections.assets.push({ code: a.code, nameAr: a.nameAr, amount: formatNum(round2(amount)) });
     } else if (a.type === "liability") {
-      totals.liabilities += Math.abs(bal.balance);
+      totals.liabilities += amount;
       sections.liabilities.push({
         code: a.code,
         nameAr: a.nameAr,
-        amount: formatNum(round2(Math.abs(bal.balance))),
+        amount: formatNum(round2(amount)),
       });
     } else if (a.type === "equity") {
-      totals.equity += Math.abs(bal.balance);
-      sections.equity.push({
-        code: a.code,
-        nameAr: a.nameAr,
-        amount: formatNum(round2(Math.abs(bal.balance))),
-      });
+      totals.equity += amount;
+      sections.equity.push({ code: a.code, nameAr: a.nameAr, amount: formatNum(round2(amount)) });
+    } else if (a.type === "revenue") {
+      totalRevenue += amount;
+    } else if (a.type === "expense") {
+      totalExpense += amount;
     }
   }
+  // Period result carried into equity until it is closed to retained earnings.
+  const periodResult = currentPeriodResult(totalRevenue, totalExpense);
+  if (periodResult !== 0) {
+    totals.equity += periodResult;
+    sections.equity.push({
+      code: "RESULT",
+      nameAr: periodResult >= 0 ? "نتيجة أعمال الفترة (أرباح)" : "نتيجة أعمال الفترة (خسائر)",
+      amount: formatNum(periodResult),
+    });
+  }
+  const totalAssets = round2(totals.assets);
+  const totalLiabilities = round2(totals.liabilities);
+  const totalEquity = round2(totals.equity);
   res.json({
     asOf: asOf ?? null,
     assets: sections.assets,
     liabilities: sections.liabilities,
     equity: sections.equity,
-    totalAssets: formatNum(round2(totals.assets)),
-    totalLiabilities: formatNum(round2(totals.liabilities)),
-    totalEquity: formatNum(round2(totals.equity)),
+    totalAssets: formatNum(totalAssets),
+    totalLiabilities: formatNum(totalLiabilities),
+    totalEquity: formatNum(totalEquity),
+    periodResult: formatNum(periodResult),
+    // A balance sheet must satisfy the accounting equation; surface the check
+    // so a drifting ledger is obvious instead of silently trusted.
+    balanced: round2(totalAssets - (totalLiabilities + totalEquity)) === 0,
+    difference: formatNum(round2(totalAssets - (totalLiabilities + totalEquity))),
   });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// أعمار الديون — Receivable / payable ageing
+//
+// A trading company is paid after it delivers and pays its suppliers after it
+// receives, so the two ageing reports answer the questions that actually matter
+// day to day: who owes us and how late, and whom do we owe and how late.
+// Balances come from the invoice tables' outstanding `balance` column, bucketed
+// by how far past `dueDate` each document is.
+// ───────────────────────────────────────────────────────────────────────────
+interface AgingRow {
+  id: number;
+  documentNo: string | null;
+  partyName: string | null;
+  documentDate: string | null;
+  dueDate: string | null;
+  total: number;
+  balance: number;
+  bucket: AgingBucket;
+  daysOverdue: number;
+}
+
+function summarizeAging(rows: AgingRow[]) {
+  const buckets = emptyBuckets();
+  for (const r of rows) buckets[r.bucket] += r.balance;
+  const total = round2(rows.reduce((s, r) => s + r.balance, 0));
+  return {
+    buckets: AGING_BUCKETS.map((b) => ({
+      bucket: b,
+      label: AGING_BUCKET_LABELS[b],
+      amount: formatNum(round2(buckets[b])),
+    })),
+    total: formatNum(total),
+    count: rows.length,
+    overdue: formatNum(
+      round2(rows.filter((r) => r.bucket !== "current").reduce((s, r) => s + r.balance, 0)),
+    ),
+  };
+}
+
+function buildAgingRows(
+  rows: Array<{
+    id: number;
+    documentNo: string | null;
+    partyName: string | null;
+    documentDate: string | null;
+    dueDate: string | null;
+    total: unknown;
+    balance: unknown;
+  }>,
+  asOf: string,
+): AgingRow[] {
+  const out: AgingRow[] = [];
+  for (const r of rows) {
+    const balance = toNum(r.balance) ?? 0;
+    // Fully settled documents are not a receivable/payable any more.
+    if (balance <= 0) continue;
+    const due = r.dueDate ?? r.documentDate;
+    const bucket = agingBucket(due, asOf);
+    out.push({
+      id: r.id,
+      documentNo: r.documentNo,
+      partyName: r.partyName,
+      documentDate: r.documentDate,
+      dueDate: r.dueDate,
+      total: toNum(r.total) ?? 0,
+      balance,
+      bucket,
+      daysOverdue: bucket === "current" || !due ? 0 : daysBetween(due, asOf),
+    });
+  }
+  // Oldest debt first — that is the order the accountant chases them in.
+  out.sort((a, b) => b.daysOverdue - a.daysOverdue);
+  return out;
+}
+
+router.get("/accounts/aging/receivables", requireAuth, async (req, res): Promise<void> => {
+  const asOf = (req.query.asOf as string) || new Date().toISOString().slice(0, 10);
+  const rows = await db
+    .select({
+      id: salesInvoicesTable.id,
+      documentNo: salesInvoicesTable.invoiceNo,
+      partyName: salesInvoicesTable.customerName,
+      documentDate: salesInvoicesTable.invoiceDate,
+      dueDate: salesInvoicesTable.dueDate,
+      total: salesInvoicesTable.grossAmount,
+      balance: salesInvoicesTable.balance,
+    })
+    .from(salesInvoicesTable)
+    .where(eq(salesInvoicesTable.status, "posted"));
+  const items = buildAgingRows(rows, asOf);
+  res.json({ asOf, ...summarizeAging(items), rows: items });
+});
+
+router.get("/accounts/aging/payables", requireAuth, async (req, res): Promise<void> => {
+  const asOf = (req.query.asOf as string) || new Date().toISOString().slice(0, 10);
+  const rows = await db
+    .select({
+      id: supplierInvoicesTable.id,
+      documentNo: supplierInvoicesTable.invoiceNo,
+      partyName: supplierInvoicesTable.supplierName,
+      documentDate: supplierInvoicesTable.invoiceDate,
+      dueDate: supplierInvoicesTable.dueDate,
+      total: supplierInvoicesTable.grossAmount,
+      balance: supplierInvoicesTable.balance,
+    })
+    .from(supplierInvoicesTable)
+    .where(eq(supplierInvoicesTable.status, "posted"));
+  const items = buildAgingRows(rows, asOf);
+  res.json({ asOf, ...summarizeAging(items), rows: items });
 });
 
 // ───────────────────────────────────────────────────────────────────────────

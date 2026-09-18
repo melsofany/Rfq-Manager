@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Scale, FileBarChart, BarChart3 } from "lucide-react";
+import { Scale, FileBarChart, BarChart3, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 
@@ -32,6 +32,9 @@ export default function FinancialStatementsTab() {
           <TabsTrigger value="balance" className="text-xs gap-1.5">
             <FileBarChart size={14} /> الميزانية
           </TabsTrigger>
+          <TabsTrigger value="aging" className="text-xs gap-1.5">
+            <Clock size={14} /> أعمار الديون
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="trial" className="mt-4">
           <TrialBalance />
@@ -42,7 +45,155 @@ export default function FinancialStatementsTab() {
         <TabsContent value="balance" className="mt-4">
           <BalanceSheet />
         </TabsContent>
+        <TabsContent value="aging" className="mt-4">
+          <AgingReport />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// أعمار الديون — who owes us / whom we owe, bucketed by how late it is.
+// The oldest debt is listed first because that is the order it gets chased in.
+function AgingReport() {
+  const [kind, setKind] = useState<"receivables" | "payables">("receivables");
+  const [asOf, setAsOf] = useState("");
+  const [data, setData] = useState<{
+    asOf: string;
+    buckets: Array<{ bucket: string; label: string; amount: string | null }>;
+    total: string | null;
+    overdue: string | null;
+    count: number;
+    rows: Array<{
+      id: number;
+      documentNo: string | null;
+      partyName: string | null;
+      documentDate: string | null;
+      dueDate: string | null;
+      balance: number;
+      daysOverdue: number;
+      bucket: string;
+    }>;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const qs = asOf ? `?asOf=${asOf}` : "";
+    try {
+      const r = await fetch(`/api/accounts/aging/${kind}${qs}`, { credentials: "include" });
+      if (!r.ok) throw new Error("فشل تحميل أعمار الديون");
+      setData(await r.json());
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, "فشل تحميل أعمار الديون"));
+    } finally {
+      setLoading(false);
+    }
+  }, [kind, asOf]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const bucketTone: Record<string, string> = {
+    current: "text-emerald-600",
+    d1_30: "text-amber-600",
+    d31_60: "text-orange-600",
+    d61_90: "text-red-600",
+    d90_plus: "text-red-800 dark:text-red-400",
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+        <Tabs value={kind} onValueChange={(v) => setKind(v as "receivables" | "payables")}>
+          <TabsList>
+            <TabsTrigger value="receivables" className="text-xs">
+              ذمم العملاء (مدينة)
+            </TabsTrigger>
+            <TabsTrigger value="payables" className="text-xs">
+              ذمم الموردين (دائنة)
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div>
+          <Label className="text-xs mb-1 block">كما في تاريخ</Label>
+          <Input
+            type="date"
+            value={asOf}
+            onChange={(e) => setAsOf(e.target.value)}
+            className="h-8 text-sm w-40"
+          />
+        </div>
+        <Button onClick={load} size="sm" className="gap-1.5">
+          تحديث
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {(data?.buckets ?? []).map((b) => (
+          <div key={b.bucket} className="bg-card border border-border rounded-lg p-3">
+            <p className="text-[11px] text-muted-foreground mb-1">{b.label}</p>
+            <p className={`text-sm font-bold ${bucketTone[b.bucket] ?? ""}`}>{fmt(b.amount)}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-card border border-border rounded-lg p-3">
+          <p className="text-[11px] text-muted-foreground mb-1">إجمالي المديونية</p>
+          <p className="text-sm font-bold">{fmt(data?.total)}</p>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-3">
+          <p className="text-[11px] text-muted-foreground mb-1">المتأخر عن السداد</p>
+          <p className="text-sm font-bold text-red-600">{fmt(data?.overdue)}</p>
+        </div>
+        <div className="bg-card border border-border rounded-lg p-3">
+          <p className="text-[11px] text-muted-foreground mb-1">عدد المستندات</p>
+          <p className="text-sm font-bold">{data?.count ?? 0}</p>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        {loading ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>
+        ) : (data?.rows?.length ?? 0) === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">لا توجد أرصدة مستحقة</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 border-b border-border">
+                <tr>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">المستند</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">
+                    {kind === "receivables" ? "العميل" : "المورد"}
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">تاريخ الاستحقاق</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">أيام التأخير</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold">الرصيد</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data?.rows ?? []).map((r) => (
+                  <tr key={r.id} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs text-primary">{r.documentNo}</td>
+                    <td className="px-3 py-2 text-xs">{r.partyName}</td>
+                    <td className="px-3 py-2 text-xs">{r.dueDate ?? r.documentDate ?? "-"}</td>
+                    <td className="px-3 py-2 text-xs">
+                      {r.daysOverdue > 0 ? (
+                        <span className="text-red-600 font-medium">{r.daysOverdue}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-xs font-medium">{fmt(String(r.balance))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -258,6 +409,9 @@ function BalanceSheet() {
     totalAssets: string | null;
     totalLiabilities: string | null;
     totalEquity: string | null;
+    periodResult?: string | null;
+    balanced?: boolean;
+    difference?: string | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [asOf, setAsOf] = useState("");
@@ -328,6 +482,18 @@ function BalanceSheet() {
           )}
         </span>
       </div>
+      {data && data.periodResult != null && Number(data.periodResult) !== 0 && (
+        <p className="text-xs text-muted-foreground">
+          نتيجة أعمال الفترة ({Number(data.periodResult) >= 0 ? "ربح" : "خسارة"}) مُدرجة ضمن حقوق
+          الملكية لأنها لم تُرحَّل بعد إلى الأرباح المرحّلة.
+        </p>
+      )}
+      {data && data.balanced === false && (
+        <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg p-3 text-xs text-red-800 dark:text-red-300">
+          تحذير: الميزانية غير متوازنة — الفرق {fmt(data.difference)}. راجع القيود غير المتوازنة أو
+          الأرصدة الافتتاحية.
+        </div>
+      )}
     </div>
   );
 }

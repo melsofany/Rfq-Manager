@@ -11,7 +11,12 @@
  * Numbering: entryNo = `JE-YYYY-NNNNNN` generated from a per-year sequence.
  */
 import { db } from "@workspace/db";
-import { journalEntriesTable, journalLinesTable, chartOfAccountsTable } from "@workspace/db";
+import {
+  journalEntriesTable,
+  journalLinesTable,
+  chartOfAccountsTable,
+  ACCOUNT_CODES,
+} from "@workspace/db";
 import { eq, sql, and, gte, lte, desc } from "drizzle-orm";
 import { round2 } from "./tax";
 import { assertMonthOpen } from "./closing";
@@ -68,6 +73,47 @@ async function assertAccountsExist(codes: string[]): Promise<void> {
 }
 
 /**
+ * Accounts whose balance is derived from a sub-ledger and must therefore stay
+ * reconcilable with it:
+ *   • ذمم العملاء / ذمم الموردين — from the sales/supplier invoice tables
+ *   • ض.ق.م. المدخلات / المخرجات — from those same invoices (the VAT return
+ *     has to agree with the GL)
+ *   • الخصم تحت حساب المورد — from supplier invoices' withholding amounts
+ *
+ * A manual entry into one of these silently breaks that reconciliation, so it
+ * is rejected. Cash, bank and inventory are deliberately NOT in this list:
+ * there is no sub-ledger behind them here, and a manual entry is the normal way
+ * to record a cash expense, opening stock or an adjustment.
+ */
+const SUBLEDGER_CONTROLLED_CODES = new Set<string>([
+  ACCOUNT_CODES.AR,
+  ACCOUNT_CODES.AP,
+  ACCOUNT_CODES.INPUT_VAT,
+  ACCOUNT_CODES.OUTPUT_VAT,
+  ACCOUNT_CODES.WITHHOLDING_PAYABLE,
+]);
+
+/**
+ * Reject a manual journal that touches a sub-ledger-controlled account. Only
+ * `source === "manual"` is checked — the invoice/payment/collection flows are
+ * exactly the paths that keep these accounts and their sub-ledgers in step.
+ */
+async function assertNoControlAccounts(codes: string[], source: string): Promise<void> {
+  if (source !== "manual") return;
+  const targets = Array.from(new Set(codes)).filter((c) => SUBLEDGER_CONTROLLED_CODES.has(c));
+  if (!targets.length) return;
+  const rows = await db
+    .select({ code: chartOfAccountsTable.code, nameAr: chartOfAccountsTable.nameAr })
+    .from(chartOfAccountsTable)
+    .where(sql`${chartOfAccountsTable.code} = any(${targets})`);
+  const names = rows.map((r) => `${r.code} ${r.nameAr}`).join("، ") || targets.join("، ");
+  throw new Error(
+    `لا يمكن تسجيل قيد يدوي على حسابات المراقبة: ${names}. ` +
+      `استخدم شاشة الفاتورة أو الدفعة الخاصة بها حتى تظل مطابقة لدفتر الأستاذ المساعد`,
+  );
+}
+
+/**
  * Create + (optionally) post a balanced journal entry. Returns the entry id.
  * Throws if lines are empty or unbalanced.
  */
@@ -77,6 +123,7 @@ export async function postJournalEntry(input: PostJournalInput): Promise<number>
 
   const codes = lines.map((l) => l.accountCode);
   await assertAccountsExist(codes);
+  await assertNoControlAccounts(codes, input.source);
 
   const totalDebit = round2(lines.reduce((s, l) => s + (l.debit ?? 0), 0));
   const totalCredit = round2(lines.reduce((s, l) => s + (l.credit ?? 0), 0));
