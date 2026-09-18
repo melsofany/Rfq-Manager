@@ -47,6 +47,7 @@ import {
 import { requireAuth } from "../../middlewares/auth";
 import { round2, rateOf } from "../accounts/tax";
 import { accountBalance } from "../accounts/posting";
+import { signedFromRaw, currentPeriodResult } from "../accounts/reporting";
 
 const router = Router();
 
@@ -1201,20 +1202,32 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
     .limit(10);
 
   // ── Financial statements snapshot ────────────────────────────────────────
+  // Same conventions as /accounts/income-statement + /accounts/balance-sheet:
+  // balances are signed in each account's own normal direction so contra
+  // accounts (مردود المبيعات، خصم مشتريات) net instead of inflating their
+  // section, and the unclosed period result is carried into equity so the
+  // accounting equation holds before year-end closing.
   const coaRows = await db.select().from(chartOfAccountsTable);
-  let netProfit = 0,
-    totalAssets = 0,
-    totalLiabilities = 0,
-    totalEquity = 0;
+  let stmtAssets = 0,
+    stmtLiabilities = 0,
+    stmtEquity = 0,
+    stmtRevenue = 0,
+    stmtExpense = 0;
   for (const a of coaRows) {
     if (!a.isActive) continue;
     const bal = await accountBalance(a.code);
-    if (a.type === "revenue") netProfit += Math.abs(bal.balance);
-    else if (a.type === "expense") netProfit -= bal.balance;
-    else if (a.type === "asset") totalAssets += bal.balance;
-    else if (a.type === "liability") totalLiabilities += Math.abs(bal.balance);
-    else if (a.type === "equity") totalEquity += Math.abs(bal.balance);
+    if (bal.balance === 0) continue;
+    const amount = signedFromRaw(a.type, bal.balance);
+    if (a.type === "revenue") stmtRevenue += amount;
+    else if (a.type === "expense") stmtExpense += amount;
+    else if (a.type === "asset") stmtAssets += amount;
+    else if (a.type === "liability") stmtLiabilities += amount;
+    else if (a.type === "equity") stmtEquity += amount;
   }
+  const netProfit = currentPeriodResult(stmtRevenue, stmtExpense);
+  const totalAssets = round2(stmtAssets);
+  const totalLiabilities = round2(stmtLiabilities);
+  const totalEquity = round2(stmtEquity + netProfit);
 
   res.json({
     counts: {
@@ -1300,6 +1313,7 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
         totalAssets: fmt(totalAssets),
         totalLiabilities: fmt(totalLiabilities),
         totalEquity: fmt(totalEquity),
+        balanced: round2(totalAssets - (totalLiabilities + totalEquity)) === 0,
       },
     },
     monthlyTrend,

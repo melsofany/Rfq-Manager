@@ -77,9 +77,56 @@ function selectBuilder() {
       else if (table === TABLES.poItemChargesTable) rows = poItemChargeRows;
       else if (table === TABLES.taxSettingsTable) rows = taxSettingsRow ? [taxSettingsRow] : [];
       const cur: any = {
-        innerJoin: vi.fn(() => cur),
+        // accountBalance() joins journal_lines → journal_entries to read each
+        // line's entry_date + status. Merge those columns onto the line rows so
+        // the "only posted lines count" filter is actually exercised.
+        innerJoin: vi.fn((joinTable: any) => {
+          if (table === TABLES.journalLinesTable && joinTable === TABLES.journalEntriesTable) {
+            const byId = new Map(journalEntryRows.map((e: any) => [e.id, e]));
+            rows = rows.map((l: any) => {
+              const e = byId.get(l.entryId);
+              return e ? { ...l, entryDate: e.entryDate, status: e.status } : l;
+            });
+          }
+          return cur;
+        }),
         leftJoin: vi.fn(() => cur),
-        where: vi.fn(() => cur),
+        // Honour the recorded filter conditions.
+        //  • `eq(col, value)` (accountBalance filters journal_lines by code)
+        //  • a raw `sql` template containing `code = any($1)` — how
+        //    assertAccountsExist / assertNoControlAccounts restrict the COA
+        //    lookup. Without this the control-account guard would see the whole
+        //    chart and reject every manual entry.
+        // Drizzle columns carry a snake_case `.name`; the fixture rows use the
+        // camelCase ORM keys, so translate before comparing.
+        where: vi.fn((cond: any) => {
+          const conds = Array.isArray(cond) ? cond : [cond];
+          for (const c of conds) {
+            if (!c) continue;
+            if (c.__eq) {
+              const [col, val] = c.__eq;
+              const snake = col?.name ?? String(col);
+              const camel = snake.replace(/_([a-z])/g, (_m: string, ch: string) =>
+                ch.toUpperCase(),
+              );
+              rows = rows.filter((r) => {
+                if (snake in r) return String(r[snake]) === String(val);
+                if (camel in r) return String(r[camel]) === String(val);
+                return true;
+              });
+            } else if (Array.isArray(c.values)) {
+              const anyArg = c.values.find((v: any) => Array.isArray(v));
+              if (anyArg) {
+                const allowed = anyArg.map(String);
+                rows = rows.filter((r) => {
+                  const code = r.code ?? r.accountCode;
+                  return code == null ? true : allowed.includes(String(code));
+                });
+              }
+            }
+          }
+          return cur;
+        }),
         orderBy: vi.fn(() => cur),
         limit: vi.fn(() => chainable(rows)),
         then: (resolve: any) => Promise.resolve(rows).then(resolve),
@@ -129,7 +176,10 @@ vi.mock("drizzle-orm", () => {
   // mimic the tagged-template helper properties used by drizzle helpers.
   sql.template = { raw: (s: any) => ({ __raw: true, sql: [s], values: [], toString: () => s }) };
   return {
-    eq: (a: any, _b: any) => a,
+    // Record the operands so a builder can honour an `accountCode = ?` filter —
+    // accountBalance() is called once per account, so the mock must actually
+    // filter or every account would report the same total.
+    eq: (a: any, b: any) => ({ __eq: [a, b], col: a, val: b }),
     sql,
     and: (...args: any[]) => args.find((a) => a !== undefined) ?? undefined,
     desc: (a: any) => a,
@@ -328,8 +378,8 @@ describe("POST /api/accounts/journal", () => {
         description: "قيد اختبار",
         status: "draft",
         lines: [
-          { accountCode: "1001", debit: 1000, credit: 0 },
-          { accountCode: "2100", debit: 0, credit: 1000 },
+          { accountCode: "5100", debit: 1000, credit: 0 },
+          { accountCode: "5900", debit: 0, credit: 1000 },
         ],
       });
     expect(res.status).toBe(200);
@@ -345,8 +395,8 @@ describe("POST /api/accounts/journal", () => {
         entryDate: "2026-08-01",
         description: "غير متوازن",
         lines: [
-          { accountCode: "1001", debit: 1000, credit: 0 },
-          { accountCode: "2100", debit: 0, credit: 500 },
+          { accountCode: "5100", debit: 1000, credit: 0 },
+          { accountCode: "5900", debit: 0, credit: 500 },
         ],
       });
     expect(res.status).toBe(400);
@@ -359,7 +409,7 @@ describe("POST /api/accounts/journal", () => {
       .send({
         entryDate: "2026-08-01",
         description: "بند واحد",
-        lines: [{ accountCode: "1001", debit: 100, credit: 0 }],
+        lines: [{ accountCode: "5100", debit: 100, credit: 0 }],
       });
     expect(res.status).toBe(400);
   });
@@ -371,11 +421,62 @@ describe("POST /api/accounts/journal", () => {
         entryDate: "2026-08-01",
         description: "صفر",
         lines: [
-          { accountCode: "1001", debit: 0, credit: 0 },
-          { accountCode: "2100", debit: 0, credit: 0 },
+          { accountCode: "5100", debit: 0, credit: 0 },
+          { accountCode: "5900", debit: 0, credit: 0 },
         ],
       });
     expect(res.status).toBe(400);
+  });
+
+  // A manual entry must not touch a control account: its GL balance has to keep
+  // agreeing with its sub-ledger, which only the invoice/payment flows write.
+  it("rejects a manual entry that hits a control account (ذمم العملاء)", async () => {
+    const res = await request(testApp)
+      .post("/api/accounts/journal")
+      .send({
+        entryDate: "2026-08-01",
+        description: "قيد يدوي على حساب مراقبة",
+        lines: [
+          { accountCode: "1200", debit: 1000, credit: 0 },
+          { accountCode: "4100", debit: 0, credit: 1000 },
+        ],
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/حسابات المراقبة/);
+    expect(res.body.error).toMatch(/1200/);
+  });
+
+  it("allows a manual entry on cash (no sub-ledger to keep in step)", async () => {
+    // Cash/bank are NOT sub-ledger controlled here, so recording a cash
+    // expense or an adjustment by hand stays possible.
+    const res = await request(testApp)
+      .post("/api/accounts/journal")
+      .send({
+        entryDate: "2026-08-01",
+        description: "مصروف نقدي يدوي",
+        lines: [
+          { accountCode: "5900", debit: 500, credit: 0 },
+          { accountCode: "1001", debit: 0, credit: 500 },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBeDefined();
+  });
+
+  it("rejects a manual entry that hits the VAT control account", async () => {
+    const res = await request(testApp)
+      .post("/api/accounts/journal")
+      .send({
+        entryDate: "2026-08-01",
+        description: "قيد يدوي على ض.ق.م. المخرجات",
+        lines: [
+          { accountCode: "5100", debit: 1000, credit: 0 },
+          { accountCode: "2401", debit: 0, credit: 1000 },
+        ],
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/حسابات المراقبة/);
+    expect(res.body.error).toMatch(/2401/);
   });
 });
 
@@ -616,5 +717,261 @@ describe("GET /api/accounts/dashboard", () => {
     expect(res.body).toHaveProperty("cash");
     expect(res.body).toHaveProperty("bank");
     expect(res.body).toHaveProperty("pendingDrafts");
+  });
+});
+
+// ── Financial statements ────────────────────────────────────────────────────
+//
+// These pin the two conventions a home-grown ledger usually gets wrong:
+// contra accounts must NET against their section, and the balance sheet must
+// carry the unclosed period result into equity so the accounting equation holds.
+describe("GET /api/accounts/income-statement", () => {
+  // One sales account (4100, credit) and one contra-revenue account (4101
+  // مردود المبيعات, debit). Revenue must be 1000 − 100 = 900, not 1100.
+  function seedRevenueWithReturns() {
+    coaRows = [
+      {
+        id: 1,
+        code: "4100",
+        nameAr: "المبيعات",
+        nameEn: null,
+        type: "revenue",
+        isControl: false,
+        isActive: true,
+      },
+      {
+        id: 2,
+        code: "4101",
+        nameAr: "مردود المبيعات",
+        nameEn: null,
+        type: "revenue",
+        isControl: false,
+        isActive: true,
+      },
+    ];
+    journalEntryRows = [{ id: 1, entryDate: "2026-08-05", status: "posted" }];
+    journalLineRows = [
+      { entryId: 1, accountCode: "4100", debit: "0", credit: "1000" },
+      { entryId: 1, accountCode: "4101", debit: "100", credit: "0" },
+    ];
+  }
+
+  it("nets a contra-revenue account (مردود المبيعات) against revenue", async () => {
+    seedRevenueWithReturns();
+    const res = await request(testApp).get("/api/accounts/income-statement");
+    expect(res.status).toBe(200);
+    // Before the fix this returned 1100 (Math.abs of the debit balance).
+    expect(Number(res.body.totalRevenue)).toBe(900);
+    const returns = res.body.revenue.find((r: any) => r.code === "4101");
+    expect(Number(returns.amount)).toBe(-100);
+  });
+
+  it("nets a contra-expense account (خصم مشتريات) against expenses", async () => {
+    coaRows = [
+      {
+        id: 1,
+        code: "5100",
+        nameAr: "تكلفة المبيعات",
+        nameEn: null,
+        type: "expense",
+        isControl: false,
+        isActive: true,
+      },
+      {
+        id: 2,
+        code: "5110",
+        nameAr: "خصم مشتريات",
+        nameEn: null,
+        type: "expense",
+        isControl: false,
+        isActive: true,
+      },
+    ];
+    journalEntryRows = [{ id: 1, entryDate: "2026-08-05", status: "posted" }];
+    journalLineRows = [
+      { entryId: 1, accountCode: "5100", debit: "1000", credit: "0" },
+      { entryId: 1, accountCode: "5110", debit: "0", credit: "200" },
+    ];
+    const res = await request(testApp).get("/api/accounts/income-statement");
+    expect(res.status).toBe(200);
+    expect(Number(res.body.totalExpense)).toBe(800);
+    const discount = res.body.expenses.find((e: any) => e.code === "5110");
+    expect(Number(discount.amount)).toBe(-200);
+  });
+});
+
+describe("GET /api/accounts/balance-sheet", () => {
+  // A profitable trading month: cash 1000 (asset), capital 1000 (equity),
+  // sales 500 (revenue), COGS 300 (expense) → profit 200 must land in equity.
+  function seedProfitableMonth() {
+    coaRows = [
+      {
+        id: 1,
+        code: "1001",
+        nameAr: "النقدية",
+        nameEn: null,
+        type: "asset",
+        isControl: true,
+        isActive: true,
+      },
+      {
+        id: 2,
+        code: "3100",
+        nameAr: "رأس المال",
+        nameEn: null,
+        type: "equity",
+        isControl: false,
+        isActive: true,
+      },
+      {
+        id: 3,
+        code: "4100",
+        nameAr: "المبيعات",
+        nameEn: null,
+        type: "revenue",
+        isControl: false,
+        isActive: true,
+      },
+      {
+        id: 4,
+        code: "5100",
+        nameAr: "تكلفة المبيعات",
+        nameEn: null,
+        type: "expense",
+        isControl: false,
+        isActive: true,
+      },
+    ];
+    journalEntryRows = [{ id: 1, entryDate: "2026-08-05", status: "posted" }];
+    journalLineRows = [
+      { entryId: 1, accountCode: "1001", debit: "1200", credit: "0" },
+      { entryId: 1, accountCode: "3100", debit: "0", credit: "1000" },
+      { entryId: 1, accountCode: "4100", debit: "0", credit: "500" },
+      { entryId: 1, accountCode: "5100", debit: "300", credit: "0" },
+    ];
+  }
+
+  it("balances by carrying the unclosed period result into equity", async () => {
+    seedProfitableMonth();
+    const res = await request(testApp).get("/api/accounts/balance-sheet");
+    expect(res.status).toBe(200);
+    expect(Number(res.body.totalAssets)).toBe(1200);
+    expect(Number(res.body.periodResult)).toBe(200);
+    // Equity = capital 1000 + period result 200
+    expect(Number(res.body.totalEquity)).toBe(1200);
+    // The equation must hold — before the fix equity was only 1000 and the
+    // sheet was out by the 200 profit.
+    expect(res.body.balanced).toBe(true);
+    expect(Number(res.body.difference)).toBe(0);
+  });
+
+  it("reports the accounting-equation check so drift is visible", async () => {
+    seedProfitableMonth();
+    const res = await request(testApp).get("/api/accounts/balance-sheet");
+    expect(res.body).toHaveProperty("balanced");
+    expect(res.body).toHaveProperty("difference");
+    expect(res.body.equity.some((e: any) => e.code === "RESULT")).toBe(true);
+  });
+});
+
+// ── Ageing — أعمار الديون ───────────────────────────────────────────────────
+describe("GET /api/accounts/aging", () => {
+  it("buckets receivables by how far past due date they are", async () => {
+    salesInvoiceRows = [
+      {
+        id: 1,
+        invoiceNo: "INV-1",
+        customerName: "عميل أ",
+        invoiceDate: "2026-06-01",
+        dueDate: "2026-06-15",
+        grossAmount: "1000",
+        balance: "1000",
+        status: "posted",
+      },
+      {
+        id: 2,
+        invoiceNo: "INV-2",
+        customerName: "عميل ب",
+        invoiceDate: "2026-08-01",
+        dueDate: "2026-08-20",
+        grossAmount: "500",
+        balance: "500",
+        status: "posted",
+      },
+    ];
+    const res = await request(testApp).get("/api/accounts/aging/receivables?asOf=2026-08-25");
+    expect(res.status).toBe(200);
+    // INV-1 due 15 Jun → 71 days overdue → 61–90 bucket.
+    // INV-2 due 20 Aug → 5 days overdue → 1–30 bucket (not "current").
+    const buckets: Record<string, string> = {};
+    for (const b of res.body.buckets) buckets[b.bucket] = b.amount;
+    expect(Number(buckets.d61_90)).toBe(1000);
+    expect(Number(buckets.d1_30)).toBe(500);
+    expect(Number(buckets.current)).toBe(0);
+    expect(Number(res.body.total)).toBe(1500);
+    expect(Number(res.body.overdue)).toBe(1500);
+  });
+
+  it("treats a document due today or later as current", async () => {
+    salesInvoiceRows = [
+      {
+        id: 1,
+        invoiceNo: "INV-1",
+        customerName: "عميل أ",
+        invoiceDate: "2026-08-01",
+        dueDate: "2026-09-10",
+        grossAmount: "800",
+        balance: "800",
+        status: "posted",
+      },
+    ];
+    const res = await request(testApp).get("/api/accounts/aging/receivables?asOf=2026-08-25");
+    expect(res.status).toBe(200);
+    const buckets: Record<string, string> = {};
+    for (const b of res.body.buckets) buckets[b.bucket] = b.amount;
+    expect(Number(buckets.current)).toBe(800);
+    expect(Number(res.body.overdue)).toBe(0);
+    expect(res.body.rows[0].daysOverdue).toBe(0);
+  });
+
+  it("excludes fully settled documents", async () => {
+    salesInvoiceRows = [
+      {
+        id: 1,
+        invoiceNo: "INV-1",
+        customerName: "عميل أ",
+        invoiceDate: "2026-06-01",
+        dueDate: "2026-06-15",
+        grossAmount: "1000",
+        balance: "0",
+        status: "posted",
+      },
+    ];
+    const res = await request(testApp).get("/api/accounts/aging/receivables?asOf=2026-08-25");
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(0);
+    expect(Number(res.body.total)).toBe(0);
+  });
+
+  it("buckets payables from supplier invoices", async () => {
+    supplierInvoiceRows = [
+      {
+        id: 1,
+        invoiceNo: "SI-1",
+        supplierName: "مورد أ",
+        invoiceDate: "2026-05-01",
+        dueDate: "2026-05-10",
+        grossAmount: "700",
+        balance: "700",
+        status: "posted",
+      },
+    ];
+    const res = await request(testApp).get("/api/accounts/aging/payables?asOf=2026-08-25");
+    expect(res.status).toBe(200);
+    const buckets: Record<string, string> = {};
+    for (const b of res.body.buckets) buckets[b.bucket] = b.amount;
+    // due 10 May → 107 days → 90+ bucket
+    expect(Number(buckets.d90_plus)).toBe(700);
+    expect(res.body.rows[0].daysOverdue).toBeGreaterThan(90);
   });
 });

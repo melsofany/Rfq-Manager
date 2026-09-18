@@ -151,6 +151,7 @@ interface OverviewData {
       totalAssets: number | null;
       totalLiabilities: number | null;
       totalEquity: number | null;
+      balanced?: boolean;
     };
   };
   monthlyTrend: { month: string; rfqs: number; pos: number; customerRfqs: number }[];
@@ -1984,6 +1985,11 @@ ${
                                 {fmtMoney(overview.financials.statements.totalEquity)}
                               </span>
                             </div>
+                            {overview.financials.statements.balanced === false && (
+                              <p className="text-[11px] text-red-500 border-t border-border pt-1.5">
+                                الأصول لا تساوي الخصوم + حقوق الملكية — راجع قيود اليومية
+                              </p>
+                            )}
                           </div>
                         </div>
                       </div>
