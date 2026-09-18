@@ -402,6 +402,23 @@ router.get("/accounts/vat", requireAuth, async (req, res): Promise<void> => {
 
   const netVat = round2(outputVat - inputVat);
 
+  // ── VAT evidence reconciliation (ضريبة مُثبتة / عجز ض.ق.م) ──────────────
+  // Only purchases backed by a proper tax invoice (hasVat) give deductible
+  // input VAT. Purchases from non-registered suppliers carry NO input VAT, so
+  // the output VAT charged on those goods has no matching input credit — the
+  // company absorbs that shortfall (عجز ض.ق.م) as pure cost. This group makes
+  // the evidence status explicit for the accountant's monthly return.
+  const vatEvidence = {
+    outputVat: round2(outputVat),
+    evidencedInputVat: round2(inputVat),
+    unevidencedInputVat: round2(nonVatDeficit),
+    unevidencedNet: round2(nonVatNet),
+    deficit: round2(nonVatDeficit),
+    netPayable: netVat > 0 ? netVat : 0,
+    carriedCredit: netVat < 0 ? Math.abs(netVat) : 0,
+    fullyEvidenced: round2(nonVatDeficit) === 0,
+  };
+
   res.json({
     vatRate,
     from: from ?? null,
@@ -413,6 +430,7 @@ router.get("/accounts/vat", requireAuth, async (req, res): Promise<void> => {
     netVat,
     payable: netVat > 0 ? netVat : 0,
     credit: netVat < 0 ? Math.abs(netVat) : 0,
+    vatEvidence,
     outputLines: output.map((l) => ({
       ...l,
       net: round2(l.net),

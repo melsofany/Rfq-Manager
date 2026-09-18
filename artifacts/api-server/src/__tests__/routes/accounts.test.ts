@@ -252,6 +252,63 @@ describe("GET /api/accounts/vat", () => {
     expect(res.body.input.net).toBe(0);
     expect(res.body.netVat).toBe(0);
   });
+
+  it("separates evidenced input VAT from the non-VAT deficit (عجز ض.ق.م)", async () => {
+    salesInvoiceRows = [
+      {
+        id: 1,
+        invoiceNo: "INV-2026-000001",
+        customerName: "عميل أ",
+        customerPoNo: "C-1",
+        invoiceDate: "2026-08-01",
+        netAmount: "10000",
+        vatAmount: "1400",
+        grossAmount: "11400",
+        status: "posted",
+      },
+    ];
+    supplierInvoiceRows = [
+      {
+        id: 2,
+        invoiceNo: "SI-2026-000001",
+        supplierInvoiceNo: "S-1",
+        supplierName: "مورد مسجل",
+        poNo: "PO-1",
+        invoiceDate: "2026-08-02",
+        netAmount: "4000",
+        vatAmount: "560",
+        grossAmount: "4560",
+        hasVat: true,
+        status: "posted",
+      },
+      {
+        id: 3,
+        invoiceNo: "SI-2026-000002",
+        supplierInvoiceNo: "S-2",
+        supplierName: "مورد غير مسجل",
+        poNo: "PO-2",
+        invoiceDate: "2026-08-03",
+        netAmount: "2000",
+        vatAmount: "0",
+        grossAmount: "2000",
+        hasVat: false,
+        status: "posted",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/vat");
+    expect(res.status).toBe(200);
+    // Evidenced input VAT = 560 only (the non-VAT supplier contributes none).
+    expect(res.body.input.vat).toBe(560);
+    expect(res.body.vatEvidence.evidencedInputVat).toBe(560);
+    expect(res.body.vatEvidence.unevidencedNet).toBe(2000);
+    // Deficit = 14% of the 2000 non-VAT purchases = 280.
+    expect(res.body.vatEvidence.unevidencedInputVat).toBe(280);
+    expect(res.body.vatEvidence.deficit).toBe(280);
+    expect(res.body.vatEvidence.fullyEvidenced).toBe(false);
+    // Net payable = 1400 − 560 = 840 (the deficit is absorbed, not deducted).
+    expect(res.body.vatEvidence.netPayable).toBe(840);
+  });
 });
 
 describe("GET /api/accounts/withholding", () => {

@@ -17,6 +17,7 @@ import ledgerRouter from "./ledger";
 import supplierInvoicesRouter from "./supplier-invoices";
 import salesInvoicesRouter from "./sales-invoices";
 import closingRouter from "./closing";
+import ordersRouter from "./orders";
 
 const router: IRouter = Router();
 router.use(accountsRouter);
@@ -24,5 +25,6 @@ router.use(ledgerRouter);
 router.use(supplierInvoicesRouter);
 router.use(salesInvoicesRouter);
 router.use(closingRouter);
+router.use(ordersRouter);
 
 export default router;
