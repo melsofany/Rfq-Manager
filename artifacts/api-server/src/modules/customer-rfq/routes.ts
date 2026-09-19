@@ -30,17 +30,69 @@ const MARGIN_FACTOR = 1.06;
 // quoted TO THE CUSTOMER, so anyone else asking the API must never learn what
 // the item costs us — not from an error message, not from a deviation figure
 // derived from the cost, and not from the audit log either.
-export function isPrivilegedRole(role: string | undefined | null): boolean {
-  return role === "admin" || role === "manager";
+//
+// PRICING access is a permission (`customer-rfq:price`), not a role: a manager
+// can grant it to a specific employee from the employees page. Only `admin` is
+// privileged unconditionally; `manager` is granted by default via
+// PRICING_ROLE_DEFAULT (mirroring the portal's ROLE_DEFAULTS).
+const PRICE_PERM_KEY = "customer-rfq:price";
+const PRICING_ROLE_DEFAULT: Record<string, boolean> = { manager: true };
+
+/**
+ * Whether an employee may PRICE a customer RFQ (set a unit price / finalize).
+ * Mirrors the portal's `resolvePermissions`: an explicit (non-empty) permission
+ * map is authoritative; otherwise the role default applies. Kept in sync with
+ * `artifacts/rfq-portal/src/lib/permissions.ts`.
+ */
+export function mayPriceCustomerRfq(
+  role: string | undefined | null,
+  permissions: Record<string, boolean> | null | undefined,
+): boolean {
+  if (role === "admin") return true;
+  const explicit =
+    permissions && typeof permissions === "object" && Object.keys(permissions).length
+      ? permissions
+      : null;
+  if (explicit) return explicit[PRICE_PERM_KEY] === true;
+  return PRICING_ROLE_DEFAULT[role ?? ""] === true;
 }
 
-// Customer pricing gate. Only admins/managers may set/change a customer unit
-// price or finalize (lock) an RFQ — the price quoted to the customer is a
-// management decision. Everyone else keeps full data-entry access (customer,
-// dates, items); any price they submit is dropped rather than honoured.
-export function denyNonPricingRole(req: any, res: any): boolean {
-  if (isPrivilegedRole(req.session?.role)) return false;
-  res.status(403).json({ error: "غير مصرح — تسعير طلبات العملاء متاح للمدير فقط" });
+/** Load the employee's explicit permission map (null ⇒ use the role default). */
+async function loadPricingPermissions(req: any): Promise<Record<string, boolean> | null> {
+  const employeeId = req.session?.employeeId;
+  if (!employeeId) return null;
+  const [emp] = await db
+    .select({ permissions: employeesTable.permissions })
+    .from(employeesTable)
+    .where(eq(employeesTable.id, employeeId));
+  return (emp?.permissions as Record<string, boolean> | null) ?? null;
+}
+
+/**
+ * Whether the requester may PRICE a customer RFQ. Resolves exactly like the
+ * portal's `resolvePermissions`: an explicit permission map is authoritative,
+ * otherwise the role default applies (manager ✓, admin always ✓). Reads
+ * permissions fresh from the employee row so a grant/revoke takes effect without
+ * a re-login.
+ */
+export async function hasPricingAccess(req: any): Promise<boolean> {
+  const role = req.session?.role;
+  if (role === "admin") return true;
+  return mayPriceCustomerRfq(role, await loadPricingPermissions(req));
+}
+
+/**
+ * Pricing gate. Only admins/managers (or an employee the manager explicitly
+ * granted «تسعير طلب العميل») may set/change a customer unit price or finalize
+ * (lock) an RFQ — the price quoted to the customer is a management decision.
+ * Everyone else keeps full data-entry access (customer, dates, items); any price
+ * they submit is dropped rather than honoured.
+ */
+export async function denyNonPricingRole(req: any, res: any): Promise<boolean> {
+  if (await hasPricingAccess(req)) return false;
+  res.status(403).json({
+    error: "غير مصرح — تسعير طلبات العملاء متاح للمدير أو لمن مُنح صلاحية تسعير طلب العميل",
+  });
   return true;
 }
 
@@ -1414,8 +1466,8 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
       (it) => (it.partNo?.trim() || it.lineItem?.trim() || it.description?.trim()) && it.qty,
     );
     if (validItems.length > 0) {
-      // Only admins/managers may seed a customer price.
-      const mayPrice = isPrivilegedRole(req.session.role);
+      // Only employees with pricing access may seed a customer price.
+      const mayPrice = await hasPricingAccess(req);
       await db.insert(customerRfqItemsTable).values(
         validItems.map((it) => ({
           customerRfqId: rfq.id,
@@ -1497,22 +1549,22 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     res.status(404).json({ error: "Not found" });
     return;
   }
-  // Pricing is a management action: only admins/managers may send a unit price
-  // or drive a status transition (finalize/lock). Data-entry edits (customer,
-  // dates, items) stay available to everyone else — but a sent (finalized) RFQ
-  // is immutable to them.
+  // Pricing is a management action: only employees with pricing access may send
+  // a unit price or drive a status transition (finalize/lock). Data-entry edits
+  // (customer, dates, items) stay available to everyone else — but a sent
+  // (finalized) RFQ is immutable to them.
   const rawBody = req.body as {
     status?: string;
     items?: Array<{ unitPrice?: string | number | null }>;
   };
-  const privileged = isPrivilegedRole(req.session.role);
+  const privileged = await hasPricingAccess(req);
   const pricingIntent =
     rawBody.status !== undefined ||
     (Array.isArray(rawBody.items) &&
       rawBody.items.some(
         (it) => it.unitPrice != null && it.unitPrice !== "" && Number(it.unitPrice) > 0,
       ));
-  if (pricingIntent && denyNonPricingRole(req, res)) return;
+  if (pricingIntent && (await denyNonPricingRole(req, res))) return;
   if (existing.status !== "draft" && !privileged) {
     res.status(400).json({ error: "لا يمكن تعديل طلب تسعير العميل بعد إرساله" });
     return;

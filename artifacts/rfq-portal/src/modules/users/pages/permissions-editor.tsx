@@ -8,6 +8,7 @@ import {
   ALL_PERMISSION_KEYS,
   PAGE_KEYS,
   ROLE_DEFAULTS,
+  EXPLICIT_ONLY_PERMS,
   permissionsFromKeys,
   resolvePermissions,
   type Role,
@@ -52,7 +53,9 @@ export default function PermissionsEditor({ role, value, onChange }: Props) {
     const node = PERMISSION_CATALOG.find((n) => n.key === pageKey);
     if (!node) return;
     const next = new Set(granted);
-    const related = [pageKey, ...(node.children ?? []).map((c) => c.key)];
+    const related = [pageKey, ...(node.children ?? []).map((c) => c.key)].filter(
+      (k) => !EXPLICIT_ONLY_PERMS.includes(k),
+    );
     for (const k of related) {
       if (checked) next.add(k);
       else next.delete(k);
