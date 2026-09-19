@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
-import { canEditCustomerDoc, EDIT_PERM } from "@/lib/permissions";
+import { canEditCustomerDoc, canPriceCustomerRfq, EDIT_PERM } from "@/lib/permissions";
 import { useCustomerRfqNoAvailability } from "../hooks/use-customer-rfq-no-availability";
 
 interface ItemRow {
@@ -66,9 +66,10 @@ export default function CustomerRfqDetailPage() {
   const { employee } = useAuth();
   const canEdit = canEditCustomerDoc(employee?.role, employee?.permissions, EDIT_PERM.customerRfq);
   const isDraft = rfq?.status === "draft";
-  // The customer price is set by the manager ONLY: a single role gate covers
+  // The customer price is set only by employees the manager granted the
+  // «تسعير طلب العميل» permission (admins always have it): a single gate covers
   // drafts and finalized RFQs alike — the PATCH endpoint enforces the same.
-  const isPricingRole = employee?.role === "admin" || employee?.role === "manager";
+  const isPricingRole = canPriceCustomerRfq(employee?.role, employee?.permissions);
   // Admins/managers may fully edit a sent (finalized) RFQ; the PATCH endpoint
   // enforces the same role gate.
   const canEditSent = rfq?.status === "sent" && isPricingRole;

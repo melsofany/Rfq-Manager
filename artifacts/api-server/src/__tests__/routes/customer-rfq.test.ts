@@ -96,6 +96,9 @@ let sheetRfqHeaders: any[] | null = null;
 let sheetRejectedDeliveries: any[];
 // Employee row returned for the POST "who entered it" lookup: { name }.
 let employeeRow: any;
+// Explicit permission map returned by the employees lookup used by the pricing
+// gate. null ⇒ the gate falls back to the role default.
+let employeePermissions: Record<string, boolean> | null;
 // Mutable session so individual tests can flip role=admin for override tests.
 const sessionState: { employeeId: number; role?: string } = { employeeId: 1 };
 
@@ -329,7 +332,15 @@ const dbMock: any = {
       }
       // Employee name lookup: select({name}).from(employees).where().limit() —
       // returns the per-test employeeRow (so POST records who entered the RFQ).
+      // The pricing gate instead selects {permissions} — serve the per-test map.
       if (table === employeesTbl) {
+        if (arg && typeof arg === "object" && "permissions" in arg) {
+          const permRows = [{ permissions: employeePermissions }];
+          return chainable(permRows, {
+            where: vi.fn(() => chainable(permRows, { limit: vi.fn(() => chainable(permRows)) })),
+            limit: vi.fn(() => chainable(permRows)),
+          });
+        }
         const rows = employeeRow ? [employeeRow] : [];
         return chainable(rows, {
           where: vi.fn(() => chainable(rows, { limit: vi.fn(() => chainable(rows)) })),
@@ -465,6 +476,7 @@ beforeEach(() => {
   sheetRfqHeaders = null;
   sheetRejectedDeliveries = [];
   employeeRow = { name: "Tester" };
+  employeePermissions = null;
   sessionState.role = "admin";
   insertedItems.length = 0;
   updatedItemIds.length = 0;
@@ -942,6 +954,59 @@ describe("PATCH /api/customer-rfq/:id", () => {
     detailRow = { ...insertedRfq };
     const res = await request(testApp).patch("/api/customer-rfq/42").send({ status: "sent" });
     expect(res.status).toBe(403);
+  });
+
+  it("lets an employee granted customer-rfq:price set a price", async () => {
+    sessionState.role = "data_entry";
+    employeePermissions = { "customer-rfq": true, "customer-rfq:price": true };
+    detailRow = { ...insertedRfq };
+    detailItems = [
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: null,
+        uom: "pc",
+        qty: "3.0000",
+        unitPrice: null,
+        createdAt: new Date("2025-01-03"),
+      },
+    ];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ items: [{ id: 1, unitPrice: 12 }] });
+    expect(res.status).toBe(200);
+    expect(res.body.items[0].unitPrice).toBe("12");
+  });
+
+  it("lets an employee granted customer-rfq:price finalize", async () => {
+    sessionState.role = "data_entry";
+    employeePermissions = { "customer-rfq:price": true };
+    detailRow = { ...insertedRfq };
+    detailItems = [];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        status: "sent",
+        items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 }],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("sent");
+  });
+
+  it("does not let an explicit map that omits the price key price (revoked)", async () => {
+    sessionState.role = "manager";
+    // An explicit map is authoritative: pricing was revoked, granting only the
+    // page + edit keys.
+    employeePermissions = { "customer-rfq": true, "customer-rfq:edit": true };
+    detailRow = { ...insertedRfq };
+    detailItems = [];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({ items: [{ id: 1, unitPrice: 12 }] });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/تسعير/);
   });
 
   it("lets an unprivileged employee edit data-entry fields on a draft", async () => {

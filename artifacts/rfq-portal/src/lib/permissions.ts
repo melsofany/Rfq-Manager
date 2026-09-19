@@ -38,7 +38,10 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     key: "customer-rfq",
     href: "/customer-rfq",
     labelKey: "nav.customerRfq",
-    children: [{ key: "customer-rfq:edit", labelKey: "perm.customerRfq.edit" }],
+    children: [
+      { key: "customer-rfq:edit", labelKey: "perm.customerRfq.edit" },
+      { key: "customer-rfq:price", labelKey: "perm.customerRfq.price" },
+    ],
   },
   {
     key: "customer-po",
@@ -136,7 +139,7 @@ export const PAGE_KEYS: string[] = PERMISSION_CATALOG.map((n) => n.key);
  * employee via the permissions editor.
  */
 export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
-  manager: [...PAGE_KEYS, "customer-rfq:edit", "customer-po:edit"],
+  manager: [...PAGE_KEYS, "customer-rfq:edit", "customer-rfq:price", "customer-po:edit"],
   purchasing: [
     ...PAGE_KEYS.filter((k) => k !== "employees" && k !== "audit" && k !== "integrations"),
     "customer-rfq:edit",
@@ -157,6 +160,24 @@ export const EDIT_PERM = {
   customerRfq: "customer-rfq:edit",
   customerPo: "customer-po:edit",
 } as const;
+
+/**
+ * Action-permission key that grants PRICING a customer RFQ (setting a customer
+ * unit price / finalizing). Distinct from `customer-rfq:edit` because pricing
+ * is a management decision that exposes the supplier cost (the margin floor is
+ * derived from it), so it is NOT grantable to lower roles by default.
+ */
+export const PRICE_PERM = {
+  customerRfq: "customer-rfq:price",
+} as const;
+
+/**
+ * Action keys that a PAGE-level checkbox must NOT grant implicitly — they are
+ * granted only by ticking them individually. Pricing exposes the supplier cost
+ * (the margin floor derives from it), so ticking the «customer-rfq» page must
+ * never hand it out by accident.
+ */
+export const EXPLICIT_ONLY_PERMS: string[] = [PRICE_PERM.customerRfq];
 
 export type PermissionMap = Record<string, boolean> | null | undefined;
 
@@ -185,6 +206,17 @@ export function hasPermission(
   key: string,
 ): boolean {
   return resolvePermissions(role, permissions).has(key);
+}
+
+/**
+ * Whether the employee may PRICE a customer RFQ (set a customer unit price /
+ * finalize). Admin is always privileged; anyone else needs the explicit
+ * `customer-rfq:price` grant. Mirrors the backend gate (`customer-rfq/routes.ts`)
+ * so the UI never offers a control the API would reject.
+ */
+export function canPriceCustomerRfq(role: string | undefined, permissions: PermissionMap): boolean {
+  if (role === "admin") return true;
+  return resolvePermissions(role, permissions).has(PRICE_PERM.customerRfq);
 }
 
 /**
