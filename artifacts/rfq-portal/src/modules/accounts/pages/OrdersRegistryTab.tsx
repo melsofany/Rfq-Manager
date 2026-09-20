@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { money } from "@/lib/format";
+import { api } from "@/lib/accounts-api";
+import { Empty, TotalCard } from "../components/ui";
 
 interface CustomerOrder {
   id: number;
@@ -66,14 +69,6 @@ interface CollectedOrders {
   };
 }
 
-function money(v: string | null | undefined): string {
-  if (v == null || v === "") return "-";
-  return Number(v).toLocaleString("ar-EG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
 /**
  * سجل الحركات المكتملة — the accounting registry.
  *
@@ -90,9 +85,7 @@ export default function OrdersRegistryTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/accounts/collected-orders", { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل سجل الحركات");
-      setData(await r.json());
+      setData(await api.get<CollectedOrders>("/api/accounts/collected-orders"));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل سجل الحركات"));
     } finally {
@@ -307,42 +300,6 @@ function SupplierOrdersTable({ rows, loading }: { rows: SupplierOrder[]; loading
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function TotalCard({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "profit" | "loss" | "vat";
-}) {
-  const color =
-    tone === "loss"
-      ? "text-rose-600"
-      : tone === "profit"
-        ? "text-emerald-600"
-        : tone === "vat"
-          ? "text-blue-600"
-          : "text-foreground";
-  return (
-    <div className="rounded-lg border border-border bg-card p-3.5">
-      <div className="text-xs text-muted-foreground mb-1">{label}</div>
-      <div className={`text-lg font-bold tabular-nums ${color}`}>{value}</div>
-      {sub && <div className="text-[11px] text-muted-foreground mt-0.5">{sub}</div>}
-    </div>
-  );
-}
-
-function Empty({ text }: { text: string }) {
-  return (
-    <div className="py-12 text-center text-muted-foreground text-sm border border-dashed border-border rounded-lg">
-      {text}
     </div>
   );
 }

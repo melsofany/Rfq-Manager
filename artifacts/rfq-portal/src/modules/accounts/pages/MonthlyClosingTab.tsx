@@ -6,6 +6,8 @@ import { Lock, Unlock, CalendarCheck, Plus, RefreshCw, ShieldAlert } from "lucid
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/accounts-api";
+import { periodLabel } from "@/lib/format";
 
 interface Closing {
   id: number;
@@ -14,26 +16,6 @@ interface Closing {
   closedBy: number | null;
   closedByName: string | null;
   notes: string | null;
-}
-
-function periodLabel(period: string): string {
-  const [y, m] = period.split("-");
-  const months = [
-    "يناير",
-    "فبراير",
-    "مارس",
-    "أبريل",
-    "مايو",
-    "يونيو",
-    "يوليو",
-    "أغسطس",
-    "سبتمبر",
-    "أكتوبر",
-    "نوفمبر",
-    "ديسمبر",
-  ];
-  const idx = Number(m) - 1;
-  return `${months[idx] ?? m} ${y}`;
 }
 
 /**
@@ -60,9 +42,7 @@ export default function MonthlyClosingTab() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/accounts/closings", { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل الإقفالات");
-      setRows(await r.json());
+      setRows(await api.get<Closing[]>("/api/accounts/closings"));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل الإقفالات"));
     } finally {
@@ -81,14 +61,7 @@ export default function MonthlyClosingTab() {
     }
     setSaving(true);
     try {
-      const r = await fetch("/api/accounts/closings", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ period, notes: notes || null }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error ?? "فشل إقفال الشهر");
+      await api.post("/api/accounts/closings", { period, notes: notes || null });
       toast.success(`تم إقفال شهر ${periodLabel(period)}`);
       setNotes("");
       await load();
@@ -103,12 +76,7 @@ export default function MonthlyClosingTab() {
     if (!confirm(`فتح شهر ${periodLabel(row.period)} مرة أخرى؟ سيصبح تسجيل القيود فيه متاحًا.`))
       return;
     try {
-      const r = await fetch(`/api/accounts/closings/${row.id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error ?? "فشل فتح الشهر");
+      await api.del(`/api/accounts/closings/${row.id}`);
       toast.success(`تم فتح شهر ${periodLabel(row.period)}`);
       await load();
     } catch (e) {

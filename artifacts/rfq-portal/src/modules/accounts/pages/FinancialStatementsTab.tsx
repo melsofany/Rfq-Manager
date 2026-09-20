@@ -6,13 +6,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Scale, FileBarChart, BarChart3, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
-
-function fmt(v: string | null | undefined): string {
-  if (v == null || v === "") return "-";
-  const n = Number(v);
-  if (!isFinite(n)) return v;
-  return n.toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { money as fmt } from "@/lib/format";
+import { api, queryString } from "@/lib/accounts-api";
 
 export default function FinancialStatementsTab() {
   return (
@@ -79,11 +74,9 @@ function AgingReport() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const qs = asOf ? `?asOf=${asOf}` : "";
+    const qs = queryString({ asOf });
     try {
-      const r = await fetch(`/api/accounts/aging/${kind}${qs}`, { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل أعمار الديون");
-      setData(await r.json());
+      setData(await api.get(`/api/accounts/aging/${kind}${qs}`));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل أعمار الديون"));
     } finally {
@@ -222,11 +215,7 @@ function TrialBalance() {
     if (to) params.set("to", to);
     const qs = params.toString();
     try {
-      const r = await fetch(`/api/accounts/trial-balance${qs ? `?${qs}` : ""}`, {
-        credentials: "include",
-      });
-      if (!r.ok) throw new Error("فشل تحميل ميزان المراجعة");
-      setData(await r.json());
+      setData(await api.get(`/api/accounts/trial-balance${qs ? `?${qs}` : ""}`));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل ميزان المراجعة"));
     } finally {
@@ -331,11 +320,7 @@ function IncomeStatement() {
     if (to) params.set("to", to);
     const qs = params.toString();
     try {
-      const r = await fetch(`/api/accounts/income-statement${qs ? `?${qs}` : ""}`, {
-        credentials: "include",
-      });
-      if (!r.ok) throw new Error("فشل تحميل قائمة الدخل");
-      setData(await r.json());
+      setData(await api.get(`/api/accounts/income-statement${qs ? `?${qs}` : ""}`));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل قائمة الدخل"));
     } finally {
@@ -420,9 +405,7 @@ function BalanceSheet() {
     setLoading(true);
     const qs = asOf ? `?asOf=${asOf}` : "";
     try {
-      const r = await fetch(`/api/accounts/balance-sheet${qs}`, { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل الميزانية");
-      setData(await r.json());
+      setData(await api.get(`/api/accounts/balance-sheet${qs}`));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل الميزانية"));
     } finally {

@@ -43,6 +43,7 @@ import { requireAuth, requireRole } from "../../middlewares/auth";
 import { round2 } from "./tax";
 import { postJournalEntry, nextEntryNo, accountBalance } from "./posting";
 import { monthOf, assertMonthOpen } from "./closing";
+import { num as toNum, formatNum } from "./helpers";
 import {
   signedFromRaw,
   currentPeriodResult,
@@ -55,19 +56,6 @@ import {
 } from "./reporting";
 
 const router = Router();
-
-function toNum(v: unknown): number | null {
-  if (v == null || v === "") return null;
-  const n = Number(v);
-  return isFinite(n) ? n : null;
-}
-
-function formatNum(n: number | null): string | null {
-  if (n == null) return null;
-  const s = String(Math.round(n * 10000) / 10000);
-  if (!s.includes(".")) return s;
-  return s.replace(/0+$/, "").replace(/\.$/, "");
-}
 
 // ───────────────────────────────────────────────────────────────────────────
 // Chart of Accounts — دليل الحسابات

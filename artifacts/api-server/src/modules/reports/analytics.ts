@@ -24,7 +24,6 @@ import {
   salesInvoicesTable,
   journalEntriesTable,
   chartOfAccountsTable,
-  taxSettingsTable,
   poItemReceiptsTable,
   customerPoItemDeliveriesTable,
   workOrderAssignmentsTable,
@@ -45,25 +44,11 @@ import {
   inArray,
 } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
-import { round2, rateOf } from "../accounts/tax";
+import { round2 } from "../accounts/tax";
 import { accountBalance } from "../accounts/posting";
+import { numOrZero as toNum, loadTaxSettings } from "../accounts/helpers";
 
 const router = Router();
-
-async function loadTaxSettings() {
-  const rows = await db.select().from(taxSettingsTable).limit(1);
-  const row = rows[0];
-  return {
-    vatRate: rateOf(row?.vatRate, 14),
-    withholdingRate: rateOf(row?.withholdingRate, 3),
-  };
-}
-
-function toNum(v: unknown): number | null {
-  if (v == null) return null;
-  const n = typeof v === "number" ? v : Number(v);
-  return isFinite(n) ? n : null;
-}
 
 function fmt(n: number | null): number | null {
   return n == null ? null : round2(n);

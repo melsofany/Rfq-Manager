@@ -29,34 +29,21 @@ import {
   suppliersTable,
   salesInvoicesTable,
   supplierInvoicesTable,
-  taxSettingsTable,
   poItemChargesTable,
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
-import { rateOf, round2 } from "./tax";
+import { round2 } from "./tax";
+import { numOr as toNum, trimNum as fmt, loadTaxSettings } from "./helpers";
 
 const router = Router();
-
-function toNum(v: unknown): number {
-  if (v == null || v === "") return 0;
-  const n = Number(v);
-  return isFinite(n) ? n : 0;
-}
-
-/** Trim trailing zeros from a NUMERIC value ("3.0000" → "3"). */
-function fmt(n: number): string {
-  const s = String(Math.round(n * 10000) / 10000);
-  if (!s.includes(".")) return s;
-  return s.replace(/0+$/, "").replace(/\.$/, "");
-}
 
 const DELIVERED_STATES = new Set(["delivered", "rejected", "cancelled"]);
 const RECEIVED_STATES = new Set(["fulfilled", "partial", "rejected"]);
 
 router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise<void> => {
-  const [settingsRow] = await db.select().from(taxSettingsTable).limit(1);
-  const vatRate = rateOf(settingsRow?.vatRate, 14);
+  const settings = await loadTaxSettings();
+  const vatRate = settings.vatRate;
 
   // ── Customer orders ───────────────────────────────────────────────────────
   const customerPos = await db

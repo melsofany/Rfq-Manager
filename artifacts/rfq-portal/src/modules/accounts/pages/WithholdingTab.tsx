@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { ShieldCheck, Banknote } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { api, queryString } from "@/lib/accounts-api";
+import { fmtMoney as fmt } from "@/lib/format";
+import { TotalCard } from "../components/ui";
 
 interface WithholdingLine {
   poId: number;
@@ -38,16 +41,9 @@ export default function WithholdingTab() {
 
   async function load() {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    const qs = params.toString();
+    const qs = queryString({ from, to });
     try {
-      const r = await fetch(`/api/accounts/withholding${qs ? `?${qs}` : ""}`, {
-        credentials: "include",
-      });
-      if (!r.ok) throw new Error("فشل تحميل الخصم تحت حساب المورد");
-      setData(await r.json());
+      setData(await api.get<WithholdingReport>(`/api/accounts/withholding${qs}`));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل الخصم تحت حساب المورد"));
     } finally {
@@ -70,18 +66,18 @@ export default function WithholdingTab() {
       </p>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <SummaryCard
+        <TotalCard
           label="إجمالي صافي المشتريات"
           value={fmt(data?.totalNet)}
           icon={<Banknote size={16} className="text-blue-600" />}
         />
-        <SummaryCard
+        <TotalCard
           label="إجمالي الخصم"
           value={fmt(data?.totalWithholding)}
           icon={<ShieldCheck size={16} className="text-amber-600" />}
           tone="highlight"
         />
-        <SummaryCard
+        <TotalCard
           label="المستحق للموردين"
           value={fmt(data?.totalPayable)}
           icon={<Banknote size={16} className="text-emerald-600" />}
@@ -168,37 +164,6 @@ export default function WithholdingTab() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function fmt(n: number | null | undefined): string {
-  if (n == null) return "-";
-  return n.toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function SummaryCard({
-  label,
-  value,
-  sub,
-  icon,
-  tone,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  icon?: React.ReactNode;
-  tone?: "highlight";
-}) {
-  const toneClass = tone === "highlight" ? "text-amber-600" : "text-foreground";
-  return (
-    <div className="bg-card border border-border rounded-lg p-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        {icon}
-      </div>
-      <div className={`text-lg font-bold ${toneClass}`}>{value}</div>
-      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
     </div>
   );
 }

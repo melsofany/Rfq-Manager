@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, AlertTriangle, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { api, queryString } from "@/lib/accounts-api";
+import { TotalCard } from "../components/ui";
 
 interface MarginLine {
   customerPoId: number;
@@ -52,23 +54,20 @@ export default function MarginsTab() {
 
   async function load() {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (customerName) params.set("customerName", customerName);
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    if (onlyLoss) params.set("onlyLoss", "true");
-    if (!includeAll) params.set("deliveries", "received");
-    const qs = params.toString();
+    const qs = queryString({
+      customerName,
+      from,
+      to,
+      onlyLoss: onlyLoss ? "true" : undefined,
+      deliveries: includeAll ? undefined : "received",
+    });
     try {
-      const [mRes, sRes] = await Promise.all([
-        fetch(`/api/accounts/margins${qs ? `?${qs}` : ""}`, { credentials: "include" }),
-        fetch(`/api/accounts/margins/summary${qs ? `?${qs}` : ""}`, {
-          credentials: "include",
-        }),
+      const [marginLines, marginSummary] = await Promise.all([
+        api.get<MarginLine[]>(`/api/accounts/margins${qs}`),
+        api.get<Summary>(`/api/accounts/margins/summary${qs}`),
       ]);
-      if (!mRes.ok || !sRes.ok) throw new Error("فشل تحميل بيانات الحسابات");
-      setLines(await mRes.json());
-      setSummary(await sRes.json());
+      setLines(marginLines);
+      setSummary(marginSummary);
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل الحسابات"));
     } finally {
@@ -91,23 +90,23 @@ export default function MarginsTab() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SummaryCard
+        <TotalCard
           label="إجمالي الإيرادات"
           value={summary?.totalRevenue ?? "-"}
           icon={<TrendingUp size={16} className="text-emerald-600" />}
         />
-        <SummaryCard
+        <TotalCard
           label="إجمالي التكلفة"
           value={summary?.totalCost ?? "-"}
           icon={<TrendingDown size={16} className="text-blue-600" />}
         />
-        <SummaryCard
+        <TotalCard
           label="صافي الهامش"
           value={summary?.totalMargin ?? "-"}
           tone={Number(summary?.totalMargin ?? 0) < 0 ? "loss" : "profit"}
           sub={summary?.marginPct ? `${summary.marginPct}%` : undefined}
         />
-        <SummaryCard
+        <TotalCard
           label="بنود خاسرة"
           value={String(summary?.lossLines ?? 0)}
           icon={<AlertTriangle size={16} className="text-red-600" />}
@@ -254,33 +253,6 @@ export default function MarginsTab() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  sub,
-  icon,
-  tone,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  icon?: React.ReactNode;
-  tone?: "profit" | "loss";
-}) {
-  const toneClass =
-    tone === "loss" ? "text-red-600" : tone === "profit" ? "text-emerald-600" : "text-foreground";
-  return (
-    <div className="bg-card border border-border rounded-lg p-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        {icon}
-      </div>
-      <div className={`text-lg font-bold ${toneClass}`}>{value}</div>
-      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
     </div>
   );
 }

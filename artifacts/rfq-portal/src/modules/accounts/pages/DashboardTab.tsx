@@ -12,6 +12,8 @@ import {
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { Link } from "wouter";
+import { api } from "@/lib/accounts-api";
+import { TotalCard } from "../components/ui";
 
 interface Dashboard {
   totalAP: string | null;
@@ -35,9 +37,7 @@ export default function DashboardTab() {
   async function load() {
     setLoading(true);
     try {
-      const r = await fetch("/api/accounts/dashboard", { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل لوحة المحاسب");
-      setData(await r.json());
+      setData(await api.get<Dashboard>("/api/accounts/dashboard"));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل لوحة المحاسب"));
     } finally {
@@ -56,24 +56,24 @@ export default function DashboardTab() {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card
+        <TotalCard
           label="ذمم الموردين (مستحق)"
           value={data.totalAP ?? "-"}
           icon={<TrendingDown size={16} className="text-red-600" />}
           tone="loss"
         />
-        <Card
+        <TotalCard
           label="ذمم العملاء (متحصّل)"
           value={data.totalAR ?? "-"}
           icon={<TrendingUp size={16} className="text-emerald-600" />}
           tone="profit"
         />
-        <Card
+        <TotalCard
           label="رصيد النقدية"
           value={data.cash ?? "-"}
           icon={<Wallet size={16} className="text-primary" />}
         />
-        <Card
+        <TotalCard
           label="رصيد البنك"
           value={data.bank ?? "-"}
           icon={<Landmark size={16} className="text-primary" />}
@@ -128,30 +128,6 @@ export default function DashboardTab() {
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Card({
-  label,
-  value,
-  icon,
-  tone,
-}: {
-  label: string;
-  value: string;
-  icon?: React.ReactNode;
-  tone?: "profit" | "loss";
-}) {
-  const toneClass =
-    tone === "loss" ? "text-red-600" : tone === "profit" ? "text-emerald-600" : "text-foreground";
-  return (
-    <div className="bg-card border border-border rounded-lg p-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        {icon}
-      </div>
-      <div className={`text-lg font-bold ${toneClass}`}>{value}</div>
     </div>
   );
 }
