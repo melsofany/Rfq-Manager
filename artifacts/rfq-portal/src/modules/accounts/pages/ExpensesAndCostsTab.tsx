@@ -5,6 +5,9 @@ import { Receipt, Truck, RefreshCw, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 import ExpensesPage from "@/modules/expenses/pages";
+import { money } from "@/lib/format";
+import { api } from "@/lib/accounts-api";
+import { Empty } from "../components/ui";
 
 interface PoCharge {
   id: number;
@@ -25,14 +28,6 @@ interface PoCharges {
   count: number;
   byType: Array<{ type: string; amount: string }>;
   charges: PoCharge[];
-}
-
-function money(v: string | null | undefined): string {
-  if (v == null || v === "") return "-";
-  return Number(v).toLocaleString("ar-EG", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 }
 
 /**
@@ -71,9 +66,7 @@ function PoChargesPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/accounts/po-charges", { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل تكاليف أوامر الشراء");
-      setData(await r.json());
+      setData(await api.get<PoCharges>("/api/accounts/po-charges"));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل تكاليف أوامر الشراء"));
     } finally {
@@ -171,14 +164,6 @@ function PoChargesPanel() {
           </table>
         </div>
       )}
-    </div>
-  );
-}
-
-function Empty({ text }: { text: string }) {
-  return (
-    <div className="py-12 text-center text-muted-foreground text-sm border border-dashed border-border rounded-lg">
-      {text}
     </div>
   );
 }

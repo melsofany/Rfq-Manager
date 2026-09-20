@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Receipt, ArrowUpCircle, ArrowDownCircle, Scale } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { api, queryString } from "@/lib/accounts-api";
+import { fmtMoney as fmt } from "@/lib/format";
+import { TotalCard } from "../components/ui";
 
 interface VatLine {
   date: string | null;
@@ -48,16 +51,9 @@ export default function VatTab() {
 
   async function load() {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    const qs = params.toString();
+    const qs = queryString({ from, to });
     try {
-      const r = await fetch(`/api/accounts/vat${qs ? `?${qs}` : ""}`, {
-        credentials: "include",
-      });
-      if (!r.ok) throw new Error("فشل تحميل بيانات الضريبة");
-      setData(await r.json());
+      setData(await api.get<VatStatement>(`/api/accounts/vat${qs}`));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل الضريبة"));
     } finally {
@@ -79,28 +75,28 @@ export default function VatTab() {
       </p>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SummaryCard
+        <TotalCard
           label="ضريبة المبيعات"
           value={fmt(data?.output.vat)}
           icon={<ArrowUpCircle size={16} className="text-emerald-600" />}
         />
-        <SummaryCard
+        <TotalCard
           label="ضريبة المشتريات"
           value={fmt(data?.input.vat)}
           icon={<ArrowDownCircle size={16} className="text-blue-600" />}
         />
-        <SummaryCard
+        <TotalCard
           label="صافي الضريبة المستحقة"
           value={fmt(data?.netVat)}
           tone={Number(data?.netVat ?? 0) < 0 ? "credit" : "payable"}
           icon={<Scale size={16} className="text-primary" />}
         />
-        <SummaryCard
+        <TotalCard
           label="دائن (مُرحَّل)"
           value={fmt(data?.credit)}
           icon={<Receipt size={16} className="text-amber-600" />}
         />
-        <SummaryCard
+        <TotalCard
           label="مشتريات بدون ض.ق.م (عجز التسوية)"
           value={fmt(data?.nonVatDeficit)}
           sub={`${fmt(data?.nonVatNet)} صافى بدون ضريبة — يحتاج تسوية ض.ق.م مع المصلحة`}
@@ -278,44 +274,6 @@ function VatSection({
           </table>
         </div>
       )}
-    </div>
-  );
-}
-
-function fmt(n: number | null | undefined): string {
-  if (n == null) return "-";
-  return n.toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function SummaryCard({
-  label,
-  value,
-  sub,
-  icon,
-  tone,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  icon?: React.ReactNode;
-  tone?: "payable" | "credit" | "deficit";
-}) {
-  const toneClass =
-    tone === "credit"
-      ? "text-amber-600"
-      : tone === "payable"
-        ? "text-emerald-600"
-        : tone === "deficit"
-          ? "text-rose-600"
-          : "text-foreground";
-  return (
-    <div className="bg-card border border-border rounded-lg p-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        {icon}
-      </div>
-      <div className={`text-lg font-bold ${toneClass}`}>{value}</div>
-      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
     </div>
   );
 }

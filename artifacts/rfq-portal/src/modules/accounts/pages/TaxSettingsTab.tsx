@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Settings2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { api } from "@/lib/accounts-api";
 
 interface TaxSettings {
   id: number | null;
@@ -32,9 +33,7 @@ export default function TaxSettingsTab() {
   async function load() {
     setLoading(true);
     try {
-      const r = await fetch("/api/accounts/tax-settings", { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل الإعدادات");
-      const s: TaxSettings = await r.json();
+      const s = await api.get<TaxSettings>("/api/accounts/tax-settings");
       setCompanyName(s.companyName ?? "");
       setCompanyTaxId(s.companyTaxId ?? "");
       setCompanyAddress(s.companyAddress ?? "");
@@ -57,25 +56,16 @@ export default function TaxSettingsTab() {
   async function save() {
     setSaving(true);
     try {
-      const r = await fetch("/api/accounts/tax-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          companyName: companyName || null,
-          companyTaxId: companyTaxId || null,
-          companyAddress: companyAddress || null,
-          companyPhone: companyPhone || null,
-          vatRate,
-          withholdingRate,
-          withholdingRateServices,
-          withholdingRatePurchases,
-        }),
+      await api.put("/api/accounts/tax-settings", {
+        companyName: companyName || null,
+        companyTaxId: companyTaxId || null,
+        companyAddress: companyAddress || null,
+        companyPhone: companyPhone || null,
+        vatRate,
+        withholdingRate,
+        withholdingRateServices,
+        withholdingRatePurchases,
       });
-      if (!r.ok) {
-        const body = await r.json().catch(() => ({}));
-        throw new Error(body.error ?? "فشل حفظ الإعدادات");
-      }
       toast.success("تم حفظ إعدادات الضرائب");
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل حفظ الإعدادات"));

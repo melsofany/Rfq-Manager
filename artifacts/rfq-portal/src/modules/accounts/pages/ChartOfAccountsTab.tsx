@@ -12,6 +12,7 @@ import {
 import { Plus, BookOpen, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { api } from "@/lib/accounts-api";
 
 interface Account {
   id: number;
@@ -55,9 +56,7 @@ export default function ChartOfAccountsTab() {
   async function load() {
     setLoading(true);
     try {
-      const r = await fetch("/api/accounts/coa", { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل دليل الحسابات");
-      setAccounts(await r.json());
+      setAccounts(await api.get<Account[]>("/api/accounts/coa"));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل دليل الحسابات"));
     } finally {
@@ -90,22 +89,10 @@ export default function ChartOfAccountsTab() {
   async function save() {
     try {
       if (editing) {
-        const r = await fetch(`/api/accounts/coa/${editing.id}`, {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-        if (!r.ok) throw new Error("فشل التحديث");
+        await api.patch(`/api/accounts/coa/${editing.id}`, form);
         toast.success("تم تحديث الحساب");
       } else {
-        const r = await fetch("/api/accounts/coa", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
-        if (!r.ok) throw new Error("فشل الإنشاء");
+        await api.post("/api/accounts/coa", form);
         toast.success("تم إنشاء الحساب");
       }
       setDialogOpen(false);

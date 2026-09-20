@@ -37,37 +37,11 @@ import {
 } from "@workspace/db";
 import { eq, desc, and, lte, gte, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
-import { rateOf, vatOnNet, vatComponents, round2 } from "./tax";
+import { rateOf, vatOnNet, round2 } from "./tax";
 import { postJournalEntry, nextEntryNo } from "./posting";
+import { num as toNum, formatNum, loadTaxSettings } from "./helpers";
 
 const router = Router();
-
-function toNum(v: unknown): number | null {
-  if (v == null || v === "") return null;
-  const n = Number(v);
-  return isFinite(n) ? n : null;
-}
-
-function formatNum(n: number | null): string | null {
-  if (n == null) return null;
-  const s = String(Math.round(n * 10000) / 10000);
-  if (!s.includes(".")) return s;
-  return s.replace(/0+$/, "").replace(/\.$/, "");
-}
-
-interface TaxSettingsLite {
-  vatRate: number;
-  withholdingRate: number;
-}
-async function loadTaxLite(): Promise<TaxSettingsLite> {
-  const { taxSettingsTable } = await import("@workspace/db");
-  const rows = await db.select().from(taxSettingsTable).limit(1);
-  const row = rows[0];
-  return {
-    vatRate: rateOf(row?.vatRate, 14),
-    withholdingRate: rateOf(row?.withholdingRate, 3),
-  };
-}
 
 // Compute net/vat/gross/withholding for a supplier invoice. `net` is the
 // VAT-exclusive supply value; VAT added on top at 14%; withholding applied to
@@ -206,7 +180,7 @@ router.post(
       return;
     }
     const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-    const settings = await loadTaxLite();
+    const settings = await loadTaxSettings();
     const net = toNum(body.netAmount)!;
     const whRate =
       body.applyWithholding === false
@@ -305,7 +279,7 @@ router.patch(
       applyWithholding?: boolean;
       notes?: string | null;
     };
-    const settings = await loadTaxLite();
+    const settings = await loadTaxSettings();
     const net = body.netAmount != null ? toNum(body.netAmount)! : toNum(existing.netAmount)!;
     const whRate =
       body.applyWithholding === false

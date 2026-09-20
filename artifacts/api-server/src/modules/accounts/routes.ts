@@ -33,38 +33,9 @@ import {
 import { eq, sql, and, desc, gte, lte } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { rateOf, round2, vatOnNet } from "./tax";
+import { numOrZero as toNum, formatNum, loadTaxSettings } from "./helpers";
 
 const router = Router();
-
-function toNum(v: unknown): number | null {
-  if (v == null) return null;
-  const n = Number(v);
-  return isFinite(n) ? n : null;
-}
-
-function formatNum(n: number | null): string | null {
-  if (n == null) return null;
-  const s = String(Math.round(n * 10000) / 10000);
-  if (!s.includes(".")) return s;
-  return s.replace(/0+$/, "").replace(/\.$/, "");
-}
-
-/** Load the single tax_settings row (creates a sane default if absent). */
-async function loadTaxSettings() {
-  const rows = await db.select().from(taxSettingsTable).limit(1);
-  const row = rows[0];
-  return {
-    id: row?.id ?? null,
-    companyName: row?.companyName ?? null,
-    companyTaxId: row?.companyTaxId ?? null,
-    companyAddress: row?.companyAddress ?? null,
-    companyPhone: row?.companyPhone ?? null,
-    vatRate: rateOf(row?.vatRate, 14),
-    withholdingRate: rateOf(row?.withholdingRate, 3),
-    withholdingRateServices: rateOf(row?.withholdingRateServices, 5),
-    withholdingRatePurchases: rateOf(row?.withholdingRatePurchases, 1),
-  };
-}
 
 function buildConditions(customerName?: string, from?: string, to?: string) {
   const conditions = [];

@@ -13,6 +13,7 @@ import {
 import { FileText, Plus, Eye, Send, XCircle, Download, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { api, queryString } from "@/lib/accounts-api";
 
 interface SalesInvoice {
   id: number;
@@ -84,17 +85,9 @@ export default function SalesInvoicesTab() {
 
   async function load() {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.from) params.set("from", filters.from);
-    if (filters.to) params.set("to", filters.to);
-    if (filters.status) params.set("status", filters.status);
-    const qs = params.toString();
+    const qs = queryString({ from: filters.from, to: filters.to, status: filters.status });
     try {
-      const r = await fetch(`/api/accounts/sales-invoices${qs ? `?${qs}` : ""}`, {
-        credentials: "include",
-      });
-      if (!r.ok) throw new Error("فشل تحميل الفواتير");
-      setInvoices(await r.json());
+      setInvoices(await api.get(`/api/accounts/sales-invoices${qs}`));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل الفواتير"));
     } finally {
@@ -104,11 +97,10 @@ export default function SalesInvoicesTab() {
 
   async function loadCustomerPos() {
     try {
-      const r = await fetch("/api/customer-po?limit=100", { credentials: "include" });
-      if (r.ok) {
-        const j = await r.json();
-        setCustomerPos(Array.isArray(j) ? j : (j.items ?? []));
-      }
+      const j = await api.get<CustomerPoOption[] | { items: CustomerPoOption[] }>(
+        "/api/customer-po?limit=100",
+      );
+      setCustomerPos(Array.isArray(j) ? j : (j.items ?? []));
     } catch {
       // ignore
     }
@@ -131,9 +123,7 @@ export default function SalesInvoicesTab() {
 
   async function openDetail(id: number) {
     try {
-      const r = await fetch(`/api/accounts/sales-invoices/${id}`, { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل التفاصيل");
-      setDetail(await r.json());
+      setDetail(await api.get(`/api/accounts/sales-invoices/${id}`));
       setDetailOpen(true);
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل التفاصيل"));
@@ -142,29 +132,20 @@ export default function SalesInvoicesTab() {
 
   async function create() {
     try {
-      const r = await fetch("/api/accounts/sales-invoices", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerPoId: form.customerPoId ? Number(form.customerPoId) : null,
-          customerName: form.customerName || undefined,
-          invoiceDate: form.invoiceDate,
-          dueDate: form.dueDate || null,
-          notes: form.notes || null,
-          items: form.items
-            .filter((it) => it.description)
-            .map((it) => ({
-              ...it,
-              qty: Number(it.qty) || 0,
-              unitPrice: Number(it.unitPrice) || 0,
-            })),
-        }),
+      await api.post("/api/accounts/sales-invoices", {
+        customerPoId: form.customerPoId ? Number(form.customerPoId) : null,
+        customerName: form.customerName || undefined,
+        invoiceDate: form.invoiceDate,
+        dueDate: form.dueDate || null,
+        notes: form.notes || null,
+        items: form.items
+          .filter((it) => it.description)
+          .map((it) => ({
+            ...it,
+            qty: Number(it.qty) || 0,
+            unitPrice: Number(it.unitPrice) || 0,
+          })),
       });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.error || "فشل الإنشاء");
-      }
       toast.success("تم إنشاء فاتورة البيع (مسودة)");
       setCreateOpen(false);
       setForm({
@@ -183,14 +164,7 @@ export default function SalesInvoicesTab() {
 
   async function post(id: number) {
     try {
-      const r = await fetch(`/api/accounts/sales-invoices/${id}/post`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.error || "فشل الترحيل");
-      }
+      await api.post(`/api/accounts/sales-invoices/${id}/post`);
       toast.success("تم ترحيل الفاتورة");
       load();
       openDetail(id);
@@ -202,11 +176,7 @@ export default function SalesInvoicesTab() {
   async function voidInv(id: number) {
     if (!confirm("هل أنت متأكد من إلغاء هذه الفاتورة؟")) return;
     try {
-      const r = await fetch(`/api/accounts/sales-invoices/${id}/void`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!r.ok) throw new Error("فشل الإلغاء");
+      await api.post(`/api/accounts/sales-invoices/${id}/void`);
       toast.success("تم إلغاء الفاتورة");
       setDetailOpen(false);
       load();

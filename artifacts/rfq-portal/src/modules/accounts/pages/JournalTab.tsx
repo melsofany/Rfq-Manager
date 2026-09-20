@@ -13,6 +13,7 @@ import {
 import { BookCopy, Plus, Eye, CheckCircle, Send, XCircle, Trash2, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { api, queryString } from "@/lib/accounts-api";
 
 interface Account {
   id: number;
@@ -126,17 +127,9 @@ export default function JournalTab() {
 
   async function load() {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.from) params.set("from", filters.from);
-    if (filters.to) params.set("to", filters.to);
-    if (filters.status) params.set("status", filters.status);
-    const qs = params.toString();
+    const qs = queryString({ from: filters.from, to: filters.to, status: filters.status });
     try {
-      const r = await fetch(`/api/accounts/journal${qs ? `?${qs}` : ""}`, {
-        credentials: "include",
-      });
-      if (!r.ok) throw new Error("فشل تحميل القيود");
-      setEntries(await r.json());
+      setEntries(await api.get(`/api/accounts/journal${qs}`));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل القيود"));
     } finally {
@@ -146,8 +139,7 @@ export default function JournalTab() {
 
   async function loadAccounts() {
     try {
-      const r = await fetch("/api/accounts/coa", { credentials: "include" });
-      if (r.ok) setAccounts(await r.json());
+      setAccounts(await api.get("/api/accounts/coa"));
     } catch {
       // ignore
     }
@@ -161,9 +153,7 @@ export default function JournalTab() {
 
   async function openDetail(id: number) {
     try {
-      const r = await fetch(`/api/accounts/journal/${id}`, { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل تفاصيل القيد");
-      setDetail(await r.json());
+      setDetail(await api.get<JournalDetail>(`/api/accounts/journal/${id}`));
       setDetailOpen(true);
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل التفاصيل"));
@@ -178,21 +168,12 @@ export default function JournalTab() {
       return;
     }
     try {
-      const r = await fetch("/api/accounts/journal", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          entryDate: form.entryDate,
-          description: form.description,
-          status: "draft",
-          lines: form.lines,
-        }),
+      await api.post("/api/accounts/journal", {
+        entryDate: form.entryDate,
+        description: form.description,
+        status: "draft",
+        lines: form.lines,
       });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.error || "فشل الإنشاء");
-      }
       toast.success("تم إنشاء القيد (مسودة)");
       setCreateOpen(false);
       setForm({
@@ -223,28 +204,19 @@ export default function JournalTab() {
       ? `${expenseForm.category} — ${expenseForm.description}`
       : expenseForm.category;
     try {
-      const r = await fetch("/api/accounts/journal", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          entryDate: expenseForm.expenseDate,
-          description: `مصروف تشغيلي — ${desc}`,
-          status: expenseForm.post ? "posted" : "draft",
-          lines: [
-            {
-              accountCode: expenseForm.expenseAccountCode,
-              description: expenseForm.category,
-              debit: amount,
-            },
-            { accountCode: expenseForm.cashAccountCode, description: "سداد مصروف", credit: amount },
-          ],
-        }),
+      await api.post("/api/accounts/journal", {
+        entryDate: expenseForm.expenseDate,
+        description: `مصروف تشغيلي — ${desc}`,
+        status: expenseForm.post ? "posted" : "draft",
+        lines: [
+          {
+            accountCode: expenseForm.expenseAccountCode,
+            description: expenseForm.category,
+            debit: amount,
+          },
+          { accountCode: expenseForm.cashAccountCode, description: "سداد مصروف", credit: amount },
+        ],
       });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.error || "فشل تسجيل المصروف");
-      }
       toast.success(
         expenseForm.post ? "تم تسجيل المصروف وترحيل القيد" : "تم إنشاء قيد المصروف (مسودة)",
       );
@@ -266,11 +238,7 @@ export default function JournalTab() {
 
   async function review(id: number) {
     try {
-      const r = await fetch(`/api/accounts/journal/${id}/review`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!r.ok) throw new Error("فشلت المراجعة");
+      await api.post(`/api/accounts/journal/${id}/review`);
       toast.success("تم اعتماد القيد");
       load();
       openDetail(id);
@@ -281,14 +249,7 @@ export default function JournalTab() {
 
   async function post(id: number) {
     try {
-      const r = await fetch(`/api/accounts/journal/${id}/post`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.error || "فشل الترحيل");
-      }
+      await api.post(`/api/accounts/journal/${id}/post`);
       toast.success("تم ترحيل القيد");
       load();
       openDetail(id);
@@ -300,11 +261,7 @@ export default function JournalTab() {
   async function voidEntry(id: number) {
     if (!confirm("هل أنت متأكد من إلغاء هذا القيد؟ الإجراء يتطلب صلاحية مدير.")) return;
     try {
-      const r = await fetch(`/api/accounts/journal/${id}/void`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!r.ok) throw new Error("فشل الإلغاء");
+      await api.post(`/api/accounts/journal/${id}/void`);
       toast.success("تم إلغاء القيد");
       load();
       setDetailOpen(false);

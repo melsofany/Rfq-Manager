@@ -13,6 +13,7 @@ import {
 import { Receipt, Plus, Eye, Send, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { api, queryString } from "@/lib/accounts-api";
 
 interface SupplierInvoice {
   id: number;
@@ -86,17 +87,9 @@ export default function SupplierInvoicesTab() {
 
   async function load() {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filters.from) params.set("from", filters.from);
-    if (filters.to) params.set("to", filters.to);
-    if (filters.status) params.set("status", filters.status);
-    const qs = params.toString();
+    const qs = queryString({ from: filters.from, to: filters.to, status: filters.status });
     try {
-      const r = await fetch(`/api/accounts/supplier-invoices${qs ? `?${qs}` : ""}`, {
-        credentials: "include",
-      });
-      if (!r.ok) throw new Error("فشل تحميل الفواتير");
-      setInvoices(await r.json());
+      setInvoices(await api.get(`/api/accounts/supplier-invoices${qs}`));
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل الفواتير"));
     } finally {
@@ -106,11 +99,10 @@ export default function SupplierInvoicesTab() {
 
   async function loadSuppliers() {
     try {
-      const r = await fetch("/api/suppliers", { credentials: "include" });
-      if (r.ok) {
-        const j = await r.json();
-        setSuppliers(Array.isArray(j) ? j : (j.items ?? j.suppliers ?? []));
-      }
+      const j = await api.get<Supplier[] | { items?: Supplier[]; suppliers?: Supplier[] }>(
+        "/api/suppliers",
+      );
+      setSuppliers(Array.isArray(j) ? j : (j.items ?? j.suppliers ?? []));
     } catch {
       // ignore
     }
@@ -132,9 +124,7 @@ export default function SupplierInvoicesTab() {
 
   async function openDetail(id: number) {
     try {
-      const r = await fetch(`/api/accounts/supplier-invoices/${id}`, { credentials: "include" });
-      if (!r.ok) throw new Error("فشل تحميل التفاصيل");
-      setDetail(await r.json());
+      setDetail(await api.get(`/api/accounts/supplier-invoices/${id}`));
       setDetailOpen(true);
     } catch (e) {
       toast.error(getApiErrorMessage(e, "فشل تحميل التفاصيل"));
@@ -143,26 +133,17 @@ export default function SupplierInvoicesTab() {
 
   async function create() {
     try {
-      const r = await fetch("/api/accounts/supplier-invoices", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          supplierId: form.supplierId ? Number(form.supplierId) : null,
-          supplierName: form.supplierName,
-          poId: form.poId ? Number(form.poId) : null,
-          invoiceDate: form.invoiceDate,
-          dueDate: form.dueDate || null,
-          netAmount: Number(form.netAmount),
-          applyWithholding: form.applyWithholding,
-          supplierInvoiceNo: form.supplierInvoiceNo || null,
-          notes: form.notes || null,
-        }),
+      await api.post("/api/accounts/supplier-invoices", {
+        supplierId: form.supplierId ? Number(form.supplierId) : null,
+        supplierName: form.supplierName,
+        poId: form.poId ? Number(form.poId) : null,
+        invoiceDate: form.invoiceDate,
+        dueDate: form.dueDate || null,
+        netAmount: Number(form.netAmount),
+        applyWithholding: form.applyWithholding,
+        supplierInvoiceNo: form.supplierInvoiceNo || null,
+        notes: form.notes || null,
       });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.error || "فشل الإنشاء");
-      }
       toast.success("تم إنشاء فاتورة المورد (مسودة)");
       setCreateOpen(false);
       setForm({
@@ -184,14 +165,7 @@ export default function SupplierInvoicesTab() {
 
   async function post(id: number) {
     try {
-      const r = await fetch(`/api/accounts/supplier-invoices/${id}/post`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.error || "فشل الترحيل");
-      }
+      await api.post(`/api/accounts/supplier-invoices/${id}/post`);
       toast.success("تم ترحيل الفاتورة");
       load();
       openDetail(id);
@@ -203,14 +177,7 @@ export default function SupplierInvoicesTab() {
   async function voidInv(id: number) {
     if (!confirm("هل أنت متأكد من إلغاء هذه الفاتورة؟")) return;
     try {
-      const r = await fetch(`/api/accounts/supplier-invoices/${id}/void`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.error || "فشل الإلغاء");
-      }
+      await api.post(`/api/accounts/supplier-invoices/${id}/void`);
       toast.success("تم إلغاء الفاتورة");
       setDetailOpen(false);
       load();

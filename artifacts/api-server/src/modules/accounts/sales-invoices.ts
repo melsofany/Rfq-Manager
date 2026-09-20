@@ -29,43 +29,18 @@ import {
   customerPoItemsTable,
   purchaseOrderItemsTable,
   poItemChargesTable,
-  taxSettingsTable,
   customersTable,
   auditLogTable,
   ACCOUNT_CODES,
 } from "@workspace/db";
 import { eq, desc, and, lte, gte } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
-import { rateOf, vatOnNet, round2 } from "./tax";
+import { vatOnNet, round2 } from "./tax";
 import { postJournalEntry, nextEntryNo } from "./posting";
 import { generateSalesInvoicePdf } from "./sales-invoice-pdf";
+import { num as toNum, formatNum, loadTaxSettings } from "./helpers";
 
 const router = Router();
-
-function toNum(v: unknown): number | null {
-  if (v == null || v === "") return null;
-  const n = Number(v);
-  return isFinite(n) ? n : null;
-}
-
-function formatNum(n: number | null): string | null {
-  if (n == null) return null;
-  const s = String(Math.round(n * 10000) / 10000);
-  if (!s.includes(".")) return s;
-  return s.replace(/0+$/, "").replace(/\.$/, "");
-}
-
-async function loadTaxSettings() {
-  const rows = await db.select().from(taxSettingsTable).limit(1);
-  const row = rows[0];
-  return {
-    vatRate: rateOf(row?.vatRate, 14),
-    companyName: row?.companyName ?? null,
-    companyTaxId: row?.companyTaxId ?? null,
-    companyAddress: row?.companyAddress ?? null,
-    companyPhone: row?.companyPhone ?? null,
-  };
-}
 
 // ───────────────────────────────────────────────────────────────────────────
 // List
