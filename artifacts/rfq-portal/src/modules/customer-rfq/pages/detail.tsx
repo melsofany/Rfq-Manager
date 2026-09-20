@@ -212,15 +212,15 @@ export default function CustomerRfqDetailPage() {
   };
 
   // Save the entered unit prices and finalize (lock) the RFQ. Re-sends the full
-  // item list (with prices) + status:"sent"; the backend requires every item to
-  // be priced before it accepts the transition.
-  const allItemsPriced =
-    (rfq?.items ?? []).length > 0 &&
-    (rfq?.items ?? []).every((it) => {
-      if (it.id == null) return false;
-      const p = priceInputs[it.id];
-      return p != null && p !== "" && Number(p) > 0;
-    });
+  // item list (with prices) + status:"sent"; the backend requires at least one
+  // priced item (partial quotes are allowed — the unpriced items stay open).
+  const pricedItemCount = (rfq?.items ?? []).filter((it) => {
+    if (it.id == null) return false;
+    const p = priceInputs[it.id];
+    return p != null && p !== "" && Number(p) > 0;
+  }).length;
+  const allItemsPriced = pricedItemCount > 0;
+  const unpricedItemCount = (rfq?.items ?? []).length - pricedItemCount;
 
   const grandTotalStr = (() => {
     const sum = (rfq?.items ?? []).reduce((acc, it) => {
@@ -250,9 +250,10 @@ export default function CustomerRfqDetailPage() {
     });
   };
 
-  // Prices-only save for a sent RFQ past its expiry: send each item's id +
-  // new unit price. The backend updates unit_price by id (preserving links)
-  // without re-running the margin check or changing the status.
+  // Prices-only save: send each item's id + new unit price. The backend updates
+  // unit_price by id (preserving links) without re-running the margin check or
+  // changing the status — so a draft can be priced progressively and a sent RFQ
+  // re-priced, both without locking/re-finalizing.
   const handleSavePrices = () => {
     if (!rfq?.items) return;
     setSuccessMsg(null);
@@ -673,6 +674,9 @@ export default function CustomerRfqDetailPage() {
                 <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <AlertTriangle size={13} className="text-amber-500" />
+                    {unpricedItemCount > 0
+                      ? `${pricedItemCount} من ${(rfq.items ?? []).length} بند مسعَّر — البنود بلا سعر تبقى بدون تسعير. `
+                      : ""}
                     تثبيت الطلب يحفظ الأسعار ويمنع أي تعديل لاحق للموظفين. يمكن للمدير تعديل الأسعار
                     وتثبيت الطلب في أي وقت.
                   </p>
@@ -686,13 +690,23 @@ export default function CustomerRfqDetailPage() {
                       </Button>
                     </div>
                   ) : (
-                    <Button
-                      disabled={!allItemsPriced}
-                      onClick={() => setConfirmFinalize(true)}
-                      className="gap-1.5"
-                    >
-                      <Lock size={15} /> حفظ الأسعار وتثبيت الطلب
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        disabled={!allItemsPriced || updateMutation.isPending}
+                        onClick={handleSavePrices}
+                        className="gap-1.5"
+                      >
+                        حفظ البنود المسعَّرة فقط
+                      </Button>
+                      <Button
+                        disabled={!allItemsPriced}
+                        onClick={() => setConfirmFinalize(true)}
+                        className="gap-1.5"
+                      >
+                        <Lock size={15} /> حفظ الأسعار وتثبيت الطلب
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}

@@ -1020,7 +1020,7 @@ describe("PATCH /api/customer-rfq/:id", () => {
     expect(res.body.buyerName).toBe("New Buyer");
   });
 
-  it("rejects finalizing when an item has no price", async () => {
+  it("rejects finalizing when no item has a price", async () => {
     detailRow = { ...insertedRfq };
     detailItems = [];
     const res = await request(testApp)
@@ -1031,6 +1031,82 @@ describe("PATCH /api/customer-rfq/:id", () => {
       });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("سعر");
+  });
+
+  it("finalizes with only some items priced (partial quote)", async () => {
+    detailRow = { ...insertedRfq };
+    detailItems = [
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: null,
+        uom: "pc",
+        qty: "3.0000",
+        unitPrice: null,
+        createdAt: new Date("2025-01-03"),
+      },
+      {
+        id: 2,
+        customerRfqId: 42,
+        partNo: "P2",
+        lineItem: "EFGH",
+        description: null,
+        uom: "pc",
+        qty: "2.0000",
+        unitPrice: null,
+        createdAt: new Date("2025-01-03"),
+      },
+    ];
+    // P1 has an approved cost and must clear the floor; P2 is left unpriced.
+    approvedRows = [{ customerRfqItemId: 1, price: "8", taxIncluded: false }];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        status: "sent",
+        items: [
+          { partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 },
+          { partNo: "P2", lineItem: "EFGH", uom: "pc", qty: 2 },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("sent");
+    expect(res.body.items[0].unitPrice).toBe("10");
+    expect(res.body.items[1].unitPrice).toBeNull();
+    // The unpriced items are recorded for the audit trail.
+    const partial = auditInserts.find((e) => e.action === "customer_rfq.partial_finalize");
+    expect(partial).toBeTruthy();
+    expect(partial!.description).toContain("P2");
+  });
+
+  it("accepts zero as an unpriced line when finalizing a partial quote", async () => {
+    detailRow = { ...insertedRfq };
+    detailItems = [
+      {
+        id: 1,
+        customerRfqId: 42,
+        partNo: "P1",
+        lineItem: "ABCD",
+        description: null,
+        uom: "pc",
+        qty: "3.0000",
+        unitPrice: null,
+        createdAt: new Date("2025-01-03"),
+      },
+    ];
+    approvedRows = [{ customerRfqItemId: 1, price: "8", taxIncluded: false }];
+    const res = await request(testApp)
+      .patch("/api/customer-rfq/42")
+      .send({
+        status: "sent",
+        items: [
+          { id: 1, partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 3, unitPrice: 10 },
+          { id: 99, partNo: "P2", lineItem: "EFGH", uom: "pc", qty: 2, unitPrice: 0 },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("sent");
   });
 
   it("blocks editing once the RFQ is sent (no session role)", async () => {

@@ -1666,9 +1666,28 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
     const unpriced = validItems.filter(
       (it) => it.unitPrice == null || it.unitPrice === "" || Number(it.unitPrice) <= 0,
     );
-    if (unpriced.length > 0) {
-      res.status(400).json({ error: "أدخل سعر كل بند قبل تثبيت الطلب" });
+    // Partial pricing is allowed: the customer prices only the items they are
+    // ready to quote, and the rest stay unpriced (they can be priced later and
+    // the request status shows the «مُسعَّر X%» share). Only a fully unpriced
+    // submission is rejected — there would be nothing to finalize.
+    if (unpriced.length === validItems.length) {
+      res.status(400).json({ error: "أدخل سعر بند واحد على الأقل قبل تثبيت الطلب" });
       return;
+    }
+    if (unpriced.length > 0) {
+      // The audit log is readable by every employee, so it records which items
+      // were left unpriced — never any price or supplier cost.
+      await db.insert(auditLogTable).values({
+        action: "customer_rfq.partial_finalize",
+        entityType: "customer_rfq",
+        entityId: id,
+        employeeId: req.session.employeeId,
+        description: `Finalized customer RFQ with unpriced items: ${unpriced
+          .map((it) => it.partNo || it.lineItem || it.description)
+          .join(" | ")}`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
     }
 
     // Margin check: each customer price (excl tax) should be ≥ 1.06 × the
@@ -1687,6 +1706,10 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
 
     const violations: string[] = [];
     for (const it of validItems) {
+      // Unpriced items are intentionally left out of the quote — nothing to
+      // check against the margin floor (and the supplier cost must not be
+      // probed for them either).
+      if (it.unitPrice == null || it.unitPrice === "" || Number(it.unitPrice) <= 0) continue;
       const dbId = findDbId(it);
       const cost = dbId != null ? (costs.get(dbId) ?? null) : null;
       // Both notes deliberately omit the numbers: the audit log is readable by
