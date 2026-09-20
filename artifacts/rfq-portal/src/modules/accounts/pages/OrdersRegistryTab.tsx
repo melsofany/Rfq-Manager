@@ -33,6 +33,8 @@ interface CustomerOrder {
   vat: string;
   gross: string;
   cost: string;
+  /** True when no goods were received yet, so cost comes from the supplier PO price. */
+  costEstimated: boolean;
   margin: string;
   marginPct: string | null;
   isLoss: boolean;
@@ -227,7 +229,12 @@ function CustomerOrdersTable({ rows, loading }: { rows: CustomerOrder[]; loading
               <td className="p-2.5 tabular-nums">{money(o.net)}</td>
               <td className="p-2.5 tabular-nums">{money(o.vat)}</td>
               <td className="p-2.5 tabular-nums font-medium">{money(o.gross)}</td>
-              <td className="p-2.5 tabular-nums">{money(o.cost)}</td>
+              <td className="p-2.5 tabular-nums">
+                {money(o.cost)}
+                {o.costEstimated && (
+                  <div className="text-[10px] text-amber-600">تقديري (سعر أمر التوريد)</div>
+                )}
+              </td>
               <td className="p-2.5 tabular-nums">
                 <span
                   className={`inline-flex items-center gap-1 font-medium ${

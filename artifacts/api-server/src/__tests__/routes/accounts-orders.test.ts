@@ -207,6 +207,238 @@ describe("GET /api/accounts/collected-orders", () => {
     expect(o.isLoss).toBe(true);
   });
 
+  it("fills the cost from the issued supplier PO price when nothing was received yet", async () => {
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000001",
+        customerPoNo: "C-100",
+        customerName: "عميل أ",
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        qty: "10",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+      {
+        id: 12,
+        customerPoId: 1,
+        lineItem: "2",
+        partNo: "ABC-2",
+        qty: "5",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+    ];
+    // Supplier PO dispatched but not received (no accepted qty / actual cost) and
+    // its lines carry no customer_po_item FK — the reported "cost = 0" case.
+    purchaseOrderRows = [
+      {
+        id: 1,
+        internalPoNo: "PO-2026-000001",
+        sheetPoNo: "C-100",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    purchaseOrderItemRows = [
+      {
+        id: 101,
+        poId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        customerPoItemId: null,
+        totalAcceptedQty: null,
+        finalActualCost: null,
+        referencePrice: "60",
+        lineStatus: "pending",
+      },
+      {
+        id: 102,
+        poId: 1,
+        lineItem: "2",
+        partNo: "ABC-2",
+        customerPoItemId: null,
+        totalAcceptedQty: null,
+        finalActualCost: null,
+        referencePrice: "60",
+        lineStatus: "pending",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    expect(res.status).toBe(200);
+    const o = res.body.customerOrders[0];
+    // 10 × 60 + 5 × 60 = 900 from the issued supplier PO price
+    expect(o.cost).toBe("900");
+    expect(o.costEstimated).toBe(true);
+    expect(o.margin).toBe("600");
+  });
+
+  it("matches the supplier PO by its number when line ids differ", async () => {
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000001",
+        customerPoNo: "C-100",
+        customerName: "عميل أ",
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        qty: "4",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+    ];
+    purchaseOrderRows = [
+      {
+        id: 1,
+        internalPoNo: "PO-2026-000001",
+        // Case-insensitive match against the customer PO number.
+        sheetPoNo: "c-100",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    // The supplier line has a different lineItem but the same partNo.
+    purchaseOrderItemRows = [
+      {
+        id: 101,
+        poId: 1,
+        lineItem: "9",
+        partNo: "ABC-1",
+        customerPoItemId: null,
+        totalAcceptedQty: null,
+        finalActualCost: null,
+        referencePrice: "25",
+        lineStatus: "pending",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    const o = res.body.customerOrders[0];
+    expect(o.cost).toBe("100");
+    expect(o.costEstimated).toBe(true);
+  });
+
+  it("ignores cancelled or rejected supplier lines when estimating cost", async () => {
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000001",
+        customerPoNo: "C-100",
+        customerName: "عميل أ",
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        qty: "10",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+    ];
+    purchaseOrderRows = [
+      {
+        id: 1,
+        internalPoNo: "PO-2026-000001",
+        sheetPoNo: "C-100",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    purchaseOrderItemRows = [
+      {
+        id: 101,
+        poId: 1,
+        lineItem: "1",
+        customerPoItemId: null,
+        totalAcceptedQty: null,
+        finalActualCost: null,
+        referencePrice: "60",
+        lineStatus: "cancelled",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    const o = res.body.customerOrders[0];
+    expect(o.cost).toBe("0");
+    expect(o.costEstimated).toBe(false);
+  });
+
+  it("prefers the realized receipt cost over the supplier PO price", async () => {
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000001",
+        customerPoNo: "C-100",
+        customerName: "عميل أ",
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        qty: "10",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+    ];
+    purchaseOrderRows = [
+      {
+        id: 1,
+        internalPoNo: "PO-2026-000001",
+        sheetPoNo: "C-100",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    purchaseOrderItemRows = [
+      {
+        id: 101,
+        poId: 1,
+        lineItem: "1",
+        customerPoItemId: 11,
+        totalAcceptedQty: "10",
+        finalActualCost: "70",
+        referencePrice: "60",
+        lineStatus: "fulfilled",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    const o = res.body.customerOrders[0];
+    // 10 × 70 realized, NOT 10 × 60 estimated
+    expect(o.cost).toBe("700");
+    expect(o.costEstimated).toBe(false);
+  });
+
   it("includes a supplier order once received or invoiced, with cost + input VAT", async () => {
     purchaseOrderRows = [
       {

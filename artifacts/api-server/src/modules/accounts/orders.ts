@@ -7,9 +7,11 @@
  *   • أوامر شراء العملاء (customer orders) — a customer PO appears once a
  *     posted sales invoice exists for it OR at least one of its lines was
  *     delivered/rejected to the customer. Selling figures come from the posted
- *     invoice (net / output VAT 14% / gross); the realized cost is the accepted
- *     supplier quantity × actual cost, so the margin is the accounting figure —
- *     not a sales-only snapshot.
+ *     invoice (net / output VAT 14% / gross); the cost is the accepted supplier
+ *     quantity × actual cost once goods were received, falling back to the
+ *     issued supplier PO price (referencePrice × qty) for lines with no receipt
+ *     or no customer_po_item link — so the margin is meaningful from the moment
+ *     the supplier order is dispatched, not 0.
  *
  *   • أوامر شراء الموردين (supplier orders) — a purchase order appears once at
  *     least one line was received (accepted / partial / rejected) or a posted
@@ -41,6 +43,35 @@ const router = Router();
 const DELIVERED_STATES = new Set(["delivered", "rejected", "cancelled"]);
 const RECEIVED_STATES = new Set(["fulfilled", "partial", "rejected"]);
 
+/** Supplier lines that no longer represent a commitment to buy. */
+const DEAD_LINE_STATES = new Set(["cancelled", "rejected"]);
+
+/** Normalise a line/part identifier for cross-table matching. */
+function normKey(v: string | null): string {
+  return (v ?? "").trim().toLowerCase();
+}
+
+/**
+ * Realized cost per customer-PO item: accepted supplier qty × actual cost.
+ * Only lines with a receipt (finalActualCost set) contribute — an issued but
+ * unreceived line has no accounting cost, so it falls back to the estimate.
+ */
+function realizedCostByCustomerItem(
+  supplierLines: {
+    customerPoItemId: number | null;
+    totalAcceptedQty: unknown;
+    finalActualCost: unknown;
+  }[],
+): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const line of supplierLines) {
+    if (line.customerPoItemId == null) continue;
+    const cost = toNum(line.totalAcceptedQty) * toNum(line.finalActualCost);
+    map.set(line.customerPoItemId, (map.get(line.customerPoItemId) ?? 0) + cost);
+  }
+  return map;
+}
+
 router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise<void> => {
   const settings = await loadTaxSettings();
   const vatRate = settings.vatRate;
@@ -64,6 +95,14 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     .from(salesInvoicesTable)
     .where(eq(salesInvoicesTable.status, "posted"));
   const supplierLines = await db.select().from(purchaseOrderItemsTable);
+  const poHeaders = await db
+    .select({
+      id: purchaseOrdersTable.id,
+      sheetPoNo: purchaseOrdersTable.sheetPoNo,
+      status: purchaseOrdersTable.status,
+    })
+    .from(purchaseOrdersTable);
+  const poHeaderById = new Map(poHeaders.map((h) => [h.id, h]));
 
   const itemsByCustomerPo = new Map<number, (typeof customerItems)[number][]>();
   for (const it of customerItems) {
@@ -79,14 +118,41 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     // so keep the last we see)
     invoiceByCustomerPo.set(inv.customerPoId, inv);
   }
-  const costByCustomerItem = new Map<number, number>();
+  const costByCustomerItem = realizedCostByCustomerItem(supplierLines);
+
+  // A customer order can be delivered before any receipt is booked, and supplier
+  // PO lines created from a sheet lookup carry no customer_po_item FK. Both cases
+  // left the cost column at 0 even though a priced supplier PO had been issued.
+  // Fall back to that issued price: match the supplier PO to the customer PO by
+  // its number (sheetPoNo ↔ customerPoNo) and the line by lineItem/partNo.
+  const customerPoIdsByNo = new Map<string, number[]>();
+  for (const po of customerPos) {
+    const key = normKey(po.customerPoNo);
+    if (!key) continue;
+    customerPoIdsByNo.set(key, [...(customerPoIdsByNo.get(key) ?? []), po.id]);
+  }
+  const estimateByCustomerItem = new Map<number, number>();
   for (const line of supplierLines) {
-    if (line.customerPoItemId == null) continue;
-    const cost = toNum(line.totalAcceptedQty) * toNum(line.finalActualCost);
-    costByCustomerItem.set(
-      line.customerPoItemId,
-      (costByCustomerItem.get(line.customerPoItemId) ?? 0) + cost,
-    );
+    const header = poHeaderById.get(line.poId);
+    if (!header || header.status !== "sent" || DEAD_LINE_STATES.has(line.lineStatus)) continue;
+    const candidatePoIds = customerPoIdsByNo.get(normKey(header.sheetPoNo));
+    if (!candidatePoIds) continue;
+    const unitCost = toNum(line.referencePrice);
+    if (unitCost == null) continue;
+    const lineKey = normKey(line.lineItem);
+    const partKey = normKey(line.partNo);
+    for (const cpoId of candidatePoIds) {
+      const items = itemsByCustomerPo.get(cpoId) ?? [];
+      const target =
+        (lineKey ? items.find((i) => normKey(i.lineItem) === lineKey) : undefined) ??
+        (partKey ? items.find((i) => normKey(i.partNo) === partKey) : undefined);
+      if (!target) continue;
+      const estimated = unitCost * toNum(target.qty);
+      estimateByCustomerItem.set(
+        target.id,
+        (estimateByCustomerItem.get(target.id) ?? 0) + estimated,
+      );
+    }
   }
 
   const customerOrders = [];
@@ -102,7 +168,21 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
       : round2(items.reduce((s, i) => s + toNum(i.qty) * toNum(i.unitPrice), 0));
     const vat = invoice ? toNum(invoice.vatAmount) : round2((net * vatRate) / 100);
     const gross = invoice ? toNum(invoice.grossAmount) : round2(net + vat);
-    const cost = round2(items.reduce((s, i) => s + (costByCustomerItem.get(i.id) ?? 0), 0));
+    // Per line: the realized receipt cost when goods were received, otherwise the
+    // issued supplier PO price. Either way the column reflects a real purchase
+    // price instead of collapsing to 0.
+    let realizedCost = 0;
+    let estimatedCost = 0;
+    for (const i of items) {
+      const realized = costByCustomerItem.get(i.id) ?? 0;
+      if (realized > 0) {
+        realizedCost += realized;
+        continue;
+      }
+      estimatedCost += estimateByCustomerItem.get(i.id) ?? 0;
+    }
+    const cost = round2(realizedCost + estimatedCost);
+    const costEstimated = realizedCost === 0 && estimatedCost > 0;
     const margin = round2(net - cost);
     customerOrders.push({
       id: po.id,
@@ -119,6 +199,7 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
       vat: fmt(vat),
       gross: fmt(gross),
       cost: fmt(cost),
+      costEstimated,
       margin: fmt(margin),
       marginPct: net > 0 ? fmt(round2((margin / net) * 100)) : null,
       isLoss: margin < 0,

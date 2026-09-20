@@ -543,3 +543,14 @@ git push --force-with-lease=<branch>:<current-remote-sha> <token-url> <branch>
 - **Frontend** (`customer-rfq/pages/detail.tsx`): `allItemsPriced` is now `pricedItemCount > 0`; the finalize footer shows `X من Y بند مسعَّر` and gained a **«حفظ البنود المسعَّرة فقط»** button calling the existing `handleSavePrices` (id-only payload → backend updates `unit_price` by id without status change), now usable on drafts too for progressive pricing.
 - Tests: `customer-rfq.test.ts` 68 (3 new). 280 api-server + 30 portal pass; tsc clean; portal build clean; prettier repo-wide clean.
 - Deploy: PR #120 squash-merged `f1b8dd0`; CI + Deploy workflows success; live `/api/healthz` 200.
+
+## Customer-order cost falls back to the issued supplier PO price (accounts registry)
+
+- **Symptom**: `/accounts` -> سجل الحركات -> **أوامر شراء العملاء** showed **0** in the «التكلفة» column for customer orders whose supplier PO had been issued but not received, so the margin looked like pure profit.
+- **Cause**: `modules/accounts/orders.ts` computed customer cost as `totalAcceptedQty x finalActualCost` only. Both operands are NULL until a receipt is booked, and the loop `continue`d on lines with no `customer_po_item_id` FK — which is every supplier line created from a sheet lookup or entered free-hand. Either gap alone yields 0.
+- **Fix**: cost is resolved **per customer-PO item**, preferring the realized receipt cost and otherwise falling back to the **issued supplier PO price**: `purchase_order_items.referencePrice x customer_po_items.qty`. `referencePrice` is the per-unit buy price — the same field the supplier PO PDF prints as `unitPrice` (see the PDF block in `po/routes.ts`) and what the operator enters as «سعر الوحدة» on `/purchase-orders/new`. The supplier PO is matched to the customer PO by **number** (`purchase_orders.sheetPoNo` <-> `customer_pos.customerPoNo`, case-insensitive) and the line by `lineItem` then `partNo` — the same fallback ladder as `resolveCustomerPoItemId` (communications) and `resolveReceivedRollup` (customer-po).
+- **`costEstimated` flag**: true when the order has no receipts at all but an estimate was found; the tab renders «تقديري (سعر أمر التوريد)» under the amount. Keep this distinction — an accounting estimate must never be presented as a realized cost.
+- **Cancelled/rejected supplier lines are excluded** from the estimate (`DEAD_LINE_STATES`), matching how they are excluded from receipts/deliveries elsewhere.
+- **Do not gate the realized path on the PO header**: legacy supplier lines carry the FK while the header row may be absent in test fixtures; only the estimate fallback reads the header (for `status === "sent"` + `sheetPoNo`).
+- **Tests**: `accounts-orders.test.ts` +4 (estimate from issued price, partNo/number matching, cancelled-line exclusion, realized-beats-estimated) — all 4 fail against the pre-fix code. 284 api-server tests total.
+- Not yet deployed/pushed — branch `refactor/accounts-shared-helpers`.
