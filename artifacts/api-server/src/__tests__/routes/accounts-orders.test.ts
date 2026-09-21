@@ -565,6 +565,175 @@ describe("GET /api/accounts/collected-orders", () => {
     expect(res.body.totals.margin).toBe("300");
     expect(res.body.totals.marginPct).toBe("30");
   });
+
+  // The selling price is VAT-exclusive, a `taxIncluded` supplier price is not,
+  // so the estimate must strip the embedded 14% before comparing the two —
+  // otherwise a profitable order reports a loss (the live P26E12299 case).
+  it("strips VAT from a tax-inclusive supplier price before estimating cost", async () => {
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000214",
+        customerPoNo: "P26E12299",
+        customerName: "EDC",
+        poDate: "2026-08-20",
+        status: "sent",
+        createdAt: new Date("2026-08-20"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 2181,
+        customerPoId: 1,
+        lineItem: "2211.008.GENRAL.7565",
+        partNo: "A9R81440",
+        qty: "10",
+        unitPrice: "4750",
+        deliveryStatus: "delivered",
+      },
+    ];
+    purchaseOrderRows = [
+      {
+        id: 31,
+        internalPoNo: "PO-2026-000024",
+        sheetPoNo: "P26E12299",
+        status: "sent",
+        createdAt: new Date("2026-08-20"),
+      },
+    ];
+    purchaseOrderItemRows = [
+      {
+        id: 57,
+        poId: 31,
+        lineItem: "2211.008.GENRAL.7565",
+        partNo: "A9R81440",
+        customerPoItemId: null,
+        totalAcceptedQty: null,
+        finalActualCost: null,
+        referencePrice: "4775",
+        taxIncluded: true,
+        lineStatus: "pending",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    expect(res.status).toBe(200);
+    const o = res.body.customerOrders[0];
+    // 4775 / 1.14 = 4188.5965 per unit × 10 = 41885.9649 → 41885.96
+    expect(o.cost).toBe("41885.96");
+    expect(o.costEstimated).toBe(true);
+    expect(o.net).toBe("47500");
+    // A profitable order must never be reported as a loss.
+    expect(o.margin).toBe("5614.04");
+    expect(o.isLoss).toBe(false);
+  });
+
+  it("leaves a VAT-exclusive supplier price untouched when estimating cost", async () => {
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000001",
+        customerPoNo: "C-100",
+        customerName: "عميل أ",
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        qty: "10",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+    ];
+    purchaseOrderRows = [
+      {
+        id: 1,
+        internalPoNo: "PO-2026-000001",
+        sheetPoNo: "C-100",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    purchaseOrderItemRows = [
+      {
+        id: 101,
+        poId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        customerPoItemId: null,
+        totalAcceptedQty: null,
+        finalActualCost: null,
+        referencePrice: "60",
+        taxIncluded: false,
+        lineStatus: "pending",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    const o = res.body.customerOrders[0];
+    expect(o.cost).toBe("600"); // 60 × 10, no VAT to strip
+    expect(o.margin).toBe("400");
+    expect(o.isLoss).toBe(false);
+  });
+
+  it("uses the configured VAT rate when stripping tax from the supplier price", async () => {
+    taxSettingsRow = { id: 1, vatRate: "10" };
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000001",
+        customerPoNo: "C-100",
+        customerName: "عميل أ",
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        qty: "1",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+    ];
+    purchaseOrderRows = [
+      {
+        id: 1,
+        internalPoNo: "PO-2026-000001",
+        sheetPoNo: "C-100",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    purchaseOrderItemRows = [
+      {
+        id: 101,
+        poId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        customerPoItemId: null,
+        totalAcceptedQty: null,
+        finalActualCost: null,
+        referencePrice: "110",
+        taxIncluded: true,
+        lineStatus: "pending",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    // 110 / 1.10 = 100 — the rate comes from tax_settings, not a hardcoded 14.
+    expect(res.body.customerOrders[0].cost).toBe("100");
+  });
 });
 
 describe("GET /api/accounts/po-charges", () => {

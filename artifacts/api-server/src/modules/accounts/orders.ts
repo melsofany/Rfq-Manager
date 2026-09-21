@@ -125,20 +125,28 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
   // left the cost column at 0 even though a priced supplier PO had been issued.
   // Fall back to that issued price: match the supplier PO to the customer PO by
   // its number (sheetPoNo ↔ customerPoNo) and the line by lineItem/partNo.
+  //
+  // The selling price (customer_po_items.unit_price) is always VAT-exclusive,
+  // while a supplier PO line marked taxIncluded stores a VAT-inclusive price —
+  // comparing the two raw made a profitable order look like a loss. Strip the
+  // embedded VAT first, the same convention the PO PDF and the customer-RFQ
+  // margin check already use.
   const customerPoIdsByNo = new Map<string, number[]>();
   for (const po of customerPos) {
     const key = normKey(po.customerPoNo);
     if (!key) continue;
     customerPoIdsByNo.set(key, [...(customerPoIdsByNo.get(key) ?? []), po.id]);
   }
+  const vatDivisor = 1 + vatRate / 100;
   const estimateByCustomerItem = new Map<number, number>();
   for (const line of supplierLines) {
     const header = poHeaderById.get(line.poId);
     if (!header || header.status !== "sent" || DEAD_LINE_STATES.has(line.lineStatus)) continue;
     const candidatePoIds = customerPoIdsByNo.get(normKey(header.sheetPoNo));
     if (!candidatePoIds) continue;
-    const unitCost = toNum(line.referencePrice);
-    if (unitCost == null) continue;
+    const rawUnitCost = toNum(line.referencePrice);
+    if (rawUnitCost == null) continue;
+    const unitCost = line.taxIncluded ? rawUnitCost / vatDivisor : rawUnitCost;
     const lineKey = normKey(line.lineItem);
     const partKey = normKey(line.partNo);
     for (const cpoId of candidatePoIds) {
