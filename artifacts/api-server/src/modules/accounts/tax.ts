@@ -36,6 +36,21 @@ export function vatOnNet(net: number, vatRate: number): number {
   return (net * vatRate) / 100;
 }
 
+/**
+ * Normalize a price/cost to its VAT-exclusive basis. A tax-inclusive amount has
+ * the embedded VAT stripped; a tax-exclusive one (or an unknown/null flag) is
+ * returned untouched. This is the single convention every margin computation
+ * must apply so a tax-inclusive supplier cost is never compared against a
+ * VAT-exclusive selling price.
+ */
+export function netOfTax(
+  amount: number,
+  taxIncluded: boolean | null | undefined,
+  vatRate: number,
+): number {
+  return taxIncluded ? vatComponents(amount, vatRate).net : amount;
+}
+
 /** Rounding to 2 decimal places (currency precision for tax reporting). */
 export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;

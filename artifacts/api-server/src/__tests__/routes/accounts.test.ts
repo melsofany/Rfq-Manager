@@ -42,6 +42,7 @@ const customersTbl = "customers";
 const auditTbl = "audit";
 const supplierInvoicesTbl = "supplierInvoices";
 const salesInvoicesTbl = "salesInvoices";
+const poChargesTbl = "poCharges";
 
 // Per-test rows.
 let taxSettingsRow: any | null;
@@ -50,6 +51,7 @@ let buyRows: any[];
 let poRows: any[];
 let salesInvoiceRows: any[];
 let supplierInvoiceRows: any[];
+let poChargeRows: any[];
 
 function selectBuilder() {
   // The accounts routes call select().from(t).innerJoin().leftJoin().where().orderBy()
@@ -67,6 +69,7 @@ function selectBuilder() {
         rows = salesInvoiceRows.filter((r) => r.status === "posted");
       else if (table === supplierInvoicesTbl)
         rows = supplierInvoiceRows.filter((r) => r.status === "posted");
+      else if (table === poChargesTbl) rows = poChargeRows;
       const cur: any = {
         innerJoin: vi.fn(() => cur),
         leftJoin: vi.fn(() => cur),
@@ -101,6 +104,7 @@ vi.mock("@workspace/db", () => ({
   auditLogTable: auditTbl,
   supplierInvoicesTable: supplierInvoicesTbl,
   salesInvoicesTable: salesInvoicesTbl,
+  poItemChargesTable: poChargesTbl,
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -141,6 +145,7 @@ beforeEach(() => {
   poRows = [];
   salesInvoiceRows = [];
   supplierInvoiceRows = [];
+  poChargeRows = [];
 });
 
 describe("GET /api/accounts/tax-settings", () => {
@@ -354,6 +359,77 @@ describe("GET /api/accounts/withholding", () => {
     expect(res.body.totalNet).toBe(1300);
     expect(res.body.totalWithholding).toBe(39);
     expect(res.body.totalPayable).toBe(1261);
+  });
+});
+
+describe("GET /api/accounts/margins", () => {
+  const baseRow = {
+    customerPoId: 1,
+    internalPoNo: "CPO-2026-000001",
+    customerPoNo: "C-100",
+    customerId: null,
+    customerName: "عميل أ",
+    storedCustomerName: null,
+    poDate: "2026-08-01",
+    poStatus: "sent",
+    customerPoItemId: 11,
+    lineItem: "1",
+    partNo: "ABC-1",
+    description: "بند",
+    uom: "قطعة",
+    sellQty: "10",
+    sellUnitPrice: "100",
+    deliveryStatus: "delivered",
+    supplierPoId: 1,
+    supplierPoItemId: 101,
+    acceptedQty: "10",
+    supplierLineStatus: "fulfilled",
+  };
+
+  it("strips VAT from a tax-inclusive supplier cost before computing the margin", async () => {
+    taxSettingsRow = { id: 1, vatRate: "10", withholdingRate: "3" };
+    // 110 tax-inclusive / 1.10 = 100 net per unit × 10 accepted = 1000 cost
+    sellRows = [{ ...baseRow, finalActualCost: "110", supplierTaxIncluded: true } as any];
+    const res = await request(testApp).get("/api/accounts/margins");
+    expect(res.status).toBe(200);
+    const line = res.body[0];
+    expect(line.cost).toBe("1000");
+    expect(line.margin).toBe("0");
+    expect(line.isLoss).toBe(false);
+    // VAT-inclusive raw cost was 1100; comparing it raw would have shown a loss.
+    expect(line.finalActualCost).toBe("110");
+  });
+
+  it("keeps a tax-exclusive supplier cost untouched", async () => {
+    sellRows = [{ ...baseRow, finalActualCost: "70", supplierTaxIncluded: false } as any];
+    const res = await request(testApp).get("/api/accounts/margins");
+    expect(res.status).toBe(200);
+    const line = res.body[0];
+    expect(line.cost).toBe("700"); // 70 × 10, no VAT to strip
+    expect(line.margin).toBe("300");
+    expect(line.isLoss).toBe(false);
+  });
+});
+
+describe("GET /api/accounts/margins/summary", () => {
+  it("normalizes tax-inclusive supplier cost so the order is not reported as a loss", async () => {
+    taxSettingsRow = { id: 1, vatRate: "10", withholdingRate: "3" };
+    sellRows = [
+      {
+        sellQty: "10",
+        sellUnitPrice: "100",
+        acceptedQty: "10",
+        finalActualCost: "110",
+        supplierTaxIncluded: true,
+        supplierPoItemId: 101,
+      } as any,
+    ];
+    const res = await request(testApp).get("/api/accounts/margins/summary");
+    expect(res.status).toBe(200);
+    expect(res.body.totalRevenue).toBe("1000");
+    expect(res.body.totalCost).toBe("1000");
+    expect(res.body.totalMargin).toBe("0");
+    expect(res.body.lossLines).toBe(0);
   });
 });
 

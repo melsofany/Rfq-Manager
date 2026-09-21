@@ -44,7 +44,7 @@ import {
   inArray,
 } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
-import { round2 } from "../accounts/tax";
+import { round2, netOfTax } from "../accounts/tax";
 import { accountBalance } from "../accounts/posting";
 import { numOrZero as toNum, loadTaxSettings } from "../accounts/helpers";
 
@@ -924,12 +924,14 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
   }
 
   // ── Margins summary ──────────────────────────────────────────────────────
+  const settings = await loadTaxSettings();
   const marginRows = await db
     .select({
       sellQty: customerPoItemsTable.qty,
       sellUnitPrice: customerPoItemsTable.unitPrice,
       acceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
       finalActualCost: purchaseOrderItemsTable.finalActualCost,
+      supplierTaxIncluded: purchaseOrderItemsTable.taxIncluded,
     })
     .from(customerPoItemsTable)
     .innerJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
@@ -948,7 +950,11 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
     const accepted = toNum(r.acceptedQty);
     const actualCost = toNum(r.finalActualCost);
     const revenue = sellQty != null && sellUnit != null ? sellQty * sellUnit : 0;
-    const cost = accepted != null && actualCost != null ? accepted * actualCost : 0;
+    // Same VAT-exclusive normalization as /accounts/margins, so a tax-inclusive
+    // supplier line never reads as a loss against a VAT-exclusive sale.
+    const unitCost =
+      actualCost != null ? netOfTax(actualCost, r.supplierTaxIncluded, settings.vatRate) : null;
+    const cost = accepted != null && unitCost != null ? accepted * unitCost : 0;
     if (cost > 0) pricedLines++;
     totalRevenue += revenue;
     totalCost += cost;
@@ -959,7 +965,6 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
   const marginPct = totalRevenue !== 0 ? (totalMargin / totalRevenue) * 100 : 0;
 
   // ── VAT (from posted invoices) ───────────────────────────────────────────
-  const settings = await loadTaxSettings();
   const sellInvoices = await db
     .select({
       netAmount: salesInvoicesTable.netAmount,

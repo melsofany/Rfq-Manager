@@ -35,7 +35,7 @@ import {
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
-import { round2, VAT_RATE } from "./tax";
+import { round2, netOfTax } from "./tax";
 import { numOr as toNum, trimNum as fmt, loadTaxSettings } from "./helpers";
 
 const router = Router();
@@ -56,10 +56,9 @@ function normKey(v: string | null): string {
  * Only lines with a receipt (finalActualCost set) contribute — an issued but
  * unreceived line has no accounting cost, so it falls back to the estimate.
  *
- * The actual cost entered in receipts should be interpreted in light of the
- * supplier PO line's taxIncluded flag: if the line was tax-inclusive, the
- * entered actual cost likely includes tax and must be stripped to obtain the
- * true goods cost (VAT-exclusive), matching the revenue convention.
+ * The cost is put on the same VAT-exclusive basis as the selling price
+ * (`netOfTax`) so a tax-inclusive supplier line is not compared against a
+ * VAT-exclusive sale — that mismatch is what reported false losses.
  */
 function realizedCostByCustomerItem(
   supplierLines: {
@@ -71,12 +70,11 @@ function realizedCostByCustomerItem(
   vatRate: number,
 ): Map<number, number> {
   const map = new Map<number, number>();
-  const vatDivisor = 1 + vatRate / 100;
   for (const line of supplierLines) {
     if (line.customerPoItemId == null) continue;
     const rawUnitCost = toNum(line.finalActualCost);
     if (rawUnitCost == null) continue;
-    const unitCost = line.taxIncluded ? rawUnitCost / vatDivisor : rawUnitCost;
+    const unitCost = netOfTax(rawUnitCost, line.taxIncluded, vatRate);
     const cost = toNum(line.totalAcceptedQty) * unitCost;
     map.set(line.customerPoItemId, (map.get(line.customerPoItemId) ?? 0) + cost);
   }
@@ -105,15 +103,7 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     })
     .from(salesInvoicesTable)
     .where(eq(salesInvoicesTable.status, "posted"));
-  const supplierLines = await db
-    .select({
-      id: purchaseOrderItemsTable.id,
-      customerPoItemId: purchaseOrderItemsTable.customerPoItemId,
-      totalAcceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
-      finalActualCost: purchaseOrderItemsTable.finalActualCost,
-      taxIncluded: purchaseOrderItemsTable.taxIncluded,
-    })
-    .from(purchaseOrderItemsTable);
+  const supplierLines = await db.select().from(purchaseOrderItemsTable);
   const poHeaders = await db
     .select({
       id: purchaseOrdersTable.id,
@@ -156,7 +146,6 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     if (!key) continue;
     customerPoIdsByNo.set(key, [...(customerPoIdsByNo.get(key) ?? []), po.id]);
   }
-  const vatDivisor = 1 + vatRate / 100;
   const estimateByCustomerItem = new Map<number, number>();
   for (const line of supplierLines) {
     const header = poHeaderById.get(line.poId);
@@ -165,7 +154,7 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     if (!candidatePoIds) continue;
     const rawUnitCost = toNum(line.referencePrice);
     if (rawUnitCost == null) continue;
-    const unitCost = line.taxIncluded ? rawUnitCost / vatDivisor : rawUnitCost;
+    const unitCost = netOfTax(rawUnitCost, line.taxIncluded, vatRate);
     const lineKey = normKey(line.lineItem);
     const partKey = normKey(line.partNo);
     for (const cpoId of candidatePoIds) {
