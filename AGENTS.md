@@ -553,4 +553,24 @@ git push --force-with-lease=<branch>:<current-remote-sha> <token-url> <branch>
 - **Cancelled/rejected supplier lines are excluded** from the estimate (`DEAD_LINE_STATES`), matching how they are excluded from receipts/deliveries elsewhere.
 - **Do not gate the realized path on the PO header**: legacy supplier lines carry the FK while the header row may be absent in test fixtures; only the estimate fallback reads the header (for `status === "sent"` + `sheetPoNo`).
 - **Tests**: `accounts-orders.test.ts` +4 (estimate from issued price, partNo/number matching, cancelled-line exclusion, realized-beats-estimated) — all 4 fail against the pre-fix code. 284 api-server tests total.
-- Not yet deployed/pushed — branch `refactor/accounts-shared-helpers`.
+
+## Tax-basis normalization across ALL margin paths (PR #124) — the generalized fix
+
+- **Symptom**: `/accounts` reported **false losses**. Live case `P26E12299` (`CPO-2026-000214`) showed `-250.00` / `(-0.53%)` on a profitable order.
+- **Root cause**: a **tax-basis mismatch**. The selling price (`customer_po_items.unit_price`) is always **VAT-exclusive**, but a supplier PO line with `taxIncluded=true` stores its amounts **with** VAT. Comparing the two raw manufactured a loss. The same line-level `taxIncluded` flag governs **both** `purchase_order_items.referencePrice` (estimated cost) and `finalActualCost` (realized cost — the amount the operator types on the receipt).
+- **Key trap**: PR #123 fixed only the **estimated** path in `/accounts/collected-orders`. That is insufficient — leaving the **realized** path raw means booking a receipt jumps the cost from a net estimate to a gross actual and _creates_ a false loss. **Any cost-vs-selling-price comparison must apply the same convention.** This class of bug recurs wherever a supplier cost meets a selling price.
+- **Fix**: one shared helper `netOfTax(amount, taxIncluded, vatRate)` in `modules/accounts/tax.ts` (accepts `boolean | null | undefined`; a null flag means untouched). Applied in every margin path:
+  - `/accounts/collected-orders` — estimated (`referencePrice`) **and** realized (`finalActualCost`) — `modules/accounts/orders.ts`.
+  - `/accounts/margins` **and** `/accounts/margins/summary` — `modules/accounts/routes.ts`.
+  - `/analytics/overview` margins summary — `modules/reports/analytics.ts`.
+  - VAT rate comes from `tax_settings` via `loadTaxSettings()` (never hardcoded — the tests use 10% to prove it).
+- **Deliberately NOT normalized**: the supplier-side **spend display** in `collected-orders` (`Σ acceptedQty × finalActualCost`). It is a gross spend figure, not a margin, so there is no tax-basis mismatch to correct. Do not "fix" it to match the margin paths.
+- **Related inconsistency left as-is**: `sales-invoices.ts` POST posts COGS = `acceptedQty × finalActualCost` to the net ledger accounts. Whether the receipt's `actualCost` is best understood as net or gross is a **data-entry convention** question — the field has no tax-inclusive hint in the UI (`receipts.tsx` labels it only «التكلفة الفعلية»). Normalizing COGS for a `taxIncluded` line is a candidate follow-up but was out of scope here.
+- **Select-width gotcha**: `collected-orders` must read the **full** `purchase_order_items` row (`db.select().from(...)`) — the estimate path needs `poId` to resolve the supplier PO header. Narrowing the select to only the columns the helper needs breaks `tsc` downstream (`Property 'poId' does not exist`).
+- **Test-mock gotcha**: `accounts.test.ts`'s `@workspace/db` mock must export `poItemChargesTable` and the `selectBuilder().from()` must return `poChargeRows` for it, or `loadChargesByPoItem` throws → 500. `poChargeRows` must be initialized in `beforeEach`. Same chainable/thenable builder as `accounts-orders.test.ts`.
+- **Tests**: `accounts.test.ts` +3 (`/accounts/margins` tax-inclusive → no false loss, tax-exclusive → untouched, `/accounts/margins/summary` totals); `accounts-orders.test.ts` +1. 2 of the 3 new margin tests fail against the pre-fix source. **292 api-server + 30 portal tests pass**; tsc + prettier + both builds clean.
+- **Deploy (verified)**: PR #124 squash-merged `4f2767e7`; CI on `main` green; `Deploy to Render` workflow `completed/success`; live `/api/healthz` 200, `/api/accounts/margins` + `/api/accounts/collected-orders` return **401** (mounted behind `requireAuth`, not 404), `/accounts` 200.
+
+### PR #123/#124 both hit the squash-merge `mergeable_state: "dirty"` artifact
+
+The branch after a squash-merge shows `dirty` even though `git rev-parse origin/main^{tree}` equals the branch-parent's tree (squash created a new commit object with the same tree, so the parent is not an ancestor). Fix per the documented replay: `git branch -f backup <tip>` → `git rebase --onto origin/main <old-parent> <branch>` → confirm `backup^{tree} == HEAD^{tree}` → `git push --force-with-lease=<branch>:<remote-sha> <token-url> <branch>`. Pass the **explicit** remote SHA (from `git ls-remote`) or the lease fails with `stale info` in this shallow clone. After the replay the PR flips to `mergeable: true`.
