@@ -37,6 +37,66 @@ export function vatOnNet(net: number, vatRate: number): number {
 }
 
 /**
+ * One row of the realized-margin rule: the selling side of a customer-PO line
+ * plus whatever supplier cost is known for it.
+ */
+export interface MarginInput {
+  sellQty: number | null;
+  sellUnitPrice: number | null;
+  /** Quantity actually accepted from the supplier (null until a receipt exists). */
+  acceptedQty: number | null;
+  /** Supplier unit cost, possibly VAT-inclusive (see `taxIncluded`). */
+  finalActualCost: number | null;
+  taxIncluded: boolean | null | undefined;
+  /** Sum of PO line charges (نقل/شحن/جمارك/…) to fold into the cost. */
+  charges?: number;
+}
+
+/** A computed margin line, with nulls wherever an input was missing. */
+export interface MarginResult {
+  revenue: number | null;
+  cost: number | null;
+  margin: number | null;
+  marginPct: number | null;
+  isLoss: boolean;
+}
+
+/**
+ * THE realized-margin rule — the single implementation every screen must use.
+ *
+ *   revenue = sellQty × sellUnitPrice
+ *   cost    = acceptedQty × netOfTax(finalActualCost) + charges
+ *   margin  = revenue − cost
+ *
+ * Two invariants that used to drift between copies of this formula:
+ *   • Cost is realized on the ACCEPTED quantity only, and is null until the
+ *     supplier actually delivered — an ordered-but-unreceived line has no
+ *     accounting cost.
+ *   • The supplier cost is normalized to a VAT-exclusive basis, because the
+ *     selling price always is; comparing the two raw reported false losses.
+ *
+ * `charges` is optional so callers that do not surface per-line charges still
+ * share the rest of the rule.
+ */
+export function marginOf(line: MarginInput, vatRate: number): MarginResult {
+  const revenue =
+    line.sellQty != null && line.sellUnitPrice != null
+      ? round2(line.sellQty * line.sellUnitPrice)
+      : null;
+  const charges = line.charges ?? 0;
+  const unitCost =
+    line.finalActualCost != null ? netOfTax(line.finalActualCost, line.taxIncluded, vatRate) : null;
+  const cost =
+    line.acceptedQty != null && unitCost != null
+      ? round2(line.acceptedQty * unitCost + charges)
+      : null;
+  const margin = revenue != null && cost != null ? round2(revenue - cost) : null;
+  const marginPct =
+    margin != null && revenue !== null && revenue !== 0 ? round2((margin / revenue) * 100) : null;
+  return { revenue, cost, margin, marginPct, isLoss: margin != null && margin < 0 };
+}
+
+/**
  * Normalize a price/cost to its VAT-exclusive basis. A tax-inclusive amount has
  * the embedded VAT stripped; a tax-exclusive one (or an unknown/null flag) is
  * returned untouched. This is the single convention every margin computation

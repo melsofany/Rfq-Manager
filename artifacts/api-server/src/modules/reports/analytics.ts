@@ -44,7 +44,7 @@ import {
   inArray,
 } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
-import { round2, netOfTax } from "../accounts/tax";
+import { round2, marginOf } from "../accounts/tax";
 import { accountBalance } from "../accounts/posting";
 import { numOrZero as toNum, loadTaxSettings } from "../accounts/helpers";
 
@@ -924,6 +924,9 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
   }
 
   // ── Margins summary ──────────────────────────────────────────────────────
+  // Uses the SAME rule as /accounts/margins (tax.ts `marginOf`), so the analytics
+  // dashboard can never report a different revenue/cost/loss than the accounts
+  // screen it summarises.
   const settings = await loadTaxSettings();
   const marginRows = await db
     .select({
@@ -945,20 +948,20 @@ router.get("/analytics/overview", requireAuth, async (_req, res): Promise<void> 
     marginLineCount = 0,
     pricedLines = 0;
   for (const r of marginRows) {
-    const sellQty = toNum(r.sellQty);
-    const sellUnit = toNum(r.sellUnitPrice);
-    const accepted = toNum(r.acceptedQty);
-    const actualCost = toNum(r.finalActualCost);
-    const revenue = sellQty != null && sellUnit != null ? sellQty * sellUnit : 0;
-    // Same VAT-exclusive normalization as /accounts/margins, so a tax-inclusive
-    // supplier line never reads as a loss against a VAT-exclusive sale.
-    const unitCost =
-      actualCost != null ? netOfTax(actualCost, r.supplierTaxIncluded, settings.vatRate) : null;
-    const cost = accepted != null && unitCost != null ? accepted * unitCost : 0;
-    if (cost > 0) pricedLines++;
-    totalRevenue += revenue;
-    totalCost += cost;
-    if (revenue > 0 && cost > 0 && revenue - cost < 0) lossLines++;
+    const { revenue, cost, isLoss } = marginOf(
+      {
+        sellQty: toNum(r.sellQty),
+        sellUnitPrice: toNum(r.sellUnitPrice),
+        acceptedQty: toNum(r.acceptedQty),
+        finalActualCost: toNum(r.finalActualCost),
+        taxIncluded: r.supplierTaxIncluded,
+      },
+      settings.vatRate,
+    );
+    if ((cost ?? 0) > 0) pricedLines++;
+    totalRevenue += revenue ?? 0;
+    totalCost += cost ?? 0;
+    if (isLoss) lossLines++;
     marginLineCount++;
   }
   const totalMargin = totalRevenue - totalCost;

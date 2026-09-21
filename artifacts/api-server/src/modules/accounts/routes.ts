@@ -32,7 +32,7 @@ import {
 } from "@workspace/db";
 import { eq, sql, and, desc, gte, lte } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
-import { rateOf, round2, vatOnNet, netOfTax } from "./tax";
+import { rateOf, round2, vatOnNet, marginOf } from "./tax";
 import { numOrZero as toNum, formatNum, loadTaxSettings } from "./helpers";
 
 const router = Router();
@@ -133,19 +133,20 @@ router.get("/accounts/margins", requireAuth, async (req, res): Promise<void> => 
     const sellUnit = toNum(r.sellUnitPrice);
     const accepted = toNum(r.acceptedQty);
     const actualCost = toNum(r.finalActualCost);
-    const revenue = sellQty != null && sellUnit != null ? sellQty * sellUnit : null;
-    // Cost is realized on accepted qty only; null when nothing accepted yet.
-    // Fold per-line PO charges (نقل/شحن/جمارك/…) into the cost. The actual cost
-    // is normalized to a VAT-exclusive basis so a tax-inclusive supplier line
-    // is not measured against the VAT-exclusive selling price (false loss).
     const lineCharges = r.supplierPoItemId != null ? (chargesMap.get(r.supplierPoItemId) ?? 0) : 0;
-    const unitCost =
-      actualCost != null ? netOfTax(actualCost, r.supplierTaxIncluded, vatRate) : null;
-    const cost = accepted != null && unitCost != null ? accepted * unitCost + lineCharges : null;
-    const margin = revenue != null && cost != null ? revenue - cost : null;
-    const marginPct =
-      revenue != null && cost != null && revenue !== 0 ? (margin! / revenue) * 100 : null;
-    const isLoss = margin != null && margin < 0;
+    // Shared rule (tax.ts) — keeps the invoice/charges/VAT conventions identical
+    // to the summary endpoint, the orders registry and the analytics page.
+    const { revenue, cost, margin, marginPct, isLoss } = marginOf(
+      {
+        sellQty,
+        sellUnitPrice: sellUnit,
+        acceptedQty: accepted,
+        finalActualCost: actualCost,
+        taxIncluded: r.supplierTaxIncluded,
+        charges: lineCharges,
+      },
+      vatRate,
+    );
     return {
       customerPoId: r.customerPoId,
       internalPoNo: r.internalPoNo,
@@ -220,19 +221,23 @@ router.get("/accounts/margins/summary", requireAuth, async (req, res): Promise<v
   let pricedLines = 0;
 
   for (const r of rows) {
-    const sellQty = toNum(r.sellQty);
-    const sellUnit = toNum(r.sellUnitPrice);
-    const accepted = toNum(r.acceptedQty);
-    const actualCost = toNum(r.finalActualCost);
-    const revenue = sellQty != null && sellUnit != null ? sellQty * sellUnit : 0;
     const lineCharges = r.supplierPoItemId != null ? (chargesMap.get(r.supplierPoItemId) ?? 0) : 0;
-    const unitCost =
-      actualCost != null ? netOfTax(actualCost, r.supplierTaxIncluded, vatRate) : null;
-    const cost = accepted != null && unitCost != null ? accepted * unitCost + lineCharges : 0;
-    if (cost > 0) pricedLines++;
-    totalRevenue += revenue;
-    totalCost += cost;
-    if (revenue > 0 && cost > 0 && revenue - cost < 0) lossLines++;
+    const { revenue, cost } = marginOf(
+      {
+        sellQty: toNum(r.sellQty),
+        sellUnitPrice: toNum(r.sellUnitPrice),
+        acceptedQty: toNum(r.acceptedQty),
+        finalActualCost: toNum(r.finalActualCost),
+        taxIncluded: r.supplierTaxIncluded,
+        charges: lineCharges,
+      },
+      vatRate,
+    );
+    if ((cost ?? 0) > 0) pricedLines++;
+    totalRevenue += revenue ?? 0;
+    totalCost += cost ?? 0;
+    // A loss needs a cost that was actually realized (not a null/unreceived line).
+    if ((revenue ?? 0) > 0 && (cost ?? 0) > 0 && (revenue ?? 0) - (cost ?? 0) < 0) lossLines++;
   }
 
   const totalMargin = totalRevenue - totalCost;

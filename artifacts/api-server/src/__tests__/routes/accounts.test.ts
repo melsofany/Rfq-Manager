@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
+import { marginOf, type MarginInput } from "../../modules/accounts/tax";
 
 // ── Mock auth ───────────────────────────────────────────────────────────────
 let sessionState = { employeeId: 7, role: "employee" };
@@ -447,5 +448,60 @@ describe("PUT /api/accounts/tax-settings", () => {
     expect(res.status).toBe(200);
     expect(res.body.vatRate).toBe(15);
     expect(res.body.withholdingRate).toBe(2);
+  });
+});
+
+// ── The single margin rule (tax.ts `marginOf`) ───────────────────────────────
+// The margin formula is shared by /accounts/margins, /accounts/margins/summary
+// and the analytics overview. These tests pin the RULE itself so a regression in
+// one consumer cannot silently disagree with the others.
+describe("marginOf — the shared realized-margin rule", () => {
+  const line = (over: Partial<MarginInput> = {}): MarginInput => ({
+    sellQty: 10,
+    sellUnitPrice: 100,
+    acceptedQty: 10,
+    finalActualCost: 70,
+    taxIncluded: false,
+    ...over,
+  });
+
+  it("computes revenue, cost, margin and margin % on a realized line", () => {
+    const r = marginOf(line(), 0);
+    expect(r.revenue).toBe(1000);
+    expect(r.cost).toBe(700);
+    expect(r.margin).toBe(300);
+    expect(r.marginPct).toBe(30);
+    expect(r.isLoss).toBe(false);
+  });
+
+  it("strips VAT from a tax-inclusive cost before subtracting it", () => {
+    // 110 gross / 1.10 = 100 net × 10 accepted = 1000; raw 1100 would be a false loss.
+    const r = marginOf(line({ finalActualCost: 110, taxIncluded: true }), 10);
+    expect(r.cost).toBe(1000);
+    expect(r.margin).toBe(0);
+    expect(r.isLoss).toBe(false);
+  });
+
+  it("has no cost until the supplier delivers (acceptedQty null)", () => {
+    const r = marginOf(line({ acceptedQty: null }), 0);
+    expect(r.cost).toBeNull();
+    expect(r.margin).toBeNull();
+    expect(r.marginPct).toBeNull();
+    expect(r.isLoss).toBe(false);
+  });
+
+  it("folds PO line charges into the cost", () => {
+    const r = marginOf(line({ charges: 150 }), 0);
+    expect(r.cost).toBe(850);
+    expect(r.margin).toBe(150);
+  });
+
+  it("flags a loss and never divides by a zero revenue", () => {
+    const r = marginOf(line({ finalActualCost: 200 }), 0);
+    expect(r.margin).toBe(-1000);
+    expect(r.isLoss).toBe(true);
+    const zero = marginOf(line({ sellUnitPrice: 0 }), 0);
+    expect(zero.revenue).toBe(0);
+    expect(zero.marginPct).toBeNull();
   });
 });
