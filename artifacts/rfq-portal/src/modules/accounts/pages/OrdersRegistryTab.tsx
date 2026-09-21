@@ -32,9 +32,8 @@ interface CustomerOrder {
   net: string;
   vat: string;
   gross: string;
-  cost: string;
-  /** True when no goods were received yet, so cost comes from the supplier PO price. */
-  costEstimated: boolean;
+  realizedCost: string;
+  estimatedCost: string;
   margin: string;
   marginPct: string | null;
   isLoss: boolean;
@@ -66,6 +65,8 @@ interface CollectedOrders {
     net: string;
     vat: string;
     cost: string;
+    realizedCost: string;
+    estimatedCost: string;
     margin: string;
     marginPct: string | null;
   };
@@ -122,7 +123,7 @@ export default function OrdersRegistryTab() {
       <p className="text-muted-foreground text-sm">
         لا يظهر أمر الشراء في هذه الصفحة إلا بعد تسليمه/استلامه فعليًا (أو ترحيل فاتورته). الأوامر
         الجارية تبقى في صفحاتها التشغيلية، وهنا تظهر القيم المحاسبية النهائية — البيع بضريبة القيمة
-        المضافة {data?.vatRate ?? 14}% والتكلفة الفعلية والهامش المحقق.
+        المضافة {data?.vatRate ?? 14}%، والتكلفة الفعلية منفصلة عن أي تكلفة تقديرية، والهامش المحقق.
       </p>
 
       <div className="flex flex-col sm:flex-row sm:items-end gap-3">
@@ -146,10 +147,12 @@ export default function OrdersRegistryTab() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <TotalCard label="إجمالي البيع (بدون ضريبة)" value={money(data?.totals.net)} />
         <TotalCard label="ض.ق.م. المخرجات" value={money(data?.totals.vat)} tone="vat" />
-        <TotalCard label="التكلفة الفعلية" value={money(data?.totals.cost)} />
+        <TotalCard label="التكلفة الفعلية" value={money(data?.totals.realizedCost)} />
+        <TotalCard label="التكلفة التقديرية" value={money(data?.totals.estimatedCost)} />
+        <TotalCard label="إجمالي التكلفة" value={money(data?.totals.cost)} />
         <TotalCard
           label="الهامش المحقق"
           value={money(data?.totals.margin)}
@@ -200,7 +203,8 @@ function CustomerOrdersTable({ rows, loading }: { rows: CustomerOrder[]; loading
             <th className="text-right p-2.5 font-medium">الصافي</th>
             <th className="text-right p-2.5 font-medium">ض.ق.م.</th>
             <th className="text-right p-2.5 font-medium">الإجمالي</th>
-            <th className="text-right p-2.5 font-medium">التكلفة</th>
+            <th className="text-right p-2.5 font-medium">التكلفة الفعلية</th>
+            <th className="text-right p-2.5 font-medium">التكلفة التقديرية</th>
             <th className="text-right p-2.5 font-medium">الهامش</th>
           </tr>
         </thead>
@@ -229,12 +233,8 @@ function CustomerOrdersTable({ rows, loading }: { rows: CustomerOrder[]; loading
               <td className="p-2.5 tabular-nums">{money(o.net)}</td>
               <td className="p-2.5 tabular-nums">{money(o.vat)}</td>
               <td className="p-2.5 tabular-nums font-medium">{money(o.gross)}</td>
-              <td className="p-2.5 tabular-nums">
-                {money(o.cost)}
-                {o.costEstimated && (
-                  <div className="text-[10px] text-amber-600">تقديري (سعر أمر التوريد)</div>
-                )}
-              </td>
+              <td className="p-2.5 tabular-nums">{o.realizedCost || "-"}</td>
+              <td className="p-2.5 tabular-nums">{o.estimatedCost || "-"}</td>
               <td className="p-2.5 tabular-nums">
                 <span
                   className={`inline-flex items-center gap-1 font-medium ${

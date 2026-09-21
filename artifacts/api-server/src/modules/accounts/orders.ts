@@ -184,9 +184,9 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
       : round2(items.reduce((s, i) => s + toNum(i.qty) * toNum(i.unitPrice), 0));
     const vat = invoice ? toNum(invoice.vatAmount) : round2((net * vatRate) / 100);
     const gross = invoice ? toNum(invoice.grossAmount) : round2(net + vat);
-    // Per line: the realized receipt cost when goods were received, otherwise the
-    // issued supplier PO price. Either way the column reflects a real purchase
-    // price instead of collapsing to 0.
+    // Keep both cost sources explicit: received goods are realized cost; an
+    // unreceived but issued supplier PO is only an estimate and is never shown
+    // as realized cost.
     let realizedCost = 0;
     let estimatedCost = 0;
     for (const i of items) {
@@ -197,9 +197,9 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
       }
       estimatedCost += estimateByCustomerItem.get(i.id) ?? 0;
     }
-    const cost = round2(realizedCost + estimatedCost);
+    const totalCost = round2(realizedCost + estimatedCost);
     const costEstimated = realizedCost === 0 && estimatedCost > 0;
-    const margin = round2(net - cost);
+    const margin = round2(net - totalCost);
     customerOrders.push({
       id: po.id,
       internalPoNo: po.internalPoNo,
@@ -214,8 +214,10 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
       net: fmt(net),
       vat: fmt(vat),
       gross: fmt(gross),
-      cost: fmt(cost),
+      cost: fmt(totalCost),
       costEstimated,
+      realizedCost: fmt(round2(realizedCost)),
+      estimatedCost: fmt(round2(estimatedCost)),
       margin: fmt(margin),
       marginPct: net > 0 ? fmt(round2((margin / net) * 100)) : null,
       isLoss: margin < 0,
@@ -297,11 +299,13 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     (acc, o) => {
       acc.net += toNum(o.net);
       acc.vat += toNum(o.vat);
+      acc.realizedCost += toNum(o.realizedCost);
+      acc.estimatedCost += toNum(o.estimatedCost);
       acc.cost += toNum(o.cost);
       acc.margin += toNum(o.margin);
       return acc;
     },
-    { net: 0, vat: 0, cost: 0, margin: 0 },
+    { net: 0, vat: 0, realizedCost: 0, estimatedCost: 0, cost: 0, margin: 0 },
   );
 
   res.json({
@@ -314,6 +318,8 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
       net: fmt(round2(customerTotals.net)),
       vat: fmt(round2(customerTotals.vat)),
       cost: fmt(round2(customerTotals.cost)),
+      realizedCost: fmt(round2(customerTotals.realizedCost)),
+      estimatedCost: fmt(round2(customerTotals.estimatedCost)),
       margin: fmt(round2(customerTotals.margin)),
       marginPct:
         customerTotals.net > 0
