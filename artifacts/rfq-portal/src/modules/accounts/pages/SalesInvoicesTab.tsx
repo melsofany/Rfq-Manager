@@ -14,6 +14,7 @@ import { FileText, Plus, Eye, Send, XCircle, Download, Trash2, Search } from "lu
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { api, queryString } from "@/lib/accounts-api";
+import { fmtMoney as fmt } from "@/lib/format";
 
 interface SalesInvoice {
   id: number;
@@ -498,7 +499,7 @@ export default function SalesInvoicesTab() {
             <div className="bg-muted/30 rounded-lg p-3 text-xs flex justify-between">
               <span className="text-muted-foreground">الصافي + ض.ق.م. (14%)</span>
               <span className="font-bold">
-                {(netTotal + vatTotal).toFixed(2)} ({netTotal.toFixed(2)} + {vatTotal.toFixed(2)})
+                {fmt(netTotal + vatTotal)} ({fmt(netTotal)} + {fmt(vatTotal)})
               </span>
             </div>
             <div>

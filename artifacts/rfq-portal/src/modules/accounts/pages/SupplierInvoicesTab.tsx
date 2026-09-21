@@ -14,6 +14,7 @@ import { Receipt, Plus, Eye, Send, XCircle, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { api, queryString } from "@/lib/accounts-api";
+import { fmtMoney as fmt } from "@/lib/format";
 
 interface SupplierInvoice {
   id: number;
@@ -374,19 +375,19 @@ export default function SupplierInvoicesTab() {
             <div className="bg-muted/30 rounded-lg p-3 space-y-1 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">ض.ق.م. المدخلات (14%)</span>
-                <span className="font-medium">{preview.vat.toFixed(2)}</span>
+                <span className="font-medium">{fmt(preview.vat)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">الإجمالي شامل الضريبة</span>
-                <span className="font-medium">{preview.gross.toFixed(2)}</span>
+                <span className="font-medium">{fmt(preview.gross)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">الخصم تحت حساب المورد (3%)</span>
-                <span className="font-medium text-amber-600">{preview.withholding.toFixed(2)}</span>
+                <span className="font-medium text-amber-600">{fmt(preview.withholding)}</span>
               </div>
               <div className="flex justify-between border-t border-border pt-1">
                 <span className="font-medium">المستحق للمورد</span>
-                <span className="font-bold text-emerald-600">{preview.balance.toFixed(2)}</span>
+                <span className="font-bold text-emerald-600">{fmt(preview.balance)}</span>
               </div>
             </div>
             <div>

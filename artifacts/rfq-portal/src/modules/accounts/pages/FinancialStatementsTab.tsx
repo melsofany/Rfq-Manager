@@ -458,11 +458,7 @@ function BalanceSheet() {
       <div className="bg-card border border-border rounded-lg p-4 flex items-center justify-between">
         <span className="text-sm font-semibold">الخصوم + حقوق الملكية</span>
         <span className="text-xl font-bold text-primary">
-          {fmt(
-            String(
-              (Number(data?.totalLiabilities ?? 0) + Number(data?.totalEquity ?? 0)).toFixed(2),
-            ),
-          )}
+          {fmt(Number(data?.totalLiabilities ?? 0) + Number(data?.totalEquity ?? 0))}
         </span>
       </div>
       {data && data.periodResult != null && Number(data.periodResult) !== 0 && (

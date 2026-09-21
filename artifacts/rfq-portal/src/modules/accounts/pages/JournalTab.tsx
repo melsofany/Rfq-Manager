@@ -14,6 +14,7 @@ import { BookCopy, Plus, Eye, CheckCircle, Send, XCircle, Trash2, Wallet } from 
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { api, queryString } from "@/lib/accounts-api";
+import { fmtMoney as fmt } from "@/lib/format";
 
 interface Account {
   id: number;
@@ -514,8 +515,8 @@ export default function JournalTab() {
                         <Plus size={12} /> إضافة بند
                       </Button>
                     </td>
-                    <td className="px-2 py-2 text-xs font-bold">{totalDebit.toFixed(2)}</td>
-                    <td className="px-2 py-2 text-xs font-bold">{totalCredit.toFixed(2)}</td>
+                    <td className="px-2 py-2 text-xs font-bold">{fmt(totalDebit)}</td>
+                    <td className="px-2 py-2 text-xs font-bold">{fmt(totalCredit)}</td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -526,7 +527,7 @@ export default function JournalTab() {
             >
               {Math.abs(totalDebit - totalCredit) < 0.01 && totalDebit > 0
                 ? "✓ القيد متوازن"
-                : `⚠ القيد غير متوازن (الفرق: ${Math.abs(totalDebit - totalCredit).toFixed(2)})`}
+                : `⚠ القيد غير متوازن (الفرق: ${fmt(Math.abs(totalDebit - totalCredit))})`}
             </div>
           </div>
           <DialogFooter>
