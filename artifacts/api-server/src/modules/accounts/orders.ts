@@ -36,7 +36,8 @@ import {
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { round2, netOfTax } from "./tax";
-import { numOr as toNum, trimNum as fmt, loadTaxSettings } from "./helpers";
+import { num, numOr as toNum, trimNum as fmt, loadTaxSettings } from "./helpers";
+import { resolveCustomerPoLinks } from "../../shared/po-links";
 
 const router = Router();
 
@@ -46,11 +47,6 @@ const RECEIVED_STATES = new Set(["fulfilled", "partial", "rejected"]);
 /** Supplier lines that no longer represent a commitment to buy. */
 const DEAD_LINE_STATES = new Set(["cancelled", "rejected"]);
 
-/** Normalise a line/part identifier for cross-table matching. */
-function normKey(v: string | null): string {
-  return (v ?? "").trim().toLowerCase();
-}
-
 /**
  * Realized cost per customer-PO item: accepted supplier qty × actual cost.
  * Only lines with a receipt (finalActualCost set) contribute — an issued but
@@ -59,24 +55,32 @@ function normKey(v: string | null): string {
  * The cost is put on the same VAT-exclusive basis as the selling price
  * (`netOfTax`) so a tax-inclusive supplier line is not compared against a
  * VAT-exclusive sale — that mismatch is what reported false losses.
+ *
+ * `linkForLine` supplies the customer-PO line each supplier line fulfils. It
+ * MUST be consulted here: the FK alone is missing on sheet-lookup and
+ * free-hand lines, and dropping those rows silently discarded cost that had
+ * already been received — the reason a received order showed as «تقديري».
  */
 function realizedCostByCustomerItem(
   supplierLines: {
-    customerPoItemId: number | null;
+    id: number;
     totalAcceptedQty: unknown;
     finalActualCost: unknown;
     taxIncluded: boolean;
   }[],
+  linkForLine: Map<number, number>,
   vatRate: number,
 ): Map<number, number> {
   const map = new Map<number, number>();
   for (const line of supplierLines) {
-    if (line.customerPoItemId == null) continue;
-    const rawUnitCost = toNum(line.finalActualCost);
+    const customerPoItemId = linkForLine.get(line.id);
+    if (customerPoItemId == null) continue;
+    // `num`, not `numOr`: a missing actual cost must stay "no cost", never 0.
+    const rawUnitCost = num(line.finalActualCost);
     if (rawUnitCost == null) continue;
     const unitCost = netOfTax(rawUnitCost, line.taxIncluded, vatRate);
     const cost = toNum(line.totalAcceptedQty) * unitCost;
-    map.set(line.customerPoItemId, (map.get(line.customerPoItemId) ?? 0) + cost);
+    map.set(customerPoItemId, (map.get(customerPoItemId) ?? 0) + cost);
   }
   return map;
 }
@@ -114,11 +118,24 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
   const poHeaderById = new Map(poHeaders.map((h) => [h.id, h]));
 
   const itemsByCustomerPo = new Map<number, (typeof customerItems)[number][]>();
+  const customerItemById = new Map<number, (typeof customerItems)[number]>();
   for (const it of customerItems) {
+    customerItemById.set(it.id, it);
     if (it.customerPoId == null) continue;
     const list = itemsByCustomerPo.get(it.customerPoId) ?? [];
     list.push(it);
     itemsByCustomerPo.set(it.customerPoId, list);
+  }
+  // Resolve the customer-PO line each supplier line fulfils — FK first, then the
+  // sheetPoNo↔customerPoNo ladder — so a received line is costed even when its
+  // customer_po_item_id was never persisted (sheet lookups, free-hand rows).
+  // Read-only on purpose: a GET must not write. The link is persisted once by
+  // the startup repair in init-db.ts and by `recordItemReceipt` when a receipt
+  // is booked; here it is only needed to attribute cost correctly.
+  const { linkByLineId } = await resolveCustomerPoLinks(supplierLines);
+  const linkForLine = new Map<number, number>();
+  for (const [lineId, link] of linkByLineId) {
+    if (link.customerPoItemId != null) linkForLine.set(lineId, link.customerPoItemId);
   }
   const invoiceByCustomerPo = new Map<number, (typeof postedSales)[number]>();
   for (const inv of postedSales) {
@@ -127,48 +144,39 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     // so keep the last we see)
     invoiceByCustomerPo.set(inv.customerPoId, inv);
   }
-  const costByCustomerItem = realizedCostByCustomerItem(supplierLines, vatRate);
+  const costByCustomerItem = realizedCostByCustomerItem(supplierLines, linkForLine, vatRate);
 
-  // A customer order can be delivered before any receipt is booked, and supplier
-  // PO lines created from a sheet lookup carry no customer_po_item FK. Both cases
-  // left the cost column at 0 even though a priced supplier PO had been issued.
-  // Fall back to that issued price: match the supplier PO to the customer PO by
-  // its number (sheetPoNo ↔ customerPoNo) and the line by lineItem/partNo.
+  // A customer order can be delivered before any receipt is booked, so the cost
+  // column may still be 0 even though a priced supplier PO was issued. Fall back
+  // to that issued price for the lines that have no realized cost — using the
+  // SAME link ladder as above, so the estimate lands on exactly the customer-PO
+  // line the supplier line fulfils.
   //
   // The selling price (customer_po_items.unit_price) is always VAT-exclusive,
   // while a supplier PO line marked taxIncluded stores a VAT-inclusive price —
   // comparing the two raw made a profitable order look like a loss. Strip the
   // embedded VAT first, the same convention the PO PDF and the customer-RFQ
   // margin check already use.
-  const customerPoIdsByNo = new Map<string, number[]>();
-  for (const po of customerPos) {
-    const key = normKey(po.customerPoNo);
-    if (!key) continue;
-    customerPoIdsByNo.set(key, [...(customerPoIdsByNo.get(key) ?? []), po.id]);
-  }
   const estimateByCustomerItem = new Map<number, number>();
   for (const line of supplierLines) {
     const header = poHeaderById.get(line.poId);
     if (!header || header.status !== "sent" || DEAD_LINE_STATES.has(line.lineStatus)) continue;
-    const candidatePoIds = customerPoIdsByNo.get(normKey(header.sheetPoNo));
-    if (!candidatePoIds) continue;
+    const customerPoItemId = linkForLine.get(line.id);
+    if (customerPoItemId == null) continue;
+    // A line that already yielded a realized cost must not also be estimated —
+    // `num` keeps "no receipt" distinct from "zero cost".
+    if (num(line.finalActualCost) != null && num(line.totalAcceptedQty) != null) continue;
     const rawUnitCost = toNum(line.referencePrice);
     if (rawUnitCost == null) continue;
     const unitCost = netOfTax(rawUnitCost, line.taxIncluded, vatRate);
-    const lineKey = normKey(line.lineItem);
-    const partKey = normKey(line.partNo);
-    for (const cpoId of candidatePoIds) {
-      const items = itemsByCustomerPo.get(cpoId) ?? [];
-      const target =
-        (lineKey ? items.find((i) => normKey(i.lineItem) === lineKey) : undefined) ??
-        (partKey ? items.find((i) => normKey(i.partNo) === partKey) : undefined);
-      if (!target) continue;
-      const estimated = unitCost * toNum(target.qty);
-      estimateByCustomerItem.set(
-        target.id,
-        (estimateByCustomerItem.get(target.id) ?? 0) + estimated,
-      );
-    }
+    // The estimate covers the customer-PO line's ordered qty.
+    const customerItem = customerItemById.get(customerPoItemId);
+    if (!customerItem) continue;
+    const estimated = unitCost * toNum(customerItem.qty);
+    estimateByCustomerItem.set(
+      customerPoItemId,
+      (estimateByCustomerItem.get(customerPoItemId) ?? 0) + estimated,
+    );
   }
 
   const customerOrders = [];

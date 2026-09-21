@@ -34,6 +34,7 @@ import { eq, sql, and, desc, gte, lte } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { rateOf, round2, vatOnNet, marginOf } from "./tax";
 import { numOrZero as toNum, formatNum, loadTaxSettings } from "./helpers";
+import { supplierLineByCustomerItem } from "../../shared/po-links";
 
 const router = Router();
 
@@ -124,16 +125,44 @@ router.get("/accounts/margins", requireAuth, async (req, res): Promise<void> => 
     .where(buildConditions(customerName, from, to))
     .orderBy(desc(customerPosTable.createdAt));
 
+  // The join above only pairs lines that carry customer_po_item_id, so a line
+  // raised from a sheet lookup would show sell-side only, with no cost — the
+  // reported "cost hallucination". Fill those gaps with the same shared ladder.
+  const supplierLineByItem = await supplierLineByCustomerItem(
+    await db.select().from(purchaseOrderItemsTable),
+  );
+  const effectiveSupplierItemId = (r: (typeof rows)[number]): number | null =>
+    r.supplierPoItemId ?? supplierLineByItem.get(r.customerPoItemId)?.id ?? null;
+  // Load charges against the effective ids, so a fallback-linked line still
+  // carries its transport/customs charges into the cost.
   const chargesMap = await loadChargesByPoItem(
-    rows.map((r) => r.supplierPoItemId).filter((x): x is number => x != null),
+    rows.map(effectiveSupplierItemId).filter((x): x is number => x != null),
   );
 
   const lines = rows.map((r) => {
     const sellQty = toNum(r.sellQty);
     const sellUnit = toNum(r.sellUnitPrice);
-    const accepted = toNum(r.acceptedQty);
-    const actualCost = toNum(r.finalActualCost);
-    const lineCharges = r.supplierPoItemId != null ? (chargesMap.get(r.supplierPoItemId) ?? 0) : 0;
+    // Prefer the joined line; fall back to the ladder for an unlinked one.
+    const fallback = supplierLineByItem.get(r.customerPoItemId);
+    const accepted =
+      r.supplierPoItemId != null
+        ? toNum(r.acceptedQty)
+        : fallback?.id != null
+          ? toNum(fallback.totalAcceptedQty)
+          : null;
+    const actualCost =
+      r.supplierPoItemId != null
+        ? toNum(r.finalActualCost)
+        : fallback?.id != null
+          ? toNum(fallback.finalActualCost)
+          : null;
+    const supplierPoItemId = r.supplierPoItemId ?? fallback?.id ?? null;
+    const supplierPoId = r.supplierPoId ?? fallback?.poId ?? null;
+    const taxIncluded =
+      r.supplierPoItemId != null ? r.supplierTaxIncluded : (fallback?.taxIncluded ?? null);
+    const supplierLineStatus =
+      r.supplierPoItemId != null ? r.supplierLineStatus : (fallback?.lineStatus ?? null);
+    const lineCharges = supplierPoItemId != null ? (chargesMap.get(supplierPoItemId) ?? 0) : 0;
     // Shared rule (tax.ts) — keeps the invoice/charges/VAT conventions identical
     // to the summary endpoint, the orders registry and the analytics page.
     const { revenue, cost, margin, marginPct, isLoss } = marginOf(
@@ -142,7 +171,7 @@ router.get("/accounts/margins", requireAuth, async (req, res): Promise<void> => 
         sellUnitPrice: sellUnit,
         acceptedQty: accepted,
         finalActualCost: actualCost,
-        taxIncluded: r.supplierTaxIncluded,
+        taxIncluded,
         charges: lineCharges,
       },
       vatRate,
@@ -194,6 +223,7 @@ router.get("/accounts/margins/summary", requireAuth, async (req, res): Promise<v
 
   const rows = await db
     .select({
+      customerPoItemId: customerPoItemsTable.id,
       sellQty: customerPoItemsTable.qty,
       sellUnitPrice: customerPoItemsTable.unitPrice,
       acceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
@@ -210,8 +240,17 @@ router.get("/accounts/margins/summary", requireAuth, async (req, res): Promise<v
     )
     .where(buildConditions(customerName, from, to));
 
+  // Same gap as the list endpoint: lines without customer_po_item_id are absent
+  // from the join, so their cost would be counted as 0 and the totals would
+  // overstate profit. Fill them from the shared ladder so the cards and the
+  // table agree.
+  const supplierLineByItem = await supplierLineByCustomerItem(
+    await db.select().from(purchaseOrderItemsTable),
+  );
   const chargesMap = await loadChargesByPoItem(
-    rows.map((r) => r.supplierPoItemId).filter((x): x is number => x != null),
+    rows
+      .map((r) => r.supplierPoItemId ?? supplierLineByItem.get(r.customerPoItemId)?.id ?? null)
+      .filter((x): x is number => x != null),
   );
 
   let totalRevenue = 0;
@@ -221,14 +260,22 @@ router.get("/accounts/margins/summary", requireAuth, async (req, res): Promise<v
   let pricedLines = 0;
 
   for (const r of rows) {
-    const lineCharges = r.supplierPoItemId != null ? (chargesMap.get(r.supplierPoItemId) ?? 0) : 0;
+    const fallback = r.supplierPoItemId == null ? supplierLineByItem.get(r.customerPoItemId) : null;
+    const acceptedQty =
+      r.supplierPoItemId != null ? toNum(r.acceptedQty) : toNum(fallback?.totalAcceptedQty);
+    const finalActualCost =
+      r.supplierPoItemId != null ? toNum(r.finalActualCost) : toNum(fallback?.finalActualCost);
+    const taxIncluded =
+      r.supplierPoItemId != null ? r.supplierTaxIncluded : (fallback?.taxIncluded ?? null);
+    const supplierPoItemId = r.supplierPoItemId ?? fallback?.id ?? null;
+    const lineCharges = supplierPoItemId != null ? (chargesMap.get(supplierPoItemId) ?? 0) : 0;
     const { revenue, cost } = marginOf(
       {
         sellQty: toNum(r.sellQty),
         sellUnitPrice: toNum(r.sellUnitPrice),
-        acceptedQty: toNum(r.acceptedQty),
-        finalActualCost: toNum(r.finalActualCost),
-        taxIncluded: r.supplierTaxIncluded,
+        acceptedQty,
+        finalActualCost,
+        taxIncluded,
         charges: lineCharges,
       },
       vatRate,

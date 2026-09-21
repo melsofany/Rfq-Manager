@@ -15,7 +15,7 @@ import {
   representativesTable,
   WORK_ORDER_KIND,
 } from "@workspace/db";
-import { eq, desc, sql, and, inArray, ne, isNotNull, ilike } from "drizzle-orm";
+import { eq, desc, sql, and, inArray, ne, isNotNull } from "drizzle-orm";
 import {
   Whatsapp,
   PHONE_NUMBER_ID,
@@ -40,6 +40,8 @@ import { logger } from "../../shared/logger";
 import { REJECTION_REASONS } from "../po/receipts";
 import multer from "multer";
 const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+import { resolveCustomerPoLinks } from "../../shared/po-links";
 
 const router = Router();
 
@@ -692,36 +694,14 @@ export async function resolveCustomerPoItemId(
   poId: number,
   lineItem: string | null,
   partNo: string | null,
+  description: string | null = null,
 ): Promise<number | null> {
-  const [po] = await db
-    .select({ sheetPoNo: purchaseOrdersTable.sheetPoNo })
-    .from(purchaseOrdersTable)
-    .where(eq(purchaseOrdersTable.id, poId));
-  if (!po?.sheetPoNo) return null;
-  const [cpo] = await db
-    .select({ id: customerPosTable.id })
-    .from(customerPosTable)
-    .where(ilike(customerPosTable.customerPoNo, po.sheetPoNo));
-  if (!cpo) return null;
-  const items = await db
-    .select({
-      id: customerPoItemsTable.id,
-      lineItem: customerPoItemsTable.lineItem,
-      partNo: customerPoItemsTable.partNo,
-    })
-    .from(customerPoItemsTable)
-    .where(eq(customerPoItemsTable.customerPoId, cpo.id));
-  if (items.length === 0) return null;
-  // Prefer an exact lineItem match, then partNo, then the first item.
-  const byLine = lineItem
-    ? items.find((i) => i.lineItem && i.lineItem.trim() === lineItem.trim())
-    : undefined;
-  if (byLine) return byLine.id;
-  const byPart = partNo
-    ? items.find((i) => i.partNo && i.partNo.trim() === partNo.trim())
-    : undefined;
-  if (byPart) return byPart.id;
-  return items[0].id;
+  // One shared ladder: FK-less lines are matched through the supplier PO's
+  // number against the customer PO, then by lineItem / partNo / description.
+  const { linkByLineId } = await resolveCustomerPoLinks([
+    { id: poId, poId, customerPoItemId: null, lineItem, partNo, description },
+  ]);
+  return linkByLineId.get(poId)?.customerPoItemId ?? null;
 }
 
 /**

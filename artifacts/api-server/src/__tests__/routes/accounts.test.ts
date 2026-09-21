@@ -50,6 +50,7 @@ let taxSettingsRow: any | null;
 let sellRows: any[];
 let buyRows: any[];
 let poRows: any[];
+let customerPoRows: any[];
 let salesInvoiceRows: any[];
 let supplierInvoiceRows: any[];
 let poChargeRows: any[];
@@ -63,6 +64,7 @@ function selectBuilder() {
     from: vi.fn((table: any) => {
       let rows: any[] = [];
       if (table === customerPoItemsTbl) rows = sellRows;
+      else if (table === customerPosTbl) rows = customerPoRows;
       else if (table === purchaseOrderItemsTbl) rows = buyRows;
       else if (table === purchaseOrdersTbl) rows = poRows;
       else if (table === taxSettingsTbl) rows = taxSettingsRow ? [taxSettingsRow] : [];
@@ -144,6 +146,7 @@ beforeEach(() => {
   sellRows = [];
   buyRows = [];
   poRows = [];
+  customerPoRows = [];
   salesInvoiceRows = [];
   supplierInvoiceRows = [];
   poChargeRows = [];
@@ -431,6 +434,51 @@ describe("GET /api/accounts/margins/summary", () => {
     expect(res.body.totalCost).toBe("1000");
     expect(res.body.totalMargin).toBe("0");
     expect(res.body.lossLines).toBe(0);
+  });
+
+  it("folds in the cost of a received line that has no customer_po_item FK", async () => {
+    // The customer-PO line has NO joined supplier line (customerPoItemId was
+    // never persisted — the sheet-lookup case). Its cost must still be found
+    // via the shared link ladder, or the profit reads as pure margin.
+    customerPoRows = [{ id: 1, customerPoNo: "C-100" }];
+    poRows = [{ id: 1, sheetPoNo: "C-100" }];
+    sellRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        description: null,
+        customerPoItemId: 11,
+        sellQty: "10",
+        sellUnitPrice: "100",
+        acceptedQty: null, // absent from the join
+        finalActualCost: null,
+        supplierTaxIncluded: null,
+        supplierPoItemId: null, // no FK
+      } as any,
+    ];
+    buyRows = [
+      {
+        id: 101,
+        poId: 1,
+        customerPoItemId: null,
+        lineItem: "1",
+        partNo: "ABC-1",
+        description: null,
+        totalAcceptedQty: "10",
+        finalActualCost: "70",
+        taxIncluded: false,
+        lineStatus: "fulfilled",
+      } as any,
+    ];
+    sellRows[0].customerPoNo = "C-100";
+
+    const res = await request(testApp).get("/api/accounts/margins/summary");
+    expect(res.status).toBe(200);
+    expect(res.body.totalRevenue).toBe("1000");
+    expect(res.body.totalCost).toBe("700"); // 10 × 70 found through the ladder
+    expect(res.body.totalMargin).toBe("300");
   });
 });
 

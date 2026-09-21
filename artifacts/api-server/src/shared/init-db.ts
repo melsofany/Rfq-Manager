@@ -665,6 +665,54 @@ export async function initDb(): Promise<void> {
              );
     `);
 
+    // ── Link repair: supplier PO lines never linked to a customer PO line ────
+    // purchase_order_items.customer_po_item_id is NULL for every line created
+    // from a Google-Sheets lookup or entered free-hand — the common case. Cost,
+    // receipts and delivery then cannot be attributed, and the accounts registry
+    // rejected the REALIZED cost of goods already received (it fell back to a
+    // «تقديري» price instead). Re-attach such lines to the customer-PO line they
+    // fulfil: the supplier PO's sheet_po_no must equal a customer PO's
+    // customer_po_no, and the line is matched by line_item, else part_no, else
+    // description. Idempotent, and only an UNAMBIGUOUS match (exactly one
+    // candidate) is written — guessing would attach a receipt to the wrong line.
+    await client.query(`
+      WITH sup AS (
+        SELECT poi.id AS poi_id, poi.line_item, poi.part_no, poi.description,
+               lower(btrim(po.sheet_po_no)) AS po_key
+          FROM purchase_order_items poi
+          JOIN purchase_orders po ON po.id = poi.po_id
+         WHERE poi.customer_po_item_id IS NULL
+           AND po.sheet_po_no IS NOT NULL
+           AND btrim(po.sheet_po_no) <> ''
+      ),
+      cand AS (
+        SELECT s.poi_id,
+               cpi.id AS cpi_id,
+               count(*) OVER (PARTITION BY s.poi_id) AS n,
+               row_number() OVER (
+                 PARTITION BY s.poi_id
+                 ORDER BY (btrim(cpi.line_item) = btrim(s.line_item)) DESC NULLS LAST, cpi.id
+               ) AS rn
+          FROM sup s
+          JOIN customer_pos cpo ON lower(btrim(cpo.customer_po_no)) = s.po_key
+          JOIN customer_po_items cpi ON cpi.customer_po_id = cpo.id
+         WHERE (
+               (NULLIF(btrim(s.line_item), '') IS NOT NULL
+                AND btrim(cpi.line_item) = btrim(s.line_item))
+               OR (NULLIF(btrim(s.part_no), '') IS NOT NULL
+                   AND btrim(cpi.part_no) = btrim(s.part_no))
+               OR (NULLIF(btrim(s.description), '') IS NOT NULL
+                   AND btrim(cpi.description) = btrim(s.description))
+         )
+      )
+      UPDATE purchase_order_items poi
+         SET customer_po_item_id = cand.cpi_id
+        FROM cand
+       WHERE poi.id = cand.poi_id
+         AND cand.rn = 1
+         AND cand.n = 1;
+    `);
+
     // ══════════════════════════════════════════════════════════════════════
     // Accounting — القيد المزدوج ودليل الحسابات
     // ══════════════════════════════════════════════════════════════════════
