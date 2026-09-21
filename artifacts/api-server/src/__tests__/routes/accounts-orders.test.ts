@@ -436,7 +436,85 @@ describe("GET /api/accounts/collected-orders", () => {
     const o = res.body.customerOrders[0];
     // 10 × 70 realized, NOT 10 × 60 estimated
     expect(o.cost).toBe("700");
+    expect(o.realizedCost).toBe("700");
+    expect(o.estimatedCost).toBe("0");
     expect(o.costEstimated).toBe(false);
+  });
+
+  it("keeps realized and estimated cost separate when an order has both", async () => {
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000001",
+        customerPoNo: "C-100",
+        customerName: "عميل أ",
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        qty: "10",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+      {
+        id: 12,
+        customerPoId: 1,
+        lineItem: "2",
+        qty: "5",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+    ];
+    purchaseOrderRows = [
+      {
+        id: 1,
+        internalPoNo: "PO-2026-000001",
+        sheetPoNo: "C-100",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    purchaseOrderItemRows = [
+      {
+        id: 101,
+        poId: 1,
+        lineItem: "1",
+        customerPoItemId: 11,
+        totalAcceptedQty: "10",
+        finalActualCost: "70",
+        referencePrice: "60",
+        lineStatus: "fulfilled",
+      },
+      {
+        id: 102,
+        poId: 1,
+        lineItem: "2",
+        customerPoItemId: null,
+        totalAcceptedQty: null,
+        finalActualCost: null,
+        referencePrice: "60",
+        lineStatus: "pending",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    const o = res.body.customerOrders[0];
+    // item 1: 10 × 70 realized; item 2: 5 × 60 estimated
+    expect(o.realizedCost).toBe("700");
+    expect(o.estimatedCost).toBe("300");
+    expect(o.cost).toBe("1000");
+    // net = 1500 → margin = 1500 − 1000
+    expect(o.margin).toBe("500");
+    // a partially realized order is not flagged as a pure estimate
+    expect(o.costEstimated).toBe(false);
+    expect(res.body.totals.realizedCost).toBe("700");
+    expect(res.body.totals.estimatedCost).toBe("300");
   });
 
   it("includes a supplier order once received or invoiced, with cost + input VAT", async () => {
