@@ -35,7 +35,7 @@ import {
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
-import { round2 } from "./tax";
+import { round2, VAT_RATE } from "./tax";
 import { numOr as toNum, trimNum as fmt, loadTaxSettings } from "./helpers";
 
 const router = Router();
@@ -55,18 +55,29 @@ function normKey(v: string | null): string {
  * Realized cost per customer-PO item: accepted supplier qty × actual cost.
  * Only lines with a receipt (finalActualCost set) contribute — an issued but
  * unreceived line has no accounting cost, so it falls back to the estimate.
+ *
+ * The actual cost entered in receipts should be interpreted in light of the
+ * supplier PO line's taxIncluded flag: if the line was tax-inclusive, the
+ * entered actual cost likely includes tax and must be stripped to obtain the
+ * true goods cost (VAT-exclusive), matching the revenue convention.
  */
 function realizedCostByCustomerItem(
   supplierLines: {
     customerPoItemId: number | null;
     totalAcceptedQty: unknown;
     finalActualCost: unknown;
+    taxIncluded: boolean;
   }[],
+  vatRate: number,
 ): Map<number, number> {
   const map = new Map<number, number>();
+  const vatDivisor = 1 + vatRate / 100;
   for (const line of supplierLines) {
     if (line.customerPoItemId == null) continue;
-    const cost = toNum(line.totalAcceptedQty) * toNum(line.finalActualCost);
+    const rawUnitCost = toNum(line.finalActualCost);
+    if (rawUnitCost == null) continue;
+    const unitCost = line.taxIncluded ? rawUnitCost / vatDivisor : rawUnitCost;
+    const cost = toNum(line.totalAcceptedQty) * unitCost;
     map.set(line.customerPoItemId, (map.get(line.customerPoItemId) ?? 0) + cost);
   }
   return map;
@@ -94,7 +105,15 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     })
     .from(salesInvoicesTable)
     .where(eq(salesInvoicesTable.status, "posted"));
-  const supplierLines = await db.select().from(purchaseOrderItemsTable);
+  const supplierLines = await db
+    .select({
+      id: purchaseOrderItemsTable.id,
+      customerPoItemId: purchaseOrderItemsTable.customerPoItemId,
+      totalAcceptedQty: purchaseOrderItemsTable.totalAcceptedQty,
+      finalActualCost: purchaseOrderItemsTable.finalActualCost,
+      taxIncluded: purchaseOrderItemsTable.taxIncluded,
+    })
+    .from(purchaseOrderItemsTable);
   const poHeaders = await db
     .select({
       id: purchaseOrdersTable.id,
@@ -118,7 +137,7 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     // so keep the last we see)
     invoiceByCustomerPo.set(inv.customerPoId, inv);
   }
-  const costByCustomerItem = realizedCostByCustomerItem(supplierLines);
+  const costByCustomerItem = realizedCostByCustomerItem(supplierLines, vatRate);
 
   // A customer order can be delivered before any receipt is booked, and supplier
   // PO lines created from a sheet lookup carry no customer_po_item FK. Both cases

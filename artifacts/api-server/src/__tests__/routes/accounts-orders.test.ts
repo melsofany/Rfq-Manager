@@ -734,6 +734,114 @@ describe("GET /api/accounts/collected-orders", () => {
     // 110 / 1.10 = 100 — the rate comes from tax_settings, not a hardcoded 14.
     expect(res.body.customerOrders[0].cost).toBe("100");
   });
+
+  it("uses the configured VAT rate when computing realized cost from tax-inclusive supplier price", async () => {
+    taxSettingsRow = { id: 1, vatRate: "10" };
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000001",
+        customerPoNo: "C-100",
+        customerName: "عميل أ",
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        qty: "10",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+    ];
+    purchaseOrderRows = [
+      {
+        id: 1,
+        internalPoNo: "PO-2026-000001",
+        sheetPoNo: "C-100",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    // Supplier has taxInclusive price, receipt actual cost entered as tax-inclusive amount
+    purchaseOrderItemRows = [
+      {
+        id: 101,
+        poId: 1,
+        customerPoItemId: 11,
+        totalAcceptedQty: "10",
+        finalActualCost: "110", // VAT-inclusive amount entered by operator
+        taxIncluded: true,
+        lineStatus: "fulfilled",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    const o = res.body.customerOrders[0];
+    // 110 / 1.10 = 100 per unit (VAT-exclusive cost) × 10 = 1000
+    expect(o.cost).toBe("1000");
+    expect(o.net).toBe("1000"); // 100 × 10
+    expect(o.margin).toBe("0"); // 1000 - 1000 = 0
+    expect(o.isLoss).toBe(false);
+  });
+
+  it("computes realized cost correctly for VAT-exclusive supplier price", async () => {
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000001",
+        customerPoNo: "C-100",
+        customerName: "عميل أ",
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        qty: "10",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+    ];
+    purchaseOrderRows = [
+      {
+        id: 1,
+        internalPoNo: "PO-2026-000001",
+        sheetPoNo: "C-100",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    // Supplier has taxExclusive price, receipt actual cost entered as VAT-exclusive amount
+    purchaseOrderItemRows = [
+      {
+        id: 101,
+        poId: 1,
+        customerPoItemId: 11,
+        totalAcceptedQty: "10",
+        finalActualCost: "70", // VAT-exclusive amount entered by operator
+        taxIncluded: false,
+        lineStatus: "fulfilled",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    const o = res.body.customerOrders[0];
+    expect(o.cost).toBe("700"); // 70 × 10, no VAT to strip
+    expect(o.margin).toBe("300"); // Wait, let me calculate: net = 1000, cost = 700, margin = 300
+    expect(o.margin).toBe("300");
+    expect(o.isLoss).toBe(false);
+  });
 });
 
 describe("GET /api/accounts/po-charges", () => {
