@@ -36,6 +36,11 @@ const chartOfAccountsTbl = "chartOfAccounts";
 const journalEntriesTbl = "journalEntries";
 const journalLinesTbl = "journalLines";
 const accountingClosingsTbl = "accountingClosings";
+// Declared because accounts/posting.ts (imported by the expenses route to post
+// its journal entry) reads the per-series number tables at module scope.
+const salesInvoicesTbl = "salesInvoices";
+const supplierInvoicesTbl = "supplierInvoices";
+const supplierPaymentsTbl = "supplierPayments";
 
 let expenseRows: any[];
 let attachmentRows: any[];
@@ -97,6 +102,9 @@ vi.mock("@workspace/db", () => ({
   journalEntriesTable: journalEntriesTbl,
   journalLinesTable: journalLinesTbl,
   accountingClosingsTable: accountingClosingsTbl,
+  salesInvoicesTable: salesInvoicesTbl,
+  supplierInvoicesTable: supplierInvoicesTbl,
+  supplierPaymentsTable: supplierPaymentsTbl,
   ACCOUNT_CODES: ACCOUNT_CODES_MOCK,
 }));
 

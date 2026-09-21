@@ -8,16 +8,20 @@
  *   • every line's account code exists in chart_of_accounts;
  *   • posted entries are immutable (further edits → void + new entry).
  *
- * Numbering: entryNo = `JE-YYYY-NNNNNN` generated from a per-year sequence.
+ * Numbering: each document series has its own prefix + table (see NUMBER_SERIES).
  */
 import { db } from "@workspace/db";
 import {
   journalEntriesTable,
   journalLinesTable,
   chartOfAccountsTable,
+  salesInvoicesTable,
+  supplierInvoicesTable,
+  supplierPaymentsTable,
   ACCOUNT_CODES,
 } from "@workspace/db";
 import { eq, sql, and, gte, lte, desc } from "drizzle-orm";
+import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import { round2 } from "./tax";
 import { assertMonthOpen } from "./closing";
 
@@ -42,16 +46,32 @@ export interface PostJournalInput {
   status?: "draft" | "posted"; // default posted (auto flows)
 }
 
-/** Generate the next entry no for a given prefix + year (e.g. JE-2026-000001). */
+/**
+ * Generate the next number for a given prefix + year (e.g. JE-2026-000001).
+ *
+ * Each prefix is a separate document series living in its own table, so the
+ * sequence MUST be read from that table — reading them all from journal_entries
+ * restarted every invoice/payment series at 000001 and collided with the
+ * existing row's UNIQUE constraint.
+ */
+const NUMBER_SERIES: Record<string, { table: PgTable; column: AnyPgColumn }> = {
+  JE: { table: journalEntriesTable, column: journalEntriesTable.entryNo },
+  INV: { table: salesInvoicesTable, column: salesInvoicesTable.invoiceNo },
+  SI: { table: supplierInvoicesTable, column: supplierInvoicesTable.invoiceNo },
+  SP: { table: supplierPaymentsTable, column: supplierPaymentsTable.paymentNo },
+};
+
 export async function nextEntryNo(prefix: string, year: number): Promise<string> {
+  const series = NUMBER_SERIES[prefix];
+  if (!series) throw new Error(`Unknown document series: ${prefix}`);
   const pattern = `${prefix}-${year}-`;
   const rows = await db
-    .select({ entryNo: journalEntriesTable.entryNo })
-    .from(journalEntriesTable)
-    .where(sql`${journalEntriesTable.entryNo} like ${pattern + "%"}`);
+    .select({ no: series.column })
+    .from(series.table)
+    .where(sql`${series.column} like ${pattern + "%"}`);
   let max = 0;
   for (const r of rows) {
-    const n = parseInt(r.entryNo.slice(pattern.length), 10);
+    const n = parseInt(String(r.no).slice(pattern.length), 10);
     if (!isNaN(n) && n > max) max = n;
   }
   return `${pattern}${String(max + 1).padStart(6, "0")}`;

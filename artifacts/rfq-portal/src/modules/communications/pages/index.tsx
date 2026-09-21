@@ -207,26 +207,13 @@ function playNotifSound() {
 }
 
 // ─── Avatar Component ─────────────────────────────────────────────────────
+// Meta's Cloud API has no contact-profile-picture lookup, so there is no image
+// to fetch — render deterministic initials instead. (Previously this pointed at
+// a /api/whatsapp/profile-picture endpoint that always 404'd, once per avatar
+// per render, flooding the console and the Render logs.)
 function Avatar({ name, phone, size = 40 }: { name: string; phone: string; size?: number }) {
-  const [imgSrc, setImgSrc] = useState<string | null>(null);
-  const [imgErr, setImgErr] = useState(false);
-  useEffect(() => {
-    setImgErr(false);
-    setImgSrc(`/api/whatsapp/profile-picture/${encodeURIComponent(phone)}`);
-  }, [phone]);
   const color = getAvatarColor(phone);
   const text = initials(name || phone);
-  if (imgSrc && !imgErr) {
-    return (
-      <img
-        src={imgSrc}
-        onError={() => setImgErr(true)}
-        alt={name}
-        className="rounded-full object-cover flex-shrink-0"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
   return (
     <div
       className="rounded-full flex-shrink-0 flex items-center justify-center text-white font-semibold select-none"
@@ -597,10 +584,26 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     return () => clearInterval(id);
   }, [loadChats]);
 
-  // Auto-scroll
+  // Auto-scroll to the newest message.
+  // The dependency must include `loading` + `selected`: while the request is in
+  // flight the list renders a spinner, so the `messagesEnd` sentinel does not
+  // exist yet and scrolling on the messages array alone silently no-ops (the
+  // chat opened at the top instead of the last message).
+  //
+  // Only the NEWEST message id is used as the trigger so the 15s polling
+  // fallback (which replaces the array with an identical list) does not yank the
+  // reader back to the bottom while they scroll through history.
+  const lastMessageId = messages.length ? messages[messages.length - 1].id : null;
+  const lastScrolledId = useRef<number | null>(null);
   useEffect(() => {
-    setTimeout(() => messagesEnd.current?.scrollIntoView({ behavior: "smooth" }), 80);
-  }, [messages]);
+    if (loading || !selected || lastMessageId == null) return;
+    if (lastScrolledId.current === lastMessageId) return;
+    lastScrolledId.current = lastMessageId;
+    const id = requestAnimationFrame(() => {
+      messagesEnd.current?.scrollIntoView({ block: "end" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [lastMessageId, loading, selected]);
 
   // Close emoji picker on outside click
   useEffect(() => {

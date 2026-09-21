@@ -1734,40 +1734,6 @@ router.get("/whatsapp/media/:mediaId", requireAuth, async (req, res): Promise<vo
   }
 });
 
-// ─── GET /api/whatsapp/profile-picture/:phone ─────────────────────────────
-router.get("/whatsapp/profile-picture/:phone", requireAuth, async (req, res): Promise<void> => {
-  const phone = req.params.phone as string;
-  if (!isWhatsAppConfigured) {
-    res.status(404).json({ error: "Not configured" });
-    return;
-  }
-  try {
-    const contactRes = await Whatsapp.$$apiFetch$$(
-      `https://graph.facebook.com/${WA_API_VERSION}/${WA_PHONE_ID}/contacts?wa_id=${phone}&fields=profile_picture_url`,
-    );
-    const contactData = (await contactRes.json()) as {
-      data?: Array<{ profile_picture_url?: string }>;
-    };
-    const picUrl = contactData.data?.[0]?.profile_picture_url;
-    if (!picUrl) {
-      res.status(404).json({ error: "No profile picture" });
-      return;
-    }
-    const imgRes = await Whatsapp.$$apiFetch$$(picUrl);
-    if (!imgRes.ok) {
-      res.status(404).json({ error: "Image not available" });
-      return;
-    }
-    const buffer = Buffer.from(await imgRes.arrayBuffer());
-    res.setHeader("Content-Type", imgRes.headers.get("content-type") || "image/jpeg");
-    res.setHeader("Cache-Control", "private, max-age=300");
-    res.send(buffer);
-  } catch (err) {
-    logger.warn({ err, phone }, "Failed to fetch WhatsApp profile picture");
-    res.status(404).json({ error: "Failed to fetch profile picture" });
-  }
-});
-
 // ─── GET /api/whatsapp/chats ──────────────────────────────────────────────
 router.get("/whatsapp/chats", requireAuth, async (req, res): Promise<void> => {
   const rows = await db

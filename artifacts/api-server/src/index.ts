@@ -5,6 +5,7 @@ setDefaultResultOrder("ipv4first");
 import app from "./app";
 import { logger } from "./shared/logger";
 import { runFullSync } from "./shared/sheet-sync";
+import { verifyMirrorSheetAccess } from "./shared/google-sheets";
 import { initDb } from "./shared/init-db";
 import {
   ensureWorkOrderTemplate,
@@ -58,13 +59,22 @@ initDb()
 
       if (process.env.GOOGLE_MIRROR_SHEET_ID) {
         const INTERVAL_MS = 5 * 60 * 1000;
-        setTimeout(() => {
+        setTimeout(async () => {
+          const reachable = await verifyMirrorSheetAccess();
+          if (!reachable.ok) {
+            logger.error(
+              { error: reachable.error, sheetId: process.env.GOOGLE_MIRROR_SHEET_ID },
+              "Mirror sheet unreachable — auto-sync disabled. Check GOOGLE_MIRROR_SHEET_ID " +
+                "and share the spreadsheet with the service account.",
+            );
+            return;
+          }
           runFullSync().catch((err) => logger.error({ err }, "Initial sheet sync failed"));
           setInterval(() => {
             runFullSync().catch((err) => logger.error({ err }, "Scheduled sheet sync failed"));
           }, INTERVAL_MS);
+          logger.info({ intervalMinutes: 5 }, "Sheet auto-sync scheduled");
         }, 30_000);
-        logger.info({ intervalMinutes: 5 }, "Sheet auto-sync scheduled");
       }
 
       scheduleDailyBackup();

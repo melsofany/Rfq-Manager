@@ -202,6 +202,25 @@ function getMirrorSheetId(): string {
   return id;
 }
 
+/**
+ * Verify the mirror spreadsheet is reachable before scheduling recurring syncs.
+ *
+ * A wrong/stale GOOGLE_MIRROR_SHEET_ID (or one the service account has not been
+ * granted access to) returns 404 on every call, which previously produced a
+ * "Sheet sync failed" error in the logs every 5 minutes forever. Checking once
+ * at boot lets the scheduler stay off and the operator get one actionable line.
+ */
+export async function verifyMirrorSheetAccess(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const auth = getAuth(true);
+    const sheets = google.sheets({ version: "v4", auth });
+    await sheets.spreadsheets.get({ spreadsheetId: getMirrorSheetId() });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
+
 const TAB_RFQS = "RFQs";
 const TAB_ITEMS = "Items";
 const TAB_SUPPLIERS = "Suppliers";
