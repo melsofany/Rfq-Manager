@@ -53,7 +53,7 @@ interface Attachment {
 
 function fmt(n: string | null): string {
   if (n == null) return "-";
-  return Number(n).toLocaleString("ar-EG", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export default function ExpensesPage() {

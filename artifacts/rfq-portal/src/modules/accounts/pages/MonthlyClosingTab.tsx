@@ -158,7 +158,7 @@ export default function MonthlyClosingTab() {
                 <tr key={r.id} className="border-t border-border hover:bg-muted/30">
                   <td className="p-2.5 font-medium">{periodLabel(r.period)}</td>
                   <td className="p-2.5 text-xs text-muted-foreground">
-                    {r.closedAt ? new Date(r.closedAt).toLocaleString("ar-EG") : "-"}
+                    {r.closedAt ? new Date(r.closedAt).toLocaleString("en-GB") : "-"}
                   </td>
                   <td className="p-2.5">{r.closedByName ?? "-"}</td>
                   <td className="p-2.5 text-xs text-muted-foreground">{r.notes ?? "-"}</td>
