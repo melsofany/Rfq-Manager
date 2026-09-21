@@ -39,6 +39,10 @@ const salesInvoicesTbl = "salesInvoices";
 const chartOfAccountsTbl = "chartOfAccounts";
 const journalEntriesTbl = "journalEntries";
 const journalLinesTbl = "journalLines";
+// Declared because accounts/posting.ts (imported by the collections route to
+// post a payment journal) reads the per-series number tables at module scope.
+const supplierInvoicesTbl = "supplierInvoices";
+const supplierPaymentsTbl = "supplierPayments";
 
 let poListRows: any[];
 let itemRows: any[];
@@ -101,6 +105,8 @@ vi.mock("@workspace/db", () => ({
   customersTable: customersTbl,
   auditLogTable: auditTbl,
   salesInvoicesTable: salesInvoicesTbl,
+  supplierInvoicesTable: supplierInvoicesTbl,
+  supplierPaymentsTable: supplierPaymentsTbl,
   chartOfAccountsTable: chartOfAccountsTbl,
   journalEntriesTable: journalEntriesTbl,
   journalLinesTable: journalLinesTbl,

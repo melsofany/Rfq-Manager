@@ -58,7 +58,12 @@ let taxSettingsRow: any | null;
 let lastInsert: { table: string; rows: any[]; returning?: any[] } | null = null;
 let entryIdSeq = 100;
 
-function selectBuilder() {
+function selectBuilder(selection?: any) {
+  // `nextEntryNo` selects `{ no: <col> }`; project the series number onto that
+  // alias so the caller's max-scan sees a value (the fixture rows carry the
+  // real column name, e.g. invoiceNo).
+  const projectNo =
+    selection && typeof selection === "object" && "no" in selection && !selection.code;
   const api: any = {
     from: vi.fn((table: any) => {
       let rows: any[] = [];
@@ -124,6 +129,24 @@ function selectBuilder() {
                 });
               }
             }
+            // A `like 'PREFIX-YYYY-%'` filter (nextEntryNo) — keep only rows of
+            // that series so each document table yields its own max sequence.
+            const likeArg = (c.values ?? []).find(
+              (v: any) => typeof v === "string" && v.includes("%"),
+            );
+            if (typeof likeArg === "string") {
+              const prefix = likeArg.replace(/%$/, "");
+              rows = rows.filter((r) => {
+                const no = r.no ?? r.entryNo ?? r.invoiceNo ?? r.paymentNo;
+                return no == null ? false : String(no).startsWith(prefix);
+              });
+            }
+          }
+          if (projectNo) {
+            rows = rows.map((r) => ({
+              ...r,
+              no: r.no ?? r.entryNo ?? r.invoiceNo ?? r.paymentNo,
+            }));
           }
           return cur;
         }),
@@ -138,7 +161,7 @@ function selectBuilder() {
 }
 
 const dbMock: any = {
-  select: vi.fn(() => selectBuilder()),
+  select: vi.fn((selection?: any) => selectBuilder(selection)),
   insert: vi.fn((table: any) => ({
     values: vi.fn((rows: any) => {
       const arr = Array.isArray(rows) ? rows : [rows];
@@ -599,6 +622,36 @@ describe("POST /api/accounts/sales-invoices", () => {
       .send({ customerName: "عميل" });
     expect(res.status).toBe(400);
   });
+
+  // Regression: nextEntryNo used to read every series from journal_entries, so
+  // INV/SI/SP all restarted at 000001 and hit the UNIQUE constraint on the
+  // second document (500). Each series must continue from its OWN table.
+  it("continues the INV series from existing sales invoices", async () => {
+    salesInvoiceRows = [{ id: 1, invoiceNo: "INV-2026-000007", status: "posted" }];
+    const res = await request(testApp)
+      .post("/api/accounts/sales-invoices")
+      .send({
+        customerName: "عميل تجريبي",
+        invoiceDate: "2026-08-01",
+        items: [{ description: "بند", qty: 1, unitPrice: 100 }],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.invoiceNo).toBe("INV-2026-000008");
+  });
+
+  it("does not let a journal entry consume the INV sequence", async () => {
+    journalEntryRows = [{ id: 1, entryNo: "JE-2026-000099", status: "posted" }];
+    salesInvoiceRows = [];
+    const res = await request(testApp)
+      .post("/api/accounts/sales-invoices")
+      .send({
+        customerName: "عميل تجريبي",
+        invoiceDate: "2026-08-01",
+        items: [{ description: "بند", qty: 1, unitPrice: 100 }],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.invoiceNo).toBe("INV-2026-000001");
+  });
 });
 
 describe("POST /api/accounts/sales-invoices/:id/post", () => {
@@ -704,6 +757,19 @@ describe("POST /api/accounts/supplier-payments", () => {
       .post("/api/accounts/supplier-payments")
       .send({ supplierName: "مورد" });
     expect(res.status).toBe(400);
+  });
+
+  // Regression: the SP series must read supplier_payments, not journal_entries.
+  it("continues the SP series from existing payments", async () => {
+    supplierPaymentRows = [{ id: 1, paymentNo: "SP-2026-000004" }];
+    const res = await request(testApp).post("/api/accounts/supplier-payments").send({
+      supplierName: "مورد تجريبي",
+      paymentDate: "2026-08-05",
+      method: "bank_transfer",
+      amount: 500,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.paymentNo).toBe("SP-2026-000005");
   });
 });
 
