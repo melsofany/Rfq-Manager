@@ -35,7 +35,7 @@ import {
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
-import { round2 } from "./tax";
+import { round2, netOfTax } from "./tax";
 import { numOr as toNum, trimNum as fmt, loadTaxSettings } from "./helpers";
 
 const router = Router();
@@ -55,18 +55,27 @@ function normKey(v: string | null): string {
  * Realized cost per customer-PO item: accepted supplier qty × actual cost.
  * Only lines with a receipt (finalActualCost set) contribute — an issued but
  * unreceived line has no accounting cost, so it falls back to the estimate.
+ *
+ * The cost is put on the same VAT-exclusive basis as the selling price
+ * (`netOfTax`) so a tax-inclusive supplier line is not compared against a
+ * VAT-exclusive sale — that mismatch is what reported false losses.
  */
 function realizedCostByCustomerItem(
   supplierLines: {
     customerPoItemId: number | null;
     totalAcceptedQty: unknown;
     finalActualCost: unknown;
+    taxIncluded: boolean;
   }[],
+  vatRate: number,
 ): Map<number, number> {
   const map = new Map<number, number>();
   for (const line of supplierLines) {
     if (line.customerPoItemId == null) continue;
-    const cost = toNum(line.totalAcceptedQty) * toNum(line.finalActualCost);
+    const rawUnitCost = toNum(line.finalActualCost);
+    if (rawUnitCost == null) continue;
+    const unitCost = netOfTax(rawUnitCost, line.taxIncluded, vatRate);
+    const cost = toNum(line.totalAcceptedQty) * unitCost;
     map.set(line.customerPoItemId, (map.get(line.customerPoItemId) ?? 0) + cost);
   }
   return map;
@@ -118,7 +127,7 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     // so keep the last we see)
     invoiceByCustomerPo.set(inv.customerPoId, inv);
   }
-  const costByCustomerItem = realizedCostByCustomerItem(supplierLines);
+  const costByCustomerItem = realizedCostByCustomerItem(supplierLines, vatRate);
 
   // A customer order can be delivered before any receipt is booked, and supplier
   // PO lines created from a sheet lookup carry no customer_po_item FK. Both cases
@@ -137,7 +146,6 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     if (!key) continue;
     customerPoIdsByNo.set(key, [...(customerPoIdsByNo.get(key) ?? []), po.id]);
   }
-  const vatDivisor = 1 + vatRate / 100;
   const estimateByCustomerItem = new Map<number, number>();
   for (const line of supplierLines) {
     const header = poHeaderById.get(line.poId);
@@ -146,7 +154,7 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     if (!candidatePoIds) continue;
     const rawUnitCost = toNum(line.referencePrice);
     if (rawUnitCost == null) continue;
-    const unitCost = line.taxIncluded ? rawUnitCost / vatDivisor : rawUnitCost;
+    const unitCost = netOfTax(rawUnitCost, line.taxIncluded, vatRate);
     const lineKey = normKey(line.lineItem);
     const partKey = normKey(line.partNo);
     for (const cpoId of candidatePoIds) {
