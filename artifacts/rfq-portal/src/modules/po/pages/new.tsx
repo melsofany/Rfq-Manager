@@ -17,7 +17,7 @@ import {
   SupplierCombobox,
   RepresentativeNameInput,
   useRepresentatives,
-  fetchSupplierPrice,
+  fetchSupplierQuote,
   type PoItemRow,
 } from "../components/fields";
 
@@ -295,11 +295,17 @@ export default function NewPurchaseOrderPage() {
       const item = items.find((i) => i.id === id);
       if (item) {
         setPriceLoadingIds((prev) => new Set([...prev, id]));
-        fetchSupplierPrice(parseInt(supplierId, 10), item.description, item.partNo)
-          .then((price) => {
+        fetchSupplierQuote(parseInt(supplierId, 10), item.description, item.partNo)
+          .then((quote) => {
             setItems((prev) =>
               prev.map((i) =>
-                i.id === id ? { ...i, unitPrice: price != null ? String(price) : "" } : i,
+                i.id === id
+                  ? {
+                      ...i,
+                      unitPrice: quote.price != null ? String(quote.price) : "",
+                      taxIncluded: quote.taxIncluded,
+                    }
+                  : i,
               ),
             );
           })
