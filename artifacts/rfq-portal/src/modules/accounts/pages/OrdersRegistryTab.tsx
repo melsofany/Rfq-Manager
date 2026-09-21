@@ -200,7 +200,8 @@ function CustomerOrdersTable({ rows, loading }: { rows: CustomerOrder[]; loading
             <th className="text-right p-2.5 font-medium">الصافي</th>
             <th className="text-right p-2.5 font-medium">ض.ق.م.</th>
             <th className="text-right p-2.5 font-medium">الإجمالي</th>
-            <th className="text-right p-2.5 font-medium">التكلفة</th>
+            <th className="text-right p-2.5 font-medium">التكلفة الفعلية</th>
+            <th className="text-right p-2.5 font-medium">التكلفة التقديرية</th>
             <th className="text-right p-2.5 font-medium">الهامش</th>
           </tr>
         </thead>
@@ -230,11 +231,11 @@ function CustomerOrdersTable({ rows, loading }: { rows: CustomerOrder[]; loading
               <td className="p-2.5 tabular-nums">{money(o.vat)}</td>
               <td className="p-2.5 tabular-nums font-medium">{money(o.gross)}</td>
               <td className="p-2.5 tabular-nums">
-                {money(o.cost)}
-                {o.costEstimated && (
-                  <div className="text-[10px] text-amber-600">تقديري (سعر أمر التوريد)</div>
-                )}
-              </td>
+              {!o.costEstimated ? money(o.cost) : "-"}
+            </td>
+            <td className="p-2.5 tabular-nums">
+              {o.costEstimated ? money(o.cost) : "-"}
+            </td>
               <td className="p-2.5 tabular-nums">
                 <span
                   className={`inline-flex items-center gap-1 font-medium ${

@@ -197,9 +197,7 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
       }
       estimatedCost += estimateByCustomerItem.get(i.id) ?? 0;
     }
-    const cost = round2(realizedCost + estimatedCost);
-    const costEstimated = realizedCost === 0 && estimatedCost > 0;
-    const margin = round2(net - cost);
+    const margin = round2(net - (realizedCost + estimatedCost));
     customerOrders.push({
       id: po.id,
       internalPoNo: po.internalPoNo,
@@ -214,8 +212,8 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
       net: fmt(net),
       vat: fmt(vat),
       gross: fmt(gross),
-      cost: fmt(cost),
-      costEstimated,
+      realizedCost: fmt(round2(realizedCost)),
+      estimatedCost: fmt(round2(estimatedCost)),
       margin: fmt(margin),
       marginPct: net > 0 ? fmt(round2((margin / net) * 100)) : null,
       isLoss: margin < 0,
@@ -297,7 +295,8 @@ router.get("/accounts/collected-orders", requireAuth, async (_req, res): Promise
     (acc, o) => {
       acc.net += toNum(o.net);
       acc.vat += toNum(o.vat);
-      acc.cost += toNum(o.cost);
+      // Total cost is the sum of realized and estimated costs
+      acc.cost += toNum(o.realizedCost) + toNum(o.estimatedCost);
       acc.margin += toNum(o.margin);
       return acc;
     },
