@@ -517,6 +517,66 @@ describe("GET /api/accounts/collected-orders", () => {
     expect(res.body.totals.estimatedCost).toBe("300");
   });
 
+  it("costs a received line that has no customer_po_item FK from the receipt, not an estimate", async () => {
+    customerPoRows = [
+      {
+        id: 1,
+        internalPoNo: "CPO-2026-000001",
+        customerPoNo: "C-100",
+        customerName: "عميل أ",
+        poDate: "2026-08-01",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    customerPoItemRows = [
+      {
+        id: 11,
+        customerPoId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        qty: "10",
+        unitPrice: "100",
+        deliveryStatus: "delivered",
+      },
+    ];
+    purchaseOrderRows = [
+      {
+        id: 1,
+        internalPoNo: "PO-2026-000001",
+        sheetPoNo: "C-100",
+        status: "sent",
+        createdAt: new Date("2026-08-01"),
+      },
+    ];
+    // Goods WERE received (accepted qty + actual cost) but the line was raised
+    // from a sheet lookup, so it carries no customer_po_item_id. The realized
+    // cost must still be found through the sheetPoNo↔customerPoNo link and the
+    // line must NOT be reported with the issued-price estimate.
+    purchaseOrderItemRows = [
+      {
+        id: 101,
+        poId: 1,
+        lineItem: "1",
+        partNo: "ABC-1",
+        customerPoItemId: null,
+        totalAcceptedQty: "10",
+        finalActualCost: "70",
+        referencePrice: "60",
+        taxIncluded: false,
+        lineStatus: "fulfilled",
+      },
+    ];
+
+    const res = await request(testApp).get("/api/accounts/collected-orders");
+    const o = res.body.customerOrders[0];
+    expect(o.realizedCost).toBe("700"); // 10 × 70 from the receipt
+    expect(o.estimatedCost).toBe("0"); // the issued price must not be substituted
+    expect(o.cost).toBe("700");
+    expect(o.costEstimated).toBe(false);
+    expect(o.margin).toBe("300"); // 1000 net − 700 cost
+  });
+
   it("includes a supplier order once received or invoiced, with cost + input VAT", async () => {
     purchaseOrderRows = [
       {
