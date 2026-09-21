@@ -419,7 +419,7 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
 
   // Search by description (case-insensitive) first
   const byDesc = await db
-    .select({ price: offerItemsTable.price })
+    .select({ price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
     .from(offerItemsTable)
     .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
     .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
@@ -433,14 +433,14 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
     .limit(1);
 
   if (byDesc.length > 0) {
-    res.json({ price: parseFloat(byDesc[0].price) });
+    res.json({ price: parseFloat(byDesc[0].price), taxIncluded: byDesc[0].taxIncluded ?? false });
     return;
   }
 
   // Fallback: search by part number if provided
   if (partNo && partNo.trim()) {
     const byPart = await db
-      .select({ price: offerItemsTable.price })
+      .select({ price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
       .from(offerItemsTable)
       .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
       .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
@@ -451,12 +451,15 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
       .limit(1);
 
     if (byPart.length > 0) {
-      res.json({ price: parseFloat(byPart[0].price) });
+      res.json({
+        price: parseFloat(byPart[0].price),
+        taxIncluded: byPart[0].taxIncluded ?? false,
+      });
       return;
     }
   }
 
-  res.json({ price: null });
+  res.json({ price: null, taxIncluded: false });
 });
 
 // POST /api/po/:id/dispatch — generate PDF per supplier and send via WhatsApp + email

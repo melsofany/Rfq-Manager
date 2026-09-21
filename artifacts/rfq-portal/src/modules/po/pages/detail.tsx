@@ -33,7 +33,7 @@ import {
   SupplierCombobox,
   RepresentativeNameInput,
   useRepresentatives,
-  fetchSupplierPrice,
+  fetchSupplierQuote,
   RfqCombobox,
   useRfqOptions,
   type RfqOption,
@@ -266,11 +266,17 @@ export default function PurchaseOrderDetailPage() {
       const item = editItems.find((i) => i.id === rowId);
       if (item && item.description) {
         setPriceLoadingIds((prev) => new Set([...prev, rowId]));
-        fetchSupplierPrice(parseInt(supplierId, 10), item.description, item.partNo)
-          .then((price) => {
+        fetchSupplierQuote(parseInt(supplierId, 10), item.description, item.partNo)
+          .then((quote) => {
             setEditItems((prev) =>
               prev.map((i) =>
-                i.id === rowId ? { ...i, unitPrice: price != null ? String(price) : "" } : i,
+                i.id === rowId
+                  ? {
+                      ...i,
+                      unitPrice: quote.price != null ? String(quote.price) : "",
+                      taxIncluded: quote.taxIncluded,
+                    }
+                  : i,
               ),
             );
           })

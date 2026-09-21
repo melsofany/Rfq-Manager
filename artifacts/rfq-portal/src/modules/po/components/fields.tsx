@@ -236,21 +236,33 @@ export function SupplierCombobox({
   );
 }
 
-/** Fetch a supplier's most recent quoted price for an item (by description / partNo). */
-export async function fetchSupplierPrice(
+export interface SupplierQuote {
+  price: number | null;
+  taxIncluded: boolean;
+}
+
+/**
+ * Fetch a supplier's most recent quoted price for an item (by description / partNo),
+ * along with whether that quote included tax (used to pre-check the per-line
+ * «شامل الضريبة» checkbox as soon as the supplier is chosen).
+ */
+export async function fetchSupplierQuote(
   supplierId: number,
   description: string,
   partNo: string | null,
-): Promise<number | null> {
+): Promise<SupplierQuote> {
   const params = new URLSearchParams({ supplierId: String(supplierId), description });
   if (partNo) params.append("partNo", partNo);
   try {
     const res = await fetch(`/api/po/supplier-price?${params}`, { credentials: "include" });
-    if (!res.ok) return null;
+    if (!res.ok) return { price: null, taxIncluded: false };
     const data = await res.json();
-    return typeof data.price === "number" ? data.price : null;
+    return {
+      price: typeof data.price === "number" ? data.price : null,
+      taxIncluded: data.taxIncluded === true,
+    };
   } catch {
-    return null;
+    return { price: null, taxIncluded: false };
   }
 }
 
