@@ -39,11 +39,14 @@ import {
 } from "./db-tools";
 import {
   searchEmails,
+  scanEmails,
   readEmail,
   readEmailAttachment,
   sendAssistantEmail,
   isEmailReadConfigured,
   isTextLikeMime,
+  type EmailCensusResult,
+  type EmailCensusNumber,
 } from "./email";
 import { defaultMailbox, mailboxes } from "./mailboxes";
 import { generateAssistantPdf, type PdfSection } from "./pdf";
@@ -73,6 +76,13 @@ export interface ToolResult {
   data?: unknown;
   error?: string;
 }
+
+/**
+ * Bind-parameter chunk for the reconciliation query. Postgres allows 65,535 per
+ * statement; a year-long census can carry thousands of numbers, so the `IN` is
+ * split rather than risking one oversized statement failing the whole answer.
+ */
+const COMPARE_CHUNK = 5_000;
 
 const asText = (data: unknown): string => {
   try {
@@ -225,6 +235,71 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
     {
       type: "function",
       function: {
+        name: "scan_emails",
+        description:
+          "حصر/إحصاء شامل لرسائل البريد (وليس عرض أحدث الرسائل فقط). استخدمها لأي سؤال عن " +
+          "«كم عدد…» أو «كل…» أو «الحصر» أو «مقارنة البريد بالنظام». " +
+          "تفحص الصندوق كله (أو فترة زمنية منه) وتعيد: العدد الإجمالي الدقيق، التوزيع على الشهور، " +
+          "أكثر المُرسلين، وأرقام المستندات المستخرجة من الموضوع (مثل 26R011936 و P26E11407) مع تكرار كل رقم. " +
+          "تختلف عن search_emails: search_emails تعرض عيّنة (٣٠ رسالة كحد أقصى) ولا تصلح للحصر. " +
+          "لجلب قائمة كاملة كبيرة، نفّذ الحصر على أجزاء: مرّة لكل شهر أو ربع سنة عبر sinceDate/beforeDate. " +
+          "مرّر compareTable/compareColumn لمقارنة الأرقام المستخرجة بما هو مسجّل في النظام وإرجاع " +
+          "الأرقام الموجودة في البريد وغير المسجّلة (الفرق) في استدعاء واحد.",
+        parameters: {
+          type: "object",
+          properties: {
+            from: {
+              type: "string",
+              description: "بريد المُرسل أو اسمه (مثل egyptian-drilling أو EDC)",
+            },
+            subject: { type: "string", description: "كلمة في الموضوع" },
+            query: { type: "string", description: "كلمة في الموضوع/المُرسل/المُرسَل إليه" },
+            sinceDate: {
+              type: "string",
+              description: "بداية الفترة بصيغة YYYY-MM-DD (مثال: 2026-01-01). مهم للحصر السنوي.",
+            },
+            beforeDate: {
+              type: "string",
+              description:
+                "نهاية الفترة بصيغة YYYY-MM-DD (غير شاملة). تُستخدم لتقسيم الحصر الكبير.",
+            },
+            mailbox: {
+              type: "string",
+              description: "بريد محدّد (اتركه فارغًا لحصر كل بريد الشركة).",
+            },
+            folder: {
+              type: "string",
+              enum: ["inbox", "sent"],
+              description: "المجلد (افتراضي الوارد)",
+            },
+            limit: {
+              type: "integer",
+              description:
+                "أقصى عدد رسائل تُعاد في القائمة (افتراضي 100، أقصى 500). العدد الإجمالي يُعاد دائمًا كاملًا.",
+            },
+            unseenOnly: { type: "boolean", description: "غير المقروءة فقط" },
+            compareTable: {
+              type: "string",
+              description:
+                "جدول النظام للمقارنة (مثل customer_rfqs أو purchase_orders). " +
+                "مع compareColumn يرجّع الأرقام الموجودة في البريد وغير المسجّلة.",
+            },
+            compareColumn: {
+              type: "string",
+              description: "عمود الرقم في ذلك الجدول (مثل customerRfqNo أو sheetPoNo).",
+            },
+            exportCsv: {
+              type: "boolean",
+              description:
+                "أرسل القائمة الكاملة كمستند CSV على واتساب (استخدمها عندما يطلب المستخدم ملفًا بالحصر).",
+            },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "list_mailboxes",
         description: "عرض كل بريدات الشركة المتاحة للقراءة، ولمعرفة البريد الافتراضي.",
         parameters: { type: "object", properties: {} },
@@ -342,6 +417,7 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
       "list_mailboxes",
       "search_emails",
       "search_sent_emails",
+      "scan_emails",
     ]);
     return defs.filter((d) => !readOnlyNames.has(d.function.name));
   }
@@ -516,6 +592,89 @@ async function supplierOverview(term: string): Promise<unknown> {
   };
 }
 
+/**
+ * Reconcile document numbers extracted from email against a system table.
+ *
+ * The operator's actual question was «أرقام طلبات التسعير اللي في الميل مش
+ * موجودة في النظام» — a set difference between ~1,600 email numbers and the
+ * database. The model cannot do that itself (it would need 1,600 lookups), so the
+ * comparison runs here as one `IN` query and returns only the difference.
+ */
+async function compareNumbersWithSystem(
+  numbers: string[],
+  target: { table: string; column: string },
+): Promise<{
+  found: number;
+  missingNumbers: string[];
+  matchedSample: Array<{ number: string; value: string }>;
+}> {
+  const spec = TABLES[target.table];
+  if (!spec) throw new Error(`Unknown table "${target.table}"`);
+  const columns = cols(spec.table);
+  const column = columns[target.column];
+  if (!column) {
+    throw new Error(`العمود «${target.column}» غير موجود في جدول «${target.table}».`);
+  }
+
+  // Compare on the same canonical form the extraction produced (uppercase, no
+  // spaces) so "26R011936" and "26R 011936" cannot look like a mismatch.
+  const wanted = [...new Set(numbers.map((n) => n.replace(/\s+/g, "").toUpperCase()))].filter(
+    Boolean,
+  );
+  if (!wanted.length) return { found: 0, missingNumbers: [], matchedSample: [] };
+
+  // Postgres caps a statement at 65,535 bind parameters; a year-long census can
+  // produce thousands of numbers, and one oversized `IN` would fail the whole
+  // reconciliation. Chunk it so the comparison still returns an answer.
+  const present = new Map<string, string>();
+  for (let i = 0; i < wanted.length; i += COMPARE_CHUNK) {
+    const chunk = wanted.slice(i, i + COMPARE_CHUNK);
+    const rows = (await db
+      .select({ value: column } as never)
+      .from(spec.table as never)
+      .where(inArray(column, chunk as never))
+      .limit(chunk.length)) as unknown as Array<{ value: unknown }>;
+    for (const r of rows) {
+      const v = String(r.value ?? "");
+      if (v) present.set(v.replace(/\s+/g, "").toUpperCase(), v);
+    }
+  }
+
+  const missingNumbers = [...new Set(wanted)].filter((n) => !present.has(n));
+
+  return {
+    found: present.size,
+    missingNumbers,
+    matchedSample: [...present.entries()].slice(0, 20).map(([k, v]) => ({ number: k, value: v })),
+  };
+}
+
+/**
+ * The census as a CSV, so a full list can actually be delivered. The chat
+ * message can only carry a bounded sample; a spreadsheet carries all of it.
+ */
+function censusCsv(census: EmailCensusResult): string {
+  const esc = (v: string) => `"${(v ?? "").replace(/"/g, '""')}"`;
+  const lines = ["mailbox,date,from,subject,numbers"];
+  for (const e of census.emails) {
+    lines.push(
+      [e.mailbox, e.date, e.from, e.subject, (e.numbers ?? []).join(" ")].map(esc).join(","),
+    );
+  }
+  if (census.numbers?.length) {
+    lines.push("");
+    lines.push("number,count,subject,date,mailbox");
+    for (const n of census.numbers as EmailCensusNumber[]) {
+      lines.push(
+        [n.number, String(n.count), n.sample.subject, n.sample.date, n.sample.mailbox]
+          .map(esc)
+          .join(","),
+      );
+    }
+  }
+  return lines.join("\n");
+}
+
 export async function executeTool(
   name: string,
   args: Record<string, unknown>,
@@ -617,6 +776,61 @@ export async function executeTool(
                 : ""),
             mailboxesSearched: results.map((r) => r.scope.mailbox),
             emails,
+          },
+        };
+      }
+      case "scan_emails": {
+        if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
+        const requested = args.mailbox ? String(args.mailbox) : "*";
+        const compareTable = args.compareTable ? String(args.compareTable) : undefined;
+        const compareColumn = args.compareColumn ? String(args.compareColumn) : undefined;
+        const useCompare = Boolean(compareTable && compareColumn);
+
+        const census = await scanEmails({
+          from: args.from ? String(args.from) : undefined,
+          subject: args.subject ? String(args.subject) : undefined,
+          query: args.query ? String(args.query) : undefined,
+          sinceDate: args.sinceDate ? String(args.sinceDate) : undefined,
+          beforeDate: args.beforeDate ? String(args.beforeDate) : undefined,
+          unseenOnly: Boolean(args.unseenOnly),
+          mailbox: requested,
+          folder: args.folder === "sent" ? "sent" : "inbox",
+          limit: typeof args.limit === "number" ? args.limit : undefined,
+          compare: useCompare
+            ? (numbers, target) => compareNumbersWithSystem(numbers, target)
+            : undefined,
+          compareTarget: useCompare
+            ? { table: compareTable as string, column: compareColumn as string }
+            : undefined,
+        });
+
+        if (args.exportCsv) {
+          ctx.outbox.push({
+            buffer: Buffer.from(censusCsv(census), "utf8"),
+            filename: `email-census-${new Date().toISOString().slice(0, 10)}.csv`,
+            mimeType: "text/csv",
+          });
+        }
+
+        return {
+          ok: true,
+          data: {
+            // Coverage FIRST, so the model reads whether this is a total before
+            // it reads the number — the whole point of the capability.
+            note: census.note,
+            isTotal: !census.scope.truncated,
+            matched: census.matched,
+            distinctNumbers: census.distinctNumbers,
+            byMailbox: census.byMailbox,
+            byMonth: census.byMonth,
+            bySender: census.bySender,
+            comparison: census.compare ?? null,
+            numbers: census.numbers,
+            numbersTruncated: census.numbersTruncated,
+            returned: census.returned,
+            emails: census.emails,
+            csvSent: Boolean(args.exportCsv),
+            scope: census.scope,
           },
         };
       }
