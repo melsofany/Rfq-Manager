@@ -45,6 +45,7 @@ import {
   isEmailReadConfigured,
   isTextLikeMime,
 } from "./email";
+import { defaultMailbox, mailboxes } from "./mailboxes";
 import { generateAssistantPdf, type PdfSection } from "./pdf";
 import type { ToolDefinition } from "./llm";
 import type { AiSettings } from "./config";
@@ -172,8 +173,9 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
       function: {
         name: "search_emails",
         description:
-          "البحث في بريد الشركة الوارد (آخر رسائل، حسب المُرسل/الموضوع/النص). " +
+          "البحث في البريد الوارد للشركة (آخر رسائل، حسب المُرسل/الموضوع/النص). " +
           "المطابقة تتجاهل فروق الهمزات والتاء المربوطة، وتشمل اسم المُرسل وليس بريده فقط. " +
+          "يبحث تلقائيًا في كل بريد الشركة إن لم تحدد mailbox، ويرجع مع كل رسالة اسم البريد والمجلد. " +
           "يرجع قائمة بالرسائل مع معرّف UID لقراءتها بالتفصيل، ويذكر نطاق البحث (المجلد والمدة وعدد الرسائل المفحوصة).",
         parameters: {
           type: "object",
@@ -186,7 +188,12 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             },
             limit: { type: "integer" },
             unseenOnly: { type: "boolean", description: "غير المقروءة فقط" },
-            mailbox: { type: "string", description: "اسم المجلد (افتراضي INBOX)" },
+            mailbox: {
+              type: "string",
+              description:
+                "بريد محدّد للبحث فيه (اتركه فارغًا للبحث في كل بريد الشركة). " +
+                "استخدم list_mailboxes لمعرفة المتاح.",
+            },
           },
         },
       },
@@ -194,11 +201,44 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
     {
       type: "function",
       function: {
-        name: "read_email",
-        description: "قراءة نص رسالة بريد كاملة عبر UID (من نتيجة search_emails).",
+        name: "search_sent_emails",
+        description:
+          "البحث في مجلد «المرسل» (الرسائل التي أرسلتها الشركة) — استخدمها لسؤال مثل " +
+          "«ماذا أرسلنا لهذا المورد؟» أو «هل أرسلنا أمر الشراء؟». نفس معاملات search_emails.",
         parameters: {
           type: "object",
-          properties: { uid: { type: "integer" } },
+          properties: {
+            query: { type: "string", description: "كلمة في الموضوع/النص/اسم المُرسَل إليه" },
+            from: { type: "string", description: "المُرسَل إليه (اسم أو بريد)" },
+            sinceDays: { type: "integer", description: "خلال آخر عدد أيام (افتراضي 60)" },
+            limit: { type: "integer" },
+            mailbox: { type: "string", description: "بريد محدّد (اتركه فارغًا للبحث في كل بريد)" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "list_mailboxes",
+        description: "عرض كل بريدات الشركة المتاحة للقراءة، ولمعرفة البريد الافتراضي.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "read_email",
+        description:
+          "قراءة نص رسالة بريد كاملة عبر UID (من نتيجة search_emails). " +
+          "مرّر نفس mailbox و folder اللذين ظهرا مع الرسالة في نتيجة البحث.",
+        parameters: {
+          type: "object",
+          properties: {
+            uid: { type: "integer" },
+            mailbox: { type: "string", description: "البريد الذي ظهر مع الرسالة" },
+            folder: { type: "string", enum: ["inbox", "sent"], description: "المجلد" },
+          },
           required: ["uid"],
         },
       },
@@ -209,7 +249,7 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
         name: "get_email_attachment",
         description:
           "جلب مرفق محدد من رسالة بريد وإرساله للمستخدم على واتساب كملف. " +
-          "استخدمها بعد read_email لمعرفة أرقام المرفقات؛ مرّر uid من نتيجة search_emails. " +
+          "استخدمها بعد read_email لمعرفة أرقام المرفقات؛ مرّر uid والبريد والمجلد من نتيجة search_emails. " +
           "هذه هي الطريقة الصحيحة لتلبية طلبات مثل «هات ملف الـ PDF من الإيميل».",
         parameters: {
           type: "object",
@@ -220,6 +260,8 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
               type: "string",
               description: "جزء من اسم المرفق للبحث عنه (بديل عن index)",
             },
+            mailbox: { type: "string", description: "البريد الذي ظهر مع الرسالة" },
+            folder: { type: "string", enum: ["inbox", "sent"], description: "المجلد" },
           },
           required: ["uid"],
         },
@@ -281,11 +323,16 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
   ];
 
   if (!isEmailReadConfigured()) {
-    // Both are useless without a readable mailbox; hide them so the model
-    // does not plan around a capability the server cannot deliver.
-    return defs.filter(
-      (d) => d.function.name !== "read_email" && d.function.name !== "get_email_attachment",
-    );
+    // These are useless without a readable mailbox; hide them so the model does
+    // not plan around a capability the server cannot deliver.
+    const readOnlyNames = new Set([
+      "read_email",
+      "get_email_attachment",
+      "list_mailboxes",
+      "search_emails",
+      "search_sent_emails",
+    ]);
+    return defs.filter((d) => !readOnlyNames.has(d.function.name));
   }
   return defs;
 }
@@ -514,44 +561,95 @@ export async function executeTool(
           data: await lookupDocument(String(args.type ?? ""), String(args.number ?? "")),
         };
       }
-      case "search_emails": {
+      case "search_emails":
+      case "search_sent_emails": {
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
-        const res = await searchEmails({
+        const folder = name === "search_sent_emails" ? "sent" : "inbox";
+        // No mailbox named → read EVERY configured mailbox, so an answer is
+        // never "not found" merely because the message is in a different inbox.
+        const requested = args.mailbox ? String(args.mailbox) : "*";
+        const results = await searchEmails({
           query: args.query ? String(args.query) : undefined,
           from: args.from ? String(args.from) : undefined,
           sinceDays: typeof args.sinceDays === "number" ? args.sinceDays : undefined,
           limit: typeof args.limit === "number" ? args.limit : undefined,
           unseenOnly: Boolean(args.unseenOnly),
-          mailbox: args.mailbox ? String(args.mailbox) : undefined,
+          mailbox: requested,
+          folder,
         });
+
+        // Merge the per-mailbox results, newest first, and keep the mailbox tag
+        // on every row so the model can ask for the right one when opening it.
+        const limit = Math.min(Math.max(Number(args.limit ?? 10), 1), 30);
+        const emails = results
+          .flatMap((r) => r.emails)
+          .sort((a, b) => b.date.localeCompare(a.date))
+          .slice(0, limit);
+
+        const seen = results
+          .map(
+            (r) =>
+              `${r.scope.mailbox}: ${r.scope.scanned} رسالة${r.scope.note ? ` (${r.scope.note})` : ""}`,
+          )
+          .join("؛ ");
+        const folderLabel = folder === "sent" ? "مجلد المرسل" : "صندوق الوارد";
         return {
           ok: true,
           data: {
-            count: res.emails.length,
+            count: emails.length,
             // Tell the model exactly what was searched, so "not found" can be
             // reported with its scope instead of as an unsupported claim.
             scopeNote:
-              `تم فحص ${res.scope.scanned} رسالة في «${res.scope.mailbox}» خلال آخر ${res.scope.sinceDays} يوم.` +
-              (res.scope.note ? ` ${res.scope.note}` : "") +
-              (res.emails.length === 0
-                ? " لم تُطابق أي رسالة. جرّب توسيع sinceDays أو اسمًا بديلًا أو مجلدًا آخر."
+              `تم فحص ${folderLabel} في ${results.length} بريد — ${seen}.` +
+              (emails.length === 0
+                ? " لم تُطابق أي رسالة. جرّب توسيع sinceDays أو اسمًا بديلًا أو بريدًا آخر."
                 : ""),
-            emails: res.emails,
+            mailboxesSearched: results.map((r) => r.scope.mailbox),
+            emails,
+          },
+        };
+      }
+      case "list_mailboxes": {
+        if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
+        return {
+          ok: true,
+          data: {
+            mailboxes: mailboxes().map((m) => ({
+              email: m.email,
+              label: m.label,
+              isDefault: m.isDefault,
+            })),
+            // The list is what the model should offer when the operator has not
+            // named a mailbox.
+            default: defaultMailbox()?.email ?? null,
           },
         };
       }
       case "read_email": {
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
-        return { ok: true, data: await readEmail(Number(args.uid)) };
+        const uid = Number(args.uid);
+        if (!Number.isInteger(uid)) return { ok: false, error: "uid غير صحيح" };
+        // Pass through the mailbox/folder the search returned — a UID is only
+        // unique inside one folder of one mailbox.
+        const folder = args.folder === "sent" ? "sent" : "inbox";
+        return {
+          ok: true,
+          data: await readEmail(uid, args.mailbox ? String(args.mailbox) : undefined, folder),
+        };
       }
       case "get_email_attachment": {
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
         const uid = Number(args.uid);
         if (!Number.isInteger(uid)) return { ok: false, error: "uid غير صحيح" };
-        const att = await readEmailAttachment(uid, {
-          index: typeof args.index === "number" ? args.index : undefined,
-          filename: args.filename ? String(args.filename) : undefined,
-        });
+        const att = await readEmailAttachment(
+          uid,
+          {
+            index: typeof args.index === "number" ? args.index : undefined,
+            filename: args.filename ? String(args.filename) : undefined,
+          },
+          args.mailbox ? String(args.mailbox) : undefined,
+          args.folder === "sent" ? "sent" : "inbox",
+        );
         if (att.oversized || !att.content) {
           return {
             ok: false,

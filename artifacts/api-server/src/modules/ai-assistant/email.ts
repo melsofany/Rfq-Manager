@@ -22,6 +22,8 @@ import {
   replyToHeader,
   senderIdentity,
 } from "../../shared/mail-identity";
+import { mailboxes, mailboxListForDisplay, resolveMailbox } from "./mailboxes";
+import { gmailAccessToken, isDelegationConfigured } from "./gmail-auth";
 
 const SMTP_TIMEOUT_MS = 15000;
 let cachedIpv4Host: string | null = null;
@@ -76,36 +78,77 @@ export function imapConfig(): {
 }
 
 /**
- * True when IMAP reading is usable. All THREE of host/user/pass are required —
- * checking only host+user would report "configured" for a partially-set
- * mailbox (e.g. SMTP_PASS unset) and then fail at login with a confusing
- * authentication error instead of the clear "not configured" path.
+ * True when IMAP reading is usable. A Google service account makes reading
+ * possible for any configured mailbox (no password needed); otherwise the
+ * legacy path requires host + user + pass — checking only host+user would report
+ * "configured" for a partially-set mailbox (e.g. SMTP_PASS unset) and then fail
+ * at login with a confusing authentication error instead of the clear "not
+ * configured" path.
  */
 export function isEmailReadConfigured(): boolean {
   const cfg = imapConfig();
-  return Boolean(cfg.host && cfg.user && cfg.pass);
+  if (!cfg.host) return false;
+  if (isDelegationConfigured() && mailboxes().length > 0) return true;
+  return Boolean(cfg.user && cfg.pass);
 }
 
-async function withMailbox<T>(fn: (client: ImapFlow) => Promise<T>): Promise<T> {
-  const cfg = imapConfig();
-  if (!isEmailReadConfigured()) {
-    // Arabic so the model relays a clear message to the operator instead of
-    // echoing an English env-var hint.
+/**
+ * Open an IMAP connection for `mailbox` and run `fn`.
+ *
+ * Two authentication paths, chosen per mailbox:
+ *  1. Service account + domain-wide delegation (XOAUTH2) when
+ *     `GOOGLE_ACCOUNT_BASE_64` is set. This is the multi-mailbox path: no
+ *     password is stored for any mailbox, and each connection impersonates its
+ *     own address.
+ *  2. The legacy single-account app password (`IMAP_PASS`/`SMTP_PASS`), used
+ *     only for the one legacy mailbox so an existing deployment is unaffected.
+ */
+export async function withMailbox<T>(
+  fn: (client: ImapFlow) => Promise<T>,
+  mailboxArg?: string,
+): Promise<T> {
+  const mailbox = resolveMailbox(mailboxArg);
+  if (!mailbox) {
     throw new Error(
-      "قراءة البريد غير مهيّأة على الخادم (مطلوب SMTP_HOST/SMTP_USER/SMTP_PASS أو IMAP_HOST/IMAP_USER/IMAP_PASS).",
+      `لم أجد بريدًا مطابقًا لـ «${mailboxArg}». المتاح: ${mailboxListForDisplay() || "لا يوجد"}.`,
     );
   }
-  const host = await resolveIpv4(cfg.host as string);
+
+  const cfg = imapConfig();
+  if (!cfg.host) {
+    throw new Error("قراءة البريد غير مهيّأة على الخادم (IMAP_HOST أو SMTP_HOST مطلوب).");
+  }
+
+  const usingDelegation = isDelegationConfigured();
+  let auth: { user: string; pass?: string; accessToken?: string };
+
+  if (usingDelegation) {
+    auth = { user: mailbox.email, accessToken: await gmailAccessToken(mailbox.email) };
+  } else {
+    // Legacy path: a single mailbox with an app password. Refuse to read an
+    // address other than the authenticated one — the password only works for it,
+    // and attempting otherwise yields a confusing auth error.
+    const legacyUser = (cfg.user ?? "").toLowerCase();
+    if (mailbox.email !== legacyUser) {
+      throw new Error(
+        `قراءة البريد متعدّدة الصناديق تحتاج تفويض Google (GOOGLE_ACCOUNT_BASE_64). ` +
+          `لا يمكن استخدام كلمة مرور التطبيق لبريد غير ${legacyUser || "(غير محدد)"}.`,
+      );
+    }
+    if (!cfg.pass) {
+      throw new Error("قراءة البريد غير مهيّأة: IMAP_PASS أو SMTP_PASS مطلوب.");
+    }
+    auth = { user: mailbox.email, pass: cfg.pass };
+  }
+
+  const host = await resolveIpv4(cfg.host);
   const client = new ImapFlow({
     host,
     port: cfg.port,
     secure: cfg.secure,
-    auth: {
-      user: cfg.user as string,
-      pass: cfg.pass as string,
-    },
+    auth: auth as never,
     tls: {
-      servername: cfg.host as string,
+      servername: cfg.host,
       rejectUnauthorized: false,
     },
     logger: false,
@@ -122,8 +165,83 @@ async function withMailbox<T>(fn: (client: ImapFlow) => Promise<T>): Promise<T> 
   }
 }
 
+/**
+ * Which folder to read. Gmail exposes the Sent folder under a LOCALIZED name
+ * (e.g. «[Gmail]/البريد المرسل» in Arabic), so a hardcoded "Sent" silently reads
+ * nothing on a non-English Workspace. `resolveFolderPath` below finds the real
+ * path instead.
+ */
+export type EmailFolder = "inbox" | "sent";
+
+/** Special-use flag Gmail reports for the Sent folder (compared lowercased). */
+const SENT_ATTRIBUTE = "\\sent";
+
+/**
+ * The real IMAP path of the requested folder.
+ *
+ * Prefers the `\Sent` special-use attribute (locale-independent), then falls
+ * back to matching a path whose final segment looks like a sent folder in
+ * English, Arabic, or French — Gmail's three most common UI languages here.
+ */
+export async function resolveFolderPath(client: ImapFlow, folder: EmailFolder): Promise<string> {
+  if (folder === "inbox") return "INBOX";
+  let boxes: { path: string; specialUse?: string }[] = [];
+  try {
+    boxes = await client.list();
+  } catch {
+    return "[Gmail]/Sent Mail";
+  }
+  return pickSentFolderPath(boxes);
+}
+
+/**
+ * Known Sent-folder leaf names, across the UI languages this domain's users
+ * might have set. Matching the LAST path segment exactly (rather than a regex
+ * over the whole path) is what keeps a folder such as "[Gmail]/Sentinel" from
+ * being mistaken for Sent.
+ */
+const SENT_FOLDER_NAMES = new Set([
+  "sent",
+  "sent mail",
+  "sent items",
+  "sent messages",
+  "sent e-mail",
+  "sent email",
+  "المرسل",
+  "البريد المرسل",
+  "رسائل مرسلة",
+  "messages envoyés",
+  "éléments envoyés",
+  "envoyés",
+]);
+
+/**
+ * Choose the Sent path from a mailbox list. Extracted so the locale handling can
+ * be tested without an IMAP connection.
+ */
+export function pickSentFolderPath(boxes: { path: string; specialUse?: string }[]): string {
+  const byAttr = boxes.find((b) => (b.specialUse ?? "").toLowerCase().trim() === SENT_ATTRIBUTE);
+  if (byAttr) return byAttr.path;
+
+  const byName = boxes.find((b) => {
+    const leaf = b.path.split("/").pop() ?? "";
+    return SENT_FOLDER_NAMES.has(leaf.toLowerCase().trim());
+  });
+  if (byName) return byName.path;
+
+  return "[Gmail]/Sent Mail";
+}
+
 export interface EmailSummary {
   uid: number;
+  /**
+   * Which mailbox this message lives in. A UID is only unique WITHIN a mailbox,
+   * so with multiple mailboxes configured the UID alone is ambiguous — the
+   * operator must pass this back when asked to open a message.
+   */
+  mailbox: string;
+  /** "inbox" or "sent" — which folder it came from. */
+  folder: EmailFolder;
   from: string;
   to: string;
   subject: string;
@@ -235,6 +353,8 @@ export function matchEmailFields(opts: { haystack: string; needle: string }): bo
 
 export interface EmailScope {
   mailbox: string;
+  /** Which folder was searched ("inbox" / "sent"). */
+  folder: EmailFolder;
   sinceDays: number;
   /** How many messages were scanned client-side. */
   scanned: number;
@@ -262,16 +382,53 @@ export async function searchEmails(opts: {
   from?: string;
   sinceDays?: number;
   limit?: number;
+  /**
+   * Which mailbox to read. Omitted → the default mailbox. `"*"` → EVERY
+   * configured mailbox (used when the operator asks without naming one, so an
+   * answer is never "not found" merely because the message lives in a different
+   * inbox).
+   */
   mailbox?: string;
+  /** Which folder to read. Defaults to the inbox. */
+  folder?: EmailFolder;
   unseenOnly?: boolean;
-}): Promise<EmailSearchResult> {
+}): Promise<EmailSearchResult[]> {
+  const targets = opts.mailbox === "*" ? mailboxes() : [resolveMailbox(opts.mailbox)];
+  const usable = targets.filter((m): m is NonNullable<typeof m> => Boolean(m));
+  if (!usable.length) {
+    throw new Error(
+      `لم أجد بريدًا مطابقًا لـ «${opts.mailbox}». المتاح: ${mailboxListForDisplay() || "لا يوجد"}.`,
+    );
+  }
+  const folder: EmailFolder = opts.folder ?? "inbox";
+
+  // Read mailboxes in parallel — they are independent connections, and with
+  // three inboxes a serial scan would make the operator wait three times as
+  // long for the same answer.
+  return Promise.all(usable.map((m) => searchOneMailbox(m.email, opts, folder)));
+}
+
+async function searchOneMailbox(
+  mailboxAddress: string,
+  opts: {
+    query?: string;
+    from?: string;
+    sinceDays?: number;
+    limit?: number;
+    unseenOnly?: boolean;
+  },
+  folder: EmailFolder,
+): Promise<EmailSearchResult> {
   const limit = Math.min(Math.max(opts.limit ?? 10, 1), 30);
   const sinceDays = Math.min(Math.max(opts.sinceDays ?? 60, 1), 3650);
   const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
 
+  // `mailboxAddress` MUST be forwarded: without it `withMailbox` falls back to
+  // the DEFAULT mailbox and every "mailbox" in a fan-out would read the same
+  // inbox, silently returning the first mailbox's mail three times.
   return withMailbox(async (client) => {
-    const mailbox = opts.mailbox || "INBOX";
-    const lock = await client.getMailboxLock(mailbox);
+    const path = await resolveFolderPath(client, folder);
+    const lock = await client.getMailboxLock(path);
     try {
       let uids = (await client.search({ since }, { uid: true })) || [];
       let note: string | undefined;
@@ -331,6 +488,8 @@ export async function searchEmails(opts: {
 
         out.push({
           uid: msg.uid,
+          mailbox: mailboxAddress,
+          folder,
           from,
           to,
           subject: subject || "(بدون موضوع)",
@@ -346,18 +505,36 @@ export async function searchEmails(opts: {
       const emails = out.slice(-limit).reverse();
       return {
         emails,
-        scope: { mailbox, sinceDays, scanned: window.length, note },
+        scope: { mailbox: mailboxAddress, folder, sinceDays, scanned: window.length, note },
       };
     } finally {
       lock.release();
     }
-  });
+  }, mailboxAddress);
 }
 
-/** Fetch a single message by UID, returning the full text body + attachments. */
-export async function readEmail(uid: number, mailbox = "INBOX"): Promise<EmailDetail> {
+export interface ReadEmailLocation {
+  /** Which mailbox the message lives in (UIDs are per-mailbox). */
+  mailbox?: string;
+  /** Which folder it lives in. */
+  folder?: EmailFolder;
+}
+
+/**
+ * Fetch a single message by UID, returning the full text body + attachments.
+ *
+ * `mailbox` and `folder` must be the values the search returned: a UID is only
+ * unique within one folder of one mailbox, so opening a UID from the wrong
+ * mailbox returns a different message (or nothing).
+ */
+export async function readEmail(
+  uid: number,
+  mailbox?: string,
+  folder: EmailFolder = "inbox",
+): Promise<EmailDetail> {
   return withMailbox(async (client) => {
-    const lock = await client.getMailboxLock(mailbox);
+    const path = await resolveFolderPath(client, folder);
+    const lock = await client.getMailboxLock(path);
     try {
       const msg = await client.fetchOne(
         String(uid),
@@ -371,6 +548,8 @@ export async function readEmail(uid: number, mailbox = "INBOX"): Promise<EmailDe
         parsed.date instanceof Date ? parsed.date : new Date(parsed.date ?? Date.now());
       return {
         uid: msg.uid,
+        mailbox: resolveMailbox(mailbox)?.email ?? mailbox ?? "",
+        folder,
         from: parsed.from?.text || "",
         to: Array.isArray(parsed.to)
           ? parsed.to.map((t: { text: string }) => t.text).join(", ")
@@ -401,10 +580,12 @@ export async function readEmail(uid: number, mailbox = "INBOX"): Promise<EmailDe
 export async function readEmailAttachment(
   uid: number,
   opts: { index?: number; filename?: string } = {},
-  mailbox = "INBOX",
+  mailbox?: string,
+  folder: EmailFolder = "inbox",
 ): Promise<EmailAttachmentContent> {
   return withMailbox(async (client) => {
-    const lock = await client.getMailboxLock(mailbox);
+    const path = await resolveFolderPath(client, folder);
+    const lock = await client.getMailboxLock(path);
     try {
       const msg = await client.fetchOne(
         String(uid),
