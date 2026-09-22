@@ -129,6 +129,11 @@ function delegationIdentity(): string {
   }
 }
 
+/** The identity that impersonates the mailboxes — see `delegationIdentity`. */
+export function mailReaderIdentity(): string {
+  return delegationIdentity();
+}
+
 export function logReadMailboxes(): void {
   const all = mailboxes();
   if (!all.length) {
