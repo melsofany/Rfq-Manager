@@ -723,3 +723,37 @@ git push --force-with-lease=<branch>:<current-remote-sha> <token-url> <branch>
   - On a failed download/extraction, tell the model the file could NOT be read. The alternative — asking about an empty document — is how a confident invention happens.
 - **Gateway coverage**: `handleAiAssistantMessage` had none; `ai-handler.test.ts` now pins the allowlist (a non-allowlisted number returns `false` and must never reach the agent), document download/pass-through, the caption default, and the download-failure path.
 - Tests: `mailboxes.test.ts` (50) + `gmail-auth.test.ts` (13) + `multi-mailbox-search.test.ts` (15) + `ai-email-tools.test.ts` (16) + `ai-handler.test.ts` (6) + 4 document tests in `ai-agent.test.ts`. **492 api-server tests** pass; tsc clean; portal + api-server builds clean; repo-wide prettier clean.
+
+## Assistant answer latency (feat/ai-assistant-latency, #151)
+
+Reported live as «الوكيل بطئ في الاستجابة». Three independent costs sat on the
+path of **every** question — none was the prompt or the model choice:
+
+1. **Email search MIME-parsed the whole window.** `searchOneMailbox` fetched
+   `source` for up to 400 messages and `simpleParser`-ed each, per mailbox (×3),
+   on every search, to find matches the envelope already identifies. `email.ts`
+   is now **two-pass**: pass 1 reads envelope-only and is the real search; pass 2
+   parses bodies (its own tighter budget, `BODY_PARSE_BUDGET`=60) _only when pass
+   1 matched nothing_, and only the newest `limit` get their body read for the
+   snippet. `ai-email-cost.test.ts` asserts the **number of body fetches** — a
+   correctness-only test cannot see this regression.
+2. **The webhook awaited the agent.** Meta redelivers a webhook not acked within
+   seconds, so a 20-40s tool-calling answer was processed **twice** (double
+   quota, two replies). `handleAiAssistantMessage` now decides ownership, starts
+   the work in the background and returns immediately; a delayed ack («⏳ جاري
+   البحث...») fires only if the answer passes `ACK_AFTER_MS`. `pendingAiAssistantWork()`
+   drains in-flight work (tests must call it after every handler invocation).
+3. **The fallback chain restarted every round.** With 20 req/day/model the
+   primary is often out, so each of the 5 tool rounds re-probed every dead model.
+   `llm.ts` now **remembers** the model that worked (`rememberWorkingModel`) and
+   the ones that are out (`markModelExhausted`) — do not clear this per request.
+   A 429 carrying a short `retryDelay` is a per-MINUTE cap: wait it out once
+   (`MAX_QUOTA_WAIT_MS`=5s) rather than demoting the whole conversation.
+   `resetModelState()` exists **only for tests**; call it in `beforeEach` or the
+   module-level memory leaks between tests (and `fetchMock.mockReset()`, since a
+   queued `mockResolvedValueOnce` leaks too).
+
+Per-round and total answer time are logged (`AI assistant: tool round complete`,
+`AI assistant: answered`) so future slowness is measured, not guessed.
+**505 api-server tests** (44 files) pass; tsc + portal build + repo-wide prettier
+clean. Deploy verified: `57826aa` live, healthz 200.
