@@ -21,10 +21,10 @@ pnpm install
 | `AI_API_KEY`      | Admin/manager WhatsApp **AI assistant** — provider key, Gemini or any OpenAI-compatible provider (`OPENAI_API_KEY` / `GEMINI_API_KEY` also accepted). Unset = assistant disabled |
 | `AI_MODEL`        | Model id for the assistant (default: `gemini-3.8-flash`)                                                                                                                         |
 | `AI_BASE_URL`     | OpenAI-compatible endpoint (default: Google Gemini `https://generativelanguage.googleapis.com/v1beta/openai`)                                                                    |
-| `IMAP_HOST`       | Mailbox IMAP host — enables the assistant's email-reading tools                                                                                                                  |
+| `IMAP_HOST`       | Mailbox IMAP host — enables the assistant's email-reading tools. **Optional**: defaults to the host derived from `SMTP_HOST` (`smtp.gmail.com` → `imap.gmail.com`)               |
 | `IMAP_PORT`       | IMAP port (default: 993)                                                                                                                                                         |
-| `IMAP_USER`       | IMAP username                                                                                                                                                                    |
-| `IMAP_PASS`       | IMAP password / app password                                                                                                                                                     |
+| `IMAP_USER`       | IMAP username — **optional**, defaults to `SMTP_USER`                                                                                                                            |
+| `IMAP_PASS`       | IMAP password / app password — **optional**, defaults to `SMTP_PASS`                                                                                                             |
 | `IMAP_SECURE`     | `false` to disable IMAP TLS (default: enabled)                                                                                                                                   |
 
 ## Development

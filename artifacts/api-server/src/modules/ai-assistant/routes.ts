@@ -134,7 +134,7 @@ router.get("/ai-assistant/settings", guard, async (_req, res): Promise<void> => 
   res.json({
     ...settings,
     apiKeySet: isAiConfigured,
-    imapConfigured: isEmailReadConfigured,
+    imapConfigured: isEmailReadConfigured(),
     defaultModel: DEFAULT_MODEL,
     defaultBaseUrl: DEFAULT_BASE_URL,
     isGemini: isGeminiEndpoint(settings.baseUrl),

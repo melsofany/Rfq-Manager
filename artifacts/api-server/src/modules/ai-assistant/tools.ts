@@ -226,7 +226,7 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
     },
   ];
 
-  if (!isEmailReadConfigured) {
+  if (!isEmailReadConfigured()) {
     return defs.filter((d) => d.function.name !== "read_email");
   }
   return defs;

@@ -1,12 +1,15 @@
 /**
  * AI Assistant — mailbox access (IMAP read/search + SMTP send).
  *
- * Reuses the existing SMTP credentials for sending and adds optional IMAP
- * credentials for reading. Everything degrades gracefully: when IMAP is not
- * configured the read tools report that clearly instead of throwing.
+ * Sending reuses the shared SMTP credentials. Reading reuses those SAME
+ * credentials against the matching IMAP host unless `IMAP_*` overrides are
+ * given, so a working mail account needs no extra configuration. Everything
+ * degrades gracefully: when reading is not configured the read tools report
+ * that clearly instead of throwing.
  *
  * Env:
- *   IMAP_HOST, IMAP_PORT (default 993), IMAP_USER, IMAP_PASS,
+ *   IMAP_HOST (default: derived from SMTP_HOST), IMAP_PORT (default 993),
+ *   IMAP_USER (default SMTP_USER), IMAP_PASS (default SMTP_PASS),
  *   IMAP_SECURE (default true), IMAP_FROM_NAME
  */
 import { promises as dns } from "dns";
@@ -34,23 +37,59 @@ async function resolveIpv4(hostname: string): Promise<string> {
   return hostname;
 }
 
-export const isEmailReadConfigured = Boolean(process.env.IMAP_HOST && process.env.IMAP_USER);
+/**
+ * Derive the IMAP host from the SMTP host so a single mail account configures
+ * both directions: smtp.gmail.com -> imap.gmail.com, and the same swap for
+ * outlook/office365/yahoo hosts. Falls back to the SMTP host unchanged.
+ */
+export function deriveImapHost(smtpHost: string | undefined): string | undefined {
+  if (!smtpHost) return undefined;
+  const host = smtpHost.trim().toLowerCase();
+  if (!host) return undefined;
+  if (host.startsWith("smtp.")) return `imap.${host.slice("smtp.".length)}`;
+  if (host.startsWith("mail.")) return `imap.${host.slice("mail.".length)}`;
+  return host;
+}
 
-async function withMailbox<T>(fn: (client: ImapFlow) => Promise<T>): Promise<T> {
-  if (!isEmailReadConfigured) {
-    throw new Error("IMAP not configured (set IMAP_HOST / IMAP_USER / IMAP_PASS)");
-  }
-  const host = await resolveIpv4(process.env.IMAP_HOST as string);
-  const client = new ImapFlow({
+export function imapConfig(): {
+  host?: string;
+  port: number;
+  user?: string;
+  pass?: string;
+  secure: boolean;
+} {
+  const smtpHost = process.env.SMTP_HOST;
+  const host = process.env.IMAP_HOST || deriveImapHost(smtpHost);
+  return {
     host,
     port: Number(process.env.IMAP_PORT) || 993,
+    user: process.env.IMAP_USER || process.env.SMTP_USER,
+    pass: process.env.IMAP_PASS || process.env.SMTP_PASS,
     secure: process.env.IMAP_SECURE !== "false",
+  };
+}
+
+export function isEmailReadConfigured(): boolean {
+  const cfg = imapConfig();
+  return Boolean(cfg.host && cfg.user);
+}
+
+async function withMailbox<T>(fn: (client: ImapFlow) => Promise<T>): Promise<T> {
+  const cfg = imapConfig();
+  if (!isEmailReadConfigured()) {
+    throw new Error("IMAP not configured (set IMAP_HOST / IMAP_USER / IMAP_PASS)");
+  }
+  const host = await resolveIpv4(cfg.host as string);
+  const client = new ImapFlow({
+    host,
+    port: cfg.port,
+    secure: cfg.secure,
     auth: {
-      user: process.env.IMAP_USER as string,
-      pass: process.env.IMAP_PASS as string,
+      user: cfg.user as string,
+      pass: cfg.pass as string,
     },
     tls: {
-      servername: process.env.IMAP_HOST as string,
+      servername: cfg.host as string,
       rejectUnauthorized: false,
     },
     logger: false,
