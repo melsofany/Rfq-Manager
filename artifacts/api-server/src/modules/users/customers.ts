@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, customersTable } from "@workspace/db";
 import { eq, ilike, or, and, ne, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
+import { isForeignKeyViolation } from "../../shared/pg-errors";
 
 const router = Router();
 
@@ -176,8 +177,9 @@ router.delete(
       }
       res.status(204).end();
     } catch (err: unknown) {
-      const msg = (err as { message?: string })?.message ?? "";
-      if (msg.includes("violates foreign key constraint")) {
+      // Drizzle hides the Postgres error text in `err.cause`, so a
+      // `message.includes(...)` check never fires — see shared/pg-errors.ts.
+      if (isForeignKeyViolation(err)) {
         res.status(409).json({
           error:
             "لا يمكن حذف هذا العميل لوجود طلبات تسعير أو أوامر شراء مرتبطة به. يمكنك تعطيله بدلاً من حذفه.",
