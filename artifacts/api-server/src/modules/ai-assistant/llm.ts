@@ -73,14 +73,49 @@ export class AiError extends Error {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Ceiling on ONE provider attempt. A request that has not answered in this long
+ * is better abandoned than waited on: the operator is watching a chat window.
+ */
+const ATTEMPT_TIMEOUT_MS = Number(process.env.AI_ATTEMPT_TIMEOUT_MS) || 45_000;
+
+/**
+ * Ceiling on ALL attempts for one completion, across every retry and fallback.
+ *
+ * Without this, the worst case was candidates × attempts × attempt-timeout — 7
+ * models × 2 × 90s ≈ 21 minutes. The reply was still generated, just long after
+ * the operator had given up and concluded they were being ignored. A budget
+ * makes the failure mode a prompt error message instead of silence.
+ *
+ * Read per call (not a constant) so tests can shorten it.
+ */
+export function completionBudgetMs(): number {
+  return Number(process.env.AI_COMPLETION_BUDGET_MS) || 100_000;
+}
+
+/** True when an error means "we ran out of time", not "the model refused". */
+export function isTimeoutError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /abort|timed? ?out|budget/i.test(msg);
+}
+
 /** Single attempt against one model. Throws AiError; 429/503 are retryable. */
 async function requestCompletion(opts: {
   model: string;
   base: string;
   body: string;
+  /** Combined with the per-attempt timeout; aborts when the caller's budget ends. */
+  signal?: AbortSignal;
 }): Promise<ChatResult> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90_000);
+  const timer = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
+  // `AbortSignal.any` (with a fallback) so an expired overall deadline cancels
+  // the in-flight request instead of the attempt running to its own timeout.
+  const onOuterAbort = () => controller.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) controller.abort();
+    else opts.signal.addEventListener("abort", onOuterAbort, { once: true });
+  }
   try {
     const res = await fetch(`${opts.base}/chat/completions`, {
       method: "POST",
@@ -113,6 +148,7 @@ async function requestCompletion(opts: {
     throw new AiError(`LLM request error: ${msg}`);
   } finally {
     clearTimeout(timer);
+    opts.signal?.removeEventListener("abort", onOuterAbort);
   }
 }
 
@@ -129,6 +165,12 @@ export async function chatCompletion(opts: {
    * runs out and leaving no answer to send.
    */
   toolChoice?: "auto" | "none";
+  /**
+   * Caller's overall deadline. Combined with the per-completion budget so a
+   * multi-round agent run cannot outlive the time the operator is willing to
+   * wait, no matter how many rounds or models it goes through.
+   */
+  signal?: AbortSignal;
 }): Promise<ChatResult> {
   if (!AI_API_KEY) {
     throw new AiError("AI_API_KEY / OPENAI_API_KEY not configured");
@@ -167,67 +209,105 @@ export async function chatCompletion(opts: {
   const candidates = modelChain(opts.model);
   let lastError: AiError | null = null;
 
-  outer: for (const model of candidates) {
-    let waitedForQuota = false;
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      try {
-        const result = await requestCompletion({ model, base, body: buildBody(model) });
-        rememberWorkingModel(model);
-        return result;
-      } catch (err) {
-        if (!(err instanceof AiError)) throw err;
-        lastError = err;
-        const status = err.status;
+  // One deadline for the whole chain. Checked before each attempt so the chain
+  // cannot start work it has no time to finish, and passed to the request so an
+  // in-flight attempt is cancelled the moment the budget expires.
+  const budgetMs = completionBudgetMs();
+  const deadline = Date.now() + budgetMs;
+  const budget = new AbortController();
+  const budgetTimer = setTimeout(() => budget.abort(), budgetMs);
+  // Also abort when the CALLER's deadline ends — that is the whole agent run's
+  // budget, which is what the operator actually experiences.
+  const onCallerAbort = () => budget.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) budget.abort();
+    else opts.signal.addEventListener("abort", onCallerAbort, { once: true });
+  }
 
-        // A permanent error (bad request, auth) is the same on every model —
-        // surface it immediately instead of burning the fallbacks.
-        if (status != null && !SWITCH_MODEL.has(status) && !RETRYABLE.has(status)) {
-          throw err;
+  try {
+    outer: for (const model of candidates) {
+      let waitedForQuota = false;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        // Stop the moment EITHER budget is spent. Checking the caller's signal
+        // too means an expired agent-run budget ends the chain here instead of
+        // walking the remaining models with requests that are already aborted.
+        if (budget.signal.aborted || Date.now() >= deadline) {
+          throw new AiError(`LLM request budget of ${budgetMs}ms exhausted before an answer`);
         }
+        try {
+          const result = await requestCompletion({
+            model,
+            base,
+            body: buildBody(model),
+            signal: budget.signal,
+          });
+          rememberWorkingModel(model);
+          return result;
+        } catch (err) {
+          if (!(err instanceof AiError)) throw err;
+          lastError = err;
+          const status = err.status;
 
-        if (status != null && SWITCH_MODEL.has(status)) {
-          // Gemini states how long the limit lasts. Honour it once when it is
-          // short, so a brief per-minute cap doesn't demote us to a weaker
-          // model for the rest of the conversation.
-          const delayMs = parseRetryDelayMs(err.message);
-          if (
-            status === 429 &&
-            !waitedForQuota &&
-            delayMs != null &&
-            delayMs <= MAX_QUOTA_WAIT_MS
-          ) {
-            waitedForQuota = true;
-            logger.info(
-              { model, delayMs },
-              "AI assistant: rate limited for a few seconds, waiting instead of downgrading",
-            );
-            await sleep(delayMs + 400);
-            attempt--; // the wait is not a failed attempt against this model
-            continue;
+          // A permanent error (bad request, auth) is the same on every model —
+          // surface it immediately instead of burning the fallbacks.
+          if (status != null && !SWITCH_MODEL.has(status) && !RETRYABLE.has(status)) {
+            throw err;
           }
-          // No short retry given: this model is out for the day. Remember it so
-          // the remaining tool-calling rounds don't re-probe it — each wasted
-          // probe is a round-trip the operator waits through.
-          if (delayMs == null) markModelExhausted(model);
-          logger.warn(
-            { model, status, retryAfter: delayMs != null ? delayMs / 1000 : undefined },
-            "AI assistant: model unavailable, trying next model",
-          );
-          continue outer;
-        }
 
-        // Retryable (503 high demand): back off, retry the same model. Once its
-        // attempts are spent, fall through to the next candidate rather than
-        // failing — an overloaded model is exactly when a different model
-        // succeeds.
-        if (attempt < MAX_ATTEMPTS) {
-          await sleep(300);
+          if (status != null && SWITCH_MODEL.has(status)) {
+            // Gemini states how long the limit lasts. Honour it once when it is
+            // short, so a brief per-minute cap doesn't demote us to a weaker
+            // model for the rest of the conversation.
+            const delayMs = parseRetryDelayMs(err.message);
+            if (
+              status === 429 &&
+              !waitedForQuota &&
+              delayMs != null &&
+              delayMs <= MAX_QUOTA_WAIT_MS &&
+              Date.now() + delayMs < deadline
+            ) {
+              waitedForQuota = true;
+              logger.info(
+                { model, delayMs },
+                "AI assistant: rate limited for a few seconds, waiting instead of downgrading",
+              );
+              await sleep(delayMs + 400);
+              attempt--; // the wait is not a failed attempt against this model
+              continue;
+            }
+            // No short retry given: this model is out for the day. Remember it so
+            // the remaining tool-calling rounds don't re-probe it — each wasted
+            // probe is a round-trip the operator waits through.
+            if (delayMs == null) markModelExhausted(model);
+            logger.warn(
+              { model, status, retryAfter: delayMs != null ? delayMs / 1000 : undefined },
+              "AI assistant: model unavailable, trying next model",
+            );
+            continue outer;
+          }
+
+          // Retryable (503 high demand): back off, retry the same model. Once its
+          // attempts are spent, fall through to the next candidate rather than
+          // failing — an overloaded model is exactly when a different model
+          // succeeds.
+          if (attempt < MAX_ATTEMPTS) {
+            if (Date.now() + 300 >= deadline) {
+              throw new AiError(`LLM request budget of ${budgetMs}ms exhausted before an answer`);
+            }
+            await sleep(300);
+          }
         }
       }
+      logger.warn(
+        { model, status: lastError?.status },
+        "AI assistant: model exhausted, trying next",
+      );
     }
-    logger.warn({ model, status: lastError?.status }, "AI assistant: model exhausted, trying next");
+    throw lastError ?? new AiError("LLM request failed");
+  } finally {
+    clearTimeout(budgetTimer);
+    opts.signal?.removeEventListener("abort", onCallerAbort);
   }
-  throw lastError ?? new AiError("LLM request failed");
 }
 
 /**

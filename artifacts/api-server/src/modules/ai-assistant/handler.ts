@@ -14,7 +14,7 @@ import {
 } from "../communications/service";
 import { findAuthorizedUser, loadSettings, isAiConfigured } from "./config";
 import { runAgent } from "./agent";
-import { isQuotaError } from "./llm";
+import { isQuotaError, isTimeoutError } from "./llm";
 
 /** Minimal structural view of an inbound Meta message (matches routes.ts). */
 export interface WaInboundMessage {
@@ -165,9 +165,12 @@ async function respondToAuthorizedUser(phone: string, msg: WaInboundMessage): Pr
   } catch (err) {
     logger.error({ err, phone }, "AI assistant: handling failed");
     const quota = isQuotaError(err);
+    const timedOut = isTimeoutError(err);
     const message = quota
       ? "المساعد الذكي وصل لحد الاستخدام المسموح للموديل حاليًا (حصة Gemini اليومية). حاول مرة أخرى بعد قليل."
-      : "تعذّر معالجة طلبك حاليًا. حاول مرة أخرى بعد قليل.";
+      : timedOut
+        ? "استغرق الطلب وقتًا أطول من المسموح فتم إيقافه. جرّب سؤالًا أكثر تحديدًا (مثل رقم أمر التوريد) وسأجيب أسرع."
+        : "تعذّر معالجة طلبك حاليًا. حاول مرة أخرى بعد قليل.";
     try {
       await sendWhatsAppText(phone, message);
     } catch {

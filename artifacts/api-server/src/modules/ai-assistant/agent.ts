@@ -36,6 +36,17 @@ import {
 export const MAX_TOOL_ROUNDS = 5;
 
 /**
+ * Hard ceiling on one whole answer, across every tool round and model fallback.
+ *
+ * The operator is waiting live in a chat window. Past this, a late answer is
+ * worse than an honest timeout: they have already given up and concluded they
+ * are being ignored — the reported symptom. Set above the per-completion budget
+ * so a single completion can use its full share, but far below the worst case of
+ * rounds × models × attempts × timeout.
+ */
+export const AGENT_BUDGET_MS = 150_000;
+
+/**
  * Cap on extracted document text handed to the model. Long enough for a full
  * supplier invoice or a couple of pages of a PO, short enough not to crowd out
  * the conversation or the tool results.
@@ -200,89 +211,104 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   let finalText: string | null = null;
   const startedAt = Date.now();
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    // Last round: forbid tool calls so the model has to answer with what it
-    // already gathered. Without this a model that keeps calling tools drains
-    // the budget and leaves nothing to send.
-    const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === MAX_TOOL_ROUNDS - 1;
-    const roundStartedAt = Date.now();
-    const result = await chatCompletion({
-      model: settings.model,
-      baseUrl: settings.baseUrl,
-      messages,
-      tools,
-      toolChoice: isLastRound ? "none" : "auto",
-    });
+  // Hard ceiling on the WHOLE run (every round, every model, every tool). The
+  // operator is waiting in a chat window: past this point a late answer is
+  // worse than an honest "it timed out", because they have already given up.
+  const runBudget = new AbortController();
+  const runTimer = setTimeout(() => runBudget.abort(), AGENT_BUDGET_MS);
 
-    if (result.toolCalls.length === 0) {
-      finalText = result.content;
-      break;
-    }
-
-    // Some providers (observed: Gemini) still return tool calls under
-    // tool_choice "none". Dropping the tool schemas entirely removes the option
-    // and reliably yields text; if even that fails, report what did run rather
-    // than silently swallowing the turn.
-    if (isLastRound) {
-      logger.warn(
-        { providerToolChoiceIgnored: true, model: settings.model, calls: result.toolCalls.length },
-        "AI assistant: model ignored tool_choice=none on the final round",
-      );
-      const noTools = await chatCompletion({
+  try {
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      // Last round: forbid tool calls so the model has to answer with what it
+      // already gathered. Without this a model that keeps calling tools drains
+      // the budget and leaves nothing to send.
+      const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === MAX_TOOL_ROUNDS - 1;
+      const roundStartedAt = Date.now();
+      const result = await chatCompletion({
         model: settings.model,
         baseUrl: settings.baseUrl,
         messages,
-        toolChoice: "none",
+        tools,
+        toolChoice: isLastRound ? "none" : "auto",
+        signal: runBudget.signal,
       });
-      finalText = noTools.content ?? result.content ?? exhaustedAnswer(usedTools);
-      break;
-    }
 
-    // Echo the assistant's tool-call turn back into the conversation, then run
-    // every call in THIS round concurrently. The calls in one round are chosen
-    // together by the model and are independent, so awaiting them in sequence
-    // only added latency (a 3-line item scan cost 3 round-trips).
-    messages.push({
-      role: "assistant",
-      content: result.content ?? null,
-      tool_calls: result.toolCalls,
-    });
+      if (result.toolCalls.length === 0) {
+        finalText = result.content;
+        break;
+      }
 
-    const calls = result.toolCalls.map((call) => {
-      const parsed = parseArgs(call);
-      usedTools.push({ name: call.function.name, args: parsed });
-      return { call, parsed };
-    });
-    const outcomes = await Promise.all(
-      calls.map(async ({ call, parsed }) => {
-        const res = await executeTool(call.function.name, parsed, ctx);
-        return {
-          call,
-          content: res.ok ? asText(res.data) : `ERROR: ${res.error}`,
-        };
-      }),
-    );
-    for (const { call, content } of outcomes) {
+      // Some providers (observed: Gemini) still return tool calls under
+      // tool_choice "none". Dropping the tool schemas entirely removes the option
+      // and reliably yields text; if even that fails, report what did run rather
+      // than silently swallowing the turn.
+      if (isLastRound) {
+        logger.warn(
+          {
+            providerToolChoiceIgnored: true,
+            model: settings.model,
+            calls: result.toolCalls.length,
+          },
+          "AI assistant: model ignored tool_choice=none on the final round",
+        );
+        const noTools = await chatCompletion({
+          model: settings.model,
+          baseUrl: settings.baseUrl,
+          messages,
+          toolChoice: "none",
+        });
+        finalText = noTools.content ?? result.content ?? exhaustedAnswer(usedTools);
+        break;
+      }
+
+      // Echo the assistant's tool-call turn back into the conversation, then run
+      // every call in THIS round concurrently. The calls in one round are chosen
+      // together by the model and are independent, so awaiting them in sequence
+      // only added latency (a 3-line item scan cost 3 round-trips).
       messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        name: call.function.name,
-        content,
+        role: "assistant",
+        content: result.content ?? null,
+        tool_calls: result.toolCalls,
       });
-    }
-    logger.info(
-      {
-        phone: input.phone,
-        round,
-        ms: Date.now() - roundStartedAt,
-        toolCalls: calls.map((c) => c.call.function.name),
-      },
-      "AI assistant: tool round complete",
-    );
-  }
 
-  if (!finalText) {
-    finalText = exhaustedAnswer(usedTools);
+      const calls = result.toolCalls.map((call) => {
+        const parsed = parseArgs(call);
+        usedTools.push({ name: call.function.name, args: parsed });
+        return { call, parsed };
+      });
+      const outcomes = await Promise.all(
+        calls.map(async ({ call, parsed }) => {
+          const res = await executeTool(call.function.name, parsed, ctx);
+          return {
+            call,
+            content: res.ok ? asText(res.data) : `ERROR: ${res.error}`,
+          };
+        }),
+      );
+      for (const { call, content } of outcomes) {
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          name: call.function.name,
+          content,
+        });
+      }
+      logger.info(
+        {
+          phone: input.phone,
+          round,
+          ms: Date.now() - roundStartedAt,
+          toolCalls: calls.map((c) => c.call.function.name),
+        },
+        "AI assistant: tool round complete",
+      );
+    }
+
+    if (!finalText) {
+      finalText = exhaustedAnswer(usedTools);
+    }
+  } finally {
+    clearTimeout(runTimer);
   }
 
   logger.info(

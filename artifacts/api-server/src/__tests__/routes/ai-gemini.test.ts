@@ -246,4 +246,33 @@ describe("Gemini integration (llm.ts)", () => {
     expect(isQuotaError(new AiError("x", 400))).toBe(false);
     expect(isQuotaError(new Error("plain"))).toBe(false);
   });
+
+  it("gives up once the overall budget is spent instead of retrying for minutes", async () => {
+    // Every model fails transiently. Without a budget this walks the whole chain
+    // (7 models × 2 attempts × 45s), so the operator waits minutes and gets the
+    // answer after they have already left the chat — the reported "مردتش".
+    process.env.AI_COMPLETION_BUDGET_MS = "300";
+    try {
+      fetchMock.mockResolvedValue({ ok: false, status: 503, text: async () => "high demand" });
+      const { chatCompletion, resetModelState } = await import("../../modules/ai-assistant/llm");
+      resetModelState();
+      const startedAt = Date.now();
+      await expect(chatCompletion({ model: "gemini-3.8-flash", messages: [] })).rejects.toThrow(
+        /budget/i,
+      );
+      // It stopped because time ran out, not because it walked the chain: the
+      // chain alone would take longer than the budget we granted.
+      expect(Date.now() - startedAt).toBeLessThan(3000);
+      expect(fetchMock.mock.calls.length).toBeLessThan(7);
+    } finally {
+      delete process.env.AI_COMPLETION_BUDGET_MS;
+    }
+  });
+
+  it("recognises a timeout so the operator is told to retry, not left in silence", async () => {
+    const { isTimeoutError } = await import("../../modules/ai-assistant/llm");
+    expect(isTimeoutError(new Error("LLM request budget of 100000ms exhausted"))).toBe(true);
+    expect(isTimeoutError(new Error("This operation was aborted"))).toBe(true);
+    expect(isTimeoutError(new Error("LLM request failed (400): bad request"))).toBe(false);
+  });
 });
