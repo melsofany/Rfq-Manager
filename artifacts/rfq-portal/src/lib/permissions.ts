@@ -114,6 +114,15 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
   },
   { key: "audit", href: "/audit", labelKey: "nav.auditLog" },
   { key: "integrations", href: "/integrations", labelKey: "nav.integrations" },
+  {
+    key: "ai-assistant",
+    href: "/ai-assistant",
+    labelKey: "nav.aiAssistant",
+    children: [
+      { key: "ai-assistant:users", labelKey: "perm.aiAssistant.users" },
+      { key: "ai-assistant:settings", labelKey: "perm.aiAssistant.settings" },
+    ],
+  },
 ];
 
 /** All permission keys flattened (pages + tabs). */
@@ -141,7 +150,9 @@ export const PAGE_KEYS: string[] = PERMISSION_CATALOG.map((n) => n.key);
 export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
   manager: [...PAGE_KEYS, "customer-rfq:edit", "customer-rfq:price", "customer-po:edit"],
   purchasing: [
-    ...PAGE_KEYS.filter((k) => k !== "employees" && k !== "audit" && k !== "integrations"),
+    ...PAGE_KEYS.filter(
+      (k) => k !== "employees" && k !== "audit" && k !== "integrations" && k !== "ai-assistant",
+    ),
     "customer-rfq:edit",
     "customer-po:edit",
   ],

@@ -1124,6 +1124,46 @@ export async function initDb(): Promise<void> {
       );
     }
 
+    // ─── AI assistant (admin/manager WhatsApp agent) ──────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_assistant_users (
+        id SERIAL PRIMARY KEY,
+        phone TEXT NOT NULL UNIQUE,
+        name TEXT,
+        employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        role TEXT NOT NULL DEFAULT 'manager',
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS ai_assistant_messages (
+        id SERIAL PRIMARY KEY,
+        phone TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        tool_calls JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_assistant_messages_phone
+        ON ai_assistant_messages (phone, created_at DESC);
+      CREATE TABLE IF NOT EXISTS ai_assistant_settings (
+        id SERIAL PRIMARY KEY,
+        key TEXT NOT NULL UNIQUE DEFAULT 'default',
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        model TEXT NOT NULL DEFAULT 'gpt-4o',
+        base_url TEXT,
+        system_prompt TEXT,
+        language TEXT NOT NULL DEFAULT 'ar',
+        allow_email BOOLEAN NOT NULL DEFAULT true,
+        allow_database BOOLEAN NOT NULL DEFAULT true,
+        allow_pdf BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      INSERT INTO ai_assistant_settings (key) VALUES ('default')
+        ON CONFLICT (key) DO NOTHING;
+    `);
+
     logger.info("initDb: seed complete");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");

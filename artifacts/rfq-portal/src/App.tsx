@@ -41,6 +41,7 @@ import WhatsAppPage from "@/modules/communications/pages/index";
 
 // ── Module: Integrations — تكاملات ERP ────────────────────────────────────
 import IntegrationsPage from "@/modules/integrations/pages/index";
+import AiAssistantPage from "@/modules/ai-assistant/pages/index";
 import ConnectPopupPage from "@/modules/integrations/pages/connect";
 
 // ── Module: Customers — العملاء ────────────────────────────────────────────
@@ -187,6 +188,11 @@ function Router() {
 
       {/* Popup page — standalone, no Layout, no auth guard (auth via API) */}
       <Route path="/integrations/connect" component={ConnectPopupPage} />
+
+      {/* ── Module: AI Assistant (admin/manager) ───────────────────────── */}
+      <Route path="/ai-assistant">
+        <ProtectedRoute component={AiAssistantPage} />
+      </Route>
 
       {/* ── Module: Customers ──────────────────────────────────────────── */}
       <Route path="/customers/new">

@@ -18,6 +18,14 @@ pnpm install
 | `SMTP_HOST`       | SMTP host (default: smtp.gmail.com)                                                                                                    |
 | `SMTP_USER`       | SMTP username                                                                                                                          |
 | `SMTP_PASS`       | SMTP password / app password                                                                                                           |
+| `AI_API_KEY`      | Admin/manager WhatsApp **AI assistant** — OpenAI-compatible API key (`OPENAI_API_KEY` also accepted). Unset = assistant disabled       |
+| `AI_MODEL`        | Model id for the assistant (default: `gpt-4o`)                                                                                         |
+| `AI_BASE_URL`     | OpenAI-compatible endpoint (default: `https://api.openai.com/v1`)                                                                      |
+| `IMAP_HOST`       | Mailbox IMAP host — enables the assistant's email-reading tools                                                                        |
+| `IMAP_PORT`       | IMAP port (default: 993)                                                                                                               |
+| `IMAP_USER`       | IMAP username                                                                                                                          |
+| `IMAP_PASS`       | IMAP password / app password                                                                                                           |
+| `IMAP_SECURE`     | `false` to disable IMAP TLS (default: enabled)                                                                                         |
 
 ## Development
 

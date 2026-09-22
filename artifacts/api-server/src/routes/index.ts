@@ -21,6 +21,7 @@ import collectionsModule from "../modules/collections/index";
 import usersModule from "../modules/users/index";
 import reportsModule from "../modules/reports/index";
 import communicationsModule from "../modules/communications/index";
+import aiAssistantModule from "../modules/ai-assistant/index";
 import integrationsModule from "../modules/integrations/index";
 import chatwootModule from "../modules/chatwoot/index";
 import backupModule from "../modules/backup/index";
@@ -41,6 +42,7 @@ router.use(expensesModule); // operating expenses
 router.use(collectionsModule); // customer collection tracking
 router.use(reportsModule); // analytics · audit · sync
 router.use(communicationsModule); // whatsapp (legacy — kept read-only as backup)
+router.use(aiAssistantModule); // AI assistant (admin/manager WhatsApp agent)
 router.use(chatwootModule); // chatwoot SSO bridge for the /whatsapp inbox
 router.use(integrationsModule); // ERP integrations (Odoo · SAP · Oracle · Google Sheets)
 router.use(backupModule); // daily DB backup → Google Drive

@@ -899,6 +899,50 @@ export async function markWhatsAppRead(messageId: string): Promise<void> {
   }
 }
 
+/**
+ * Download an inbound media object from Meta by its media id. Returns null when
+ * WhatsApp is unconfigured or the media has expired. Used by the AI assistant
+ * to read images/documents/voice notes the operator sends.
+ */
+export async function downloadInboundMedia(
+  mediaId: string,
+): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  if (!isWhatsAppConfigured) return null;
+  try {
+    const metaRes = await Whatsapp.$$apiFetch$$(`https://graph.facebook.com/v22.0/${mediaId}`);
+    if (!metaRes.ok) return null;
+    const metaData = (await metaRes.json()) as { url?: string; mime_type?: string };
+    if (!metaData.url) return null;
+    const mediaRes = await Whatsapp.$$apiFetch$$(metaData.url);
+    if (!mediaRes.ok) return null;
+    const buffer = Buffer.from(await mediaRes.arrayBuffer());
+    return { buffer, mimeType: metaData.mime_type ?? "application/octet-stream" };
+  } catch (err) {
+    logger.warn({ err, mediaId }, "WhatsApp media download failed");
+    return null;
+  }
+}
+
+/** Send a media document (PDF etc.) to a phone via an uploaded media id. */
+export async function sendWhatsAppDocument(
+  phone: string,
+  buffer: Buffer,
+  filename: string,
+  mimeType: string,
+  caption?: string,
+): Promise<string | null> {
+  requireConfigured();
+  const mediaId = await uploadWhatsAppMedia(buffer, filename, mimeType);
+  const to = normalizePhone(phone);
+  const message = new WADocument(mediaId, true, caption, filename);
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  logger.info({ to, filename }, "WhatsApp document sent");
+  return result.messages?.[0]?.id ?? null;
+}
+
 // ─── Representative bot (interactive list menus) ───────────────────────────
 // The rep bot is a menu-driven conversation: the rep opens the WhatsApp list
 // (or sends any text), gets a main menu, then drills into POs → items → action.

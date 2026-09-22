@@ -18,6 +18,7 @@ import {
   Plug,
   UserRound,
   Calculator,
+  Bot,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   const adminNavItems = [
+    { href: "/ai-assistant", label: t("nav.aiAssistant"), icon: Bot },
     { href: "/employees", label: t("nav.employees"), icon: UserCog },
     { href: "/audit", label: t("nav.auditLog"), icon: ClipboardList },
     { href: "/integrations", label: t("nav.integrations"), icon: Plug },
