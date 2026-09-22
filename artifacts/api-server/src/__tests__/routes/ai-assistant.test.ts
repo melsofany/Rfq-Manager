@@ -78,6 +78,24 @@ const dbMock: any = {
   delete: vi.fn(() => ({ where: vi.fn(() => chainable([])) })),
 };
 
+// ── Mail mocks: the diagnostics route reaches the real IMAP path ─────────────
+const mailboxOpen = vi.fn();
+const withMailbox = vi.fn(async (fn: any, _email?: string) => fn({ mailboxOpen }));
+vi.mock("../../modules/ai-assistant/email", () => ({
+  isEmailReadConfigured: () => true,
+  withMailbox: (fn: any, email?: string) => withMailbox(fn, email),
+}));
+
+let mailboxList = [
+  { email: "procurement@cortoba-supplies.com", label: "المشتريات", isDefault: true },
+  { email: "finance@cortoba-supplies.com", label: "الحسابات", isDefault: false },
+];
+vi.mock("../../modules/ai-assistant/mailboxes", () => ({
+  mailboxes: () => mailboxList,
+  defaultMailbox: () => mailboxList.find((m) => m.isDefault) ?? mailboxList[0],
+  mailReaderIdentity: () => "cortoba-ai-mail-assistant@project.iam.gserviceaccount.com",
+}));
+
 vi.mock("@workspace/db", () => ({
   db: dbMock,
   aiAssistantUsersTable: usersTable,
@@ -94,6 +112,12 @@ describe("AI assistant admin routes", () => {
     vi.clearAllMocks();
     userRows = [];
     employeeRows = [];
+    mailboxOpen.mockReset();
+    mailboxOpen.mockResolvedValue({ exists: 3, uidNext: 10 });
+    mailboxList = [
+      { email: "procurement@cortoba-supplies.com", label: "المشتريات", isDefault: true },
+      { email: "finance@cortoba-supplies.com", label: "الحسابات", isDefault: false },
+    ];
     const { default: router } = await import("../../modules/ai-assistant/routes");
     app = express();
     app.use(express.json());
@@ -162,6 +186,48 @@ describe("AI assistant admin routes", () => {
     });
     restricted.use(router);
     const res = await request(restricted).get("/ai-assistant/users");
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /ai-assistant/mail-diagnostics reports each mailbox's reachability", async () => {
+    mailboxOpen.mockResolvedValue({ exists: 7, uidNext: 99 });
+    const res = await request(app).get("/ai-assistant/mail-diagnostics");
+    expect(res.status).toBe(200);
+    // The impersonating identity is reported so an admin can match it against
+    // the Workspace delegation list.
+    expect(res.body.reader).toBe("cortoba-ai-mail-assistant@project.iam.gserviceaccount.com");
+    expect(res.body.total).toBe(2);
+    expect(res.body.okCount).toBe(2);
+    expect(res.body.mailboxes[0]).toMatchObject({
+      email: "procurement@cortoba-supplies.com",
+      ok: true,
+      messages: 7,
+    });
+    expect(res.body.default).toBe("procurement@cortoba-supplies.com");
+  });
+
+  it("reports a per-mailbox failure instead of an empty inbox", async () => {
+    // A delegation gap must surface as an error, not as "no messages".
+    mailboxOpen.mockImplementation(async () => {
+      throw new Error("Invalid credentials (invalid_grant)");
+    });
+    const res = await request(app).get("/ai-assistant/mail-diagnostics");
+    expect(res.status).toBe(200);
+    expect(res.body.okCount).toBe(0);
+    expect(res.body.mailboxes[0].ok).toBe(false);
+    expect(res.body.mailboxes[0].error).toContain("invalid_grant");
+  });
+
+  it("refuses mail diagnostics to a non-admin role", async () => {
+    const { default: router } = await import("../../modules/ai-assistant/routes");
+    const other = express();
+    other.use(express.json());
+    other.use((req: any, _res, next) => {
+      req.session = { employeeId: 2, role: "data_entry" };
+      next();
+    });
+    other.use(router);
+    const res = await request(other).get("/ai-assistant/mail-diagnostics");
     expect(res.status).toBe(403);
   });
 });
