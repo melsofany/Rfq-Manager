@@ -156,3 +156,62 @@ describe("suppliers auto-deactivate + manual reactivation", () => {
     expect(setArg.reactivatedAt).toBeUndefined();
   });
 });
+
+/**
+ * Production log, 2026-09-22: deleting supplier 249 returned 500 even though
+ * the route had an FK guard — it matched `err.message`, but drizzle puts the
+ * SQL in the message and the Postgres error in `cause`, so the check never
+ * fired. These tests use the exact captured error shape.
+ */
+describe("DELETE /suppliers/:id — foreign-key aware", () => {
+  function drizzleFkError(): Error {
+    const err = new Error(
+      'Failed query: delete from "suppliers" where "suppliers"."id" = $1 returning "id"\nparams: 249',
+    ) as Error & { cause: unknown; query: string; params: unknown[] };
+    err.cause = {
+      code: "23503",
+      constraint: "whatsapp_chats_supplier_id_fkey",
+      detail: 'Key (id)=(249) is still referenced from table "whatsapp_chats".',
+      message:
+        'update or delete on table "suppliers" violates foreign key constraint "whatsapp_chats_supplier_id_fkey" on table "whatsapp_chats"',
+    };
+    return err;
+  }
+
+  it("returns 409 (not 500) when a linked record blocks the delete", async () => {
+    (db.delete as any).mockImplementationOnce(() => {
+      const api: any = {
+        where: () => api,
+        returning: () => Promise.reject(drizzleFkError()),
+      };
+      return api;
+    });
+    const res = await request(testApp).delete("/suppliers/249");
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("لا يمكن حذف هذا المورد");
+  });
+
+  it("still succeeds (204) when nothing references the supplier", async () => {
+    (db.delete as any).mockImplementationOnce(() => {
+      const api: any = {
+        where: () => api,
+        returning: () => Promise.resolve([{ id: 249 }]),
+      };
+      return api;
+    });
+    const res = await request(testApp).delete("/suppliers/249");
+    expect(res.status).toBe(204);
+  });
+
+  it("returns 404 when the supplier does not exist", async () => {
+    (db.delete as any).mockImplementationOnce(() => {
+      const api: any = {
+        where: () => api,
+        returning: () => Promise.resolve([]),
+      };
+      return api;
+    });
+    const res = await request(testApp).delete("/suppliers/249");
+    expect(res.status).toBe(404);
+  });
+});
