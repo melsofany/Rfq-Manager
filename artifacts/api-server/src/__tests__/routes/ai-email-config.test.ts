@@ -75,4 +75,33 @@ describe("AI assistant mailbox config (email.ts)", () => {
     const { isEmailReadConfigured } = await import("../../modules/ai-assistant/email");
     expect(isEmailReadConfigured()).toBe(false);
   });
+
+  it("reports reading as unconfigured when the password is missing", async () => {
+    // host + user but no password: login would fail, so the guard must say
+    // "not configured" rather than letting a confusing auth error surface.
+    process.env.SMTP_HOST = "smtp.gmail.com";
+    process.env.SMTP_USER = "procurement@cortoba-supplies.com";
+    const { imapConfig, isEmailReadConfigured } = await import("../../modules/ai-assistant/email");
+    expect(imapConfig().host).toBe("imap.gmail.com");
+    expect(imapConfig().user).toBe("procurement@cortoba-supplies.com");
+    expect(imapConfig().pass).toBeUndefined();
+    expect(isEmailReadConfigured()).toBe(false);
+  });
+
+  it("derives the full config from SMTP alone (production shape)", async () => {
+    // Mirrors the live Render env: SMTP_* set, no IMAP_* at all.
+    process.env.SMTP_HOST = "smtp.gmail.com";
+    process.env.SMTP_PORT = "587";
+    process.env.SMTP_USER = "procurement@cortoba-supplies.com";
+    process.env.SMTP_PASS = "app-password-19chars";
+    const { imapConfig, isEmailReadConfigured } = await import("../../modules/ai-assistant/email");
+    expect(imapConfig()).toEqual({
+      host: "imap.gmail.com",
+      port: 993,
+      user: "procurement@cortoba-supplies.com",
+      pass: "app-password-19chars",
+      secure: true,
+    });
+    expect(isEmailReadConfigured()).toBe(true);
+  });
 });

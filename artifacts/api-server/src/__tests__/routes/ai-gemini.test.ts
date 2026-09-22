@@ -104,4 +104,78 @@ describe("Gemini integration (llm.ts)", () => {
     await expect(chatCompletion({ model: "m", messages: [] })).rejects.toThrow(/400/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("falls back to the next model when the primary is out of quota (429)", async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => "quota exceeded for gemini-3.8-flash; retry in 11s",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({ choices: [{ message: { content: "من الموديل البديل" } }] }),
+      });
+    const { chatCompletion } = await import("../../modules/ai-assistant/llm");
+    const res = await chatCompletion({ model: "gemini-3.8-flash", messages: [] });
+    expect(res.content).toBe("من الموديل البديل");
+    // Did NOT hammer the exhausted model: one 429 then straight to the fallback.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).model).toBe("gemini-3.8-flash");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).model).not.toBe("gemini-3.8-flash");
+  });
+
+  it("surfaces a quota error only after every fallback model is exhausted", async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 429, text: async () => "quota exceeded" });
+    const { chatCompletion, isQuotaError } = await import("../../modules/ai-assistant/llm");
+    let caught: unknown;
+    try {
+      await chatCompletion({ model: "gemini-3.8-flash", messages: [] });
+    } catch (e) {
+      caught = e;
+    }
+    expect(isQuotaError(caught)).toBe(true);
+    // Primary + both configured fallbacks, each tried once.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("moves to the next model when one is overloaded (503), not just on quota", async () => {
+    // Observed live: gemini-3.7-flash answers 503 "high demand" while
+    // gemini-3.6-flash serves the same request fine.
+    const unavailable = { ok: false, status: 503, text: async () => "high demand" };
+    fetchMock
+      .mockResolvedValueOnce(unavailable)
+      .mockResolvedValueOnce(unavailable)
+      .mockResolvedValueOnce(unavailable)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ choices: [{ message: { content: "رد بديل" } }] }),
+      });
+    const { chatCompletion } = await import("../../modules/ai-assistant/llm");
+    const res = await chatCompletion({ model: "gemini-3.8-flash", messages: [] });
+    expect(res.content).toBe("رد بديل");
+    // 3 attempts on the overloaded primary, then the fallback model answers.
+    const models = fetchMock.mock.calls.map((c) => JSON.parse(c[1].body).model);
+    expect(models.filter((m) => m === "gemini-3.8-flash")).toHaveLength(3);
+    expect(models[3]).not.toBe("gemini-3.8-flash");
+  }, 20000);
+
+  it("does not waste fallbacks on a permanent 400", async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 400, text: async () => "bad request" });
+    const { chatCompletion } = await import("../../modules/ai-assistant/llm");
+    await expect(chatCompletion({ model: "gemini-3.8-flash", messages: [] })).rejects.toThrow(
+      /400/,
+    );
+    // A malformed request fails identically on every model — tried once.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("classifies a 503 as a quota/capacity error", async () => {
+    const { isQuotaError, AiError } = await import("../../modules/ai-assistant/llm");
+    expect(isQuotaError(new AiError("x", 503))).toBe(true);
+    expect(isQuotaError(new AiError("x", 429))).toBe(true);
+    expect(isQuotaError(new AiError("x", 400))).toBe(false);
+    expect(isQuotaError(new Error("plain"))).toBe(false);
+  });
 });

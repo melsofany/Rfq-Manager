@@ -69,15 +69,25 @@ export function imapConfig(): {
   };
 }
 
+/**
+ * True when IMAP reading is usable. All THREE of host/user/pass are required —
+ * checking only host+user would report "configured" for a partially-set
+ * mailbox (e.g. SMTP_PASS unset) and then fail at login with a confusing
+ * authentication error instead of the clear "not configured" path.
+ */
 export function isEmailReadConfigured(): boolean {
   const cfg = imapConfig();
-  return Boolean(cfg.host && cfg.user);
+  return Boolean(cfg.host && cfg.user && cfg.pass);
 }
 
 async function withMailbox<T>(fn: (client: ImapFlow) => Promise<T>): Promise<T> {
   const cfg = imapConfig();
   if (!isEmailReadConfigured()) {
-    throw new Error("IMAP not configured (set IMAP_HOST / IMAP_USER / IMAP_PASS)");
+    // Arabic so the model relays a clear message to the operator instead of
+    // echoing an English env-var hint.
+    throw new Error(
+      "قراءة البريد غير مهيّأة على الخادم (مطلوب SMTP_HOST/SMTP_USER/SMTP_PASS أو IMAP_HOST/IMAP_USER/IMAP_PASS).",
+    );
   }
   const host = await resolveIpv4(cfg.host as string);
   const client = new ImapFlow({

@@ -14,6 +14,7 @@ import {
 } from "../communications/service";
 import { findAuthorizedUser, loadSettings, isAiConfigured } from "./config";
 import { runAgent } from "./agent";
+import { isQuotaError } from "./llm";
 
 /** Minimal structural view of an inbound Meta message (matches routes.ts). */
 export interface WaInboundMessage {
@@ -115,8 +116,12 @@ export async function handleAiAssistantMessage(
     return true;
   } catch (err) {
     logger.error({ err, phone: user.phone }, "AI assistant: handling failed");
+    const quota = isQuotaError(err);
+    const message = quota
+      ? "المساعد الذكي وصل لحد الاستخدام المسموح للموديل حاليًا (حصة Gemini اليومية). حاول مرة أخرى بعد قليل."
+      : "تعذّر معالجة طلبك حاليًا. حاول مرة أخرى بعد قليل.";
     try {
-      await sendWhatsAppText(user.phone, "تعذّر معالجة طلبك حاليًا. حاول مرة أخرى بعد قليل.");
+      await sendWhatsAppText(user.phone, message);
     } catch {
       /* ignore */
     }
