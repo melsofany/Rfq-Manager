@@ -24,6 +24,7 @@ import { eq, sql, and, gte, lte, desc } from "drizzle-orm";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import { round2 } from "./tax";
 import { assertMonthOpen } from "./closing";
+import { isUniqueViolation } from "../../shared/pg-errors";
 
 export interface JournalLineInput {
   accountCode: string;
@@ -75,6 +76,37 @@ export async function nextEntryNo(prefix: string, year: number): Promise<string>
     if (!isNaN(n) && n > max) max = n;
   }
   return `${pattern}${String(max + 1).padStart(6, "0")}`;
+}
+
+/**
+ * Insert a document whose number comes from `nextEntryNo`, retrying if a
+ * concurrent request claimed the same number first.
+ *
+ * The scan above reads the current maximum and adds one, so two overlapping
+ * requests — or a submit retried after a slow response — can compute the same
+ * number; the loser then hits the unique index and the request 500s. Re-reading
+ * and retrying turns that into a fresh number. (Observed in production:
+ * repeated `sales_invoices_invoice_no_key` violations where every attempt
+ * generated `INV-2026-000001`.)
+ */
+export async function insertWithDocNo<T>(
+  prefix: string,
+  dateStr: string,
+  insert: (docNo: string) => Promise<T>,
+): Promise<{ docNo: string; row: T }> {
+  const year = parseInt(dateStr.slice(0, 4), 10) || new Date().getFullYear();
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const docNo = await nextEntryNo(prefix, year);
+    try {
+      return { docNo, row: await insert(docNo) };
+    } catch (err) {
+      // Only a number collision is retryable; anything else is a real failure.
+      if (!isUniqueViolation(err)) throw err;
+      lastErr = err;
+    }
+  }
+  throw lastErr ?? new Error(`تعذّر توليد رقم مستند فريد (${prefix})`);
 }
 
 /** Ensure every account code in `lines` exists in chart_of_accounts. */
@@ -154,28 +186,32 @@ export async function postJournalEntry(input: PostJournalInput): Promise<number>
   // Monthly closing lock — refuse posting into a locked (مقفل) period.。
   await assertMonthOpen(input.entryDate.slice(0, 7));
 
-  const year = parseInt(input.entryDate.slice(0, 4), 10) || new Date().getFullYear();
-  const entryNo = await nextEntryNo("JE", year);
   const status = input.status ?? "posted";
 
-  const [entry] = await db
-    .insert(journalEntriesTable)
-    .values({
-      entryNo,
-      entryDate: input.entryDate,
-      description: input.description,
-      source: input.source,
-      sourceRefId: input.sourceRefId ?? null,
-      status,
-      totalDebit: String(totalDebit),
-      totalCredit: String(totalCredit),
-      employeeId: input.employeeId ?? null,
-      employeeName: input.employeeName ?? null,
-      postedAt: status === "posted" ? new Date() : null,
-    })
-    .returning({ id: journalEntriesTable.id });
+  const { docNo: entryNo, row: entry } = await insertWithDocNo(
+    "JE",
+    input.entryDate,
+    async (docNo) =>
+      db
+        .insert(journalEntriesTable)
+        .values({
+          entryNo: docNo,
+          entryDate: input.entryDate,
+          description: input.description,
+          source: input.source,
+          sourceRefId: input.sourceRefId ?? null,
+          status,
+          totalDebit: String(totalDebit),
+          totalCredit: String(totalCredit),
+          employeeId: input.employeeId ?? null,
+          employeeName: input.employeeName ?? null,
+          postedAt: status === "posted" ? new Date() : null,
+        })
+        .returning({ id: journalEntriesTable.id })
+        .then((rows) => rows[0]!),
+  );
 
-  const entryId = entry!.id;
+  const entryId = entry.id;
   let lineNo = 1;
   const lineRows = lines.map((l) => ({
     entryId,

@@ -38,7 +38,7 @@ import {
 import { eq, desc, and, lte, gte, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { rateOf, vatOnNet, round2 } from "./tax";
-import { postJournalEntry, nextEntryNo } from "./posting";
+import { postJournalEntry, insertWithDocNo } from "./posting";
 import { num as toNum, formatNum, loadTaxSettings } from "./helpers";
 
 const router = Router();
@@ -203,8 +203,6 @@ router.post(
     }
     const c = computeInvoice(net, settings.vatRate, whRate, hasVat);
 
-    const year = parseInt(body.invoiceDate.slice(0, 4), 10) || new Date().getFullYear();
-    const invoiceNo = await nextEntryNo("SI", year);
     let poNo: string | null = null;
     if (body.poId) {
       const [po] = await db
@@ -214,30 +212,37 @@ router.post(
       poNo = po?.no ?? null;
     }
 
-    const [row] = await db
-      .insert(supplierInvoicesTable)
-      .values({
-        invoiceNo,
-        supplierInvoiceNo: body.supplierInvoiceNo ?? null,
-        supplierId: body.supplierId ?? null,
-        supplierName: body.supplierName,
-        poId: body.poId ?? null,
-        poNo,
-        invoiceDate: body.invoiceDate,
-        dueDate: body.dueDate ?? null,
-        netAmount: String(c.net),
-        vatAmount: String(c.vat),
-        hasVat: c.hasVat,
-        withholdingRate: String(c.whRate),
-        withholdingAmount: String(c.withholding),
-        grossAmount: String(c.gross),
-        balance: String(c.balance),
-        status: "draft",
-        notes: body.notes ?? null,
-        employeeId: session.employeeId,
-        employeeName: session.employeeName ?? null,
-      })
-      .returning();
+    const { docNo: invoiceNo, row } = await insertWithDocNo(
+      "SI",
+      body.invoiceDate,
+      async (docNo) => {
+        const [inserted] = await db
+          .insert(supplierInvoicesTable)
+          .values({
+            invoiceNo: docNo,
+            supplierInvoiceNo: body.supplierInvoiceNo ?? null,
+            supplierId: body.supplierId ?? null,
+            supplierName: body.supplierName,
+            poId: body.poId ?? null,
+            poNo,
+            invoiceDate: body.invoiceDate,
+            dueDate: body.dueDate ?? null,
+            netAmount: String(c.net),
+            vatAmount: String(c.vat),
+            hasVat: c.hasVat,
+            withholdingRate: String(c.whRate),
+            withholdingAmount: String(c.withholding),
+            grossAmount: String(c.gross),
+            balance: String(c.balance),
+            status: "draft",
+            notes: body.notes ?? null,
+            employeeId: session.employeeId,
+            employeeName: session.employeeName ?? null,
+          })
+          .returning();
+        return inserted!;
+      },
+    );
     await db.insert(auditLogTable).values({
       action: "supplier_invoice.create",
       entityType: "supplier_invoices",
@@ -556,8 +561,6 @@ router.post(
       partyName: body.supplierName,
     };
 
-    const year = parseInt(body.paymentDate.slice(0, 4), 10) || new Date().getFullYear();
-    const paymentNo = await nextEntryNo("SP", year);
     let poNo: string | null = null;
     if (body.poId) {
       const [po] = await db
@@ -594,27 +597,34 @@ router.post(
       ],
     });
 
-    const [row] = await db
-      .insert(supplierPaymentsTable)
-      .values({
-        paymentNo,
-        supplierId: body.supplierId ?? null,
-        supplierName: body.supplierName,
-        poId: body.poId ?? null,
-        poNo,
-        paymentDate: body.paymentDate,
-        method: body.method,
-        reference: body.reference ?? null,
-        amount: String(amount),
-        bankCharges: String(bankCharges),
-        cashAccountCode: cashAccount,
-        status: "posted",
-        journalEntryId: entryId,
-        notes: body.notes ?? null,
-        employeeId: session.employeeId,
-        employeeName: session.employeeName ?? null,
-      })
-      .returning();
+    const { docNo: paymentNo, row } = await insertWithDocNo(
+      "SP",
+      body.paymentDate,
+      async (docNo) => {
+        const [inserted] = await db
+          .insert(supplierPaymentsTable)
+          .values({
+            paymentNo: docNo,
+            supplierId: body.supplierId ?? null,
+            supplierName: body.supplierName,
+            poId: body.poId ?? null,
+            poNo,
+            paymentDate: body.paymentDate,
+            method: body.method,
+            reference: body.reference ?? null,
+            amount: String(amount),
+            bankCharges: String(bankCharges),
+            cashAccountCode: cashAccount,
+            status: "posted",
+            journalEntryId: entryId,
+            notes: body.notes ?? null,
+            employeeId: session.employeeId,
+            employeeName: session.employeeName ?? null,
+          })
+          .returning();
+        return inserted!;
+      },
+    );
 
     // Apply to invoices
     const apps = body.applications ?? [];

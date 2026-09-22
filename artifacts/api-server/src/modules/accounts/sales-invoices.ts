@@ -36,7 +36,7 @@ import {
 import { eq, desc, and, lte, gte } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { vatOnNet, round2 } from "./tax";
-import { postJournalEntry, nextEntryNo } from "./posting";
+import { postJournalEntry, insertWithDocNo } from "./posting";
 import { generateSalesInvoicePdf } from "./sales-invoice-pdf";
 import { num as toNum, formatNum, loadTaxSettings } from "./helpers";
 
@@ -218,31 +218,35 @@ router.post(
     const vat = vatOnNet(net, settings.vatRate);
     const gross = round2(net + vat);
 
-    const year = parseInt(body.invoiceDate.slice(0, 4), 10) || new Date().getFullYear();
-    const invoiceNo = await nextEntryNo("INV", year);
-
-    const [row] = await db
-      .insert(salesInvoicesTable)
-      .values({
-        invoiceNo,
-        customerPoId: body.customerPoId ?? null,
-        customerPoNo,
-        customerRfqId: body.customerRfqId ?? null,
-        customerId: customerId,
-        customerName,
-        invoiceDate: body.invoiceDate,
-        dueDate: body.dueDate ?? null,
-        netAmount: String(net),
-        vatAmount: String(vat),
-        grossAmount: String(gross),
-        cogsAmount: "0",
-        balance: String(gross),
-        status: "draft",
-        notes: body.notes ?? null,
-        employeeId: session.employeeId,
-        employeeName: session.employeeName ?? null,
-      })
-      .returning();
+    const { docNo: invoiceNo, row } = await insertWithDocNo(
+      "INV",
+      body.invoiceDate,
+      async (docNo) => {
+        const [inserted] = await db
+          .insert(salesInvoicesTable)
+          .values({
+            invoiceNo: docNo,
+            customerPoId: body.customerPoId ?? null,
+            customerPoNo,
+            customerRfqId: body.customerRfqId ?? null,
+            customerId: customerId,
+            customerName,
+            invoiceDate: body.invoiceDate,
+            dueDate: body.dueDate ?? null,
+            netAmount: String(net),
+            vatAmount: String(vat),
+            grossAmount: String(gross),
+            cogsAmount: "0",
+            balance: String(gross),
+            status: "draft",
+            notes: body.notes ?? null,
+            employeeId: session.employeeId,
+            employeeName: session.employeeName ?? null,
+          })
+          .returning();
+        return inserted!;
+      },
+    );
 
     if (lineItems.length) {
       await db.insert(salesInvoiceItemsTable).values(
