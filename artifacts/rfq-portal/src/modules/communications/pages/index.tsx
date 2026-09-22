@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { chatLabel } from "@/lib/chat-label";
+import { scrollToBottom } from "@/lib/scroll-to-bottom";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 interface Chat {
@@ -420,7 +421,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   const [toast, setToast] = useState<{ msg: string; ok: boolean; phone?: string } | null>(null);
   const [contacts, setContacts] = useState<Supplier[]>([]);
 
-  const messagesEnd = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const selectedRef = useRef<string | null>(null);
@@ -588,24 +589,38 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   }, [loadChats]);
 
   // Auto-scroll to the newest message.
-  // The dependency must include `loading` + `selected`: while the request is in
-  // flight the list renders a spinner, so the `messagesEnd` sentinel does not
-  // exist yet and scrolling on the messages array alone silently no-ops (the
-  // chat opened at the top instead of the last message).
   //
-  // Only the NEWEST message id is used as the trigger so the 15s polling
-  // fallback (which replaces the array with an identical list) does not yank the
-  // reader back to the bottom while they scroll through history.
+  // A single rAF is not enough. `selected`/`loading` flip and the message list
+  // mounts in the same commit, so when the callback runs the container may still
+  // measure 0px tall — the scroll silently no-ops AND the one-shot guard marks
+  // the message as "already scrolled", leaving the chat pinned at the top
+  // forever. Retry across frames until the container is actually at the bottom,
+  // and only latch the guard once it is.
+  //
+  // The trigger is the newest message id (plus the conversation): the 15s
+  // polling fallback replaces the array with an identical list, and keying off
+  // the array identity would yank the reader back out of their history.
   const lastMessageId = messages.length ? messages[messages.length - 1].id : null;
-  const lastScrolledId = useRef<number | null>(null);
+  // Latched as "<conversation>:<newest message id>" so returning to a
+  // previously-read chat re-lands on its newest message instead of keeping the
+  // stale guard from the first visit.
+  const scrolledKey = useRef<string | null>(null);
   useEffect(() => {
     if (loading || !selected || lastMessageId == null) return;
-    if (lastScrolledId.current === lastMessageId) return;
-    lastScrolledId.current = lastMessageId;
-    const id = requestAnimationFrame(() => {
-      messagesEnd.current?.scrollIntoView({ block: "end" });
-    });
-    return () => cancelAnimationFrame(id);
+    const key = `${selected}:${lastMessageId}`;
+    if (scrolledKey.current === key) return;
+
+    let rafId = 0;
+    let frame = 0;
+    const scrollNow = () => {
+      if (scrollToBottom(messagesScrollRef.current)) {
+        scrolledKey.current = key;
+        return;
+      }
+      if (frame++ < 30) rafId = requestAnimationFrame(scrollNow);
+    };
+    rafId = requestAnimationFrame(scrollNow);
+    return () => cancelAnimationFrame(rafId);
   }, [lastMessageId, loading, selected]);
 
   // Close emoji picker on outside click
@@ -1004,7 +1019,8 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
 
           {/* Messages area */}
           <div
-            className="flex-1 overflow-y-auto p-4"
+            ref={messagesScrollRef}
+            className="flex-1 min-h-0 overflow-y-auto p-4"
             style={{
               background: "#e5ddd5",
               backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300000006'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
@@ -1233,7 +1249,6 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
                     </div>
                   );
                 })}
-                <div ref={messagesEnd} />
               </div>
             )}
           </div>
