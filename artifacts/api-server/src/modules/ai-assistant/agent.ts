@@ -29,10 +29,10 @@ import {
  * Tool-calling rounds before we force an answer. Each round costs one provider
  * request, so this is a budget as much as a limit: on Gemini's free tier (20
  * requests/day/model) a generous budget burns the day's quota in a few
- * questions. 8 leaves room for a gather phase (search → read → lookup) without
- * letting a tool-happy model loop forever.
+ * questions. 5 covers gather → refine → answer, and the last round always
+ * produces text (see FORCE_ANSWER_ON_LAST_ROUND).
  */
-const MAX_TOOL_ROUNDS = 8;
+export const MAX_TOOL_ROUNDS = 5;
 
 /**
  * Rounds with the full toolset before the last one, which forbids tools. A
@@ -46,27 +46,40 @@ const LANGUAGE_NAME: Record<string, string> = { ar: "العربية", en: "Engli
 export function systemPrompt(settings: AiSettings): string {
   const lang = LANGUAGE_NAME[settings.language] ?? "العربية";
   const base = `أنت «المساعد الذكي» لنظام قرطبة للتوريدات لإدارة طلبات عروض الأسعار وأوامر الشراء.
-لديك صلاحية الوصول لكل بيانات النظام (العملاء، الموردين، طلبات التسعير، أوامر الشراء، العروض، الاستلامات، التسليمات، الفواتير، المحاسبة، واتساب) وبريد الشركة.
+لديك صلاحية القراءة لكل بيانات النظام (العملاء، الموردين، طلبات التسعير، أوامر الشراء، العروض، الاستلامات، التسليمات، الفواتير، المحاسبة، سجل الواتساب) وبريد الشركة.
 مهامك:
 - الإجابة على أي سؤال عن أي معلومة داخل النظام بالبحث في قاعدة البيانات وأدوات أخرى.
-- جلب معلومات البريد الإلكتروني وقراءتها عند الطلب.
+- جلب معلومات البريد الإلكتروني وقراءتها، وإرسال مرفقاته على واتساب.
 - قراءة الصور والملفات التي يرسلها المستخدم وتحليلها.
 - إنشاء ملفات PDF (تقارير/ملخصات/مستندات) وإرسالها للمستخدم عند طلبها.
+
+قواعد صارمة ضد التخمين (الأهم على الإطلاق):
+- لا تذكر أي اسم مورد أو عميل أو رقم أو مبلغ لم ترَه حرفيًا في نتيجة أداة. أي معلومة لا تظهر في نتيجة أداة = غير معروفة، فقل «غير متوفر» ولا تؤلّفها.
+- راجع حقل «searchNote» في نتيجة search_database. إذا كان searchApplied=false فالنتائج غير مفلترة ولا تصلح كإجابة عن البحث — أعد البحث بجدول أو كلمة أخرى، أو أخبر المستخدم أن البحث لم يفلح.
+- لا تستنتج اسمًا من رقم (id). إذا ظهر لك رقم مورد فقط، استخدم supplier_overview أو search_database على جدول suppliers لجلب الاسم الحقيقي.
+- لا تنسب أمر شراء إلى مورد إلا إذا ظهر اسم المورد صراحة في صفوف ذلك الأمر أو بنوده.
+- إذا قال المستخدم إنك أخطأت، لا تُقدّم تخمينًا آخر. أعد التحقق بالأدوات، واذكر مصدر كل معلومة، وإن لم تجدها فاعتذر بوضوح واذكر ما بحثت فيه بالضبط.
+- عند ذكر أي معلومة، اذكر مصدرها بإيجاز (مثال: «من جدول بنود أوامر الشراء: البند كذا في الأمر كذا»).
+
+قدراتك وحدودها (لا تدّعي ما ليس لديك):
+- قراءة سجل محادثات الواتساب: نعم. إرسال رسائل واتساب للموردين من داخل المحادثة: لا — لا توجد أداة لإرسال واتساب، والواتساب للقراءة فقط. إن طلب المستخدم إرسال رسالة، قل ذلك بوضوح واقترح صياغة نصية يرسلها هو بنفسه.
+- إرسال بريد إلكتروني: نعم عبر send_email. قراءة البريد: نعم. إنشاء PDF: نعم.
+
 أسلوب العمل (مهم جدًا):
-- اعمل على مرحلتين: مرحلة جمع (استدعِ الأدوات مرة أو مرتين فقط) ثم مرحلة إجابة.
+- استخدم supplier_overview عند السؤال عن مورد (تجلب كل شيء في استدعاء واحد).
+- استخدم lookup_document عند وجود رقم مستند.
+- اعمل على مرحلتين: مرحلة جمع (استدعاء أو استدعاءان) ثم مرحلة إجابة.
 - بعد أن تحصل على نتيجة كافية، توقّف فورًا عن استدعاء الأدوات واكتب الرد النصي النهائي.
-- لا تُكرّر نفس الاستدعاء بنفس المعطيات، ولا تستدعِ أداة ثانية للحصول على معلومة وصلتك بالفعل.
-- الحد الأقصى للاستدعاءات المتتالية هو 3 استدعاءات؛ بعدها يجب أن تكون قد كتبت الرد.
-- إن لم تجد المعلومة بعد محاولتين، اكتب ما وجدته واذكر بوضوح ما لم يتوفر بدل مواصلة البحث.
-قواعد مهمة:
-- استخدم الأدوات دائمًا للحصول على بيانات حقيقية؛ لا تخمّن أرقامًا أو معلومات.
+- لا تُكرّر نفس الاستدعاء بنفس المعطيات، ولا تستدعِ أداة ثانية لمعلومة وصلتك بالفعل.
+- الحد الأقصى 4 استدعاءات متتالية؛ بعدها يجب أن تكون كتبت الرد.
+قواعد عامة:
 - عند السؤال عن رقم (أمر شراء/طلب/فاتورة) استخدم lookup_document أو search_database.
 - الأرقام المالية اكتبها كأرقام إنجليزية (مثل 1,234.50) والجنيه المصري عند اللزوم.
 - كن موجزًا ومرتبًا، واستخدم نقاطًا عند الحاجة.
-- إذا لم تتوفر معلومة، اذكر ذلك بوضوح ولا تختلقها.
 - رد دائمًا بال${lang} إلا إذا طلب المستخدم غير ذلك.
 - عند طلب تقرير/ملف، استخدم generate_pdf ثم أخبر المستخدم أن الملف تم إرساله.
-- عند طلب «ملف من الإيميل» أو مرفق رسالة: ابحث بـ search_emails ثم اقرأ الرسالة بـ read_email لمعرفة المرفقات، ثم استخدم get_email_attachment لجلب المرفق. المرفقات تُرسل للمستخدم على واتساب كملفات، فلا حاجة لإنشاء PDF بديل منها.`;
+- عند طلب «ملف من الإيميل» أو مرفق رسالة: ابحث بـ search_emails ثم اقرأ الرسالة بـ read_email لمعرفة المرفقات، ثم استخدم get_email_attachment لجلب المرفق. المرفقات تُرسل للمستخدم على واتساب كملفات، فلا حاجة لإنشاء PDF بديل منها.
+- عند البحث في البريد ولا تجد شيئًا: وسّع المدة (sinceDays) وجرّب أسماء بديلة، وأخبر المستخدم بالمدة والمجلد الذي بحثت فيهما فعلًا بدل قول «لم أجد» فقط.`;
 
   if (settings.systemPrompt && settings.systemPrompt.trim()) {
     return base + "\n\nتعليمات إضافية من الإدارة:\n" + settings.systemPrompt.trim();
@@ -188,22 +201,36 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       break;
     }
 
-    // Echo the assistant's tool-call turn back into the conversation.
+    // Echo the assistant's tool-call turn back into the conversation, then run
+    // every call in THIS round concurrently. The calls in one round are chosen
+    // together by the model and are independent, so awaiting them in sequence
+    // only added latency (a 3-line item scan cost 3 round-trips).
     messages.push({
       role: "assistant",
       content: result.content ?? null,
       tool_calls: result.toolCalls,
     });
 
-    for (const call of result.toolCalls) {
+    const calls = result.toolCalls.map((call) => {
       const parsed = parseArgs(call);
       usedTools.push({ name: call.function.name, args: parsed });
-      const res = await executeTool(call.function.name, parsed, ctx);
+      return { call, parsed };
+    });
+    const outcomes = await Promise.all(
+      calls.map(async ({ call, parsed }) => {
+        const res = await executeTool(call.function.name, parsed, ctx);
+        return {
+          call,
+          content: res.ok ? asText(res.data) : `ERROR: ${res.error}`,
+        };
+      }),
+    );
+    for (const { call, content } of outcomes) {
       messages.push({
         role: "tool",
         tool_call_id: call.id,
         name: call.function.name,
-        content: res.ok ? asText(res.data) : `ERROR: ${res.error}`,
+        content,
       });
     }
   }

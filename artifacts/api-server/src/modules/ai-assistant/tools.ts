@@ -24,8 +24,9 @@ import {
   salesInvoicesTable,
   supplierInvoicesTable,
   suppliersTable,
+  whatsappChatsTable,
 } from "@workspace/db";
-import { and, or, ilike, eq as _eq, desc } from "drizzle-orm";
+import { and, or, ilike, eq, desc, inArray } from "drizzle-orm";
 import type { SQL, AnyColumn } from "drizzle-orm";
 import {
   TABLES,
@@ -34,6 +35,7 @@ import {
   systemSnapshot,
   findWhere,
   tableListForPrompt,
+  cols,
 } from "./db-tools";
 import {
   searchEmails,
@@ -124,6 +126,23 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
     {
       type: "function",
       function: {
+        name: "supplier_overview",
+        description:
+          "ملف كامل لمورد في استدعاء واحد: بياناته + كل أوامر الشراء الخاصة به + بنودها + " +
+          "عروضه + محادثات الواتساب معه. استخدمها فورًا عند السؤال عن مورد بالاسم أو بالرقم " +
+          "بدلاً من استدعاء عدة أدوات متتالية.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "اسم المورد أو رقمه الداخلي (id)" },
+          },
+          required: ["name"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "lookup_document",
         description:
           "جلب مستند كامل بكل تفاصيله عبر رقمه: أمر شراء مورد، أمر شراء عميل، طلب عرض سعر، " +
@@ -154,15 +173,20 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
         name: "search_emails",
         description:
           "البحث في بريد الشركة الوارد (آخر رسائل، حسب المُرسل/الموضوع/النص). " +
-          "يرجع قائمة بالرسائل مع معرّف UID لقراءتها بالتفصيل.",
+          "المطابقة تتجاهل فروق الهمزات والتاء المربوطة، وتشمل اسم المُرسل وليس بريده فقط. " +
+          "يرجع قائمة بالرسائل مع معرّف UID لقراءتها بالتفصيل، ويذكر نطاق البحث (المجلد والمدة وعدد الرسائل المفحوصة).",
         parameters: {
           type: "object",
           properties: {
-            query: { type: "string", description: "كلمة في الموضوع أو النص" },
-            from: { type: "string", description: "بريد المُرسل" },
-            sinceDays: { type: "integer", description: "خلال آخر عدد أيام (افتراضي 14)" },
+            query: { type: "string", description: "كلمة في الموضوع/النص/اسم المُرسل" },
+            from: { type: "string", description: "بريد المُرسل أو اسمه" },
+            sinceDays: {
+              type: "integer",
+              description: "خلال آخر عدد أيام (افتراضي 60). وسّعها عند البحث عن أمر توريد قديم.",
+            },
             limit: { type: "integer" },
             unseenOnly: { type: "boolean", description: "غير المقروءة فقط" },
+            mailbox: { type: "string", description: "اسم المجلد (افتراضي INBOX)" },
           },
         },
       },
@@ -280,10 +304,10 @@ async function lookupDocument(type: string, number: string): Promise<unknown> {
       );
       if (!po) return { found: false };
       const items = await findWhere(purchaseOrderItemsTable, [
-        _eq(purchaseOrderItemsTable.poId, po.id as number),
+        eq(purchaseOrderItemsTable.poId, po.id as number),
       ]);
       const receipts = await findWhere(poItemReceiptsTable, [
-        _eq(poItemReceiptsTable.poId, po.id as number),
+        eq(poItemReceiptsTable.poId, po.id as number),
       ]);
       return { found: true, po, items, receipts };
     }
@@ -296,30 +320,30 @@ async function lookupDocument(type: string, number: string): Promise<unknown> {
       );
       if (!po) return { found: false };
       const items = await findWhere(customerPoItemsTable, [
-        _eq(customerPoItemsTable.customerPoId, po.id as number),
+        eq(customerPoItemsTable.customerPoId, po.id as number),
       ]);
       const deliveries = await findWhere(customerPoItemDeliveriesTable, [
-        _eq(customerPoItemDeliveriesTable.customerPoId, po.id as number),
+        eq(customerPoItemDeliveriesTable.customerPoId, po.id as number),
       ]);
       const [collection] = await findWhere(customerPoCollectionsTable, [
-        _eq(customerPoCollectionsTable.customerPoId, po.id as number),
+        eq(customerPoCollectionsTable.customerPoId, po.id as number),
       ]);
       const payments = await findWhere(customerPoPaymentsTable, [
-        _eq(customerPoPaymentsTable.customerPoId, po.id as number),
+        eq(customerPoPaymentsTable.customerPoId, po.id as number),
       ]);
       return { found: true, po, items, deliveries, collection, payments };
     }
     case "rfq": {
       const [rfq] = await findWhere(rfqTable, [byNumber([rfqTable.internalRfqNo])], 1, rfqTable.id);
       if (!rfq) return { found: false };
-      const items = await findWhere(rfqItemsTable, [_eq(rfqItemsTable.rfqId, rfq.id as number)]);
-      const offers = await findWhere(offersTable, [_eq(offersTable.rfqId, rfq.id as number)]);
+      const items = await findWhere(rfqItemsTable, [eq(rfqItemsTable.rfqId, rfq.id as number)]);
+      const offers = await findWhere(offersTable, [eq(offersTable.rfqId, rfq.id as number)]);
       const offerIds = offers.map((o) => o.id as number);
       const offerItems = offerIds.length
         ? await db
             .select()
             .from(offerItemsTable)
-            .where(or(...offerIds.map((id) => _eq(offerItemsTable.offerId, id))))
+            .where(or(...offerIds.map((id) => eq(offerItemsTable.offerId, id))))
             .limit(200)
         : [];
       return { found: true, rfq, items, offers, offerItems };
@@ -333,7 +357,7 @@ async function lookupDocument(type: string, number: string): Promise<unknown> {
       );
       if (!rfq) return { found: false };
       const items = await findWhere(customerRfqItemsTable, [
-        _eq(customerRfqItemsTable.customerRfqId, rfq.id as number),
+        eq(customerRfqItemsTable.customerRfqId, rfq.id as number),
       ]);
       return { found: true, rfq, items };
     }
@@ -360,6 +384,80 @@ async function lookupDocument(type: string, number: string): Promise<unknown> {
   }
 }
 
+/**
+ * Everything known about one supplier, in a single round-trip. The agent
+ * previously needed 4–5 sequential calls (find supplier → find its offers → find
+ * its POs → find their items) and often ran out of rounds mid-chase, answering
+ * from whatever it had partially collected.
+ */
+async function supplierOverview(term: string): Promise<unknown> {
+  const needle = term.trim();
+  const scols = cols(suppliersTable);
+  const orParts = ["name", "contactPerson", "email", "phone", "supplierId"]
+    .map((c) => scols[c])
+    .filter(Boolean)
+    .map((c) => ilike(c, `%${needle}%`));
+  const idFilter = /^\d+$/.test(needle) && scols["id"] ? eq(scols["id"], Number(needle)) : null;
+  const where = idFilter ? or(or(...orParts), idFilter) : or(...orParts);
+  const matches = (await db
+    .select()
+    .from(suppliersTable as never)
+    .where(where as SQL)
+    .limit(10)) as never as Array<Record<string, unknown>>;
+
+  if (matches.length === 0) {
+    return { found: false, note: `لا يوجد مورد مطابق لـ «${needle}».` };
+  }
+
+  const results = [];
+  for (const supplier of matches.slice(0, 5)) {
+    const id = supplier.id as number;
+    const lineRows = (await db
+      .select()
+      .from(purchaseOrderItemsTable as never)
+      .where(eq(purchaseOrderItemsTable.supplierId, id))
+      .limit(300)) as never as Array<Record<string, unknown>>;
+    const poIds = [...new Set(lineRows.map((r) => Number(r.poId)))].filter(Number.isInteger);
+    const pos = poIds.length
+      ? ((await db
+          .select()
+          .from(purchaseOrdersTable as never)
+          .where(inArray(purchaseOrdersTable.id, poIds))
+          .limit(100)) as never as Array<Record<string, unknown>>)
+      : [];
+    const offerRows = (await db
+      .select()
+      .from(offersTable as never)
+      .where(eq(offersTable.supplierId, id))
+      .limit(100)) as never as Array<Record<string, unknown>>;
+    const chats = (await db
+      .select()
+      .from(whatsappChatsTable as never)
+      .where(eq(whatsappChatsTable.supplierId, id))
+      .orderBy(desc(whatsappChatsTable.id))
+      .limit(30)) as never as Array<Record<string, unknown>>;
+
+    const poById = new Map(pos.map((p) => [p.id as number, p]));
+    results.push({
+      supplier,
+      purchaseOrders: pos.map((p) => ({
+        ...p,
+        items: lineRows.filter((l) => Number(l.poId) === Number(p.id)),
+      })),
+      // A line whose header is missing still carries useful data.
+      orphanLines: lineRows.filter((l) => !poById.has(Number(l.poId))),
+      offers: offerRows,
+      whatsappChats: chats,
+    });
+  }
+
+  return {
+    found: true,
+    matchCount: matches.length,
+    suppliers: results,
+  };
+}
+
 export async function executeTool(
   name: string,
   args: Record<string, unknown>,
@@ -370,14 +468,24 @@ export async function executeTool(
       case "search_database": {
         if (!ctx.settings.allowDatabase)
           return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
-        const rows = await queryRecords({
+        const res = await queryRecords({
           table: String(args.table ?? ""),
           search: args.search ? String(args.search) : undefined,
           limit: typeof args.limit === "number" ? args.limit : undefined,
           sinceDays: typeof args.sinceDays === "number" ? args.sinceDays : undefined,
           orderDir: args.orderDir === "asc" ? "asc" : args.orderDir === "desc" ? "desc" : undefined,
         });
-        return { ok: true, data: { count: rows.length, rows } };
+        return {
+          ok: true,
+          data: {
+            count: res.rows.length,
+            // Stated FIRST so the model reads the grounding caveat before the
+            // rows: an unfiltered result must never be presented as a match.
+            searchNote: res.filter.note,
+            searchApplied: res.filter.applied,
+            rows: res.rows,
+          },
+        };
       }
       case "count_database": {
         if (!ctx.settings.allowDatabase)
@@ -393,6 +501,11 @@ export async function executeTool(
           return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
         return { ok: true, data: await systemSnapshot() };
       }
+      case "supplier_overview": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        return { ok: true, data: await supplierOverview(String(args.name ?? "")) };
+      }
       case "lookup_document": {
         if (!ctx.settings.allowDatabase)
           return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
@@ -403,14 +516,29 @@ export async function executeTool(
       }
       case "search_emails": {
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
-        const emails = await searchEmails({
+        const res = await searchEmails({
           query: args.query ? String(args.query) : undefined,
           from: args.from ? String(args.from) : undefined,
           sinceDays: typeof args.sinceDays === "number" ? args.sinceDays : undefined,
           limit: typeof args.limit === "number" ? args.limit : undefined,
           unseenOnly: Boolean(args.unseenOnly),
+          mailbox: args.mailbox ? String(args.mailbox) : undefined,
         });
-        return { ok: true, data: { count: emails.length, emails } };
+        return {
+          ok: true,
+          data: {
+            count: res.emails.length,
+            // Tell the model exactly what was searched, so "not found" can be
+            // reported with its scope instead of as an unsupported claim.
+            scopeNote:
+              `تم فحص ${res.scope.scanned} رسالة في «${res.scope.mailbox}» خلال آخر ${res.scope.sinceDays} يوم.` +
+              (res.scope.note ? ` ${res.scope.note}` : "") +
+              (res.emails.length === 0
+                ? " لم تُطابق أي رسالة. جرّب توسيع sinceDays أو اسمًا بديلًا أو مجلدًا آخر."
+                : ""),
+            emails: res.emails,
+          },
+        };
       }
       case "read_email": {
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };

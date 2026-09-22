@@ -192,7 +192,65 @@ function snippetOf(text: string, len = 200): string {
   return text.replace(/\s+/g, " ").trim().slice(0, len);
 }
 
-/** Search recent messages. `query` matches subject/from/body text loosely. */
+/**
+ * Normalise text for loose matching: lowercase, strip Arabic diacritics/tatweel,
+ * unify alef/ya/ta variants, and drop punctuation. A search for "شركة الحفر
+ * المصرية" must match "شركه الحفر المصريه" and vice-versa.
+ */
+export function normalizeText(s: string): string {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[\u064B-\u0652\u0670\u0640]/g, "") // harakat + tatweel
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/** True when every whitespace-separated token of `needle` appears in `hay`. */
+function matchesAllTokens(hay: string, needle: string): boolean {
+  return matchEmailFields({ haystack: hay, needle });
+}
+
+/**
+ * The client-side match rule, exported so it can be tested directly. `haystack`
+ * is the searchable text (subject + from display name + addresses, and the body
+ * when the envelope did not already match), `needle` the operator's phrase.
+ */
+export function matchEmailFields(opts: { haystack: string; needle: string }): boolean {
+  const tokens = normalizeText(opts.needle).split(" ").filter(Boolean);
+  if (!tokens.length) return false;
+  const target = normalizeText(opts.haystack);
+  return tokens.every((t) => target.includes(t));
+}
+
+export interface EmailScope {
+  mailbox: string;
+  sinceDays: number;
+  /** How many messages were scanned client-side. */
+  scanned: number;
+  /** Set when the server-side search was skipped or reported an error. */
+  note?: string;
+}
+
+export interface EmailSearchResult {
+  emails: EmailSummary[];
+  scope: EmailScope;
+}
+
+/**
+ * Search recent messages by matching CLIENT-SIDE.
+ *
+ * Why not the server's `search.or = [{subject},{body}]`: BODY full-text search
+ * is unimplemented or unreliable on many IMAP servers, it never matches the
+ * From display name, and Arabic terms are mangled by charset handling. The
+ * observable effect was "لا توجد رسائل من EDC" for mail that was right there. We
+ * therefore fetch the recent window's envelopes and match in JS, so matching is
+ * predictable and reported back to the caller.
+ */
 export async function searchEmails(opts: {
   query?: string;
   from?: string;
@@ -200,44 +258,76 @@ export async function searchEmails(opts: {
   limit?: number;
   mailbox?: string;
   unseenOnly?: boolean;
-}): Promise<EmailSummary[]> {
+}): Promise<EmailSearchResult> {
   const limit = Math.min(Math.max(opts.limit ?? 10, 1), 30);
-  const sinceDays = Math.min(Math.max(opts.sinceDays ?? 14, 1), 180);
+  const sinceDays = Math.min(Math.max(opts.sinceDays ?? 60, 1), 3650);
   const since = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
 
   return withMailbox(async (client) => {
     const mailbox = opts.mailbox || "INBOX";
     const lock = await client.getMailboxLock(mailbox);
     try {
-      const search: Record<string, unknown> = { since };
-      if (opts.from) search.from = opts.from;
-      if (opts.unseenOnly) search.seen = false;
-      if (opts.query) search.or = [{ subject: opts.query }, { body: opts.query }];
-
-      const uids = (await client.search(search, { uid: true })) || [];
-      const picked = uids.slice(-limit).reverse();
+      let uids = (await client.search({ since }, { uid: true })) || [];
+      let note: string | undefined;
+      if (!uids.length) {
+        // Some servers reject a bare `since`; fall back to the whole mailbox so
+        // an operator never gets an empty answer from a search quirk.
+        uids = (await client.search({ all: true }, { uid: true })) || [];
+        if (uids.length) note = "تعذّر التصفية بتاريخ الاستلام؛ تم فحص صندوق البريد بالكامل.";
+      }
+      // Bound the scan: newest last, so slice from the tail then reverse.
+      const window = uids.slice(-400);
       const out: EmailSummary[] = [];
-      if (picked.length === 0) return out;
+
       for await (const msg of client.fetch(
-        picked,
-        { uid: true, envelope: true, source: true, bodyStructure: true },
+        window,
+        { uid: true, envelope: true, source: true },
         { uid: true },
       )) {
+        const from =
+          msg.envelope?.from?.map((a) => `${a.name ?? ""} ${a.address ?? ""}`).join(", ") || "";
+        const to = msg.envelope?.to?.map((a) => a.address ?? "").join(", ") || "";
+        const subject = msg.envelope?.subject || "";
+        const seen = msg.flags?.has("\\Seen") ?? false;
+        if (opts.unseenOnly && seen) continue;
+
         let text = "";
         let hasAttachments = false;
-        try {
-          const parsed = await simpleParser(msg.source as Buffer);
-          text = parsed.text || (parsed.html ? String(parsed.html) : "");
-          hasAttachments = (parsed.attachments?.length ?? 0) > 0;
-        } catch {
-          /* keep envelope-only summary */
+        const hasQuery = Boolean(opts.query && opts.query.trim());
+        const hasFrom = Boolean(opts.from && opts.from.trim());
+        // Only parse bodies when a text query needs them, or when we must
+        // report attachment presence for a matched message.
+        const envelopeHit = !hasQuery || matchesAllTokens(`${subject} ${from} ${to}`, opts.query!);
+        if (hasQuery && !envelopeHit) {
+          try {
+            const parsed = await simpleParser(msg.source as Buffer);
+            text = parsed.text || "";
+            hasAttachments = (parsed.attachments?.length ?? 0) > 0;
+            if (
+              !matchesAllTokens(`${subject} ${from} ${to} ${text.slice(0, 20_000)}`, opts.query!)
+            ) {
+              continue;
+            }
+          } catch {
+            continue;
+          }
+        } else {
+          try {
+            const parsed = await simpleParser(msg.source as Buffer);
+            text = parsed.text || "";
+            hasAttachments = (parsed.attachments?.length ?? 0) > 0;
+          } catch {
+            /* envelope-only */
+          }
         }
+
+        if (hasFrom && !matchesAllTokens(from, opts.from!)) continue;
+
         out.push({
           uid: msg.uid,
-          from:
-            msg.envelope?.from?.map((a) => `${a.name ?? ""} <${a.address ?? ""}>`).join(", ") || "",
-          to: msg.envelope?.to?.map((a) => a.address ?? "").join(", ") || "",
-          subject: msg.envelope?.subject || "(بدون موضوع)",
+          from,
+          to,
+          subject: subject || "(بدون موضوع)",
           date: (() => {
             const d = msg.envelope?.date;
             return d instanceof Date ? d.toISOString() : new Date(d ?? Date.now()).toISOString();
@@ -246,7 +336,12 @@ export async function searchEmails(opts: {
           hasAttachments,
         });
       }
-      return out;
+
+      const emails = out.slice(-limit).reverse();
+      return {
+        emails,
+        scope: { mailbox, sinceDays, scanned: window.length, note },
+      };
     } finally {
       lock.release();
     }
