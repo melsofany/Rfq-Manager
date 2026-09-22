@@ -86,19 +86,25 @@ export async function handleAiAssistantMessage(
         const media = await downloadInboundMedia(msg.audio.id);
         if (media) payload.audio = { buffer: media.buffer, mimeType: media.mimeType };
       }
-    } else if (
-      msg.type === "document" ||
-      msg.type === "interactive" ||
-      msg.type === "button" ||
-      msg.type === "video"
-    ) {
-      // Documents/videos: acknowledge and reply with guidance instead of
-      // blindly forwarding binary. Text captions are still answered.
-      payload.text =
-        text ||
-        (msg.type === "document" && msg.document?.filename
-          ? `أرسلت ملفًا باسم «${msg.document.filename}». هل تريد أن ألخّص لك محتواه أو أبحث عن بيانات مرتبطة به؟`
-          : "اكتب سؤالك نصيًا وسأجيبك فورًا.");
+    } else if (msg.type === "document") {
+      const doc = msg.document;
+      if (doc?.id) {
+        const media = await downloadInboundMedia(doc.id);
+        if (media) {
+          payload.document = {
+            buffer: media.buffer,
+            mimeType: doc.mime_type || media.mimeType,
+            filename: doc.filename,
+          };
+        }
+      }
+      // A caption ("لخّص ده") is the question about the file; without one, ask
+      // the model to work out what the file is and answer about it.
+      payload.text = text || "اقرأ هذا الملف ولخّص لي أهم ما فيه.";
+    } else if (msg.type === "interactive" || msg.type === "button" || msg.type === "video") {
+      // Videos are not read: too large to download and not a document format the
+      // model can interpret usefully here. Text captions are still answered.
+      payload.text = text || "اكتب سؤالك نصيًا وسأجيبك فورًا.";
     } else {
       return false;
     }

@@ -242,32 +242,73 @@ export async function transcribeAudio(
 ): Promise<string | null> {
   if (!AI_API_KEY) return null;
   if (isGeminiEndpoint(baseUrl)) {
-    return transcribeWithGemini(buffer, mimeType, baseUrl, model);
+    return extractWithGemini(buffer, mimeType, TRANSCRIBE_PROMPT, baseUrl, model);
   }
   return transcribeWithWhisper(buffer, mimeType, baseUrl);
 }
 
-async function transcribeWithGemini(
+const TRANSCRIBE_PROMPT =
+  "حوّل هذه الرسالة الصوتية إلى نص مكتوب كما هي، بنفس اللغة، دون أي إضافة أو تعليق. أعد النص فقط.";
+
+/** What the model is asked to do with a document it cannot read as plain text. */
+const DOCUMENT_PROMPT =
+  "استخرج كل المعلومات المفيدة من هذا الملف: الأرقام، الأسماء، التواريخ، " +
+  "البنود والكميات والأسعار، وأي جدول. اكتب النص المنظّم الذي يمكن الاعتماد " +
+  "عليه كنصّ، بنفس اللغة، دون تعليق على الملف نفسه.";
+
+/**
+ * Read a document (PDF, image of a document, spreadsheet export) as text.
+ *
+ * Uses the same native `generateContent` + `inline_data` path as voice notes:
+ * Gemini accepts PDF and image bytes directly, which avoids adding a PDF parser
+ * (the Render image has no `pdftotext`) and handles scanned/photographed
+ * documents that a text extractor cannot. Returns null when the endpoint is not
+ * Gemini or the call fails — the caller then tells the operator it could not be
+ * read rather than inventing an answer.
+ */
+export async function extractDocumentText(
   buffer: Buffer,
   mimeType: string,
   baseUrl?: string | null,
   model?: string | null,
 ): Promise<string | null> {
-  // Voice notes are a small share of traffic but still count against the same
-  // per-model daily quota as text, so walk the same fallback chain.
+  if (!AI_API_KEY) return null;
+  if (!isGeminiEndpoint(baseUrl)) return null;
+  return extractWithGemini(buffer, mimeType, DOCUMENT_PROMPT, baseUrl, model);
+}
+
+/** MIME types Gemini reads as inline document data. */
+export function isReadableDocumentMime(mimeType: string): boolean {
+  const t = (mimeType || "").toLowerCase();
+  return (
+    t === "application/pdf" || t.startsWith("image/") || t === "text/plain" || t === "text/csv"
+  );
+}
+
+async function extractWithGemini(
+  buffer: Buffer,
+  mimeType: string,
+  prompt: string,
+  baseUrl?: string | null,
+  model?: string | null,
+): Promise<string | null> {
+  // Voice notes and documents are a small share of traffic but still count
+  // against the same per-model daily quota as text, so walk the same fallback
+  // chain.
   const candidates = [model || DEFAULT_MODEL, ...FALLBACK_MODELS].filter(
     (m, i, arr) => arr.indexOf(m) === i,
   );
   for (const candidate of candidates) {
-    const text = await transcribeWithGeminiModel(buffer, mimeType, baseUrl, candidate);
+    const text = await extractWithGeminiModel(buffer, mimeType, prompt, baseUrl, candidate);
     if (text) return text;
   }
   return null;
 }
 
-async function transcribeWithGeminiModel(
+async function extractWithGeminiModel(
   buffer: Buffer,
   mimeType: string,
+  prompt: string,
   baseUrl: string | null | undefined,
   model: string,
 ): Promise<string | null> {
@@ -283,14 +324,10 @@ async function transcribeWithGeminiModel(
         contents: [
           {
             parts: [
-              {
-                text:
-                  "حوّل هذه الرسالة الصوتية إلى نص مكتوب كما هي، بنفس اللغة، " +
-                  "دون أي إضافة أو تعليق. أعد النص فقط.",
-              },
+              { text: prompt },
               {
                 inline_data: {
-                  mime_type: mimeType || "audio/ogg",
+                  mime_type: mimeType || "application/octet-stream",
                   data: buffer.toString("base64"),
                 },
               },

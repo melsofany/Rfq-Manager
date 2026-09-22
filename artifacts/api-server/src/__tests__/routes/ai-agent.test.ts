@@ -6,9 +6,12 @@ const MAX_ROUNDS = 5;
 
 // ── Mock the LLM so the loop is deterministic ────────────────────────────────
 const chatCompletion = vi.fn();
+const extractDocumentText = vi.fn(async (..._a: any[]): Promise<string | null> => null);
+const transcribeAudio = vi.fn(async (..._a: any[]): Promise<string | null> => null);
 vi.mock("../../modules/ai-assistant/llm", () => ({
   chatCompletion: (...args: any[]) => chatCompletion(...args),
-  transcribeAudio: vi.fn(async () => null),
+  transcribeAudio,
+  extractDocumentText,
 }));
 
 // ── Mock tools so execution is observable ────────────────────────────────────
@@ -72,6 +75,7 @@ describe("AI assistant agent loop", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     inserts.length = 0;
+    extractDocumentText.mockResolvedValue(null);
   });
 
   it("executes a tool call and returns the final answer", async () => {
@@ -258,5 +262,86 @@ describe("AI assistant agent loop", () => {
     const out = await runAgent({ phone: "2010", text: "?" });
     expect(out.reply).toContain("search_database");
     expect(out.reply).toContain("نفدت محاولات المعالجة");
+  });
+
+  it("reads a document and feeds the extracted text into the same turn", async () => {
+    extractDocumentText.mockResolvedValue("بند ١: صمام ٣ بوصة — ١٢ قطعة — ٥٠٠ جنيه");
+    chatCompletion.mockResolvedValue({
+      content: "الملف يحتوي بندًا واحدًا.",
+      finishReason: "stop",
+      toolCalls: [],
+    });
+
+    const { runAgent } = await import("../../modules/ai-assistant/agent");
+    const out = await runAgent({
+      phone: "2010",
+      text: "لخّص ده",
+      document: { buffer: Buffer.from("pdf"), mimeType: "application/pdf", filename: "po.pdf" },
+    });
+
+    expect(out.reply).toBe("الملف يحتوي بندًا واحدًا.");
+    expect(extractDocumentText).toHaveBeenCalledWith(
+      expect.anything(),
+      "application/pdf",
+      null,
+      "test-model",
+    );
+    // The contents must reach the model in the SAME user turn, or it would have
+    // to guess at a file it cannot see.
+    const msgs = chatCompletion.mock.calls[0][0].messages;
+    const user = msgs.find((m: any) => m.role === "user");
+    expect(String(user.content)).toContain("صمام ٣ بوصة");
+    expect(String(user.content)).toContain("po.pdf");
+  });
+
+  it("keeps a long document from crowding out the question by capping the text", async () => {
+    extractDocumentText.mockResolvedValue("X".repeat(100_000));
+    chatCompletion.mockResolvedValue({ content: "ok", finishReason: "stop", toolCalls: [] });
+
+    const { runAgent, MAX_DOCUMENT_CHARS } = await import("../../modules/ai-assistant/agent");
+    await runAgent({
+      phone: "2010",
+      text: "?",
+      document: { buffer: Buffer.from("pdf"), mimeType: "application/pdf" },
+    });
+    const msgs = chatCompletion.mock.calls[0][0].messages;
+    const user = msgs.find((m: any) => m.role === "user");
+    const xs = String(user.content).match(/X+/)?.[0].length ?? 0;
+    expect(xs).toBeLessThanOrEqual(MAX_DOCUMENT_CHARS);
+  });
+
+  it("does not claim to have read a document it could not extract", async () => {
+    extractDocumentText.mockResolvedValue(null);
+    chatCompletion.mockResolvedValue({ content: "تمام", finishReason: "stop", toolCalls: [] });
+
+    const { runAgent } = await import("../../modules/ai-assistant/agent");
+    await runAgent({
+      phone: "2010",
+      document: {
+        buffer: Buffer.from("x"),
+        mimeType: "application/octet-stream",
+        filename: "b.bin",
+      },
+    });
+    const msgs = chatCompletion.mock.calls[0][0].messages;
+    const user = msgs.find((m: any) => m.role === "user");
+    // The model is told the file could not be read instead of being asked about
+    // an empty document.
+    expect(String(user.content)).toContain("تعذّر قراءة الملف");
+  });
+
+  it("keeps the extracted text out of the stored history", async () => {
+    extractDocumentText.mockResolvedValue("سري جدا: تكلفة ١٢٣");
+    chatCompletion.mockResolvedValue({ content: "ok", finishReason: "stop", toolCalls: [] });
+
+    const { runAgent } = await import("../../modules/ai-assistant/agent");
+    await runAgent({
+      phone: "2010",
+      text: "لخّص",
+      document: { buffer: Buffer.from("pdf"), mimeType: "application/pdf", filename: "po.pdf" },
+    });
+    const userRow = inserts.find((r: any) => r.role === "user");
+    expect(userRow.content).toContain("po.pdf");
+    expect(userRow.content).not.toContain("سري جدا");
   });
 });
