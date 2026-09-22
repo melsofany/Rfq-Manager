@@ -9,6 +9,12 @@ import { db, aiAssistantUsersTable, aiAssistantSettingsTable, employeesTable } f
 import { eq } from "drizzle-orm";
 import { logger } from "../../shared/logger";
 
+export const DEFAULT_MODEL = process.env.AI_MODEL || "gemini-3.8-flash";
+// Default to Google Gemini's OpenAI-compatible endpoint. Any OpenAI-compatible
+// gateway still works by setting AI_BASE_URL.
+export const DEFAULT_BASE_URL =
+  process.env.AI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai";
+
 export interface AiSettings {
   enabled: boolean;
   model: string;
@@ -22,7 +28,7 @@ export interface AiSettings {
 
 export const DEFAULT_SETTINGS: AiSettings = {
   enabled: true,
-  model: process.env.AI_MODEL || "gpt-4o",
+  model: DEFAULT_MODEL,
   baseUrl: process.env.AI_BASE_URL || null,
   systemPrompt: null,
   language: "ar",
@@ -31,8 +37,20 @@ export const DEFAULT_SETTINGS: AiSettings = {
   allowPdf: true,
 };
 
-export const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "";
-export const DEFAULT_BASE_URL = process.env.AI_BASE_URL || "https://api.openai.com/v1";
+export const AI_API_KEY =
+  process.env.AI_API_KEY || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || "";
+
+/**
+ * True when the configured endpoint is Google Gemini. Gemini shares the OpenAI
+ * wire format for chat/tools/vision, but differs in two ways that matter here:
+ * a native `generateContent` endpoint must be used for WhatsApp voice notes
+ * (the OpenAI-compat audio path rejects `ogg`), and Gemini 3 requires the
+ * assistant tool-call turn's `thought_signature` to be echoed back.
+ */
+export function isGeminiEndpoint(baseUrl?: string | null): boolean {
+  const base = baseUrl || DEFAULT_BASE_URL;
+  return /generativelanguage\.googleapis\.com/i.test(base);
+}
 
 export const isAiConfigured = Boolean(AI_API_KEY);
 

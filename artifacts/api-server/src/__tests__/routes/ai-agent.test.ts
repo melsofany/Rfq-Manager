@@ -131,4 +131,25 @@ describe("AI assistant agent loop", () => {
     const out = await runAgent({ phone: "2010", text: "?" });
     expect(out.reply).toBe("تعذّر الوصول.");
   });
+
+  it("echoes Gemini's thought_signature back on the assistant tool-call turn", async () => {
+    const call = {
+      id: "c1",
+      type: "function",
+      function: { name: "search_database", arguments: '{"table":"suppliers"}' },
+      extra_content: { google: { thought_signature: "SIG-ABC" } },
+    };
+    chatCompletion
+      .mockResolvedValueOnce({ content: null, finishReason: "tool_calls", toolCalls: [call] })
+      .mockImplementationOnce((args: any) => {
+        const assistant = args.messages.find((m: any) => m.role === "assistant" && m.tool_calls);
+        expect(assistant.tool_calls[0].extra_content.google.thought_signature).toBe("SIG-ABC");
+        return Promise.resolve({ content: "تم.", finishReason: "stop", toolCalls: [] });
+      });
+
+    executeTool.mockResolvedValue({ ok: true, data: { count: 1 } });
+    const { runAgent } = await import("../../modules/ai-assistant/agent");
+    const out = await runAgent({ phone: "2010", text: "?" });
+    expect(out.reply).toBe("تم.");
+  });
 });

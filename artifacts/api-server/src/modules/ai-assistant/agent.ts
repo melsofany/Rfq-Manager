@@ -103,6 +103,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       input.audio.buffer,
       input.audio.mimeType,
       settings.baseUrl,
+      settings.model,
     );
     if (transcript) userText = transcript;
     else userText = userText || "[رسالة صوتية — تعذّر تحويلها إلى نص]";

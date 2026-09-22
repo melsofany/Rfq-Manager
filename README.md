@@ -10,22 +10,22 @@ pnpm install
 
 ### Environment variables
 
-| Variable          | Description                                                                                                                            |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`    | PostgreSQL connection string                                                                                                           |
-| `SESSION_SECRET`  | Express session signing key — **required in production** (server refuses to start without it). Generate with `openssl rand -base64 48` |
-| `ALLOWED_ORIGINS` | Optional comma-separated extra CORS origins (same-origin SPA is always allowed)                                                        |
-| `SMTP_HOST`       | SMTP host (default: smtp.gmail.com)                                                                                                    |
-| `SMTP_USER`       | SMTP username                                                                                                                          |
-| `SMTP_PASS`       | SMTP password / app password                                                                                                           |
-| `AI_API_KEY`      | Admin/manager WhatsApp **AI assistant** — OpenAI-compatible API key (`OPENAI_API_KEY` also accepted). Unset = assistant disabled       |
-| `AI_MODEL`        | Model id for the assistant (default: `gpt-4o`)                                                                                         |
-| `AI_BASE_URL`     | OpenAI-compatible endpoint (default: `https://api.openai.com/v1`)                                                                      |
-| `IMAP_HOST`       | Mailbox IMAP host — enables the assistant's email-reading tools                                                                        |
-| `IMAP_PORT`       | IMAP port (default: 993)                                                                                                               |
-| `IMAP_USER`       | IMAP username                                                                                                                          |
-| `IMAP_PASS`       | IMAP password / app password                                                                                                           |
-| `IMAP_SECURE`     | `false` to disable IMAP TLS (default: enabled)                                                                                         |
+| Variable          | Description                                                                                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`    | PostgreSQL connection string                                                                                                                                                     |
+| `SESSION_SECRET`  | Express session signing key — **required in production** (server refuses to start without it). Generate with `openssl rand -base64 48`                                           |
+| `ALLOWED_ORIGINS` | Optional comma-separated extra CORS origins (same-origin SPA is always allowed)                                                                                                  |
+| `SMTP_HOST`       | SMTP host (default: smtp.gmail.com)                                                                                                                                              |
+| `SMTP_USER`       | SMTP username                                                                                                                                                                    |
+| `SMTP_PASS`       | SMTP password / app password                                                                                                                                                     |
+| `AI_API_KEY`      | Admin/manager WhatsApp **AI assistant** — provider key, Gemini or any OpenAI-compatible provider (`OPENAI_API_KEY` / `GEMINI_API_KEY` also accepted). Unset = assistant disabled |
+| `AI_MODEL`        | Model id for the assistant (default: `gemini-3.8-flash`)                                                                                                                         |
+| `AI_BASE_URL`     | OpenAI-compatible endpoint (default: Google Gemini `https://generativelanguage.googleapis.com/v1beta/openai`)                                                                    |
+| `IMAP_HOST`       | Mailbox IMAP host — enables the assistant's email-reading tools                                                                                                                  |
+| `IMAP_PORT`       | IMAP port (default: 993)                                                                                                                                                         |
+| `IMAP_USER`       | IMAP username                                                                                                                                                                    |
+| `IMAP_PASS`       | IMAP password / app password                                                                                                                                                     |
+| `IMAP_SECURE`     | `false` to disable IMAP TLS (default: enabled)                                                                                                                                   |
 
 ## Development
 

@@ -36,7 +36,7 @@ export const aiAssistantSettingsTable = pgTable("ai_assistant_settings", {
   id: serial("id").primaryKey(),
   key: text("key").notNull().default("default").unique(),
   enabled: boolean("enabled").notNull().default(true),
-  model: text("model").notNull().default("gpt-4o"),
+  model: text("model").notNull().default("gemini-3.8-flash"),
   baseUrl: text("base_url"),
   systemPrompt: text("system_prompt"),
   language: text("language").notNull().default("ar"),

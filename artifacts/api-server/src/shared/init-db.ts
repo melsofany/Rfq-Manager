@@ -1150,7 +1150,7 @@ export async function initDb(): Promise<void> {
         id SERIAL PRIMARY KEY,
         key TEXT NOT NULL UNIQUE DEFAULT 'default',
         enabled BOOLEAN NOT NULL DEFAULT true,
-        model TEXT NOT NULL DEFAULT 'gpt-4o',
+        model TEXT NOT NULL DEFAULT 'gemini-3.8-flash',
         base_url TEXT,
         system_prompt TEXT,
         language TEXT NOT NULL DEFAULT 'ar',
@@ -1162,6 +1162,14 @@ export async function initDb(): Promise<void> {
       );
       INSERT INTO ai_assistant_settings (key) VALUES ('default')
         ON CONFLICT (key) DO NOTHING;
+    `);
+
+    // Move the seeded row off the retired OpenAI default to the Gemini default.
+    // Its own statement so a sibling failure can never roll it back.
+    await client.query(`
+      UPDATE ai_assistant_settings
+         SET model = 'gemini-3.8-flash', updated_at = NOW()
+       WHERE key = 'default' AND model IN ('gpt-4o', 'gpt-4o-mini', '');
     `);
 
     logger.info("initDb: seed complete");

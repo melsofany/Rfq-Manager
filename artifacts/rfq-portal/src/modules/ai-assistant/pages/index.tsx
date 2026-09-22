@@ -20,7 +20,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Bot, Plus, Trash2, Save, RefreshCw, ShieldAlert, Mail, Loader2 } from "lucide-react";
+import {
+  Bot,
+  Plus,
+  Trash2,
+  Save,
+  RefreshCw,
+  ShieldAlert,
+  Mail,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,7 +61,9 @@ interface AiSettings {
   allowPdf: boolean;
   apiKeySet: boolean;
   imapConfigured: boolean;
+  defaultModel?: string;
   defaultBaseUrl: string;
+  isGemini?: boolean;
 }
 
 async function apiGet<T>(url: string): Promise<T> {
@@ -67,6 +79,7 @@ export default function AiAssistantPage() {
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
 
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
@@ -83,6 +96,10 @@ export default function AiAssistantPage() {
       setUsers(u);
       setEmployees(e);
       setSettings(s);
+      // Model list is best-effort — falls back to a free-text input.
+      apiGet<{ models: string[] }>("/api/ai-assistant/models")
+        .then((m) => setModels(m.models))
+        .catch(() => setModels([]));
     } catch (err) {
       toast.error(getApiErrorMessage(err, "فشل تحميل بيانات المساعد الذكي"));
     } finally {
@@ -206,6 +223,12 @@ export default function AiAssistantPage() {
             <Mail className="h-3 w-3" />
             {settings?.imapConfigured ? "البريد الوارد متاح" : "البريد الوارد غير مهيّأ (IMAP)"}
           </Badge>
+          {settings?.isGemini && (
+            <Badge variant="secondary" className="gap-1">
+              <Sparkles className="h-3 w-3" />
+              Google Gemini
+            </Badge>
+          )}
         </div>
 
         {(!settings?.apiKeySet || !settings?.imapConfigured) && (
@@ -216,10 +239,11 @@ export default function AiAssistantPage() {
                 لتفعيل كل الإمكانات، يجب ضبط متغيّرات البيئة على الخادم:
                 <ul className="list-disc pr-5 mt-1 space-y-0.5">
                   <li>
-                    <code>AI_API_KEY</code> — مفتاح مزوّد الذكاء الاصطناعي (OpenAI-compatible)
+                    <code>AI_API_KEY</code> — مفتاح مزوّد الذكاء الاصطناعي (Google Gemini أو أي
+                    مزوّد متوافق مع OpenAI)
                   </li>
                   <li>
-                    <code>AI_MODEL</code> — اسم الموديل (اختياري، الافتراضي gpt-4o)
+                    <code>AI_MODEL</code> — اسم الموديل (اختياري، الافتراضي gemini-3.8-flash)
                   </li>
                   <li>
                     <code>IMAP_HOST / IMAP_USER / IMAP_PASS</code> — لقراءة البريد الوارد
@@ -346,10 +370,27 @@ export default function AiAssistantPage() {
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-1">
                   <Label>الموديل</Label>
-                  <Input
-                    value={settings.model}
-                    onChange={(e) => setSettings({ ...settings, model: e.target.value })}
-                  />
+                  {models.length > 0 ? (
+                    <select
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                      value={settings.model}
+                      onChange={(e) => setSettings({ ...settings, model: e.target.value })}
+                    >
+                      {!models.includes(settings.model) && (
+                        <option value={settings.model}>{settings.model}</option>
+                      )}
+                      {models.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Input
+                      value={settings.model}
+                      onChange={(e) => setSettings({ ...settings, model: e.target.value })}
+                    />
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label>عنوان API (اختياري)</Label>

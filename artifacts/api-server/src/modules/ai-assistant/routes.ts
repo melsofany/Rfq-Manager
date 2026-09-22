@@ -10,8 +10,16 @@ import { db, aiAssistantUsersTable, aiAssistantSettingsTable, employeesTable } f
 import { eq, desc } from "drizzle-orm";
 import { requireRole } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
-import { loadSettings, isAiConfigured, DEFAULT_BASE_URL, canonicalPhone } from "./config";
+import {
+  loadSettings,
+  isAiConfigured,
+  DEFAULT_BASE_URL,
+  DEFAULT_MODEL,
+  isGeminiEndpoint,
+  canonicalPhone,
+} from "./config";
 import { isEmailReadConfigured } from "./email";
+import { listModels } from "./llm";
 
 const router = Router();
 const guard = requireRole("admin", "manager");
@@ -127,8 +135,17 @@ router.get("/ai-assistant/settings", guard, async (_req, res): Promise<void> => 
     ...settings,
     apiKeySet: isAiConfigured,
     imapConfigured: isEmailReadConfigured,
+    defaultModel: DEFAULT_MODEL,
     defaultBaseUrl: DEFAULT_BASE_URL,
+    isGemini: isGeminiEndpoint(settings.baseUrl),
   });
+});
+
+// ─── GET /ai-assistant/models ─────────────────────────────────────────────
+router.get("/ai-assistant/models", guard, async (_req, res): Promise<void> => {
+  const settings = await loadSettings();
+  const models = await listModels(settings.baseUrl);
+  res.json({ models, defaultModel: DEFAULT_MODEL });
 });
 
 // ─── PUT /ai-assistant/settings ───────────────────────────────────────────
