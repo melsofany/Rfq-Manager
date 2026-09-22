@@ -677,3 +677,31 @@ git push --force-with-lease=<branch>:<current-remote-sha> <token-url> <branch>
 - **Unknown tool calls and tool failures were silent** — a hallucinated tool name only showed to the model as "Unknown tool". Both now `logger.warn`.
 - **Test-mock note**: `ai-email-attachment.test.ts` fakes only `imapflow` + `dns` and lets the REAL `mailparser` parse a hand-built MIME message, so the attachment path is exercised for real. `AI_MAX_ATTACHMENT_BYTES` makes the size ceiling testable without allocating 25MB.
 - `ai-gemini.test.ts` originally hardcoded "3 models tried"; derive it from `FALLBACK_MODELS.length` so extending the chain doesn't break it.
+
+## A silently-unfiltered query makes the model hallucinate (the «هاي فولت» incident)
+
+- **Symptom**: asking the assistant about supplier «هاي فولت» produced offers 237/232/231/230, and on challenge it invented «شركة النور» as the supplier on PO 37. **No exception anywhere** — which is what made it hard to find.
+- **Cause**: `queryRecords` built its `WHERE` from
+  `spec.search.map(c => columns[c]).filter(Boolean)`. The registry declared columns that do not exist (`offers.supplierName`/`status`, `offer_items.partNo`/`lineItem`/`description`, `purchase_orders.supplierName`), so the array was **empty** → no filter applied → the newest rows of the table came back as "search results". The model read real rows as its answer and filled the gaps with invented names.
+- **The general rule**: a capability that silently does something OTHER than it claims is worse than one that throws. `filter(Boolean)` on a registry lookup turns a configuration typo into fabricated data.
+- **Fix invariants** (do not regress):
+  - A search term that cannot be matched returns **nothing** (`sql`1 = 0``), never a scan.
+  - Sub-matches are **OR**ed (a PO matches by its number **or** its supplier), never ANDed — ANDing rejects the very rows the term was meant to find.
+  - FK columns are resolved to labels (`supplierName`/`poNo`) so the model never guesses a name from an id.
+  - `searchNote`/`searchApplied` are returned **first** in the tool result so the model reads the caveat before the rows.
+  - `ai-grounding.test.ts` guards the WHOLE registry: it asserts every declared `search` column exists in the Drizzle schema, so this cannot return silently.
+- **Searching a FK's integer column by a name is not a filter** — `ilike(offers.supplierId, "%هاي فولت%")` matches nothing yet marks the search "applied", which defeats the guard. Related-table terms must go through `extraSearch`/`extraSearchColumn`.
+- Do not point `extraSearchColumn` at a column the table lacks (`purchase_orders` has no `supplierId`; it resolves to `id`).
+- The prompt must state read-only capabilities honestly: there is **no WhatsApp send tool**, and the agent had been claiming it could message suppliers.
+
+## IMAP server-side search is not a reliable text search
+
+- `search.or = [{subject},{body}]` failed live: «لا توجد رسائل من EDC» for mail that was in the inbox. BODY full-text is unimplemented on many servers, it **never matches the From display name**, and Arabic is mangled by charset handling.
+- Match **client-side** over the recent window instead (`matchEmailFields`), with Arabic normalisation (alef/hamza, taa marbuta, yaa, harakat, tatweel folded) so «شركه» == «شركة».
+- Report the **scope** (folder, window, messages scanned) — otherwise "not found" is an unsupported claim and the operator has no way to judge it. Default window 60d (was 14d).
+- Tests: `ai-email-search.test.ts` covers the match decision, normalisation, and attachment selection.
+
+## Cost/latency of the tool loop
+
+- Tool calls within one round are chosen together and are independent: run them with `Promise.all`, not sequentially. 3 sequential line-item lookups cost 3 round-trips for no reason.
+- `MAX_TOOL_ROUNDS` is a **quota** budget, not just a loop guard: Gemini's free tier is 20 requests/day/**model**, so 8 rounds burned the day in a couple of questions. It is now 5, and `ai-agent.test.ts` asserts the test's copy matches the source constant.
