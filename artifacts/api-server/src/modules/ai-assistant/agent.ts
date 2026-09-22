@@ -198,12 +198,14 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const tools = toolDefinitions(ctx);
   const usedTools: Array<{ name: string; args: unknown }> = [];
   let finalText: string | null = null;
+  const startedAt = Date.now();
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     // Last round: forbid tool calls so the model has to answer with what it
     // already gathered. Without this a model that keeps calling tools drains
     // the budget and leaves nothing to send.
     const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === MAX_TOOL_ROUNDS - 1;
+    const roundStartedAt = Date.now();
     const result = await chatCompletion({
       model: settings.model,
       baseUrl: settings.baseUrl,
@@ -268,11 +270,25 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         content,
       });
     }
+    logger.info(
+      {
+        phone: input.phone,
+        round,
+        ms: Date.now() - roundStartedAt,
+        toolCalls: calls.map((c) => c.call.function.name),
+      },
+      "AI assistant: tool round complete",
+    );
   }
 
   if (!finalText) {
     finalText = exhaustedAnswer(usedTools);
   }
+
+  logger.info(
+    { phone: input.phone, ms: Date.now() - startedAt, rounds: usedTools.length },
+    "AI assistant: answered",
+  );
 
   // The extracted document text is intentionally kept out of the stored
   // history: it is large and only relevant to this one turn. The label keeps

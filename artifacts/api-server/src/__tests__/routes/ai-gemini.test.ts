@@ -5,9 +5,15 @@ process.env.AI_API_KEY = "test-key";
 
 describe("Gemini integration (llm.ts)", () => {
   const fetchMock = vi.fn();
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeEach(async () => {
+    // mockReset (not clearAllMocks) so a queued `mockResolvedValueOnce` from a
+    // previous test cannot leak into this one.
+    fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
+    // Model-selection memory persists across requests by design; clear it so
+    // one test's exhausted model does not leak into the next.
+    const { resetModelState } = await import("../../modules/ai-assistant/llm");
+    resetModelState();
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -149,10 +155,10 @@ describe("Gemini integration (llm.ts)", () => {
 
   it("moves to the next model when one is overloaded (503), not just on quota", async () => {
     // Observed live: gemini-3.7-flash answers 503 "high demand" while
-    // gemini-3.6-flash serves the same request fine.
+    // gemini-3.6-flash serves the same request fine. Only one retry on the
+    // overloaded model — a long retry chain just delays the fallback.
     const unavailable = { ok: false, status: 503, text: async () => "high demand" };
     fetchMock
-      .mockResolvedValueOnce(unavailable)
       .mockResolvedValueOnce(unavailable)
       .mockResolvedValueOnce(unavailable)
       .mockResolvedValueOnce({
@@ -162,10 +168,65 @@ describe("Gemini integration (llm.ts)", () => {
     const { chatCompletion } = await import("../../modules/ai-assistant/llm");
     const res = await chatCompletion({ model: "gemini-3.8-flash", messages: [] });
     expect(res.content).toBe("رد بديل");
-    // 3 attempts on the overloaded primary, then the fallback model answers.
+    // 2 attempts on the overloaded primary, then the fallback model answers.
     const models = fetchMock.mock.calls.map((c) => JSON.parse(c[1].body).model);
-    expect(models.filter((m) => m === "gemini-3.8-flash")).toHaveLength(3);
-    expect(models[3]).not.toBe("gemini-3.8-flash");
+    expect(models.filter((m) => m === "gemini-3.8-flash")).toHaveLength(2);
+    expect(models[2]).not.toBe("gemini-3.8-flash");
+  }, 20000);
+
+  it("sticks to the model that worked instead of re-probing the dead primary", async () => {
+    // The costly pattern: the primary is out for the day (429, no retry hint),
+    // a fallback answers. On the NEXT request the chain must start at the model
+    // that worked — a tool-calling turn makes several requests, and re-walking
+    // the chain from the top each time is pure added latency.
+    const { chatCompletion, resetModelState } = await import("../../modules/ai-assistant/llm");
+    resetModelState();
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => JSON.stringify({ error: { message: "quota exceeded, limit: 20" } }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({ choices: [{ message: { content: "ok" } }] }),
+      });
+
+    await chatCompletion({ model: "gemini-3.8-flash", messages: [] });
+    const first = fetchMock.mock.calls.map((c: any[]) => JSON.parse(c[1].body).model);
+    expect(first[0]).toBe("gemini-3.8-flash");
+    const winner = first[1];
+    expect(winner).not.toBe("gemini-3.8-flash");
+
+    fetchMock.mockClear();
+    await chatCompletion({ model: "gemini-3.8-flash", messages: [] });
+    const second = fetchMock.mock.calls.map((c: any[]) => JSON.parse(c[1].body).model);
+    // One call: straight to the model that worked, primary not re-probed.
+    expect(second).toEqual([winner]);
+  });
+
+  it("waits out a short per-minute limit instead of downgrading the model", async () => {
+    // A 429 that states a short retryDelay is a per-minute limit: the model
+    // recovers in seconds and is better than the fallback, so wait it out.
+    const { chatCompletion, resetModelState } = await import("../../modules/ai-assistant/llm");
+    resetModelState();
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () =>
+          JSON.stringify({ error: { message: "rate limited", details: [{ retryDelay: "1s" }] } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ choices: [{ message: { content: "بعد الانتظار" } }] }),
+      });
+    const res = await chatCompletion({ model: "gemini-3.8-flash", messages: [] });
+    expect(res.content).toBe("بعد الانتظار");
+    // Retried the SAME model rather than falling through the whole chain.
+    const models = fetchMock.mock.calls.map((c: any[]) => JSON.parse(c[1].body).model);
+    expect(models).toEqual(["gemini-3.8-flash", "gemini-3.8-flash"]);
+    resetModelState();
   }, 20000);
 
   it("does not waste fallbacks on a permanent 400", async () => {

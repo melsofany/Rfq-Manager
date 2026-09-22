@@ -146,20 +146,34 @@ export async function chatCompletion(opts: {
       max_tokens: opts.maxTokens ?? 1600,
     });
 
-  // Transient provider errors worth retrying on the SAME model.
-  const RETRYABLE = new Set([500, 502, 503, 504]);
-  const MAX_ATTEMPTS = 3;
+  // Transient provider errors worth retrying on the SAME model. Measured
+  // against Gemini: a 503 is usually a brief "high demand" blip that clears in
+  // under a second, but 500/502/504 tend to persist for the whole request and
+  // retrying them only delays the fallback. Only 503 is retried.
+  const RETRYABLE = new Set([503]);
+  const MAX_ATTEMPTS = 2;
   // 429 or 404 on the model means this model is exhausted/unavailable: move on
   // rather than retrying it. Gemini's free tier caps a single model at 20
   // requests/day, so switching is the only way to stay usable.
   const SWITCH_MODEL = new Set([429, 404]);
-  const candidates = [opts.model, ...FALLBACK_MODELS.filter((m) => m !== opts.model)];
+  /**
+   * A 429 carrying `retryDelay` is a per-MINUTE limit, not the daily cap — the
+   * model recovers in seconds and is usually the better model. Waiting it out
+   * beats falling through to a weaker one, but only up to this bound: the
+   * operator is waiting live, and a hint longer than this is better served by
+   * switching models immediately.
+   */
+  const MAX_QUOTA_WAIT_MS = 5_000;
+  const candidates = modelChain(opts.model);
   let lastError: AiError | null = null;
 
   outer: for (const model of candidates) {
+    let waitedForQuota = false;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        return await requestCompletion({ model, base, body: buildBody(model) });
+        const result = await requestCompletion({ model, base, body: buildBody(model) });
+        rememberWorkingModel(model);
+        return result;
       } catch (err) {
         if (!(err instanceof AiError)) throw err;
         lastError = err;
@@ -172,26 +186,130 @@ export async function chatCompletion(opts: {
         }
 
         if (status != null && SWITCH_MODEL.has(status)) {
-          const retryAfter = /retry in ([\d.]+)s/i.exec(err.message)?.[1];
+          // Gemini states how long the limit lasts. Honour it once when it is
+          // short, so a brief per-minute cap doesn't demote us to a weaker
+          // model for the rest of the conversation.
+          const delayMs = parseRetryDelayMs(err.message);
+          if (
+            status === 429 &&
+            !waitedForQuota &&
+            delayMs != null &&
+            delayMs <= MAX_QUOTA_WAIT_MS
+          ) {
+            waitedForQuota = true;
+            logger.info(
+              { model, delayMs },
+              "AI assistant: rate limited for a few seconds, waiting instead of downgrading",
+            );
+            await sleep(delayMs + 400);
+            attempt--; // the wait is not a failed attempt against this model
+            continue;
+          }
+          // No short retry given: this model is out for the day. Remember it so
+          // the remaining tool-calling rounds don't re-probe it — each wasted
+          // probe is a round-trip the operator waits through.
+          if (delayMs == null) markModelExhausted(model);
           logger.warn(
-            { model, status, retryAfter },
+            { model, status, retryAfter: delayMs != null ? delayMs / 1000 : undefined },
             "AI assistant: model unavailable, trying next model",
           );
           continue outer;
         }
 
-        // Retryable (503 high demand, network): back off, retry the same model.
-        // Once its attempts are spent, fall through to the next candidate
-        // rather than failing — an overloaded model is exactly when a
-        // different model succeeds.
+        // Retryable (503 high demand): back off, retry the same model. Once its
+        // attempts are spent, fall through to the next candidate rather than
+        // failing — an overloaded model is exactly when a different model
+        // succeeds.
         if (attempt < MAX_ATTEMPTS) {
-          await sleep(600 * attempt);
+          await sleep(300);
         }
       }
     }
     logger.warn({ model, status: lastError?.status }, "AI assistant: model exhausted, trying next");
   }
   throw lastError ?? new AiError("LLM request failed");
+}
+
+/**
+ * Models to try, in order, for one completion.
+ *
+ * The first choice is whatever last succeeded for this process. Without this,
+ * every round of the same tool-calling conversation re-walked the chain from
+ * the top: a primary model that is out for the day (429) got re-probed on each
+ * of up to 5 rounds, adding a wasted round-trip each time — the difference
+ * between a snappy answer and a visibly slow one. Known-exhausted models are
+ * skipped entirely.
+ */
+function modelChain(primary: string): string[] {
+  const preferred = lastWorkingModel();
+  const ordered = [
+    ...(preferred && preferred !== primary ? [preferred] : []),
+    primary,
+    ...FALLBACK_MODELS.filter((m) => m !== primary && m !== preferred),
+  ];
+  const usable = ordered.filter((m) => !isModelExhausted(m));
+  // If every model is remembered as out, the memory is stale rather than the
+  // world having ended — try them all again instead of failing instantly, so
+  // the caller still surfaces the provider's own quota error.
+  return usable.length > 0 ? usable : ordered;
+}
+
+/** Model that most recently answered, reused for the next request. */
+let cachedWorkingModel: string | null = null;
+
+function lastWorkingModel(): string | null {
+  return cachedWorkingModel;
+}
+
+function rememberWorkingModel(model: string): void {
+  if (cachedWorkingModel !== model) {
+    cachedWorkingModel = model;
+    logger.info({ model }, "AI assistant: using model");
+  }
+}
+
+/**
+ * Day-level quota exhaustion, keyed by model. Gemini's free tier is per-model
+ * and resets daily, so an exhausted model is skipped for an hour — long enough
+ * to stop the repeated probes, short enough to pick it back up after a reset.
+ */
+const exhaustedUntil = new Map<string, number>();
+const EXHAUSTED_TTL_MS = 60 * 60 * 1000;
+
+function markModelExhausted(model: string): void {
+  exhaustedUntil.set(model, Date.now() + EXHAUSTED_TTL_MS);
+}
+
+function isModelExhausted(model: string): boolean {
+  const until = exhaustedUntil.get(model);
+  if (until == null) return false;
+  if (Date.now() >= until) {
+    exhaustedUntil.delete(model);
+    return false;
+  }
+  return true;
+}
+
+/** Test seam: clear the model-selection memory between cases. */
+export function resetModelState(): void {
+  cachedWorkingModel = null;
+  exhaustedUntil.clear();
+}
+
+/**
+ * Parse the wait a provider asks for before retrying.
+ *
+ * Gemini returns both a `retryDelay` field and a human phrase ("Please retry in
+ * 11.2s") in the 429 body; accept either. Returns null when the provider said
+ * nothing, which is the signal that the limit is not a short one.
+ */
+export function parseRetryDelayMs(message: string): number | null {
+  const field = /"retryDelay"\s*:\s*"([\d.]+)s"/i.exec(message);
+  const phrase = /retry in ([\d.]+)s/i.exec(message);
+  const seconds = field?.[1] ?? phrase?.[1];
+  if (seconds == null) return null;
+  const n = Number(seconds);
+  return Number.isFinite(n) ? Math.round(n * 1000) : null;
 }
 
 /** True when the error means "this provider/model is out of capacity or quota". */
