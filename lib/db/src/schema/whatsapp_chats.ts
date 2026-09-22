@@ -8,6 +8,10 @@ export const whatsappChatsTable = pgTable("whatsapp_chats", {
   phone: text("phone").notNull(),
   supplierId: integer("supplier_id").references(() => suppliersTable.id),
   body: text("body").notNull(),
+  // The WhatsApp profile name Meta sends on the inbound webhook. It is the
+  // only contact identity the Cloud API exposes — there is no profile-picture
+  // lookup — so this is what the UI shows instead of a bare phone number.
+  contactName: text("contact_name"),
   mediaId: text("media_id"), // WhatsApp media ID (for proxy download)
   mediaType: text("media_type"), // "image" | "document" | "audio" | "video"
   mimeType: text("mime_type"), // e.g. "image/jpeg"

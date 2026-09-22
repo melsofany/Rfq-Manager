@@ -44,12 +44,15 @@ import {
   Layout as LayoutIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { chatLabel } from "@/lib/chat-label";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 interface Chat {
   phone: string;
   supplierId: number | null;
   supplierName: string | null;
+  /** WhatsApp profile name from the webhook — the only contact identity Meta exposes. */
+  contactName: string | null;
   lastMessage: string;
   lastAt: string;
   lastInboundAt: string | null;
@@ -518,7 +521,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               const chat = fresh?.find((c) => c.phone === ev.phone);
               if (chat)
                 showToast(
-                  `📩 ${chat.supplierName || ev.phone}: ${chat.lastMessage?.substring(0, 40)}`,
+                  `📩 ${chatLabel(chat)}: ${chat.lastMessage?.substring(0, 40)}`,
                   false,
                   ev.phone,
                 );
@@ -787,6 +790,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
     const matchSearch =
       !search ||
       c.supplierName?.toLowerCase().includes(search.toLowerCase()) ||
+      c.contactName?.toLowerCase().includes(search.toLowerCase()) ||
       c.phone.includes(search) ||
       c.lastMessage?.toLowerCase().includes(search.toLowerCase());
     const matchFilter =
@@ -797,7 +801,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
   });
 
   const selectedChat = chats.find((c) => c.phone === selected);
-  const displayName = selectedChat?.supplierName || selected || "";
+  const displayName = selectedChat ? chatLabel(selectedChat) : selected || "";
 
   function getReplyBody(waMessageId: string): string {
     const msg = messages.find((m) => m.waMessageId === waMessageId);
@@ -916,7 +920,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
           ) : (
             filteredChats.map((chat) => {
               const isActive = selected === chat.phone;
-              const name = chat.supplierName || chat.phone;
+              const name = chatLabel(chat);
               const lastTime = chat.lastAt
                 ? new Date(chat.lastAt).toLocaleTimeString("ar-EG", {
                     hour: "2-digit",
@@ -1405,9 +1409,7 @@ function ChatsTab({ onStatsChange }: { onStatsChange: (s: Stats) => void }) {
               ].map((item) => {
                 const isChat = "lastAt" in item;
                 const phone = isChat ? (item as Chat).phone : ((item as Supplier).phone ?? "");
-                const name = isChat
-                  ? ((item as Chat).supplierName ?? phone)
-                  : ((item as Supplier).name ?? phone);
+                const name = isChat ? chatLabel(item as Chat) : ((item as Supplier).name ?? phone);
                 if (!phone) return null;
                 return (
                   <div
