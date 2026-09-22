@@ -143,6 +143,58 @@ router.get("/ai-assistant/settings", guard, async (_req, res): Promise<void> => 
   });
 });
 
+// ─── GET /ai-assistant/mail-diagnostics ───────────────────────────────────
+/**
+ * Try to reach each configured mailbox and report what happened.
+ *
+ * A delegation failure is otherwise indistinguishable from an empty inbox, so
+ * this runs the real IMAP connect (not a reachability ping) per mailbox and
+ * returns the outcome. Admin-facing: it answers "did the delegation grant
+ * actually take effect for THIS address?" without waiting for the assistant to
+ * answer a question and quietly read nothing.
+ */
+router.get("/ai-assistant/mail-diagnostics", guard, async (_req, res): Promise<void> => {
+  const { mailboxes, defaultMailbox, mailReaderIdentity } = await import("./mailboxes");
+  const { withMailbox } = await import("./email");
+
+  const list = mailboxes();
+  const results = [];
+  for (const m of list) {
+    const started = Date.now();
+    try {
+      // Opening the INBOX is the real test: it authenticates (delegation) and
+      // proves the mailbox is readable.
+      const info = await withMailbox(async (client) => {
+        const box = await client.mailboxOpen("INBOX");
+        return { messages: box.exists, uidNext: box.uidNext };
+      }, m.email);
+      results.push({
+        email: m.email,
+        label: m.label,
+        ok: true,
+        messages: info.messages,
+        ms: Date.now() - started,
+      });
+    } catch (err) {
+      results.push({
+        email: m.email,
+        label: m.label,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+        ms: Date.now() - started,
+      });
+    }
+  }
+
+  res.json({
+    reader: mailReaderIdentity(),
+    default: defaultMailbox()?.email ?? null,
+    mailboxes: results,
+    okCount: results.filter((r) => r.ok).length,
+    total: results.length,
+  });
+});
+
 // ─── GET /ai-assistant/models ─────────────────────────────────────────────
 router.get("/ai-assistant/models", guard, async (_req, res): Promise<void> => {
   const settings = await loadSettings();
