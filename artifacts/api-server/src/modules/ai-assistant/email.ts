@@ -43,6 +43,47 @@ const BODY_SCAN_BUDGET = 400;
  * email question slow for everyone.
  */
 const BODY_PARSE_BUDGET = 60;
+
+/**
+ * Envelope budget for a CENSUS scan (`scanEmails`).
+ *
+ * An envelope fetch is cheap — measured against the live mailbox: 3,875
+ * envelopes in ~4.5s, versus ~0.33s for 400 — so a census can afford to read
+ * the whole mailbox. The search path's 400-message window is what made the
+ * assistant answer «10 رسائل» for 1,582 real messages: it could not SEE the rest
+ * of the year, so no amount of prompting could produce a correct count.
+ *
+ * Read per call (not a module constant) so the truncation path can be exercised
+ * with a small mailbox instead of allocating 20,000 messages.
+ */
+export function censusEnvelopeBudget(): number {
+  return Number(process.env.AI_CENSUS_ENVELOPE_BUDGET) || 20_000;
+}
+
+/** Envelopes fetched per IMAP round-trip, so the time budget can be checked. */
+const CENSUS_CHUNK = 1_000;
+
+/**
+ * Wall-clock ceiling for one mailbox's census. A full-year scan of a large
+ * inbox is seconds, not minutes; past this the answer is reported as partial
+ * (with the scope that was covered) rather than blowing the agent's budget.
+ */
+const CENSUS_TIME_BUDGET_MS = 40_000;
+
+/**
+ * Document-number shapes worth extracting from subjects during a census. These
+ * are the identifiers this business actually keys on: EDC-style customer RFQ
+ * numbers (26R011936), supplier PO numbers (P26E11407), internal customer-RFQ
+ * and customer-PO numbers, and external platform references (RFQ-6152439).
+ */
+export const DEFAULT_NUMBER_PATTERNS = [
+  "\\b\\d{2}R\\d{5,9}\\b",
+  "\\bP\\d{2}E\\d{5,8}\\b",
+  "\\bC?RFQ-\\d{4}-\\d{4,6}\\b",
+  "\\bCPO-\\d{4}-\\d{4,6}\\b",
+  "\\bRFQ[- ]?\\d{5,10}\\b",
+];
+
 let cachedIpv4Host: string | null = null;
 let cacheExpiry = 0;
 
@@ -599,6 +640,436 @@ async function safeParse(
   } catch {
     return null;
   }
+}
+
+/** One message matched by a census scan. */
+export interface EmailCensusMatch {
+  uid: number;
+  mailbox: string;
+  folder: EmailFolder;
+  from: string;
+  to: string;
+  subject: string;
+  date: string;
+  /** Document numbers extracted from the subject (see `numberPatterns`). */
+  numbers: string[];
+}
+
+/** How a census was narrowed and how much of the mailbox it actually covered. */
+export interface EmailCensusScope {
+  folder: EmailFolder;
+  sinceDate: string | null;
+  beforeDate: string | null;
+  /** Per-mailbox coverage, including whether the budget cut the scan short. */
+  mailboxes: Array<{
+    mailbox: string;
+    scanned: number;
+    truncated: boolean;
+    /** False when the server-side narrowing failed and the whole box was read. */
+    serverNarrowed: boolean;
+  }>;
+  /** Envelopes examined in total. */
+  scanned: number;
+  /**
+   * True when any mailbox was only PARTIALLY scanned (budget or time limit).
+   * `matched` is then a LOWER BOUND, and the caller must say so — presenting a
+   * partial scan as a total is the failure this capability exists to prevent.
+   */
+  truncated: boolean;
+  elapsedMs: number;
+}
+
+/** One distinct document number found in the census, with an example message. */
+export interface EmailCensusNumber {
+  number: string;
+  count: number;
+  sample: { uid: number; mailbox: string; folder: EmailFolder; subject: string; date: string };
+}
+
+/** Result of reconciling extracted numbers against the system of record. */
+export interface EmailNumberComparison {
+  /** Which table/column the numbers were checked against. */
+  table: string;
+  column: string;
+  /** Numbers present in the system. */
+  found: number;
+  /** Numbers seen in email but ABSENT from the system, with an example. */
+  missing: Array<{ number: string; subject: string; date: string; mailbox: string }>;
+  /** Numbers in email that the system already has (for spot-checking). */
+  matchedSample: Array<{ number: string; value: string }>;
+}
+
+export interface EmailCensusResult {
+  /** Total matched messages across every mailbox — the exact count when not truncated. */
+  matched: number;
+  /** How many messages are returned in `emails` (bounded by `limit`). */
+  returned: number;
+  emails: EmailCensusMatch[];
+  byMailbox: Record<string, number>;
+  /** Matched messages per YYYY-MM — the basis for paging a large census. */
+  byMonth: Record<string, number>;
+  bySender: Array<{ from: string; count: number }>;
+  /** Distinct document numbers (bounded; see `numbersTruncated`). */
+  numbers: EmailCensusNumber[];
+  distinctNumbers: number;
+  numbersTruncated: boolean;
+  compare?: EmailNumberComparison;
+  scope: EmailCensusScope;
+  note: string;
+}
+
+/** Extract document numbers from a subject using the given regex sources. */
+export function extractNumbers(subject: string, patterns: string[]): string[] {
+  const found = new Set<string>();
+  for (const src of patterns) {
+    let re: RegExp;
+    try {
+      re = new RegExp(src, "gi");
+    } catch {
+      continue; // an invalid model-supplied pattern must not fail the scan
+    }
+    for (const m of subject.matchAll(re)) {
+      const token = (m[0] || "").replace(/\s+/g, " ").trim().toUpperCase();
+      if (token) found.add(token);
+    }
+  }
+  return [...found];
+}
+
+/** The bare address out of a "Name <addr@host>" header value. */
+export function senderAddress(from: string): string {
+  // Prefer a real address token: the envelope's `from` is rendered as
+  // "Display Name addr@host", so taking the first whitespace token would report
+  // the display name ("edc") instead of the address the operator recognizes.
+  const address = /[^\s<>",;]+@[^\s<>",;]+/.exec(from);
+  if (address) return address[0].toLowerCase();
+  const angled = /<([^>]+)>/.exec(from);
+  const raw = (angled?.[1] ?? from).trim().toLowerCase();
+  return raw.split(/\s+/)[0] || "";
+}
+
+/** Max distinct numbers returned before the list is declared truncated. */
+const CENSUS_NUMBER_CAP = 400;
+
+/**
+ * Census / reconciliation scan over a whole mailbox (or a date range of one).
+ *
+ * `searchEmails` answers "show me messages matching X" and is bounded to the
+ * recent window and 30 results — correct for that question, but it cannot answer
+ * "how many RFQs arrived this year" or "which numbers are in the mail but not in
+ * the system". The assistant answered those anyway, presenting a 30-row page as
+ * a total (live: «10 رسائل» / «أكثر من 30» for 1,582 real messages), because no
+ * tool could count.
+ *
+ * This one is built for enumeration:
+ *  - narrows SERVER-SIDE (from/subject/date) so the whole mailbox is reachable;
+ *  - reads envelopes only, so a few thousand messages cost seconds;
+ *  - reports coverage explicitly (`scope.truncated`) so a partial scan is never
+ *    presented as a complete answer;
+ *  - aggregates (totals, by month, by sender, distinct numbers) instead of
+ *    handing back a page the caller has to add up itself;
+ *  - can reconcile the extracted numbers against a table via `compare`.
+ */
+export async function scanEmails(opts: {
+  from?: string;
+  subject?: string;
+  query?: string;
+  sinceDate?: string;
+  beforeDate?: string;
+  mailbox?: string;
+  folder?: EmailFolder;
+  limit?: number;
+  /** Regex sources used to pull document numbers out of the subject. */
+  numberPatterns?: string[];
+  /** Reconcile extracted numbers against the system of record. */
+  compare?: (
+    numbers: string[],
+    target: { table: string; column: string },
+  ) => Promise<{
+    found: number;
+    /** Numbers the system does NOT have (enriched with an email sample below). */
+    missingNumbers: string[];
+    matchedSample: Array<{ number: string; value: string }>;
+  }>;
+  compareTarget?: { table: string; column: string };
+  unseenOnly?: boolean;
+}): Promise<EmailCensusResult> {
+  const startedAt = Date.now();
+  // A census defaults to EVERY configured mailbox, not the default one. Reading
+  // only the default inbox would silently produce a partial count while the note
+  // still claimed completeness — the precise failure this capability exists to
+  // prevent. An explicit mailbox still narrows it.
+  const targets =
+    !opts.mailbox || opts.mailbox === "*" ? mailboxes() : [resolveMailbox(opts.mailbox)];
+  const usable = targets.filter((m): m is NonNullable<typeof m> => Boolean(m));
+  if (!usable.length) {
+    throw new Error(
+      `لم أجد بريدًا مطابقًا لـ «${opts.mailbox}». المتاح: ${mailboxListForDisplay() || "لا يوجد"}.`,
+    );
+  }
+  const folder: EmailFolder = opts.folder ?? "inbox";
+
+  const since = parseDateArg(opts.sinceDate);
+  const before = parseDateArg(opts.beforeDate);
+  const patterns = opts.numberPatterns?.length ? opts.numberPatterns : DEFAULT_NUMBER_PATTERNS;
+
+  const perMailbox = await Promise.all(
+    usable.map((m) =>
+      scanOneMailbox(m.email, {
+        from: opts.from,
+        subject: opts.subject,
+        query: opts.query,
+        unseenOnly: opts.unseenOnly,
+        since,
+        before,
+        folder,
+        startedAt: Date.now(),
+        patterns,
+      }),
+    ),
+  );
+
+  const all: EmailCensusMatch[] = perMailbox.flatMap((r) => r.matches);
+  all.sort((a, b) => b.date.localeCompare(a.date));
+
+  const byMailbox: Record<string, number> = {};
+  for (const r of perMailbox) byMailbox[r.mailbox] = r.matches.length;
+
+  const byMonth: Record<string, number> = {};
+  for (const e of all) {
+    const month = e.date.slice(0, 7);
+    byMonth[month] = (byMonth[month] ?? 0) + 1;
+  }
+
+  const senderCounts = new Map<string, number>();
+  for (const e of all) {
+    const addr = senderAddress(e.from) || e.from;
+    senderCounts.set(addr, (senderCounts.get(addr) ?? 0) + 1);
+  }
+  const bySender = [...senderCounts.entries()]
+    .map(([from, count]) => ({ from, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 15);
+
+  // Distinct numbers, with one example message each — the identifiers the
+  // operator actually reconciles against the system.
+  const numberMap = new Map<string, EmailCensusNumber>();
+  for (const e of all) {
+    for (const n of e.numbers) {
+      const hit = numberMap.get(n);
+      if (hit) hit.count += 1;
+      else
+        numberMap.set(n, {
+          number: n,
+          count: 1,
+          sample: {
+            uid: e.uid,
+            mailbox: e.mailbox,
+            folder: e.folder,
+            subject: e.subject,
+            date: e.date,
+          },
+        });
+    }
+  }
+  const allNumbers = [...numberMap.values()].sort((a, b) => a.number.localeCompare(b.number));
+  const distinctNumbers = allNumbers.length;
+  const numbersTruncated = distinctNumbers > CENSUS_NUMBER_CAP;
+
+  const truncated = perMailbox.some((r) => r.truncated);
+  const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
+
+  let compare: EmailNumberComparison | undefined;
+  if (opts.compare && opts.compareTarget) {
+    // Reconcile against the FULL number set, not the capped sample: a number
+    // missing from the system is exactly what the operator is hunting for, and
+    // dropping it because the list was long would hide the answer.
+    const res = await opts.compare(
+      allNumbers.map((n) => n.number),
+      opts.compareTarget,
+    );
+    // Attach the email that carried each missing number — a bare number is not
+    // actionable, the subject and date are.
+    const byNumber = numberMap;
+    compare = {
+      table: opts.compareTarget.table,
+      column: opts.compareTarget.column,
+      found: res.found,
+      missing: res.missingNumbers.map((n) => {
+        const sample = byNumber.get(n)?.sample;
+        return {
+          number: n,
+          subject: sample?.subject ?? "",
+          date: sample?.date ?? "",
+          mailbox: sample?.mailbox ?? "",
+        };
+      }),
+      matchedSample: res.matchedSample,
+    };
+  }
+
+  const scope: EmailCensusScope = {
+    folder,
+    sinceDate: since ? since.toISOString() : null,
+    beforeDate: before ? before.toISOString() : null,
+    mailboxes: perMailbox.map((r) => ({
+      mailbox: r.mailbox,
+      scanned: r.scanned,
+      truncated: r.truncated,
+      serverNarrowed: r.narrowed,
+    })),
+    scanned: perMailbox.reduce((sum, r) => sum + r.scanned, 0),
+    truncated,
+    elapsedMs: Date.now() - startedAt,
+  };
+
+  return {
+    matched: all.length,
+    returned: Math.min(all.length, limit),
+    emails: all.slice(0, limit),
+    byMailbox,
+    byMonth,
+    bySender,
+    numbers: allNumbers.slice(0, CENSUS_NUMBER_CAP),
+    distinctNumbers,
+    numbersTruncated,
+    compare,
+    scope,
+    note: censusNote(scope, all.length),
+  };
+}
+
+/**
+ * The coverage caveat, stated for the model. A count is only a total when the
+ * scan was complete; otherwise it is a lower bound, and saying so is what keeps
+ * the answer honest.
+ */
+function censusNote(scope: EmailCensusScope, matched: number): string {
+  const covered = scope.mailboxes
+    .map((m) => `${m.mailbox}: ${m.scanned} رسالة${m.truncated ? " (ناقص)" : ""}`)
+    .join("؛ ");
+  const range =
+    scope.sinceDate || scope.beforeDate
+      ? ` الفترة: ${scope.sinceDate?.slice(0, 10) ?? "البداية"} ← ${scope.beforeDate?.slice(0, 10) ?? "الآن"}.`
+      : " الفترة: كل البريد المتاح.";
+  const base = `حصر كامل${range} تم فحص ${scope.scanned} رسالة (${covered}) وطابق ${matched}.`;
+  if (scope.truncated) {
+    return (
+      base +
+      " تحذير: لم تُفحص كل الرسائل في هذه الصناديق، فالعدد أعلاه حدّ أدنى وليس الإجمالي — " +
+      "أعد الحصر بفترة أضيق (sinceDate/beforeDate) أو صندوق واحد."
+    );
+  }
+  return base + " العدد أعلاه إجمالي وليس عيّنة.";
+}
+
+/** Parse a YYYY-MM-DD (or full ISO) argument; undefined when absent/unparseable. */
+export function parseDateArg(value: string | undefined): Date | undefined {
+  if (!value || !value.trim()) return undefined;
+  const d = new Date(value.trim());
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+/** Census scan of a single mailbox. Envelope-only, chunked, budget-aware. */
+async function scanOneMailbox(
+  mailboxAddress: string,
+  opts: {
+    from?: string;
+    subject?: string;
+    query?: string;
+    unseenOnly?: boolean;
+    since?: Date;
+    before?: Date;
+    folder: EmailFolder;
+    startedAt: number;
+    patterns: string[];
+  },
+): Promise<{
+  mailbox: string;
+  matches: EmailCensusMatch[];
+  scanned: number;
+  truncated: boolean;
+  /** False when the server-side narrowing failed and the whole box was read. */
+  narrowed: boolean;
+}> {
+  // `mailboxAddress` MUST be forwarded or every mailbox in a fan-out reads the
+  // default inbox (see `searchOneMailbox`).
+  return withMailbox(async (client) => {
+    const path = await resolveFolderPath(client, opts.folder);
+    const lock = await client.getMailboxLock(path);
+    try {
+      const hasFrom = Boolean(opts.from?.trim());
+      const hasSubject = Boolean(opts.subject?.trim());
+      const hasQuery = Boolean(opts.query?.trim());
+
+      // Narrow SERVER-SIDE first: this is what makes the whole mailbox reachable
+      // within a sane budget. Measured on the live mailbox: a `from` search over
+      // 3,875 messages takes ~0.2s versus ~4.5s to fetch every envelope.
+      const criteria: Record<string, unknown> = {};
+      if (hasFrom) criteria.from = opts.from!.trim();
+      if (hasSubject) criteria.subject = opts.subject!.trim();
+      if (opts.since) criteria.since = opts.since;
+      if (opts.before) criteria.before = opts.before;
+      if (opts.unseenOnly) criteria.seen = false;
+
+      let uids =
+        (await client.search(Object.keys(criteria).length ? criteria : { all: true }, {
+          uid: true,
+        })) || [];
+
+      // A server-side narrowing that finds nothing could be a server quirk
+      // (charset, display-name handling). Fall back to the whole mailbox so a
+      // census never reports zero for mail that is present — the client-side
+      // filters below then re-apply every criterion, so a fallback cannot widen
+      // the result set.
+      let narrowed = true;
+      if (!uids.length && (hasFrom || hasSubject)) {
+        uids = (await client.search({ all: true }, { uid: true })) || [];
+        narrowed = false;
+      }
+
+      const window = uids.slice(-censusEnvelopeBudget());
+      const matches: EmailCensusMatch[] = [];
+      let scanned = 0;
+      let truncated = uids.length > window.length;
+
+      // Chunked so the time budget can be honoured mid-scan instead of after a
+      // single unbounded fetch.
+      for (let i = 0; i < window.length; i += CENSUS_CHUNK) {
+        if (Date.now() - opts.startedAt > CENSUS_TIME_BUDGET_MS) {
+          truncated = true;
+          break;
+        }
+        const chunk = window.slice(i, i + CENSUS_CHUNK);
+        for await (const msg of client.fetch(chunk, { uid: true, envelope: true }, { uid: true })) {
+          scanned += 1;
+          if (opts.unseenOnly && (msg.flags?.has("\\Seen") ?? false)) continue;
+          const env = envelopeOf(msg, mailboxAddress, opts.folder);
+          const haystack = `${env.subject} ${env.from} ${env.to}`;
+          // EVERY criterion is re-verified client-side, dates included. The
+          // server narrowing is an optimisation, not the source of truth: when
+          // the fallback above triggers (or a server ignores a criterion), an
+          // unverified scan silently returns the whole mailbox as the answer —
+          // a March slice reported the full year's 3,710 messages that way.
+          if (opts.since && new Date(env.date) < opts.since) continue;
+          if (opts.before && new Date(env.date) >= opts.before) continue;
+          if (hasFrom && !matchesAllTokens(env.from, opts.from!)) continue;
+          if (hasSubject && !matchesAllTokens(env.subject, opts.subject!)) continue;
+          if (hasQuery && !matchesAllTokens(haystack, opts.query!)) continue;
+          matches.push({ ...env, numbers: [] });
+        }
+      }
+
+      // Extraction happens after filtering, on the matched set only.
+      for (const m of matches) {
+        m.numbers = extractNumbers(m.subject, opts.patterns);
+      }
+
+      return { mailbox: mailboxAddress, matches, scanned, truncated, narrowed };
+    } finally {
+      lock.release();
+    }
+  }, mailboxAddress);
 }
 
 export interface ReadEmailLocation {
