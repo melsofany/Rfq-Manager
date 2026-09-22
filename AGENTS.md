@@ -781,3 +781,45 @@ clean. Deploy verified: `57826aa` live, healthz 200.
   so the test can shorten it via env; a module const would be frozen at import.
 - **Test**: every model 503 → asserts the call gives up inside the granted budget
   instead of walking all 7 (fails 2/16 against the pre-fix source).
+
+## Email attachments unreadable — the read paths dropped their mailbox (UID 3977)
+
+- **Symptom**: asking the WhatsApp agent for the PDF on the Jaz Almaza order
+  (`Cordoba Order - Jaz Almaza Matrouh`, from `purchasing.crystal@jazhotels.com`)
+  failed with a generic «تعذّر معالجة طلبك حاليًا» — no file, no item list.
+- **Cause**: `withMailbox(fn, mailboxArg)` resolves the mailbox from its second
+  argument and **falls back to `defaultMailbox()` when it is undefined**.
+  `searchEmails` forwards the mailbox correctly, but `readEmail` and
+  `readEmailAttachment` accepted a `mailbox` parameter and never passed it on —
+  so **every** read/search-then-open went to the default mailbox. With
+  `AI_MAILBOXES=procurement@…|المشتريات,info@…|العام,finance@…|الحسابات`, the
+  default is `procurement@`, while this message lives in `info@` — so the UID
+  lookup found nothing and threw. The docblock right above these functions warns
+  that the mailbox MUST be forwarded; the rule had been applied to search only.
+- **Fix**: both read paths now pass their mailbox into `withMailbox`, and go
+  through `readFromCandidateMailboxes`, which tries the requested mailbox FIRST
+  then the other configured ones. The fallback exists because the caller may omit
+  the mailbox and the model may pass one it inferred rather than the one the
+  search tagged. **Only a genuine not-found advances** (`isNotFoundError`); an
+  auth/TLS/not-configured fault would fail identically everywhere, so retrying it
+  would spend the latency budget to report the same error.
+- **Second half — the agent must _read_ the file, not just forward it**: the user
+  asked for the PDF _and_ its item/quantity details. `get_email_attachment`
+  already queued the file for WhatsApp but returned metadata only, so the body
+  (which carries no item details) was all the model had. It now extracts
+  PDF/image attachments via the existing `extractDocumentText` (Gemini
+  inline_data — no PDF parser needed on Render) and returns the text. Called with
+  `read:false` it skips extraction; when extraction returns null it reports
+  `readFailed` and tells the model not to describe a file it never read.
+- **`MAX_DOCUMENT_CHARS` moved to `llm.ts`**: the tool registry needs the cap and
+  `agent.ts` imports the registry, so importing it from `agent.ts` would be a
+  cycle. `agent.ts` re-exports it, so existing importers are unaffected. Any test
+  that fully mocks `modules/ai-assistant/llm` must now use `importOriginal` or it
+  loses the constant (the `ai-agent.test.ts` mock was fixed this way).
+- **Tests**: `ai-email-read-mailbox.test.ts` (7) — reads UID 3977 from the second
+  mailbox, a bare read finding it in any mailbox, a wrong model guess still
+  resolving, attachment bytes from the right mailbox, genuine not-found across all
+  three, and the config-error short-circuit (1 auth attempt). 5 of 7 fail against
+  the pre-fix source. `ai-email-attachment.test.ts` +3 for PDF text extraction /
+  `readFailed` / `read:false`; the first two fail against the pre-fix source.
+  517 api-server tests pass; tsc + repo-wide prettier + api-server build clean.

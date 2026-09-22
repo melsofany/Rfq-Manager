@@ -8,7 +8,8 @@ const MAX_ROUNDS = 5;
 const chatCompletion = vi.fn();
 const extractDocumentText = vi.fn(async (..._a: any[]): Promise<string | null> => null);
 const transcribeAudio = vi.fn(async (..._a: any[]): Promise<string | null> => null);
-vi.mock("../../modules/ai-assistant/llm", () => ({
+vi.mock("../../modules/ai-assistant/llm", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   chatCompletion: (...args: any[]) => chatCompletion(...args),
   transcribeAudio,
   extractDocumentText,

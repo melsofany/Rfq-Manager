@@ -609,6 +609,60 @@ export interface ReadEmailLocation {
 }
 
 /**
+ * Fetch a message by UID, trying each candidate mailbox in turn until one has it.
+ *
+ * A UID is only unique inside one folder of one mailbox, so `mailbox` says where
+ * to look FIRST. Two things make the fallbacks necessary rather than optional:
+ * the caller may omit the mailbox (a bare `read_email`), and the model may pass
+ * a mailbox it inferred rather than the one the search actually tagged. Failing
+ * the read outright in either case is what made an existing message look
+ * unreadable ("مرفق هذه الرسالة" — a technical error).
+ *
+ * The requested mailbox is tried first, so the normal path costs one connection.
+ * Only a genuine not-found advances to the next mailbox: a configuration or auth
+ * failure would fail identically everywhere, and retrying it three times would
+ * burn the operator's latency budget to report the same error.
+ */
+async function readFromCandidateMailboxes<T>(
+  mailbox: string | undefined,
+  read: (mailboxArg: string | undefined) => Promise<T>,
+): Promise<T> {
+  const preferred = resolveMailbox(mailbox);
+  if (!preferred) return read(mailbox);
+
+  const candidates = [
+    preferred.email,
+    ...mailboxes()
+      .filter((m) => m.email !== preferred.email)
+      .map((m) => m.email),
+  ];
+
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return await read(candidate);
+    } catch (err) {
+      if (!isNotFoundError(err)) throw err;
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * Whether an error means "this mailbox does not hold that message".
+ *
+ * Matched on the message because `withMailbox` throws plain `Error`s (imapflow
+ * supplies no typed not-found), and the imapflow fetch path reports absence the
+ * same way. Anything else — auth, TLS, IMAP not configured — is a real fault
+ * that the next mailbox would hit too, so the caller must not mask it.
+ */
+function isNotFoundError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /not found/i.test(msg);
+}
+
+/**
  * Fetch a single message by UID, returning the full text body + attachments.
  *
  * `mailbox` and `folder` must be the values the search returned: a UID is only
@@ -619,6 +673,16 @@ export async function readEmail(
   uid: number,
   mailbox?: string,
   folder: EmailFolder = "inbox",
+): Promise<EmailDetail> {
+  return readFromCandidateMailboxes(mailbox, (mailboxArg) =>
+    readEmailFrom(mailboxArg, uid, folder),
+  );
+}
+
+async function readEmailFrom(
+  mailboxArg: string | undefined,
+  uid: number,
+  folder: EmailFolder,
 ): Promise<EmailDetail> {
   return withMailbox(async (client) => {
     const path = await resolveFolderPath(client, folder);
@@ -636,7 +700,7 @@ export async function readEmail(
         parsed.date instanceof Date ? parsed.date : new Date(parsed.date ?? Date.now());
       return {
         uid: msg.uid,
-        mailbox: resolveMailbox(mailbox)?.email ?? mailbox ?? "",
+        mailbox: resolveMailbox(mailboxArg)?.email ?? mailboxArg ?? "",
         folder,
         from: parsed.from?.text || "",
         to: Array.isArray(parsed.to)
@@ -657,7 +721,7 @@ export async function readEmail(
     } finally {
       lock.release();
     }
-  });
+  }, mailboxArg);
 }
 
 /**
@@ -670,6 +734,17 @@ export async function readEmailAttachment(
   opts: { index?: number; filename?: string } = {},
   mailbox?: string,
   folder: EmailFolder = "inbox",
+): Promise<EmailAttachmentContent> {
+  return readFromCandidateMailboxes(mailbox, (mailboxArg) =>
+    readEmailAttachmentFrom(mailboxArg, uid, opts, folder),
+  );
+}
+
+async function readEmailAttachmentFrom(
+  mailboxArg: string | undefined,
+  uid: number,
+  opts: { index?: number; filename?: string },
+  folder: EmailFolder,
 ): Promise<EmailAttachmentContent> {
   return withMailbox(async (client) => {
     const path = await resolveFolderPath(client, folder);
@@ -698,7 +773,7 @@ export async function readEmailAttachment(
     } finally {
       lock.release();
     }
-  });
+  }, mailboxArg);
 }
 
 /** Send an email via the shared SMTP transport. */

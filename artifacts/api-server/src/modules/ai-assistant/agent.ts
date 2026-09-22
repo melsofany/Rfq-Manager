@@ -13,10 +13,12 @@ import {
   chatCompletion,
   transcribeAudio,
   extractDocumentText,
+  MAX_DOCUMENT_CHARS,
   type ChatMessage,
   type ContentPart,
   type ToolCall,
 } from "./llm";
+export { MAX_DOCUMENT_CHARS } from "./llm";
 import { loadSettings, MAX_HISTORY, type AiSettings } from "./config";
 import {
   toolDefinitions,
@@ -45,13 +47,6 @@ export const MAX_TOOL_ROUNDS = 5;
  * rounds × models × attempts × timeout.
  */
 export const AGENT_BUDGET_MS = 150_000;
-
-/**
- * Cap on extracted document text handed to the model. Long enough for a full
- * supplier invoice or a couple of pages of a PO, short enough not to crowd out
- * the conversation or the tool results.
- */
-export const MAX_DOCUMENT_CHARS = 40_000;
 
 /**
  * Rounds with the full toolset before the last one, which forbids tools. A
@@ -98,6 +93,7 @@ export function systemPrompt(settings: AiSettings): string {
 - رد دائمًا بال${lang} إلا إذا طلب المستخدم غير ذلك.
 - عند طلب تقرير/ملف، استخدم generate_pdf ثم أخبر المستخدم أن الملف تم إرساله.
 - عند طلب «ملف من الإيميل» أو مرفق رسالة: ابحث بـ search_emails ثم اقرأ الرسالة بـ read_email لمعرفة المرفقات، ثم استخدم get_email_attachment لجلب المرفق. المرفقات تُرسل للمستخدم على واتساب كملفات، فلا حاجة لإنشاء PDF بديل منها.
+- get_email_attachment تقرأ أيضًا محتوى الـ PDF والصور وترجعه لك كنص؛ فإذا سأل المستخدم عن بنود أو كميات داخل مرفق (مثل «إيه البنود والكميات في ملف الأوردر؟»)، استخدمها واذكر التفاصيل من المحتوى نفسه. وإن رجعت readFailed فلا تخمّن ما داخل الملف، بل قل إن الملف أُرسل ولم أتمكن من قراءته.
 - البريد: الشركة لها أكثر من صندوق بريد. search_emails تبحث تلقائيًا في كل الصناديق إن لم تحدّد mailbox، وlist_mailboxes تعرض المتاح. اذكر مع كل نتيجة البريد والمجلد اللذين وُجدت فيهما.
 - إن سأل المستخدم عن شيء أرسلناه نحن (لا وصلنا): استخدم search_sent_emails لمجلد «المرسل»، وليس search_emails.
 - عند فتح رسالة بـ read_email أو جلب مرفق، مرّر نفس mailbox و folder اللذين ظهرا مع الرسالة في نتيجة البحث؛ فمعرّف UID لا يكون فريدًا إلا داخل مجلد واحد في صندوق واحد.

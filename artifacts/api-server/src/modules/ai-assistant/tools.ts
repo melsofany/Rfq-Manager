@@ -47,7 +47,12 @@ import {
 } from "./email";
 import { defaultMailbox, mailboxes } from "./mailboxes";
 import { generateAssistantPdf, type PdfSection } from "./pdf";
-import type { ToolDefinition } from "./llm";
+import {
+  extractDocumentText,
+  isReadableDocumentMime,
+  MAX_DOCUMENT_CHARS,
+  type ToolDefinition,
+} from "./llm";
 import type { AiSettings } from "./config";
 import { logger } from "../../shared/logger";
 
@@ -248,9 +253,10 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
       function: {
         name: "get_email_attachment",
         description:
-          "جلب مرفق محدد من رسالة بريد وإرساله للمستخدم على واتساب كملف. " +
+          "جلب مرفق محدد من رسالة بريد وإرساله للمستخدم على واتساب كملف، مع قراءة محتواه إن كان PDF أو صورة " +
+          "حتى تجيب على أسئلة عن البنود والكميات داخل الملف. " +
           "استخدمها بعد read_email لمعرفة أرقام المرفقات؛ مرّر uid والبريد والمجلد من نتيجة search_emails. " +
-          "هذه هي الطريقة الصحيحة لتلبية طلبات مثل «هات ملف الـ PDF من الإيميل».",
+          "هذه هي الطريقة الصحيحة لتلبية طلبات مثل «هات ملف الـ PDF من الإيميل» أو «إيه البنود اللي جوه الملف ده؟».",
         parameters: {
           type: "object",
           properties: {
@@ -262,6 +268,11 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             },
             mailbox: { type: "string", description: "البريد الذي ظهر مع الرسالة" },
             folder: { type: "string", enum: ["inbox", "sent"], description: "المجلد" },
+            read: {
+              type: "boolean",
+              description:
+                "اقرأ محتوى الملف وأعده كنص (افتراضي true). اجعلها false فقط إذا أردت إرسال الملف بدون قراءته.",
+            },
           },
           required: ["uid"],
         },
@@ -658,30 +669,78 @@ export async function executeTool(
         }
         // Text-like attachments go back to the model as text so it can quote
         // from them; everything else (PDF, images, spreadsheets) is queued for
-        // WhatsApp and reported as metadata only.
+        // WhatsApp. A readable document (PDF / image) is ALSO extracted to text,
+        // so a question about its contents ("إيه البنود والكميات جوه الملف؟") is
+        // answered from the real file rather than from the email body — the
+        // whole point when the body itself carries no item details.
         const textLike = isTextLikeMime(att.mimeType);
         ctx.outbox.push({
           buffer: att.content,
           filename: att.filename,
           mimeType: att.mimeType || "application/octet-stream",
         });
+
+        if (textLike) {
+          return {
+            ok: true,
+            data: {
+              sent: true,
+              filename: att.filename,
+              mimeType: att.mimeType,
+              size: att.size,
+              content: att.content.toString("utf8").slice(0, 12_000),
+            },
+          };
+        }
+
+        // `read: false` skips extraction for a plain "send me the file" request.
+        const shouldRead = args.read !== false;
+        if (shouldRead && isReadableDocumentMime(att.mimeType || "")) {
+          const extracted = await extractDocumentText(
+            att.content,
+            att.mimeType || "application/octet-stream",
+            ctx.settings.baseUrl,
+            ctx.settings.model,
+          );
+          if (extracted) {
+            return {
+              ok: true,
+              data: {
+                sent: true,
+                filename: att.filename,
+                mimeType: att.mimeType,
+                size: att.size,
+                content: extracted.slice(0, MAX_DOCUMENT_CHARS),
+                note: "تم إرسال الملف للمستخدم على واتساب، وهذا محتواه لتستخرج منه البنود والكميات.",
+              },
+            };
+          }
+          // Extraction unavailable (non-Gemini endpoint, or quota exhausted).
+          // Say so rather than letting the model describe a file it never read.
+          return {
+            ok: true,
+            data: {
+              sent: true,
+              filename: att.filename,
+              mimeType: att.mimeType,
+              size: att.size,
+              readFailed: true,
+              note:
+                "تم إرسال الملف للمستخدم على واتساب، لكن تعذّرت قراءة محتواه الآن. " +
+                "أخبر المستخدم أن الملف أُرسل ولا تدّعِ معرفة ما بداخله.",
+            },
+          };
+        }
+
         return {
           ok: true,
-          data: textLike
-            ? {
-                sent: true,
-                filename: att.filename,
-                mimeType: att.mimeType,
-                size: att.size,
-                content: att.content.toString("utf8").slice(0, 12_000),
-              }
-            : {
-                sent: true,
-                filename: att.filename,
-                mimeType: att.mimeType,
-                size: att.size,
-                note: "تم إرسال الملف للمستخدم على واتساب.",
-              },
+          data: {
+            sent: true,
+            filename: att.filename,
+            mimeType: att.mimeType,
+            size: att.size,
+            note: "تم إرسال الملف للمستخدم على واتساب.",
+          },
         };
       }
       case "send_email": {
