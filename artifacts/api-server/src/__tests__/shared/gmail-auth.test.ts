@@ -44,7 +44,38 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.GOOGLE_ACCOUNT_BASE_64;
+  delete process.env.GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64;
   clearTokenCache();
+});
+
+describe("mail service account selection", () => {
+  const MAIL_SA = {
+    client_email: "cortoba-ai-mail-assistant@cortoba-ai-mail-assistant.iam.gserviceaccount.com",
+    private_key: "-----BEGIN PRIVATE KEY-----\nmail\n-----END PRIVATE KEY-----\n",
+  };
+
+  it("prefers the dedicated MAIL service account over the shared one", async () => {
+    // The shared credential backs Sheets/Drive/ERP. If mail used it, granting
+    // the mail scope would widen every one of those integrations.
+    process.env.GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64 = Buffer.from(JSON.stringify(MAIL_SA)).toString(
+      "base64",
+    );
+    await gmailAccessToken("finance@cortoba-supplies.com");
+    expect(jwtCtor.mock.calls[0][0].email).toBe(MAIL_SA.client_email);
+  });
+
+  it("falls back to the shared credential when no mail-specific one is set", async () => {
+    await gmailAccessToken("info@cortoba-supplies.com");
+    expect(jwtCtor.mock.calls[0][0].email).toBe(SERVICE_ACCOUNT.client_email);
+  });
+
+  it("treats delegation as configured when only the mail credential exists", () => {
+    delete process.env.GOOGLE_ACCOUNT_BASE_64;
+    process.env.GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64 = Buffer.from(JSON.stringify(MAIL_SA)).toString(
+      "base64",
+    );
+    expect(isDelegationConfigured()).toBe(true);
+  });
 });
 
 describe("gmailAccessToken", () => {

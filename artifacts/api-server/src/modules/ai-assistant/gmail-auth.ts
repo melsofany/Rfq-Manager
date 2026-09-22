@@ -22,6 +22,20 @@ import { logger } from "../../shared/logger";
 /** Full mailbox access; the minimum that XOAUTH2 for IMAP accepts. */
 const GMAIL_SCOPE = "https://mail.google.com/";
 
+/**
+ * The service account used for MAIL, if one is configured separately.
+ *
+ * `GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64` is preferred over the shared
+ * `GOOGLE_ACCOUNT_BASE_64` so mail access can live in its own project with its
+ * own delegation grant. The shared credential is used by Sheets, the Drive
+ * backup and the ERP connectors, so rotating it to add mail scopes would widen
+ * those integrations' blast radius. The fallback keeps single-mailbox
+ * deployments working with the credential they already have.
+ */
+function mailServiceAccountBase64(): string | undefined {
+  return process.env.GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64 || process.env.GOOGLE_ACCOUNT_BASE_64;
+}
+
 interface ServiceAccountJson {
   client_email?: string;
   private_key?: string;
@@ -46,24 +60,24 @@ export class GmailAuthError extends Error {
 }
 
 function readServiceAccount(): ServiceAccountJson | null {
-  const b64 = process.env.GOOGLE_ACCOUNT_BASE_64;
+  const b64 = mailServiceAccountBase64();
   if (!b64) return null;
   try {
     const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8")) as ServiceAccountJson;
     if (!json.client_email || !json.private_key) {
-      logger.error("GOOGLE_ACCOUNT_BASE_64 is missing client_email/private_key");
+      logger.error("GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64 is missing client_email/private_key");
       return null;
     }
     return json;
   } catch (err) {
-    logger.error({ err }, "GOOGLE_ACCOUNT_BASE_64 is not valid base64 JSON");
+    logger.error({ err }, "GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64 is not valid base64 JSON");
     return null;
   }
 }
 
 /** True when the service-account credentials needed for delegation are present. */
 export function isDelegationConfigured(): boolean {
-  return Boolean(process.env.GOOGLE_ACCOUNT_BASE_64);
+  return Boolean(mailServiceAccountBase64());
 }
 
 /** Clear cached tokens (tests, or after rotating the service account key). */
@@ -83,7 +97,8 @@ export async function gmailAccessToken(mailbox: string): Promise<string> {
   const sa = readServiceAccount();
   if (!sa) {
     throw new GmailAuthError(
-      "قراءة البريد عبر Google غير مهيّأة: GOOGLE_ACCOUNT_BASE_64 غير موجود.",
+      `قراءة البريد عبر Google غير مهيّأة: ` +
+        `GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64 (أو GOOGLE_ACCOUNT_BASE_64) غير موجود.`,
     );
   }
 

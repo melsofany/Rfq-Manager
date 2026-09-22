@@ -16,15 +16,20 @@
  *
  * ## Authentication (Google Workspace — domain-wide delegation)
  *
- * Every mailbox authenticates as itself through a service account, using the
- * existing `GOOGLE_ACCOUNT_BASE_64` credentials (the same service account the
- * Sheets and Drive-backup modules use). No per-mailbox passwords are stored
- * anywhere, which is what makes it impossible to send from the wrong account.
+ * Every mailbox authenticates as itself through a service account. Use a
+ * DEDICATED mail service account via `GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64`; the
+ * shared `GOOGLE_ACCOUNT_BASE_64` (Sheets / Drive backup / ERP connectors) is
+ * only a fallback, so granting mail scope never widens those integrations. No
+ * per-mailbox password is stored anywhere, which is what makes it impossible to
+ * send from the wrong account.
  *
  * Required setup in Google Workspace Admin Console (once, by an admin):
- *   1. Add the service account's client ID to the domain-wide delegation list.
+ *   1. Add the mail service account's client ID to the domain-wide delegation
+ *      list.
  *   2. Authorize the scope: https://mail.google.com/
- * Then every mailbox in `AI_MAILBOXES` is readable without further secrets.
+ * Then every mailbox in `AI_MAILBOXES` is readable without further secrets. The
+ * startup log prints the impersonating identity (`reader`) so this can be
+ * checked.
  *
  * If there is exactly one mailbox, the legacy `IMAP_USER`/`IMAP_PASS` app
  * password path still works, so a single-mailbox deployment needs no Google
@@ -105,13 +110,25 @@ export function isMultiMailbox(): boolean {
 }
 
 /**
- * Log the readable mailboxes at startup.
+ * The service account's client email, for the startup log.
  *
- * A missing or partial `AI_MAILBOXES` is otherwise invisible until someone asks
- * the assistant a question and gets "not found" — the mailboxes are read from
- * the environment, not from the database, so there is no settings screen to
- * check.
+ * Logged because a delegation misconfiguration is otherwise invisible: mail
+ * simply reads as empty. Knowing WHICH identity is impersonating the mailboxes
+ * tells an admin which client ID must appear in the Workspace delegation list.
  */
+function delegationIdentity(): string {
+  const b64 = process.env.GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64 || process.env.GOOGLE_ACCOUNT_BASE_64;
+  if (!b64) return "(no service account)";
+  try {
+    const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8")) as {
+      client_email?: string;
+    };
+    return json.client_email || "(missing client_email)";
+  } catch {
+    return "(unreadable credential)";
+  }
+}
+
 export function logReadMailboxes(): void {
   const all = mailboxes();
   if (!all.length) {
@@ -119,7 +136,12 @@ export function logReadMailboxes(): void {
     return;
   }
   logger.info(
-    { mailboxes: all.map((m) => m.email), default: defaultMailbox()?.email },
+    {
+      mailboxes: all.map((m) => m.email),
+      default: defaultMailbox()?.email,
+      // Which identity reads them, so a delegation grant can be verified here.
+      reader: delegationIdentity(),
+    },
     `البريد للقراءة: ${all.length} صندوق`,
   );
 }
