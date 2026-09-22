@@ -16,6 +16,16 @@ import {
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
+/**
+ * Cap on extracted document text handed to the model. Long enough for a full
+ * supplier invoice or a couple of pages of a PO, short enough not to crowd out
+ * the conversation or the tool results.
+ *
+ * Lives here rather than in `agent.ts` because the tool registry needs it too,
+ * and `agent.ts` imports the registry — a shared home avoids the cycle.
+ */
+export const MAX_DOCUMENT_CHARS = 40_000;
+
 export interface TextPart {
   type: "text";
   text: string;

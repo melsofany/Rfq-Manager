@@ -215,6 +215,15 @@ vi.mock("../../modules/ai-assistant/pdf", () => ({
   generateAssistantPdf: vi.fn(async () => Buffer.from("pdf")),
 }));
 
+// Only the Gemini document reader is stubbed; the rest of the llm module (the
+// schemas the tool registry needs) stays real. `isReadableDocumentMime` and
+// MAX_DOCUMENT_CHARS come from the same module and must keep their behaviour.
+const extractDocumentText = vi.fn(async () => null as string | null);
+vi.mock("../../modules/ai-assistant/llm", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  extractDocumentText: (...args: never[]) => extractDocumentText(...(args as [])),
+}));
+
 const settings = {
   enabled: true,
   model: "m",
@@ -272,6 +281,51 @@ describe("get_email_attachment tool", () => {
     const res = await executeTool("get_email_attachment", { uid: 9 }, ctx);
     expect(res.ok).toBe(true);
     expect((res.data as any).content).toContain("part,qty");
+    expect(ctx.outbox).toHaveLength(1);
+  });
+
+  it("reads a PDF's contents so the agent can answer about its items", async () => {
+    // The email body carries no item details — the PDF does. Forwarding alone
+    // leaves the model unable to answer "إيه البنود والكميات جوه الملف؟".
+    fetchOne.mockResolvedValue({ uid: 77, source: mimeWithPdf(64) });
+    extractDocumentText.mockResolvedValue(null);
+    extractDocumentText.mockResolvedValue("البند: MD-4410 — الكمية: 12 — الوصف: كابل نحاس 3x2.5");
+    const { executeTool } = await import("../../modules/ai-assistant/tools");
+    const ctx = { settings, phone: "2010", outbox: [] as any[] } as any;
+
+    const res = await executeTool("get_email_attachment", { uid: 77 }, ctx);
+    expect(res.ok).toBe(true);
+    expect((res.data as any).content).toContain("MD-4410");
+    expect((res.data as any).content).toContain("الكمية: 12");
+    // The file is still delivered to WhatsApp alongside the text.
+    expect(ctx.outbox).toHaveLength(1);
+    expect(ctx.outbox[0].filename).toBe("PO-2026-000123.pdf");
+  });
+
+  it("does not let the model describe a PDF it could not read", async () => {
+    fetchOne.mockResolvedValue({ uid: 77, source: mimeWithPdf(64) });
+    extractDocumentText.mockResolvedValue(null);
+    const { executeTool } = await import("../../modules/ai-assistant/tools");
+    const ctx = { settings, phone: "2010", outbox: [] as any[] } as any;
+
+    const res = await executeTool("get_email_attachment", { uid: 77 }, ctx);
+    expect(res.ok).toBe(true);
+    expect((res.data as any).content).toBeUndefined();
+    expect((res.data as any).readFailed).toBe(true);
+    // Still delivered — a read failure must not lose the file.
+    expect(ctx.outbox).toHaveLength(1);
+  });
+
+  it("skips reading when read:false asks only for delivery", async () => {
+    fetchOne.mockResolvedValue({ uid: 77, source: mimeWithPdf(64) });
+    extractDocumentText.mockResolvedValue("SHOULD NOT BE CALLED");
+    const { executeTool } = await import("../../modules/ai-assistant/tools");
+    const ctx = { settings, phone: "2010", outbox: [] as any[] } as any;
+
+    const res = await executeTool("get_email_attachment", { uid: 77, read: false }, ctx);
+    expect(res.ok).toBe(true);
+    expect((res.data as any).content).toBeUndefined();
+    expect(extractDocumentText).not.toHaveBeenCalled();
     expect(ctx.outbox).toHaveLength(1);
   });
 
