@@ -12,6 +12,7 @@ import { logger } from "../../shared/logger";
 import {
   chatCompletion,
   transcribeAudio,
+  extractDocumentText,
   type ChatMessage,
   type ContentPart,
   type ToolCall,
@@ -33,6 +34,13 @@ import {
  * produces text (see FORCE_ANSWER_ON_LAST_ROUND).
  */
 export const MAX_TOOL_ROUNDS = 5;
+
+/**
+ * Cap on extracted document text handed to the model. Long enough for a full
+ * supplier invoice or a couple of pages of a PO, short enough not to crowd out
+ * the conversation or the tool results.
+ */
+export const MAX_DOCUMENT_CHARS = 40_000;
 
 /**
  * Rounds with the full toolset before the last one, which forbids tools. A
@@ -121,6 +129,8 @@ export interface AgentInput {
   text?: string;
   imageUrl?: string;
   audio?: { buffer: Buffer; mimeType: string };
+  /** A document the operator sent (PDF, spreadsheet, scanned image). */
+  document?: { buffer: Buffer; mimeType: string; filename?: string };
 }
 
 export interface AgentOutput {
@@ -146,6 +156,28 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     else userText = userText || "[رسالة صوتية — تعذّر تحويلها إلى نص]";
   }
 
+  // A document is read into text UP FRONT rather than handed to the model as a
+  // tool result: the operator's question usually refers to it ("لخّص هذا الملف",
+  // "ابحث عن البند ده"), so the model needs the contents in the same turn.
+  let documentNote = "";
+  if (input.document) {
+    const extracted = await extractDocumentText(
+      input.document.buffer,
+      input.document.mimeType,
+      settings.baseUrl,
+      settings.model,
+    );
+    if (extracted) {
+      documentNote =
+        `\n\n[محتوى الملف المرفق «${input.document.filename || "ملف"}»:]\n` +
+        extracted.slice(0, MAX_DOCUMENT_CHARS);
+    } else {
+      userText =
+        userText ||
+        `تعذّر قراءة الملف «${input.document.filename || "الملف"}» (${input.document.mimeType}).`;
+    }
+  }
+
   const ctx: ToolContext = { settings, phone: input.phone, outbox: [] };
 
   const history = await loadHistory(input.phone);
@@ -154,11 +186,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   let userContent: string | ContentPart[];
   if (input.imageUrl) {
     userContent = [
-      { type: "text", text: userText || "حلّل هذه الصورة وأخبرني بما تحتويه." },
+      { type: "text", text: (userText || "حلّل هذه الصورة وأخبرني بما تحتويه.") + documentNote },
       { type: "image_url", image_url: { url: input.imageUrl } },
     ];
   } else {
-    userContent = userText || "(رسالة فارغة)";
+    userContent = (userText || "(رسالة فارغة)") + documentNote;
   }
 
   const messages: ChatMessage[] = [system, ...history, { role: "user", content: userContent }];
@@ -242,7 +274,14 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     finalText = exhaustedAnswer(usedTools);
   }
 
-  const historyText = input.imageUrl ? `[صورة] ${userText}`.trim() : userText;
+  // The extracted document text is intentionally kept out of the stored
+  // history: it is large and only relevant to this one turn. The label keeps
+  // the transcript understandable when it is replayed as context.
+  const historyText = input.imageUrl
+    ? `[صورة] ${userText}`.trim()
+    : input.document
+      ? `[ملف: ${input.document.filename || "ملف"}] ${userText}`.trim()
+      : userText;
   await saveMessage(input.phone, "user", historyText);
   await saveMessage(input.phone, "assistant", finalText, usedTools.length ? usedTools : null);
 
