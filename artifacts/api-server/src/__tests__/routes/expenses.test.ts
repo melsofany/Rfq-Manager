@@ -78,7 +78,11 @@ const dbMock: any = {
   })),
   update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => chainable(undefined)) })) })),
   delete: vi.fn(() => ({ where: vi.fn(() => chainable(undefined)) })),
+  execute: vi.fn(async () => ({ rows: [] })),
 };
+// `insertWithDocNo` allocates inside db.transaction; passing the same mock as
+// the tx handle keeps the existing insert/select assertions valid.
+dbMock.transaction = vi.fn(async (fn: any) => fn(dbMock));
 
 const ACCOUNT_CODES_MOCK = {
   CASH: "1001",
