@@ -823,3 +823,69 @@ clean. Deploy verified: `57826aa` live, healthz 200.
   the pre-fix source. `ai-email-attachment.test.ts` +3 for PDF text extraction /
   `readFailed` / `read:false`; the first two fail against the pre-fix source.
   517 api-server tests pass; tsc + repo-wide prettier + api-server build clean.
+
+## A sample must never be presented as a total (feat: `scan_emails` census)
+
+- **Symptom**: the operator asked «أرقام طلبات التسعير اللي في الميل مش موجودة في
+  النظام» and «عدد الطلبات الواردة خلال 2026» over WhatsApp. The agent answered
+  «10 رسائل» (the real figure is **3,710**), listed only the newest 20 rows as if
+  that were the whole set, then declared «العدد أكبر من الحد الأقصى» and offered to
+  «قسّم على أجزاء» — an invented limitation, since the census fits in one call.
+- **Root cause — a false negative plus no way to see a total.** `searchEmails`
+  delegated matching to IMAP `search.or` on subject/body. **BODY full-text is
+  unimplemented on many servers, it never matches the From display name, and
+  Arabic is mangled by charset handling** — so a query for EDC mail returned
+  nothing and the assistant reported «لا توجد رسائل من EDC» for a mailbox holding
+  thousands. Nothing in the tool surface exposed a count, so the model answered
+  from whatever the capped sample contained. **A capability that silently returns
+  a subset while the answer is phrased as a total is worse than one that errors** —
+  same class as the `filter(Boolean)` hallucination incident.
+- **`scan_emails`** (`email.ts` + `tools.ts`): scans the WHOLE mailbox (envelope-only,
+  chunked), extracts document numbers from the **subject** via `DEFAULT_NUMBER_PATTERNS`
+  (exported for tests), and returns the true `matched`, `byMonth`, `bySender`,
+  `distinctNumbers`, `isTotal` and a `note`. The prompt now states outright that
+  `search_emails` is a **sample and never a count**.
+- **`isTotal`/`note` are the honesty mechanism** — a truncated scan is labelled a
+  lower bound («حدّ أدنى وليس الإجمالي») so a partial result cannot be reported as
+  a total. Keep that distinction when extending the tool.
+- **A census defaults to EVERY configured mailbox.** Reading only the default inbox
+  produced a partial count while the note still claimed completeness.
+- **Fall back to a whole-mailbox read when server-side narrowing finds nothing —
+  then re-verify EVERY criterion client-side, dates included.** The server search is
+  an optimisation, not the source of truth: an unverified fallback returned the
+  whole year's 3,710 messages as the answer to a **March** slice (March is
+  genuinely 0 — the mailbox's earliest mail is April 2026). This is the same
+  "verify, don't trust the attempt" rule as the WhatsApp scroll fix.
+- **Time budget is per mailbox, not per scan.** A single shared budget let one slow
+  mailbox (the 429-message default inbox, plus IMAP connect overhead) starve the
+  others: the first live run reported `scanned: 3715, truncated: true, isTotal:
+false` and `procurement: 0 رسالة (ناقص)`. Per-mailbox budgets → `scanned: 4144`,
+  `isTotal: true`, and 7.8s instead of 36s. **Always check `byMailbox` — a zero
+  there means a starvation, not an empty mailbox.**
+- **`scanEmails` must forward its mailbox to `withMailbox`** (same trap as
+  `readEmail`/`readEmailAttachment`): a fan-out that reads the DEFAULT inbox once
+  per mailbox returns the same mail N times.
+- **Reconciliation is one query, chunked.** Comparing thousands of email numbers
+  against a table in a single `IN` risks the Postgres **65,535 bind-parameter cap**;
+  `compareNumbersWithSystem` splits at `COMPARE_CHUNK` (5,000) so an oversized
+  statement cannot fail the whole answer. Compare on the canonical form
+  (uppercase, spaces stripped) so «26R 011936» and «26R011936» never look like a
+  mismatch. A long list is delivered as a **CSV attachment** (`exportCsv`) rather
+  than being refused.
+- **Diagnosing the mailboxes from this sandbox**: the Render Postgres host is
+  **internal-only** (`dpg-…-a`), so live DB comparison cannot run here
+  (`getaddrinfo ENOTFOUND`) — the mailboxes ARE reachable via the service-account
+  delegation, so census/date/slice behaviour can be verified live while DB joins
+  cannot. Do not read an `ENOTFOUND` as a code defect.
+- **Drizzle hides driver errors in `err.cause`** (again): the failed comparison
+  surfaced only as `Failed query: select …`, which is why the probe had to unwrap
+  `cause.cause` to see `ENOTFOUND`.
+- Tests: `ai-email-census.test.ts` + `ai-scan-emails-tool.test.ts` (28) — total vs
+  lower bound, per-mailbox coverage, the date re-verification after fallback,
+  mailbox fan-out, chunked comparison, CSV export. 21/23 of the guards fail against
+  the pre-fix source. **545 api-server tests** (was 517); tsc (libs + api-server +
+  portal) clean; repo-wide prettier clean; api-server build clean.
+- **Live verification (production mailboxes)**: EDC 2026 = **3,710** matched across
+  4,144 scanned, 3,317 distinct numbers, `isTotal: true`; byMonth sums exactly to
+  the total; the **April slice = 528**, identical to the year's own April bucket —
+  the cross-check that proves the window is applied.
