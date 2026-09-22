@@ -126,9 +126,66 @@ export interface EmailSummary {
   hasAttachments: boolean;
 }
 
+export interface EmailAttachmentMeta {
+  index: number;
+  filename: string;
+  mimeType: string | null;
+  size: number;
+}
+
 export interface EmailDetail extends EmailSummary {
   body: string;
-  attachments: Array<{ filename: string; mimeType: string | null; size: number }>;
+  attachments: EmailAttachmentMeta[];
+}
+
+export interface EmailAttachmentContent extends EmailAttachmentMeta {
+  /** Null when the attachment exceeds MAX_ATTACHMENT_BYTES. */
+  content: Buffer | null;
+  oversized: boolean;
+}
+
+/**
+ * Attachments larger than this are reported, not downloaded — WhatsApp
+ * documents max out around 100MB and an oversized fetch would just burn memory.
+ * Overridable so the guard can be exercised without allocating 25MB.
+ */
+export const MAX_ATTACHMENT_BYTES = Number(process.env.AI_MAX_ATTACHMENT_BYTES) || 25 * 1024 * 1024;
+
+/** Attachments worth handing back to the model as text rather than a file. */
+export function isTextLikeMime(mimeType: string | null | undefined): boolean {
+  if (!mimeType) return false;
+  const mime = mimeType.toLowerCase();
+  return (
+    mime.startsWith("text/") ||
+    mime.includes("json") ||
+    mime.includes("xml") ||
+    mime.includes("csv") ||
+    mime.includes("x-www-form-urlencoded")
+  );
+}
+
+/**
+ * Pick one attachment out of a message. `filename` matches case-insensitively
+ * as a substring so the model can ask for "the PO pdf" without knowing exact
+ * naming; `index` is the fallback and defaults to the first attachment.
+ */
+export function selectAttachment<T extends EmailAttachmentMeta>(
+  attachments: T[],
+  opts: { index?: number; filename?: string } = {},
+): T {
+  if (attachments.length === 0) throw new Error("لا توجد مرفقات في هذه الرسالة.");
+  if (opts.filename) {
+    const needle = opts.filename.trim().toLowerCase();
+    const hit = attachments.find((a) => a.filename.toLowerCase().includes(needle));
+    if (hit) return hit;
+  }
+  const idx = Number.isInteger(opts.index) ? (opts.index as number) : 0;
+  const byIndex = attachments[idx];
+  if (!byIndex) {
+    const names = attachments.map((a, i) => `${i}: ${a.filename}`).join(", ");
+    throw new Error(`لا يوجد مرفق بالرقم ${idx}. المتاح: ${names}`);
+  }
+  return byIndex;
 }
 
 function snippetOf(text: string, len = 200): string {
@@ -222,12 +279,52 @@ export async function readEmail(uid: number, mailbox = "INBOX"): Promise<EmailDe
         snippet: snippetOf(text),
         hasAttachments: (parsed.attachments?.length ?? 0) > 0,
         body: text.slice(0, 12_000),
-        attachments: (parsed.attachments ?? []).map((a) => ({
+        attachments: (parsed.attachments ?? []).map((a, i) => ({
+          index: i,
           filename: a.filename ?? "attachment",
           mimeType: a.contentType ?? null,
           size: a.size ?? 0,
         })),
       };
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+/**
+ * Download one attachment's bytes from a message. `index`/`filename` pick which
+ * one (see `selectAttachment`). Oversized attachments come back with
+ * `oversized: true` and no content rather than blowing up the request.
+ */
+export async function readEmailAttachment(
+  uid: number,
+  opts: { index?: number; filename?: string } = {},
+  mailbox = "INBOX",
+): Promise<EmailAttachmentContent> {
+  return withMailbox(async (client) => {
+    const lock = await client.getMailboxLock(mailbox);
+    try {
+      const msg = await client.fetchOne(
+        String(uid),
+        { uid: true, envelope: true, source: true },
+        { uid: true },
+      );
+      if (!msg || !msg.source) throw new Error(`Email UID ${uid} not found`);
+      const parsed = await simpleParser(msg.source as Buffer);
+      const metas: EmailAttachmentMeta[] = (parsed.attachments ?? []).map((a, i) => ({
+        index: i,
+        filename: a.filename ?? "attachment",
+        mimeType: a.contentType ?? null,
+        size: a.size ?? 0,
+      }));
+      const chosen = selectAttachment(metas, opts);
+      const raw = parsed.attachments[chosen.index];
+      const size = chosen.size || raw?.content?.length || 0;
+      if (size > MAX_ATTACHMENT_BYTES) {
+        return { ...chosen, size, content: null, oversized: true };
+      }
+      return { ...chosen, size, content: raw?.content ?? null, oversized: false };
     } finally {
       lock.release();
     }

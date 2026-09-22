@@ -25,7 +25,21 @@ import {
   type OutboxAttachment,
 } from "./tools";
 
-const MAX_TOOL_ROUNDS = 6;
+/**
+ * Tool-calling rounds before we force an answer. Each round costs one provider
+ * request, so this is a budget as much as a limit: on Gemini's free tier (20
+ * requests/day/model) a generous budget burns the day's quota in a few
+ * questions. 8 leaves room for a gather phase (search → read → lookup) without
+ * letting a tool-happy model loop forever.
+ */
+const MAX_TOOL_ROUNDS = 8;
+
+/**
+ * Rounds with the full toolset before the last one, which forbids tools. A
+ * model that never stops calling tools would otherwise exhaust the budget and
+ * leave `finalText` null — surfacing as "no final answer" to the operator.
+ */
+const FORCE_ANSWER_ON_LAST_ROUND = true;
 
 const LANGUAGE_NAME: Record<string, string> = { ar: "العربية", en: "English" };
 
@@ -38,6 +52,12 @@ export function systemPrompt(settings: AiSettings): string {
 - جلب معلومات البريد الإلكتروني وقراءتها عند الطلب.
 - قراءة الصور والملفات التي يرسلها المستخدم وتحليلها.
 - إنشاء ملفات PDF (تقارير/ملخصات/مستندات) وإرسالها للمستخدم عند طلبها.
+أسلوب العمل (مهم جدًا):
+- اعمل على مرحلتين: مرحلة جمع (استدعِ الأدوات مرة أو مرتين فقط) ثم مرحلة إجابة.
+- بعد أن تحصل على نتيجة كافية، توقّف فورًا عن استدعاء الأدوات واكتب الرد النصي النهائي.
+- لا تُكرّر نفس الاستدعاء بنفس المعطيات، ولا تستدعِ أداة ثانية للحصول على معلومة وصلتك بالفعل.
+- الحد الأقصى للاستدعاءات المتتالية هو 3 استدعاءات؛ بعدها يجب أن تكون قد كتبت الرد.
+- إن لم تجد المعلومة بعد محاولتين، اكتب ما وجدته واذكر بوضوح ما لم يتوفر بدل مواصلة البحث.
 قواعد مهمة:
 - استخدم الأدوات دائمًا للحصول على بيانات حقيقية؛ لا تخمّن أرقامًا أو معلومات.
 - عند السؤال عن رقم (أمر شراء/طلب/فاتورة) استخدم lookup_document أو search_database.
@@ -45,7 +65,8 @@ export function systemPrompt(settings: AiSettings): string {
 - كن موجزًا ومرتبًا، واستخدم نقاطًا عند الحاجة.
 - إذا لم تتوفر معلومة، اذكر ذلك بوضوح ولا تختلقها.
 - رد دائمًا بال${lang} إلا إذا طلب المستخدم غير ذلك.
-- عند طلب تقرير/ملف، استخدم generate_pdf ثم أخبر المستخدم أن الملف تم إرساله.`;
+- عند طلب تقرير/ملف، استخدم generate_pdf ثم أخبر المستخدم أن الملف تم إرساله.
+- عند طلب «ملف من الإيميل» أو مرفق رسالة: ابحث بـ search_emails ثم اقرأ الرسالة بـ read_email لمعرفة المرفقات، ثم استخدم get_email_attachment لجلب المرفق. المرفقات تُرسل للمستخدم على واتساب كملفات، فلا حاجة لإنشاء PDF بديل منها.`;
 
   if (settings.systemPrompt && settings.systemPrompt.trim()) {
     return base + "\n\nتعليمات إضافية من الإدارة:\n" + settings.systemPrompt.trim();
@@ -131,15 +152,39 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   let finalText: string | null = null;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    // Last round: forbid tool calls so the model has to answer with what it
+    // already gathered. Without this a model that keeps calling tools drains
+    // the budget and leaves nothing to send.
+    const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === MAX_TOOL_ROUNDS - 1;
     const result = await chatCompletion({
       model: settings.model,
       baseUrl: settings.baseUrl,
       messages,
       tools,
+      toolChoice: isLastRound ? "none" : "auto",
     });
 
     if (result.toolCalls.length === 0) {
       finalText = result.content;
+      break;
+    }
+
+    // Some providers (observed: Gemini) still return tool calls under
+    // tool_choice "none". Dropping the tool schemas entirely removes the option
+    // and reliably yields text; if even that fails, report what did run rather
+    // than silently swallowing the turn.
+    if (isLastRound) {
+      logger.warn(
+        { providerToolChoiceIgnored: true, model: settings.model, calls: result.toolCalls.length },
+        "AI assistant: model ignored tool_choice=none on the final round",
+      );
+      const noTools = await chatCompletion({
+        model: settings.model,
+        baseUrl: settings.baseUrl,
+        messages,
+        toolChoice: "none",
+      });
+      finalText = noTools.content ?? result.content ?? exhaustedAnswer(usedTools);
       break;
     }
 
@@ -164,7 +209,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   }
 
   if (!finalText) {
-    finalText = "تم تنفيذ طلبك لكنني لم أحصل على رد نهائي. جرّب إعادة صياغة السؤال بشكل أوضح.";
+    finalText = exhaustedAnswer(usedTools);
   }
 
   const historyText = input.imageUrl ? `[صورة] ${userText}`.trim() : userText;
@@ -181,6 +226,24 @@ function parseArgs(call: ToolCall): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/**
+ * Message shown when the model spent its whole budget on tools without
+ * producing an answer. Naming the tools it did call tells the operator the
+ * request was worked on (and that retrying the same way will hit the same wall)
+ * instead of the misleading "rephrase your question".
+ */
+function exhaustedAnswer(usedTools: Array<{ name: string; args: unknown }>): string {
+  if (usedTools.length === 0) {
+    return "لم أتمكن من الوصول لإجابة. جرّب إعادة صياغة السؤال.";
+  }
+  const names = [...new Set(usedTools.map((t) => t.name))].join(", ");
+  return (
+    "نفدت محاولات المعالجة قبل الوصول لرد نهائي، لكن تم تنفيذ خطوات فعلية: " +
+    names +
+    ". جرّب سؤالًا أكثر تحديدًا (مثل رقم أمر التوريد) وسأجيب مباشرة."
+  );
 }
 
 /** Clear conversation history for a phone (used by the reset command). */
