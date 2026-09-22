@@ -19,9 +19,14 @@ export const DEFAULT_BASE_URL =
  * Models tried, in order, when the primary model is unavailable or out of
  * quota (Gemini free tier is 20 requests/day/model). Only used on the Gemini
  * endpoint, where these ids exist. Override with AI_FALLBACK_MODELS.
+ *
+ * The chain is deliberately long: the free-tier quota is PER MODEL, so each
+ * extra working model multiplies the daily request budget. Keep the ordering in
+ * sync with `listModels()` output when Gemini retires ids.
  */
 export const FALLBACK_MODELS = (
-  process.env.AI_FALLBACK_MODELS || "gemini-3.6-flash,gemini-3.1-flash-lite"
+  process.env.AI_FALLBACK_MODELS ||
+  "gemini-3.6-flash,gemini-3.1-flash-lite,gemini-3.7-flash,gemini-3.5-flash-lite,gemini-flash-latest,gemini-flash-lite-latest"
 )
   .split(",")
   .map((m) => m.trim())

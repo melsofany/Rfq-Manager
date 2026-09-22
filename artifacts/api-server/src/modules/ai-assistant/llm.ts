@@ -123,17 +123,25 @@ export async function chatCompletion(opts: {
   tools?: ToolDefinition[];
   temperature?: number;
   maxTokens?: number;
+  /**
+   * "auto" lets the model call tools; "none" forbids it. Passing "none" on the
+   * final round is what stops a tool-happy model from looping until the budget
+   * runs out and leaving no answer to send.
+   */
+  toolChoice?: "auto" | "none";
 }): Promise<ChatResult> {
   if (!AI_API_KEY) {
     throw new AiError("AI_API_KEY / OPENAI_API_KEY not configured");
   }
   const base = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const hasTools = Boolean(opts.tools && opts.tools.length);
+  const toolChoice = opts.toolChoice ?? "auto";
   const buildBody = (model: string) =>
     JSON.stringify({
       model,
       messages: opts.messages,
-      tools: opts.tools && opts.tools.length ? opts.tools : undefined,
-      tool_choice: opts.tools && opts.tools.length ? "auto" : undefined,
+      tools: hasTools ? opts.tools : undefined,
+      tool_choice: hasTools ? toolChoice : undefined,
       temperature: opts.temperature ?? 0.2,
       max_tokens: opts.maxTokens ?? 1600,
     });

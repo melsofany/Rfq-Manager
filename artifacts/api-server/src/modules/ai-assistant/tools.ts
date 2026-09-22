@@ -35,10 +35,18 @@ import {
   findWhere,
   tableListForPrompt,
 } from "./db-tools";
-import { searchEmails, readEmail, sendAssistantEmail, isEmailReadConfigured } from "./email";
+import {
+  searchEmails,
+  readEmail,
+  readEmailAttachment,
+  sendAssistantEmail,
+  isEmailReadConfigured,
+  isTextLikeMime,
+} from "./email";
 import { generateAssistantPdf, type PdfSection } from "./pdf";
 import type { ToolDefinition } from "./llm";
 import type { AiSettings } from "./config";
+import { logger } from "../../shared/logger";
 
 export interface OutboxAttachment {
   buffer: Buffer;
@@ -174,6 +182,28 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
     {
       type: "function",
       function: {
+        name: "get_email_attachment",
+        description:
+          "جلب مرفق محدد من رسالة بريد وإرساله للمستخدم على واتساب كملف. " +
+          "استخدمها بعد read_email لمعرفة أرقام المرفقات؛ مرّر uid من نتيجة search_emails. " +
+          "هذه هي الطريقة الصحيحة لتلبية طلبات مثل «هات ملف الـ PDF من الإيميل».",
+        parameters: {
+          type: "object",
+          properties: {
+            uid: { type: "integer", description: "معرّف الرسالة (UID)" },
+            index: { type: "integer", description: "رقم المرفق داخل الرسالة (يبدأ من 0)" },
+            filename: {
+              type: "string",
+              description: "جزء من اسم المرفق للبحث عنه (بديل عن index)",
+            },
+          },
+          required: ["uid"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "send_email",
         description: "إرسال بريد إلكتروني من حساب الشركة.",
         parameters: {
@@ -227,7 +257,11 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
   ];
 
   if (!isEmailReadConfigured()) {
-    return defs.filter((d) => d.function.name !== "read_email");
+    // Both are useless without a readable mailbox; hide them so the model
+    // does not plan around a capability the server cannot deliver.
+    return defs.filter(
+      (d) => d.function.name !== "read_email" && d.function.name !== "get_email_attachment",
+    );
   }
   return defs;
 }
@@ -382,6 +416,48 @@ export async function executeTool(
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
         return { ok: true, data: await readEmail(Number(args.uid)) };
       }
+      case "get_email_attachment": {
+        if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
+        const uid = Number(args.uid);
+        if (!Number.isInteger(uid)) return { ok: false, error: "uid غير صحيح" };
+        const att = await readEmailAttachment(uid, {
+          index: typeof args.index === "number" ? args.index : undefined,
+          filename: args.filename ? String(args.filename) : undefined,
+        });
+        if (att.oversized || !att.content) {
+          return {
+            ok: false,
+            error: `المرفق «${att.filename}» حجمه كبير جدًا (${att.size} بايت) ولا يمكن إرساله.`,
+          };
+        }
+        // Text-like attachments go back to the model as text so it can quote
+        // from them; everything else (PDF, images, spreadsheets) is queued for
+        // WhatsApp and reported as metadata only.
+        const textLike = isTextLikeMime(att.mimeType);
+        ctx.outbox.push({
+          buffer: att.content,
+          filename: att.filename,
+          mimeType: att.mimeType || "application/octet-stream",
+        });
+        return {
+          ok: true,
+          data: textLike
+            ? {
+                sent: true,
+                filename: att.filename,
+                mimeType: att.mimeType,
+                size: att.size,
+                content: att.content.toString("utf8").slice(0, 12_000),
+              }
+            : {
+                sent: true,
+                filename: att.filename,
+                mimeType: att.mimeType,
+                size: att.size,
+                note: "تم إرسال الملف للمستخدم على واتساب.",
+              },
+        };
+      }
       case "send_email": {
         if (!ctx.settings.allowEmail) return { ok: false, error: "إرسال البريد معطّل" };
         await sendAssistantEmail({
@@ -405,10 +481,14 @@ export async function executeTool(
         return { ok: true, data: { generated: true, filename, bytes: buffer.length } };
       }
       default:
+        // A hallucinated tool name is invisible without this log — the model
+        // just sees "Unknown tool" and retries something else, forever.
+        logger.warn({ tool: name }, "AI assistant: model called an unknown tool");
         return { ok: false, error: `Unknown tool "${name}"` };
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    logger.warn({ err, tool: name }, "AI assistant: tool execution failed");
     return { ok: false, error: msg };
   }
 }

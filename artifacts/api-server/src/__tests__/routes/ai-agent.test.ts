@@ -34,6 +34,11 @@ vi.mock("../../modules/ai-assistant/config", async () => {
   };
 });
 
+const warn = vi.fn();
+vi.mock("../../shared/logger", () => ({
+  logger: { info: vi.fn(), warn: (...a: any[]) => warn(...a), error: vi.fn() },
+}));
+
 // ── Mock DB persistence ──────────────────────────────────────────────────────
 const table = { _: "aiMessages" };
 const inserts: any[] = [];
@@ -151,5 +156,98 @@ describe("AI assistant agent loop", () => {
     const { runAgent } = await import("../../modules/ai-assistant/agent");
     const out = await runAgent({ phone: "2010", text: "?" });
     expect(out.reply).toBe("تم.");
+  });
+
+  it("forbids tool calls on the final round so a tool-happy model still answers", async () => {
+    // Reproduces the live failure: the model calls tools every round and, with
+    // no forced-answer round, the loop ends with no text at all.
+    const call = (n: number) => ({
+      id: "c" + n,
+      type: "function",
+      function: { name: "search_database", arguments: "{}" },
+    });
+    let round = 0;
+    chatCompletion.mockImplementation((args: any) => {
+      round++;
+      if (round < 8) {
+        return Promise.resolve({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [call(round)],
+        });
+      }
+      // Final round: tool_choice must be "none", and the model answers.
+      expect(args.toolChoice).toBe("none");
+      return Promise.resolve({ content: "تقرير مختصر.", finishReason: "stop", toolCalls: [] });
+    });
+    executeTool.mockResolvedValue({ ok: true, data: { rows: [] } });
+
+    const { runAgent } = await import("../../modules/ai-assistant/agent");
+    const out = await runAgent({ phone: "2010", text: "هات ملف من الايميل" });
+    expect(out.reply).toBe("تقرير مختصر.");
+    // The first rounds must still allow tools.
+    expect(chatCompletion.mock.calls[0][0].toolChoice).toBe("auto");
+    expect(chatCompletion).toHaveBeenCalledTimes(8);
+  });
+
+  it("retries without tool schemas when the model ignores tool_choice=none", async () => {
+    // Gemini was observed returning tool calls even under tool_choice "none".
+    // The final round must then drop the schemas entirely and get text.
+    chatCompletion.mockImplementation((args: any) => {
+      const forced = args.toolChoice === "none";
+      if (forced && args.tools) {
+        return Promise.resolve({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [
+            { id: "z", type: "function", function: { name: "search_database", arguments: "{}" } },
+          ],
+        });
+      }
+      if (forced) {
+        // Schemas omitted: now it must produce text.
+        expect(args.tools).toBeUndefined();
+        return Promise.resolve({
+          content: "تم إرسال ملف PDF.",
+          finishReason: "stop",
+          toolCalls: [],
+        });
+      }
+      return Promise.resolve({
+        content: null,
+        finishReason: "tool_calls",
+        toolCalls: [
+          { id: "a", type: "function", function: { name: "search_emails", arguments: "{}" } },
+        ],
+      });
+    });
+    executeTool.mockResolvedValue({ ok: true, data: { emails: [] } });
+
+    const { runAgent } = await import("../../modules/ai-assistant/agent");
+    const out = await runAgent({ phone: "2010", text: "?" });
+
+    expect(out.reply).toBe("تم إرسال ملف PDF.");
+    // The ignored last-round call is NOT executed.
+    const names = executeTool.mock.calls.map((c) => c[0]);
+    expect(names).not.toContain("search_database");
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ providerToolChoiceIgnored: true }),
+      "AI assistant: model ignored tool_choice=none on the final round",
+    );
+  });
+
+  it("names the tools it did run when even the no-tools retry yields nothing", async () => {
+    chatCompletion.mockResolvedValue({
+      content: null,
+      finishReason: "tool_calls",
+      toolCalls: [
+        { id: "x", type: "function", function: { name: "search_database", arguments: "{}" } },
+      ],
+    });
+    executeTool.mockResolvedValue({ ok: false, error: "nope" });
+    const { runAgent } = await import("../../modules/ai-assistant/agent");
+    const out = await runAgent({ phone: "2010", text: "?" });
+    expect(out.reply).toContain("search_database");
+    expect(out.reply).toContain("نفدت محاولات المعالجة");
   });
 });

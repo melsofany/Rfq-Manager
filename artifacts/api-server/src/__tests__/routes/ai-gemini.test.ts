@@ -129,6 +129,7 @@ describe("Gemini integration (llm.ts)", () => {
   it("surfaces a quota error only after every fallback model is exhausted", async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 429, text: async () => "quota exceeded" });
     const { chatCompletion, isQuotaError } = await import("../../modules/ai-assistant/llm");
+    const { FALLBACK_MODELS } = await import("../../modules/ai-assistant/config");
     let caught: unknown;
     try {
       await chatCompletion({ model: "gemini-3.8-flash", messages: [] });
@@ -136,8 +137,14 @@ describe("Gemini integration (llm.ts)", () => {
       caught = e;
     }
     expect(isQuotaError(caught)).toBe(true);
-    // Primary + both configured fallbacks, each tried once.
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // Primary + every configured fallback, each tried once. Derived from the
+    // chain so extending it (to multiply the free-tier quota) does not break
+    // this test.
+    expect(fetchMock).toHaveBeenCalledTimes(1 + FALLBACK_MODELS.length);
+    // Every candidate was actually attempted, and no model twice.
+    const tried = fetchMock.mock.calls.map((c: any[]) => JSON.parse(c[1].body).model);
+    expect(tried[0]).toBe("gemini-3.8-flash");
+    expect(new Set(tried).size).toBe(tried.length);
   });
 
   it("moves to the next model when one is overloaded (503), not just on quota", async () => {
