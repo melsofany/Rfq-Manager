@@ -38,6 +38,7 @@ import {
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { REJECTION_REASONS } from "../po/receipts";
+import { handleAiAssistantMessage, type WaInboundMessage } from "../ai-assistant/handler";
 import multer from "multer";
 const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -151,6 +152,9 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
     const msg = message as unknown as ServerMessage;
     if (msg.type === "reaction") {
       await handleReactionWebhook(from, msg);
+    } else if (await handleAiAssistantMessage(from, msg as unknown as WaInboundMessage)) {
+      // Allowlisted admin/manager AI assistant owns this message.
+      logger.info({ from }, "AI assistant message handled");
     } else if (await handleRepMessage(from, msg)) {
       // Registered representative bot owns this message (text or rep_ menu).
       logger.info({ from }, "Representative bot message handled");
@@ -284,6 +288,9 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
 
       if (message.type === "reaction") {
         await handleReactionWebhook(from, message);
+      } else if (await handleAiAssistantMessage(from, message as unknown as WaInboundMessage)) {
+        // Allowlisted admin/manager AI assistant owns this message.
+        logger.info({ from }, "AI assistant message handled");
       } else if (await handleRepMessage(from, message)) {
         // Registered representative bot owns this message (text or rep_ menu).
         logger.info({ from }, "Representative bot message handled");
