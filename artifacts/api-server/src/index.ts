@@ -13,6 +13,7 @@ import {
   ensurePoCancelItemTemplate,
 } from "./modules/communications/service";
 import { scheduleDailyBackup } from "./modules/backup/service";
+import { verifySenderIdentity } from "./shared/mail-identity";
 
 const rawPort = process.env["PORT"];
 
@@ -38,6 +39,9 @@ process.on("unhandledRejection", (reason) => {
 initDb()
   .then(async () => {
     logger.info("DB initialized successfully");
+    // Fail loudly HERE rather than in a supplier's spam folder: a sender that
+    // does not match the authenticated account silently breaks DKIM alignment.
+    verifySenderIdentity();
     try {
       await ensureWorkOrderTemplate();
       await ensurePoCancelTemplate();

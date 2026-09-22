@@ -16,6 +16,12 @@ import { promises as dns } from "dns";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { logger } from "../../shared/logger";
+import {
+  assertCanSend,
+  fromHeader,
+  replyToHeader,
+  senderIdentity,
+} from "../../shared/mail-identity";
 
 const SMTP_TIMEOUT_MS = 15000;
 let cachedIpv4Host: string | null = null;
@@ -433,6 +439,10 @@ export async function sendAssistantEmail(opts: {
   body: string;
   cc?: string;
 }): Promise<void> {
+  // The assistant is the sender most likely to be misconfigured (its own env
+  // fallbacks) and the one whose mail people reply to conversationally, so it
+  // must use the shared identity rather than deriving its own.
+  assertCanSend();
   const { default: nodemailer } = await import("nodemailer");
   const rawHost = process.env.SMTP_HOST || "smtp.gmail.com";
   const port = Number(process.env.SMTP_PORT) || 587;
@@ -448,13 +458,18 @@ export async function sendAssistantEmail(opts: {
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     tls: { servername: rawHost, rejectUnauthorized: false },
   });
-  const from = process.env.SMTP_USER || "info@cortoba-supplies.com";
+  const identity = senderIdentity();
+  if (!identity.email) throw new Error("لا يوجد بريد مُرسِل مُهيّأ (SMTP_USER/SMTP_FROM_EMAIL).");
   await transporter.sendMail({
-    from,
+    from: fromHeader(),
+    replyTo: replyToHeader(),
     to: opts.to,
     cc: opts.cc,
     subject: opts.subject,
     text: opts.body,
   });
-  logger.info({ to: opts.to, subject: opts.subject }, "AI assistant: email sent");
+  logger.info(
+    { to: opts.to, subject: opts.subject, from: identity.email },
+    "AI assistant: email sent",
+  );
 }

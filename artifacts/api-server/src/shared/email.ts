@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { promises as dns } from "dns";
 import { logger } from "./logger";
+import { assertCanSend, fromHeader, replyToHeader, senderIdentity } from "./mail-identity";
 
 const SMTP_TIMEOUT_MS = 10000;
 
@@ -73,8 +74,9 @@ export async function sendPoEmail(opts: {
   }>;
   pdfBuffer: Buffer;
 }): Promise<void> {
+  assertCanSend();
   const transporter = await createTransporter();
-  const senderEmail = (process.env.SMTP_USER || "info@cortoba-supplies.com").toLowerCase();
+  const senderEmail = senderIdentity().email.toLowerCase();
 
   const itemRows = opts.items
     .map(
@@ -158,8 +160,8 @@ Cortoba Supplies — ش.الاسكندرية - برج نجمة مطروح الد
 
   try {
     await transporter.sendMail({
-      from: `"Cortoba Supplies قرطبة للتوريدات" <${senderEmail}>`,
-      replyTo: `"${opts.employeeName}" <${senderEmail}>`,
+      from: fromHeader(),
+      replyTo: replyToHeader(),
       to: `"${opts.toName}" <${opts.to}>`,
       subject: `Purchase Order — ${opts.poNo}`,
       text,
@@ -211,8 +213,9 @@ export async function sendRfqEmail(opts: {
   employeeName: string;
   employeePhone?: string | null;
 }): Promise<void> {
+  assertCanSend();
   const transporter = await createTransporter();
-  const senderEmail = (process.env.SMTP_USER || "info@cortoba-supplies.com").toLowerCase();
+  const senderEmail = senderIdentity().email.toLowerCase();
 
   const itemRows = opts.items
     .map(
@@ -320,8 +323,8 @@ Cortoba Supplies — ش.الاسكندرية - برج نجمة مطروح الد
 
   try {
     await transporter.sendMail({
-      from: `"Cortoba Supplies قرطبة للتوريدات" <${senderEmail}>`,
-      replyTo: `"${opts.employeeName}" <${senderEmail}>`,
+      from: fromHeader(),
+      replyTo: replyToHeader(),
       to: `"${opts.toName}" <${opts.to}>`,
       subject: `Request for Quotation — ${opts.rfqNo} (Closing: ${opts.closeDate})`,
       text,
