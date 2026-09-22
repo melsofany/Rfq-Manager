@@ -26,6 +26,23 @@ import { mailboxes, mailboxListForDisplay, resolveMailbox } from "./mailboxes";
 import { gmailAccessToken, isDelegationConfigured } from "./gmail-auth";
 
 const SMTP_TIMEOUT_MS = 15000;
+
+/**
+ * Recent messages examined per mailbox when searching.
+ *
+ * Envelope metadata is cheap, so the window can be generous — enough to cover
+ * months of traffic in a busy inbox.
+ */
+const BODY_SCAN_BUDGET = 400;
+
+/**
+ * Messages whose FULL body is MIME-parsed when the envelopes alone matched
+ * nothing. Parsing is the expensive part (measured: seconds for a full window),
+ * so the second pass is bounded much more tightly than the envelope pass. A
+ * body-only match older than this is rare, and the alternative is making every
+ * email question slow for everyone.
+ */
+const BODY_PARSE_BUDGET = 60;
 let cachedIpv4Host: string | null = null;
 let cacheExpiry = 0;
 
@@ -439,78 +456,149 @@ async function searchOneMailbox(
         if (uids.length) note = "تعذّر التصفية بتاريخ الاستلام؛ تم فحص صندوق البريد بالكامل.";
       }
       // Bound the scan: newest last, so slice from the tail then reverse.
-      const window = uids.slice(-400);
+      const window = uids.slice(-BODY_SCAN_BUDGET);
       const out: EmailSummary[] = [];
+      const hasQuery = Boolean(opts.query && opts.query.trim());
+      const hasFrom = Boolean(opts.from && opts.from.trim());
 
-      for await (const msg of client.fetch(
-        window,
-        { uid: true, envelope: true, source: true },
-        { uid: true },
-      )) {
-        const from =
-          msg.envelope?.from?.map((a) => `${a.name ?? ""} ${a.address ?? ""}`).join(", ") || "";
-        const to = msg.envelope?.to?.map((a) => a.address ?? "").join(", ") || "";
-        const subject = msg.envelope?.subject || "";
-        const seen = msg.flags?.has("\\Seen") ?? false;
-        if (opts.unseenOnly && seen) continue;
-
-        let text = "";
-        let hasAttachments = false;
-        const hasQuery = Boolean(opts.query && opts.query.trim());
-        const hasFrom = Boolean(opts.from && opts.from.trim());
-        // Only parse bodies when a text query needs them, or when we must
-        // report attachment presence for a matched message.
-        const envelopeHit = !hasQuery || matchesAllTokens(`${subject} ${from} ${to}`, opts.query!);
-        if (hasQuery && !envelopeHit) {
-          try {
-            const parsed = await simpleParser(msg.source as Buffer);
-            text = parsed.text || "";
-            hasAttachments = (parsed.attachments?.length ?? 0) > 0;
-            if (
-              !matchesAllTokens(`${subject} ${from} ${to} ${text.slice(0, 20_000)}`, opts.query!)
-            ) {
-              continue;
-            }
-          } catch {
-            continue;
-          }
-        } else {
-          try {
-            const parsed = await simpleParser(msg.source as Buffer);
-            text = parsed.text || "";
-            hasAttachments = (parsed.attachments?.length ?? 0) > 0;
-          } catch {
-            /* envelope-only */
-          }
+      /*
+       * Two passes, because a message body is expensive and usually unnecessary.
+       * Fetching `source` for the whole window and MIME-parsing each message cost
+       * seconds per mailbox (×3 mailboxes, on every search) — the dominant cost
+       * of an email question. Subject and sender live in the envelope, so pass 1
+       * reads ONLY metadata; pass 2 parses bodies, bounded tightly, and only
+       * when pass 1 did not already fill the page.
+       */
+      const envelopeMatched = new Set<number>();
+      const matched: EmailSummary[] = [];
+      for await (const msg of client.fetch(window, { uid: true, envelope: true }, { uid: true })) {
+        if (opts.unseenOnly && (msg.flags?.has("\\Seen") ?? false)) continue;
+        const env = envelopeOf(msg, mailboxAddress, folder);
+        if (hasQuery && !matchesAllTokens(`${env.subject} ${env.from} ${env.to}`, opts.query!)) {
+          continue;
         }
-
-        if (hasFrom && !matchesAllTokens(from, opts.from!)) continue;
-
-        out.push({
-          uid: msg.uid,
-          mailbox: mailboxAddress,
-          folder,
-          from,
-          to,
-          subject: subject || "(بدون موضوع)",
-          date: (() => {
-            const d = msg.envelope?.date;
-            return d instanceof Date ? d.toISOString() : new Date(d ?? Date.now()).toISOString();
-          })(),
-          snippet: snippetOf(text),
-          hasAttachments,
-        });
+        if (hasFrom && !matchesAllTokens(env.from, opts.from!)) continue;
+        envelopeMatched.add(msg.uid);
+        matched.push(env);
       }
 
-      const emails = out.slice(-limit).reverse();
+      /*
+       * Pass 2 is a FALLBACK, not a supplement: it runs only when the envelope
+       * search found nothing. If the subject or sender matched, the operator's
+       * question is already answered, and spending up to BODY_PARSE_BUDGET MIME
+       * parses to also catch a body-only mention is not worth the seconds it
+       * adds — that cost is exactly what made email questions slow.
+       */
+      if (hasQuery && matched.length === 0) {
+        const bodyWindow = window.slice(-BODY_PARSE_BUDGET);
+        for await (const msg of client.fetch(
+          bodyWindow,
+          { uid: true, envelope: true, source: true },
+          { uid: true },
+        )) {
+          if (envelopeMatched.has(msg.uid)) continue;
+          if (opts.unseenOnly && (msg.flags?.has("\\Seen") ?? false)) continue;
+          const parsed = await safeParse(msg.source as Buffer);
+          if (!parsed) continue;
+          const env = envelopeOf(msg, mailboxAddress, folder);
+          if (hasFrom && !matchesAllTokens(env.from, opts.from!)) continue;
+          if (
+            !matchesAllTokens(
+              `${env.subject} ${env.from} ${env.to} ${parsed.text.slice(0, 20_000)}`,
+              opts.query!,
+            )
+          ) {
+            continue;
+          }
+          matched.push({
+            ...env,
+            snippet: snippetOf(parsed.text),
+            hasAttachments: (parsed.attachments?.length ?? 0) > 0,
+          });
+        }
+      }
+
+      // Only the newest `limit` are returned, so only those need their body
+      // parsed for the snippet. Parsing the whole matched set would make an
+      // unfiltered "latest mail" question as slow as a full scan.
+      const selected = matched.slice(-limit).reverse();
+      for (const e of selected) {
+        if (e.snippet || e.hasAttachments) continue; // already parsed in pass 2
+        const text = await parseBodyText(e.uid, client);
+        e.snippet = snippetOf(text.text);
+        e.hasAttachments = text.hasAttachments;
+      }
+
       return {
-        emails,
+        emails: selected,
         scope: { mailbox: mailboxAddress, folder, sinceDays, scanned: window.length, note },
       };
     } finally {
       lock.release();
     }
   }, mailboxAddress);
+}
+
+/** Envelope-only summary fields, shared by both search passes. */
+function envelopeOf(
+  msg: {
+    uid: number;
+    envelope?: {
+      from?: { name?: string; address?: string }[];
+      to?: { address?: string }[];
+      subject?: string;
+      date?: Date | string;
+    };
+  },
+  mailboxAddress: string,
+  folder: EmailFolder,
+): EmailSummary {
+  const from =
+    msg.envelope?.from?.map((a) => `${a.name ?? ""} ${a.address ?? ""}`).join(", ") || "";
+  const to = msg.envelope?.to?.map((a) => a.address ?? "").join(", ") || "";
+  const subject = msg.envelope?.subject || "";
+  const d = msg.envelope?.date;
+  return {
+    uid: msg.uid,
+    mailbox: mailboxAddress,
+    folder,
+    from,
+    to,
+    subject: subject || "(بدون موضوع)",
+    date: (d instanceof Date ? d : new Date(d ?? Date.now())).toISOString(),
+    snippet: "",
+    hasAttachments: false,
+  };
+}
+
+/** Parse one message's body, tolerating a malformed message. */
+async function parseBodyText(
+  uid: number,
+  client: { fetchOne: (seq: string, opts: unknown, opts2?: unknown) => Promise<unknown> },
+): Promise<{ text: string; hasAttachments: boolean }> {
+  try {
+    const raw = await client.fetchOne(String(uid), { uid: true, source: true }, { uid: true });
+    const source = (raw as { source?: Buffer } | undefined)?.source;
+    if (!source) return { text: "", hasAttachments: false };
+    const parsed = await simpleParser(source);
+    return {
+      text: parsed.text || "",
+      hasAttachments: (parsed.attachments?.length ?? 0) > 0,
+    };
+  } catch {
+    return { text: "", hasAttachments: false };
+  }
+}
+
+async function safeParse(
+  source: Buffer,
+): Promise<{ text: string; attachments?: unknown[] } | null> {
+  try {
+    const parsed = await simpleParser(source);
+    return { text: parsed.text || "", attachments: parsed.attachments };
+  } catch {
+    return null;
+  }
 }
 
 export interface ReadEmailLocation {

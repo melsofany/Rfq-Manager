@@ -34,7 +34,8 @@ vi.mock("../../modules/communications/service", () => ({
   sendWhatsAppDocument: (...a: unknown[]) => sendWhatsAppDocument(...a),
 }));
 
-const { handleAiAssistantMessage } = await import("../../modules/ai-assistant/handler");
+const { handleAiAssistantMessage, pendingAiAssistantWork } =
+  await import("../../modules/ai-assistant/handler");
 
 const user = { id: 1, phone: "201000000000", name: "مدير", employeeId: 7, role: "admin" };
 
@@ -59,6 +60,7 @@ describe("allowlist", () => {
       type: "text",
       text: { body: "السلام عليكم" },
     });
+    await pendingAiAssistantWork();
     expect(taken).toBe(false);
     expect(runAgent).not.toHaveBeenCalled();
   });
@@ -76,6 +78,7 @@ describe("documents", () => {
       document: { id: "doc-1", filename: "po.pdf", mime_type: "application/pdf" },
       text: { body: "لخّص ده" },
     });
+    await pendingAiAssistantWork();
 
     expect(downloadInboundMedia).toHaveBeenCalledWith("doc-1");
     const payload = runAgent.mock.calls[0][0];
@@ -97,6 +100,7 @@ describe("documents", () => {
       type: "document",
       document: { id: "d", filename: "po.pdf", mime_type: "application/pdf" },
     });
+    await pendingAiAssistantWork();
     expect(runAgent.mock.calls[0][0].text).toContain("لخّص");
   });
 
@@ -109,6 +113,7 @@ describe("documents", () => {
       document: { id: "d", filename: "po.pdf" },
       text: { body: "لخّص ده" },
     });
+    await pendingAiAssistantWork();
     const payload = runAgent.mock.calls[0][0];
     expect(payload.document).toBeUndefined();
     expect(payload.text).toBe("لخّص ده");
@@ -122,6 +127,7 @@ describe("images", () => {
       type: "image",
       image: { id: "img-1", mime_type: "image/jpeg" },
     });
+    await pendingAiAssistantWork();
     const payload = runAgent.mock.calls[0][0];
     expect(payload.imageUrl).toBe(
       `data:image/jpeg;base64,${Buffer.from("img").toString("base64")}`,
@@ -133,6 +139,7 @@ describe("images", () => {
 describe("reset", () => {
   it("clears the conversation without calling the agent", async () => {
     await handleAiAssistantMessage("201000000000", { type: "text", text: { body: "تصفير" } });
+    await pendingAiAssistantWork();
     expect(runAgent).not.toHaveBeenCalled();
     expect(sendWhatsAppText).toHaveBeenCalledWith(user.phone, expect.stringContaining("تصفير"));
   });
