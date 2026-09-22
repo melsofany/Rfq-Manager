@@ -342,6 +342,11 @@ export async function initDb(): Promise<void> {
         ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS reply_to_message_id TEXT;
       `);
 
+    // Add the WhatsApp profile name column (safe migration — skipped if present)
+    await client.query(`
+        ALTER TABLE whatsapp_chats ADD COLUMN IF NOT EXISTS contact_name TEXT;
+      `);
+
     // Add filename column to whatsapp_media (safe migration — skipped if already present)
     await client.query(`
         ALTER TABLE whatsapp_media ADD COLUMN IF NOT EXISTS filename TEXT;

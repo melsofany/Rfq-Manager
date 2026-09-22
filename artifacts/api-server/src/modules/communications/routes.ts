@@ -1582,6 +1582,8 @@ async function handleInboundMessage(
     phone,
     supplierId: matchedSupplier?.id ?? null,
     body,
+    // Meta sends the contact's WhatsApp profile name on every inbound message.
+    contactName: senderName?.trim() || null,
     mediaId,
     mediaType,
     mimeType,
@@ -1741,6 +1743,11 @@ router.get("/whatsapp/chats", requireAuth, async (req, res): Promise<void> => {
       phone: whatsappChatsTable.phone,
       supplierId: whatsappChatsTable.supplierId,
       supplierName: suppliersTable.name,
+      // Most recent non-null WhatsApp profile name for this phone. Outbound
+      // rows carry no name, so filter them out before picking the latest.
+      contactName: sql<
+        string | null
+      >`(array_agg(${whatsappChatsTable.contactName} ORDER BY ${whatsappChatsTable.createdAt} DESC) FILTER (WHERE ${whatsappChatsTable.contactName} IS NOT NULL))[1]`,
       lastMessage: sql<string>`(array_agg(${whatsappChatsTable.body} ORDER BY ${whatsappChatsTable.createdAt} DESC))[1]`,
       lastAt: sql<Date>`MAX(${whatsappChatsTable.createdAt})`,
       lastInboundAt: sql<Date | null>`MAX(${whatsappChatsTable.createdAt}) FILTER (WHERE ${whatsappChatsTable.direction} = 'inbound')`,
