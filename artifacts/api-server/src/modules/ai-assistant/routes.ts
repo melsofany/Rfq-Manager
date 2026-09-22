@@ -15,6 +15,7 @@ import {
   isAiConfigured,
   DEFAULT_BASE_URL,
   DEFAULT_MODEL,
+  FALLBACK_MODELS,
   isGeminiEndpoint,
   canonicalPhone,
 } from "./config";
@@ -137,6 +138,7 @@ router.get("/ai-assistant/settings", guard, async (_req, res): Promise<void> => 
     imapConfigured: isEmailReadConfigured(),
     defaultModel: DEFAULT_MODEL,
     defaultBaseUrl: DEFAULT_BASE_URL,
+    fallbackModels: FALLBACK_MODELS,
     isGemini: isGeminiEndpoint(settings.baseUrl),
   });
 });
@@ -145,7 +147,7 @@ router.get("/ai-assistant/settings", guard, async (_req, res): Promise<void> => 
 router.get("/ai-assistant/models", guard, async (_req, res): Promise<void> => {
   const settings = await loadSettings();
   const models = await listModels(settings.baseUrl);
-  res.json({ models, defaultModel: DEFAULT_MODEL });
+  res.json({ models, defaultModel: DEFAULT_MODEL, fallbackModels: FALLBACK_MODELS });
 });
 
 // ─── PUT /ai-assistant/settings ───────────────────────────────────────────

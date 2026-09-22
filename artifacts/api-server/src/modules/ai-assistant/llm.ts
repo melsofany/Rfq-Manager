@@ -6,7 +6,13 @@
  * plain text turns and image turns (vision) via the multimodal content array.
  */
 import { logger } from "../../shared/logger";
-import { AI_API_KEY, DEFAULT_BASE_URL, DEFAULT_MODEL, isGeminiEndpoint } from "./config";
+import {
+  AI_API_KEY,
+  DEFAULT_BASE_URL,
+  DEFAULT_MODEL,
+  FALLBACK_MODELS,
+  isGeminiEndpoint,
+} from "./config";
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
@@ -67,6 +73,49 @@ export class AiError extends Error {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Single attempt against one model. Throws AiError; 429/503 are retryable. */
+async function requestCompletion(opts: {
+  model: string;
+  base: string;
+  body: string;
+}): Promise<ChatResult> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90_000);
+  try {
+    const res = await fetch(`${opts.base}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${AI_API_KEY}`,
+      },
+      body: opts.body,
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      throw new AiError(`LLM request failed (${res.status}): ${text.slice(0, 300)}`, res.status);
+    }
+    const json = JSON.parse(text) as {
+      choices?: Array<{
+        message?: { content?: string | null; tool_calls?: ToolCall[] };
+        finish_reason?: string;
+      }>;
+    };
+    const choice = json.choices?.[0];
+    return {
+      content: choice?.message?.content ?? null,
+      toolCalls: choice?.message?.tool_calls ?? [],
+      finishReason: choice?.finish_reason ?? null,
+    };
+  } catch (err) {
+    if (err instanceof AiError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new AiError(`LLM request error: ${msg}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function chatCompletion(opts: {
   model: string;
   baseUrl?: string | null;
@@ -79,75 +128,67 @@ export async function chatCompletion(opts: {
     throw new AiError("AI_API_KEY / OPENAI_API_KEY not configured");
   }
   const base = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
-  const body = JSON.stringify({
-    model: opts.model,
-    messages: opts.messages,
-    tools: opts.tools && opts.tools.length ? opts.tools : undefined,
-    tool_choice: opts.tools && opts.tools.length ? "auto" : undefined,
-    temperature: opts.temperature ?? 0.2,
-    max_tokens: opts.maxTokens ?? 1600,
-  });
+  const buildBody = (model: string) =>
+    JSON.stringify({
+      model,
+      messages: opts.messages,
+      tools: opts.tools && opts.tools.length ? opts.tools : undefined,
+      tool_choice: opts.tools && opts.tools.length ? "auto" : undefined,
+      temperature: opts.temperature ?? 0.2,
+      max_tokens: opts.maxTokens ?? 1600,
+    });
 
-  // Gemini (and other providers) occasionally return 429/503 under load. Retry
-  // those twice with a short backoff before surfacing an error to the operator.
-  const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+  // Transient provider errors worth retrying on the SAME model.
+  const RETRYABLE = new Set([500, 502, 503, 504]);
   const MAX_ATTEMPTS = 3;
+  // 429 or 404 on the model means this model is exhausted/unavailable: move on
+  // rather than retrying it. Gemini's free tier caps a single model at 20
+  // requests/day, so switching is the only way to stay usable.
+  const SWITCH_MODEL = new Set([429, 404]);
+  const candidates = [opts.model, ...FALLBACK_MODELS.filter((m) => m !== opts.model)];
   let lastError: AiError | null = null;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 90_000);
-    try {
-      const res = await fetch(`${base}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${AI_API_KEY}`,
-        },
-        body,
-        signal: controller.signal,
-      });
-      const text = await res.text();
-      if (!res.ok) {
-        logger.error({ status: res.status, body: text.slice(0, 500) }, "AI assistant: LLM error");
-        const err = new AiError(
-          `LLM request failed (${res.status}): ${text.slice(0, 300)}`,
-          res.status,
-        );
-        if (RETRYABLE.has(res.status) && attempt < MAX_ATTEMPTS) {
-          lastError = err;
-          clearTimeout(timer);
-          await sleep(600 * attempt);
-          continue;
+  outer: for (const model of candidates) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        return await requestCompletion({ model, base, body: buildBody(model) });
+      } catch (err) {
+        if (!(err instanceof AiError)) throw err;
+        lastError = err;
+        const status = err.status;
+
+        // A permanent error (bad request, auth) is the same on every model —
+        // surface it immediately instead of burning the fallbacks.
+        if (status != null && !SWITCH_MODEL.has(status) && !RETRYABLE.has(status)) {
+          throw err;
         }
-        throw err;
+
+        if (status != null && SWITCH_MODEL.has(status)) {
+          const retryAfter = /retry in ([\d.]+)s/i.exec(err.message)?.[1];
+          logger.warn(
+            { model, status, retryAfter },
+            "AI assistant: model unavailable, trying next model",
+          );
+          continue outer;
+        }
+
+        // Retryable (503 high demand, network): back off, retry the same model.
+        // Once its attempts are spent, fall through to the next candidate
+        // rather than failing — an overloaded model is exactly when a
+        // different model succeeds.
+        if (attempt < MAX_ATTEMPTS) {
+          await sleep(600 * attempt);
+        }
       }
-      const json = JSON.parse(text) as {
-        choices?: Array<{
-          message?: { content?: string | null; tool_calls?: ToolCall[] };
-          finish_reason?: string;
-        }>;
-      };
-      const choice = json.choices?.[0];
-      return {
-        content: choice?.message?.content ?? null,
-        toolCalls: choice?.message?.tool_calls ?? [],
-        finishReason: choice?.finish_reason ?? null,
-      };
-    } catch (err) {
-      if (err instanceof AiError) throw err;
-      const msg = err instanceof Error ? err.message : String(err);
-      if (attempt < MAX_ATTEMPTS) {
-        lastError = new AiError(`LLM request error: ${msg}`);
-        await sleep(600 * attempt);
-        continue;
-      }
-      throw new AiError(`LLM request error: ${msg}`);
-    } finally {
-      clearTimeout(timer);
     }
+    logger.warn({ model, status: lastError?.status }, "AI assistant: model exhausted, trying next");
   }
   throw lastError ?? new AiError("LLM request failed");
+}
+
+/** True when the error means "this provider/model is out of capacity or quota". */
+export function isQuotaError(err: unknown): boolean {
+  return err instanceof AiError && (err.status === 429 || err.status === 503);
 }
 
 /**
@@ -204,10 +245,27 @@ async function transcribeWithGemini(
   baseUrl?: string | null,
   model?: string | null,
 ): Promise<string | null> {
+  // Voice notes are a small share of traffic but still count against the same
+  // per-model daily quota as text, so walk the same fallback chain.
+  const candidates = [model || DEFAULT_MODEL, ...FALLBACK_MODELS].filter(
+    (m, i, arr) => arr.indexOf(m) === i,
+  );
+  for (const candidate of candidates) {
+    const text = await transcribeWithGeminiModel(buffer, mimeType, baseUrl, candidate);
+    if (text) return text;
+  }
+  return null;
+}
+
+async function transcribeWithGeminiModel(
+  buffer: Buffer,
+  mimeType: string,
+  baseUrl: string | null | undefined,
+  model: string,
+): Promise<string | null> {
   try {
     const base = (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "").replace(/\/openai$/, "");
-    const useModel = model || DEFAULT_MODEL;
-    const res = await fetch(`${base}/models/${encodeURIComponent(useModel)}:generateContent`, {
+    const res = await fetch(`${base}/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

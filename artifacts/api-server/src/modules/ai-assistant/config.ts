@@ -15,6 +15,18 @@ export const DEFAULT_MODEL = process.env.AI_MODEL || "gemini-3.8-flash";
 export const DEFAULT_BASE_URL =
   process.env.AI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai";
 
+/**
+ * Models tried, in order, when the primary model is unavailable or out of
+ * quota (Gemini free tier is 20 requests/day/model). Only used on the Gemini
+ * endpoint, where these ids exist. Override with AI_FALLBACK_MODELS.
+ */
+export const FALLBACK_MODELS = (
+  process.env.AI_FALLBACK_MODELS || "gemini-3.6-flash,gemini-3.1-flash-lite"
+)
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
+
 export interface AiSettings {
   enabled: boolean;
   model: string;

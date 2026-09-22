@@ -62,6 +62,7 @@ interface AiSettings {
   apiKeySet: boolean;
   imapConfigured: boolean;
   defaultModel?: string;
+  fallbackModels?: string[];
   defaultBaseUrl: string;
   isGemini?: boolean;
 }
@@ -390,6 +391,12 @@ export default function AiAssistantPage() {
                       value={settings.model}
                       onChange={(e) => setSettings({ ...settings, model: e.target.value })}
                     />
+                  )}
+                  {settings.fallbackModels && settings.fallbackModels.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      عند نفاد حصة الموديل (429) يتحوّل تلقائيًا إلى:{" "}
+                      {settings.fallbackModels.join(" ← ")}
+                    </p>
                   )}
                 </div>
                 <div className="space-y-1">
