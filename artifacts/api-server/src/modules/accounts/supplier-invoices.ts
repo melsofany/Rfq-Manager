@@ -215,8 +215,8 @@ router.post(
     const { docNo: invoiceNo, row } = await insertWithDocNo(
       "SI",
       body.invoiceDate,
-      async (docNo) => {
-        const [inserted] = await db
+      async (docNo, tx) => {
+        const [inserted] = await tx
           .insert(supplierInvoicesTable)
           .values({
             invoiceNo: docNo,
@@ -600,8 +600,8 @@ router.post(
     const { docNo: paymentNo, row } = await insertWithDocNo(
       "SP",
       body.paymentDate,
-      async (docNo) => {
-        const [inserted] = await db
+      async (docNo, tx) => {
+        const [inserted] = await tx
           .insert(supplierPaymentsTable)
           .values({
             paymentNo: docNo,
