@@ -757,3 +757,27 @@ Per-round and total answer time are logged (`AI assistant: tool round complete`,
 `AI assistant: answered`) so future slowness is measured, not guessed.
 **505 api-server tests** (44 files) pass; tsc + portal build + repo-wide prettier
 clean. Deploy verified: `57826aa` live, healthz 200.
+
+## No overall deadline meant "silence" for the operator (#152)
+
+- **Symptom**: «هات أحدث أمر توريد وارد من العملاء ملف PDF» → the ack was sent,
+  then nothing ever arrived; the operator answered «مردتش يعني». The reply WAS
+  produced, just minutes later — after they had left the chat.
+- **Cause**: no total deadline existed anywhere. Per-attempt timeout was 90s,
+  `chatCompletion` could walk the 7-model chain × 2 attempts, and the agent ran
+  up to 5 of those completions. Worst case: hours. **A very late answer is
+  indistinguishable from no answer** — that is the real defect, not the wording.
+- **Three bounds** (all env-tunable), checked before each attempt and passed as
+  an `AbortSignal` so an in-flight request is cancelled the moment a budget ends:
+  `AI_ATTEMPT_TIMEOUT_MS` (45s, one provider attempt) <
+  `AI_COMPLETION_BUDGET_MS` via `completionBudgetMs()` (100s, one completion's
+  whole chain) < `AGENT_BUDGET_MS` (150s, the entire run: every round + tool).
+  An aborted run must also stop the chain (`budget.signal.aborted` guard in the
+  attempt loop) or the remaining models are walked with already-aborted requests.
+- **Timeout is a user-visible outcome**: `isTimeoutError()` routes it to a
+  distinct Arabic message («استغرق الطلب وقتًا أطول من المسموح…») so the operator
+  knows to retry with something specific, never silence.
+- **Read budgets per call, not at import**: `completionBudgetMs()` is a function
+  so the test can shorten it via env; a module const would be frozen at import.
+- **Test**: every model 503 → asserts the call gives up inside the granted budget
+  instead of walking all 7 (fails 2/16 against the pre-fix source).
