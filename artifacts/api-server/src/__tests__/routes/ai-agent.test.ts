@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// Mirrors MAX_TOOL_ROUNDS in agent.ts; imported lazily inside tests to avoid
+// hoisting issues, so assert the two agree in one place.
+const MAX_ROUNDS = 5;
+
 // ── Mock the LLM so the loop is deterministic ────────────────────────────────
 const chatCompletion = vi.fn();
 vi.mock("../../modules/ai-assistant/llm", () => ({
@@ -158,6 +162,11 @@ describe("AI assistant agent loop", () => {
     expect(out.reply).toBe("تم.");
   });
 
+  it("keeps the round budget asserted against the source constant", async () => {
+    const { MAX_TOOL_ROUNDS } = await import("../../modules/ai-assistant/agent");
+    expect(MAX_TOOL_ROUNDS).toBe(MAX_ROUNDS);
+  });
+
   it("forbids tool calls on the final round so a tool-happy model still answers", async () => {
     // Reproduces the live failure: the model calls tools every round and, with
     // no forced-answer round, the loop ends with no text at all.
@@ -169,7 +178,7 @@ describe("AI assistant agent loop", () => {
     let round = 0;
     chatCompletion.mockImplementation((args: any) => {
       round++;
-      if (round < 8) {
+      if (round < MAX_ROUNDS) {
         return Promise.resolve({
           content: null,
           finishReason: "tool_calls",
@@ -187,7 +196,7 @@ describe("AI assistant agent loop", () => {
     expect(out.reply).toBe("تقرير مختصر.");
     // The first rounds must still allow tools.
     expect(chatCompletion.mock.calls[0][0].toolChoice).toBe("auto");
-    expect(chatCompletion).toHaveBeenCalledTimes(8);
+    expect(chatCompletion).toHaveBeenCalledTimes(MAX_ROUNDS);
   });
 
   it("retries without tool schemas when the model ignores tool_choice=none", async () => {

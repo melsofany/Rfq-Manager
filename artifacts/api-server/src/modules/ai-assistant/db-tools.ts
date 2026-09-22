@@ -40,10 +40,24 @@ import {
   chartOfAccountsTable,
   dataEntrySessionsTable,
 } from "@workspace/db";
-import { and, or, ilike, desc, asc, count, sql, gte, eq } from "drizzle-orm";
+import { and, or, ilike, desc, asc, count, sql, gte, eq, inArray } from "drizzle-orm";
 import type { AnyColumn, SQL } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import { logger } from "../../shared/logger";
+
+/** A readable label copied onto each row from a related table. */
+interface RefSpec {
+  /** Foreign-key column name on this table, e.g. "supplierId". */
+  column: string;
+  /** Related table holder (lazy, so partial `@workspace/db` mocks still work). */
+  target: () => PgTable;
+  /** Target column holding the label, e.g. "name". */
+  labelColumn: string;
+  /** Target column holding the related row's id (defaults to "id"). */
+  idColumn?: string;
+  /** Field name receiving the label on the result row, e.g. "supplierName". */
+  as: string;
+}
 
 interface TableSpec {
   table: PgTable;
@@ -55,11 +69,42 @@ interface TableSpec {
   orderBy?: string;
   orderDir?: "asc" | "desc";
   description: string;
+  /**
+   * Allow a purely numeric `search` to match the primary key exactly. Users ask
+   * for "supplier 95" / "PO 47" using the internal id shown in the URL.
+   */
+  matchId?: boolean;
+  /** Related-table labels appended to every row (never the raw FK alone). */
+  refs?: RefSpec[];
+  /**
+   * Extra matcher for fields that live on OTHER rows. Returns the ids of THIS
+   * table that should be included (e.g. POs whose supplier matches the term).
+   */
+  extraSearch?: (term: string) => Promise<number[]>;
+  /** Which column receives the ids from `extraSearch` (e.g. "supplierId"). */
+  extraSearchColumn?: string;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-function cols(table: PgTable): Record<string, AnyColumn> {
+export function cols(table: PgTable): Record<string, AnyColumn> {
   return (table as any)[Symbol.for("drizzle:Columns")] ?? {};
+}
+
+/**
+ * Ids of rows in `table` whose `search` columns match `term`. Used to resolve a
+ * name to its foreign key before filtering the table that only stores the id.
+ */
+async function matchingIds(table: PgTable, searchCols: string[], term: string): Promise<number[]> {
+  const columns = cols(table);
+  const parts = searchCols
+    .map((c) => columns[c])
+    .filter(Boolean)
+    .map((c) => ilike(c, `%${term}%`));
+  if (!parts.length) return [];
+  const rows = (await (db.select().from(table as any) as any)
+    .where(or(...parts))
+    .limit(200)) as Array<Record<string, unknown>>;
+  return rows.map((r) => Number(r.id)).filter((n) => Number.isInteger(n));
 }
 
 /**
@@ -74,23 +119,36 @@ export function getTables(): Record<string, TableSpec> {
     _tables = {
       suppliers: {
         table: suppliersTable,
-        search: ["name", "contactPerson", "email", "phone", "address", "category"],
+        search: ["supplierId", "name", "contactPerson", "email", "phone", "address", "category"],
+        matchId: true,
         description: "الموردون",
       },
       customers: {
         table: customersTable,
-        search: ["name", "nickname", "contactPerson", "email", "phone", "address", "taxId"],
+        search: [
+          "customerId",
+          "name",
+          "nickname",
+          "contactPerson",
+          "email",
+          "phone",
+          "address",
+          "taxId",
+        ],
+        matchId: true,
         description: "العملاء",
       },
       employees: {
         table: employeesTable,
         search: ["name", "email", "role", "phone"],
         sensitive: ["passwordHash"],
+        matchId: true,
         description: "الموظفون",
       },
       representatives: {
         table: representativesTable,
         search: ["name", "phone"],
+        matchId: true,
         description: "المندوبون",
       },
       customer_rfqs: {
@@ -110,22 +168,56 @@ export function getTables(): Record<string, TableSpec> {
         search: ["internalRfqNo", "customerRfqNo", "status"],
         orderBy: "id",
         orderDir: "desc",
+        matchId: true,
         description: "طلبات عروض الأسعار للموردين",
       },
       rfq_items: {
         table: rfqItemsTable,
         search: ["itemId", "lineItem", "partNo", "description", "uom"],
+        matchId: true,
         description: "بنود طلبات عروض الأسعار",
       },
       offers: {
         table: offersTable,
-        search: ["supplierName", "status"],
+        // `offers` has NO supplier name and no status column — the supplier is a
+        // foreign key, resolved via `extraSearch` (searching a name against the
+        // integer `supplierId` would be meaningless and would make every term
+        // look "matched").
+        search: ["generalNotes"],
+        orderBy: "id",
+        orderDir: "desc",
+        matchId: true,
+        refs: [
+          {
+            column: "supplierId",
+            target: () => suppliersTable,
+            labelColumn: "name",
+            as: "supplierName",
+          },
+          { column: "rfqId", target: () => rfqTable, labelColumn: "internalRfqNo", as: "rfqNo" },
+        ],
+        extraSearch: (term) => matchingIds(suppliersTable, ["name", "contactPerson"], term),
+        extraSearchColumn: "supplierId",
         description: "عروض الموردين",
       },
       offer_items: {
         table: offerItemsTable,
-        search: ["partNo", "lineItem", "description"],
-        description: "بنود عروض الموردين",
+        // partNo/lineItem/description belong to rfq_items, not here.
+        search: ["notes"],
+        matchId: true,
+        refs: [
+          {
+            column: "rfqItemId",
+            target: () => rfqItemsTable,
+            labelColumn: "description",
+            as: "rfqItemDescription",
+          },
+          { column: "offerId", target: () => offersTable, labelColumn: "id", as: "offerRef" },
+        ],
+        extraSearch: (term) =>
+          matchingIds(rfqItemsTable, ["partNo", "lineItem", "description"], term),
+        extraSearchColumn: "rfqItemId",
+        description: "بنود عروض الموردين (كل بند مرتبط ببند طلب عرض السعر)",
       },
       customer_pos: {
         table: customerPosTable,
@@ -141,14 +233,52 @@ export function getTables(): Record<string, TableSpec> {
       },
       purchase_orders: {
         table: purchaseOrdersTable,
-        search: ["internalPoNo", "sheetPoNo", "supplierName", "status"],
+        // No supplier column on the header — the supplier lives on each line.
+        search: ["internalPoNo", "sheetPoNo", "status", "receiverName", "receiverPhone", "notes"],
         orderBy: "id",
         orderDir: "desc",
+        matchId: true,
+        // Resolves to PO ids (this table's own key), because the match is found
+        // on the line items rather than on a column here.
+        extraSearchColumn: "id",
+        extraSearch: async (term) => {
+          // POs whose line items belong to a matching supplier.
+          const supplierIds = await matchingIds(
+            suppliersTable,
+            ["name", "contactPerson", "email", "phone"],
+            term,
+          );
+          if (!supplierIds.length) return [];
+          const rows = (await db
+            .select()
+            .from(purchaseOrderItemsTable as any)
+            .where(inArray(purchaseOrderItemsTable.supplierId, supplierIds))
+            .limit(500)) as any as Array<Record<string, unknown>>;
+          return [...new Set(rows.map((r) => Number(r.poId)).filter(Number.isInteger))];
+        },
         description: "أوامر الشراء من الموردين",
       },
       purchase_order_items: {
         table: purchaseOrderItemsTable,
         search: ["partNo", "lineItem", "description", "uom", "lineStatus"],
+        orderBy: "id",
+        orderDir: "desc",
+        refs: [
+          {
+            column: "supplierId",
+            target: () => suppliersTable,
+            labelColumn: "name",
+            as: "supplierName",
+          },
+          {
+            column: "poId",
+            target: () => purchaseOrdersTable,
+            labelColumn: "internalPoNo",
+            as: "poNo",
+          },
+        ],
+        extraSearch: (term) => matchingIds(suppliersTable, ["name", "contactPerson"], term),
+        extraSearchColumn: "supplierId",
         description: "بنود أوامر الشراء من الموردين",
       },
       po_item_receipts: {
@@ -269,13 +399,30 @@ function camel(s: string): string {
   return s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
+export interface QueryResult {
+  rows: Record<string, unknown>[];
+  /**
+   * How the search was actually applied. The model MUST be told when a term
+   * could not be matched, otherwise it treats arbitrary rows as its results —
+   * the exact behaviour that produced "PO 37 belongs to شركة النور".
+   */
+  filter: {
+    searched: string | null;
+    /** Columns the term was matched against (across tables, hence descriptive). */
+    matchedOn: string[];
+    /** False when a search term was given but nothing could match on it. */
+    applied: boolean;
+    note: string;
+  };
+}
+
 export async function queryRecords(opts: {
   table: string;
   search?: string;
   limit?: number;
   sinceDays?: number;
   orderDir?: "asc" | "desc";
-}): Promise<Record<string, unknown>[]> {
+}): Promise<QueryResult> {
   const spec = TABLES[opts.table];
   if (!spec) throw new Error(`Unknown table "${opts.table}"`);
   const columns = cols(spec.table);
@@ -284,14 +431,57 @@ export async function queryRecords(opts: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let q: any = db.select().from(spec.table as any);
   const filters: SQL[] = [];
+  const matchedOn: string[] = [];
+  let applied = false;
 
-  if (opts.search && opts.search.trim()) {
-    const term = `%${opts.search.trim()}%`;
-    const parts = spec.search
-      .map((c) => columns[c])
-      .filter(Boolean)
-      .map((c) => ilike(c, term));
-    if (parts.length) filters.push(or(...parts) as SQL);
+  const term = opts.search?.trim();
+  if (term) {
+    // Every way the term can match is an ALTERNATIVE (OR), not a conjunction:
+    // a PO matches if its own number matches OR its supplier matches. Combining
+    // them with AND would reject the very rows the term was meant to find.
+    const orParts: SQL[] = [];
+    /** True once we have at least one way to match the term. */
+    let canMatch = false;
+
+    const direct = spec.search.filter((c) => columns[c]);
+    const directParts = direct.map((c) => ilike(columns[c], `%${term}%`));
+    if (directParts.length) {
+      orParts.push(or(...directParts) as SQL);
+      matchedOn.push(...direct.map((c) => `${opts.table}.${c}`));
+      canMatch = true;
+    }
+
+    // Numeric id match — "supplier 95" / "PO 37" refer to the internal id.
+    if (spec.matchId && /^\d+$/.test(term) && columns["id"]) {
+      orParts.push(eq(columns["id"], Number(term)) as SQL);
+      matchedOn.push(`${opts.table}.id`);
+      canMatch = true;
+    }
+
+    // Fields that live on related rows (supplier name for POs, partNo for
+    // offer_items). Without this the table is unsearchable by what users
+    // actually type, and the term silently returns unrelated rows.
+    if (spec.extraSearch && spec.extraSearchColumn && columns[spec.extraSearchColumn]) {
+      canMatch = true;
+      matchedOn.push(`${opts.table}.${spec.extraSearchColumn} (مرتبط)`);
+      try {
+        const ids = await spec.extraSearch(term);
+        if (ids.length) orParts.push(inArray(columns[spec.extraSearchColumn], ids) as SQL);
+      } catch (err) {
+        logger.warn({ err, table: opts.table }, "AI assistant: related-table search failed");
+      }
+    }
+
+    if (canMatch) {
+      applied = true;
+      // No branch matched: the search IS applied, it simply found nothing.
+      filters.push(orParts.length ? (or(...orParts) as SQL) : (sql`1 = 0` as SQL));
+    } else {
+      // No column on this table can match the term. Returning the newest rows
+      // here is the bug that made the model present unrelated records as
+      // search results; force an empty set and let the note say why.
+      filters.push(sql`1 = 0` as SQL);
+    }
   }
 
   if (opts.sinceDays && columns["createdAt"]) {
@@ -307,17 +497,63 @@ export async function queryRecords(opts: {
     q = q.orderBy(dir === "asc" ? asc(orderCol) : desc(orderCol));
   }
 
-  const rows = (await q.limit(limit)) as Record<string, unknown>[];
+  const rawRows = (await q.limit(limit)) as Record<string, unknown>[];
   const sensitive = new Set((spec.sensitive ?? []).map(camel));
-  return rows.map((row) => {
+
+  const rows: Record<string, unknown>[] = [];
+  for (const row of rawRows) {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(row)) {
       if (sensitive.has(k)) continue;
-      if (v instanceof Date) out[k] = v.toISOString();
-      else out[k] = v;
+      out[k] = v instanceof Date ? v.toISOString() : v;
     }
-    return out;
-  });
+    await applyRefs(spec, out);
+    rows.push(out);
+  }
+
+  const searched = term ?? null;
+  let note: string;
+  if (!searched) {
+    note = `لا يوجد بحث — تُعرض أحدث السجلات في «${spec.description}».`;
+  } else if (applied) {
+    note = `تمت المطابقة على: ${matchedOn.join(", ")}.`;
+  } else {
+    note =
+      `تعذّرت مطابقة «${searched}» في «${spec.description}» (لا توجد أعمدة قابلة للبحث لهذا الحقل). ` +
+      `النتائج المعروضة غير مفلترة — لا تعتبرها إجابة على البحث.`;
+  }
+
+  return {
+    rows,
+    filter: { searched, matchedOn, applied: !searched || applied, note },
+  };
+}
+
+/**
+ * Copy human-readable labels onto a row for its foreign keys. A row that shows
+ * only `supplierId: 146` invites the model to invent a name; attaching
+ * `supplierName` removes the guesswork entirely.
+ */
+async function applyRefs(spec: TableSpec, row: Record<string, unknown>): Promise<void> {
+  for (const ref of spec.refs ?? []) {
+    const fk = row[ref.column];
+    if (fk == null) continue;
+    try {
+      const target = ref.target();
+      const tcols = cols(target);
+      const idCol = tcols[ref.idColumn ?? "id"];
+      const labelCol = tcols[ref.labelColumn];
+      if (!idCol || !labelCol) continue;
+      const found = (await db
+        .select()
+        .from(target as any)
+        .where(eq(idCol, fk as never))
+        .limit(1)) as any as Array<Record<string, unknown>>;
+      if (found[0]) row[ref.as] = found[0][ref.labelColumn];
+    } catch (err) {
+      logger.warn({ err, ref: ref.as }, "AI assistant: resolving related label failed");
+    }
+  }
 }
 
 /** Row count, optionally for recent rows only. */
