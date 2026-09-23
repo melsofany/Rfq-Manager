@@ -46,21 +46,18 @@ import {
   isEmailReadConfigured,
   isTextLikeMime,
   isPdfAttachment,
-  fetchMessageAttachments,
   extractPdfText,
-  memoizeScan,
   scanCacheKey,
   type EmailCensusResult,
   type EmailCensusNumber,
 } from "./email";
 import {
-  parseItemsFromAttachments,
   itemsCsv,
   itemsAggregateCsv,
   aggregateItems,
   aggregateItemsByOccurrence,
-  type ItemScanResult,
 } from "./email-items";
+import { runItemScan, sessionAttachmentCoverage } from "./item-scan-session";
 import { defaultMailbox, mailboxes } from "./mailboxes";
 import { rememberFact, recallMemories, forgetMemory } from "./memory";
 import { generateAssistantPdf, generateMissingNumbersPdf, type PdfSection } from "./pdf";
@@ -361,9 +358,9 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             limit: {
               type: "integer",
               description:
-                "أقصى عدد رسائل تُفتح مرفقاتها (افتراضي 1200). العدد المطابق الكلي يُعاد دائمًا، " +
-                "وإن كان أكبر من الحد فاذكر أن الترتيب مبني على أحدث المفحوص فقط. " +
-                "قد يتوقف المرور قبل الحد بسبب ميزانية الوقت لا العدد — اقرأ attachmentCoverage.truncatedReason لتذكر السبب الصحيح.",
+                "أقصى عدد رسائل في الدُفعة الواحدة (افتراضي 1200). الفحص قابل للاستكمال: " +
+                "إن عاد isComplete=false فتبقّى رسائل لم تُفتح — أعد نداء الأداة بنفس الوسائط " +
+                "لتكملة الحصر من حيث توقف. لا تعرض النتيجة كحصر كامل قبل isComplete=true.",
             },
             top: {
               type: "integer",
@@ -867,6 +864,21 @@ export function toolTimeoutMs(): number {
   return Number(process.env.AI_TOOL_TIMEOUT_MS) || 100_000;
 }
 
+/**
+ * How long ONE `scan_email_items` call may spend opening attachments before it
+ * returns and lets the next call continue.
+ *
+ * The scan is resumable, so this is a pacing value, not a completeness limit: a
+ * call stops here, reports `remainingMessages`, and the model calls again. Set
+ * below the agent's whole-run budget (150s) so calls, verification and delivery
+ * still have room after a batch, and below the per-tool ceiling so the tool
+ * returns its own honest "partial, continue" result rather than a generic
+ * timeout error. Overridable so the resume path is testable.
+ */
+export function scanCallBudgetMs(): number {
+  return Number(process.env.AI_SCAN_CALL_BUDGET_MS ?? 45_000);
+}
+
 /** Raised when a tool exceeds `toolTimeoutMs()`. */
 export class ToolTimeoutError extends Error {
   constructor(public readonly toolName: string) {
@@ -1091,12 +1103,14 @@ async function executeToolInner(
         // count) and to DOWNLOAD their attachments once; the item parser then
         // works on those bytes locally, with no model call.
         //
-        // The scan+parse is MEMOIZED on the scan arguments (NOT on `contains`,
-        // which is applied to the already-parsed rows). A follow-up question
-        // about the same mail — «ليه السخانات الأريستون مش في التقرير؟» right
-        // after «اكتر بند اتكرر» — otherwise re-ran a ~30-100s scan and blew the
-        // agent's budget, answering with a timeout. The memo holds the small
-        // parsed rows, never the downloaded PDF buffers.
+        // The scan is RESUMABLE, not single-shot: the envelope census is cached
+        // once, then batches of attachments are opened across tool calls until
+        // the cursor reaches the end. A follow-up question continues the SAME
+        // census («ليه السخانات الأريستون مش في التقرير؟» right after «اكتر بند
+        // اتكرر» must not restart a ~2-minute scan and blow the budget), and a
+        // year too large for one call is finished by the next call rather than
+        // reported as a sample. The session holds only derived rows, never the
+        // downloaded PDF buffers.
         const scanArgs = {
           from: args.from ? String(args.from) : undefined,
           subject: args.subject ? String(args.subject) : undefined,
@@ -1107,19 +1121,25 @@ async function executeToolInner(
           limit: typeof args.limit === "number" ? args.limit : undefined,
         };
 
-        const { census, parsed } = await memoizeScan(scanCacheKey("items", scanArgs), async () => {
-          const c = await scanEmails({
-            ...scanArgs,
-            folder: "inbox",
-            includeAttachments: true,
-            returnAllMatches: true,
-          });
-          const p = await parseItemsFromAttachments(c.attachmentMessages ?? []);
-          return { census: c, parsed: p };
-        });
+        // Leave the agent room to answer after the scan stops (calls, verification
+        // and delivery), so the scan deadline sits below the whole-run budget.
+        const scanDeadline = Date.now() + scanCallBudgetMs();
+        const { session } = await runItemScan(
+          scanCacheKey("items", scanArgs),
+          scanArgs,
+          scanDeadline,
+        );
+        const census = session.census;
+        const parsed = {
+          items: session.items,
+          messages: session.messages,
+          coverage: session.coverage,
+          aggregate: aggregateItems(session.items),
+        };
+        const scanCoverage = sessionAttachmentCoverage(session);
 
         const top = Math.min(Math.max(Number(args.top ?? 50), 1), 300);
-        const truncated = census.attachmentCoverage?.truncated ?? false;
+        const truncated = scanCoverage.truncated;
 
         // A brand/part lookup («فين السخانات الأريستون؟») is a filter over the
         // rows already parsed — it must never look like a fresh census.
@@ -1153,30 +1173,41 @@ async function executeToolInner(
         // items" — it means no attachment was recognised. Saying so prevents the
         // honest-looking "0 بنود، الحصر كامل" the model would otherwise report.
         const noAttachments = coverage.attachments === 0;
-        // "Complete" means every matched message's attachments were opened. The
-        // flag must NOT rest on `attachmentCoverage.truncated` alone: that is set
-        // from the message budget, and a pass can also stop on TIME with the
-        // budget unspent. Comparing opened against matched catches both.
+        // "Complete" is a fact about the CURSOR, not about one pass: the scan is
+        // resumable, so a session is complete only once every matched message has
+        // been opened (session.complete), no file was unreadable, and the pass
+        // did not stop short. `allOpened` guards the count independently.
         const allOpened = coverage.messages >= census.matched;
-        const complete = !noAttachments && coverage.unreadable === 0 && !truncated && allOpened;
+        const complete =
+          session.complete &&
+          !noAttachments &&
+          coverage.unreadable === 0 &&
+          !truncated &&
+          allOpened;
         // The item counts are only ever facts about the messages actually OPENED.
-        // State the scope beside them so a capped scan cannot be relayed as the
+        // State the scope beside them so a staged scan cannot be relayed as the
         // whole year — the mailbox matched thousands, and a sample is not a total.
-        // Name the REASON the pass stopped, from `truncatedReason`, so the model
+        // Name the REASON the scan stopped, from `truncatedReason`, so the model
         // never has to invent one (a live reply told the operator «الحد 400» when
         // the real ceiling was the time budget).
         const reason =
-          census.attachmentCoverage?.truncatedReason === "time"
+          scanCoverage.truncatedReason === "time"
             ? "بسبب ميزانية الوقت"
-            : census.attachmentCoverage?.truncatedReason === "error"
+            : scanCoverage.truncatedReason === "error"
               ? "بسبب تعذّر جلب بعض الرسائل"
-              : census.attachmentCoverage?.truncatedReason === "count"
+              : scanCoverage.truncatedReason === "count"
                 ? "بسبب حد عدد الرسائل"
                 : "";
         const scope =
           !allOpened || truncated
-            ? `النطاق: أحدث ${coverage.messages} رسالة من ${census.matched} مطابقة (لم يُفحص الباقي${reason ? " " + reason : ""})`
+            ? `النطاق: فُتح ${coverage.messages} من ${census.matched} رسالة مطابقة (لم يُفحص الباقي${reason ? " " + reason : ""})`
             : `النطاق: كل الرسائل المطابقة (${census.matched})`;
+        // The scan is staged, so an incomplete census is not a dead end: the next
+        // call continues from the cursor. Say so, and tell the model to call the
+        // tool again instead of reporting a sample as the year.
+        const continueHint = complete
+          ? ""
+          : ` تبقّى ${session.remaining} رسالة لم تُفتح بعد. أعد نداء scan_email_items بنفس الوسائط لإكمال الحصر من حيث توقف — لا تعرض النتيجة كحصر كامل قبل أن يصبح isComplete=true.`;
         const partialDetail = [
           coverage.unreadable > 0 ? `تعذّرت قراءة ${coverage.unreadable} رسالة` : "",
           !allOpened || truncated ? `ولم تُفحص كل الرسائل${reason ? ` (${reason})` : ""}` : "",
@@ -1206,7 +1237,7 @@ async function executeToolInner(
           // documents invites the operator to trust a sample as a total.
           const scopeLine =
             !allOpened || truncated
-              ? `النطاق: أحدث ${parsed.coverage.messages} رسالة من ${census.matched} مطابقة — الحصر ناقص، لم تُفحص كل الرسائل${reason ? ` (${reason})` : ""}.`
+              ? `النطاق: فُتح ${parsed.coverage.messages} من ${census.matched} رسالة مطابقة — الحصر ناقص، لم تُفحص كل الرسائل${reason ? ` (${reason})` : ""}.`
               : `النطاق: كل الرسائل المطابقة (${census.matched}) — الحصر كامل.`;
           const buffer = await generateAssistantPdf({
             title: "أكثر البنود تكرارًا في أوامر الشراء",
@@ -1279,7 +1310,8 @@ async function executeToolInner(
             `النتائج: ${matchedItems.length} سطرًا. ` +
             (truncated
               ? `تنبيه: لم تُفحص كل الرسائل — ${scope}. إن لم يظهر ما تبحث عنه فقد يكون في رسائل أقدم، ` +
-                "فوسّع النطاق (sinceDate) أو خفّض from ثم أعد المحاولة. لا تقل «غير موجود في البريد»."
+                "فأعد النداء لإكمال الحصر، أو وسّع النطاق (sinceDate). لا تقل «غير موجود في البريد»." +
+                continueHint
               : "تم فحص كل الرسائل المطابقة.");
           return {
             ok: true,
@@ -1291,8 +1323,11 @@ async function executeToolInner(
               hasAttachments: !noAttachments,
               ordering,
               matchedMessages: census.matched,
+              scannedMessages: coverage.messages,
+              remainingMessages: session.remaining,
+              batches: session.batches,
               coverage,
-              attachmentCoverage: census.attachmentCoverage ?? null,
+              attachmentCoverage: scanCoverage,
               matchedLines: matchedItems.length,
               distinctParts: ranked.length,
               totalLines: coverage.lines,
@@ -1314,14 +1349,18 @@ async function executeToolInner(
                 scope +
                 (complete
                   ? " — الحصر كامل على كل الرسائل المطابقة."
-                  : ` — تنبيه: الحصر جزئي (${partialDetail}). اذكر أن الترتيب مبني على العينة المفحوصة ولا تدّعِ الكمال.`),
+                  : ` — تنبيه: الحصر جزئي (${partialDetail}). اذكر أن الترتيب مبني على المفحوص حتى الآن ولا تدّعِ الكمال.` +
+                    continueHint),
             isComplete: complete,
             scope,
             hasAttachments: !noAttachments,
             ordering,
             matchedMessages: census.matched,
+            scannedMessages: coverage.messages,
+            remainingMessages: session.remaining,
+            batches: session.batches,
             coverage,
-            attachmentCoverage: census.attachmentCoverage ?? null,
+            attachmentCoverage: scanCoverage,
             distinctParts: parsed.aggregate.length,
             totalLines: coverage.lines,
             // Ranked by how MANY orders carried the part by default — the

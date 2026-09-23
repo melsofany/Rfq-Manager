@@ -1394,3 +1394,53 @@ TAX`, `Purchase Order Distribution`, …), and an item with **no description**
   `VALUE ADDED TAX LOCAL`; both fail when the drop is removed. The tool-level
   fixture (`totalLines`) was corrected from 2 to 1 for the same reason.
 - **Tests**: 653 api-server tests pass (was 652).
+
+## Phase 3 — the census RESUMES instead of claiming a sample is the total
+
+The «480-message mailbox» answer above was honest but still a dead end: a scan
+larger than one call's budget could only ever report a partial list, and the
+operator was left to rephrase. Raising the budget does not fix it — at the
+observed ~430ms/message, 480 messages need ~3.5 minutes, above any ceiling the
+operator will wait. So the scan became **resumable**.
+
+### 13. `runItemScan` walks a cursor in the shared scan cache
+
+- `email.ts`'s `fetchMessageAttachments(matches, budget, skip)` and
+  `scanEmails`'s `attachmentSkip` take an EXCLUSIVE start index into the matched
+  list, so a caller reads the next window instead of re-opening the newest one.
+  There is one mailbox census (`scanEmails` with `returnAllMatches: true`); only
+  the attachment window moves, and each window's attachments are cached with the
+  pass that produced them.
+- `item-scan-session.ts` (new) holds the session: the accumulated `items` /
+  `messages` / `coverage`, the `nextSkip` cursor, `remaining`, `batches`, and
+  `complete`. It lives under the same `scanCacheKey("items", …)` the old
+  one-shot memo used, so a follow-up question continues the SAME census instead
+  of restarting it, and a different filter is a different census.
+- **The cursor advances by messages actually PARSED**, not by messages fetched.
+  A window is fetched, then parsed in `AI_ITEM_PARSE_CHUNK` (default 150) sized
+  chunks, and the session is written back **after every chunk**. That is what
+  makes progress durable: the per-tool timeout can cut a call DURING the parse
+  (the fetch budget does not bound the parser), and without mid-batch persistence
+  the whole window would be lost — the live failure. A message is never counted
+  as read before its rows are in the session.
+- `runItemScan` always opens at least ONE window per call (`do/while`, not
+  `while`), so a resumed scan can never stall on a zero/elapsed budget.
+- `sessionAttachmentCoverage(session)` derives `truncated` from the CURSOR: a
+  session is truncated while `remaining > 0`, whatever any single window reported
+  about itself. `complete` is a fact about reaching the end, never an assumption.
+- Pacing: `scanCallBudgetMs()` (env `AI_SCAN_CALL_BUDGET_MS`, default 45s) sits
+  below the per-tool ceiling (100s) and the run budget (150s), so a call returns
+  its own honest "partial, continue" payload rather than a generic timeout.
+- The `scan_email_items` result carries `scannedMessages` / `remainingMessages`
+  and, when incomplete, a `continueHint` telling the model to call the tool again
+  with the same arguments. The tool description, the agent prompt, and the PDF
+  scope line all say the same thing: report `فُتح N من M` and do not call a
+  sample a total. `limit` is now described as the WINDOW size, not a sampling cap.
+- **Tests** (`ai-email-items-tool.test.ts`): `completes the census across calls
+  instead of stopping at one batch` drives three calls (2+2+1) and asserts the
+  cursor advanced `0,2,4` with the last call `isComplete`; `keeps parsed rows
+  when a call is cut mid-batch, and resumes from there` sets a 0ms call budget and
+  a 2-message parse chunk and asserts every message was read exactly once across
+  calls. `ai-email-items-timeout.test.ts` pins the honest reason and that a
+  completed multi-window census reports complete with no fabricated shortfall.
+- **Tests**: 655 api-server tests pass (was 653); tsc clean.
