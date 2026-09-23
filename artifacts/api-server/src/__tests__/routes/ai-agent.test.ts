@@ -69,7 +69,19 @@ vi.mock("@workspace/db", () => ({
 vi.mock("drizzle-orm", () => ({
   eq: () => ({}),
   and: () => ({}),
+  or: () => ({}),
+  isNull: () => ({}),
   desc: () => ({}),
+  asc: () => ({}),
+  sql: Object.assign((..._a: any[]) => ({}), { join: (..._a: any[]) => ({}) }),
+}));
+
+// Memory is read on every turn (core memory) and written after it; stub the
+// module so the loop tests stay focused on tool-calling behaviour.
+vi.mock("../../modules/ai-assistant/memory", () => ({
+  recallMemories: vi.fn(async () => []),
+  renderMemoryBlock: () => "",
+  distillMemories: vi.fn(async () => []),
 }));
 
 describe("AI assistant agent loop", () => {

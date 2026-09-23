@@ -151,13 +151,17 @@ function buildYear(count = 900): typeof envelopes {
   return out;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   envelopes = buildYear();
   searchCalls = [];
   fetched = [];
   serverCap = Number.POSITIVE_INFINITY;
   clientClass = makeClient();
   vi.clearAllMocks();
+  // The scan result cache is module-level and would leak a previous test's mail
+  // into the next one; each case here models a DIFFERENT mailbox.
+  const { clearScanCache } = await import("../../modules/ai-assistant/email");
+  clearScanCache();
 });
 
 describe("extractNumbers", () => {

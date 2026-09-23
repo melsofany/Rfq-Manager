@@ -20,6 +20,7 @@ import {
 } from "./llm";
 export { MAX_DOCUMENT_CHARS } from "./llm";
 import { loadSettings, MAX_HISTORY, type AiSettings } from "./config";
+import { recallMemories, renderMemoryBlock, distillMemories } from "./memory";
 import {
   toolDefinitions,
   executeTool,
@@ -78,6 +79,14 @@ export function systemPrompt(settings: AiSettings): string {
 قدراتك وحدودها (لا تدّعي ما ليس لديك):
 - قراءة سجل محادثات الواتساب: نعم. إرسال رسائل واتساب للموردين من داخل المحادثة: لا — لا توجد أداة لإرسال واتساب، والواتساب للقراءة فقط. إن طلب المستخدم إرسال رسالة، قل ذلك بوضوح واقترح صياغة نصية يرسلها هو بنفسه.
 - إرسال بريد إلكتروني: نعم عبر send_email. قراءة البريد: نعم. إنشاء PDF: نعم.
+
+ذاكرتك طويلة المدى (تتعلّم باستمرار):
+- لديك ذاكرة دائمة تعرفها في كل المحادثات القادمة، وتُعرض لك في أعلى هذه التعليمات تحت «ذاكرتك طويلة المدى».
+- عندما يقول المستخدم «افتكر إن…» أو «من الآن اعتبر…» أو يعلّمك قاعدة عمل، استخدم remember_fact بمفتاح قصير ثابت وقيمة كاملة. تعليم نفس المفتاح ثانيةً يُحدِّث القيمة.
+- قبل أن تقول «لا أعرف» عن شيء قد يكون تعليمًا سابقًا، استخدم recall_memory للبحث في ذاكرتك.
+- عندما يقول المستخدم إن معلومة قديمة أو خاطئة، استخدم forget_memory لإنهاء صلاحيتها.
+- عند تعارض معلومة محفوظة مع نتيجة أداة حديثة، الأداة هي الأصح — وحدّث الذاكرة عبر remember_fact.
+- لا تحفظ في الذاكرة أرقامًا متغيّرة (عدد رسائل، رصيد لحظي، سعر متغيّر) — هذه تُقرأ من الأدوات كل مرّة.
 
 أسلوب العمل (مهم جدًا):
 - استخدم supplier_overview عند السؤال عن مورد (تجلب كل شيء في استدعاء واحد).
@@ -202,7 +211,23 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const ctx: ToolContext = { settings, phone: input.phone, outbox: [] };
 
   const history = await loadHistory(input.phone);
-  const system: ChatMessage = { role: "system", content: systemPrompt(settings) };
+
+  // Core memory: the memories most relevant to THIS message are injected into
+  // the system prompt, so a fact taught weeks ago is available without the model
+  // having to spend a tool round asking for it (and without the whole table
+  // crowding the context). Retrieval is local keyword scoring — no model quota.
+  const memories = await recallMemories({
+    phone: input.phone,
+    query: userText,
+    limit: 12,
+    trackUse: true,
+  });
+  const memoryBlock = renderMemoryBlock(memories);
+
+  const system: ChatMessage = {
+    role: "system",
+    content: systemPrompt(settings) + memoryBlock,
+  };
 
   let userContent: string | ContentPart[];
   if (input.imageUrl) {
@@ -336,6 +361,16 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       : userText;
   await saveMessage(input.phone, "user", historyText);
   await saveMessage(input.phone, "assistant", finalText, usedTools.length ? usedTools : null);
+
+  // Learn from the exchange. Fire-and-forget: the reply is already produced, and
+  // a memory-write failure must never turn a good answer into an error the
+  // operator sees. The distiller uses only the operator's own words (no model
+  // call), so this costs none of the scarce daily quota.
+  void distillMemories({
+    phone: input.phone,
+    userText,
+    assistantText: finalText,
+  }).catch((err) => logger.warn({ err }, "AI assistant: background learning failed"));
 
   return { reply: finalText, attachments: ctx.outbox };
 }
