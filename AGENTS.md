@@ -1127,3 +1127,73 @@ learns continuously" capability.
 - **616 api-server** + 45 portal tests pass; tsc (libs + api-server + portal)
   clean; repo-wide prettier clean; api-server + portal builds clean.
 - Deploy: pending — push/PR only on explicit request.
+
+## The assistant stops repeating itself and stops inventing document numbers
+
+Two reliability upgrades to the tool loop, modelled on proven open-source agent
+patterns: the LangGraph "generator → critic" self-correction loop, and the
+per-run tool-result cache recommended by the OpenAI Agents SDK / Hermes guidance.
+
+### 1. Identical tool calls are executed once per run
+
+- **Pattern**: a light deduplication layer between the model's tool calls and the
+  executor. The cache key is `tool name + canonicalised arguments`; the _promise_
+  is cached (not the resolved value) because the calls in one round already run
+  concurrently via `Promise.all`.
+- **Why it matters here specifically**: Gemini's free tier is **20 requests/day
+  per model**, so every wasted round is a fraction of the day's ability to answer.
+  A model that re-issues the same search when the first result did not match its
+  expectation was burning that budget on work already done — one of the recorded
+  ways this assistant goes silent.
+- **Cache scope is the RUN, not the process.** A later question must see fresh
+  data, so `toolCache` is a local `Map` inside `runAgent`. Do not hoist it.
+- **Every `tool_call_id` still gets a response**: the memoized content is echoed
+  for the duplicate call too, otherwise the provider rejects a `tool_calls` turn
+  with an unanswered id.
+- `toolCacheKey()` sorts object keys recursively, so `{"a":1,"b":2}` and
+  `{"b":2,"a":1}` dedupe, while two calls differing in any value stay distinct.
+
+### 2. A deterministic grounding verifier before the reply is sent
+
+- **The failure it targets** is the documented one: asked about a supplier, the
+  model answered «عروض 237، 232…» and on challenge **invented** a supplier name.
+  Prompt rules alone had not prevented it.
+- **Mechanism**: `findGroundingNumbers()` extracts document-id-shaped tokens
+  (letters AND digits, e.g. `26R011936`, `P26E13477`, `INV-2026-000045`) from the
+  draft answer; `findUngroundedNumbers()` checks them against a **grounding
+  ledger** built from every tool result plus the operator's own words and the
+  conversation history. Any token that appears nowhere in that evidence triggers
+  `verifyGroundedAnswer()` — one extra `toolChoice:"none"` round that names the
+  unverifiable tokens and forces the model to remove them or say the information
+  is unavailable.
+- **The critic is deterministic — no model call to decide.** The check is token
+  containment, so the extra provider request is spent **only when a fabrication
+  is actually suspected**, never on an ordinary answer. This is deliberate: an
+  LLM-judge critic would spend the same daily quota whose exhaustion is this
+  assistant's recorded failure mode.
+- **Guardrails that must not regress**:
+  - Only mixed alphanumeric ids are challenged. Money, quantities, ids and years
+    are excluded by shape, so correct prose is never rejected for containing a
+    plain number.
+  - A token that is a **substring** of a grounded id is accepted (quoting
+    `011936` from `26R011936` is fine); an **extension** is not (`26R0119367` is a
+    different id).
+  - The verification round runs only if at least `VERIFY_MIN_REMAINING_MS` (30s)
+    is left in `AGENT_BUDGET_MS`. Past that a late correction is worse than the
+    answer the operator is already waiting for.
+  - **The draft is kept if verification throws or returns nothing** — an
+    unavailable verifier must never lose a good reply.
+- The system prompt states both behaviours (no repeated identical calls; never
+  write a document number that did not appear in a tool result), so the model
+  usually complies without the loop having to intervene.
+
+- Tests: `ai-agent.test.ts` grew by **8** (dedup: an identical call runs once,
+  argument key order is equivalent, differing args still both run; grounding: a
+  fabricated number is corrected, a real number is not challenged, an
+  operator-stated number is accepted, the draft is kept on verifier failure, and
+  token classification). **6 of them fail against the pre-fix code**, verified by
+  temporarily disabling the cache and the verification block — they guard the
+  behaviour, not merely the code path.
+- **624 api-server tests** (was 616) pass; tsc (libs + api-server) clean;
+  repo-wide prettier clean; api-server build clean.
+- Deploy: pending — push/PR only on explicit request.
