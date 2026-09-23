@@ -1197,3 +1197,61 @@ per-run tool-result cache recommended by the OpenAI Agents SDK / Hermes guidance
 - **624 api-server tests** (was 616) pass; tsc (libs + api-server) clean;
   repo-wide prettier clean; api-server build clean.
 - Deploy: pending — push/PR only on explicit request.
+
+## The assistant knows the real names, and refuses to give up too early
+
+Follow-up sharpening of the same loop (PR #163 landed the dedup + number check).
+
+### 3. The real supplier/customer vocabulary is prefetched into the prompt
+
+- **The lesson**: the live «هاي فولت» incident. Asked which supplier PO 37
+  belonged to, the model invented «شركة النور» / «الشركة المصرية». Prompt rules
+  alone had not stopped it, and only a human asking again caught it.
+- **Mechanism**: `entityVocabulary()` (db-tools) reads the real names in two
+  bounded selects, caches them for `ENTITY_TTL_MS` (10 min), and
+  `renderVocabularyBlock()` puts the list + internal ids in the system prompt.
+  No model quota is spent — it is two cheap queries — and it turns "did I
+  invent this name?" from an act of faith into a lookup the model can do.
+- **Rediscovery cadence matters**: the cache lives at MODULE scope, unlike the
+  per-run tool cache. Names change on the order of days, so re-reading them on
+  every one of the day's 20 requests would be pure waste; 10 minutes is the
+  agreed staleness. `settings.allowDatabase` gates the read entirely.
+- **A read failure returns empty lists**, never throws: a database hiccup must
+  degrade to "no vocabulary", not block the answer.
+
+### 4. A draft naming an unknown company is corrected before it is sent
+
+- `findUnknownEntityNames()` scans the draft for name-shaped runs and compares
+  them to the vocabulary, flagging any run that shares no distinguishing token.
+- **The check is deliberately NARROW**, because a false flag is worse than the
+  bug: it would make the assistant "correct" a name it got right. So it only
+  looks at runs anchored on a company FORM word (`شركة`/`مؤسسة`/`company`), and
+  accepts a run when ANY token matches — hence a correct short form
+  (`شركة الأمل` for `شركة الأمل للتوريدات`) passes.
+- **Generic words are excluded from the match test.** Marker words and
+  `لل…`-prefixed suffixes (`للتوريدات`) are shared by most Arabic company names
+  and say nothing about identity; counting them would accept every invented name
+  whose suffix looks familiar (`مؤسسة الدلتا للتوريدات` vs `شركة الأمل
+للتوريدات`).
+- Arabic is normalised before comparison (hamza/alef, taa marbuta, yaa, harakat,
+  tatweel) and a glued connective (`بشركة` → `شركة`) is stripped both for
+  matching and for what gets shown back to the model.
+- A flag reuses the same single correction round as the number check, and the
+  cause is logged (`unknownNames`) so a bad flag would be visible, not silent.
+
+### 5. A refusal that answered nothing gets one re-ask
+
+- `isRefusalSentence()` matches explicit "I found nothing" phrasing, and only
+  when the draft also cites no id and no 2+ digit number (`looksLikeDataFound`).
+- `RETRY_MIN_REMAINING_MS` (35s) and `MAX_REFUSAL_REASKS` (1) bound it: exactly
+  one second attempt, only with budget to spend, and the loop stops if the
+  re-ask still comes back empty. Naming the words `مورد`/`أمر` as "data" was
+  rejected on purpose — they appear inside the refusal sentence itself.
+- Tests: `ai-entity-names.test.ts` covers the real checker (invented name
+  flagged, existing name accepted, short form accepted, spelling variants,
+  shared-token acceptance, empty-vocabulary silence, ordinary prose untouched);
+  `ai-agent.test.ts` covers the prompt injection, the corrective round, and the
+  re-ask bounds. **3 of the new loop tests fail when the name check and the
+  re-ask are disabled**, confirmed by temporarily stubbing both.
+- **638 api-server tests** (was 624) pass; tsc clean; prettier clean.
+- Deploy: pending — push/PR only on explicit request.

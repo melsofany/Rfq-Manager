@@ -84,11 +84,33 @@ vi.mock("../../modules/ai-assistant/memory", () => ({
   distillMemories: vi.fn(async () => []),
 }));
 
+// The entity vocabulary is prefetched from the database before every answer.
+// Stub it so the loop tests do not need the real table bindings, and so a case
+// can control exactly what the "known names" list contains.
+type Vocab = {
+  suppliers: { id: number | null; name: string }[];
+  customers: { id: number | null; name: string }[];
+};
+const entityVocabulary = vi.fn(async (): Promise<Vocab> => ({ suppliers: [], customers: [] }));
+const findUnknownEntityNames = vi.fn((_t: string, _k: unknown) => [] as string[]);
+vi.mock("../../modules/ai-assistant/db-tools", () => ({
+  entityVocabulary: (...a: unknown[]) => entityVocabulary(...(a as [])),
+  findUnknownEntityNames: (t: string, k: unknown) => findUnknownEntityNames(t, k),
+}));
+
 describe("AI assistant agent loop", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks() only clears recorded calls; queued `...Once` results would
+    // survive into the next case and make an unrelated test see a tool call.
+    chatCompletion.mockReset();
     inserts.length = 0;
     extractDocumentText.mockResolvedValue(null);
+    // Default: no known names, and the name checker finds nothing — the loop
+    // tests below exercise the number check. The name check is covered by the
+    // dedicated suites (mirroring db-tools' real implementation).
+    entityVocabulary.mockResolvedValue({ suppliers: [], customers: [] });
+    findUnknownEntityNames.mockReturnValue([]);
   });
 
   it("executes a tool call and returns the final answer", async () => {
@@ -559,6 +581,121 @@ describe("AI assistant agent loop", () => {
       // An EXTENDED id is not the id the tool returned.
       expect(findUngroundedNumbers("الطلب 26R0119367", grounded)).toEqual(["26R0119367"]);
       expect(findUngroundedNumbers("الطلب 26R099999", grounded)).toEqual(["26R099999"]);
+    });
+  });
+
+  // ── Entity-name grounding (the «هاي فولت» lesson) ───────────────────────────
+  describe("name grounding", () => {
+    it("corrects an answer that names a supplier the system does not have", async () => {
+      entityVocabulary.mockResolvedValue({
+        suppliers: [{ id: 167, name: "هاي فولت" }],
+        customers: [],
+      });
+      findUnknownEntityNames.mockReturnValue(["شركة النور"]);
+      chatCompletion
+        .mockResolvedValueOnce({
+          content: "أمر الشراء 37 خاص بشركة النور للتوريدات.",
+          finishReason: "stop",
+          toolCalls: [],
+        })
+        .mockImplementationOnce((args: any) => {
+          const instruction = args.messages[args.messages.length - 1];
+          expect(String(instruction.content)).toContain("شركة النور");
+          expect(String(instruction.content)).toContain("قوائم النظام");
+          return Promise.resolve({
+            content: "أمر الشراء 37 خاص بهاي فولت.",
+            finishReason: "stop",
+            toolCalls: [],
+          });
+        });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "أمر شراء 37 لمين؟" });
+
+      expect(out.reply).toBe("أمر الشراء 37 خاص بهاي فولت.");
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ unknownNames: ["شركة النور"] }),
+        expect.stringContaining("absent from every tool result"),
+      );
+    });
+
+    it("injects the real supplier vocabulary into the system prompt", async () => {
+      entityVocabulary.mockResolvedValue({
+        suppliers: [{ id: 167, name: "هاي فولت" }],
+        customers: [{ id: 4, name: "المصرية للحفر" }],
+      });
+      chatCompletion.mockResolvedValueOnce({ content: "تم.", finishReason: "stop", toolCalls: [] });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      await runAgent({ phone: "2010", text: "?" });
+
+      const system = chatCompletion.mock.calls[0][0].messages[0];
+      expect(String(system.content)).toContain("هاي فولت");
+      expect(String(system.content)).toContain("المصرية للحفر");
+      expect(String(system.content)).toContain("لا تخترع اسمًا");
+    });
+  });
+
+  // ── Premature refusal re-ask ────────────────────────────────────────────────
+  describe("premature refusal", () => {
+    it("re-asks once when the model gives up without searching", async () => {
+      chatCompletion
+        .mockResolvedValueOnce({
+          content: "لا يوجد مورد بهذا الاسم.",
+          finishReason: "stop",
+          toolCalls: [],
+        })
+        .mockImplementationOnce((args: any) => {
+          const instruction = args.messages[args.messages.length - 1];
+          expect(String(instruction.content)).toContain("لا تُنهِ الرد قبل أن تحاول");
+          return Promise.resolve({
+            content: "بحثت في جدول الموردين باسم «النور» ولم أجد نتيجة.",
+            finishReason: "stop",
+            toolCalls: [],
+          });
+        });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "فين مورد النور؟" });
+
+      expect(chatCompletion).toHaveBeenCalledTimes(2);
+      expect(out.reply).toContain("بحثت في جدول الموردين");
+    });
+
+    it("does NOT re-ask an answer that already carries data", async () => {
+      chatCompletion.mockResolvedValueOnce({
+        content: "لم أجد طلبات جديدة، ويوجد 12 بندًا مسجلًا في الأمر.",
+        finishReason: "stop",
+        toolCalls: [],
+      });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      await runAgent({ phone: "2010", text: "?" });
+      // A concrete count means the model did real work; the «لم أجد» clause must
+      // not be read as a bare refusal and re-asked.
+      expect(chatCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    it("re-asks at most once even if the model keeps refusing", async () => {
+      chatCompletion.mockResolvedValue({
+        content: "لا توجد نتائج.",
+        finishReason: "stop",
+        toolCalls: [],
+      });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "?" });
+      expect(out.reply).toBe("لا توجد نتائج.");
+      // 1 draft + 1 re-ask only.
+      expect(chatCompletion).toHaveBeenCalledTimes(2);
+    });
+
+    it("classifies refusal language without misfiring on ordinary prose", async () => {
+      const { isRefusalSentence } = await import("../../modules/ai-assistant/agent");
+      expect(isRefusalSentence("لا يوجد مورد بهذا الاسم")).toBe(true);
+      expect(isRefusalSentence("لم أجد نتائج في البريد")).toBe(true);
+      expect(isRefusalSentence("هذه المعلومة غير متوفرة حاليًا")).toBe(true);
+      expect(isRefusalSentence("no results found")).toBe(true);
+      // Data-bearing prose is not a refusal.
+      expect(isRefusalSentence("الطلب 26R011936 مسجل في النظام")).toBe(false);
+      expect(isRefusalSentence("يوجد 12 بندًا في الأمر")).toBe(false);
     });
   });
 });
