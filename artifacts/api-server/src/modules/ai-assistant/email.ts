@@ -822,15 +822,63 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
   }
 }
 
-/** Messages whose attachments are opened per census. Envelope+body fetch is
- * expensive, so an attachment scan is bounded much more tightly than the
- * envelope census. Overridable so the truncation path is testable. */
-export function attachmentScanBudget(): number {
-  return Number(process.env.AI_ATTACHMENT_SCAN_BUDGET) || 120;
+/**
+ * Whether the BYTES are a PDF, by magic number.
+ *
+ * The declared MIME type is not trustworthy evidence of the content. EDC's
+ * «Quotation Import» / «RFQ» notices label their PDF attachments
+ * `application/doc` (verified on live mail: 281 of 305 EDC attachments), so a
+ * filter that accepted only `application/pdf` scanned a whole year of mail and
+ * opened nothing — the assistant then truthfully reported that the item tables
+ * were inside files it could not read. Content is the only signal that cannot
+ * be mislabelled, so it is checked whenever the bytes are available.
+ */
+export function isPdfContent(buffer: Buffer | null | undefined): boolean {
+  if (!buffer || buffer.length < 5) return false;
+  return buffer.subarray(0, 5).toString("latin1") === "%PDF-";
 }
 
-/** Wall-clock ceiling for one attachment fetch pass. */
-const ATTACHMENT_SCAN_TIME_BUDGET_MS = 60_000;
+/**
+ * Whether an attachment is a PDF, using every available signal.
+ *
+ * MIME, filename and magic bytes are ORed rather than demanded together: the
+ * declared type is the MOST likely to be wrong (see `isPdfContent`), the
+ * extension is what a human sees, and the bytes are only present once the
+ * attachment has been fetched. Requiring all three would keep EDC's mail
+ * unreadable, which is the exact failure being fixed.
+ */
+export function isPdfAttachment(a: {
+  mimeType?: string | null;
+  filename?: string | null;
+  content?: Buffer | null;
+}): boolean {
+  if ((a.mimeType ?? "").trim().toLowerCase() === "application/pdf") return true;
+  if (/\.pdf$/i.test((a.filename ?? "").trim())) return true;
+  return isPdfContent(a.content);
+}
+
+/**
+ * Messages whose attachments are opened per census.
+ *
+ * Envelope+body fetch is the expensive part (measured live: ~67ms/message on
+ * EDC's 35KB PDFs, so 400 messages ≈ 27s). The default is set so a year of a
+ * genuinely large sender fits inside one call: this mailbox matched 3,749
+ * messages from a single sender, and the previous 120-message cap analysed a
+ * thirty-second of it while reporting a total. Overridable so the truncation
+ * path is testable.
+ */
+export function attachmentScanBudget(): number {
+  return Number(process.env.AI_ATTACHMENT_SCAN_BUDGET) || 400;
+}
+
+/**
+ * Wall-clock ceiling for one attachment fetch pass.
+ *
+ * Above the observed 27s for 400 messages so the message budget normally bites
+ * first, and comfortably below the agent's own 150s ceiling — a census that
+ * overruns it must still have time to answer with what it read.
+ */
+const ATTACHMENT_SCAN_TIME_BUDGET_MS = 75_000;
 
 /** Coverage of an attachment pass — never report a partial read as complete. */
 export interface AttachmentCoverage {
@@ -922,8 +970,17 @@ export async function fetchMessageAttachments(
               }
               try {
                 const parsed = await simpleParser(source);
+                // Match on content as well as the declared type: EDC labels its
+                // PDFs `application/doc`, so an exact-mime filter silently found
+                // nothing and the whole census came back empty.
                 const attachments = (parsed.attachments ?? [])
-                  .filter((a) => (a.contentType ?? "").toLowerCase() === "application/pdf")
+                  .filter((a) =>
+                    isPdfAttachment({
+                      mimeType: a.contentType,
+                      filename: a.filename,
+                      content: a.content as Buffer,
+                    }),
+                  )
                   .map((a) => ({
                     filename: a.filename ?? "attachment.pdf",
                     mimeType: a.contentType ?? null,

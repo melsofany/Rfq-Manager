@@ -206,7 +206,7 @@ export interface AggregatedPart {
 export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
   const map = new Map<string, AggregatedPart>();
   for (const it of items) {
-    const key = (it.partNo ?? it.description).toUpperCase();
+    const key = itemKey(it);
     if (!key) continue;
     const hit = map.get(key);
     if (hit) {
@@ -223,6 +223,44 @@ export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
     }
   }
   return [...map.values()].sort((a, b) => b.qty - a.qty || b.occurrences - a.occurrences);
+}
+
+/**
+ * The identity a line is grouped by.
+ *
+ * The part number when there is one; otherwise the description. Rows with no
+ * part number are common on EDC's RFQ layout (the Part No cell overflows), and
+ * some of their descriptions are only fragments the PDF's columns left behind
+ * (observed literally: «RCV», a location tag). Those fragments out-ranked real
+ * parts on live mail — a 3-character string appearing on every order is not an
+ * item — so an implausibly short description does not become its own group.
+ * Description keys are never normalised further: stripping numbers would merge
+ * genuinely different parts («50 MM» / «70 MM»).
+ */
+export function itemKey(it: ParsedLineItem): string {
+  const partNo = (it.partNo || "").trim();
+  if (partNo) return partNo.toUpperCase();
+  const description = (it.description || "").trim();
+  if (description.length < MIN_DESCRIPTION_KEY_LEN) return "";
+  return description.toUpperCase();
+}
+
+/**
+ * Shortest description that can stand in for a part number. Below this the text
+ * is page furniture, not an item name.
+ */
+const MIN_DESCRIPTION_KEY_LEN = 4;
+
+/**
+ * Roll parsed lines up ranked by how often a part was ordered.
+ *
+ * «أكتر بند اتكرر» is about FREQUENCY, not volume: a single huge line (1,000
+ * pcs ordered once) would top a quantity-ranked list over a small part that
+ * appears on every order. The default quantity ranking answers a different
+ * question, so the frequency view is its own sort rather than a re-slice.
+ */
+export function aggregateItemsByOccurrence(items: ParsedLineItem[]): AggregatedPart[] {
+  return aggregateItems(items).sort((a, b) => b.occurrences - a.occurrences || b.qty - a.qty);
 }
 
 /** Items parsed from one message. */

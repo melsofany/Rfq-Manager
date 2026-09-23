@@ -15,7 +15,8 @@
  */
 import { describe, it, expect } from "vitest";
 
-const { parseLineItems, aggregateItems } = await import("../../modules/ai-assistant/email-items");
+const { parseLineItems, aggregateItems, aggregateItemsByOccurrence, itemKey } =
+  await import("../../modules/ai-assistant/email-items");
 
 /** Verbatim text of a real EDC RFQ attachment (26R011954). */
 const RFQ_TEXT = `Page 1 of 1
@@ -168,5 +169,68 @@ describe("aggregateItems", () => {
     ]);
     expect(agg).toHaveLength(1);
     expect(agg[0].qty).toBe(5);
+  });
+
+  it("does not let a 3-character description fragment top the list", () => {
+    // Observed on live EDC mail: the id-less description cell held just «RCV»
+    // (a location tag) on 33 lines, out-ranking every real part. An
+    // implausibly short description is page furniture, not an item.
+    const agg = aggregateItems([
+      ...Array.from({ length: 9 }, (_, i) => ({
+        lineNo: i + 1,
+        partNo: null,
+        description: "RCV",
+        qty: 1,
+        uom: "Each",
+      })),
+      { lineNo: 10, partNo: null, description: "REAL PART NAME", qty: 2, uom: "Each" },
+    ]);
+    expect(agg).toHaveLength(1);
+    expect(agg[0].description).toBe("REAL PART NAME");
+  });
+});
+
+describe("itemKey", () => {
+  it("prefers the part number and case-folds it", () => {
+    expect(itemKey({ lineNo: 1, partNo: "abc-1", description: "", qty: 1, uom: null })).toBe(
+      "ABC-1",
+    );
+  });
+
+  it("uses the description when there is no part number", () => {
+    expect(itemKey({ lineNo: 1, partNo: null, description: "Real Part", qty: 1, uom: null })).toBe(
+      "REAL PART",
+    );
+  });
+
+  it("drops an implausibly short description and an empty line", () => {
+    expect(itemKey({ lineNo: 1, partNo: null, description: "RCV", qty: 1, uom: null })).toBe("");
+    expect(itemKey({ lineNo: 1, partNo: null, description: "", qty: 1, uom: null })).toBe("");
+    expect(itemKey({ lineNo: 1, partNo: "  ", description: "", qty: 1, uom: null })).toBe("");
+  });
+
+  it("does not merge genuinely different parts that differ only by number", () => {
+    // Only the partNo wins the key; descriptions are never number-stripped.
+    const a = itemKey({ lineNo: 1, partNo: null, description: "CABLE 50 MM", qty: 1, uom: null });
+    const b = itemKey({ lineNo: 2, partNo: null, description: "CABLE 70 MM", qty: 1, uom: null });
+    expect(a).not.toBe(b);
+  });
+});
+
+describe("aggregateItemsByOccurrence", () => {
+  it("leads with the most repeated part, not the largest quantity", () => {
+    const items = [
+      // small part ordered on three separate documents
+      { lineNo: 1, partNo: "SMALL", description: "s", qty: 1, uom: "Each" },
+      { lineNo: 2, partNo: "SMALL", description: "s", qty: 1, uom: "Each" },
+      { lineNo: 3, partNo: "SMALL", description: "s", qty: 1, uom: "Each" },
+      // one huge one-off order
+      { lineNo: 4, partNo: "BIG", description: "b", qty: 5000, uom: "Each" },
+    ];
+    const byOcc = aggregateItemsByOccurrence(items);
+    expect(byOcc[0].partNo).toBe("SMALL");
+    expect(byOcc[0].occurrences).toBe(3);
+    // The quantity view still leads with the big one — different question.
+    expect(aggregateItems(items)[0].partNo).toBe("BIG");
   });
 });
