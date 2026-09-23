@@ -16,7 +16,7 @@
  * run a fuller check on a machine with a key, but nothing in the normal suite
  * calls it.
  */
-import { routeQuestion, type QueryIntent, type QueryPath } from "./router";
+import { routeQuestion, type QueryIntent, type QueryPath, type SourceScope } from "./router";
 
 export interface EvalCase {
   /** The question exactly as an operator would type it. */
@@ -25,6 +25,16 @@ export interface EvalCase {
   expectedIntents: QueryIntent[];
   /** The path it must take — this is the safety-critical assertion. */
   expectedPath: QueryPath;
+  /**
+   * The required SOURCE, when the operator named one.
+   *
+   * `allowedEvidence` says what evidence an answer may cite; this says what the
+   * ROUTER must recognise as a constraint. They are separate because a question
+   * can be answerable from several sources yet have one demanded — «من الميل مش
+   * قاعدة البيانات» is answerable from the database and must NOT be, which is the
+   * live failure this asserts against.
+   */
+  expectedSourceScope?: "email" | "any";
   /** Tools the answer would legitimately need (advisory, for the live half). */
   allowedTools?: string[];
   /** The hard ceiling this question should be answered within, in ms. */
@@ -109,6 +119,7 @@ export const EVAL_CASES: EvalCase[] = [
     question: "اعمل حصر لكل PO في البريد خلال 2026",
     expectedIntents: ["analytics", "email_search"],
     expectedPath: "deep",
+    expectedSourceScope: "email",
     allowedTools: ["scan_emails", "scan_email_items"],
     note: "the 3,710-message census: must not be answered from a sample",
   },
@@ -304,6 +315,7 @@ export const EVAL_CASES: EvalCase[] = [
     question: "ابحث في البريد عن إيميلات شركة EDC",
     expectedIntents: ["email_search"],
     expectedPath: "deep",
+    expectedSourceScope: "email",
     allowedTools: ["search_emails", "scan_emails"],
     expectedInvariants: ["يذكر عدد الرسائل المفحوصة والصندوق"],
     allowedEvidence: ["email"],
@@ -330,12 +342,14 @@ export const EVAL_CASES: EvalCase[] = [
     question: "اعمل حصر لكل أوامر الشراء في البريد خلال السنة",
     expectedIntents: ["analytics", "email_search"],
     expectedPath: "deep",
+    expectedSourceScope: "email",
     allowedTools: ["scan_emails", "scan_email_items"],
   },
   {
     question: "قارن أرقام أوامر الشراء في البريد مع النظام",
     expectedIntents: ["analytics", "email_search"],
     expectedPath: "deep",
+    expectedSourceScope: "email",
     allowedTools: ["scan_emails", "find_missing_records"],
   },
   {
@@ -348,6 +362,7 @@ export const EVAL_CASES: EvalCase[] = [
     question: "الأرقام اللي في البريد ومش موجودة في النظام",
     expectedIntents: ["analytics", "email_search"],
     expectedPath: "deep",
+    expectedSourceScope: "email",
     allowedTools: ["scan_emails", "find_missing_records"],
   },
   {
@@ -742,6 +757,51 @@ export const EVAL_CASES: EvalCase[] = [
     expectedIntents: ["analytics", "smalltalk", "document_lookup"],
     expectedPath: "deep",
   },
+
+  // ── Source scope (the live «من الميل مش قاعدة البيانات» failure) ──────────
+  // Each of these is answerable from the database AND must not be: the operator
+  // demanded the mailbox, and a database census presented as the answer about the
+  // mail is a census of a different dataset.
+  {
+    question: "بقولك من الميل مش قاعده البيانات، ادخل وافحص كل أوامر الشراء",
+    expectedIntents: ["email_search", "analytics", "report"],
+    expectedPath: "deep",
+    expectedSourceScope: "email",
+    allowedEvidence: ["email", "attachment"],
+    note: "the exact live phrasing — the exclusion must be read as a constraint",
+  },
+  {
+    question: "هات أوامر الشراء من البريد",
+    expectedIntents: ["email_search", "analytics", "report"],
+    expectedPath: "deep",
+    expectedSourceScope: "email",
+    allowedEvidence: ["email", "attachment"],
+  },
+  {
+    question: "عايز الأرقام دي مش من قاعدة البيانات",
+    expectedIntents: ["email_search", "analytics", "report"],
+    expectedPath: "deep",
+    expectedSourceScope: "email",
+    allowedEvidence: ["email", "attachment"],
+    note: "the exclusion without a mailbox noun must still scope to email",
+  },
+  {
+    question: "افحص البريد واعمل حصر كامل بنسبة 100%",
+    expectedIntents: ["email_search", "report", "analytics"],
+    expectedPath: "deep",
+    expectedSourceScope: "email",
+    allowedEvidence: ["email", "attachment"],
+  },
+  {
+    // The other side of the same coin: an ordinary database question must NOT be
+    // scoped to email, or the scope warning would fire on every answer.
+    question: "كام أمر شراء عندنا النهاردة؟",
+    expectedIntents: ["count_aggregate", "analytics", "document_lookup"],
+    expectedPath: "fast",
+    expectedSourceScope: "any",
+    allowedEvidence: ["database"],
+    note: "no source named — the scope must stay open",
+  },
 ];
 
 export interface EvalCaseResult {
@@ -749,6 +809,7 @@ export interface EvalCaseResult {
   passed: boolean;
   intent: QueryIntent;
   path: QueryPath;
+  sourceScope: SourceScope;
   reason: string;
   /** Only the offline router portion is timed here; it must be negligible. */
   routeMs: number;
@@ -761,6 +822,17 @@ export interface EvalReport {
   accuracy: number;
   /** Fraction whose PATH matched — the safety-critical metric (0–1). */
   pathAccuracy: number;
+  /**
+   * Fraction whose SOURCE SCOPE matched, over the cases that label one.
+   *
+   * Reported separately from accuracy because it is the other safety-critical
+   * metric: a question that demanded the mailbox but was scoped "any" can be
+   * answered from the database, which is exactly how a census of the wrong
+   * dataset gets reported as the answer about the mail.
+   */
+  scopeAccuracy: number;
+  /** Cases that labelled a scope (the denominator of `scopeAccuracy`). */
+  scopeCases: number;
   /** Median router time across the set, in ms. */
   medianRouteMs: number;
   /** Worst router time, in ms. */
@@ -784,11 +856,17 @@ export function runOfflineEvaluation(cases: EvalCase[] = EVAL_CASES): EvalReport
     const routeMs = performance.now() - started;
     const intentOk = c.expectedIntents.includes(plan.intent);
     const pathOk = plan.path === c.expectedPath;
+    // A scope label is only asserted when the case carries one: most questions
+    // name no source, and demanding "any" from them would turn a default into a
+    // claim the case never made.
+    const scopeOk =
+      c.expectedSourceScope === undefined || plan.sourceScope === c.expectedSourceScope;
     return {
       question: c.question,
-      passed: intentOk && pathOk,
+      passed: intentOk && pathOk && scopeOk,
       intent: plan.intent,
       path: plan.path,
+      sourceScope: plan.sourceScope,
       reason: plan.reason,
       routeMs,
     };
@@ -801,12 +879,22 @@ export function runOfflineEvaluation(cases: EvalCase[] = EVAL_CASES): EvalReport
       : (sortedTimes[Math.floor(sortedTimes.length / 2)] ?? sortedTimes[0] ?? 0);
   const passed = results.filter((r) => r.passed).length;
   const pathPassed = results.filter((r, i) => r.path === cases[i].expectedPath).length;
+  // Scope is scored only over the labelled cases, so adding unlabelled questions
+  // can never move the metric.
+  const scopeIdx = cases
+    .map((c, i) => (c.expectedSourceScope !== undefined ? i : -1))
+    .filter((i) => i >= 0);
+  const scopePassed = scopeIdx.filter(
+    (i) => results[i].sourceScope === cases[i].expectedSourceScope,
+  ).length;
 
   return {
     total: results.length,
     passed,
     accuracy: results.length ? passed / results.length : 0,
     pathAccuracy: results.length ? pathPassed / results.length : 0,
+    scopeAccuracy: scopeIdx.length ? scopePassed / scopeIdx.length : 1,
+    scopeCases: scopeIdx.length,
     medianRouteMs: Number(median.toFixed(3)),
     maxRouteMs: Number(Math.max(0, ...sortedTimes).toFixed(3)),
     failures: results.filter((r) => !r.passed),
