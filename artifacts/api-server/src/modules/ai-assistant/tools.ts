@@ -368,11 +368,18 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
               type: "integer",
               description: "عدد البنود الأكثر تكرارًا في الملخص (افتراضي 50)",
             },
+            minOrders: {
+              type: "integer",
+              description:
+                "أقل عدد أوامر يجب أن يظهر فيها البند ليُدرج في ترتيب التكرار (افتراضي 2). " +
+                "القاعدة المطلوبة: البند الذي ورد في أمر واحد يُستبعد حتى لو كانت كميته ضخمة. " +
+                "مرّر 1 فقط إذا طلب المستخدم صراحةً ضم البنود أحادية الظهور.",
+            },
             ordering: {
               type: "string",
               enum: ["mostRepeated", "qty"],
               description:
-                "ترتيب البنود: mostRepeated (افتراضي) = الأكثر تكرارًا/ورودًا، " +
+                "ترتيب البنود: mostRepeated (افتراضي) = الأكثر تكرارًا/ورودًا في أوامر الشراء، " +
                 "qty = الأكبر إجمالي كمية.",
             },
             contains: {
@@ -1074,11 +1081,44 @@ export async function executeTool(
         // Default to FREQUENCY: «أكتر بند اتكرر» is the common ask, and ranking
         // by quantity alone answers a different question (one huge one-off order
         // would top it). The quantity view stays available for volume questions.
+        //
+        // In frequency mode a part seen on a single order is excluded by default
+        // (`minOrders` 2): that is the operator's explicit rule — a 7,000-piece
+        // line ordered once must not appear in a "most repeated" list.
         const ordering = args.ordering === "qty" ? "qty" : "mostRepeated";
+        // A `contains` lookup answers "where did THIS part appear?" — a single
+        // occurrence is a valid answer there, so the singleton exclusion applies
+        // only to the ranked list, never to a targeted lookup.
+        const minOrders = contains ? 1 : Math.max(1, Number(args.minOrders ?? 2) || 2);
         const ranked =
           ordering === "qty"
             ? aggregateItems(matchedItems)
-            : aggregateItemsByOccurrence(matchedItems);
+            : aggregateItemsByOccurrence(matchedItems, minOrders);
+
+        const coverage = parsed.coverage;
+        // A complete scan that found ZERO files is not "the orders have no
+        // items" — it means no attachment was recognised. Saying so prevents the
+        // honest-looking "0 بنود، الحصر كامل" the model would otherwise report.
+        const noAttachments = coverage.attachments === 0;
+        // "Complete" means every matched message's attachments were opened. The
+        // flag must NOT rest on `attachmentCoverage.truncated` alone: that is set
+        // from the message budget, and a pass can also stop on TIME with the
+        // budget unspent. Comparing opened against matched catches both.
+        const allOpened = coverage.messages >= census.matched;
+        const complete = !noAttachments && coverage.unreadable === 0 && !truncated && allOpened;
+        // The item counts are only ever facts about the messages actually OPENED.
+        // State the scope beside them so a capped scan cannot be relayed as the
+        // whole year — the mailbox matched thousands, and a sample is not a total.
+        const scope =
+          !allOpened || truncated
+            ? `النطاق: أحدث ${coverage.messages} رسالة من ${census.matched} مطابقة (لم يُفحص الباقي)`
+            : `النطاق: كل الرسائل المطابقة (${census.matched})`;
+        const partialDetail = [
+          coverage.unreadable > 0 ? `تعذّرت قراءة ${coverage.unreadable} رسالة` : "",
+          !allOpened || truncated ? "ولم تُفحص كل الرسائل" : "",
+        ]
+          .filter(Boolean)
+          .join("، ");
 
         if (args.exportCsv) {
           ctx.outbox.push({
@@ -1096,28 +1136,60 @@ export async function executeTool(
         let pdfSent = false;
         if (args.exportPdf) {
           if (!ctx.settings.allowPdf) return { ok: false, error: "إنشاء PDF معطّل" };
+          // The report states its own coverage: how many messages matched, how
+          // many attachments were actually opened, and whether that was all of
+          // them. A report that lists 20 parts without saying it read 381 of 480
+          // documents invites the operator to trust a sample as a total.
+          const scopeLine =
+            !allOpened || truncated
+              ? `النطاق: أحدث ${parsed.coverage.messages} رسالة من ${census.matched} مطابقة — الحصر ناقص، لم تُفحص كل الرسائل.`
+              : `النطاق: كل الرسائل المطابقة (${census.matched}) — الحصر كامل.`;
           const buffer = await generateAssistantPdf({
-            title: "بنود الطلبات من البريد الإلكتروني",
+            title: "أكثر البنود تكرارًا في أوامر الشراء",
             subtitle:
               ordering === "qty"
                 ? `أكثر ${top} بندًا كمية — من ${parsed.coverage.withItems} رسالة`
-                : `أكثر ${top} بندًا تكرارًا — من ${parsed.coverage.withItems} رسالة`,
+                : `أكثر ${top} بندًا تكرارًا (من ${minOrders} أوامر فأكثر) — من ${parsed.coverage.withItems} رسالة`,
             sections: [
               {
                 paragraphs: [
-                  `رسائل مطابقة: ${census.matched} — رسائل فُتحت مرفقاتها: ${parsed.coverage.messages}`,
+                  `رسائل مطابقة: ${census.matched} — رسائل فُتحت مرفقاتها وقرأنا بنودها: ${parsed.coverage.withItems}.`,
                   `بنود مقروءة: ${parsed.coverage.lines} سطرًا من ${parsed.coverage.attachments} ملف.`,
-                  parsed.coverage.unreadable || census.attachmentCoverage?.truncated
-                    ? "تنبيه: الحصر ناقص — بعض المرفقات لم تُقرأ أو لم تُفحص كلها."
-                    : "تم فحص كل المرفقات المطابقة.",
-                ],
+                  scopeLine,
+                  parsed.coverage.unreadable
+                    ? `تنبيه: تعذّرت قراءة ${parsed.coverage.unreadable} رسالة.`
+                    : "",
+                  `ترتيب القائمة: ${ordering === "qty" ? "بحسب إجمالي الكمية" : "بحسب عدد أوامر الشراء التي ورد فيها البند (وليس الكمية)"}، ` +
+                    (ordering === "qty"
+                      ? "مع استبعاد ما لا يمكن تجميعه."
+                      : `مع استبعاد أي بند ورد في أقل من ${minOrders} أمر شراء.`),
+                  "متوسط سعر الوحدة والإجمالي مأخوذان حرفيًا من أسطر أوامر الشراء؛ «—» تعني أن الأمر لم يطبع سعرًا لهذا البند.",
+                ].filter(Boolean),
               },
               {
                 table: {
-                  columns: ["رقم القطعة", "التوصيف", "مرات التكرار", "إجمالي الكمية", "الوحدة"],
+                  columns: [
+                    "رقم القطعة",
+                    "التوصيف الكامل",
+                    "عدد الأوامر",
+                    "إجمالي الكمية",
+                    "الوحدة",
+                    "متوسط سعر الوحدة",
+                    "إجمالي القيمة",
+                    "أرقام الأوامر",
+                  ],
                   rows: ranked
                     .slice(0, top)
-                    .map((p) => [p.partNo ?? "", p.description, p.occurrences, p.qty, p.uom ?? ""]),
+                    .map((p) => [
+                      p.partNo ?? "—",
+                      p.description,
+                      p.occurrences,
+                      p.qty,
+                      p.uom ?? "—",
+                      p.avgUnitPrice != null ? p.avgUnitPrice.toFixed(2) : "—",
+                      p.totalValue != null ? p.totalValue.toFixed(2) : "—",
+                      p.documents.length ? p.documents.join("، ") : "—",
+                    ]),
                 },
               },
             ],
@@ -1129,25 +1201,6 @@ export async function executeTool(
           });
           pdfSent = true;
         }
-
-        const coverage = parsed.coverage;
-        // A complete scan that found ZERO files is not "the orders have no
-        // items" — it means no attachment was recognised. Saying so prevents the
-        // honest-looking "0 بنود، الحصر كامل" the model would otherwise report.
-        const noAttachments = coverage.attachments === 0;
-        const complete = !noAttachments && coverage.unreadable === 0 && !truncated;
-        // The item counts are only ever facts about the messages actually OPENED.
-        // State the scope beside them so a capped scan cannot be relayed as the
-        // whole year — the mailbox matched thousands, and a sample is not a total.
-        const scope = truncated
-          ? `النطاق: أحدث ${coverage.messages} رسالة من ${census.matched} مطابقة (لم يُفحص الباقي)`
-          : `النطاق: كل الرسائل المطابقة (${census.matched})`;
-        const partialDetail = [
-          coverage.unreadable > 0 ? `تعذّرت قراءة ${coverage.unreadable} رسالة` : "",
-          truncated ? "ولم تُفحص كل الرسائل" : "",
-        ]
-          .filter(Boolean)
-          .join("، ");
 
         // A `contains` lookup answers about ONE brand/part: report its own
         // count, and when the scan was capped say plainly that older messages

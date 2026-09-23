@@ -149,7 +149,13 @@ describe("scan_email_items contains filter (missing older orders)", () => {
     scanEmails.mockResolvedValue(censusWith([PLAIN_TEXT, ARISTON_TEXT], false));
     const ctx = makeCtx();
 
-    const all = await executeTool("scan_email_items", { from: "edc", top: 50 }, ctx as never);
+    // minOrders:1 here isolates the contains behaviour from the singleton
+    // exclusion — this test is about the filter, not the ranking rule.
+    const all = await executeTool(
+      "scan_email_items",
+      { from: "edc", top: 50, minOrders: 1 },
+      ctx as never,
+    );
     expect((all.data as { topItems: unknown[] }).topItems.length).toBeGreaterThan(1);
 
     // The brand filter surfaces only the rows that match it — the rows a plain

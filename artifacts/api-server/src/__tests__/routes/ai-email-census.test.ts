@@ -251,6 +251,29 @@ describe("scanEmails census", () => {
     }
   });
 
+  it("marks a truncated ATTACHMENT pass in the census scope, not just the envelope scan", async () => {
+    // The live bug: the envelope scan covered every match, so `scope.truncated`
+    // read false while the attachment pass had opened a fraction of them. The
+    // census must fold the attachment coverage into its own truncation flag.
+    process.env.AI_ATTACHMENT_SCAN_BUDGET = "500";
+    try {
+      const { scanEmails } = await import("../../modules/ai-assistant/email");
+      const res = await scanEmails({
+        from: "egyptian-drilling",
+        mailbox: "info@",
+        includeAttachments: true,
+      });
+      expect(res.matched).toBe(900);
+      // The envelope scan itself read all 900 — this is NOT the truncation.
+      expect(res.scope.mailboxes[0].truncated).toBe(false);
+      expect(res.attachmentCoverage?.truncated).toBe(true);
+      expect(res.scope.truncated).toBe(true);
+      expect(res.note).toContain("حدّ أدنى");
+    } finally {
+      delete process.env.AI_ATTACHMENT_SCAN_BUDGET;
+    }
+  });
+
   it("narrows SERVER-SIDE so the whole mailbox is reachable", async () => {
     const { scanEmails } = await import("../../modules/ai-assistant/email");
     await scanEmails({ from: "egyptian-drilling", sinceDate: "2026-01-01", mailbox: "info@" });

@@ -936,7 +936,13 @@ export function isPdfAttachment(a: {
  * path is testable.
  */
 export function attachmentScanBudget(): number {
-  return Number(process.env.AI_ATTACHMENT_SCAN_BUDGET) || 400;
+  // Raised from 400 after a live report: a mailbox matched 480 messages and the
+  // pass opened only 381 of them while the answer read as a full census. The
+  // message cap is a safety valve, not a sampling strategy, so it now sits well
+  // above a realistic year of orders. When a mailbox genuinely exceeds it the
+  // time budget bites first and `coverage.truncated` reports the shortfall —
+  // the operator is told the scan was partial instead of being shown a sample.
+  return Number(process.env.AI_ATTACHMENT_SCAN_BUDGET) || 1_200;
 }
 
 /**
@@ -1339,7 +1345,12 @@ async function runScanEmails(opts: {
   const distinctNumbers = allNumbers.length;
   const numbersTruncated = distinctNumbers > CENSUS_NUMBER_CAP;
 
-  const truncated = perMailbox.some((r) => r.truncated);
+  // `truncated` must mean "some matched mail was not inspected", so an
+  // attachment pass that stopped at its budget counts too. Previously only the
+  // ENVELOPE scan fed this flag, so a run that opened 381 of 480 attachments
+  // still reported `scope.truncated: false` — and the model relayed "حصر كامل"
+  // over a sample. That is the exact false claim this flag exists to prevent.
+  const truncated = perMailbox.some((r) => r.truncated) || Boolean(attachmentCoverage?.truncated);
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 500);
 
   let compare: EmailNumberComparison | undefined;

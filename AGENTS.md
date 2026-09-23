@@ -1255,3 +1255,62 @@ Follow-up sharpening of the same loop (PR #163 landed the dedup + number check).
   re-ask are disabled**, confirmed by temporarily stubbing both.
 - **638 api-server tests** (was 624) pass; tsc clean; prettier clean.
 - Deploy: pending — push/PR only on explicit request.
+
+## The most-repeated part is counted by ORDERS, and a capped scan says so
+
+Live report (the operator, «gos»): the assistant declared a «فحص شامل» of EDC's
+mail for the year, but the answer was built from **381 of 480** matched messages
+and its PO numbers did not reconcile. The scan had stopped at its message cap
+while the prose read as a total.
+
+### 6. `scope.truncated` now reflects the ATTACHMENT pass, not just the census
+
+- **The bug**: `truncated` was computed from the ENVELOPE scan alone
+  (`perMailbox.some((r) => r.truncated)`). The envelope scan covered all 480
+  matches, so the flag stayed `false` even though `fetchMessageAttachments` had
+  opened only 381. Every downstream sentence keyed on that flag, so the summary
+  honestly said "complete" about a sample.
+- **The fix**: `truncated` is `envelope || attachmentCoverage.truncated`. The
+  attachment pass already knew it had stopped early (the coverage carries its own
+  `truncated`, set by both the message cap and the wall-clock budget) — nothing
+  was reading it.
+- **Belt and braces**: `scan_email_items` also compares _opened_ against
+  _matched_ (`coverage.messages >= census.matched`). A pass can stop on TIME with
+  its message budget unspent, and that path leaves `truncated` false; the
+  comparison catches both shapes. `complete` needs all three: files found, none
+  unreadable, and every matched message opened.
+- The default attachment budget rose **400 → 1,200** (env
+  `AI_ATTACHMENT_SCAN_BUDGET`). The cap is a safety valve, not a sampling
+  strategy: set below a normal year of orders, it silently turned every census
+  into a sample. The time budget (`ATTACHMENT_SCAN_TIME_BUDGET_MS`, 75s) is what
+  bites first on a genuinely huge mailbox, and when it does, coverage reports it.
+
+### 7. Occurrences count ORDERS, not printed lines
+
+- A part's `documents` set is keyed on the document's OWN number
+  (`documentNumber()` reads `PO number: P26E14630(RIG58)` / `RFQ number:
+26R011954`), falling back to `mailbox#uid#filename`. A PO that lists a part on
+  three lines — or restates every line on its distribution page — is ONE order.
+  Counting lines let a single noisy document top a frequency ranking.
+- `documents` is surfaced (CSV + PDF) so the count is auditable rather than a
+  bare number.
+
+### 8. The ranking rule the operator asked for, and the columns they need
+
+- `aggregateItemsByOccurrence(items, minOccurrences)` excludes a part seen on
+  fewer than `minOccurrences` orders; `scan_email_items` defaults `minOrders: 2`
+  and the tool description spells out the rule. A 7,000-piece line ordered once
+  is **not** "most repeated" — the escape hatch is `minOrders: 1`.
+- A `contains` lookup is exempt from the rule (`minOrders = 1`): «فين بند كذا؟»
+  is a lookup, and a single occurrence is a valid answer.
+- Item rows now carry `unitPrice`/`lineTotal` parsed from the PO's money tail
+  (anchored on the delivery date so a description ending in two numbers is not
+  read as prices), aggregated to `avgUnitPrice`/`totalValue`. The PDF gains the
+  columns the operator asked for: part no, full description, order count, total
+  qty, UOM, avg unit price, total value, PO numbers — and a scope line that says
+  whether the report is the whole set or a capped sample.
+- **Tests**: parser cases for price/docId/order-counting, the singleton rule and
+  its `minOrders: 1` escape hatch, the PDF column/scope contents, and the
+  attachment-cap honesty fix (`ai-email-items*.test.ts`). **646 api-server tests**
+  (was 638) pass; tsc clean; prettier clean.
+- Deploy: pending — push/PR only on explicit request.

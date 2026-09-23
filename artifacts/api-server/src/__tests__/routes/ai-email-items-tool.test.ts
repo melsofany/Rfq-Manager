@@ -48,7 +48,8 @@ function pdfAttachments(files: Array<{ filename: string; content: Buffer }>) {
 }
 
 /** Real extracted text of EDC PO P26E14630 (both pages). */
-const PO_TEXT = `Line
+const PO_TEXT = `PO number: P26E14630(RIG58)
+Line
 No.
 Quantity UOM Part No Line Item Delivery Date Unit Price Total (EGP)
 1 12 Piece 05-OCT-2026 75.00 900.00
@@ -86,9 +87,12 @@ function censusWithAttachments(
   }>,
   overrides: Record<string, unknown> = {},
 ) {
+  // `matched` defaults to the number of messages supplied so the census is
+  // internally consistent (every matched message's attachments were opened).
+  // Tests that model a SHORTFALL override `matched` explicitly.
   return {
-    matched: 137,
-    returned: 137,
+    matched: messages.length,
+    returned: messages.length,
     emails: messages.map((m) => ({
       uid: m.uid,
       mailbox: m.mailbox,
@@ -188,15 +192,24 @@ describe("scan_email_items tool", () => {
     };
 
     expect(res.ok).toBe(true);
-    expect(res.data.matchedMessages).toBe(137);
+    expect(res.data.matchedMessages).toBe(1);
     expect(res.data.totalLines).toBe(2);
     expect(res.data.distinctParts).toBe(2);
-    expect(res.data.topItems.map((i) => i.partNo)).toEqual([
+    // Both lines come from ONE order, so the frequency ranking excludes them
+    // (default minOrders=2). The quantity view still lists them.
+    expect(res.data.topItems).toHaveLength(0);
+    expect(res.data.isComplete).toBe(true);
+
+    const qty = (await executeTool(
+      "scan_email_items",
+      { from: "egyptian-drilling", ordering: "qty" },
+      ctx as never,
+    )) as { data: { topItems: Array<{ partNo: string; qty: number; uom: string }> } };
+    expect(qty.data.topItems.map((i) => i.partNo)).toEqual([
       "0666.000.GENRAL.0006",
       "0600.000.GENRAL.0005",
     ]);
-    expect(res.data.topItems[0]).toMatchObject({ qty: 12, uom: "Piece" });
-    expect(res.data.isComplete).toBe(true);
+    expect(qty.data.topItems[0]).toMatchObject({ qty: 12, uom: "Piece" });
   });
 
   it("asks the census for the WHOLE matched set, not the public 500-row page", async () => {
@@ -247,8 +260,9 @@ describe("scan_email_items tool", () => {
     };
     expect(res.data.isComplete).toBe(false);
     expect(res.data.coverage.unreadable).toBe(1);
-    // The note must say it is partial AND name the scope — a count from a capped
-    // or partly-unreadable pass must never be relayed as the whole set.
+    // All matched messages WERE opened here; the partial flag comes from one
+    // unreadable file, so the scope line is allowed to say "all matched" — the
+    // note carries the shortfall. (A capped fetch is covered by the next test.)
     expect(res.data.note).toContain("جزئي");
     expect(res.data.note).toContain("تعذّرت قراءة 1");
     expect(res.data.scope).toContain("كل الرسائل المطابقة");
@@ -333,6 +347,87 @@ describe("scan_email_items tool", () => {
     expect(ctx.outbox[0].mimeType).toBe("application/pdf");
   });
 
+  it("puts price, order-count and PO numbers in the PDF table", async () => {
+    extractPdfText.mockImplementation(async (buf: Buffer) => buf.toString("utf8"));
+    scanEmails.mockResolvedValue(
+      censusWithAttachments([
+        {
+          uid: 30,
+          mailbox: "info@cortoba-supplies.com",
+          subject: "EDC PO No P26E14630",
+          attachments: pdfAttachments([{ filename: "po.pdf", content: Buffer.from(PO_TEXT) }]),
+        },
+        {
+          uid: 31,
+          mailbox: "info@cortoba-supplies.com",
+          subject: "EDC PO No P26E14631",
+          attachments: pdfAttachments([
+            {
+              filename: "po2.pdf",
+              content: Buffer.from(PO_TEXT.replace("P26E14630", "P26E14631")),
+            },
+          ]),
+        },
+      ]),
+    );
+    const { generateAssistantPdf } = await import("../../modules/ai-assistant/pdf");
+    const pdfMock = generateAssistantPdf as unknown as ReturnType<typeof vi.fn>;
+    pdfMock.mockClear();
+
+    await executeTool("scan_email_items", { exportPdf: true }, ctx as never);
+
+    const opts = pdfMock.mock.calls[0][0] as {
+      sections: Array<{ paragraphs?: string[]; table?: { columns: string[]; rows: unknown[][] } }>;
+    };
+    const table = opts.sections.find((s) => s.table)?.table;
+    expect(table?.columns).toEqual([
+      "رقم القطعة",
+      "التوصيف الكامل",
+      "عدد الأوامر",
+      "إجمالي الكمية",
+      "الوحدة",
+      "متوسط سعر الوحدة",
+      "إجمالي القيمة",
+      "أرقام الأوامر",
+    ]);
+    const padlock = table?.rows.find((r) => r[0] === "0666.000.GENRAL.0006");
+    // Seen in two orders, price 75.00 each, and both PO numbers listed.
+    expect(padlock?.[2]).toBe(2);
+    expect(padlock?.[5]).toBe("75.00");
+    expect(padlock?.[7]).toContain("P26E14630");
+    expect(padlock?.[7]).toContain("P26E14631");
+    // The scope paragraph is present and honest.
+    const paragraphs = opts.sections.flatMap((s) => s.paragraphs ?? []).join("\n");
+    expect(paragraphs).toContain("النطاق");
+  });
+
+  it("does not claim a complete scan when the attachment cap cut the pass short", async () => {
+    // The live bug, pinned: the ENVELOPE scan covered every match, but the
+    // attachment pass stopped at its budget — so the old scope said "complete"
+    // while only a sample of PDFs had been read.
+    extractPdfText.mockImplementation(async (buf: Buffer) => buf.toString("utf8"));
+    scanEmails.mockResolvedValue({
+      ...censusWithAttachments([
+        {
+          uid: 40,
+          mailbox: "info@cortoba-supplies.com",
+          subject: "EDC PO No P26E14630",
+          attachments: pdfAttachments([{ filename: "po.pdf", content: Buffer.from(PO_TEXT) }]),
+        },
+      ]),
+      matched: 480,
+      scope: { truncated: false },
+    });
+
+    const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
+      data: { isComplete: boolean; scope: string; note: string };
+    };
+    // attachmentCoverage.messages (1) is less than matched (480) → not complete.
+    expect(res.data.isComplete).toBe(false);
+    expect(res.data.note).toContain("جزئي");
+    expect(res.data.note).not.toContain("الحصر كامل على كل الرسائل المطابقة");
+  });
+
   it("refuses when email access is disabled", async () => {
     const off = {
       settings: { allowDatabase: true, allowEmail: false, allowPdf: true },
@@ -403,8 +498,14 @@ describe("scan_email_items tool", () => {
     expect(res.data.topItems[0].partNo).toBe("0101.001.GENRAL.0001");
     expect(res.data.topItems[0].occurrences).toBe(2);
     expect(res.data.topItems[0].qty).toBe(2);
-    // The huge one-off is still present, just not first.
-    const big = res.data.topItems.find((i) => i.partNo === "0101.001.GENRAL.0002");
+    // The huge one-off is EXCLUDED: the operator's rule is that a part ordered
+    // once — however large — is not "most repeated". minOrders=1 brings it back.
+    expect(res.data.topItems.find((i) => i.partNo === "0101.001.GENRAL.0002")).toBeUndefined();
+
+    const all = (await executeTool("scan_email_items", { minOrders: 1 }, ctx as never)) as {
+      data: { topItems: Array<{ partNo: string | null; occurrences: number; qty: number }> };
+    };
+    const big = all.data.topItems.find((i) => i.partNo === "0101.001.GENRAL.0002");
     expect(big?.qty).toBe(5000);
     expect(big?.occurrences).toBe(1);
   });
