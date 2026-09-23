@@ -1436,11 +1436,47 @@ operator will wait. So the scan became **resumable**.
   with the same arguments. The tool description, the agent prompt, and the PDF
   scope line all say the same thing: report `فُتح N من M` and do not call a
   sample a total. `limit` is now described as the WINDOW size, not a sampling cap.
-- **Tests** (`ai-email-items-tool.test.ts`): `completes the census across calls
-  instead of stopping at one batch` drives three calls (2+2+1) and asserts the
-  cursor advanced `0,2,4` with the last call `isComplete`; `keeps parsed rows
-  when a call is cut mid-batch, and resumes from there` sets a 0ms call budget and
-  a 2-message parse chunk and asserts every message was read exactly once across
-  calls. `ai-email-items-timeout.test.ts` pins the honest reason and that a
-  completed multi-window census reports complete with no fabricated shortfall.
+- **Tests** (`ai-email-items-tool.test.ts`): the "completes the census across
+  calls instead of stopping at one batch" case drives three calls (2+2+1) and
+  asserts the cursor advanced `0,2,4` with the last call `isComplete`; the
+  "keeps parsed rows when a call is cut mid-batch" case sets a 0ms call budget
+  and a 2-message parse chunk and asserts every message was read exactly once
+  across calls. `ai-email-items-timeout.test.ts` pins the honest reason and that
+  a completed multi-window census reports complete with no fabricated shortfall.
 - **Tests**: 655 api-server tests pass (was 653); tsc clean.
+
+## Procurement agent upgrade — intent router, evidence envelope, DB-first tools, evaluation gate
+
+The assistant was answering EVERY question through the same path with the same budget, doing arithmetic in the model's head. Live consequences: a 3,710-message census reported as "10", a supplier name invented under challenge, and a simple "which supplier owns PO X?" costing the same rounds as a year-long analysis. This work gives it a deterministic front end, database-computed answers, and a measurable quality gate.
+
+### Intent router (`router.ts`) — deterministic, free, testable
+
+- `routeQuestion(text)` classifies each question into an `intent` + `path` BEFORE any provider request. Rules-based (regex over normalised Arabic), never an LLM call, so it is free/instant/explainable — and unit-testable, which an LLM classifier would not be.
+- Two paths: **FAST** (`FAST_MAX_ROUNDS = 2`) for a single document/supplier/count question, **DEEP** (`DEEP_MAX_ROUNDS = 5`) for analysis/email/reports. `plan.verify` says whether the post-answer grounding check is worth its round.
+- **Rule ORDER is the design**: analytical/email/report signals are checked BEFORE the bare-document-number rule, so «اعمل حصر لكل PO في البريد خلال 2026» is not mistaken for a document lookup just because it contains «PO» and a year. The unclassified default is DEEP — mis-routing a real analysis as trivial (answers confidently from a sample) is the expensive error; the reverse merely costs a round.
+- **Do not put the bare quantifiers «كل»/«all» back into `ANALYTIC_RE`**: they appear in email/report requests («كل المرفقات», «كل البنود») and matching them there labels those as analytics before the email/report rules can see them. Same trap for «كام» without a word boundary — «كامل» (complete) reads as «كام» (how many).
+- `normalizeArabic` folds hamza/alef/yaa/taa-marbuta + strips harakat, so «تسعير»/«تسعيره» both match. Without it the router silently misses and sends everything deep.
+- `MAX_TOOL_ROUNDS` in `agent.ts` is now an alias for `DEEP_MAX_ROUNDS`; the loop uses `plan.maxRounds`, so the router — not a module constant — sets the budget per question.
+
+### Evidence envelope (`evidence.ts`) — a sample must never read as a total
+
+- Business tools return `EvidenceEnvelope` instead of a bare array: `{data, source, filters, recordCount, isComplete, warnings, confidence, method, evidence}`.
+- `confidence` (VERIFIED | PARTIALLY_VERIFIED | INSUFFICIENT_EVIDENCE) is DERIVED in ONE place: `isComplete:false` can never be VERIFIED; any warning degrades a complete result to PARTIALLY_VERIFIED. That rule is what makes "I analysed everything" unsayable about a partial scan. Keep it centralised — per-tool confidence logic is how the 3,710-as-10 bug returns.
+
+### Database-first procurement tools (`procurement-tools.ts`)
+
+- `get_purchase_order_status`, `get_supplier_performance`, `aggregate_po_items`, `get_unfulfilled_orders`, `get_latest_supplier_price`, `get_open_supplier_invoices`, `detect_duplicates`, `find_missing_records` — all aggregate in SQL (`SUM`/`COUNT … GROUP BY … HAVING`), not in the model. A model totalling hundreds of rows will approximate, drop rows past its context window, or invent a figure the operator cannot audit; a `GROUP BY` cannot.
+- Built to avoid N+1: supplier names are resolved for a whole result set in ONE `inArray` query, and offers/PO aggregates are one query each regardless of supplier count.
+- `find_missing_records` chunks its `IN` at `COMPARE_CHUNK` (5,000) — a year-long number list would otherwise exceed Postgres's 65,535 bind-parameter cap and fail the whole answer.
+- All eight are registered in `tools.ts` (definitions + dispatch) behind the existing `allowDatabase` flag, so a settings toggle disables them with the rest.
+
+### Telemetry (`metrics.ts`) + evaluation gate (`eval.ts`)
+
+- `recordMetrics` captures per-request `{intent, path, rounds, toolCalls, verified, latencyMs, outcome, model}`; `metricsSummary()` gives avg/P95 latency, avg rounds, timeout rate, verification rate. Exposed at `GET /api/ai-assistant/metrics` and rendered as an «أداء الطلبات» card on `/ai-assistant` (best-effort fetch — its absence never blocks the settings page).
+- `eval.ts` is a labelled set of real operator questions (Arabic-first, shaped around the actual incidents) scored against the router with `runOfflineEvaluation()`. **Offline by design**: it spends zero model requests and is deterministic, so it can gate every commit. `runLiveEvaluation` exists for a human with a key but is never called by the suite — a CI run that consumed the day's model quota to grade itself would be self-defeating.
+- `ai-eval.test.ts` asserts accuracy ≥ 90%, **path-accuracy ≥ 95%** (stricter than intent accuracy, because the path is the safety-critical decision), routing latency < 20ms, and every incident-derived case (`note` set) individually — a regression on one of those is a bug already paid for.
+
+### Tests
+
+- New: `ai-router.test.ts` (17), `ai-procurement-tools.test.ts` (19), `ai-eval.test.ts` (6), plus router-budget + telemetry integration cases in `ai-agent.test.ts` (4). **699 api-server tests** (was 655) pass; tsc (libs + api-server + portal) clean; portal build clean; repo-wide prettier clean.
+- **CI format-gate fix**: `main`'s CI had been failing on `prettier --check` because of two over-long backticked test names in AGENTS.md, so every `Deploy to Render` run was `skipped`. Reworded (not just reformatted — prettier's "fix" de-indents the whole list item) so the gate passes and deploys resume.

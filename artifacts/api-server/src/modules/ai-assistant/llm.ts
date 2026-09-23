@@ -70,6 +70,8 @@ export interface ChatResult {
   content: string | null;
   toolCalls: ToolCall[];
   finishReason: string | null;
+  /** The model that actually produced this result (not necessarily the primary). */
+  modelUsed?: string;
 }
 
 export class AiError extends Error {
@@ -264,7 +266,7 @@ export async function chatCompletion(opts: {
             signal: budget.signal,
           });
           rememberWorkingModel(model);
-          return result;
+          return { ...result, modelUsed: model };
         } catch (err) {
           if (!(err instanceof AiError)) throw err;
           lastError = err;

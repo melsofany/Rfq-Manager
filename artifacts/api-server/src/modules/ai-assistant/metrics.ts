@@ -1,0 +1,109 @@
+/**
+ * AI Assistant — per-request telemetry.
+ *
+ * Every answer records what it cost: which intent/path the router chose, how
+ * many model rounds were spent, which tools ran, whether the verification round
+ * fired, the wall-clock latency, and whether a model fallback was used. The
+ * assistant's recorded failure modes (silent timeouts, exhausted daily quota)
+ * are all *cost* problems, and none of them was measurable before — a diagnosis
+ * meant reading logs by hand. This makes "was that question expensive, and why?"
+ * a single structured log line and a value the run can attach to its own result.
+ *
+ * Kept deliberately small: an in-memory ring buffer of recent requests (for the
+ * admin dashboard) plus structured logging. No table, no writes on the hot path.
+ */
+import { logger } from "../../shared/logger";
+import type { QueryIntent, QueryPath } from "./router";
+
+export interface RequestMetrics {
+  phone: string;
+  intent: QueryIntent;
+  path: QueryPath;
+  routeReason: string;
+  /** Model rounds actually spent (chat completions issued). */
+  rounds: number;
+  /** Distinct/annotated tool invocations in this run. */
+  toolCalls: number;
+  toolNames: string[];
+  /** True when the grounding-verification round ran. */
+  verified: boolean;
+  /** True when a model fallback (not the primary) produced the answer. */
+  fallbackUsed: boolean;
+  latencyMs: number;
+  /** Set when the run ended in a timeout/quota error instead of an answer. */
+  outcome: "answered" | "timeout" | "quota" | "error";
+}
+
+const HISTORY_LIMIT = 100;
+const history: RequestMetrics[] = [];
+
+/** Record one request, log it structurally, and keep it for the dashboard. */
+export function recordMetrics(m: RequestMetrics): void {
+  history.push(m);
+  if (history.length > HISTORY_LIMIT) history.splice(0, history.length - HISTORY_LIMIT);
+  logger.info(
+    {
+      phone: m.phone,
+      intent: m.intent,
+      path: m.path,
+      route: m.routeReason,
+      rounds: m.rounds,
+      toolCalls: m.toolCalls,
+      tools: m.toolNames,
+      verified: m.verified,
+      fallbackUsed: m.fallbackUsed,
+      latencyMs: m.latencyMs,
+      outcome: m.outcome,
+    },
+    "AI assistant: request metrics",
+  );
+}
+
+/** Most recent requests, newest last — for the admin dashboard. */
+export function recentMetrics(limit = 20): RequestMetrics[] {
+  return history.slice(-limit);
+}
+
+/**
+ * Aggregate view for the dashboard: average latency, P95, timeout rate and the
+ * model-call average over the retained window. Percentiles are computed over the
+ * in-memory buffer only — this is an operational signal, not an audit trail.
+ */
+export interface MetricsSummary {
+  count: number;
+  avgLatencyMs: number;
+  p95LatencyMs: number;
+  avgRounds: number;
+  timeoutRate: number;
+  verificationRate: number;
+}
+
+export function metricsSummary(): MetricsSummary {
+  const n = history.length;
+  if (n === 0) {
+    return {
+      count: 0,
+      avgLatencyMs: 0,
+      p95LatencyMs: 0,
+      avgRounds: 0,
+      timeoutRate: 0,
+      verificationRate: 0,
+    };
+  }
+  const latencies = history.map((h) => h.latencyMs).sort((a, b) => a - b);
+  const p95Index = Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95));
+  const sum = <T>(f: (x: RequestMetrics) => T) => history.reduce((a, x) => a + Number(f(x)), 0);
+  return {
+    count: n,
+    avgLatencyMs: Math.round(sum((h) => h.latencyMs) / n),
+    p95LatencyMs: latencies[p95Index] ?? 0,
+    avgRounds: Number((sum((h) => h.rounds) / n).toFixed(2)),
+    timeoutRate: Number((sum((h) => (h.outcome === "timeout" ? 1 : 0)) / n).toFixed(3)),
+    verificationRate: Number((sum((h) => (h.verified ? 1 : 0)) / n).toFixed(3)),
+  };
+}
+
+/** Test-only: drop the retained buffer so cases do not leak into each other. */
+export function resetMetrics(): void {
+  history.length = 0;
+}

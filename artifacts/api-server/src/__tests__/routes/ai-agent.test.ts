@@ -698,4 +698,113 @@ describe("AI assistant agent loop", () => {
       expect(isRefusalSentence("يوجد 12 بندًا في الأمر")).toBe(false);
     });
   });
+
+  // ── Router integration: the path decides the round budget ──────────────────
+  describe("router-driven budget", () => {
+    it("caps a simple document lookup at the FAST path's rounds", async () => {
+      // A fast-path question must not be allowed to run for the deep budget.
+      // The model here keeps calling tools; the loop must still stop at the fast
+      // ceiling (2), not the deep one (5).
+      let rounds = 0;
+      chatCompletion.mockImplementation((args: any) => {
+        rounds += 1;
+        // Behave like a real model: on the tool-forbidding final round it
+        // answers instead of calling another tool.
+        if (args.toolChoice === "none") {
+          return Promise.resolve({ content: "تم.", finishReason: "stop", toolCalls: [] });
+        }
+        return Promise.resolve({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [
+            {
+              id: "c" + rounds,
+              type: "function",
+              function: { name: "lookup_document", arguments: "{}" },
+            },
+          ],
+        });
+      });
+      executeTool.mockResolvedValue({ ok: true, data: { found: true } });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const { FAST_MAX_ROUNDS } = await import("../../modules/ai-assistant/router");
+      await runAgent({ phone: "2010", text: "أمر الشراء P26E11407 تبع مين؟" });
+      expect(rounds).toBe(FAST_MAX_ROUNDS);
+    });
+
+    it("lets an analytical question use the full deep budget", async () => {
+      let rounds = 0;
+      chatCompletion.mockImplementation((args: any) => {
+        rounds += 1;
+        if (args.toolChoice === "none") {
+          return Promise.resolve({ content: "تم.", finishReason: "stop", toolCalls: [] });
+        }
+        return Promise.resolve({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [
+            {
+              id: "c" + rounds,
+              type: "function",
+              function: { name: "search_database", arguments: "{}" },
+            },
+          ],
+        });
+      });
+      executeTool.mockResolvedValue({ ok: true, data: { rows: [] } });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const { DEEP_MAX_ROUNDS } = await import("../../modules/ai-assistant/router");
+      await runAgent({ phone: "2010", text: "اعمل حصر لكل PO في البريد خلال 2026" });
+      expect(rounds).toBe(DEEP_MAX_ROUNDS);
+    });
+
+    it("does not spend a verification round on a plain greeting", async () => {
+      // A greeting has no facts, so the router turns verification off and the
+      // model gets exactly one round.
+      chatCompletion.mockResolvedValueOnce({
+        content: "وعليكم السلام! اسألني عن أي شيء.",
+        finishReason: "stop",
+        toolCalls: [],
+      });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "السلام عليكم" });
+      expect(out.reply).toContain("وعليكم السلام");
+      expect(chatCompletion).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── Telemetry ──────────────────────────────────────────────────────────────
+  describe("request metrics", () => {
+    it("records the intent, path, rounds and outcome for an answer", async () => {
+      const { resetMetrics, recentMetrics } = await import("../../modules/ai-assistant/metrics");
+      resetMetrics();
+      chatCompletion.mockResolvedValueOnce({
+        content: "أمر الشراء P26E11407 تبع هاي فولت.",
+        finishReason: "stop",
+        toolCalls: [],
+      });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      await runAgent({ phone: "2010", text: "أمر الشراء P26E11407 تبع مين؟" });
+
+      const [m] = recentMetrics(1);
+      expect(m.intent).toBe("document_lookup");
+      expect(m.path).toBe("fast");
+      expect(m.outcome).toBe("answered");
+      expect(m.rounds).toBe(1);
+      expect(m.latencyMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it("records a failed run with its outcome before rethrowing", async () => {
+      const { resetMetrics, recentMetrics } = await import("../../modules/ai-assistant/metrics");
+      resetMetrics();
+      chatCompletion.mockRejectedValue(new Error("LLM request budget exhausted"));
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      await expect(runAgent({ phone: "2010", text: "كام أمر شراء؟" })).rejects.toThrow();
+      const [m] = recentMetrics(1);
+      expect(m.outcome).toBe("timeout");
+      expect(m.intent).toBe("count_aggregate");
+    });
+  });
 });
