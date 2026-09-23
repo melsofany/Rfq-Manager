@@ -140,6 +140,91 @@ export function putScanCacheEntry<T>(key: string, value: T): void {
   scanCache.set(key, { value, expiresAt: Date.now() + ttl });
 }
 
+/**
+ * Persist a scan session to Postgres so a restart resumes instead of restarting.
+ *
+ * Best-effort and fire-and-forget: the in-memory cache is the fast path and the
+ * source of truth while the process lives, so a database hiccup must never fail
+ * the scan. Writes are coalesced per key (the census writes after every parsed
+ * chunk) so a long scan does not issue a statement per chunk.
+ */
+const persisting = new Set<string>();
+export function persistScanSession(key: string, session: unknown): void {
+  if (!process.env.DATABASE_URL || persisting.has(key)) return;
+  persisting.add(key);
+  void (async () => {
+    try {
+      const db = await scanSessionStore();
+      if (!db) return;
+      await db.save(key, session);
+    } catch {
+      // Ignored on purpose — persistence is an optimisation, not a requirement.
+    } finally {
+      persisting.delete(key);
+    }
+  })();
+}
+
+/** Load a persisted session (used when the in-memory cache misses after a restart). */
+export async function loadPersistedScanSession<T>(key: string): Promise<T | undefined> {
+  if (!process.env.DATABASE_URL) return undefined;
+  try {
+    const db = await scanSessionStore();
+    return db ? ((await db.load(key)) as T | undefined) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The scan-session store, resolved once. `@workspace/db` is imported lazily so
+ * this module stays importable (and testable) without a live database, and its
+ * absence simply disables persistence.
+ */
+let storePromise: Promise<ScanSessionStore | null> | undefined;
+interface ScanSessionStore {
+  save(key: string, session: unknown): Promise<void>;
+  load(key: string): Promise<unknown>;
+  remove(key: string): Promise<void>;
+}
+async function scanSessionStore(): Promise<ScanSessionStore | null> {
+  if (!storePromise) {
+    storePromise = (async () => {
+      try {
+        const { db, aiAssistantScanSessionsTable } = await import("@workspace/db");
+        const { eq } = await import("drizzle-orm");
+        return {
+          save: async (key, session) => {
+            await db
+              .insert(aiAssistantScanSessionsTable)
+              .values({ key, session, updatedAt: new Date() })
+              .onConflictDoUpdate({
+                target: aiAssistantScanSessionsTable.key,
+                set: { session, updatedAt: new Date() },
+              });
+          },
+          load: async (key) => {
+            const rows = await db
+              .select()
+              .from(aiAssistantScanSessionsTable)
+              .where(eq(aiAssistantScanSessionsTable.key, key))
+              .limit(1);
+            return rows[0]?.session;
+          },
+          remove: async (key) => {
+            await db
+              .delete(aiAssistantScanSessionsTable)
+              .where(eq(aiAssistantScanSessionsTable.key, key));
+          },
+        } satisfies ScanSessionStore;
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return storePromise;
+}
+
 /** Stable string key for a scan's options — argument order must not matter. */
 export function scanCacheKey(prefix: string, opts: Record<string, unknown>): string {
   const norm: Record<string, unknown> = {};

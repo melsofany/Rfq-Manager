@@ -20,6 +20,8 @@ const T = {
   supplierInvoicesTable: { _: "supplier_invoices" },
   customerPosTable: { _: "customer_pos" },
   customerPoItemsTable: { _: "customer_po_items" },
+  rfqTable: { _: "rfq" },
+  rfqItemsTable: { _: "rfq_items" },
 };
 
 /** Per-table fixtures: `group` for a GROUP BY query, `plain` for a plain one. */
@@ -90,6 +92,8 @@ const {
   getOpenSupplierInvoices,
   detectDuplicates,
   findMissingRecords,
+  getOverdueDeliveries,
+  compareSupplierQuotes,
 } = await import("../../modules/ai-assistant/procurement-tools");
 
 beforeEach(() => {
@@ -337,5 +341,84 @@ describe("find_missing_records", () => {
     expect(data.missing).toEqual(["P26E2"]);
     expect(data.presentCount).toBe(1);
     expect(data.checkedCount).toBe(2);
+  });
+});
+
+describe("get_overdue_deliveries", () => {
+  it("returns overdue customer lines with their overdue days", async () => {
+    fixtures.set(T.customerPoItemsTable, {
+      plain: [
+        {
+          customerPoId: 1,
+          customerPoNo: "877",
+          customerName: "EDC",
+          itemId: 9,
+          partNo: "A1",
+          description: "part",
+          qty: 10,
+          deliveredQty: 4,
+          deliveryDate: "2026-01-01",
+          deliveryStatus: "partial",
+          overdueDays: 40,
+        },
+      ],
+    });
+    const res = await getOverdueDeliveries({});
+    const data = res.data as any;
+    expect(data.overdueLines).toBe(1);
+    expect(data.outstandingQty).toBe(6);
+    expect(res.source).toContain("customer_po_items");
+  });
+
+  it("is a PARTIAL result when the row cap truncates the set", async () => {
+    fixtures.set(T.customerPoItemsTable, {
+      plain: Array.from({ length: 50 }, (_, i) => ({
+        customerPoId: i,
+        qty: 1,
+        deliveredQty: 0,
+        deliveryStatus: "pending",
+        overdueDays: 5,
+      })),
+    });
+    const res = await getOverdueDeliveries({ limit: 50 });
+    expect(res.isComplete).toBe(false);
+    expect(res.confidence).toBe("PARTIALLY_VERIFIED");
+  });
+});
+
+describe("compare_supplier_quotes", () => {
+  it("marks the cheapest supplier per item and reports the supplier count", async () => {
+    fixtures.set(T.rfqTable, { plain: [{ id: 7 }] });
+    fixtures.set(T.offerItemsTable, {
+      plain: [
+        { offerId: 1, supplierId: 1, supplierName: "A", rfqItemId: 11, partNo: "P1", price: 10 },
+        { offerId: 2, supplierId: 2, supplierName: "B", rfqItemId: 11, partNo: "P1", price: 8 },
+        { offerId: 1, supplierId: 1, supplierName: "A", rfqItemId: 12, partNo: "P2", price: 5 },
+      ],
+    });
+    const res = await compareSupplierQuotes({ rfqId: 7 });
+    const data = res.data as any;
+    expect(data.supplierCount).toBe(2);
+    const cheapest11 = data.cheapest.find((c: any) => c.rfqItemId === 11);
+    expect(cheapest11.supplierName).toBe("B");
+    expect(cheapest11.cheapestPrice).toBe(8);
+  });
+
+  it("refuses with a clear warning when the RFQ number is unknown", async () => {
+    fixtures.set(T.rfqTable, { plain: [] });
+    const res = await compareSupplierQuotes({ rfqNo: "26R999999" });
+    expect(res.recordCount).toBe(0);
+    expect(res.warnings[0]).toContain("لم أجد");
+  });
+
+  it("warns when the RFQ number is ambiguous rather than guessing one", async () => {
+    fixtures.set(T.rfqTable, { plain: [{ id: 1 }, { id: 2 }] });
+    const res = await compareSupplierQuotes({ rfqNo: "26R0119" });
+    expect(res.warnings[0]).toContain("أكثر من");
+  });
+
+  it("asks for an identifier when neither rfqId nor rfqNo was given", async () => {
+    const res = await compareSupplierQuotes({});
+    expect(res.warnings[0]).toContain("rfqNo");
   });
 });

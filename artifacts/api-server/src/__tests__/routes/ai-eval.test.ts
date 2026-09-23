@@ -17,10 +17,43 @@ import { EVAL_CASES, runOfflineEvaluation } from "../../modules/ai-assistant/eva
 const REPORT = runOfflineEvaluation();
 
 describe("evaluation: coverage of the labelled set", () => {
-  it("has enough cases to be meaningful", () => {
+  it("meets the prompt's target dataset size", () => {
     // The prompt asked for ~100 labelled cases across PO / supplier / offers /
-    // email / invoices / ambiguous. This asserts the coverage actually grew.
-    expect(EVAL_CASES.length).toBeGreaterThanOrEqual(60);
+    // email / invoices / ambiguous / misspelled. The bar is the documented target
+    // so the coverage claim is checked, not asserted in prose.
+    expect(EVAL_CASES.length).toBeGreaterThanOrEqual(100);
+  });
+
+  it("covers each requested category with a meaningful number of cases", () => {
+    const has = (words: string[]) =>
+      EVAL_CASES.filter((c) => words.some((w) => c.question.includes(w))).length;
+    // ~30 POs, ~20 suppliers, ~15 offers/prices, ~15 email, ~10 invoices,
+    // ~10 ambiguous/misspelled — asserted loosely so a reworded case cannot
+    // silently empty a category.
+    expect(has(["أمر الشراء", "أوامر الشراء", "PO", "P26E"])).toBeGreaterThanOrEqual(20);
+    expect(has(["مورد", "الموردين", "Supplier"])).toBeGreaterThanOrEqual(15);
+    expect(has(["عرض", "عروض", "سعر", "أسعار", "RFQ"])).toBeGreaterThanOrEqual(12);
+    expect(has(["بريد", "إيميل", "مرفق", "رسالة"])).toBeGreaterThanOrEqual(8);
+    expect(has(["فاتور", "مدفوع", "دفعة", "ض.ق.م"])).toBeGreaterThanOrEqual(6);
+  });
+
+  it("carries invariants and allowed-evidence on the reasoning-critical cases", () => {
+    // The prompt asked each case to carry an expected result/invariant and an
+    // allowed evidence set. A case with neither is only checking routing, which
+    // says nothing about whether the ANSWER was right.
+    const withInvariant = EVAL_CASES.filter((c) => c.expectedInvariants?.length).length;
+    const withEvidence = EVAL_CASES.filter((c) => c.allowedEvidence?.length).length;
+    expect(withInvariant).toBeGreaterThanOrEqual(10);
+    expect(withEvidence).toBeGreaterThanOrEqual(10);
+  });
+
+  it("uses only known evidence sources", () => {
+    const allowed = new Set(["database", "email", "attachment", "memory", "calculation"]);
+    for (const c of EVAL_CASES) {
+      for (const e of c.allowedEvidence ?? []) {
+        expect(allowed.has(e), `unknown evidence source «${e}» on «${c.question}»`).toBe(true);
+      }
+    }
   });
 
   it("span both paths and several intents", () => {

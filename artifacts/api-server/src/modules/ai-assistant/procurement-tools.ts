@@ -21,6 +21,8 @@ import {
   supplierInvoicesTable,
   customerPosTable,
   customerPoItemsTable,
+  rfqTable,
+  rfqItemsTable,
 } from "@workspace/db";
 import { and, or, eq, ilike, inArray, ne, isNotNull, sql, desc } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
@@ -694,6 +696,185 @@ export async function findMissingRecords(opts: {
     method:
       "مقارنة القائمة المعطاة بقيم العمود في قاعدة البيانات (توحيد الحروف والمسافات)، وإرجاع غير الموجود.",
     evidence: missing.slice(0, 10).map((n) => ({ missingNumber: n })),
+  });
+}
+
+// ─── 10. Overdue deliveries (customer side) ──────────────────────────────────
+
+/**
+ * Customer-PO lines past their promised delivery date that have not been
+ * delivered (or fully rejected). Computed in SQL so the count, the overdue days
+ * and the qty are exact — a model counting rows would drop the ones past its
+ * window.
+ *
+ * A line is "overdue" when it has a `deliveryDate` before today, its delivery
+ * status is not terminal, and it still belongs to a live PO. Detached rows
+ * (customerPoId IS NULL — cancelled off a PO) are excluded: they are history,
+ * not outstanding work.
+ */
+export async function getOverdueDeliveries(opts: {
+  customer?: string;
+  limit?: number;
+}): Promise<EvidenceEnvelope> {
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  const filters: SQL[] = [
+    isNotNull(customerPoItemsTable.customerPoId),
+    isNotNull(customerPoItemsTable.deliveryDate),
+    sql`${customerPoItemsTable.deliveryDate} < CURRENT_DATE::text` as SQL,
+    inArray(customerPoItemsTable.deliveryStatus, ["pending", "partial"]),
+    ne(customerPosTable.status, "cancelled"),
+  ];
+  if (opts.customer) {
+    filters.push(ilike(customerPosTable.customerName, `%${opts.customer}%`) as SQL);
+  }
+
+  const rows = (await (db as any)
+    .select({
+      customerPoId: customerPosTable.id,
+      internalPoNo: customerPosTable.internalPoNo,
+      customerPoNo: customerPosTable.customerPoNo,
+      customerName: customerPosTable.customerName,
+      itemId: customerPoItemsTable.id,
+      partNo: customerPoItemsTable.partNo,
+      description: customerPoItemsTable.description,
+      qty: sql<number>`coalesce(${customerPoItemsTable.qty},0)::float8`,
+      deliveredQty: sql<number>`coalesce(${customerPoItemsTable.totalDeliveredQty},0)::float8`,
+      deliveryDate: customerPoItemsTable.deliveryDate,
+      deliveryStatus: customerPoItemsTable.deliveryStatus,
+      overdueDays: sql<number>`(CURRENT_DATE - ${customerPoItemsTable.deliveryDate}::date)::int`,
+    })
+    .from(customerPoItemsTable)
+    .innerJoin(customerPosTable, eq(customerPoItemsTable.customerPoId, customerPosTable.id))
+    .where(and(...filters))
+    .orderBy(customerPoItemsTable.deliveryDate)
+    .limit(limit)) as Row[];
+
+  const truncated = rows.length >= limit;
+  const totalOverdueQty = rows.reduce((a, r) => a + num(r.qty) - num(r.deliveredQty), 0);
+  return evidence({
+    data: { deliveries: rows, overdueLines: rows.length, outstandingQty: totalOverdueQty },
+    source: "database:customer_po_items + customer_pos",
+    filters: { customer: opts.customer ?? null },
+    recordCount: rows.length,
+    isComplete: !truncated,
+    warnings: truncated ? [`أعرض أقدم ${limit} بندًا متأخرًا فقط.`] : [],
+    method:
+      "بنود أوامر شراء العملاء التي فات تاريخ تسليمها ولم تُسلَّم بعد، مع عدد أيام التأخير والكمية المتبقية.",
+    evidence: rows.slice(0, 10).map((r) => ({
+      customerPoNo: r.customerPoNo,
+      partNo: r.partNo,
+      overdueDays: r.overdueDays,
+    })),
+  });
+}
+
+// ─── 11. Compare supplier quotes for one RFQ ─────────────────────────────────
+
+/**
+ * Price comparison across the offers received for one RFQ, per line item.
+ *
+ * "قارن عروض الموردين" is the classic question that a model answers wrongly: it
+ * must line up several suppliers' prices per item and find the cheapest, and any
+ * item it loses from the middle of a long list silently skews the result. This
+ * does the comparison in SQL — one row per (item, supplier) — and marks the
+ * cheapest supplier per item, so the model only narrates the winner.
+ *
+ * Approval is surfaced too (`isApproved`), because the approved price is the
+ * reference cost the margin check uses; a cheapest quote that is not approved is
+ * not the cost basis.
+ */
+export async function compareSupplierQuotes(opts: {
+  rfqId?: number;
+  rfqNo?: string;
+  limit?: number;
+}): Promise<EvidenceEnvelope> {
+  // Resolve the RFQ first (by id or number) so the comparison is scoped to one.
+  let rfqId = opts.rfqId ?? null;
+  if (rfqId == null && opts.rfqNo) {
+    const term = `%${opts.rfqNo.trim()}%`;
+    const found = (await (db as any)
+      .select({ id: rfqTable.id })
+      .from(rfqTable)
+      .where(or(ilike(rfqTable.internalRfqNo, term), ilike(rfqTable.customerRfqNo, term)) as SQL)
+      .limit(2)) as Row[];
+    if (found.length !== 1) {
+      return evidence({
+        data: { offers: [], cheapest: [] },
+        source: "database:rfq",
+        filters: { rfqNo: opts.rfqNo },
+        recordCount: 0,
+        warnings: [
+          found.length === 0
+            ? `لم أجد طلب عرض مطابقًا لـ «${opts.rfqNo}».`
+            : `أكثر من طلب عرض يطابق «${opts.rfqNo}» — استخدم الرقم الداخلي.`,
+        ],
+      });
+    }
+    rfqId = Number(found[0].id);
+  }
+  if (rfqId == null) {
+    return evidence({
+      data: { offers: [], cheapest: [] },
+      source: "database:offers",
+      filters: {},
+      recordCount: 0,
+      warnings: ["حدّد الطلب برقمه (rfqNo) أو معرّفه (rfqId)."],
+    });
+  }
+
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
+  const rows = (await (db as any)
+    .select({
+      offerId: offersTable.id,
+      supplierId: suppliersTable.id,
+      supplierName: suppliersTable.name,
+      rfqItemId: offerItemsTable.rfqItemId,
+      lineItem: rfqItemsTable.lineItem,
+      partNo: rfqItemsTable.partNo,
+      description: rfqItemsTable.description,
+      price: sql<number>`${offerItemsTable.price}::float8`,
+      taxIncluded: offerItemsTable.taxIncluded,
+      isApproved: offerItemsTable.isApproved,
+      deliveryDays: offerItemsTable.deliveryDays,
+    })
+    .from(offerItemsTable)
+    .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+    .innerJoin(suppliersTable, eq(offersTable.supplierId, suppliersTable.id))
+    .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+    .where(eq(offersTable.rfqId, rfqId) as SQL)
+    .limit(limit)) as Row[];
+
+  const truncated = rows.length >= limit;
+  // Cheapest per item, computed here rather than by the model.
+  const byItem = new Map<string, Row>();
+  for (const r of rows) {
+    const key = String(r.rfqItemId);
+    const prev = byItem.get(key);
+    if (!prev || num(r.price) < num(prev.price)) byItem.set(key, r);
+  }
+  const cheapest = [...byItem.values()].map((r) => ({
+    rfqItemId: r.rfqItemId,
+    partNo: r.partNo,
+    description: r.description,
+    supplierName: r.supplierName,
+    cheapestPrice: num(r.price),
+  }));
+
+  return evidence({
+    data: { offers: rows, cheapest, supplierCount: new Set(rows.map((r) => r.supplierId)).size },
+    source: "database:offer_items + offers + suppliers + rfq_items",
+    filters: { rfqId },
+    recordCount: rows.length,
+    isComplete: !truncated,
+    warnings: truncated ? [`أعرض أول ${limit} عرضًا فقط.`] : [],
+    method:
+      "مقارنة عروض الموردين لكل بند على حدة: صف لكل (بند، مورد) بالسعر، مع أرخص مورد لكل بند. " +
+      "isApproved يشير إلى السعر المعتمد (أساس حساب الهامش).",
+    evidence: cheapest.slice(0, 10).map((c) => ({
+      partNo: c.partNo,
+      supplierName: c.supplierName,
+      cheapestPrice: c.cheapestPrice,
+    })),
   });
 }
 

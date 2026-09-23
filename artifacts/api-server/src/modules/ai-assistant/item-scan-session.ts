@@ -20,6 +20,8 @@ import {
   scanEmails,
   getScanCacheEntry,
   putScanCacheEntry,
+  persistScanSession,
+  loadPersistedScanSession,
   type AttachmentCoverage,
   type EmailCensusResult,
   type MessageAttachments,
@@ -164,6 +166,8 @@ async function parseChunks(
     session.complete = session.remaining === 0;
     session.batches += 1;
     putScanCacheEntry(key, session);
+    // Mirror to Postgres so the cursor survives a restart mid-census.
+    persistScanSession(key, session);
 
     if (Date.now() >= deadline) return false;
   }
@@ -224,6 +228,14 @@ export async function runItemScan(
   let ranBatches = 0;
 
   if (!session) {
+    // A restart (deploy/crash) clears the in-process cache. Restore the session
+    // from Postgres so the census CONTINUES from its cursor instead of re-reading
+    // a multi-minute scan from zero — or, for a large mailbox, never finishing.
+    session = await loadPersistedScanSession<ItemScanSession>(key);
+    if (session) putScanCacheEntry(key, session);
+  }
+
+  if (!session) {
     session = {
       // Filled by the first `runBatch`, which this function always runs before
       // returning. Only `nextSkip`/`args` are needed to seed the walk.
@@ -249,6 +261,7 @@ export async function runItemScan(
   }
 
   putScanCacheEntry(key, session);
+  persistScanSession(key, session);
 
   return { session, ranBatches };
 }

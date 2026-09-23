@@ -14,6 +14,7 @@
  */
 import { logger } from "../../shared/logger";
 import type { QueryIntent, QueryPath } from "./router";
+import type { Confidence } from "./evidence";
 
 export interface RequestMetrics {
   phone: string;
@@ -29,9 +30,17 @@ export interface RequestMetrics {
   verified: boolean;
   /** True when a model fallback (not the primary) produced the answer. */
   fallbackUsed: boolean;
+  /** The primary model the router selected for this path (P6 model routing). */
+  model: string;
   latencyMs: number;
   /** Set when the run ended in a timeout/quota error instead of an answer. */
   outcome: "answered" | "timeout" | "quota" | "error";
+  /**
+   * Answer evidence level, shown on the dashboard. A concurrent figure the model
+   * asserted with no tool result behind it is what the operator cannot detect —
+   * so "was this reply verified?" must be visible, not inferred from a flag.
+   */
+  confidence?: Confidence;
 }
 
 const HISTORY_LIMIT = 100;
@@ -52,6 +61,7 @@ export function recordMetrics(m: RequestMetrics): void {
       tools: m.toolNames,
       verified: m.verified,
       fallbackUsed: m.fallbackUsed,
+      model: m.model,
       latencyMs: m.latencyMs,
       outcome: m.outcome,
     },
@@ -76,6 +86,18 @@ export interface MetricsSummary {
   avgRounds: number;
   timeoutRate: number;
   verificationRate: number;
+  /** Model-call average: how many provider requests one answer costs. */
+  avgToolCalls: number;
+  /** Share of answers that needed a fallback model (quota/overload signal). */
+  fallbackRate: number;
+  /** Requests per intent — shows what the assistant is actually used for. */
+  byIntent: Record<string, number>;
+  /** Requests per path (fast/deep) — the router's own effectiveness. */
+  byPath: Record<string, number>;
+  /** Requests per primary model — which model carried the traffic. */
+  byModel: Record<string, number>;
+  /** Answers per evidence level — how much of the traffic was fully verified. */
+  byConfidence: Record<string, number>;
 }
 
 export function metricsSummary(): MetricsSummary {
@@ -88,11 +110,23 @@ export function metricsSummary(): MetricsSummary {
       avgRounds: 0,
       timeoutRate: 0,
       verificationRate: 0,
+      avgToolCalls: 0,
+      fallbackRate: 0,
+      byIntent: {},
+      byPath: {},
+      byModel: {},
+      byConfidence: {},
     };
   }
   const latencies = history.map((h) => h.latencyMs).sort((a, b) => a - b);
   const p95Index = Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95));
   const sum = <T>(f: (x: RequestMetrics) => T) => history.reduce((a, x) => a + Number(f(x)), 0);
+  const tally = (f: (x: RequestMetrics) => string) =>
+    history.reduce<Record<string, number>>((acc, x) => {
+      const k = f(x) || "unknown";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {});
   return {
     count: n,
     avgLatencyMs: Math.round(sum((h) => h.latencyMs) / n),
@@ -100,6 +134,12 @@ export function metricsSummary(): MetricsSummary {
     avgRounds: Number((sum((h) => h.rounds) / n).toFixed(2)),
     timeoutRate: Number((sum((h) => (h.outcome === "timeout" ? 1 : 0)) / n).toFixed(3)),
     verificationRate: Number((sum((h) => (h.verified ? 1 : 0)) / n).toFixed(3)),
+    avgToolCalls: Number((sum((h) => h.toolCalls) / n).toFixed(2)),
+    fallbackRate: Number((sum((h) => (h.fallbackUsed ? 1 : 0)) / n).toFixed(3)),
+    byIntent: tally((h) => h.intent),
+    byPath: tally((h) => h.path),
+    byModel: tally((h) => h.model),
+    byConfidence: tally((h) => h.confidence ?? "UNKNOWN"),
   };
 }
 

@@ -30,12 +30,31 @@ vi.mock("../../modules/ai-assistant/email", async (importOriginal) => ({
 
 vi.mock("@workspace/db", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  db: { select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) }) },
+  db: {
+    select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) }),
+    // The oversize-census hand-off creates a real job row, so `insert`/`update`
+    // must exist or the hand-off would fail with a TypeError instead of queueing.
+    insert: () => ({
+      values: (v: Record<string, unknown>) => ({
+        returning: () => Promise.resolve([{ id: 1, ...v }]),
+      }),
+    }),
+    update: () => ({ set: () => ({ where: () => Promise.resolve([]) }) }),
+  },
 }));
 
 vi.mock("../../modules/ai-assistant/pdf", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   generateAssistantPdf: vi.fn(async () => Buffer.from("%PDF-fake")),
+}));
+
+// The oversize-census hand-off calls the WhatsApp sender from the background
+// worker's finish callback; it must be a no-op here rather than a real network
+// call (the worker runs detached and would otherwise hit the API after the test).
+vi.mock("../../modules/communications/service", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  sendWhatsAppText: vi.fn(async () => undefined),
+  sendWhatsAppDocument: vi.fn(async () => undefined),
 }));
 
 /** One attached PDF, as the item parser receives it. */
@@ -289,7 +308,7 @@ describe("scan_email_items tool", () => {
         }),
     );
 
-    const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
+    const res = (await executeTool("scan_email_items", { noAutoJob: true }, ctx as never)) as {
       data: {
         isComplete: boolean;
         scope: string;
@@ -424,7 +443,7 @@ describe("scan_email_items tool", () => {
         }),
     );
 
-    const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
+    const res = (await executeTool("scan_email_items", { noAutoJob: true }, ctx as never)) as {
       data: { isComplete: boolean; scope: string; note: string; remainingMessages: number };
     };
     // Only 3 of 480 opened → not complete, and the shortfall is stated.
@@ -664,5 +683,92 @@ describe("scan_email_items tool", () => {
     expect(res.data.hasAttachments).toBe(false);
     expect(res.data.isComplete).toBe(false);
     expect(res.data.note).toContain("لم أجد أي مرفق");
+  });
+});
+
+describe("oversize census hands off to a background job", () => {
+  beforeEach(() => {
+    scanEmails.mockReset();
+    extractPdfText.mockReset();
+    ctx.outbox.length = 0;
+  });
+
+  it("queues a job and returns immediately when too much is left to finish now", async () => {
+    // Thousands matched, a handful opened. Rather than tell the operator to keep
+    // re-asking (each re-ask spends the day's model quota), the tool queues a
+    // job and returns its id — the worker finishes it unattended.
+    extractPdfText.mockResolvedValue("Quantity UOM Part No Line Item\n1 5 Each X-1 THING\n");
+    const pool = [1, 2, 3].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC RFQ ${uid}`,
+      attachments: pdfAttachments([{ filename: `a${uid}.pdf`, content: Buffer.from("pdf") }]),
+    }));
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 3749,
+        }),
+    );
+
+    const res = (await executeTool(
+      "scan_email_items",
+      { question: "حصر كل بنود السنة" },
+      ctx as never,
+    )) as { data: { jobId: number; status: string; note: string } };
+
+    // The hand-off returns a job, not a partial item list.
+    expect(res.data.jobId).toBeGreaterThan(0);
+    expect(res.data.note).toContain("الخلفية");
+    expect(res.data.note).toContain("job_status");
+  });
+
+  it("does NOT queue a job for a scan that finished", async () => {
+    // A completed census must return its rows, not a job — the threshold only
+    // applies to work that would otherwise be left unfinished.
+    extractPdfText.mockResolvedValue("Quantity UOM Part No Line Item\n1 5 Each X-1 THING\n");
+    scanEmails.mockResolvedValue(
+      censusWithAttachments([
+        {
+          uid: 1,
+          mailbox: "info@cortoba-supplies.com",
+          subject: "EDC RFQ 1",
+          attachments: pdfAttachments([{ filename: "a.pdf", content: Buffer.from("pdf") }]),
+        },
+      ]),
+    );
+    const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
+      data: { jobId?: number; isComplete: boolean; topItems: unknown[] };
+    };
+    expect(res.data.jobId).toBeUndefined();
+    expect(res.data.isComplete).toBe(true);
+    expect(Array.isArray(res.data.topItems)).toBe(true);
+  });
+
+  it("does NOT queue a job for a `contains` lookup (an answer beats a notice)", async () => {
+    // «فين البند ده؟» must be answered from what was read, with its scope, not
+    // replaced by a «جاري الحصر» message.
+    extractPdfText.mockResolvedValue(
+      "Quantity UOM Part No Line Item\n1 5 Each X-1 ARISTON HEATER\n",
+    );
+    const pool = [1, 2].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC RFQ ${uid}`,
+      attachments: pdfAttachments([{ filename: `a${uid}.pdf`, content: Buffer.from("pdf") }]),
+    }));
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 3749,
+        }),
+    );
+    const res = (await executeTool("scan_email_items", { contains: "ariston" }, ctx as never)) as {
+      data: { jobId?: number; contains?: string; note: string };
+    };
+    expect(res.data.jobId).toBeUndefined();
+    expect(res.data.contains).toBe("ariston");
+    // The scope warning still tells the model older mail was not read.
+    expect(res.data.note).toContain("لم تُفحص كل الرسائل");
   });
 });

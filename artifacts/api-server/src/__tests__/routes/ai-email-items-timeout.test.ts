@@ -122,7 +122,11 @@ describe("scan_email_items memoization (timeout fix)", () => {
     scanEmails.mockResolvedValue(censusWith([PLAIN_TEXT, ARISTON_TEXT], false));
     const ctx = makeCtx();
 
-    const first = await executeTool("scan_email_items", { from: "edc", top: 5 }, ctx as never);
+    const first = await executeTool(
+      "scan_email_items",
+      { from: "edc", top: 5, noAutoJob: true },
+      ctx as never,
+    );
     expect(first.ok).toBe(true);
     expect(scanEmails).toHaveBeenCalledTimes(1);
 
@@ -140,7 +144,7 @@ describe("scan_email_items memoization (timeout fix)", () => {
   it("re-scans when the scope actually changes", async () => {
     scanEmails.mockResolvedValue(censusWith([PLAIN_TEXT], false));
     const ctx = makeCtx();
-    await executeTool("scan_email_items", { from: "edc", top: 5 }, ctx as never);
+    await executeTool("scan_email_items", { from: "edc", top: 5, noAutoJob: true }, ctx as never);
     await executeTool(
       "scan_email_items",
       { from: "edc", sinceDate: "2026-06-01", top: 5 },
@@ -217,7 +221,11 @@ describe("scan_email_items contains filter (missing older orders)", () => {
     scanEmails.mockImplementation(async (opts: { attachmentSkip?: number }) =>
       censusWith(opts.attachmentSkip ? [] : [PLAIN_TEXT], false, 480),
     );
-    const r = await executeTool("scan_email_items", { from: "edc", top: 10 }, ctx as never);
+    const r = await executeTool(
+      "scan_email_items",
+      { from: "edc", top: 10, noAutoJob: true },
+      ctx as never,
+    );
     const data = r.data as { note: string; scope: string; isComplete: boolean };
     expect(data.scope).toContain("ميزانية الوقت");
     expect(data.note).toContain("ميزانية الوقت");
@@ -234,7 +242,11 @@ describe("scan_email_items contains filter (missing older orders)", () => {
       scanEmails.mockImplementation(async (opts: { attachmentSkip?: number }) =>
         censusWith(opts.attachmentSkip ? [] : [PLAIN_TEXT, ARISTON_TEXT], false, 2),
       );
-      const r = (await executeTool("scan_email_items", { from: "edc", top: 10 }, ctx as never)) as {
+      const r = (await executeTool(
+        "scan_email_items",
+        { from: "edc", top: 10, noAutoJob: true },
+        ctx as never,
+      )) as {
         data: { isComplete: boolean; scope: string; note: string };
       };
       expect(r.data.isComplete).toBe(true);

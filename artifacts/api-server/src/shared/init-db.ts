@@ -1241,6 +1241,20 @@ export async function initDb(): Promise<void> {
         ON ai_assistant_jobs (job_key, status);
     `);
 
+    // Persisted scan sessions. The resumable email/item census keeps its cursor
+    // and parsed rows here, so a restart resumes instead of re-reading a
+    // multi-minute scan. Own statement: statements share an implicit transaction,
+    // so a sibling failure could otherwise roll this CREATE back silently.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_assistant_scan_sessions (
+        key TEXT PRIMARY KEY,
+        session JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_scan_sessions_updated
+        ON ai_assistant_scan_sessions (updated_at DESC);
+    `);
+
     // ── Search / document-number indexes (P12) ──────────────────────────────
     // The assistant resolves documents by number and suppliers/customers by name
     // with ILIKE '%term%'. Without indexes those become sequential scans as the
@@ -1262,6 +1276,19 @@ export async function initDb(): Promise<void> {
       `CREATE INDEX IF NOT EXISTS idx_suppliers_name_trgm ON suppliers USING gin (name gin_trgm_ops)`,
       `CREATE INDEX IF NOT EXISTS idx_customers_name_trgm ON customers USING gin (name gin_trgm_ops)`,
       `CREATE INDEX IF NOT EXISTS idx_po_items_description_trgm ON purchase_order_items USING gin (description gin_trgm_ops)`,
+      // Part-number lookups (the assistant's item queries and the alias-aware
+      // contains filter) hit these columns with a leading-wildcard ILIKE too.
+      `CREATE INDEX IF NOT EXISTS idx_po_items_part_no_trgm ON purchase_order_items USING gin (part_no gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfq_items_part_no_trgm ON customer_rfq_items USING gin (part_no gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfq_items_line_item_trgm ON customer_rfq_items USING gin (line_item gin_trgm_ops)`,
+      // Customer-PO numbers are matched against supplier-PO sheet numbers by
+      // number, so both sides need an index for that join-ish lookup to scale.
+      `CREATE INDEX IF NOT EXISTS idx_customer_pos_po_no ON customer_pos (customer_po_no)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_po_items_rfq_item ON customer_po_items (customer_rfq_item_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_items_customer_po_item ON purchase_order_items (customer_po_item_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_offers_rfq ON offers (rfq_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_offer_items_offer ON offer_items (offer_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_offer_items_rfq_item ON offer_items (rfq_item_id)`,
     ]) {
       try {
         await client.query(stmt);

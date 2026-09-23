@@ -96,7 +96,7 @@ vi.mock("../../shared/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-const { createJob, getJob, listJobs, describeJob, pendingAiJobs } =
+const { createJob, getJob, listJobs, describeJob, pendingAiJobs, startCensusJob } =
   await import("../../modules/ai-assistant/jobs");
 
 describe("async jobs", () => {
@@ -207,5 +207,64 @@ describe("async jobs", () => {
     expect(line).toContain("#7");
     expect(line).toContain("1842");
     expect(line).toContain("61%");
+  });
+
+  it("startCensusJob walks batches to completion, reports progress, and finishes once", async () => {
+    let batches = 0;
+    let finished = 0;
+    const sessionFor = (batch: number) => ({
+      census: { matched: 4 },
+      coverage: { messages: batch, attachments: batch, lines: batch * 3 },
+      items: [{ description: `x${batch}` }],
+      complete: batch >= 4,
+    });
+
+    const { job } = await startCensusJob({
+      phone: "2010",
+      question: "حصر كل البريد",
+      args: { mailbox: "*" },
+      runBatch: async () => {
+        batches += 1;
+        return { session: sessionFor(batches) };
+      },
+      finish: async () => {
+        finished += 1;
+      },
+    });
+    expect(job.id).toBeGreaterThan(0);
+    await pendingAiJobs();
+    // 4 batches for a 4-message census, then stop — never an infinite loop.
+    expect(batches).toBe(4);
+    expect(finished).toBe(1);
+    const done = await getJob(job.id);
+    expect(done?.status).toBe("completed");
+    expect(done?.progress?.percent).toBe(100);
+  });
+
+  it("startCensusJob RESUMES an identical active census instead of double-scanning", async () => {
+    const slow = startCensusJob({
+      phone: "2010",
+      question: "حصر",
+      args: { mailbox: "info@", sinceDate: "2026-01-01" },
+      runBatch: async () => {
+        await new Promise((r) => setTimeout(r, 25));
+        return { session: { census: { matched: 1 }, coverage: {}, items: [], complete: false } };
+      },
+      finish: async () => {},
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    const again = await startCensusJob({
+      phone: "2010",
+      question: "حصر",
+      args: { mailbox: "info@", sinceDate: "2026-01-01" },
+      runBatch: async () => {
+        throw new Error("must not start a second census");
+      },
+      finish: async () => {},
+    });
+    expect(again.reused).toBe(true);
+    const first = await slow;
+    expect(again.job.id).toBe(first.job.id);
+    await pendingAiJobs();
   });
 });

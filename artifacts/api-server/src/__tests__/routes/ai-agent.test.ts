@@ -806,5 +806,54 @@ describe("AI assistant agent loop", () => {
       expect(m.outcome).toBe("timeout");
       expect(m.intent).toBe("count_aggregate");
     });
+
+    it("records the evidence level of a tool-backed answer", async () => {
+      const { resetMetrics, recentMetrics } = await import("../../modules/ai-assistant/metrics");
+      resetMetrics();
+      chatCompletion.mockResolvedValueOnce({
+        content: "عدد أوامر الشراء 5.",
+        finishReason: "stop",
+        toolCalls: [],
+      });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      await runAgent({ phone: "2010", text: "كام أمر شراء؟" });
+      const [m] = recentMetrics(1);
+      // No tool ran and nothing was reconciled, so the reply is a verified
+      // absence of data rather than a weak answer.
+      expect(m.confidence).toBe("VERIFIED");
+    });
+
+    it("downgrades the evidence level when a grounding correction was needed", async () => {
+      const metrics = await import("../../modules/ai-assistant/metrics");
+      metrics.resetMetrics();
+      // A first draft that cites a document number no tool produced is what the
+      // verifier rewrites — and a corrected answer must read as
+      // PARTIALLY_VERIFIED on the dashboard, not as a clean reply.
+      const call = {
+        id: "c1",
+        type: "function",
+        function: {
+          name: "lookup_document",
+          arguments: '{"type":"customer_rfq","number":"26R011936"}',
+        },
+      };
+      chatCompletion
+        .mockResolvedValueOnce({ content: null, finishReason: "tool_calls", toolCalls: [call] })
+        .mockResolvedValueOnce({
+          content: "الطلب 26R099999 موجود في النظام.",
+          finishReason: "stop",
+          toolCalls: [],
+        })
+        .mockResolvedValueOnce({
+          content: "لا يوجد طلب آخر بهذا الرقم.",
+          finishReason: "stop",
+          toolCalls: [],
+        });
+      executeTool.mockResolvedValue({ ok: true, data: { found: true, rfq: { id: 7 } } });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      await runAgent({ phone: "2010", text: "?" });
+      const [m] = metrics.recentMetrics(1);
+      expect(m.confidence).toBe("PARTIALLY_VERIFIED");
+    });
   });
 });
