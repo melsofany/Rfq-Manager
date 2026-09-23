@@ -1006,3 +1006,50 @@ one of the following types … Received file of type 'text/csv'`), so every CSV 
   logs** — a time-filtered sweep will "prove" there were no inbound webhooks when
   there were. Pull unfiltered (`limit=1000`, repeated, dedupe by `id`) and filter in
   JS.
+
+## A sender's declared MIME type is not evidence of the content (feat #160)
+
+- **Symptom**: «ادخل الميل وشوف كل الPO وقولي اكتر بند اتكرر» answered «بنود القطع
+  داخل ملفات PDF … يتعذر استخراجها آليًا». IMAP was healthy (3,749 EDC messages
+  matched) and `pdf-parse` worked — the assistant never got a file to read.
+- **Cause**: EDC declares its real PDFs (`%PDF-`) as `application/doc` — **281 of
+  305 attachments measured on live mail**. `fetchMessageAttachments` filtered on
+  `contentType === "application/pdf"` exactly, so the scan opened **zero** files
+  and still reported a total. `isReadableDocumentMime` had the same blind spot for
+  the model-side read path. **A filter keyed on a label the sender controls is a
+  filter the sender can defeat.**
+- **Fix**: `isPdfContent` (magic bytes) + `isPdfAttachment` — MIME **or** filename
+  **or** bytes, ORed. The bytes are the signal that cannot be mislabelled;
+  requiring all three would keep the mail unreadable, which is the bug. Both
+  `fetchMessageAttachments` and `get_email_attachment` use it, so the file is also
+  sent to WhatsApp under a type it accepts (`application/doc` is not one).
+- **«أكتر بند اتكرر» is a FREQUENCY question**: the old sort was by quantity, so a
+  single 5,000-pc one-off order led it. `aggregateItemsByOccurrence` is now the
+  default (`ordering=mostRepeated`), `ordering=qty` keeps the volume view. The
+  aggregator lives in `email-items.ts` and is unit-tested without IMAP.
+- **Grouping keys need a floor**: live data had the location tag `RCV` as the
+  description on 33 lines, out-ranking every real part. `itemKey` drops
+  descriptions shorter than `MIN_DESCRIPTION_KEY_LEN` (4) — **do NOT normalise
+  descriptions further** (stripping numbers merges `CABLE 50 MM` with `CABLE 70 MM`).
+- **A sample must not read as a total** (again — same rule as `scan_emails`): the
+  tool result carries `scope` («أحدث N رسالة من M»), `isComplete:false` when the
+  pass was capped, and distinguishes «found no readable files»
+  (`hasAttachments:false`) from «the orders have no items». The old note said
+  neither, which is how the reply sounded authoritative while having read nothing.
+- **Budget**: attachment fetch is ~**67 ms/message** live, so the 120-message
+  default analysed a thirty-second of the year. Now 400 messages / 75 s wall clock
+  (inside the agent's 150 s ceiling). Measured through the REAL pipeline after the
+  fix: 400 messages → 382 attachments, 1,311 item lines, 856 distinct parts
+  (previously 0).
+- Tests: `ai-email-attachment-mime.test.ts` (7 — the `application/doc` PDF opens,
+  a genuine xlsx is still ignored; **verified failing against the pre-fix filter**),
+  `itemKey`/occurrence tests in `ai-email-items.test.ts`, ranking + truncated-scope
+  - no-files tests in `ai-email-items-tool.test.ts`. **593 api-server tests** pass;
+    tsc + repo-wide prettier + api-server build clean.
+- **Env leakage when running the suite by hand**: `set -a && . /tmp/env_exports.sh`
+  to reach the live mailbox leaves `SMTP_*`/`IMAP_*`/`AI_*` exported, and 4 tests
+  that assert the _unconfigured_ state then fail. `unset` them before trusting a
+  local `vitest run` — they pass on a clean shell.
+- PR #160 squash-merged `1d8ac8f`; CI (Type Check / Tests / Format Check) green;
+  Render `dep-dapr5g8473hc73c01u10` live at `1d8ac8f`; `/api/healthz` 200 and
+  `/api/ai-assistant/*` 401 (mounted behind auth).
