@@ -56,6 +56,14 @@ export const AGENT_BUDGET_MS = 150_000;
  */
 const FORCE_ANSWER_ON_LAST_ROUND = true;
 
+/**
+ * Least time that must remain in the run budget before a grounding-verification
+ * round is attempted. The operator is waiting live: if there is not enough time
+ * for another provider round-trip, shipping the answer as-is beats a timeout
+ * notice. See `verifyGroundedAnswer`.
+ */
+export const VERIFY_MIN_REMAINING_MS = 30_000;
+
 const LANGUAGE_NAME: Record<string, string> = { ar: "العربية", en: "English" };
 
 export function systemPrompt(settings: AiSettings): string {
@@ -75,6 +83,7 @@ export function systemPrompt(settings: AiSettings): string {
 - لا تنسب أمر شراء إلى مورد إلا إذا ظهر اسم المورد صراحة في صفوف ذلك الأمر أو بنوده.
 - إذا قال المستخدم إنك أخطأت، لا تُقدّم تخمينًا آخر. أعد التحقق بالأدوات، واذكر مصدر كل معلومة، وإن لم تجدها فاعتذر بوضوح واذكر ما بحثت فيه بالضبط.
 - عند ذكر أي معلومة، اذكر مصدرها بإيجاز (مثال: «من جدول بنود أوامر الشراء: البند كذا في الأمر كذا»).
+- لا تكتب أبدًا رقم مستند (طلب/أمر/فاتورة) لم يظهر حرفيًا في نتيجة أداة. قبل إرسال الرد تأكد أن كل رقم ذكرته موجود في نتائج الأدوات فعلًا؛ وإن لم يوجد فقل «غير متوفر» بدلًا من كتابته.
 
 قدراتك وحدودها (لا تدّعي ما ليس لديك):
 - قراءة سجل محادثات الواتساب: نعم. إرسال رسائل واتساب للموردين من داخل المحادثة: لا — لا توجد أداة لإرسال واتساب، والواتساب للقراءة فقط. إن طلب المستخدم إرسال رسالة، قل ذلك بوضوح واقترح صياغة نصية يرسلها هو بنفسه.
@@ -94,6 +103,7 @@ export function systemPrompt(settings: AiSettings): string {
 - اعمل على مرحلتين: مرحلة جمع (استدعاء أو استدعاءان) ثم مرحلة إجابة.
 - بعد أن تحصل على نتيجة كافية، توقّف فورًا عن استدعاء الأدوات واكتب الرد النصي النهائي.
 - لا تُكرّر نفس الاستدعاء بنفس المعطيات، ولا تستدعِ أداة ثانية لمعلومة وصلتك بالفعل.
+- التكرار الحرفي لنفس الأداة بنفس المعطيات يُعاد استخدام نتيجته من الذاكرة (لا فائدة فيه)، فغيّر المعطيات أو استخدم النتيجة التي معك.
 - الحد الأقصى 4 استدعاءات متتالية؛ بعدها يجب أن تكون كتبت الرد.
 قواعد عامة:
 - عند السؤال عن رقم (أمر شراء/طلب/فاتورة) استخدم lookup_document أو search_database.
@@ -246,6 +256,29 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   let finalText: string | null = null;
   const startedAt = Date.now();
 
+  // Per-run memo of tool results, keyed on the tool name + canonical arguments.
+  // A model that re-issues an identical call (documented live: it repeats the
+  // same search when the first result did not match its expectation) would
+  // otherwise spend another scarce round on work already done — one of the
+  // recorded causes of the assistant going silent on the free-tier quota. The
+  // cache is scoped to this run only: a later question must see fresh data.
+  const toolCache = new Map<string, Promise<string>>();
+  // Grounding ledger: every token that appeared in a tool result (or was stated
+  // by the operator). The verifier checks the final answer against this — see
+  // `findUngroundedNumbers`.
+  const groundedNumbers = new Set<string>();
+  // Anything the operator, the conversation, the attached document, or the
+  // learned memory already stated is fair game for the answer to quote back —
+  // the verifier only challenges tokens the run itself introduced.
+  for (const n of findGroundingNumbers(userText + documentNote + memoryBlock)) {
+    groundedNumbers.add(n);
+  }
+  for (const m of history) {
+    if (typeof m.content === "string") {
+      for (const n of findGroundingNumbers(m.content)) groundedNumbers.add(n);
+    }
+  }
+
   // Hard ceiling on the WHOLE run (every round, every model, every tool). The
   // operator is waiting in a chat window: past this point a late answer is
   // worse than an honest "it timed out", because they have already given up.
@@ -311,13 +344,26 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         usedTools.push({ name: call.function.name, args: parsed });
         return { call, parsed };
       });
+      let dedupedCount = 0;
       const outcomes = await Promise.all(
         calls.map(async ({ call, parsed }) => {
-          const res = await executeTool(call.function.name, parsed, ctx);
-          return {
-            call,
-            content: res.ok ? asText(res.data) : `ERROR: ${res.error}`,
-          };
+          // Identical (tool, args) in the SAME run: reuse the earlier result
+          // instead of re-running the tool. The calls in one round already run
+          // concurrently, so the promise is cached rather than the value.
+          const key = toolCacheKey(call.function.name, parsed);
+          let pending = toolCache.get(key);
+          if (pending) {
+            dedupedCount += 1;
+          } else {
+            pending = (async () => {
+              const res = await executeTool(call.function.name, parsed, ctx);
+              return res.ok ? asText(res.data) : `ERROR: ${res.error}`;
+            })();
+            toolCache.set(key, pending);
+          }
+          const content = await pending;
+          for (const n of findGroundingNumbers(content)) groundedNumbers.add(n);
+          return { call, content };
         }),
       );
       for (const { call, content } of outcomes) {
@@ -334,6 +380,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
           round,
           ms: Date.now() - roundStartedAt,
           toolCalls: calls.map((c) => c.call.function.name),
+          deduped: dedupedCount,
         },
         "AI assistant: tool round complete",
       );
@@ -341,6 +388,33 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
 
     if (!finalText) {
       finalText = exhaustedAnswer(usedTools);
+    }
+
+    // Grounding check (Reflexion-style verification): if the answer cites a
+    // document number that never appeared in any tool result, the operator is
+    // reading a fabrication. One bounded corrective round is cheaper — and far
+    // more trustworthy — than shipping the invented number. Skipped once the
+    // budget is already spent, where a late correction is worse than the answer.
+    if (
+      finalText &&
+      !runBudget.signal.aborted &&
+      Date.now() - startedAt < AGENT_BUDGET_MS - VERIFY_MIN_REMAINING_MS
+    ) {
+      const ungrounded = findUngroundedNumbers(finalText, groundedNumbers);
+      if (ungrounded.length) {
+        logger.warn(
+          { phone: input.phone, ungrounded: ungrounded.slice(0, 8) },
+          "AI assistant: answer cites numbers absent from every tool result",
+        );
+        const corrected = await verifyGroundedAnswer({
+          settings,
+          messages,
+          finalText,
+          ungrounded,
+          signal: runBudget.signal,
+        });
+        if (corrected) finalText = corrected;
+      }
     }
   } finally {
     clearTimeout(runTimer);
@@ -381,6 +455,138 @@ function parseArgs(call: ToolCall): Record<string, unknown> {
     return typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
+  }
+}
+
+/**
+ * Stable cache key for one tool call: the tool name plus its arguments in a
+ * canonical form, so `{"a":1,"b":2}` and `{"b":2,"a":1}` dedupe to one entry.
+ * Nested objects are sorted recursively; a non-object value falls back to its
+ * string form.
+ */
+export function toolCacheKey(name: string, args: unknown): string {
+  const canonical = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(canonical);
+    if (v && typeof v === "object") {
+      return Object.keys(v as Record<string, unknown>)
+        .sort()
+        .reduce<Record<string, unknown>>((acc, k) => {
+          acc[k] = canonical((v as Record<string, unknown>)[k]);
+          return acc;
+        }, {});
+    }
+    return v;
+  };
+  try {
+    return `${name}:${JSON.stringify(canonical(args ?? {}))}`;
+  } catch {
+    return `${name}:${String(args)}`;
+  }
+}
+
+/**
+ * Document-number-shaped tokens in a piece of text.
+ *
+ * Shape matters: only strings that carry BOTH letters and digits (optionally
+ * hyphen-separated), like `26R011936`, `P26E13477`, `INV-2026-000045`, are
+ * treated as a numbered document. Plain numbers — money amounts, quantities,
+ * ids, years — are deliberately excluded, because challenging every `3` in a
+ * sentence would reject correct prose.
+ */
+export function findGroundingNumbers(text: string): string[] {
+  if (!text) return [];
+  // Capture whole id-shaped runs first (letters/digits plus `._-` separators),
+  // because splitting on the hyphen would turn `INV-2026-000045` into a bare
+  // number and lose the letter that makes it a document id.
+  const candidates = text.match(/[A-Za-z0-9][A-Za-z0-9._-]{2,}/g) ?? [];
+  const out: string[] = [];
+  for (const raw of candidates) {
+    const t = raw.replace(/[._-]+$/, "").toUpperCase();
+    if (t.length < 4) continue;
+    // Must be a genuine mixed alphanumeric doc id: letters AND digits, and not
+    // a bare decimal (money/quantity) which the operator never needs checked.
+    if (!/\d/.test(t) || !/[A-Z]/.test(t)) continue;
+    if (/^\d+(?:[.,]\d+)*$/.test(t)) continue;
+    out.push(t);
+  }
+  return [...new Set(out)];
+}
+
+/**
+ * Tokens in the answer that never appeared in any tool result.
+ *
+ * Compares in a normalised form (uppercase, spaces and hyphens removed) so
+ * `26R 011936` and `26R-011936` are recognised as the number the tool returned.
+ * A token that is a SUBSTRING of a grounded token is accepted too — that is how
+ * the model quoting "011936" out of "26R011936" reads. The reverse (the answer
+ * token CONTAINING a grounded one, e.g. an extra trailing digit) is not
+ * accepted, because an extended id is not the id the tool returned.
+ */
+export function findUngroundedNumbers(answer: string, grounded: Set<string>): string[] {
+  if (!answer) return [];
+  const norm = (s: string) => s.replace(/[\s-]+/g, "").toUpperCase();
+  const pool = new Set([...grounded].map(norm));
+  const bad: string[] = [];
+  for (const token of findGroundingNumbers(answer)) {
+    const n = norm(token);
+    if (pool.has(n)) continue;
+    let covered = false;
+    for (const g of pool) {
+      if (g.includes(n)) {
+        covered = true;
+        break;
+      }
+    }
+    if (!covered && !bad.includes(token)) bad.push(token);
+  }
+  return bad;
+}
+
+/**
+ * The verification round: hand the model its own draft plus the list of tokens
+ * that appear nowhere in the evidence, and ask it to remove or correct them.
+ *
+ * This is the "generator → critic" pattern from LangGraph / Reflexion applied
+ * with a DETERMINISTIC critic (token containment, no model call to decide), so
+ * it costs one provider request only when a real fabrication is suspected —
+ * never on an ordinary answer. The draft is kept if the model fails to improve
+ * it, so a verification failure can never lose a good reply.
+ */
+async function verifyGroundedAnswer(opts: {
+  settings: AiSettings;
+  messages: ChatMessage[];
+  finalText: string;
+  ungrounded: string[];
+  signal: AbortSignal;
+}): Promise<string | null> {
+  const numbers = opts.ungrounded.slice(0, 20).join(", ");
+  const instruction =
+    "مراجعة إلزامية قبل الإرسال: الردّ التالي يحتوي أرقامًا لم تظهر في أي نتيجة أداة: " +
+    numbers +
+    ".\n" +
+    "أعد كتابة الرد مع الالتزام الصارم بالآتي:\n" +
+    "1) احذف أي رقم مستند/طلب/أمر/فاتورة لم يظهر حرفيًا في نتيجة أداة، ولا تستبدله برقم مخمّن.\n" +
+    "2) إن كانت المعلومة المطلوبة تعتمد على تلك الأرقام، فاذكر صراحةً أنها غير متوفرة ولم تُعثر عليها.\n" +
+    "3) أبقِ باقي الرد كما هو — لا تُغيّر الأرقام التي ظهرت فعلًا في نتائج الأدوات.\n" +
+    "أعد نص الرد النهائي فقط، بدون شرح أو مقدمة.";
+  try {
+    const res = await chatCompletion({
+      model: opts.settings.model,
+      baseUrl: opts.settings.baseUrl,
+      messages: [
+        ...opts.messages,
+        { role: "assistant", content: opts.finalText },
+        { role: "user", content: instruction },
+      ],
+      toolChoice: "none",
+      signal: opts.signal,
+    });
+    const text = res.content?.trim();
+    return text ? text : null;
+  } catch (err) {
+    // The draft is already written; an unavailable verifier must not lose it.
+    logger.warn({ err }, "AI assistant: grounding verification round failed");
+    return null;
   }
 }
 

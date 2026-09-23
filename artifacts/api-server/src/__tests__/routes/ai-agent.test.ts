@@ -357,4 +357,208 @@ describe("AI assistant agent loop", () => {
     expect(userRow.content).toContain("po.pdf");
     expect(userRow.content).not.toContain("سري جدا");
   });
+
+  // ── Tool-call deduplication (quota savings) ────────────────────────────────
+  describe("identical tool calls in one run", () => {
+    it("executes an identical (tool, args) call only ONCE", async () => {
+      // The model re-issuing the same search when the first result did not match
+      // its expectation used to spend another scarce round (Gemini free tier is
+      // 20 requests/day/model) on work already done.
+      const same = {
+        id: "c",
+        type: "function",
+        function: { name: "search_database", arguments: '{"table":"suppliers","search":"النور"}' },
+      };
+      chatCompletion
+        .mockResolvedValueOnce({ content: null, finishReason: "tool_calls", toolCalls: [same] })
+        .mockResolvedValueOnce({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [{ ...same, id: "c2" }],
+        })
+        .mockResolvedValueOnce({ content: "تم.", finishReason: "stop", toolCalls: [] });
+      executeTool.mockResolvedValue({ ok: true, data: { count: 1 } });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "?" });
+
+      expect(out.reply).toBe("تم.");
+      expect(executeTool).toHaveBeenCalledTimes(1);
+      // The repeated call still gets an answer in the transcript, so the model
+      // sees a result for every tool_call_id it emitted.
+      const toolMsgs = chatCompletion.mock.calls[2][0].messages.filter(
+        (m: any) => m.role === "tool",
+      );
+      expect(toolMsgs).toHaveLength(2);
+      expect(toolMsgs[1].content).toBe(toolMsgs[0].content);
+    });
+
+    it("treats argument key order as the same call", async () => {
+      const call = (args: string, id: string) => ({
+        id,
+        type: "function",
+        function: { name: "scan_emails", arguments: args },
+      });
+      chatCompletion
+        .mockResolvedValueOnce({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [call('{"from":"edc","limit":50}', "a")],
+        })
+        .mockResolvedValueOnce({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [call('{"limit":50,"from":"edc"}', "b")],
+        })
+        .mockResolvedValueOnce({ content: "تم.", finishReason: "stop", toolCalls: [] });
+      executeTool.mockResolvedValue({ ok: true, data: { matched: 0 } });
+
+      const { runAgent, toolCacheKey } = await import("../../modules/ai-assistant/agent");
+      await runAgent({ phone: "2010", text: "?" });
+
+      expect(executeTool).toHaveBeenCalledTimes(1);
+      expect(toolCacheKey("scan_emails", { a: 1, b: 2 })).toBe(
+        toolCacheKey("scan_emails", { b: 2, a: 1 }),
+      );
+    });
+
+    it("still runs two calls that only differ in one argument", async () => {
+      const call = (args: string, id: string) => ({
+        id,
+        type: "function",
+        function: { name: "search_database", arguments: args },
+      });
+      chatCompletion
+        .mockResolvedValueOnce({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [call('{"table":"suppliers"}', "a")],
+        })
+        .mockResolvedValueOnce({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [call('{"table":"customers"}', "b")],
+        })
+        .mockResolvedValueOnce({ content: "تم.", finishReason: "stop", toolCalls: [] });
+      executeTool.mockResolvedValue({ ok: true, data: { rows: [] } });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      await runAgent({ phone: "2010", text: "?" });
+
+      expect(executeTool).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ── Deterministic grounding verification (generator → critic) ───────────────
+  describe("grounding verification", () => {
+    it("corrects an answer that cites a number no tool returned", async () => {
+      const call = {
+        id: "c1",
+        type: "function",
+        function: {
+          name: "lookup_document",
+          arguments: '{"type":"customer_rfq","number":"26R011936"}',
+        },
+      };
+      chatCompletion
+        .mockResolvedValueOnce({ content: null, finishReason: "tool_calls", toolCalls: [call] })
+        // The draft invents 26R099999, which never appeared in any tool result.
+        .mockResolvedValueOnce({
+          content: "الطلب 26R099999 موجود في النظام.",
+          finishReason: "stop",
+          toolCalls: [],
+        })
+        // Verification round returns the corrected answer.
+        .mockImplementationOnce((args: any) => {
+          const instruction = args.messages[args.messages.length - 1];
+          expect(instruction.role).toBe("user");
+          expect(String(instruction.content)).toContain("26R099999");
+          expect(args.toolChoice).toBe("none");
+          return Promise.resolve({
+            content: "لا يوجد طلب آخر بهذا الرقم.",
+            finishReason: "stop",
+            toolCalls: [],
+          });
+        });
+      executeTool.mockResolvedValue({ ok: true, data: { found: true, rfq: { id: 7 } } });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "?" });
+
+      expect(out.reply).toBe("لا يوجد طلب آخر بهذا الرقم.");
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ ungrounded: ["26R099999"] }),
+        expect.stringContaining("absent from every tool result"),
+      );
+    });
+
+    it("does NOT challenge a number that a tool really returned", async () => {
+      const call = {
+        id: "c1",
+        type: "function",
+        function: { name: "scan_emails", arguments: "{}" },
+      };
+      chatCompletion
+        .mockResolvedValueOnce({ content: null, finishReason: "tool_calls", toolCalls: [call] })
+        .mockResolvedValueOnce({
+          content: "وصل الطلب 26R011936 وهو مسجل.",
+          finishReason: "stop",
+          toolCalls: [],
+        });
+      executeTool.mockResolvedValue({ ok: true, data: { numbers: ["26R011936"] } });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "?" });
+
+      expect(out.reply).toBe("وصل الطلب 26R011936 وهو مسجل.");
+      // Exactly one tool round + one answer round: no verification request.
+      expect(chatCompletion).toHaveBeenCalledTimes(2);
+    });
+
+    it("accepts a number the operator themselves stated", async () => {
+      chatCompletion.mockResolvedValueOnce({
+        content: "تمام، 26R055555 في الطلب.",
+        finishReason: "stop",
+        toolCalls: [],
+      });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "افتكر إن رقم الطلب 26R055555" });
+      expect(out.reply).toBe("تمام، 26R055555 في الطلب.");
+      expect(chatCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the draft when the verification round fails", async () => {
+      chatCompletion
+        .mockResolvedValueOnce({
+          content: "الرقم 99X12345.",
+          finishReason: "stop",
+          toolCalls: [],
+        })
+        .mockRejectedValueOnce(new Error("provider down"));
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "?" });
+      // Losing a good reply to an unavailable verifier is not acceptable.
+      expect(out.reply).toBe("الرقم 99X12345.");
+    });
+
+    it("classifies document ids and ignores money/quantities", async () => {
+      const { findGroundingNumbers, findUngroundedNumbers } =
+        await import("../../modules/ai-assistant/agent");
+      expect(findGroundingNumbers("الطلب 26R011936 بمبلغ 1,234.50 جنيه")).toEqual(["26R011936"]);
+      expect(findGroundingNumbers("أمر P26E13477 و INV-2026-000045")).toEqual([
+        "P26E13477",
+        "INV-2026-000045",
+      ]);
+      // A bare quantity/amount/year is never a document to challenge.
+      expect(findGroundingNumbers("12 قطعة بقيمة 5000 و 2026")).toEqual([]);
+
+      const grounded = new Set(["26R011936"]);
+      expect(findUngroundedNumbers("الطلب 26R011936", grounded)).toEqual([]);
+      // Quoting the suffix of a grounded id is fine.
+      expect(findUngroundedNumbers("الطلب 011936", grounded)).toEqual([]);
+      // An EXTENDED id is not the id the tool returned.
+      expect(findUngroundedNumbers("الطلب 26R0119367", grounded)).toEqual(["26R0119367"]);
+      expect(findUngroundedNumbers("الطلب 26R099999", grounded)).toEqual(["26R099999"]);
+    });
+  });
 });
