@@ -34,6 +34,7 @@ import {
   Brain,
   Pin,
   PinOff,
+  Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
@@ -84,6 +85,27 @@ interface AiSettings {
   isGemini?: boolean;
 }
 
+interface AiMetrics {
+  summary: {
+    count: number;
+    avgLatencyMs: number;
+    p95LatencyMs: number;
+    avgRounds: number;
+    timeoutRate: number;
+    verificationRate: number;
+  };
+  recent: Array<{
+    phone: string;
+    intent: string;
+    path: string;
+    rounds: number;
+    toolCalls: number;
+    verified: boolean;
+    latencyMs: number;
+    outcome: string;
+  }>;
+}
+
 async function apiGet<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
   if (!r.ok) throw new Error(`${r.status}`);
@@ -98,6 +120,7 @@ export default function AiAssistantPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [models, setModels] = useState<string[]>([]);
+  const [metrics, setMetrics] = useState<AiMetrics | null>(null);
 
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
@@ -138,6 +161,11 @@ export default function AiAssistantPage() {
       apiGet<{ models: string[] }>("/api/ai-assistant/models")
         .then((m) => setModels(m.models))
         .catch(() => setModels([]));
+      // Request telemetry is best-effort too — it is an operational signal, and
+      // its absence must never block the settings page.
+      apiGet<AiMetrics>("/api/ai-assistant/metrics")
+        .then(setMetrics)
+        .catch(() => setMetrics(null));
       await loadMemories();
     } catch (err) {
       toast.error(getApiErrorMessage(err, "فشل تحميل بيانات المساعد الذكي"));
@@ -363,6 +391,78 @@ export default function AiAssistantPage() {
                     <code>IMAP_HOST / IMAP_USER / IMAP_PASS</code> — لقراءة البريد الوارد
                   </li>
                 </ul>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {metrics && metrics.summary.count > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Activity className="h-5 w-5" /> أداء الطلبات (آخر {metrics.summary.count} طلب)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-4">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">متوسط زمن الرد</p>
+                  <p className="text-xl font-bold">
+                    {(metrics.summary.avgLatencyMs / 1000).toFixed(1)} ث
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">الزمن عند 95%</p>
+                  <p className="text-xl font-bold">
+                    {(metrics.summary.p95LatencyMs / 1000).toFixed(1)} ث
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">متوسط جولات النموذج</p>
+                  <p className="text-xl font-bold">{metrics.summary.avgRounds}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">نسبة انتهاء المهلة</p>
+                  <p className="text-xl font-bold">
+                    {(metrics.summary.timeoutRate * 100).toFixed(0)}%
+                  </p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>النوع</TableHead>
+                      <TableHead>المسار</TableHead>
+                      <TableHead>الجولات</TableHead>
+                      <TableHead>الأدوات</TableHead>
+                      <TableHead>التحقق</TableHead>
+                      <TableHead>الزمن</TableHead>
+                      <TableHead>النتيجة</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {metrics.recent.map((r, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-xs">{r.intent}</TableCell>
+                        <TableCell className="text-xs">
+                          {r.path === "fast" ? "سريع" : "تحليلي"}
+                        </TableCell>
+                        <TableCell className="text-xs">{r.rounds}</TableCell>
+                        <TableCell className="text-xs">{r.toolCalls}</TableCell>
+                        <TableCell className="text-xs">{r.verified ? "نعم" : "لا"}</TableCell>
+                        <TableCell className="text-xs">
+                          {(r.latencyMs / 1000).toFixed(1)} ث
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <Badge variant={r.outcome === "answered" ? "default" : "destructive"}>
+                            {r.outcome}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             </CardContent>
           </Card>

@@ -14,6 +14,8 @@ import {
   transcribeAudio,
   extractDocumentText,
   MAX_DOCUMENT_CHARS,
+  isTimeoutError,
+  isQuotaError,
   type ChatMessage,
   type ContentPart,
   type ToolCall,
@@ -29,15 +31,14 @@ import {
   type OutboxAttachment,
 } from "./tools";
 import { entityVocabulary, findUnknownEntityNames, type EntityName } from "./db-tools";
+import { routeQuestion, routeHint, DEEP_MAX_ROUNDS } from "./router";
+import { recordMetrics } from "./metrics";
 
 /**
- * Tool-calling rounds before we force an answer. Each round costs one provider
- * request, so this is a budget as much as a limit: on Gemini's free tier (20
- * requests/day/model) a generous budget burns the day's quota in a few
- * questions. 5 covers gather → refine → answer, and the last round always
- * produces text (see FORCE_ANSWER_ON_LAST_ROUND).
+ * Rounds allowed for the DEEP path (the router picks it per question). Kept as
+ * an alias of the router's constant so there is one source of truth.
  */
-export const MAX_TOOL_ROUNDS = 5;
+export const MAX_TOOL_ROUNDS = DEEP_MAX_ROUNDS;
 
 /**
  * Hard ceiling on one whole answer, across every tool round and model fallback.
@@ -242,32 +243,46 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
 
   const ctx: ToolContext = { settings, phone: input.phone, outbox: [] };
 
-  const history = await loadHistory(input.phone);
+  // The router is deterministic and free: it classifies the question before any
+  // provider request, so a simple lookup does not pay for the budget an analysis
+  // needs (and vice versa). It never answers — it only allocates rounds and
+  // supplies a short tool hint.
+  const plan = routeQuestion(userText);
+  // Rounds actually allowed for THIS question. The last one still forbids tools
+  // (see FORCE_ANSWER_ON_LAST_ROUND) so an answer is always produced.
+  const maxRounds = plan.maxRounds;
 
-  // Core memory: the memories most relevant to THIS message are injected into
-  // the system prompt, so a fact taught weeks ago is available without the model
-  // having to spend a tool round asking for it (and without the whole table
-  // crowding the context). Retrieval is local keyword scoring — no model quota.
-  const memories = await recallMemories({
-    phone: input.phone,
-    query: userText,
-    limit: 12,
-    trackUse: true,
-  });
+  // Independent loads run concurrently. Previously these were awaited in
+  // sequence — history, then memories, then the vocabulary — which added their
+  // latencies together on the path of every single question. Nothing here
+  // depends on anything else in the group, so the only correct behaviour is to
+  // overlap them.
+  const [history, memories, vocabulary] = await Promise.all([
+    loadHistory(input.phone),
+    // Core memory: the memories most relevant to THIS message are injected into
+    // the system prompt, so a fact taught weeks ago is available without the model
+    // having to spend a tool round asking for it (and without the whole table
+    // crowding the context). Retrieval is local keyword scoring — no model quota.
+    recallMemories({
+      phone: input.phone,
+      query: userText,
+      limit: 12,
+      trackUse: true,
+    }),
+    // The real supplier/customer vocabulary, prefetched so the model can tell an
+    // invented name from a real one. Two cheap selects, cached upstream — no model
+    // quota spent, and it is what makes a name checkable before it is written
+    // rather than after the operator challenges it.
+    settings.allowDatabase
+      ? entityVocabulary()
+      : Promise.resolve({ suppliers: [] as EntityName[], customers: [] as EntityName[] }),
+  ]);
   const memoryBlock = renderMemoryBlock(memories);
-
-  // The real supplier/customer vocabulary, prefetched so the model can tell an
-  // invented name from a real one. Two cheap selects, cached upstream — no model
-  // quota spent, and it is what makes a name checkable before it is written
-  // rather than after the operator challenges it.
-  const vocabulary = settings.allowDatabase
-    ? await entityVocabulary()
-    : { suppliers: [] as EntityName[], customers: [] as EntityName[] };
   const vocabularyBlock = renderVocabularyBlock(vocabulary);
 
   const system: ChatMessage = {
     role: "system",
-    content: systemPrompt(settings) + memoryBlock + vocabularyBlock,
+    content: systemPrompt(settings) + routeHint(plan) + memoryBlock + vocabularyBlock,
   };
 
   let userContent: string | ContentPart[];
@@ -285,6 +300,9 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const tools = toolDefinitions(ctx);
   const usedTools: Array<{ name: string; args: unknown }> = [];
   let finalText: string | null = null;
+  let rounds = 0;
+  let fallbackUsed = false;
+  let verificationRan = false;
   const startedAt = Date.now();
 
   // Per-run memo of tool results, keyed on the tool name + canonical arguments.
@@ -317,11 +335,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const runTimer = setTimeout(() => runBudget.abort(), AGENT_BUDGET_MS);
 
   try {
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    for (let round = 0; round < maxRounds; round++) {
       // Last round: forbid tool calls so the model has to answer with what it
       // already gathered. Without this a model that keeps calling tools drains
       // the budget and leaves nothing to send.
-      const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === MAX_TOOL_ROUNDS - 1;
+      const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === maxRounds - 1;
       const roundStartedAt = Date.now();
       const result = await chatCompletion({
         model: settings.model,
@@ -331,6 +349,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         toolChoice: isLastRound ? "none" : "auto",
         signal: runBudget.signal,
       });
+      rounds += 1;
+      if (result.modelUsed && result.modelUsed !== settings.model) fallbackUsed = true;
 
       if (result.toolCalls.length === 0) {
         finalText = result.content;
@@ -356,6 +376,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
           messages,
           toolChoice: "none",
         });
+        rounds += 1;
+        if (noTools.modelUsed && noTools.modelUsed !== settings.model) fallbackUsed = true;
         finalText = noTools.content ?? result.content ?? exhaustedAnswer(usedTools);
         break;
       }
@@ -430,8 +452,10 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     // ── Post-answer verification ────────────────────────────────────────────
     // Two independent checks, both deterministic (no model call to decide), so
     // the extra provider request is spent only when a real problem is found.
+    // The router decides whether verification can pay off at all: a greeting has
+    // no facts to check, so it never spends a round there.
     let refusals = 0;
-    for (let pass = 0; pass <= MAX_REFUSAL_REASKS; pass++) {
+    for (let pass = 0; plan.verify && pass <= MAX_REFUSAL_REASKS; pass++) {
       if (!finalText) break;
       const remaining = AGENT_BUDGET_MS - (Date.now() - startedAt);
       if (runBudget.signal.aborted || remaining < VERIFY_MIN_REMAINING_MS) break;
@@ -472,6 +496,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         logger.info({ phone: input.phone }, "AI assistant: re-asking after a premature refusal");
       }
 
+      verificationRan = true;
       const corrected = await verifyGroundedAnswer({
         settings,
         messages,
@@ -494,14 +519,43 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       }
       finalText = corrected;
     }
+  } catch (err) {
+    // A timeout or quota error still needs to be measured — those are the two
+    // failure modes the operator actually reports, and without a metric here
+    // they are invisible except in the logs.
+    recordMetrics({
+      phone: input.phone,
+      intent: plan.intent,
+      path: plan.path,
+      routeReason: plan.reason,
+      rounds,
+      toolCalls: usedTools.length,
+      toolNames: [...new Set(usedTools.map((t) => t.name))],
+      verified: verificationRan,
+      fallbackUsed,
+      latencyMs: Date.now() - startedAt,
+      outcome: isTimeoutError(err) ? "timeout" : isQuotaError(err) ? "quota" : "error",
+    });
+    throw err;
   } finally {
     clearTimeout(runTimer);
   }
 
-  logger.info(
-    { phone: input.phone, ms: Date.now() - startedAt, rounds: usedTools.length },
-    "AI assistant: answered",
-  );
+  logger.info({ phone: input.phone, ms: Date.now() - startedAt, rounds }, "AI assistant: answered");
+
+  recordMetrics({
+    phone: input.phone,
+    intent: plan.intent,
+    path: plan.path,
+    routeReason: plan.reason,
+    rounds,
+    toolCalls: usedTools.length,
+    toolNames: [...new Set(usedTools.map((t) => t.name))],
+    verified: verificationRan,
+    fallbackUsed,
+    latencyMs: Date.now() - startedAt,
+    outcome: "answered",
+  });
 
   // The extracted document text is intentionally kept out of the stored
   // history: it is large and only relevant to this one turn. The label keeps

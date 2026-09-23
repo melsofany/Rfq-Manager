@@ -22,6 +22,7 @@ import {
 import { isEmailReadConfigured } from "./email";
 import { listModels } from "./llm";
 import { rememberFact, normalizeCategory } from "./memory";
+import { recentMetrics, metricsSummary } from "./metrics";
 
 const router = Router();
 const guard = requireRole("admin", "manager");
@@ -201,6 +202,17 @@ router.get("/ai-assistant/models", guard, async (_req, res): Promise<void> => {
   const settings = await loadSettings();
   const models = await listModels(settings.baseUrl);
   res.json({ models, defaultModel: DEFAULT_MODEL, fallbackModels: FALLBACK_MODELS });
+});
+
+// ─── GET /ai-assistant/metrics — recent request telemetry ─────────────────
+/**
+ * What the assistant has actually cost lately: average + P95 latency, average
+ * model rounds, timeout and verification rates, and the last requests with their
+ * intent/path. This is in-memory and intentionally small — an operational signal
+ * for the dashboard, not an audit trail.
+ */
+router.get("/ai-assistant/metrics", guard, async (_req, res): Promise<void> => {
+  res.json({ summary: metricsSummary(), recent: recentMetrics(20) });
 });
 
 // ─── PUT /ai-assistant/settings ───────────────────────────────────────────

@@ -58,6 +58,16 @@ import {
   aggregateItemsByOccurrence,
 } from "./email-items";
 import { runItemScan, sessionAttachmentCoverage } from "./item-scan-session";
+import {
+  getPurchaseOrderStatus,
+  getSupplierPerformance,
+  aggregatePoItems,
+  getUnfulfilledOrders,
+  getLatestSupplierPrice,
+  getOpenSupplierInvoices,
+  detectDuplicates,
+  findMissingRecords,
+} from "./procurement-tools";
 import { defaultMailbox, mailboxes } from "./mailboxes";
 import { rememberFact, recallMemories, forgetMemory } from "./memory";
 import { generateAssistantPdf, generateMissingNumbersPdf, type PdfSection } from "./pdf";
@@ -203,6 +213,149 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             number: { type: "string", description: "الرقم الداخلي أو رقم العميل/المورد" },
           },
           required: ["type", "number"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_purchase_order_status",
+        description:
+          "حالة أمر شراء مورد برقمه: الحالة + البنود + الموردون + الكميات المستلمة/المقبولة، " +
+          "محسوبة داخل قاعدة البيانات. استخدمها بدلًا من سلسلة استدعاءات لمعرفة حالة أمر بعينه.",
+        parameters: {
+          type: "object",
+          properties: {
+            number: { type: "string", description: "الرقم الداخلي أو رقم الشيت/العميل" },
+          },
+          required: ["number"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_supplier_performance",
+        description:
+          "أداء الموردين بالأرقام (تجميع في قاعدة البيانات): عدد أوامر الشراء والبنود، مجموع الكميات، " +
+          "المقبول/المرفوض، نسبة القبول، وعدد العروض المقدَّمة. للأسئلة مثل «أداء المورد X» أو «مين أفضل مورد».",
+        parameters: {
+          type: "object",
+          properties: {
+            supplier: {
+              type: "string",
+              description: "اسم المورد أو رقمه (اختياري — فارغ = كل الموردين)",
+            },
+            sinceDays: { type: "integer", description: "قصر النطاق على آخر عدد أيام" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "aggregate_po_items",
+        description:
+          "أكثر البنود تكرارًا/كمية عبر بنود أوامر الشراء، بتجميع SQL. " +
+          "by=qty (افتراضي) للترتيب بإجمالي الكمية، by=occurrences للترتيب بعدد مرات الورود.",
+        parameters: {
+          type: "object",
+          properties: {
+            by: { type: "string", enum: ["qty", "occurrences"] },
+            partNo: { type: "string", description: "قصر على بند معيّن (جزء من رقم القطعة)" },
+            sinceDays: { type: "integer" },
+            limit: { type: "integer", description: "عدد البنود المعروضة (افتراضي 20)" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_unfulfilled_orders",
+        description:
+          "أوامر الشراء غير المكتملة: أوامر بها بنود لم تُستلم بالكامل (pending/partial)، " +
+          "مع المورد وإجمالي الكمية المفتوحة. محسوبة في قاعدة البيانات.",
+        parameters: {
+          type: "object",
+          properties: {
+            sinceDays: { type: "integer" },
+            limit: { type: "integer" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_latest_supplier_price",
+        description:
+          "آخر سعر مسجَّل لبند (من أسعار بنود أوامر الشراء وأسعار العروض)، مرتبًا بالأحدث. " +
+          "لأسئلة «آخر سعر لبند كذا» أو «سعر المورد كذا للقطعة كذا».",
+        parameters: {
+          type: "object",
+          properties: {
+            partNo: { type: "string" },
+            description: { type: "string" },
+            supplier: { type: "string" },
+            limit: { type: "integer" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_open_supplier_invoices",
+        description:
+          "فواتير الموردين المرحَّلة (posted) التي لها رصيد متبقٍّ (لم تُسدَّد)، مع الإجمالي المستحق.",
+        parameters: {
+          type: "object",
+          properties: {
+            supplier: { type: "string", description: "اسم المورد (اختياري)" },
+            limit: { type: "integer" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "detect_duplicates",
+        description:
+          "كشف القيم المكرَّرة في عمود داخل جدول (مثال: أرقام فواتير مكرَّرة). تجميع في قاعدة البيانات.",
+        parameters: {
+          type: "object",
+          properties: {
+            table: {
+              type: "string",
+              enum: ["purchase_orders", "suppliers", "customer_pos"],
+            },
+            column: { type: "string", description: "اسم العمود" },
+            limit: { type: "integer" },
+          },
+          required: ["table", "column"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "find_missing_records",
+        description:
+          "مقارنة قائمة أرقام (غالبًا مستخرجة من البريد) بعمود في قاعدة البيانات، وإرجاع الأرقام غير المسجَّلة. " +
+          "استخدمها لسؤال «الأرقام اللي في الميل مش في النظام» بعد استخراج الأرقام.",
+        parameters: {
+          type: "object",
+          properties: {
+            numbers: { type: "array", items: { type: "string" } },
+            table: {
+              type: "string",
+              enum: ["customer_rfqs", "purchase_orders", "customer_pos", "rfq"],
+            },
+            column: { type: "string", description: "اسم عمود الرقم داخل الجدول" },
+          },
+          required: ["numbers", "table", "column"],
         },
       },
     },
@@ -967,6 +1120,101 @@ async function executeToolInner(
         return {
           ok: true,
           data: await lookupDocument(String(args.type ?? ""), String(args.number ?? "")),
+        };
+      }
+      case "get_purchase_order_status": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        return { ok: true, data: await getPurchaseOrderStatus(String(args.number ?? "")) };
+      }
+      case "get_supplier_performance": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        return {
+          ok: true,
+          data: await getSupplierPerformance({
+            supplier: args.supplier ? String(args.supplier) : undefined,
+            sinceDays: typeof args.sinceDays === "number" ? args.sinceDays : undefined,
+          }),
+        };
+      }
+      case "aggregate_po_items": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        return {
+          ok: true,
+          data: await aggregatePoItems({
+            by: args.by === "occurrences" ? "occurrences" : args.by === "qty" ? "qty" : undefined,
+            partNo: args.partNo ? String(args.partNo) : undefined,
+            sinceDays: typeof args.sinceDays === "number" ? args.sinceDays : undefined,
+            limit: typeof args.limit === "number" ? args.limit : undefined,
+          }),
+        };
+      }
+      case "get_unfulfilled_orders": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        return {
+          ok: true,
+          data: await getUnfulfilledOrders({
+            sinceDays: typeof args.sinceDays === "number" ? args.sinceDays : undefined,
+            limit: typeof args.limit === "number" ? args.limit : undefined,
+          }),
+        };
+      }
+      case "get_latest_supplier_price": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        return {
+          ok: true,
+          data: await getLatestSupplierPrice({
+            partNo: args.partNo ? String(args.partNo) : undefined,
+            description: args.description ? String(args.description) : undefined,
+            supplier: args.supplier ? String(args.supplier) : undefined,
+            limit: typeof args.limit === "number" ? args.limit : undefined,
+          }),
+        };
+      }
+      case "get_open_supplier_invoices": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        return {
+          ok: true,
+          data: await getOpenSupplierInvoices({
+            supplier: args.supplier ? String(args.supplier) : undefined,
+            limit: typeof args.limit === "number" ? args.limit : undefined,
+          }),
+        };
+      }
+      case "detect_duplicates": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        return {
+          ok: true,
+          data: await detectDuplicates({
+            table:
+              args.table === "suppliers" || args.table === "customer_pos"
+                ? args.table
+                : "purchase_orders",
+            column: String(args.column ?? ""),
+            limit: typeof args.limit === "number" ? args.limit : undefined,
+          }),
+        };
+      }
+      case "find_missing_records": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        const table =
+          args.table === "purchase_orders" || args.table === "customer_pos" || args.table === "rfq"
+            ? args.table
+            : "customer_rfqs";
+        return {
+          ok: true,
+          data: await findMissingRecords({
+            numbers: Array.isArray(args.numbers) ? args.numbers.map(String) : [],
+            table,
+            column: String(args.column ?? ""),
+          }),
         };
       }
       case "search_emails":
