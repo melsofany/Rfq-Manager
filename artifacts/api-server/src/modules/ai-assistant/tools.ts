@@ -45,12 +45,19 @@ import {
   sendAssistantEmail,
   isEmailReadConfigured,
   isTextLikeMime,
+  isPdfAttachment,
   fetchMessageAttachments,
   extractPdfText,
   type EmailCensusResult,
   type EmailCensusNumber,
 } from "./email";
-import { parseItemsFromAttachments, itemsCsv, itemsAggregateCsv } from "./email-items";
+import {
+  parseItemsFromAttachments,
+  itemsCsv,
+  itemsAggregateCsv,
+  aggregateItemsByOccurrence,
+  type ItemScanResult,
+} from "./email-items";
 import { defaultMailbox, mailboxes } from "./mailboxes";
 import { generateAssistantPdf, generateMissingNumbersPdf, type PdfSection } from "./pdf";
 import {
@@ -333,8 +340,10 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
           "حصر بنود الطلبات/أوامر التوريد من داخل مرفقات البريد (ملفات PDF) وليس من الموضوع. " +
           "تفتح المرفقات وتقرأ جداول البنود (رقم القطعة، التوصيف، الكمية، الوحدة) وتجمّعها. " +
           "استخدمها لأي سؤال مثل «إيه البنود والكميات اللي في طلبات شركة الحفر المصرية؟» أو " +
-          "«إيه أكتر قطعة اتطلبت؟». لا تعتمد على search_emails لهذا — فهي لا تقرأ داخل الملفات. " +
-          "أعِد دائمًا coverage في الرد: إن كان unreadable>0 أو truncated=true فاذكر أن الحصر ناقص ولا تدّعِ الكمال. " +
+          "«إيه أكتر قطعة اتطلبت؟» أو «أكتر بند اتكرر؟». لا تعتمد على search_emails لهذا — فهي لا تقرأ داخل الملفات. " +
+          "الترتيب الافتراضي بالتكرار (مرات ورود البند) وهو المقصود بسؤال «أكتر بند اتكرر»؛ " +
+          "استخدم ordering=qty للترتيب بإجمالي الكمية. " +
+          "أعِد دائمًا coverage في الرد: إن كان unreadable>0 أو truncated=true أو hasAttachments=false فاذكر أن الحصر ناقص ولا تدّعِ الكمال. " +
           "مرّر exportCsv=true لإرسال كل البنود كملف، أو exportPdf=true لملف PDF بالملخص.",
         parameters: {
           type: "object",
@@ -348,11 +357,19 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             limit: {
               type: "integer",
               description:
-                "أقصى عدد رسائل تُفتح مرفقاتها (افتراضي 120). العدد المطابق الكلي يُعاد دائمًا.",
+                "أقصى عدد رسائل تُفتح مرفقاتها (افتراضي 400). العدد المطابق الكلي يُعاد دائمًا، " +
+                "وإن كان أكبر من الحد فاذكر أن الترتيب مبني على أحدث المفحوص فقط.",
             },
             top: {
               type: "integer",
               description: "عدد البنود الأكثر تكرارًا في الملخص (افتراضي 50)",
+            },
+            ordering: {
+              type: "string",
+              enum: ["mostRepeated", "qty"],
+              description:
+                "ترتيب البنود: mostRepeated (افتراضي) = الأكثر تكرارًا/ورودًا، " +
+                "qty = الأكبر إجمالي كمية.",
             },
             exportCsv: { type: "boolean", description: "أرسل كل البنود كملف CSV" },
             exportPdf: { type: "boolean", description: "أرسل ملخص البنود كملف PDF" },
@@ -943,6 +960,13 @@ export async function executeTool(
         const parsed = await parseItemsFromAttachments(census.attachmentMessages ?? []);
         const top = Math.min(Math.max(Number(args.top ?? 50), 1), 300);
 
+        // Default to FREQUENCY: «أكتر بند اتكرر» is the common ask, and ranking
+        // by quantity alone answers a different question (one huge one-off order
+        // would top it). The quantity view stays available for volume questions.
+        const ordering = args.ordering === "qty" ? "qty" : "mostRepeated";
+        const ranked =
+          ordering === "qty" ? parsed.aggregate : aggregateItemsByOccurrence(parsed.items);
+
         if (args.exportCsv) {
           ctx.outbox.push({
             buffer: Buffer.from(itemsCsv(parsed), "utf8"),
@@ -950,7 +974,7 @@ export async function executeTool(
             mimeType: CSV_UPLOAD_MIME,
           });
           ctx.outbox.push({
-            buffer: Buffer.from(itemsAggregateCsv(parsed.aggregate), "utf8"),
+            buffer: Buffer.from(itemsAggregateCsv(ranked), "utf8"),
             filename: `email-items-summary-${new Date().toISOString().slice(0, 10)}.csv`,
             mimeType: CSV_UPLOAD_MIME,
           });
@@ -961,7 +985,10 @@ export async function executeTool(
           if (!ctx.settings.allowPdf) return { ok: false, error: "إنشاء PDF معطّل" };
           const buffer = await generateAssistantPdf({
             title: "بنود الطلبات من البريد الإلكتروني",
-            subtitle: `أكثر ${top} بندًا تكرارًا — من ${parsed.coverage.withItems} رسالة`,
+            subtitle:
+              ordering === "qty"
+                ? `أكثر ${top} بندًا كمية — من ${parsed.coverage.withItems} رسالة`
+                : `أكثر ${top} بندًا تكرارًا — من ${parsed.coverage.withItems} رسالة`,
             sections: [
               {
                 paragraphs: [
@@ -974,10 +1001,10 @@ export async function executeTool(
               },
               {
                 table: {
-                  columns: ["رقم القطعة", "التوصيف", "إجمالي الكمية", "الوحدة", "مرات التكرار"],
-                  rows: parsed.aggregate
+                  columns: ["رقم القطعة", "التوصيف", "مرات التكرار", "إجمالي الكمية", "الوحدة"],
+                  rows: ranked
                     .slice(0, top)
-                    .map((p) => [p.partNo ?? "", p.description, p.qty, p.uom ?? "", p.occurrences]),
+                    .map((p) => [p.partNo ?? "", p.description, p.occurrences, p.qty, p.uom ?? ""]),
                 },
               },
             ],
@@ -991,26 +1018,49 @@ export async function executeTool(
         }
 
         const coverage = parsed.coverage;
-        const complete =
-          coverage.unreadable === 0 && !(census.attachmentCoverage?.truncated ?? false);
+        // A complete scan that found ZERO files is not "the orders have no
+        // items" — it means no attachment was recognised. Saying so prevents the
+        // honest-looking "0 بنود، الحصر كامل" the model would otherwise report.
+        const noAttachments = coverage.attachments === 0;
+        const truncated = census.attachmentCoverage?.truncated ?? false;
+        const complete = !noAttachments && coverage.unreadable === 0 && !truncated;
+        // The item counts are only ever facts about the messages actually OPENED.
+        // State the scope beside them so a capped scan cannot be relayed as the
+        // whole year — the mailbox matched thousands, and a sample is not a total.
+        const scope = truncated
+          ? `النطاق: أحدث ${coverage.messages} رسالة من ${census.matched} مطابقة (لم يُفحص الباقي)`
+          : `النطاق: كل الرسائل المطابقة (${census.matched})`;
+        const partialDetail = [
+          coverage.unreadable > 0 ? `تعذّرت قراءة ${coverage.unreadable} رسالة` : "",
+          truncated ? "ولم تُفحص كل الرسائل" : "",
+        ]
+          .filter(Boolean)
+          .join("، ");
         return {
           ok: true,
           data: {
-            note:
-              `حصر بنود من مرفقات البريد: ${census.matched} رسالة مطابقة، فُتح مرفق ${coverage.messages} رسالة، ` +
-              `وقُرئ ${coverage.lines} سطر بند من ${coverage.attachments} ملف.` +
-              (complete
-                ? " الحصر كامل."
-                : ` تنبيه: الحصر ناقص (تعذّرت قراءة ${coverage.unreadable} رسالة` +
-                  (census.attachmentCoverage?.truncated ? "، ولم تُفحص كل الرسائل" : "") +
-                  ") — اذكر ذلك ولا تدّعِ الكمال."),
+            note: noAttachments
+              ? `لم أجد أي مرفق PDF يمكن قراءته في ${census.matched} رسالة مطابقة. ` +
+                "لا تقل إن الطلبات بلا بنود — قل إنه لم يُعثر على ملفات بنود في هذا النطاق، وجرّب وسّع المدة أو غيّر المُرسل."
+              : `حصر بنود من مرفقات البريد: ${census.matched} رسالة مطابقة، فُتح مرفق ${coverage.messages} رسالة، ` +
+                `وقُرئ ${coverage.lines} سطر بند من ${coverage.attachments} ملف. ` +
+                scope +
+                (complete
+                  ? " — الحصر كامل على كل الرسائل المطابقة."
+                  : ` — تنبيه: الحصر جزئي (${partialDetail}). اذكر أن الترتيب مبني على العينة المفحوصة ولا تدّعِ الكمال.`),
             isComplete: complete,
+            scope,
+            hasAttachments: !noAttachments,
+            ordering,
             matchedMessages: census.matched,
             coverage,
             attachmentCoverage: census.attachmentCoverage ?? null,
             distinctParts: parsed.aggregate.length,
             totalLines: coverage.lines,
-            topItems: parsed.aggregate.slice(0, top),
+            // Ranked by how MANY orders carried the part by default — the
+            // «أكتر بند اتكرر» answer — with occurrences always present so the
+            // model can quote the count.
+            topItems: ranked.slice(0, top),
             csvSent: Boolean(args.exportCsv),
             pdfSent,
           },
@@ -1069,11 +1119,20 @@ export async function executeTool(
         // so a question about its contents ("إيه البنود والكميات جوه الملف؟") is
         // answered from the real file rather than from the email body — the
         // whole point when the body itself carries no item details.
+        //
+        // A PDF is detected by CONTENT as well as the declared type: EDC labels
+        // its PDF attachments `application/doc`, so keying on the MIME alone
+        // both mislabelled the file on WhatsApp and skipped local extraction.
+        const isPdf = isPdfAttachment({
+          mimeType: att.mimeType,
+          filename: att.filename,
+          content: att.content,
+        });
         const textLike = isTextLikeMime(att.mimeType);
         ctx.outbox.push({
           buffer: att.content,
           filename: att.filename,
-          mimeType: att.mimeType || "application/octet-stream",
+          mimeType: isPdf ? "application/pdf" : att.mimeType || "application/octet-stream",
         });
 
         if (textLike) {
@@ -1091,22 +1150,24 @@ export async function executeTool(
 
         // `read: false` skips extraction for a plain "send me the file" request.
         const shouldRead = args.read !== false;
-        if (shouldRead && isReadableDocumentMime(att.mimeType || "")) {
+        if (shouldRead && (isPdf || isReadableDocumentMime(att.mimeType || ""))) {
           // A PDF with a text layer is read LOCALLY first: the Gemini path is
           // quota-limited (20 requests/day/model) and returns null once the day
           // is spent, which is how "read the PDF" turned into a generic failure.
-          const isPdf = (att.mimeType || "").toLowerCase() === "application/pdf";
+          // The inline type is reported as a PDF too, so a provider that sniffs
+          // the declared type does not reject bytes it already has.
+          const inlineMime = isPdf ? "application/pdf" : att.mimeType || "application/octet-stream";
           const extracted = isPdf
             ? (await extractPdfText(att.content)).slice(0, MAX_DOCUMENT_CHARS) ||
               (await extractDocumentText(
                 att.content,
-                att.mimeType || "application/octet-stream",
+                inlineMime,
                 ctx.settings.baseUrl,
                 ctx.settings.model,
               ))
             : await extractDocumentText(
                 att.content,
-                att.mimeType || "application/octet-stream",
+                inlineMime,
                 ctx.settings.baseUrl,
                 ctx.settings.model,
               );

@@ -501,7 +501,17 @@ export async function extractDocumentText(
 export function isReadableDocumentMime(mimeType: string): boolean {
   const t = (mimeType || "").toLowerCase();
   return (
-    t === "application/pdf" || t.startsWith("image/") || t === "text/plain" || t === "text/csv"
+    t === "application/pdf" ||
+    t.startsWith("image/") ||
+    t === "text/plain" ||
+    t === "text/csv" ||
+    // A document mislabelled by the sender still has to be readable: EDC marks
+    // real PDFs `application/doc`, and mail clients hand over unknown binary
+    // parts as `application/octet-stream`. Content sniffing happens downstream;
+    // refusing these by MIME alone is what left the attachments unreadable.
+    t === "application/doc" ||
+    t === "application/msword" ||
+    t === "application/octet-stream"
   );
 }
 

@@ -239,11 +239,49 @@ describe("scan_email_items tool", () => {
     );
 
     const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
-      data: { isComplete: boolean; note: string; coverage: { unreadable: number } };
+      data: { isComplete: boolean; note: string; scope: string; coverage: { unreadable: number } };
     };
     expect(res.data.isComplete).toBe(false);
     expect(res.data.coverage.unreadable).toBe(1);
-    expect(res.data.note).toContain("ناقص");
+    // The note must say it is partial AND name the scope — a count from a capped
+    // or partly-unreadable pass must never be relayed as the whole set.
+    expect(res.data.note).toContain("جزئي");
+    expect(res.data.note).toContain("تعذّرت قراءة 1");
+    expect(res.data.scope).toContain("كل الرسائل المطابقة");
+  });
+
+  it("names the scanned scope when the attachment pass was truncated", async () => {
+    // The live failure's shape: thousands matched, only the newest scanned. The
+    // ranking is a fact about the sample, so the note has to say so.
+    extractPdfText.mockResolvedValue("Quantity UOM Part No Line Item\n1 5 Each X-1 THING\n");
+    scanEmails.mockResolvedValue({
+      matched: 3749,
+      truncated: false,
+      emails: [],
+      attachmentMessages: [
+        {
+          uid: 1,
+          mailbox: "info@cortoba-supplies.com",
+          subject: "EDC RFQ",
+          attachments: pdfAttachments([{ filename: "a.pdf", content: Buffer.from("pdf") }]),
+        },
+      ],
+      attachmentCoverage: {
+        messages: 1,
+        scanned: 1,
+        readable: 1,
+        unreadable: 0,
+        attachments: 1,
+        truncated: true,
+      },
+    });
+
+    const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
+      data: { isComplete: boolean; scope: string; note: string };
+    };
+    expect(res.data.isComplete).toBe(false);
+    expect(res.data.scope).toContain("أحدث 1 رسالة من 3749");
+    expect(res.data.note).toContain("ولم تُفحص كل الرسائل");
   });
 
   it("sends both the full line list and the summary as CSV", async () => {
@@ -298,5 +336,114 @@ describe("scan_email_items tool", () => {
     };
     const res = (await executeTool("scan_email_items", {}, off as never)) as { ok: boolean };
     expect(res.ok).toBe(false);
+  });
+
+  it("ranks by occurrence by default, answering «أكتر بند اتكرر»", async () => {
+    // Two messages carry the SAME small part (repeated), one carries a single
+    // huge line. Frequency must lead — a quantity-ranked list would put the
+    // one-off order first and miss the question being asked.
+    extractPdfText.mockImplementation(async (buf: Buffer) => buf.toString("utf8"));
+    scanEmails.mockResolvedValue(
+      censusWithAttachments([
+        {
+          uid: 20,
+          mailbox: "info@cortoba-supplies.com",
+          subject: "EDC RFQ No 26R011900",
+          attachments: pdfAttachments([
+            {
+              filename: "a.pdf",
+              content: Buffer.from(
+                "Quantity UOM Part No Line Item\n1 1 Each 0101.001.GENRAL.0001 ITEM\n1 SMALL PART 4\n",
+              ),
+            },
+          ]),
+        },
+        {
+          uid: 21,
+          mailbox: "info@cortoba-supplies.com",
+          subject: "EDC RFQ No 26R011901",
+          attachments: pdfAttachments([
+            {
+              filename: "b.pdf",
+              content: Buffer.from(
+                "Quantity UOM Part No Line Item\n1 1 Each 0101.001.GENRAL.0001 ITEM\n1 SMALL PART 4\n",
+              ),
+            },
+          ]),
+        },
+        {
+          uid: 22,
+          mailbox: "info@cortoba-supplies.com",
+          subject: "EDC RFQ No 26R011902",
+          attachments: pdfAttachments([
+            {
+              filename: "c.pdf",
+              content: Buffer.from(
+                "Quantity UOM Part No Line Item\n1 5000 Each 0101.001.GENRAL.0002 BIG ONCE\n",
+              ),
+            },
+          ]),
+        },
+      ]),
+    );
+
+    const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
+      data: {
+        ordering: string;
+        topItems: Array<{ partNo: string | null; occurrences: number; qty: number }>;
+      };
+    };
+
+    expect(res.data.ordering).toBe("mostRepeated");
+    // The repeated small part outranks the single huge line.
+    expect(res.data.topItems[0].partNo).toBe("0101.001.GENRAL.0001");
+    expect(res.data.topItems[0].occurrences).toBe(2);
+    expect(res.data.topItems[0].qty).toBe(2);
+    // The huge one-off is still present, just not first.
+    const big = res.data.topItems.find((i) => i.partNo === "0101.001.GENRAL.0002");
+    expect(big?.qty).toBe(5000);
+    expect(big?.occurrences).toBe(1);
+  });
+
+  it("honours ordering=qty for a volume question", async () => {
+    extractPdfText.mockImplementation(async (buf: Buffer) => buf.toString("utf8"));
+    scanEmails.mockResolvedValue(
+      censusWithAttachments([
+        {
+          uid: 23,
+          mailbox: "info@cortoba-supplies.com",
+          subject: "EDC RFQ No 26R011903",
+          attachments: pdfAttachments([
+            {
+              filename: "d.pdf",
+              content: Buffer.from(
+                "Quantity UOM Part No Line Item\n1 1 Each 0101.001.GENRAL.0001 ITEM\n1 SMALL PART 4\n1 5000 Each 0101.001.GENRAL.0002 BIG ONCE\n",
+              ),
+            },
+          ]),
+        },
+      ]),
+    );
+
+    const res = (await executeTool("scan_email_items", { ordering: "qty" }, ctx as never)) as {
+      data: { topItems: Array<{ partNo: string | null }> };
+    };
+    expect(res.data.topItems[0].partNo).toBe("0101.001.GENRAL.0002");
+  });
+
+  it("never claims completeness when NO attachment could be opened", async () => {
+    // A nothing-found scan is the exact state that produced the misleading
+    // report the operator saw; it must be labelled, not presented as a result.
+    scanEmails.mockResolvedValue(censusWithAttachments([]));
+    const res = (await executeTool(
+      "scan_email_items",
+      { from: "egyptian-drilling" },
+      ctx as never,
+    )) as {
+      data: { isComplete: boolean; hasAttachments: boolean; note: string };
+    };
+    expect(res.data.hasAttachments).toBe(false);
+    expect(res.data.isComplete).toBe(false);
+    expect(res.data.note).toContain("لم أجد أي مرفق");
   });
 });
