@@ -28,6 +28,7 @@ import {
   type ToolContext,
   type OutboxAttachment,
 } from "./tools";
+import { entityVocabulary, findUnknownEntityNames, type EntityName } from "./db-tools";
 
 /**
  * Tool-calling rounds before we force an answer. Each round costs one provider
@@ -64,6 +65,18 @@ const FORCE_ANSWER_ON_LAST_ROUND = true;
  */
 export const VERIFY_MIN_REMAINING_MS = 30_000;
 
+/**
+ * Least time that must remain before a second re-ask is attempted, and the
+ * ceiling on how many times one run may re-ask. The re-ask exists for the case
+ * where the model met a genuinely empty result and gave up: it is worth one more
+ * attempt, never an open loop (the operator is waiting and the quota is scarce).
+ */
+export const RETRY_MIN_REMAINING_MS = 35_000;
+export const MAX_REFUSAL_REASKS = 1;
+
+/** How much of the known supplier/customer list to put in the prompt. */
+const VOCAB_PROMPT_LIMIT = 120;
+
 const LANGUAGE_NAME: Record<string, string> = { ar: "العربية", en: "English" };
 
 export function systemPrompt(settings: AiSettings): string {
@@ -84,6 +97,13 @@ export function systemPrompt(settings: AiSettings): string {
 - إذا قال المستخدم إنك أخطأت، لا تُقدّم تخمينًا آخر. أعد التحقق بالأدوات، واذكر مصدر كل معلومة، وإن لم تجدها فاعتذر بوضوح واذكر ما بحثت فيه بالضبط.
 - عند ذكر أي معلومة، اذكر مصدرها بإيجاز (مثال: «من جدول بنود أوامر الشراء: البند كذا في الأمر كذا»).
 - لا تكتب أبدًا رقم مستند (طلب/أمر/فاتورة) لم يظهر حرفيًا في نتيجة أداة. قبل إرسال الرد تأكد أن كل رقم ذكرته موجود في نتائج الأدوات فعلًا؛ وإن لم يوجد فقل «غير متوفر» بدلًا من كتابته.
+
+عقلية العمل (كن دقيقًا كالقنّاص، لا تكتفِ بأول نتيجة):
+- اشتغل كأن كل رقم ستكتبه سيُراجَع عليك. لو شكّكت في معلومة، تحقّق منها بأداة ثانية قبل كتابتها، لا بعد أن يسألك المدير.
+- عند أي تناقض بين مصدرين: لا تجمع بينهما في إجابة واحدة. الأحدث والأخص هو المرجع، واذكر أن هناك اختلافًا.
+- لو لم تجد ما طُلب بعد محاولتين، وسّع البحث (اسم بديل، بريد آخر، مدة أطول، جدول آخر) قبل أن تعلن عدم العثور. اذكر بالضبط ما جرّبته.
+- الإجابة الناقصة الصادقة أقوى من إجابة كاملة فيها تخمين. إن كان جزء من السؤال لا تملك بياناته فقل صراحةً «هذا الجزء غير متوفر» وأكمل الباقي.
+- لا تُغلق السؤال بالاعتذار وأنت قادر على محاولة أخرى بالأدوات. حاول أولًا، وإن فشلت فاشرح ما جرى بدقة.
 
 قدراتك وحدودها (لا تدّعي ما ليس لديك):
 - قراءة سجل محادثات الواتساب: نعم. إرسال رسائل واتساب للموردين من داخل المحادثة: لا — لا توجد أداة لإرسال واتساب، والواتساب للقراءة فقط. إن طلب المستخدم إرسال رسالة، قل ذلك بوضوح واقترح صياغة نصية يرسلها هو بنفسه.
@@ -234,9 +254,18 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   });
   const memoryBlock = renderMemoryBlock(memories);
 
+  // The real supplier/customer vocabulary, prefetched so the model can tell an
+  // invented name from a real one. Two cheap selects, cached upstream — no model
+  // quota spent, and it is what makes a name checkable before it is written
+  // rather than after the operator challenges it.
+  const vocabulary = settings.allowDatabase
+    ? await entityVocabulary()
+    : { suppliers: [] as EntityName[], customers: [] as EntityName[] };
+  const vocabularyBlock = renderVocabularyBlock(vocabulary);
+
   const system: ChatMessage = {
     role: "system",
-    content: systemPrompt(settings) + memoryBlock,
+    content: systemPrompt(settings) + memoryBlock + vocabularyBlock,
   };
 
   let userContent: string | ContentPart[];
@@ -270,7 +299,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   // Anything the operator, the conversation, the attached document, or the
   // learned memory already stated is fair game for the answer to quote back —
   // the verifier only challenges tokens the run itself introduced.
-  for (const n of findGroundingNumbers(userText + documentNote + memoryBlock)) {
+  for (const n of findGroundingNumbers(userText + documentNote + memoryBlock + vocabularyBlock)) {
     groundedNumbers.add(n);
   }
   for (const m of history) {
@@ -390,31 +419,72 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       finalText = exhaustedAnswer(usedTools);
     }
 
-    // Grounding check (Reflexion-style verification): if the answer cites a
-    // document number that never appeared in any tool result, the operator is
-    // reading a fabrication. One bounded corrective round is cheaper — and far
-    // more trustworthy — than shipping the invented number. Skipped once the
-    // budget is already spent, where a late correction is worse than the answer.
-    if (
-      finalText &&
-      !runBudget.signal.aborted &&
-      Date.now() - startedAt < AGENT_BUDGET_MS - VERIFY_MIN_REMAINING_MS
-    ) {
+    // ── Post-answer verification ────────────────────────────────────────────
+    // Two independent checks, both deterministic (no model call to decide), so
+    // the extra provider request is spent only when a real problem is found.
+    let refusals = 0;
+    for (let pass = 0; pass <= MAX_REFUSAL_REASKS; pass++) {
+      if (!finalText) break;
+      const remaining = AGENT_BUDGET_MS - (Date.now() - startedAt);
+      if (runBudget.signal.aborted || remaining < VERIFY_MIN_REMAINING_MS) break;
+
+      // (a) Numbers the answer cites that appear nowhere in the evidence.
       const ungrounded = findUngroundedNumbers(finalText, groundedNumbers);
-      if (ungrounded.length) {
+
+      // (b) Entity names the answer cites that are not in the real vocabulary.
+      // This is the «هاي فولت» lesson: invented company names read as plausible
+      // prose, and a challenge from the operator is the only thing that caught
+      // it before. Now the check happens before the reply is sent.
+      const unknownNames = findUnknownEntityNames(finalText, vocabulary);
+
+      // (c) A reply that says it found nothing while it also cites nothing —
+      // the "gave up too early" case. Worth one re-ask with an explicit order to
+      // widen the search, because the operator's question was answerable.
+      const looksLikeRefusal =
+        !ungrounded.length &&
+        !unknownNames.length &&
+        isRefusalSentence(finalText) &&
+        !looksLikeDataFound(finalText);
+      const canReask =
+        looksLikeRefusal && refusals < MAX_REFUSAL_REASKS && remaining >= RETRY_MIN_REMAINING_MS;
+
+      if (!ungrounded.length && !unknownNames.length && !canReask) break;
+
+      if (ungrounded.length || unknownNames.length) {
         logger.warn(
-          { phone: input.phone, ungrounded: ungrounded.slice(0, 8) },
-          "AI assistant: answer cites numbers absent from every tool result",
+          {
+            phone: input.phone,
+            ungrounded: ungrounded.slice(0, 8),
+            unknownNames: unknownNames.slice(0, 8),
+          },
+          "AI assistant: answer cites tokens absent from every tool result",
         );
-        const corrected = await verifyGroundedAnswer({
-          settings,
-          messages,
-          finalText,
-          ungrounded,
-          signal: runBudget.signal,
-        });
-        if (corrected) finalText = corrected;
+      } else {
+        refusals += 1;
+        logger.info({ phone: input.phone }, "AI assistant: re-asking after a premature refusal");
       }
+
+      const corrected = await verifyGroundedAnswer({
+        settings,
+        messages,
+        finalText,
+        ungrounded,
+        unknownNames,
+        reask: canReask && !ungrounded.length && !unknownNames.length,
+        signal: runBudget.signal,
+      });
+      // A verification that produced nothing leaves the draft in place — an
+      // unavailable verifier must never lose a good reply.
+      if (!corrected) break;
+      // A re-ask that came back with a still-empty answer is the model's final
+      // word; do not loop on it.
+      if (canReask && !ungrounded.length && !unknownNames.length) {
+        if (isRefusalSentence(corrected) && !looksLikeDataFound(corrected)) {
+          finalText = corrected;
+          break;
+        }
+      }
+      finalText = corrected;
     }
   } finally {
     clearTimeout(runTimer);
@@ -543,32 +613,103 @@ export function findUngroundedNumbers(answer: string, grounded: Set<string>): st
 }
 
 /**
- * The verification round: hand the model its own draft plus the list of tokens
- * that appear nowhere in the evidence, and ask it to remove or correct them.
+ * The known supplier/customer names, rendered as a checkable list.
  *
- * This is the "generator → critic" pattern from LangGraph / Reflexion applied
- * with a DETERMINISTIC critic (token containment, no model call to decide), so
- * it costs one provider request only when a real fabrication is suspected —
- * never on an ordinary answer. The draft is kept if the model fails to improve
- * it, so a verification failure can never lose a good reply.
+ * Bounded on purpose: the prompt must stay small enough not to crowd out the
+ * conversation. We list names (and their internal ids) — never prices or counts,
+ * which change and belong in tool results.
+ */
+export function renderVocabularyBlock(known: {
+  suppliers: EntityName[];
+  customers: EntityName[];
+}): string {
+  const s = known.suppliers.slice(0, VOCAB_PROMPT_LIMIT);
+  const c = known.customers.slice(0, VOCAB_PROMPT_LIMIT);
+  if (!s.length && !c.length) return "";
+  const line = (e: EntityName) => (e.id != null ? `${e.name} (${e.id})` : e.name);
+  const parts = ["\n\nأسماء الجهات الحقيقية في النظام (لا تكتب اسمًا غير موجود في هذه القوائم):"];
+  if (s.length) parts.push(`الموردون (${known.suppliers.length}): ${s.map(line).join("، ")}`);
+  if (c.length) parts.push(`العملاء (${known.customers.length}): ${c.map(line).join("، ")}`);
+  parts.push(
+    "إن احتجت موردًا أو عميلًا غير موجود في القائمة فقل إنه غير مسجّل، ولا تخترع اسمًا مشابهًا.",
+  );
+  return parts.join("\n");
+}
+
+/**
+ * Does the answer read as "I found nothing"? Deliberately conservative: it needs
+ * an explicit negative phrase AND no cited document number or entity name, so an
+ * answer that merely contains the word «لا» mid-sentence is not misread as a
+ * refusal and re-asked needlessly.
+ */
+const REFUSAL_PATTERNS = [
+  /لا\s+(?:يوجد|توجد|توجد\s+نتائج|أجد|اجد|يوجد\s+نتائج|توجد\s+بيانات)/,
+  /لم\s+(?:أجد|اجد|أعثر|اعثر|أتمكن|اتمكن)/,
+  /لا\s+توجد\s+بيانات/,
+  /غير\s+متوفر/,
+  /لا\s+توجد\s+معلومات/,
+  /(?:no|nothing|not)\s+(?:results?|found|records?|data)/i,
+];
+
+export function isRefusalSentence(text: string): boolean {
+  return REFUSAL_PATTERNS.some((re) => re.test(text || ""));
+}
+
+/** Does the answer contain anything concrete (a cited id or a multi-digit number)? */
+function looksLikeDataFound(text: string): boolean {
+  // Only ids and 2+ digit numbers count as "data". Deliberately NOT keyed on
+  // words like «مورد»/«أمر»: those appear in the refusal sentence itself
+  // («لا يوجد مورد بهذا الاسم») and would suppress the very re-ask we want.
+  return findGroundingNumbers(text).length > 0 || /\d{2,}/.test(text ?? "");
+}
+
+/**
+ * The verification round: hand the model its own draft plus the specific tokens
+ * that the evidence does not support, and ask it to remove or correct them.
+ *
+ * This is the LangGraph "generator → critic" pattern with a DETERMINISTIC critic
+ * (token containment, no model call to decide), so it costs one provider request
+ * only when a real problem is suspected — never on an ordinary answer. The draft
+ * is kept if the model fails to improve it, so a verification failure can never
+ * lose a good reply.
  */
 async function verifyGroundedAnswer(opts: {
   settings: AiSettings;
   messages: ChatMessage[];
   finalText: string;
   ungrounded: string[];
+  unknownNames: string[];
+  /** True when the draft refused without evidence and should widen its search. */
+  reask: boolean;
   signal: AbortSignal;
 }): Promise<string | null> {
-  const numbers = opts.ungrounded.slice(0, 20).join(", ");
-  const instruction =
-    "مراجعة إلزامية قبل الإرسال: الردّ التالي يحتوي أرقامًا لم تظهر في أي نتيجة أداة: " +
-    numbers +
-    ".\n" +
-    "أعد كتابة الرد مع الالتزام الصارم بالآتي:\n" +
-    "1) احذف أي رقم مستند/طلب/أمر/فاتورة لم يظهر حرفيًا في نتيجة أداة، ولا تستبدله برقم مخمّن.\n" +
-    "2) إن كانت المعلومة المطلوبة تعتمد على تلك الأرقام، فاذكر صراحةً أنها غير متوفرة ولم تُعثر عليها.\n" +
-    "3) أبقِ باقي الرد كما هو — لا تُغيّر الأرقام التي ظهرت فعلًا في نتائج الأدوات.\n" +
-    "أعد نص الرد النهائي فقط، بدون شرح أو مقدمة.";
+  const problems: string[] = [];
+  if (opts.ungrounded.length) {
+    problems.push(`أرقامًا لم تظهر في أي نتيجة أداة: ${opts.ungrounded.slice(0, 20).join(", ")}`);
+  }
+  if (opts.unknownNames.length) {
+    problems.push(
+      `أسماء جهات غير موجودة في قوائم النظام: ${opts.unknownNames.slice(0, 20).join(", ")}`,
+    );
+  }
+
+  const instruction = opts.reask
+    ? "ردك السابق أعلن عدم العثور على المعلومة دون أن تجرّب أدوات كافية. " +
+      "لا تُنهِ الرد قبل أن تحاول مرة أخرى فعليًا:\n" +
+      "1) جرّب اسمًا بديلًا أو تهجئة أخرى، أو بريدًا آخر، أو جدولًا آخر، أو وسّع المدة (sinceDays).\n" +
+      "2) إن طُلب رقم مستند فجرّب البحث بالجزء منه (آخر أرقامه) لا بالرقم كاملًا فقط.\n" +
+      "3) إن فشلت كل المحاولات فعلًا، اذكر بالضبط ما جرّبته (الجدول/الكلمة/المدة) — ولا تقل «غير متوفر» وحدها.\n" +
+      "أعد نص الرد النهائي فقط، بدون شرح أو مقدمة."
+    : "مراجعة إلزامية قبل الإرسال: الردّ التالي يحتوي " +
+      problems.join(" و ") +
+      ".\n" +
+      "أعد كتابة الرد مع الالتزام الصارم بالآتي:\n" +
+      "1) احذف أي رقم مستند/طلب/أمر/فاتورة لم يظهر حرفيًا في نتيجة أداة، ولا تستبدله برقم مخمّن.\n" +
+      "2) احذف أو صحّح أي اسم مورد/عميل غير موجود في قوائم النظام المعطاة لك، ولا تخترع اسمًا شبيهًا.\n" +
+      "3) إن كانت المعلومة المطلوبة تعتمد على تلك الأرقام أو الأسماء، فاذكر صراحةً أنها غير متوفرة ولم تُعثر عليها.\n" +
+      "4) أبقِ باقي الرد كما هو — لا تُغيّر ما ظهر فعلًا في نتائج الأدوات.\n" +
+      "أعد نص الرد النهائي فقط، بدون شرح أو مقدمة.";
+
   try {
     const res = await chatCompletion({
       model: opts.settings.model,

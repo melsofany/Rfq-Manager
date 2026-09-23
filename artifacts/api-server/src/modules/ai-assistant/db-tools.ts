@@ -587,6 +587,191 @@ export async function systemSnapshot(): Promise<Record<string, number>> {
   return Object.fromEntries(results);
 }
 
+/** One entity's name, as known by the database. */
+export interface EntityName {
+  name: string;
+  /** Internal id, so the model can follow up with the number it saw. */
+  id: number | null;
+}
+
+/**
+ * The real list of supplier and customer names, read straight from the database.
+ *
+ * This is the difference between a plausible text and a verified one. Given only
+ * a question, the model writes whatever name it imagines and the answer LOOKS
+ * right (the recorded «هاي فولت» incident: real rows were read as the match and
+ * invented names filled the gaps). With the actual vocabulary in context it can
+ * tell that «شركة النور» is not a supplier at all, without spending one of the
+ * 20 daily requests/model to discover that.
+ *
+ * Deliberately bounded: two indexed-ish `ilike`-free selects limited to the
+ * table's own name column, cached for a short TTL because the list changes
+ * slowly while every message would otherwise re-read it. Returns empty arrays on
+ * failure so a database hiccup degrades to "no vocabulary" rather than blocking
+ * the answer.
+ */
+const ENTITY_TTL_MS = 10 * 60 * 1000;
+let entityCache: { at: number; suppliers: EntityName[]; customers: EntityName[] } | null = null;
+
+export async function entityVocabulary(
+  limit = 400,
+): Promise<{ suppliers: EntityName[]; customers: EntityName[] }> {
+  if (entityCache && Date.now() - entityCache.at < ENTITY_TTL_MS) {
+    return { suppliers: entityCache.suppliers, customers: entityCache.customers };
+  }
+  const read = async (table: PgTable): Promise<EntityName[]> => {
+    try {
+      const nameCol = cols(table)["name"];
+      if (!nameCol) return [];
+      // Selected in the same loose style the rest of this registry uses; the
+      // drizzle generics on a variable `PgTable` are not worth fighting here.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = (await db
+        .select()
+        .from(table as any)
+        .limit(limit)) as Array<Record<string, unknown>>;
+      return rows
+        .map((r) => {
+          const id = Number(r.id);
+          return {
+            id: Number.isInteger(id) ? id : null,
+            name: String(r.name ?? "").trim(),
+          };
+        })
+        .filter((r) => r.name);
+    } catch (err) {
+      logger.warn({ err }, "AI assistant: entity vocabulary read failed");
+      return [];
+    }
+  };
+  const [suppliers, customers] = await Promise.all([read(suppliersTable), read(customersTable)]);
+  entityCache = { at: Date.now(), suppliers, customers };
+  return { suppliers, customers };
+}
+
+/** Test seam: drop the cached vocabulary so a case starts from a known list. */
+export function resetEntityVocabulary(): void {
+  entityCache = null;
+}
+
+/**
+ * Names mentioned in text that are NOT in the known list.
+ *
+ * Deliberately NARROW. The failure being fixed is an invented COMPANY name
+ * («شركة النور» / «الشركة المصرية»), so only a word run carrying an explicit
+ * company marker (شركة / مؤسسة / للتوريدات / company / ltd …) is considered.
+ * Flagging any multi-word Arabic run would fire on ordinary prose («الطلب
+ * موجود») and make the assistant "correct" a name it got right — a worse failure
+ * than the one being fixed. A run is unknown only when it shares NO token with
+ * any known entity, so a correct short form («شركة الأمل» for «شركة الأمل
+ * للتوريدات») stays accepted. Arabic is normalised (alef/hamza, taa marbuta,
+ * yaa, harakat, tatweel) so spelling variants agree.
+ */
+export function findUnknownEntityNames(
+  answer: string,
+  known: { suppliers: EntityName[]; customers: EntityName[] },
+): string[] {
+  const names = [...known.suppliers, ...known.customers].map((e) => e.name).filter(Boolean);
+  if (!names.length || !answer) return [];
+
+  const fold = (s: string) =>
+    (s ?? "")
+      .replace(/[\u064B-\u0652\u0640]/g, "")
+      .replace(/[أإآٱ]/g, "ا")
+      .replace(/ى/g, "ي")
+      .replace(/ة/g, "ه")
+      .toLowerCase()
+      .trim();
+
+  const tokensOf = (s: string) =>
+    fold(s)
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter(Boolean);
+
+  // Words that mark the START of a company name. Only company-FORM words belong
+  // here — «شركة» / «مؤسسة» / «company». Suffix words like «للتوريدات» are part
+  // of a name («شركة الأمل للتوريدات»), so listing them would truncate the name
+  // at the suffix and check only «شركة الأمل».
+  const MARKERS = new Set([
+    "شركه",
+    "مؤسسه",
+    "company",
+    "co",
+    "corp",
+    "corporation",
+    "ltd",
+    "llc",
+    "inc",
+    "group",
+    "trading",
+  ]);
+  /**
+   * The bare marker form of a word, or null when it is not a company marker.
+   *
+   * Arabic glues short prefixes to the following word («بشركة» = «ب» + «شركة»),
+   * so each candidate prefix is stripped before folding and checking the
+   * markers. Folding happens AFTER stripping because folding rewrites letters
+   * the prefix may itself start with. The word returned keeps the ORIGINAL
+   * spelling minus the prefix, so the model is handed «شركة» not the folded «شركه».
+   */
+  function bareMarkerWord(word: string): string | null {
+    if (MARKERS.has(fold(word))) return word;
+    for (const p of ["ال", "و", "ف", "ب", "ك", "ل"]) {
+      if (!word.startsWith(p)) continue;
+      const rest = word.slice(p.length);
+      if (MARKERS.has(fold(rest))) return rest;
+    }
+    return null;
+  }
+
+  /**
+   * True for words that carry no distinguishing information about which company
+   * is meant: the company FORM itself («شركة», «co») and the descriptive
+   * "for-the-X" suffix Arabic business names share («للتوريدات» = for supply).
+   *
+   * This matters for the share-a-token test below. «مؤسسة الدلتا للتوريدات» and
+   * the real «شركة الأمل للتوريدات» share «للتوريدات», but that says nothing
+   * about identity — only «الدلتا» vs «الأمل» does. Counting a shared suffix as
+   * a match would accept every invented name whose suffix looks familiar.
+   */
+  const ignorable = (t: string) => MARKERS.has(fold(t)) || /^لل/.test(fold(t));
+
+  const knownTokens = new Set<string>();
+  const foldedKnown: string[] = [];
+  for (const n of names) {
+    foldedKnown.push(fold(n));
+    for (const t of tokensOf(n)) if (!ignorable(t)) knownTokens.add(t);
+  }
+
+  // Scan the answer word by word. A candidate name STARTS at a company marker
+  // and runs to the next punctuation/marker — anchoring on the marker instead of
+  // on sentence boundaries avoids truncating a name that appears mid-sentence
+  // («... خاص بشركة النور» must yield «شركة النور», not just «شركة»).
+  const words = answer.split(/\s+/);
+  const unknown: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const marker = bareMarkerWord(words[i].replace(/^[^\p{L}\p{N}]+/u, ""));
+    if (!marker) continue;
+    const parts = [marker];
+    for (let j = i + 1; j < words.length && parts.length <= 4; j++) {
+      const clean = words[j].replace(/[^\p{L}\p{N}]+$/u, "");
+      if (!clean || bareMarkerWord(clean)) break;
+      parts.push(clean);
+    }
+    // A bare marker with no name word («الشركة المصرية للحفر» alone is «شركة»)
+    // carries no entity to check — skip it rather than flag the generic word.
+    if (parts.length < 2) continue;
+    const candidate = parts.join(" ");
+    const f = fold(candidate);
+    // Accept when a known name contains this run or vice versa (short form).
+    if (foldedKnown.some((k) => k.includes(f) || f.includes(k))) continue;
+    // Accept when any distinguishing token is part of the known vocabulary.
+    if (tokensOf(candidate).some((t) => knownTokens.has(t))) continue;
+    if (!unknown.includes(candidate)) unknown.push(candidate);
+  }
+  return unknown;
+}
+
 /**
  * Exact-match lookup helper used by the high-level tools (PO numbers etc.).
  */
