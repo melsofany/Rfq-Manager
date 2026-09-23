@@ -1136,9 +1136,30 @@ export function scanCallBudgetMs(): number {
  * more model round-trips, each spending the day's scarce quota, so the tool
  * queues a background job instead. Env-tunable because the right threshold
  * depends on measured per-message cost on the live mailbox.
+ *
+ * Note this is the threshold for the AUTOMATIC hand-off. When the operator asked
+ * for a 100% census (see `wantsCompleteCensus`), the hand-off is unconditional —
+ * a partial list is not an acceptable answer to that question, however small the
+ * remainder is.
  */
 function autoCensusMinRemaining(): number {
   return Number(process.env.AI_AUTO_JOB_MIN_REMAINING ?? 150);
+}
+
+/**
+ * Whether the operator demanded a COMPLETE census rather than a quick sample.
+ *
+ * «فحص كامل بنسبة 100%», «كل أوامر الشراء», «ما تتوقفش», «لسه باقي» — the
+ * recorded failure is a ranked list presented as the year's answer while only
+ * 150 of 480 documents had been opened. When this is true the tool must not
+ * return a partial ranking as though it were the result: it either finishes the
+ * scan or hands it to a background job that will.
+ */
+export function wantsCompleteCensus(args: Record<string, unknown>): boolean {
+  const text = String(args.question ?? args.contains ?? "");
+  return /(100\s*%|فحص\s*كامل|حصر\s*كامل|كل\s*أوامر|كل\s*اوامر|جميع\s*أوامر|جميع\s*اوامر|ما\s*تتوقف|لا\s*تتوقف|لسه\s*باقي|لسة\s*باقي|كامل\s*100|complete|full\s+scan|all\s+orders)/i.test(
+    text,
+  );
 }
 
 /** Raised when a tool exceeds `toolTimeoutMs()`. */
@@ -1689,7 +1710,7 @@ async function executeToolInner(
           !complete &&
           !contains &&
           !args.noAutoJob &&
-          session.remaining >= autoCensusMinRemaining()
+          (wantsCompleteCensus(args) || session.remaining >= autoCensusMinRemaining())
         ) {
           const scopeLabel = [
             args.from ? `من ${String(args.from)}` : "",
@@ -1734,6 +1755,16 @@ async function executeToolInner(
           .filter(Boolean)
           .join("، ");
 
+        // Only POs are counted, so say so — and say how many RFQs were skipped,
+        // because the operator's rule is explicit that a quotation is not an
+        // order. Silence here would look like the RFQs were counted.
+        const docMix =
+          coverage.rfqDocuments > 0
+            ? ` المستندات: ${coverage.poDocuments} أمر شراء (تُحسب) و${coverage.rfqDocuments} طلب عرض/عرض سعر (مستبعد).`
+            : coverage.poDocuments > 0
+              ? ` المستندات: ${coverage.poDocuments} أمر شراء.`
+              : "";
+
         if (args.exportCsv) {
           ctx.outbox.push({
             buffer: Buffer.from(itemsCsv(parsed), "utf8"),
@@ -1769,6 +1800,13 @@ async function executeToolInner(
                 paragraphs: [
                   `رسائل مطابقة: ${census.matched} — رسائل فُتحت مرفقاتها وقرأنا بنودها: ${parsed.coverage.withItems}.`,
                   `بنود مقروءة: ${parsed.coverage.lines} سطرًا من ${parsed.coverage.attachments} ملف.`,
+                  `المستندات المحسوبة: ${parsed.coverage.poDocuments} أمر شراء فقط` +
+                    (parsed.coverage.rfqDocuments
+                      ? ` (واستُبعد ${parsed.coverage.rfqDocuments} طلب عرض/عرض سعر — ليست أوامر شراء).`
+                      : ".") +
+                    (parsed.coverage.unknownDocuments
+                      ? ` ونوع ${parsed.coverage.unknownDocuments} مستند غير مؤكد (حُسبت بنودها).`
+                      : ""),
                   scopeLine,
                   parsed.coverage.unreadable
                     ? `تنبيه: تعذّرت قراءة ${parsed.coverage.unreadable} رسالة.`
@@ -1777,33 +1815,46 @@ async function executeToolInner(
                     (ordering === "qty"
                       ? "مع استبعاد ما لا يمكن تجميعه."
                       : `مع استبعاد أي بند ورد في أقل من ${minOrders} أمر شراء.`),
-                  "متوسط سعر الوحدة والإجمالي مأخوذان حرفيًا من أسطر أوامر الشراء؛ «—» تعني أن الأمر لم يطبع سعرًا لهذا البند.",
+                  "هوية البند محسوبة من مجموعة بياناته كاملة (الوصف والمواصفات والموديل والمقاس والقدرة والوحدة) " +
+                    "وليس من رقم القطعة وحده؛ لذلك قد يظهر أكثر من رقم قطعة لنفس البند.",
+                  `بنود لم يمكن تحديد هويتها بشكل مؤكد (لا رقم قطعة ولا كود موديل): ${
+                    ranked.filter((p) => !p.identityConfident).length
+                  } من ${ranked.length}.`,
+                  "متوسط سعر الوحدة والإجمالي مأخوذان حرفيًا من أسطر أوامر الشراء؛ «غير متوفر» تعني أن الأمر لم يطبع سعرًا لهذا البند.",
+                  "«عدد الأوامر» يحسب أوامر الشراء المختلفة فقط؛ تكرار البند داخل نفس الأمر لا يزيد العدد.",
                 ].filter(Boolean),
               },
               {
                 table: {
                   columns: [
-                    "رقم القطعة",
-                    "التوصيف الكامل",
+                    "الترتيب",
+                    "وصف البند الكامل",
+                    "Part Number",
+                    "Line Item",
                     "عدد الأوامر",
                     "إجمالي الكمية",
                     "الوحدة",
                     "متوسط سعر الوحدة",
                     "إجمالي القيمة",
+                    "العملة",
                     "أرقام الأوامر",
                   ],
-                  rows: ranked
-                    .slice(0, top)
-                    .map((p) => [
-                      p.partNo ?? "—",
-                      p.description,
-                      p.occurrences,
-                      p.qty,
-                      p.uom ?? "—",
-                      p.avgUnitPrice != null ? p.avgUnitPrice.toFixed(2) : "—",
-                      p.totalValue != null ? p.totalValue.toFixed(2) : "—",
-                      p.documents.length ? p.documents.join("، ") : "—",
-                    ]),
+                  rows: ranked.slice(0, top).map((p, i) => [
+                    i + 1,
+                    p.description || "غير متوفر",
+                    p.partNo ?? "غير متوفر",
+                    // A Line Item is an internal row number that differs PO by PO,
+                    // so it is deliberately NOT the identity — it is not even
+                    // carried through aggregation. Say so rather than invent one.
+                    "غير متوفر",
+                    p.occurrences,
+                    p.qty,
+                    p.uom ?? "غير متوفر",
+                    p.avgUnitPrice != null ? p.avgUnitPrice.toFixed(2) : "غير متوفر",
+                    p.totalValue != null ? p.totalValue.toFixed(2) : "غير متوفر",
+                    p.avgUnitPrice != null || p.totalValue != null ? "EGP" : "غير متوفر",
+                    p.documents.length ? p.documents.join("، ") : "غير متوفر",
+                  ]),
                 },
               },
             ],
@@ -1864,7 +1915,9 @@ async function executeToolInner(
               ? `لم أجد أي مرفق PDF يمكن قراءته في ${census.matched} رسالة مطابقة. ` +
                 "لا تقل إن الطلبات بلا بنود — قل إنه لم يُعثر على ملفات بنود في هذا النطاق، وجرّب وسّع المدة أو غيّر المُرسل."
               : `حصر بنود من مرفقات البريد: ${census.matched} رسالة مطابقة، فُتح مرفق ${coverage.messages} رسالة، ` +
-                `وقُرئ ${coverage.lines} سطر بند من ${coverage.attachments} ملف. ` +
+                `وقُرئ ${coverage.lines} سطر بند من ${coverage.attachments} ملف.` +
+                docMix +
+                " " +
                 scope +
                 (complete
                   ? " — الحصر كامل على كل الرسائل المطابقة."
@@ -1882,6 +1935,26 @@ async function executeToolInner(
             attachmentCoverage: scanCoverage,
             distinctParts: parsed.aggregate.length,
             totalLines: coverage.lines,
+            // The counts the operator asked for, so the final report relays facts
+            // instead of estimates. `poDocuments`/`rfqDocuments` make the PO-only
+            // rule auditable: a quotation read but excluded is visible, not
+            // silently absent.
+            poDocuments: coverage.poDocuments,
+            rfqDocumentsExcluded: coverage.rfqDocuments,
+            unknownDocuments: coverage.unknownDocuments,
+            // The final-report numbers the operator asked for, computed HERE so
+            // the model relays facts rather than estimating them. A census that
+            // has not finished must not look finished: `completionPct` is the
+            // share of matched messages actually opened, and
+            // `identityUncertain` counts the items whose identity rests on prose
+            // alone (no part number, no model code) — the operator explicitly
+            // asked for that count and for the scan to continue until 100%.
+            completionPct:
+              census.matched > 0
+                ? Math.min(100, Math.round((coverage.messages / census.matched) * 100))
+                : 100,
+            totalAttachments: coverage.attachments,
+            identityUncertain: ranked.filter((p) => !p.identityConfident).length,
             // Ranked by how MANY orders carried the part by default — the
             // «أكتر بند اتكرر» answer — with occurrences always present so the
             // model can quote the count.

@@ -19,7 +19,22 @@
 import { logger } from "../../shared/logger";
 
 /** Max characters accepted from one message. Beyond this it is truncated. */
-export const MAX_INPUT_CHARS = 4000;
+export const MAX_INPUT_CHARS = 6000;
+
+/**
+ * Share of the budget kept from the END of an over-long message.
+ *
+ * A long instruction message is not shaped like a long document: the ASK is at
+ * the top and the CONSTRAINTS are at the bottom. Truncating to the head alone
+ * therefore dropped the most decisive line — the operator's message ended
+ * «PO فقط وليس RFQ او quotation», that tail was cut, and the census went on to
+ * treat quotations as orders. Keeping both ends is what makes truncation
+ * survivable; the middle (elaboration) is what gets dropped.
+ */
+const TAIL_SHARE = 0.4;
+
+/** Marker inserted where the middle was dropped. */
+const TRUNCATION_MARKER = "\n\n[... تم اختصار جزء من منتصف الرسالة ...]\n\n";
 
 /** Messages allowed per phone inside the window. */
 export const RATE_LIMIT_MAX = 20;
@@ -37,11 +52,21 @@ const hits = new Map<string, number[]>();
  * message was shortened — silently answering a truncated question produces a
  * confidently wrong answer, which is the failure class this module exists to
  * avoid.
+ *
+ * The head AND the tail are kept (see `TAIL_SHARE`): an instruction message puts
+ * its constraints last, and those are the lines that must not be lost.
  */
 export function capInput(text: string): { text: string; truncated: boolean } {
   const t = text ?? "";
   if (t.length <= MAX_INPUT_CHARS) return { text: t, truncated: false };
-  return { text: t.slice(0, MAX_INPUT_CHARS), truncated: true };
+  // The marker counts against the budget, so the result never exceeds the cap
+  // the caller advertises.
+  const budget = MAX_INPUT_CHARS - TRUNCATION_MARKER.length;
+  const tailLen = Math.floor(budget * TAIL_SHARE);
+  const headLen = budget - tailLen;
+  const head = t.slice(0, headLen);
+  const tail = t.slice(t.length - tailLen);
+  return { text: `${head}${TRUNCATION_MARKER}${tail}`, truncated: true };
 }
 
 /**

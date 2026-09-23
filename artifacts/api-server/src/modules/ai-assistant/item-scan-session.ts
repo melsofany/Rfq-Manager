@@ -84,6 +84,9 @@ function emptyItemCoverage(): ItemScanCoverage {
     noAttachment: 0,
     attachments: 0,
     lines: 0,
+    poDocuments: 0,
+    rfqDocuments: 0,
+    unknownDocuments: 0,
   };
 }
 
@@ -96,6 +99,9 @@ const ITEM_COVERAGE_KEYS: Array<keyof ItemScanCoverage> = [
   "noAttachment",
   "attachments",
   "lines",
+  "poDocuments",
+  "rfqDocuments",
+  "unknownDocuments",
 ];
 
 function addItemCoverage(acc: ItemScanCoverage, add: ItemScanCoverage): void {

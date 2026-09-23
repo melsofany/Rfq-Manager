@@ -177,6 +177,27 @@ export async function loadPersistedScanSession<T>(key: string): Promise<T | unde
 }
 
 /**
+ * Drop every persisted scan session.
+ *
+ * A reset («ابدأ من جديد») means the operator wants NO prior result reused, and
+ * the in-process cache is only half the state: the Postgres mirror would let the
+ * next question resume a census — and reuse the row set — produced before the
+ * reset. Clearing the memory cache alone therefore looked like a reset while the
+ * old results were still reachable, which is the same class of silent
+ * wrong-answer this assistant keeps having to be cured of.
+ */
+export async function clearPersistedScanSessions(): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const { db, aiAssistantScanSessionsTable } = await import("@workspace/db");
+    await db.delete(aiAssistantScanSessionsTable);
+  } catch {
+    // Best-effort: the in-memory cache is already cleared, and a reset must not
+    // fail the operator's message.
+  }
+}
+
+/**
  * The scan-session store, resolved once. `@workspace/db` is imported lazily so
  * this module stays importable (and testable) without a live database, and its
  * absence simply disables persistence.

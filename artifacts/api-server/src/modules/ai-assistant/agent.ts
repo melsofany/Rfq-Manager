@@ -156,6 +156,18 @@ export function systemPrompt(settings: AiSettings): string {
 - عندما تطلب منك الإدارة «قارن البريد بالنظام» أو «الأرقام اللي في الميل مش في النظام»: استخدم scan_emails مع compareTable/compareColumn. وإن طلبوا ملفًا بالفرق، أضف exportPdf=true — التقرير يُبنى في الخادم من القائمة الكاملة، فلن تُقتطع مهما كان عدد الأرقام. لا تنقل الأرقام بنفسك إلى generate_pdf أبدًا.
 - الرقم قد يكون داخل المرفق لا في الموضوع (مثل إشعارات «Quotation Import» من EDC). إن أردت حصرًا أدق، مرّر includeAttachments=true مع scan_emails.
 - لسؤال عن «البنود والكميات» أو «أكتر بند اتكرر» داخل ملفات/طلبات/أوامر توريد واردة بالبريد: استخدم scan_email_items وحدها (تقرأ داخل مرفقات PDF وتجمّع البنود). لا تقل «البنود داخل الملفات ولا أستطيع قراءتها» — الأداة تفعل ذلك. ترتيبها الافتراضي بالتكرار (مرات ورود البند) وهو المقصود بـ«أكتر بند اتكرر»؛ وإن كان السؤال عن الكمية الإجمالية مرّر ordering=qty. وإن طلب المستخدم ملفًا، مرّر exportCsv=true (كل البنود) أو exportPdf=true (ملخص).
+
+قواعد هوية البند والتكرار (مهمة جدًا — هذه قواعد العمل التي طلبها المدير):
+- رقم القطعة (Part Number) ليس هوية البند. قد يكون غير موجود، أو مكتوبًا بتهجئة مختلفة، أو موجودًا في أمر وغائبًا في أمر آخر لنفس البند. لا تعتبر اختلاف رقم القطعة دليلًا على أن البندين مختلفان، ولا تشترط وجوده ليدخل البند في التحليل.
+- هوية البند تُبنى من مجموعة بياناته كاملة: الوصف الكامل، المواصفات الفنية، الموديل، الماركة/الشركة المصنعة، المقاس، القدرة/السعة، النوع، الوحدة، وأي أكواد أخرى. البند بدون رقم قطعة يبقى داخل التحليل ويُعرَّف من الوصف والمواصفات.
+- Line Item ليس معرفًا: رقم السطر يتغير من أمر لآخر، فلا تستخدمه للمطابقة ولا تكتبه في التقرير.
+- معيار التكرار = عدد أوامر الشراء المختلفة التي ظهر فيها البند. ليس إجمالي الكمية، وليس عدد الأسطر، وليس عدد مرات ظهور النص. مثال: بند في 10 أوامر بـ50 قطعة أكثر تكرارًا من بند في 3 أوامر بـ500 قطعة — الكمية لا تحدد الترتيب.
+- لا تدمج بندين مختلفين لمجرد تشابه الوصف: أي اختلاف جوهري في الموديل أو المقاس أو القدرة أو السعة أو النوع أو الشركة المصنعة أو المواصفات يعني أنهما بندان مختلفان.
+- أوامر الشراء (PO) فقط هي المقصود — لا تحسب طلبات عروض الأسعار (RFQ) ولا عروض الأسعار (Quotation) كأوامر شراء، ولا تخلط بينهما في نفس القائمة. الأداة تستبعدها تلقائيًا وتخبرك بالعدد.
+- إذا كان طلب المستخدم حصرًا كاملًا بنسبة 100% (أو «كل أوامر الشراء» أو «ما تتوقفش»): لا تقدّم قائمة نهائية وأنت لم تفحص كل الرسائل. الأداة ستحوّل الحصر الكبير إلى مهمة خلفية تلقائيًا (وتعيد jobId) — أخبر المستخدم برقم المهمة وأن التقرير سيصله، ولا تعرض نتيجة جزئية كأنها نهائية.
+- لا تكتب «تم الفحص الشامل» أو «تم فحص جميع أوامر الشراء» إلا إذا كان isComplete=true فعلًا في نتيجة الأداة. وإن كان الحصر جزئيًا اذكر الأرقام: المطابق، والمفحوص، ونسبة الاكتمال (completionPct)، والمتبقي.
+- عند طلب تقرير، الأرقام المطلوبة لكل بند: الترتيب، الوصف الكامل، Part Number (أو «غير متوفر»)، Line Item (أو «غير متوفر»)، عدد أوامر الشراء، إجمالي الكمية، الوحدة، متوسط سعر الوحدة، إجمالي القيمة، العملة، أرقام الأوامر. لا تخترع أي قيمة مفقودة — اكتب «غير متوفر».
+- لا تخلط العملات في متوسط واحد. إن اختلفت العملة اذكر ذلك بدل الدمج.
 - إن رجعت scan_email_items بـ isComplete=false فالحصر لم ينتهِ بعد، والترتيب مبني على ما فُحص حتى الآن فقط. اذكر النطاق صريحًا («فُتح N من أصل M رسالة مطابقة») ثم أعد نداء scan_email_items بنفس الوسائط لإكمال الحصر من حيث توقف. لا تقدّم الترتيب على أنه حصر لكل الرسائل، ولا تقل إن بندًا «غير موجود» قبل isComplete=true.
 - إن رجعت scan_email_items بـ hasAttachments=false فهذا يعني أن الحصر لم يعثر على ملفات بنود في النطاق المطلوب، وليس أن الطلبات بلا بنود. لا تقل «الطلبات لا تحتوي بنودًا»؛ قل إنه لم يُعثر على ملفات بنود في هذا النطاق، واقترح توسيع المدة (sinceDate) أو تغيير المُرسل.
 - عندما يطلب المستخدم قائمة كاملة بالأرقام وعددها أكبر من أن يُكتب في الرسالة: أرسل الملف (exportCsv) واذكر الإجمالي والتوزيع على الشهور، ولا تسرد الأرقام كلها في نص الرسالة.
@@ -480,6 +492,27 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       finalText = exhaustedAnswer(usedTools);
     }
 
+    // ── Source-scope enforcement ────────────────────────────────────────────
+    // The operator named the mailbox as the required source («بقولك من الميل
+    // مش قاعده البيانات») and the run answered from the database instead — a
+    // complete census of a DIFFERENT dataset, presented as the answer about the
+    // mail. A hint is not a constraint, so this is checked: when the scope was
+    // email and no email tool ran, the reply is labelled rather than passed off
+    // as the requested analysis.
+    if (plan.sourceScope === "email" && finalText) {
+      const ranEmail = usedTools.some((t) => EMAIL_TOOLS.has(t.name));
+      if (!ranEmail) {
+        finalText =
+          `${finalText}\n\n⚠️ تنبيه: طلبت البيانات من البريد الإلكتروني، لكن هذه الإجابة مبنية على النظام الداخلي ` +
+          `ولم يُقرأ البريد في هذه الجولة — فهي ليست حصرًا للميل. أعد السؤال بكلمة «من البريد» وسأفحص المرفقات.`;
+        verificationRan = true;
+        logger.warn(
+          { phone: input.phone, tools: usedTools.map((t) => t.name) },
+          "AI assistant: email-scoped question answered without reading email",
+        );
+      }
+    }
+
     // ── Post-answer verification ────────────────────────────────────────────
     // Two independent checks, both deterministic (no model call to decide), so
     // the extra provider request is spent only when a real problem is found.
@@ -561,7 +594,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     // beside the correction.
     if (finalText) {
       try {
-        const v = await verifyAnswer({ answerText: finalText });
+        const v = await verifyAnswer({ answerText: finalText, source: answerSource(usedTools) });
         if (v.outcome === "disagreement" && v.note) {
           finalText = `${finalText}\n\n⚠️ تحقق آلي: ${v.note} — لذا النتيجة PARTIALLY_VERIFIED.`;
           verificationRan = true;
@@ -666,6 +699,38 @@ function answerConfidence(
   if (toolCalls === 0) return "VERIFIED";
   if (verificationRan) return "PARTIALLY_VERIFIED";
   return "VERIFIED";
+}
+
+/** Tools whose figures come from the mailbox rather than the database. */
+const EMAIL_TOOLS = new Set([
+  "search_emails",
+  "search_sent_emails",
+  "scan_emails",
+  "scan_email_items",
+  "read_email",
+  "get_email_attachment",
+  "list_mailboxes",
+]);
+
+/**
+ * Which source an answer's figures came from.
+ *
+ * The numeric verifier reconciles a reported total against the DATABASE, so it
+ * may only run when the database produced the figure. An email census and the
+ * database legitimately hold different numbers (the mailbox has orders the
+ * system does not), and comparing them flagged every correct email answer as
+ * PARTIALLY_VERIFIED — the live «المرصود 235800 والمحسوب من قاعدة البيانات 14265»
+ * on a reply that was entirely about the mail.
+ */
+function answerSource(
+  usedTools: Array<{ name: string }>,
+): "database" | "email" | "mixed" | "unknown" {
+  if (!usedTools.length) return "unknown";
+  const names = new Set(usedTools.map((t) => t.name));
+  const email = [...names].some((n) => EMAIL_TOOLS.has(n));
+  const db = [...names].some((n) => !EMAIL_TOOLS.has(n));
+  if (email && db) return "mixed";
+  return email ? "email" : "database";
 }
 
 function parseArgs(call: ToolCall): Record<string, unknown> {

@@ -13,6 +13,7 @@
  * a document nobody managed to open.
  */
 import { extractPdfText, type MessageAttachments } from "./email";
+import { groupByItemIdentity, hasConfidentIdentity } from "./item-identity";
 
 /** One parsed order line. */
 export interface ParsedLineItem {
@@ -202,6 +203,43 @@ export function documentNumber(text: string): string | null {
   return DOC_NUMBER_RE.exec(text || "")?.[1] ?? null;
 }
 
+/** The kind of document an attachment is. */
+export type DocumentKind = "po" | "rfq" | "unknown";
+
+/**
+ * Classify an attachment as a PURCHASE ORDER or a REQUEST FOR QUOTE.
+ *
+ * The operator's rule is explicit: count POs, NOT RFQs or quotations. The two
+ * arrive from the same sender with nearly identical item tables, so without this
+ * the census mixes quotes into an order-frequency ranking — a part «ordered 5
+ * times» could be a part merely quoted 5 times, which is a different fact.
+ *
+ * Two independent signals, because neither alone is reliable:
+ *  - the title (`PURCHASE ORDER` / `REQUEST FOR QUOTE|QUOTATION`), which the
+ *    generator prints but a scanned copy may lose;
+ *  - the document number's prefix — EDC writes `P26E14630` for a PO and
+ *    `26R011954` for an RFQ, so the leading letter identifies the type even when
+ *    the title is unreadable.
+ */
+export function documentKind(text: string): DocumentKind {
+  const t = (text || "").toUpperCase();
+  // The title wins when present: it is the generator's own statement of intent.
+  const saysPo = /\bPURCHASE\s+ORDER\b/.test(t);
+  const saysRfq = /\bREQUEST\s+FOR\s+(QUOTE|QUOTATION)\b/.test(t) || /\bQUOTATION\b/.test(t);
+  if (saysPo && !saysRfq) return "po";
+  if (saysRfq && !saysPo) return "rfq";
+  // Otherwise fall back to the number's prefix.
+  const no = documentNumber(text);
+  if (no) {
+    if (/^P\d/i.test(no)) return "po";
+    if (/^\d{2}R/i.test(no) || /^R\d/i.test(no)) return "rfq";
+  }
+  // The explicit label EDC prints beside the number (`PO number:` / `RFQ number:`).
+  if (/\bPO\s*(?:number|no\.?)\s*:/.test(t)) return "po";
+  if (/\bRFQ\s*(?:number|no\.?)\s*:/.test(t)) return "rfq";
+  return "unknown";
+}
+
 /** Description for an item: text after the part number, plus following prose. */
 function collectDescription(
   lines: string[],
@@ -283,6 +321,18 @@ export interface AggregatedPart {
   totalValue: number | null;
   /** Distinct document numbers the part appeared in — the audit trail. */
   documents: string[];
+  /**
+   * Every part number seen for this item. More than one means the item was
+   * written with different codes (or one order omitted it) and the identity
+   * grouping joined them — the operator asked for exactly this.
+   */
+  partNos: string[];
+  /**
+   * True when a part number or model code pins the identity. False means the
+   * cluster rests on prose alone, which is reported separately rather than
+   * presented as certain.
+   */
+  identityConfident: boolean;
 }
 
 /** Unit of measure as it should appear beside an aggregated quantity. */
@@ -304,85 +354,99 @@ function dominantUom(items: ParsedLineItem[]): string | null {
 }
 
 /**
- * Roll parsed lines up by part number.
+ * Roll parsed lines up by ITEM IDENTITY (not by part number).
  *
- * Grouping on the part number (falling back to the description when a document
- * omits one) answers "what did we quote/order most this year" — the operator's
- * actual question — instead of listing hundreds of raw rows.
+ * Grouping on the part number alone answers the wrong question: the operator
+ * wants "which item was ordered most often", and an item written `P/N : A9R41440`
+ * on one PO and by description alone on the next is ONE item. The grouping is
+ * therefore delegated to `groupByItemIdentity`, which compares the whole item
+ * (part number, description, model, size, capacity, unit) and refuses to merge
+ * two items whose distinguishing attributes conflict.
  *
  * Occurrences count DOCUMENTS, not lines: one PO that prints a part on three
  * lines (or restates it on its distribution page) is one order. Counting lines
  * would let a single noisy document top a frequency ranking.
+ *
+ * Sort order is by QUANTITY: this function is the VOLUME view (the caller's
+ * `ordering=qty`). The frequency view — «أكتر بند اتكرر», where a part on 10
+ * orders outranks a part on 3 with a far larger quantity — is
+ * `aggregateItemsByOccurrence`, which sorts on `occurrences`.
  */
 export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
-  const map = new Map<
-    string,
-    { part: AggregatedPart; docs: Set<string>; lines: ParsedLineItem[] }
-  >();
-  for (const it of items) {
-    const key = itemKey(it);
-    if (!key) continue;
-    let hit = map.get(key);
-    if (!hit) {
-      hit = {
-        part: {
-          partNo: it.partNo,
-          description: it.description,
-          qty: 0,
-          uom: null,
-          occurrences: 0,
-          avgUnitPrice: null,
-          totalValue: null,
-          documents: [],
-        },
-        docs: new Set<string>(),
-        lines: [],
-      };
-      map.set(key, hit);
-    }
-    hit.part.qty += it.qty ?? 0;
-    hit.lines.push(it);
-    // A line with no document number still counts as its own occurrence, keyed
-    // on the line so it can never silently vanish from the total.
-    const doc = (it.docId || "").trim() || `__line_${hit.lines.length}__${it.lineNo ?? ""}`;
-    hit.docs.add(doc);
-    // Keep the LONGEST description seen — the operator asked for the full text,
-    // and the PDF wraps the same item across lines with varying completeness.
-    if ((it.description || "").length > (hit.part.description || "").length) {
-      hit.part.description = it.description;
-    }
-  }
+  // A line whose description is only page furniture is not an item at all; it is
+  // dropped before grouping so it can neither form a cluster nor join one.
+  const usable = items.filter((it) => itemKey(it) !== "");
+  const groups = groupByItemIdentity(
+    usable.map((it) => ({
+      partNo: it.partNo,
+      description: it.description,
+      row: it,
+    })),
+  );
 
   const out: AggregatedPart[] = [];
-  for (const { part, docs, lines } of map.values()) {
-    part.occurrences = docs.size;
-    part.documents = [...docs].filter((d) => !d.startsWith("__line_"));
-    part.uom = dominantUom(lines);
+  for (const group of groups) {
+    const lines = group.rows.map((r) => r.row);
+    const docs = new Set<string>();
+    const partNos = new Set<string>();
+    let description = "";
+    let qty = 0;
+
+    lines.forEach((it, idx) => {
+      qty += it.qty ?? 0;
+      const pn = (it.partNo || "").trim();
+      if (pn) partNos.add(pn);
+      // A line with no document number still counts as its own occurrence, keyed
+      // on the line so it can never silently vanish from the total.
+      const doc = (it.docId || "").trim() || `__line_${idx}__${it.lineNo ?? ""}`;
+      docs.add(doc);
+      // Keep the LONGEST description seen — the operator asked for the full text,
+      // and the PDF wraps the same item across lines with varying completeness.
+      if ((it.description || "").length > description.length) description = it.description;
+    });
+
     const priced = lines.filter((l) => l.unitPrice != null && l.unitPrice > 0);
-    if (priced.length) {
-      const sum = priced.reduce((s, l) => s + (l.unitPrice ?? 0), 0);
-      part.avgUnitPrice = Number((sum / priced.length).toFixed(4));
-    }
     const valued = lines.filter((l) => l.lineTotal != null);
-    if (valued.length) {
-      part.totalValue = Number(valued.reduce((s, l) => s + (l.lineTotal ?? 0), 0).toFixed(2));
-    }
-    out.push(part);
+    out.push({
+      // The most specific code seen, so a cluster that includes a part-numbered
+      // line is not reported as "غير متوفر".
+      partNo: partNos.size ? [...partNos].sort((a, b) => b.length - a.length)[0] : null,
+      description,
+      qty,
+      uom: dominantUom(lines),
+      occurrences: docs.size,
+      avgUnitPrice: priced.length
+        ? Number((priced.reduce((s, l) => s + (l.unitPrice ?? 0), 0) / priced.length).toFixed(4))
+        : null,
+      totalValue: valued.length
+        ? Number(valued.reduce((s, l) => s + (l.lineTotal ?? 0), 0).toFixed(2))
+        : null,
+      documents: [...docs].filter((d) => !d.startsWith("__line_")),
+      partNos: [...partNos],
+      identityConfident: hasConfidentIdentity(group.identity),
+    });
   }
+
   return out.sort((a, b) => b.qty - a.qty || b.occurrences - a.occurrences);
 }
 
 /**
  * The identity a line is grouped by.
  *
- * The part number when there is one; otherwise the description. Rows with no
- * part number are common on EDC's RFQ layout (the Part No cell overflows), and
- * some of their descriptions are only fragments the PDF's columns left behind
- * (observed literally: «RCV», a location tag). Those fragments out-ranked real
- * parts on live mail — a 3-character string appearing on every order is not an
- * item — so an implausibly short description does not become its own group.
- * Description keys are never normalised further: stripping numbers would merge
- * genuinely different parts («50 MM» / «70 MM»).
+ * Deliberately NOT the part number: the operator's rule is that a Part Number is
+ * not an item's identity — it may be missing, misspelled, or printed on one PO
+ * and absent from the next for the same item. Keying on it alone split one item
+ * into several (the live case: the same breaker counted twice because one PO
+ * printed `P/N : A9R41440` and another only the description).
+ *
+ * This function still returns a per-LINE key (used to dedupe an exact repeat and
+ * as a cheap first pass); the authoritative grouping across wordings is
+ * `groupByItemIdentity` in `item-identity.ts`, which compares the whole item —
+ * part number, description, model, size, capacity, unit — and refuses to merge
+ * two items whose model/size/capacity differ.
+ *
+ * Description keys are never number-stripped: stripping numbers would merge
+ * genuinely different parts («50 MM» / «70 MM»), which is the opposite error.
  */
 export function itemKey(it: ParsedLineItem): string {
   const partNo = (it.partNo || "").trim();
@@ -449,6 +513,12 @@ export interface ItemScanCoverage {
   attachments: number;
   /** Total parsed lines. */
   lines: number;
+  /** Purchase-order documents read (the operator counts POs, not RFQs). */
+  poDocuments: number;
+  /** RFQ / quotation documents read — parsed for coverage but excluded. */
+  rfqDocuments: number;
+  /** Documents whose type could not be determined. */
+  unknownDocuments: number;
 }
 
 export interface ItemScanResult {
@@ -476,6 +546,9 @@ export async function parseItemsFromAttachments(
     noAttachment: 0,
     attachments: 0,
     lines: 0,
+    poDocuments: 0,
+    rfqDocuments: 0,
+    unknownDocuments: 0,
   };
   const out: MessageItems[] = [];
   const flat: ParsedLineItem[] = [];
@@ -497,6 +570,18 @@ export async function parseItemsFromAttachments(
       // occurrences must key on the ORDER, and a message with two attachments
       // (PO plus its distribution copy) is one order, not two.
       const docId = documentNumber(text) ?? `${message.mailbox}#${message.uid}#${att.filename}`;
+      // Only PURCHASE ORDERS count. The operator's rule is explicit: POs, not
+      // RFQs or quotations — the same sender sends both with identical item
+      // tables, so counting RFQs would report a part «ordered» on quotes that
+      // were never ordered. Non-PO documents are still READ (so coverage is
+      // honest about what was opened) but their lines are not counted.
+      const kind = documentKind(text);
+      if (kind === "rfq") {
+        coverage.rfqDocuments += 1;
+        continue;
+      }
+      if (kind === "unknown") coverage.unknownDocuments += 1;
+      else coverage.poDocuments += 1;
       const items = parseLineItems(text, docId);
       if (!items.length) continue;
       sawItem = true;
@@ -547,17 +632,21 @@ export function itemsCsv(result: ItemScanResult): string {
 /** Aggregate CSV — the summary the operator reads, one row per part. */
 export function itemsAggregateCsv(parts: AggregatedPart[]): string {
   const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const lines = ["partNo,description,totalQty,uom,orders,avgUnitPrice,totalValue,documents"];
+  const lines = [
+    "description,partNo,allPartNos,orders,totalQty,uom,avgUnitPrice,totalValue,identityConfident,documents",
+  ];
   for (const p of parts) {
     lines.push(
       [
-        p.partNo ?? "",
         p.description,
+        p.partNo ?? "",
+        p.partNos.join(" | "),
+        p.occurrences,
         p.qty,
         p.uom ?? "",
-        p.occurrences,
         p.avgUnitPrice ?? "",
         p.totalValue ?? "",
+        p.identityConfident ? "yes" : "no",
         p.documents.join(" | "),
       ]
         .map(esc)

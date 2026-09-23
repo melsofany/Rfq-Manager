@@ -32,6 +32,17 @@ export type QueryIntent =
 
 export type QueryPath = "fast" | "deep";
 
+/**
+ * Which SOURCE the operator demanded, when they said so explicitly.
+ *
+ * «من الميل مش قاعدة البيانات» is not a preference — it is the requirement. The
+ * recorded failure is the model answering an email question from the internal
+ * purchase-order table and reporting it as a complete census of the mail, which
+ * is a different dataset entirely. `sourceScope` makes that demand explicit so
+ * the run can be checked against it.
+ */
+export type SourceScope = "email" | "any";
+
 export interface RoutePlan {
   intent: QueryIntent;
   path: QueryPath;
@@ -43,6 +54,12 @@ export interface RoutePlan {
   reason: string;
   /** One-line tool hint appended to the prompt (empty when none applies). */
   hint: string;
+  /**
+   * "email" when the operator named the mailbox as the required source (or
+   * explicitly excluded the database). The answer is then only acceptable if an
+   * email tool actually ran — see the check in `agent.ts`.
+   */
+  sourceScope: SourceScope;
 }
 
 /** A fast-path question gets at most this many model rounds (see agent.ts). */
@@ -148,6 +165,24 @@ const PROCUREMENT_OPS_RE =
  *  count rule so «أرقام الموردين» remains a count. */
 const SUPPLIER_PLURAL_RE = /(موردين|موردون|الموردين|الموردون|\bsuppliers\b|\bvendors\b)/;
 
+/**
+ * The operator NAMING the mailbox as the required source, or excluding the
+ * internal system.
+ *
+ * «بقولك من الميل مش قاعده البيانات» was answered from the purchase-order table
+ * — a complete census of a different dataset, presented as the answer about the
+ * mail. The demand has to be recognised as a CONSTRAINT, not a topic: it is
+ * matched here so the run can be verified against it. Two shapes:
+ *  - a source directive: «من الإيميل», «من البريد», «ادخل الميل», «افحص البريد»;
+ *  - an explicit exclusion: «مش قاعدة البيانات», «مش النظام», «لا من الداتا».
+ */
+const EMAIL_SCOPE_RE =
+  /(من\s*ال(بريد|ايميل|ايمل|ميل)|في\s*ال(بريد|ايميل|ميل)|ادخل\s*ال(بريد|ايميل|ميل)|افحص\s*ال(بريد|ايميل|ميل|مرفقات)|من\s*(الميل|الايميل|الايمل)|فى\s*(الميل|الايميل)|from\s+(the\s+)?(email|mail|inbox)|from\s+email|in\s+the\s+mailbox)/;
+
+/** The operator explicitly excluding the internal database as a source. */
+const NOT_DB_SCOPE_RE =
+  /(مش\s*(?:من\s*)?(?:قاعده|قاعدة)\s*البيانات|مش\s*ال(نظام|داتا|داتابيز|داتا\s*بيس)|لسه\s*مش\s*فرق|لا\s*من\s*ال(داتا|قاعده)|not\s+(?:from\s+)?(?:the\s+)?database|not\s+from\s+(the\s+)?(db|system))/;
+
 function words(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }
@@ -164,6 +199,12 @@ function words(text: string): number {
 export function routeQuestion(rawText: string): RoutePlan {
   const text = normalizeArabic(rawText);
 
+  // A source constraint is computed once and attached to every plan, so no
+  // branch can forget it: «من الميل مش قاعدة البيانات» must survive whichever
+  // intent the question also matches.
+  const sourceScope: SourceScope =
+    EMAIL_SCOPE_RE.test(text) || NOT_DB_SCOPE_RE.test(text) ? "email" : "any";
+
   if (!text) {
     return {
       intent: "smalltalk",
@@ -172,6 +213,7 @@ export function routeQuestion(rawText: string): RoutePlan {
       verify: false,
       reason: "empty message",
       hint: "",
+      sourceScope,
     };
   }
 
@@ -196,6 +238,7 @@ export function routeQuestion(rawText: string): RoutePlan {
       verify: false,
       reason: "greeting only",
       hint: "",
+      sourceScope,
     };
   }
 
@@ -210,6 +253,7 @@ export function routeQuestion(rawText: string): RoutePlan {
       verify: true,
       reason: "report/file delivery wording",
       hint: "طلب تقرير/ملف: استخدم أدوات الحصر مع exportCsv/exportPdf، أو generate_pdf.",
+      sourceScope,
     };
   }
 
@@ -226,6 +270,7 @@ export function routeQuestion(rawText: string): RoutePlan {
       hint:
         "سؤال بريد: search_emails للحصر النقطي، scan_emails للحصر الكامل، scan_email_items للبنود داخل المرفقات. " +
         "إن كان النطاق كبيرًا (سنة كاملة/مئات الرسائل) فاستخدم start_census_job ليعمل الحصر في الخلفية ويصل التقرير تلقائيًا.",
+      sourceScope,
     };
   }
 
@@ -244,6 +289,7 @@ export function routeQuestion(rawText: string): RoutePlan {
         "سؤال عن المتأخر/المعلَّق: استخدم get_overdue_deliveries لتسليمات العملاء المتأخرة، " +
         "وget_unfulfilled_orders لبنود أوامر الشراء غير المستلمة. النتيجة محسوبة في قاعدة البيانات " +
         "للفترة/المورد المطلوب؛ اذكر العدد الإجمالي وأقدم الحالات، ولا تعتمد على عيّنة قرأتها.",
+      sourceScope,
     };
   }
 
@@ -257,6 +303,7 @@ export function routeQuestion(rawText: string): RoutePlan {
       hint:
         "سؤال تحليلي/حصر: استخدم الأدوات التي تُجمِع في قاعدة البيانات أو أدوات الحصر في البريد، " +
         "ولا تُجرِ الجمع يدويًا. اذكر دائمًا هل النتيجة كاملة أم عيّنة.",
+      sourceScope,
     };
   }
 
@@ -270,6 +317,7 @@ export function routeQuestion(rawText: string): RoutePlan {
       verify: true,
       reason: "counting wording",
       hint: "سؤال عدّ: استخدم count_database أو دالة تجميع في قاعدة البيانات، لا تعتمد على عيّنة.",
+      sourceScope,
     };
   }
 
@@ -284,6 +332,7 @@ export function routeQuestion(rawText: string): RoutePlan {
       verify: true,
       reason: "document noun + number",
       hint: "سؤال عن مستند بعينه: استخدم lookup_document بالرقم مباشرة، ثم أجب من نتيجة الأداة.",
+      sourceScope,
     };
   }
 
@@ -298,6 +347,7 @@ export function routeQuestion(rawText: string): RoutePlan {
       verify: true,
       reason: "supplier wording",
       hint: "سؤال عن مورد: استخدم supplier_overview لجلب كل شيء في استدعاء واحد.",
+      sourceScope,
     };
   }
 
@@ -311,11 +361,18 @@ export function routeQuestion(rawText: string): RoutePlan {
     verify: true,
     reason: "unclassified — safe default",
     hint: "",
+    sourceScope,
   };
 }
 
 /** Convenience: the router's hint as a system-prompt fragment (may be empty). */
 export function routeHint(plan: RoutePlan): string {
-  if (!plan.hint) return "";
-  return `\n\nتوجيه هذه الجولة (${plan.path === "fast" ? "مسار سريع" : "مسار تحليلي"}): ${plan.hint}`;
+  const scopeHint =
+    plan.sourceScope === "email"
+      ? "\n\nمصدر هذه الجولة مقيَّد: المستخدم طلب البيانات من البريد الإلكتروني تحديدًا (لا من قاعدة البيانات الداخلية). " +
+        "استخدم أدوات البريد (scan_emails / scan_email_items / search_emails) فقط، " +
+        "ولا تبنِ الإجابة على جدول purchase_orders. إن كانت النتيجة ناقصة فاذكر النطاق بوضوح."
+      : "";
+  if (!plan.hint) return scopeHint;
+  return `\n\nتوجيه هذه الجولة (${plan.path === "fast" ? "مسار سريع" : "مسار تحليلي"}): ${plan.hint}${scopeHint}`;
 }
