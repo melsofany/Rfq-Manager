@@ -141,7 +141,18 @@ async function respondToAuthorizedUser(phone: string, msg: WaInboundMessage): Pr
       // conversation.
       const { clearConversationState } = await import("./conversation");
       await clearConversationState(phone);
-      await sendWhatsAppText(phone, "تم تصفير المحادثة. اسألني عن أي شيء.");
+      // And drop the CACHED CENSUS. A reset means "start over with no prior
+      // result": leaving the scan cache (or its Postgres mirror) in place would
+      // let the next question reuse a cursor and a row set produced before the
+      // reset — exactly the "don't rely on any previous result or sample" the
+      // operator asked for, violated invisibly.
+      const { clearScanCache, clearPersistedScanSessions } = await import("./email");
+      clearScanCache();
+      await clearPersistedScanSessions();
+      await sendWhatsAppText(
+        phone,
+        "تم تصفير المحادثة والنتائج المحفوظة. اسألني عن أي شيء من جديد.",
+      );
       return;
     }
 

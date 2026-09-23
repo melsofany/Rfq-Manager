@@ -289,6 +289,7 @@ Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm w
 - **Problem (seen on live data, PO P26E11407)**: a PO with 2 items showed only 1 in the rep-bot item picker. Root cause: the rep had confirmed receipt of one item, then also tapped reject on it, creating **two** `po_item_receipts` rows (received 3 + rejected 3) for the same line. The re-aggregation naively summed both (`accepted=3 >= ordered=3`) в†’ `line_status='fulfilled'` в†’ the item was filtered out of the pending list, so the picker showed only 1 item. Separately, **re-dispatching** piled up duplicate `work_order_assignments` rows (9 rows for one PO) because each dispatch inserted without checking for an existing active assignment вЂ” inflating the rep menu's task counts.
 - **Fix 1 (authoritative bot receipts)**: `recordItemReceipt` now deletes prior **bot** receipts (`received_by='Щ€Ш§ШЄШіШ§ШЁ'`) for the line before inserting the new full-qty event, so the latest rep action is authoritative and a received+rejected pair never both sum in. Portal-entered receipts (different `receivedBy`) are preserved. `recordItemDelivery` does the same for `customer_po_item_deliveries` (`delivered_by='Щ€Ш§ШЄШіШ§ШЁ'`).
 - **Fix 2 (idempotent dispatch assignments)**: the dispatch path now checks for an existing **active** receipt assignment (`status != received/rejected`) for a `poItemId` before inserting вЂ” re-dispatch no longer creates duplicate rows.
+
 - **Test mock**: `po-dispatch.test.ts` `selectChain` upgraded to a `chainableThenable` that supports `.limit()/.orderBy()` (the new idempotency check chains `.where().limit(1)`); a drained `selectQueue` yields `[]` (no existing assignment). 152 tests pass.
 - **Live data cleanup**: reset PO 22's items to `pending`, deleted its conflicting bot receipts + accumulated assignments so the rep can re-test cleanly.
 
@@ -1493,3 +1494,89 @@ The Manus prompt asked for a multi-phase upgrade from "a chatbot that reads mail
 - **Evaluation gate grew to 63 labelled cases** (was 17) covering PO / supplier / offers / email / invoices / ambiguous, including the incident-derived cases. Growing it exposed **real router gaps** that were then fixed: smalltalk was matched too late (a greeting fell to the deep default), the report-vs-analysis ordering was wrong («ابعت تقرير بالأرقام الناقصة» is a report, not an analysis), «أرقام الموردين» was not recognised as a count, a bare sheet PO code (`P26E13477`) was not a document lookup without a noun, and the PLURAL «الموردين» was mis-classified as a single-entity lookup (a set question is analysis). Thresholds: accuracy ≥90%, **path accuracy ≥95%** (the safety-critical metric — a fast-labelled analysis answers from a sample).
 - Tests: `ai-conversation.test.ts` (9), `ai-jobs.test.ts` (6), `ai-verifier.test.ts` (9), `ai-send-email-gate.test.ts` (3), expanded `ai-eval.test.ts` (9). **727 api-server tests** (was 699) + 45 portal pass; tsc (libs + api-server + portal) clean; repo-wide prettier clean; api-server + portal builds clean.
 - Deploy: PR pending — push/PR only on explicit request.
+
+## P4/P6 completion — durable scan sessions, evidence-level telemetry, operator dashboard (PR #171)
+
+Closed the last gaps in the procurement-agent upgrade.
+
+- **A restart must not lose a census cursor.** The resumable email/item census kept its `nextSkip` cursor and parsed rows in an in-process cache, so a deploy/crash/recycle mid-census either restarted a multi-minute scan from zero or never finished. New `ai_assistant_scan_sessions` table (`lib/db/src/schema/ai_assistant.ts`, DDL in `init-db.ts` as its OWN statement — statements share an implicit transaction, so a sibling failure would roll the CREATE back silently). `persistScanSession` / `loadPersistedScanSession` (`email.ts`) mirror/restore the session; `runItemScan` restores on a cache miss and **continues from the saved cursor**. Best-effort + fire-and-forget (a DB hiccup must never fail a scan), lazy `@workspace/db` import so the module stays testable without a database. Only DERIVED rows are stored — never the downloaded PDF buffers.
+- **Evidence level is derived from the run, not claimed.** `answerConfidence()` maps `(toolCalls, verificationRan, numericDisagreed)` to `VERIFIED` / `PARTIALLY_VERIFIED`: a numeric reconciliation that disagreed, or a grounding-correction round that fired, means the first draft contained something the evidence did not support. `metrics.ts` gains `byConfidence` + per-request `confidence`; the `/ai-assistant` page shows a coloured evidence badge per request and a breakdown. Do not let a "verified" label be asserted by the model — derive it.
+- **Operator onboarding** — the admin page lists concrete example questions grouped by the capability each exercises (DB lookup / quote comparison / delivery follow-up / email census), so the agent's real scope is discoverable instead of "ask me anything".
+- Tests: `ai-scan-persistence.test.ts` (2 — both fail when persistence is disabled) + 2 confidence tests in `ai-agent.test.ts` (both fail when `confidence` is not recorded) + the `byConfidence` breakdown. **783 api-server tests** pass; tsc (libs + api-server + portal) clean; repo-wide prettier clean; api-server + portal builds clean.
+- Deploy: PR #171 squash-merged `3907434`; CI + Deploy-to-Render workflows success; `/api/healthz` 200 and `/api/ai-assistant/{metrics,jobs}` 401 (mounted behind auth).
+
+## Item identity, PO-only counting, source scope (feat/ai-item-identity)
+
+Live operator report («بقولك من الميل مش قاعده البيانات» + «PO فقط وليس RFQ او
+quotation» + «اكتر بند اتكرر»). Four separate defects, all of the same family: a
+capability that silently did something other than what it claimed.
+
+- **A Part Number is not an identity.** New `item-identity.ts`: `itemTokens`
+  (Arabic/English normalisation, unit folding `LITERS`==`LTR`, stopwords dropped,
+  a number glued to a unit kept as ONE token so `50 MM` != `70 MM`), then
+  `itemAttributes` -> `hasConflictingAttributes` (differing model/size/capacity
+  means different items, even when only one side states it) -> `itemsEquivalent`
+  -> `groupByItemIdentity` (union-find: identity is transitive, so A<->B and
+  B<->C put all three in one cluster). Two different part numbers NEVER merge.
+  The live case — the same breaker counted twice because one PO printed
+  `P/N : A9R41440` and the next identified it by description alone — is one item
+  again.
+- **`aggregateItems` is the VOLUME view; frequency is
+  `aggregateItemsByOccurrence`.** Do not swap the sorts: `aggregateItems` sorts by
+  `qty` (the `ordering=qty` answer) and the frequency ranking sorts by
+  `occurrences`. Sorting the volume view by occurrences breaks its callers.
+- **Occurrences count ORDERS, and only PURCHASE ORDERS.** `documentKind()`
+  classifies an attachment from its title (`PURCHASE ORDER` /
+  `REQUEST FOR QUOTE|QUOTATION`) **and** the document number's prefix (`P26E...` =
+  PO, `26R...` = RFQ) — two independent signals because a scanned copy can lose
+  the title. RFQ lines are read (coverage stays honest) but **not counted**; the
+  counts are surfaced as `poDocuments` / `rfqDocumentsExcluded` /
+  `unknownDocuments` so the exclusion is auditable rather than silent.
+- **Source scope is a CONSTRAINT, not a topic.** `SourceScope` on `RoutePlan`,
+  computed once in `routeQuestion` and attached to **every** branch (a branch that
+  forgets it loses the operator's requirement). `EMAIL_SCOPE_RE` /
+  `NOT_DB_SCOPE_RE` (the latter must tolerate «مش **من** قاعدة البيانات» — the
+  bare «مش قاعدة» form missed the live phrasing). `routeHint` adds a scope
+  instruction, and `agent.ts` **checks the outcome**: an email-scoped question
+  answered with no email tool in `usedTools` gets an explicit «هذه الإجابة من
+  النظام الداخلي وليست حصرًا للميل» warning appended. A hint is not a guarantee —
+  verify the run, don't trust the prompt.
+- **`verifyAnswer` must not reconcile a figure against the wrong source.** The
+  numeric check compares a reported total to the DATABASE; an email census and the
+  database legitimately hold different numbers, so `source: "email" | "mixed"` now
+  returns `skipped`. The live false alarm («المرصود 235800 والمحسوب 14265» on a
+  reply entirely about the mail) came from comparing the two. `answerSource()` in
+  `agent.ts` derives the source from the tools that actually ran; omitting
+  `source` keeps the old behaviour so existing callers are unaffected.
+- **`capInput` keeps the HEAD *and* the TAIL.** An instruction message puts its
+  constraints LAST («PO فقط وليس RFQ او quotation») and head-only truncation
+  dropped exactly those lines. `MAX_INPUT_CHARS` 4000->6000, `TAIL_SHARE` 0.4, and
+  the marker is **inside** the budget so the result never exceeds the advertised
+  cap.
+- **A 100% census is never answered with a sample.** `wantsCompleteCensus()`
+  («100%», «فحص كامل», «كل أوامر الشراء», «ما تتوقفش») makes the background-job
+  hand-off **unconditional** — `AI_AUTO_JOB_MIN_REMAINING` is only the threshold
+  for an ordinary ask. The payload carries `completionPct`, `poDocuments`,
+  `identityUncertain` (items resting on prose alone — the operator asked for that
+  count) and `totalAttachments`, and the PDF gains the columns the operator named
+  (الترتيب / وصف البند الكامل / Part Number / Line Item / عدد الأوامر / إجمالي
+  الكمية / الوحدة / متوسط سعر الوحدة / إجمالي القيمة / العملة / أرقام الأوامر),
+  with a missing value spelled «غير متوفر» rather than left blank. **Line Item is
+  deliberately always «غير متوفر»**: it is an internal row number that differs PO
+  by PO, so it is not carried through aggregation — say so rather than invent one.
+- **Reset clears the census, not just the transcript.** `handler.ts` reset calls
+  `clearScanCache()` **and** `clearPersistedScanSessions()`; clearing only the
+  memory cache left the Postgres mirror reachable, so the next question resumed a
+  scan (and reused a row set) produced *before* the reset — a reset that looked
+  like a reset while doing nothing.
+- Tests: `ai-item-identity.test.ts` (23 — 2 fail against a part-number-keyed
+  implementation), `ai-source-scope.test.ts` (15 — 2 fail without the verifier
+  source guard), +3 in `ai-email-items-tool.test.ts` (PO-only exclusion and the
+  unconditional 100% hand-off each fail when their guard is removed), +1 reset
+  test in `ai-handler.test.ts`. Three existing tests were updated because they
+  pinned the OLD behaviour: `ai-agent.test.ts` (its question was email-worded, so
+  the new scope warning correctly fires), the PDF column list, and the
+  `aggregateItems` volume-sort assertion. **825 api-server tests** pass; tsc
+  (libs + api-server + portal) clean; repo-wide prettier clean; api-server +
+  portal builds clean.
+- Deploy: pending — push/PR only on explicit request.

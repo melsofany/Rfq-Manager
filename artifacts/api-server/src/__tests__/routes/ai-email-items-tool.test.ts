@@ -404,22 +404,28 @@ describe("scan_email_items tool", () => {
       sections: Array<{ paragraphs?: string[]; table?: { columns: string[]; rows: unknown[][] } }>;
     };
     const table = opts.sections.find((s) => s.table)?.table;
+    // The operator specified these columns exactly: part number and line item
+    // are reported as separate, possibly-absent fields, and a missing value is
+    // spelled «غير متوفر» rather than left blank.
     expect(table?.columns).toEqual([
-      "رقم القطعة",
-      "التوصيف الكامل",
+      "الترتيب",
+      "وصف البند الكامل",
+      "Part Number",
+      "Line Item",
       "عدد الأوامر",
       "إجمالي الكمية",
       "الوحدة",
       "متوسط سعر الوحدة",
       "إجمالي القيمة",
+      "العملة",
       "أرقام الأوامر",
     ]);
-    const padlock = table?.rows.find((r) => r[0] === "0666.000.GENRAL.0006");
+    const padlock = table?.rows.find((r) => r[2] === "0666.000.GENRAL.0006");
     // Seen in two orders, price 75.00 each, and both PO numbers listed.
-    expect(padlock?.[2]).toBe(2);
-    expect(padlock?.[5]).toBe("75.00");
-    expect(padlock?.[7]).toContain("P26E14630");
-    expect(padlock?.[7]).toContain("P26E14631");
+    expect(padlock?.[4]).toBe(2);
+    expect(padlock?.[7]).toBe("75.00");
+    expect(padlock?.[10]).toContain("P26E14630");
+    expect(padlock?.[10]).toContain("P26E14631");
     // The scope paragraph is present and honest.
     const paragraphs = opts.sections.flatMap((s) => s.paragraphs ?? []).join("\n");
     expect(paragraphs).toContain("النطاق");
@@ -770,5 +776,125 @@ describe("oversize census hands off to a background job", () => {
     expect(res.data.contains).toBe("ariston");
     // The scope warning still tells the model older mail was not read.
     expect(res.data.note).toContain("لم تُفحص كل الرسائل");
+  });
+
+  it("counts PURCHASE ORDERS only — an RFQ is read but excluded", async () => {
+    // The operator's rule: a quotation is not an order. EDC sends both from the
+    // same address with nearly identical item tables, so counting RFQs would
+    // report a part «ordered» on quotes that were never ordered.
+    extractPdfText.mockImplementation(async (buf: Buffer) => buf.toString("utf8"));
+    const poText = `PO number: P26E14630\nPURCHASE ORDER\nQuantity UOM Part No Line Item\n1 5 Each 0666.000.GENRAL.0006 PADLOCK\n`;
+    const rfqText = `RFQ number: 26R011954\nREQUEST FOR QUOTATION\nQuantity UOM Part No Line Item\n1 5 Each 0666.000.GENRAL.0006 PADLOCK\n`;
+    const pool = [
+      {
+        uid: 1,
+        mailbox: "info@cortoba-supplies.com",
+        subject: "EDC PO",
+        attachments: pdfAttachments([{ filename: "po.pdf", content: Buffer.from(poText) }]),
+      },
+      {
+        uid: 2,
+        mailbox: "info@cortoba-supplies.com",
+        subject: "EDC RFQ",
+        attachments: pdfAttachments([{ filename: "rfq.pdf", content: Buffer.from(rfqText) }]),
+      },
+    ];
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 2,
+          returned: 2,
+        }),
+    );
+
+    const res = (await executeTool("scan_email_items", { minOrders: 1 }, ctx as never)) as {
+      data: {
+        poDocuments: number;
+        rfqDocumentsExcluded: number;
+        isComplete: boolean;
+        note: string;
+        topItems: Array<{ occurrences: number; partNo: string | null }>;
+      };
+    };
+    expect(res.data.poDocuments).toBe(1);
+    expect(res.data.rfqDocumentsExcluded).toBe(1);
+    // Only the PO contributed, so the part was seen on ONE order — not two.
+    expect(res.data.topItems).toHaveLength(1);
+    expect(res.data.topItems[0].occurrences).toBe(1);
+    // And the exclusion is stated, not silent.
+    expect(res.data.note).toContain("مستبعد");
+  });
+
+  it("groups the same item across POs even when one omits the part number", async () => {
+    // The operator's exact case, end to end: the same physical item appears with
+    // a part number on one PO and by description alone on the next. A
+    // part-number-keyed census splits it into two items and under-reports its
+    // frequency.
+    extractPdfText.mockImplementation(async (buf: Buffer) => buf.toString("utf8"));
+    // Part numbers in the format the parser recognises — `A9R41440` is not a
+    // part-number shape and would be read as prose, making the assertion vacuous.
+    const withCode = `PO number: P26E14630\nPURCHASE ORDER\nQuantity UOM Part No Line Item\n1 5 Each 0666.000.GENRAL.0006 2 INCH BRASS LONG SHACKLE PADLOCK\n`;
+    const without = `PO number: P26E14631\nPURCHASE ORDER\nQuantity UOM Part No Line Item\n1 5 Each 2 INCH BRASS LONG SHACKLE PADLOCK\n`;
+    const pool = [
+      {
+        uid: 1,
+        mailbox: "info@cortoba-supplies.com",
+        subject: "EDC PO 1",
+        attachments: pdfAttachments([{ filename: "po1.pdf", content: Buffer.from(withCode) }]),
+      },
+      {
+        uid: 2,
+        mailbox: "info@cortoba-supplies.com",
+        subject: "EDC PO 2",
+        attachments: pdfAttachments([{ filename: "po2.pdf", content: Buffer.from(without) }]),
+      },
+    ];
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 2,
+          returned: 2,
+        }),
+    );
+
+    const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
+      data: {
+        distinctParts: number;
+        topItems: Array<{ occurrences: number; partNo: string | null; partNos: string[] }>;
+      };
+    };
+    // ONE item, seen on TWO orders.
+    expect(res.data.distinctParts).toBe(1);
+    expect(res.data.topItems[0].occurrences).toBe(2);
+    expect(res.data.topItems[0].partNo).toBe("0666.000.GENRAL.0006");
+  });
+
+  it("hands a 100%-census request to a background job instead of a partial list", async () => {
+    // «فحص كامل بنسبة 100%» must not come back as a sample. Even a SMALL
+    // remainder is handed off, because a partial ranking is not an answer to
+    // that question — the auto-job threshold only applies to an ordinary ask.
+    extractPdfText.mockResolvedValue("Quantity UOM Part No Line Item\n1 5 Each X-1 THING\n");
+    const pool = [1, 2, 3].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC PO ${uid}`,
+      attachments: pdfAttachments([{ filename: `po${uid}.pdf`, content: Buffer.from("pdf") }]),
+    }));
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(
+          opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0, 1) : [],
+          { matched: 3 },
+        ),
+    );
+
+    const res = (await executeTool(
+      "scan_email_items",
+      { question: "اعمل فحص كامل بنسبة 100% لكل أوامر الشراء" },
+      ctx as never,
+    )) as { data: { jobId?: number; note: string } };
+    // A job, not a ranked sample.
+    expect(res.data.jobId).toBe(1);
+    expect(res.data.note).toContain("الخلفية");
   });
 });

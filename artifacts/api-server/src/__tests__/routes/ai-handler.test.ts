@@ -143,4 +143,34 @@ describe("reset", () => {
     expect(runAgent).not.toHaveBeenCalled();
     expect(sendWhatsAppText).toHaveBeenCalledWith(user.phone, expect.stringContaining("تصفير"));
   });
+
+  it("drops the cached census so a reset really starts from nothing", async () => {
+    // «ابدأ من جديد» must not leave a prior scan's rows (or its resume cursor)
+    // reachable: a reset that only cleared the transcript would let the next
+    // question reuse the previous result, which is the opposite of what was
+    // asked. The scan cache and its Postgres mirror are cleared together.
+    const email = await import("../../modules/ai-assistant/email");
+    const spy = vi.spyOn(email, "clearScanCache");
+    const { clearPersistedScanSessions } = email;
+    const dbSpy = vi
+      .spyOn(email, "clearPersistedScanSessions")
+      .mockResolvedValue(undefined as never);
+
+    const taken = await handleAiAssistantMessage("201000000000", {
+      type: "text",
+      text: { body: "ابدأ من جديد" },
+    });
+    await pendingAiAssistantWork();
+
+    expect(taken).toBe(true);
+    expect(spy).toHaveBeenCalled();
+    expect(dbSpy).toHaveBeenCalled();
+    // The reset must not have run the agent — it is a state operation, not a
+    // question.
+    expect(runAgent).not.toHaveBeenCalled();
+    expect(sendWhatsAppText).toHaveBeenCalledWith("201000000000", expect.stringContaining("تصفير"));
+    dbSpy.mockRestore();
+    spy.mockRestore();
+    void clearPersistedScanSessions;
+  });
 });

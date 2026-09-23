@@ -99,11 +99,21 @@ export async function verifyPoItemCount(
  * unrelated question does not query the DB: an answer with no ≥1000 figure is
  * SKIPPED rather than "verified" — the distinction matters, because a skip is not
  * evidence that a figure was right.
+ *
+ * `source` is what makes the reconciliation MEANINGFUL, and omitting it produced
+ * a live false alarm: an answer built entirely from EMAIL attachments (the
+ * operator asked for the mail) had its total compared against the database's
+ * purchase-order items and was reported as PARTIALLY_VERIFIED because the two
+ * sets differ — which they always will. A figure may only be reconciled against
+ * the source that produced it; when the answer came from email, the database is
+ * not the authority and the check must be SKIPPED, not failed.
  */
 export async function verifyAnswer(opts: {
   answerText: string;
   /** Tool data the answer was built from (its own reported aggregates). */
   toolData?: unknown;
+  /** Which source produced the figures: only "database" may be reconciled. */
+  source?: "database" | "email" | "mixed" | "unknown";
 }): Promise<VerificationResult> {
   const checks: VerificationResult["checks"] = [];
 
@@ -118,6 +128,13 @@ export async function verifyAnswer(opts: {
   const answerTotals = extractReportedTotals(opts.answerText);
 
   if (reportedTotal === undefined && answerTotals.length === 0) {
+    return { outcome: "skipped", checks };
+  }
+
+  // A figure that came from email (or from both sources) cannot be checked
+  // against the database: the two sets legitimately differ, so "disagreement"
+  // would be reported for every correct answer.
+  if (opts.source === "email" || opts.source === "mixed") {
     return { outcome: "skipped", checks };
   }
 

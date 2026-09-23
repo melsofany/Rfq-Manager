@@ -231,7 +231,10 @@ describe("AI assistant agent loop", () => {
     executeTool.mockResolvedValue({ ok: true, data: { rows: [] } });
 
     const { runAgent } = await import("../../modules/ai-assistant/agent");
-    const out = await runAgent({ phone: "2010", text: "هات ملف من الايميل" });
+    // Deliberately NOT an email-scoped question: the source-scope guard is a
+    // separate behaviour (see the scope test below) and would append its own
+    // notice here.
+    const out = await runAgent({ phone: "2010", text: "اعمل تقرير مختصر" });
     expect(out.reply).toBe("تقرير مختصر.");
     // The first rounds must still allow tools.
     expect(chatCompletion.mock.calls[0][0].toolChoice).toBe("auto");
