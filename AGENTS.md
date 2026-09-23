@@ -1372,3 +1372,25 @@ behaviour — is to state how many of how many were opened, name why it stopped,
 and never present the sample as the total.
 
 **Tests**: 652 api-server tests pass (was 647); tsc + prettier + build clean.
+
+## An ERP's tax row is a part number, but it is not stock
+
+### 12. `0600.000.GENRAL.0005` — the pseudo-line that topped «most repeated»
+
+- The EDC PO prints its VAT as a real row: a part number (`0600.000.GENRAL.0005`),
+  a quantity, and — on the next line — the text `VALUE ADDED TAX LOCAL`. So it
+  parsed as a genuine line item with an EMPTY description, and because it appears
+  on every PO it climbed to the top of the frequency ranking (live: 134 orders).
+- A real line item always carries prose. `collectDescription` now reports whether
+  its scan ran into the totals marker (`TABLE_END_RE`: `Total`, `VALUE ADDED
+TAX`, `Purchase Order Distribution`, …), and an item with **no description**
+  whose next content line is that boundary is dropped as accounting, not stock.
+- This is deliberately narrow: only un-described rows adjacent to the totals are
+  dropped, so a genuinely terse real row (rare) is not lost, and the earlier
+  «does not double-count the restatement page» behaviour (which `TABLE_END_RE`
+  already handled) is untouched.
+- **Tests**: the main PO fixture now asserts ONE line and no
+  `0600.000.GENRAL.0005`, plus a dedicated case for an un-described row before
+  `VALUE ADDED TAX LOCAL`; both fail when the drop is removed. The tool-level
+  fixture (`totalLines`) was corrected from 2 to 1 for the same reason.
+- **Tests**: 653 api-server tests pass (was 652).

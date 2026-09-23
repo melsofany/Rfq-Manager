@@ -193,10 +193,12 @@ describe("scan_email_items tool", () => {
 
     expect(res.ok).toBe(true);
     expect(res.data.matchedMessages).toBe(1);
-    expect(res.data.totalLines).toBe(2);
-    expect(res.data.distinctParts).toBe(2);
-    // Both lines come from ONE order, so the frequency ranking excludes them
-    // (default minOrders=2). The quantity view still lists them.
+    // One real line: line 2 of this PO is the ERP's VAT pseudo-line
+    // (0600.000.GENRAL.0005 / «VALUE ADDED TAX LOCAL»), which is not stock.
+    expect(res.data.totalLines).toBe(1);
+    expect(res.data.distinctParts).toBe(1);
+    // The single line comes from ONE order, so the frequency ranking excludes it
+    // (default minOrders=2). The quantity view still lists it.
     expect(res.data.topItems).toHaveLength(0);
     expect(res.data.isComplete).toBe(true);
 
@@ -205,10 +207,7 @@ describe("scan_email_items tool", () => {
       { from: "egyptian-drilling", ordering: "qty" },
       ctx as never,
     )) as { data: { topItems: Array<{ partNo: string; qty: number; uom: string }> } };
-    expect(qty.data.topItems.map((i) => i.partNo)).toEqual([
-      "0666.000.GENRAL.0006",
-      "0600.000.GENRAL.0005",
-    ]);
+    expect(qty.data.topItems.map((i) => i.partNo)).toEqual(["0666.000.GENRAL.0006"]);
     expect(qty.data.topItems[0]).toMatchObject({ qty: 12, uom: "Piece" });
   });
 
