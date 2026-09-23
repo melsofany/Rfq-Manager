@@ -96,6 +96,19 @@ const PN_INLINE_RE = /\bP\s*\/\s*N\s*:?\s*([A-Z0-9][A-Z0-9./-]{4,})/i;
 const PART_CELL_JUNK_RE = /\b\d\.\d{3,}E[+-]?\b/;
 
 /**
+ * Page furniture that the PDF text layer interleaves with a row's real
+ * description — never prose, always a stamp or a running footer.
+ *
+ * Seen live on EDC POs: every page repeats `P26E11255` (the document's own
+ * number) and `Page N of M`, and the extractor can place them BETWEEN a row's
+ * part number and its description. Left unhandled they became the description,
+ * which is how a part ordered 100+ times surfaced as
+ * «P26E11255 Page 2 of 4» — a row that looks authoritative and says nothing.
+ */
+const PAGE_FURNITURE_RE =
+  /^(?:Page\s+\d+\s+of\s+\d+|[A-Z]\d{2}[A-Z]\d{5}(?:\([A-Z0-9]+\))?|PURCHASE ORDER|REQUEST FOR QUOTE|REQUEST FOR QUOTATION|(?:PO|RFQ)\s*(?:number|no\.?)\s*:.*)$/i;
+
+/**
  * Parse the line-item table out of an EDC RFQ/PO attachment's text.
  *
  * Two layouts, because the RFQ and the PO place the part number differently:
@@ -198,12 +211,17 @@ function collectDescription(
     .trim();
   // A real description has a word in it. This drops the PO row's date/price
   // tail ("05-OCT-2026 75.00 900.00"), whose description is on the lines below.
-  if (/[A-Za-z\u0600-\u06FF]{4,}/.test(head)) parts.push(head);
+  if (/[A-Za-z\u0600-\u06FF]{4,}/.test(head) && !PAGE_FURNITURE_RE.test(head)) parts.push(head);
 
-  for (let j = startIndex + 1; j < lines.length && j <= startIndex + 5; j++) {
+  for (let j = startIndex + 1; j < lines.length && j <= startIndex + 7; j++) {
     const raw = lines[j];
     if (TABLE_END_RE.test(raw)) break;
     if (ITEM_ROW_RE.test(raw)) break;
+    // A stamp or running footer is never the description: SKIP it and keep
+    // looking at the following lines, because the real prose sits after it on
+    // the page (breaking here is what produced the live «P26E11255 Page 2 of 4»
+    // description).
+    if (PAGE_FURNITURE_RE.test(raw)) continue;
     // A continuation line carries the row's line number, and often the wrapped
     // fragment of an overflowing Part No cell: `12 GENRAL.0 RECIPROCATING …`.
     const next = stripRowFurniture(raw);

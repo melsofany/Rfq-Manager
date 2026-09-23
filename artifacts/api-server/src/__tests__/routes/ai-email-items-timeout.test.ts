@@ -54,7 +54,12 @@ Quantity UOM Part No Line Item Delivery Date Unit Price Total (EGP)
 5720.015.GENRAL.0016
 خرطوم لفة ملي 16`;
 
-function censusWith(texts: string[], truncated: boolean, matched = texts.length) {
+function censusWith(
+  texts: string[],
+  truncated: boolean,
+  matched = texts.length,
+  reason?: "count" | "time" | "error",
+) {
   return {
     matched,
     numbers: [],
@@ -79,6 +84,7 @@ function censusWith(texts: string[], truncated: boolean, matched = texts.length)
       messages: texts.length,
       attachments: texts.length,
       truncated,
+      truncatedReason: truncated ? (reason ?? "count") : null,
       unreadable: 0,
     },
   };
@@ -197,5 +203,60 @@ describe("scan_email_items contains filter (missing older orders)", () => {
     expect(note).toContain("3753");
     expect(note).toContain("قد يكون في رسائل أقدم");
     expect((r.data as { isComplete: boolean }).isComplete).toBe(false);
+  });
+
+  it("names the TIME budget as the reason when the pass stopped on time, not count", async () => {
+    // The live reply told the operator «الحد 400» while no 400 cap existed — the
+    // real ceiling was the 75s time budget. The reason must come from coverage,
+    // never be guessed.
+    scanEmails.mockResolvedValue(censusWith([PLAIN_TEXT], true, 480, "time"));
+    const ctx = makeCtx();
+    const r = await executeTool("scan_email_items", { from: "edc", top: 10 }, ctx as never);
+    const data = r.data as { note: string; scope: string; isComplete: boolean };
+    expect(data.scope).toContain("ميزانية الوقت");
+    expect(data.note).toContain("ميزانية الوقت");
+    expect(data.note).not.toContain("400");
+    expect(data.isComplete).toBe(false);
+  });
+
+  it("names the message count as the reason when the cap was reached", async () => {
+    scanEmails.mockResolvedValue(censusWith([PLAIN_TEXT], true, 480, "count"));
+    const ctx = makeCtx();
+    const r = await executeTool("scan_email_items", { from: "edc", top: 10 }, ctx as never);
+    expect((r.data as { scope: string }).scope).toContain("حد عدد الرسائل");
+  });
+});
+
+describe("per-tool timeout wrapper", () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns a partial-data error naming the tool when it exceeds its ceiling", async () => {
+    // The run budget alone cannot stop one slow tool from eating the whole turn;
+    // the wrapper must cut it and report, not hang.
+    process.env.AI_TOOL_TIMEOUT_MS = "30";
+    try {
+      scanEmails.mockImplementation(() => new Promise(() => {})); // never resolves
+      const ctx = makeCtx();
+      const r = await executeTool("scan_email_items", { from: "edc" }, ctx as never);
+      expect(r.ok).toBe(false);
+      expect(r.error).toContain("scan_email_items");
+      expect(r.error).toContain("لم تُقرأ كل البيانات");
+    } finally {
+      delete process.env.AI_TOOL_TIMEOUT_MS;
+    }
+  });
+
+  it("does not interfere with a fast tool", async () => {
+    process.env.AI_TOOL_TIMEOUT_MS = "5000";
+    try {
+      scanEmails.mockResolvedValue(censusWith([PLAIN_TEXT], false));
+      const ctx = makeCtx();
+      const r = await executeTool("scan_email_items", { from: "edc" }, ctx as never);
+      expect(r.ok).toBe(true);
+    } finally {
+      delete process.env.AI_TOOL_TIMEOUT_MS;
+    }
   });
 });

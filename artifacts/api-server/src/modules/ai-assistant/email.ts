@@ -968,6 +968,13 @@ export interface AttachmentCoverage {
   attachments: number;
   /** True when the budget stopped the pass short of every matched message. */
   truncated: boolean;
+  /**
+   * WHY the pass stopped: `count` when the message cap was reached, `time` when
+   * the wall-clock ceiling was. Null when the pass was complete. The model must
+   * quote this instead of guessing a cause — a live answer invented «الحد 400»
+   * because the reason was not exposed and it filled the gap.
+   */
+  truncatedReason?: "count" | "time" | "error" | null;
 }
 
 /** The attachments of one message, ready for local parsing. */
@@ -1002,6 +1009,7 @@ export async function fetchMessageAttachments(
     unreadable: 0,
     attachments: 0,
     truncated: matches.length > budget,
+    truncatedReason: matches.length > budget ? "count" : null,
   };
   const out: MessageAttachments[] = [];
 
@@ -1016,6 +1024,7 @@ export async function fetchMessageAttachments(
   for (const [mailboxAddress, group] of byMailbox) {
     if (Date.now() - startedAt > ATTACHMENT_SCAN_TIME_BUDGET_MS) {
       coverage.truncated = true;
+      coverage.truncatedReason = "time";
       break;
     }
     try {
@@ -1027,6 +1036,7 @@ export async function fetchMessageAttachments(
           for (let i = 0; i < uids.length; i += 25) {
             if (Date.now() - startedAt > ATTACHMENT_SCAN_TIME_BUDGET_MS) {
               coverage.truncated = true;
+              coverage.truncatedReason = "time";
               break;
             }
             const chunk = uids.slice(i, i + 25);
@@ -1084,6 +1094,7 @@ export async function fetchMessageAttachments(
     } catch (err) {
       logger.warn({ err, mailbox: mailboxAddress }, "AI assistant: attachment fetch failed");
       coverage.truncated = true;
+      coverage.truncatedReason = "error";
     }
   }
 
