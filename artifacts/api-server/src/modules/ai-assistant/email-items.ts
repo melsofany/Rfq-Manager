@@ -21,6 +21,16 @@ export interface ParsedLineItem {
   description: string;
   qty: number | null;
   uom: string | null;
+  /** Unit price printed on the row (PO layout), when present. */
+  unitPrice?: number | null;
+  /** Line total printed on the row (PO layout), when present. */
+  lineTotal?: number | null;
+  /**
+   * Identity of the DOCUMENT this line came from. Occurrence counting keys on
+   * this, not on the array index: a part printed on three lines of one PO (or
+   * restated on its distribution page) is ONE order, not three.
+   */
+  docId?: string | null;
 }
 
 /**
@@ -49,6 +59,22 @@ const TABLE_NOISE_RE = /^(Page\s+\d|Note:?$|Line\s*$|No\.$)/i;
 
 /** Does this line begin a new item row (`1 24 Each …`)? */
 const ITEM_ROW_RE = /^(\d{1,3})\s+(\d+(?:\.\d+)?)\s+([A-Za-z]{1,12})\b(.*)$/;
+
+/**
+ * The PO row's money tail: the delivery date followed by the unit price and the
+ * line total, as printed under `Delivery Date Unit Price Total (EGP)`
+ * (`05-OCT-2026 75.00 900.00`). Anchored on the date so a description that
+ * merely ends in two numbers is not read as prices.
+ */
+const PO_PRICE_RE = /\b\d{2}-[A-Za-z]{3}-\d{4}\b\s+(\d[\d,]*(?:\.\d+)?)\s+(\d[\d,]*(?:\.\d+)?)/;
+
+/**
+ * The document's own number, printed on the PO (`PO number: P26E14630(RIG58)`)
+ * and on the RFQ (`RFQ number: 26R011954`). This is the identity an item is
+ * counted against — the operator asks how many ORDERS carried a part, and one
+ * PO that lists a part on three lines is still one order.
+ */
+const DOC_NUMBER_RE = /\b(?:PO|RFQ)\s*(?:number|no\.?)\s*:?\s*([A-Z0-9][A-Z0-9-]{4,})/i;
 
 /**
  * The table's column header — where the item region starts. The RFQ prints it as
@@ -84,7 +110,7 @@ const PART_CELL_JUNK_RE = /\b\d\.\d{3,}E[+-]?\b/;
  * item. When the header is absent the whole text is scanned, so a document with
  * a slightly different header still yields items rather than nothing.
  */
-export function parseLineItems(text: string): ParsedLineItem[] {
+export function parseLineItems(text: string, docId: string | null = null): ParsedLineItem[] {
   const lines = (text || "")
     .split("\n")
     .map((l) => l.replace(/\s+/g, " ").trim())
@@ -117,15 +143,41 @@ export function parseLineItems(text: string): ParsedLineItem[] {
       null;
     if (!partNo && headerAt < 0) continue; // no header → demand a part number
 
+    // Money and identity are read from the ROW plus its immediate lookahead: on
+    // the PO the price sits on the row and the part number on the next lines, so
+    // neither field alone sees both.
+    const priceOn = PO_PRICE_RE.exec(rest) ?? PO_PRICE_RE.exec(lookahead);
+    const unitPrice = priceOn ? parseMoney(priceOn[1]) : null;
+    const lineTotal = priceOn ? parseMoney(priceOn[2]) : null;
+
     items.push({
       lineNo: Number(noStr),
       partNo,
       description: collectDescription(lines, i, rest, partNo),
       qty: Number(qtyStr),
       uom: normaliseUom(word),
+      unitPrice,
+      lineTotal,
+      docId,
     });
   }
   return items;
+}
+
+/** Parse a printed money token (`1,026.00`) into a number; null when invalid. */
+function parseMoney(token: string): number | null {
+  const n = Number(token.replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * The document number printed inside an attachment's text, if any.
+ *
+ * Falls back to null so a document that omits it still parses; callers then key
+ * occurrences on the message instead (see `docIdFor`).
+ */
+export function documentNumber(text: string): string | null {
+  return DOC_NUMBER_RE.exec(text || "")?.[1] ?? null;
 }
 
 /** Description for an item: text after the part number, plus following prose. */
@@ -185,15 +237,39 @@ function normaliseUom(word: string): string {
   return hit ? hit[1] : word;
 }
 
-/** One part aggregated across every line it appeared on. */
+/** One part aggregated across every ORDERS it appeared on. */
 export interface AggregatedPart {
   partNo: string | null;
   description: string;
   /** Total quantity across all occurrences. */
   qty: number;
   uom: string | null;
-  /** How many order lines carried this part. */
+  /** How many distinct ORDER DOCUMENTS carried this part. */
   occurrences: number;
+  /** Average unit price over the lines that printed one, or null when none did. */
+  avgUnitPrice: number | null;
+  /** Summed line totals over the lines that printed one, or null when none did. */
+  totalValue: number | null;
+  /** Distinct document numbers the part appeared in — the audit trail. */
+  documents: string[];
+}
+
+/** Unit of measure as it should appear beside an aggregated quantity. */
+function dominantUom(items: ParsedLineItem[]): string | null {
+  const counts = new Map<string, number>();
+  for (const it of items) {
+    if (!it.uom) continue;
+    counts.set(it.uom, (counts.get(it.uom) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let bestN = 0;
+  for (const [uom, n] of counts) {
+    if (n > bestN) {
+      best = uom;
+      bestN = n;
+    }
+  }
+  return best;
 }
 
 /**
@@ -202,27 +278,67 @@ export interface AggregatedPart {
  * Grouping on the part number (falling back to the description when a document
  * omits one) answers "what did we quote/order most this year" — the operator's
  * actual question — instead of listing hundreds of raw rows.
+ *
+ * Occurrences count DOCUMENTS, not lines: one PO that prints a part on three
+ * lines (or restates it on its distribution page) is one order. Counting lines
+ * would let a single noisy document top a frequency ranking.
  */
 export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
-  const map = new Map<string, AggregatedPart>();
+  const map = new Map<
+    string,
+    { part: AggregatedPart; docs: Set<string>; lines: ParsedLineItem[] }
+  >();
   for (const it of items) {
     const key = itemKey(it);
     if (!key) continue;
-    const hit = map.get(key);
-    if (hit) {
-      hit.qty += it.qty ?? 0;
-      hit.occurrences += 1;
-    } else {
-      map.set(key, {
-        partNo: it.partNo,
-        description: it.description,
-        qty: it.qty ?? 0,
-        uom: it.uom,
-        occurrences: 1,
-      });
+    let hit = map.get(key);
+    if (!hit) {
+      hit = {
+        part: {
+          partNo: it.partNo,
+          description: it.description,
+          qty: 0,
+          uom: null,
+          occurrences: 0,
+          avgUnitPrice: null,
+          totalValue: null,
+          documents: [],
+        },
+        docs: new Set<string>(),
+        lines: [],
+      };
+      map.set(key, hit);
+    }
+    hit.part.qty += it.qty ?? 0;
+    hit.lines.push(it);
+    // A line with no document number still counts as its own occurrence, keyed
+    // on the line so it can never silently vanish from the total.
+    const doc = (it.docId || "").trim() || `__line_${hit.lines.length}__${it.lineNo ?? ""}`;
+    hit.docs.add(doc);
+    // Keep the LONGEST description seen — the operator asked for the full text,
+    // and the PDF wraps the same item across lines with varying completeness.
+    if ((it.description || "").length > (hit.part.description || "").length) {
+      hit.part.description = it.description;
     }
   }
-  return [...map.values()].sort((a, b) => b.qty - a.qty || b.occurrences - a.occurrences);
+
+  const out: AggregatedPart[] = [];
+  for (const { part, docs, lines } of map.values()) {
+    part.occurrences = docs.size;
+    part.documents = [...docs].filter((d) => !d.startsWith("__line_"));
+    part.uom = dominantUom(lines);
+    const priced = lines.filter((l) => l.unitPrice != null && l.unitPrice > 0);
+    if (priced.length) {
+      const sum = priced.reduce((s, l) => s + (l.unitPrice ?? 0), 0);
+      part.avgUnitPrice = Number((sum / priced.length).toFixed(4));
+    }
+    const valued = lines.filter((l) => l.lineTotal != null);
+    if (valued.length) {
+      part.totalValue = Number(valued.reduce((s, l) => s + (l.lineTotal ?? 0), 0).toFixed(2));
+    }
+    out.push(part);
+  }
+  return out.sort((a, b) => b.qty - a.qty || b.occurrences - a.occurrences);
 }
 
 /**
@@ -252,15 +368,24 @@ export function itemKey(it: ParsedLineItem): string {
 const MIN_DESCRIPTION_KEY_LEN = 4;
 
 /**
- * Roll parsed lines up ranked by how often a part was ordered.
+ * Roll parsed lines up ranked by how often an ORDER carried the part.
  *
  * «أكتر بند اتكرر» is about FREQUENCY, not volume: a single huge line (1,000
  * pcs ordered once) would top a quantity-ranked list over a small part that
  * appears on every order. The default quantity ranking answers a different
  * question, so the frequency view is its own sort rather than a re-slice.
+ *
+ * `minOccurrences` is the operator's explicit rule: a part seen on only one
+ * order is excluded even when its quantity is huge. Defaults to 1 so callers
+ * that want the raw list are unaffected.
  */
-export function aggregateItemsByOccurrence(items: ParsedLineItem[]): AggregatedPart[] {
-  return aggregateItems(items).sort((a, b) => b.occurrences - a.occurrences || b.qty - a.qty);
+export function aggregateItemsByOccurrence(
+  items: ParsedLineItem[],
+  minOccurrences = 1,
+): AggregatedPart[] {
+  return aggregateItems(items)
+    .filter((p) => p.occurrences >= Math.max(1, minOccurrences))
+    .sort((a, b) => b.occurrences - a.occurrences || b.qty - a.qty);
 }
 
 /** Items parsed from one message. */
@@ -337,7 +462,11 @@ export async function parseItemsFromAttachments(
       const text = await extractPdfText(att.content);
       if (!text) continue;
       sawReadable = true;
-      const items = parseLineItems(text);
+      // The document's own number when it prints one, else the message+file —
+      // occurrences must key on the ORDER, and a message with two attachments
+      // (PO plus its distribution copy) is one order, not two.
+      const docId = documentNumber(text) ?? `${message.mailbox}#${message.uid}#${att.filename}`;
+      const items = parseLineItems(text, docId);
       if (!items.length) continue;
       sawItem = true;
       coverage.lines += items.length;
@@ -356,7 +485,9 @@ export async function parseItemsFromAttachments(
 /** CSV of the item census: one row per parsed line, so nothing is lost. */
 export function itemsCsv(result: ItemScanResult): string {
   const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const lines = ["mailbox,date,subject,filename,lineNo,partNo,description,qty,uom"];
+  const lines = [
+    "mailbox,date,subject,filename,docId,lineNo,partNo,description,qty,uom,unitPrice,lineTotal",
+  ];
   for (const m of result.messages) {
     for (const it of m.items) {
       lines.push(
@@ -365,11 +496,14 @@ export function itemsCsv(result: ItemScanResult): string {
           m.date,
           m.subject,
           m.filename,
+          it.docId ?? "",
           it.lineNo ?? "",
           it.partNo ?? "",
           it.description,
           it.qty ?? "",
           it.uom ?? "",
+          it.unitPrice ?? "",
+          it.lineTotal ?? "",
         ]
           .map(esc)
           .join(","),
@@ -382,10 +516,21 @@ export function itemsCsv(result: ItemScanResult): string {
 /** Aggregate CSV — the summary the operator reads, one row per part. */
 export function itemsAggregateCsv(parts: AggregatedPart[]): string {
   const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const lines = ["partNo,description,totalQty,uom,occurrences"];
+  const lines = ["partNo,description,totalQty,uom,orders,avgUnitPrice,totalValue,documents"];
   for (const p of parts) {
     lines.push(
-      [p.partNo ?? "", p.description, p.qty, p.uom ?? "", p.occurrences].map(esc).join(","),
+      [
+        p.partNo ?? "",
+        p.description,
+        p.qty,
+        p.uom ?? "",
+        p.occurrences,
+        p.avgUnitPrice ?? "",
+        p.totalValue ?? "",
+        p.documents.join(" | "),
+      ]
+        .map(esc)
+        .join(","),
     );
   }
   return lines.join("\n");

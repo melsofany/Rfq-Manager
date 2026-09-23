@@ -15,7 +15,7 @@
  */
 import { describe, it, expect } from "vitest";
 
-const { parseLineItems, aggregateItems, aggregateItemsByOccurrence, itemKey } =
+const { parseLineItems, aggregateItems, aggregateItemsByOccurrence, itemKey, documentNumber } =
   await import("../../modules/ai-assistant/email-items");
 
 /** Verbatim text of a real EDC RFQ attachment (26R011954). */
@@ -232,5 +232,78 @@ describe("aggregateItemsByOccurrence", () => {
     expect(byOcc[0].occurrences).toBe(3);
     // The quantity view still leads with the big one — different question.
     expect(aggregateItems(items)[0].partNo).toBe("BIG");
+  });
+
+  it("excludes a part seen on a single order, however large its quantity", () => {
+    // The operator's rule, stated verbatim: a part that appeared once with a
+    // huge quantity is excluded from a "most repeated" list.
+    const items = [
+      { lineNo: 1, partNo: "REPEAT", description: "r", qty: 5, uom: "Each", docId: "P1" },
+      { lineNo: 2, partNo: "REPEAT", description: "r", qty: 5, uom: "Each", docId: "P2" },
+      { lineNo: 3, partNo: "HUGEONCE", description: "h", qty: 7000, uom: "Each", docId: "P3" },
+    ];
+    const byOcc = aggregateItemsByOccurrence(items, 2);
+    expect(byOcc.map((p) => p.partNo)).toEqual(["REPEAT"]);
+    // minOrders=1 is the escape hatch that brings it back.
+    expect(aggregateItemsByOccurrence(items, 1).map((p) => p.partNo)).toContain("HUGEONCE");
+  });
+});
+
+describe("occurrences count ORDERS, not printed lines", () => {
+  it("counts one PO once even when it prints the part on several lines", () => {
+    // A single PO can list the same part on multiple lines. Counting lines would
+    // let one noisy document top the frequency ranking.
+    const items = [
+      { lineNo: 1, partNo: "A.1", description: "x", qty: 1, uom: "Each", docId: "P26E001" },
+      { lineNo: 2, partNo: "A.1", description: "x", qty: 1, uom: "Each", docId: "P26E001" },
+      { lineNo: 3, partNo: "A.1", description: "x", qty: 1, uom: "Each", docId: "P26E001" },
+      { lineNo: 4, partNo: "A.1", description: "x", qty: 1, uom: "Each", docId: "P26E002" },
+    ];
+    const agg = aggregateItems(items);
+    expect(agg[0].occurrences).toBe(2);
+    expect(agg[0].qty).toBe(4);
+    expect(agg[0].documents).toEqual(["P26E001", "P26E002"]);
+  });
+
+  it("reads the document number printed in the attachment", () => {
+    expect(documentNumber(PO_TEXT)).toBe("P26E14630");
+    expect(documentNumber(RFQ_TEXT)).toBe("26R011954");
+    expect(documentNumber("no number here")).toBeNull();
+  });
+});
+
+describe("prices come from the PO rows", () => {
+  it("extracts unit price and line total, and aggregates them", () => {
+    const items = parseLineItems(PO_TEXT, "P26E14630");
+    const padlock = items.find((i) => i.partNo === "0666.000.GENRAL.0006");
+    expect(padlock?.unitPrice).toBe(75);
+    expect(padlock?.lineTotal).toBe(900);
+    expect(padlock?.docId).toBe("P26E14630");
+
+    const agg = aggregateItems(items);
+    const a = agg.find((p) => p.partNo === "0666.000.GENRAL.0006");
+    expect(a?.avgUnitPrice).toBe(75);
+    expect(a?.totalValue).toBe(900);
+  });
+
+  it("reports no price rather than inventing one when the row prints none", () => {
+    const rfqItems = parseLineItems(RFQ_TEXT, "26R011954");
+    const agg = aggregateItems(rfqItems);
+    expect(agg.every((p) => p.avgUnitPrice === null && p.totalValue === null)).toBe(true);
+  });
+
+  it("keeps the longest description seen for a part", () => {
+    const agg = aggregateItems([
+      { lineNo: 1, partNo: "A.1", description: "SHORT", qty: 1, uom: "Each", docId: "P1" },
+      {
+        lineNo: 2,
+        partNo: "A.1",
+        description: "SHORT WITH THE FULL DESCRIPTION TEXT",
+        qty: 1,
+        uom: "Each",
+        docId: "P2",
+      },
+    ]);
+    expect(agg[0].description).toBe("SHORT WITH THE FULL DESCRIPTION TEXT");
   });
 });
