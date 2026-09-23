@@ -955,3 +955,54 @@ once the count was right:
 - PR #156 squash-merged `5c5fa8e`; CI (Type Check / Tests / Format Check) green;
   Deploy-to-Render workflow success; Render `dep-dapn7qk9v7es7397u9f0` **live** at
   `5c5fa8e`; `/api/healthz` 200 and the `/api/ai-assistant/*` routes 401.
+
+## An overloaded PRIMARY model makes the assistant look dead (PR #158)
+
+- **Symptom**: «مش بيرد عليا» — the assistant sent only the ack. Reproduced by
+  injecting a synthetic webhook (POST `/api/webhook/whatsapp` with a Meta-shaped
+  body; the route `res.sendStatus(200)` first, so a 200 proves nothing — watch the
+  LOGS): `AI assistant message handled` → ack → `model exhausted … gemini-3.8-flash
+status 503` → `AiError: LLM request budget of 100000ms exhausted before an
+answer` → a timeout notice. **Meta was healthy the whole time** (`subscribed_apps`
+  lists the app, phone `CONNECTED`, WABA `APPROVED`) and nothing was wrong with the
+  allowlist — check those BEFORE blaming the webhook.
+- **Root cause**: `gemini-3.8-flash` (the configured primary) is overloaded. Live
+  probe, 5 requests each with the real tool schema: **3.8-flash 1/5** (503,503,429,429)
+  and **3.7-flash 1/5** (503 ×4), while 3.6-flash / 3.1-flash-lite / 3.5-flash-lite /
+  flash-lite-latest were **5/5**. Model ids that EXIST and answer on a single probe
+  can still be unusable under load — measure several requests, not one.
+- **The fatal interaction was retry × budget**: an overloaded model answers 503
+  _slowly_ (~40s/attempt live). `MAX_ATTEMPTS=2` on the primary alone consumed the
+  whole `completionBudgetMs()`, so the healthy fallbacks were never reached. **A
+  shared budget with no per-model cap lets one bad model starve the chain.**
+  Fix: `perModelMs = budgetMs / candidates.length` gates the retry
+  (`attempt < MAX_ATTEMPTS && Date.now() < modelDeadline`) so every candidate gets a
+  turn.
+- **Order the chain by measured reliability, not by version**: a flaky model early
+  spends the budget before a working one is tried. `DEFAULT_MODEL` is now
+  `gemini-3.6-flash` and the fallbacks lead with the 5/5 models.
+- **Diagnosing a model problem without the app**: probe
+  `POST https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
+  with `Authorization: Bearer $AI_API_KEY` and the REAL tool array — a bare
+  chat request succeeds on models that 503 with tools attached (3.8-flash answered
+  a plain request 200 while failing 4/5 with tools).
+- **WhatsApp rejects `text/csv` outright** (`(#100) Param file must be a file with
+one of the following types … Received file of type 'text/csv'`), so every CSV the
+  assistant generated was silently lost — the operator asked for a file and got
+  nothing. Upload CSVs as `text/plain` (accepted; the `.csv` filename is preserved).
+  `whatsappSafeMime()` in `communications/service.ts` now guards the upload, and its
+  final fallback is `text/plain` — **`application/octet-stream` is itself NOT in
+  WhatsApp's accepted list**, so it would lose the file just as certainly.
+- Tests: `whatsapp-media-mime.test.ts` (4), 2 new `ai-gemini` regressions (the
+  fallback is reached when the primary is slow+overloaded; the default-model /
+  fallback-order assertions), CSV mime expectations updated in
+  `ai-scan-emails-tool` + `ai-email-items-tool`. **576 api-server tests** pass; tsc
+  clean; repo-wide prettier clean; api-server build clean.
+- PR #158 squash-merged `1b854b2`; CI + Deploy workflows success; Render
+  `dep-dapnu4qd0e5s739q74bg` live at `1b854b2`; `/api/healthz` 200. Post-deploy
+  webhook injection: reply produced in **7s** and the outbound status reached
+  `delivered` — the healthy cycle.
+- **Render `logs?startTime=&endTime=` returned EMPTY for windows that DO contain
+  logs** — a time-filtered sweep will "prove" there were no inbound webhooks when
+  there were. Pull unfiltered (`limit=1000`, repeated, dedupe by `id`) and filter in
+  JS.
