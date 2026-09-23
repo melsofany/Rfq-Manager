@@ -21,6 +21,26 @@ vi.mock("../../modules/ai-assistant/email", async (importOriginal) => ({
   isEmailReadConfigured: () => true,
 }));
 
+/**
+ * The PDF generator is spied, not run: its Arabic font is bundled into `dist/`
+ * by the build, so it cannot be loaded from the source tree. Spying is also what
+ * makes the assertion exact — it captures the comparison the report was built
+ * from, which is the property under test.
+ */
+const generateMissingNumbersPdf = vi.fn(
+  async (_comparison: {
+    table: string;
+    column: string;
+    found: number;
+    missing: Array<{ number: string; subject: string; date: string; mailbox: string }>;
+  }) => Buffer.from("%PDF-fake"),
+);
+vi.mock("../../modules/ai-assistant/pdf", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  generateMissingNumbersPdf,
+  generateAssistantPdf: vi.fn(async () => Buffer.from("%PDF-fake")),
+}));
+
 // The comparison reads a real table handle through the registry, so the db mock
 // only needs `select().from().where().limit()` to resolve to the fixture rows.
 let dbRows: Array<{ value: string }> = [];
@@ -273,6 +293,61 @@ describe("scan_emails tool", () => {
   it("sends no file when none was requested", async () => {
     await executeTool("scan_emails", {}, ctx as never);
     expect(ctx.outbox).toHaveLength(0);
+  });
+
+  it("builds the missing-numbers PDF from the FULL comparison, not a model sample", async () => {
+    // The regression this pins: `generate_pdf` receives whatever rows the model
+    // passes it, and the model's payload is truncated by `asText` — the report
+    // came out with only the first few numbers. Building it here means the PDF
+    // carries every missing number however long the list is.
+    const missing = Array.from({ length: 137 }, (_, i) => ({
+      number: `26R0119${String(i).padStart(2, "0")}`,
+      subject: `EDC RFQ No 26R0119${String(i).padStart(2, "0")}`,
+      date: "2026-09-22T10:00:00Z",
+      mailbox: "info@cortoba-supplies.com",
+    }));
+    scanEmails.mockResolvedValue(
+      census({
+        compare: {
+          table: "customer_rfqs",
+          column: "customerRfqNo",
+          found: 1444,
+          missing,
+          matchedSample: [],
+        },
+      }),
+    );
+
+    const res = (await executeTool(
+      "scan_emails",
+      { compareTable: "customer_rfqs", compareColumn: "customerRfqNo", exportPdf: true },
+      ctx as never,
+    )) as { ok: boolean; data: { pdfSent: boolean; comparison: { missing: unknown[] } } };
+
+    expect(res.ok).toBe(true);
+    expect(res.data.pdfSent).toBe(true);
+    expect(ctx.outbox).toHaveLength(1);
+    expect(ctx.outbox[0].mimeType).toBe("application/pdf");
+    expect(ctx.outbox[0].filename).toMatch(/^missing-numbers-\d{4}-\d{2}-\d{2}\.pdf$/);
+    // The report was built from EVERY missing number, not a capped sample.
+    expect(generateMissingNumbersPdf).toHaveBeenCalledTimes(1);
+    expect(generateMissingNumbersPdf.mock.calls[0][0].missing).toHaveLength(137);
+    expect(res.data.comparison.missing).toHaveLength(137);
+  });
+
+  it("refuses exportPdf without a comparison rather than emitting an empty report", async () => {
+    const res = (await executeTool("scan_emails", { exportPdf: true }, ctx as never)) as {
+      ok: boolean;
+      error?: string;
+    };
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("compareTable");
+    expect(ctx.outbox).toHaveLength(0);
+  });
+
+  it("passes includeAttachments through to the scan", async () => {
+    await executeTool("scan_emails", { includeAttachments: true }, ctx as never);
+    expect(scanEmails).toHaveBeenCalledWith(expect.objectContaining({ includeAttachments: true }));
   });
 
   it("refuses when email access is disabled", async () => {

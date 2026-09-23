@@ -45,11 +45,14 @@ import {
   sendAssistantEmail,
   isEmailReadConfigured,
   isTextLikeMime,
+  fetchMessageAttachments,
+  extractPdfText,
   type EmailCensusResult,
   type EmailCensusNumber,
 } from "./email";
+import { parseItemsFromAttachments, itemsCsv, itemsAggregateCsv } from "./email-items";
 import { defaultMailbox, mailboxes } from "./mailboxes";
-import { generateAssistantPdf, type PdfSection } from "./pdf";
+import { generateAssistantPdf, generateMissingNumbersPdf, type PdfSection } from "./pdf";
 import {
   extractDocumentText,
   isReadableDocumentMime,
@@ -293,6 +296,54 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
               description:
                 "أرسل القائمة الكاملة كمستند CSV على واتساب (استخدمها عندما يطلب المستخدم ملفًا بالحصر).",
             },
+            exportPdf: {
+              type: "boolean",
+              description:
+                "أرسل تقرير PDF كاملًا بالأرقام غير المسجلة في النظام (يُبنى من نتيجة المقارنة الكاملة، " +
+                "فلا تُقتطع القائمة). استخدمها مع compareTable/compareColumn عندما يطلب المستخدم ملفًا بالفرق.",
+            },
+            includeAttachments: {
+              type: "boolean",
+              description:
+                "افتح مرفقات الرسائل المطابقة (PDF) واستخرج الأرقام من داخل الملفات أيضًا، وليس من الموضوع فقط. " +
+                "استخدمها عندما تريد حصرًا أدق (مثل إشعارات «Quotation Import» التي يكون الرقم فيها داخل الملف). " +
+                "يبطئ الحصر، ويُذكر نطاق ما فُتح فعليًا في attachmentCoverage.",
+            },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "scan_email_items",
+        description:
+          "حصر بنود الطلبات/أوامر التوريد من داخل مرفقات البريد (ملفات PDF) وليس من الموضوع. " +
+          "تفتح المرفقات وتقرأ جداول البنود (رقم القطعة، التوصيف، الكمية، الوحدة) وتجمّعها. " +
+          "استخدمها لأي سؤال مثل «إيه البنود والكميات اللي في طلبات شركة الحفر المصرية؟» أو " +
+          "«إيه أكتر قطعة اتطلبت؟». لا تعتمد على search_emails لهذا — فهي لا تقرأ داخل الملفات. " +
+          "أعِد دائمًا coverage في الرد: إن كان unreadable>0 أو truncated=true فاذكر أن الحصر ناقص ولا تدّعِ الكمال. " +
+          "مرّر exportCsv=true لإرسال كل البنود كملف، أو exportPdf=true لملف PDF بالملخص.",
+        parameters: {
+          type: "object",
+          properties: {
+            from: { type: "string", description: "بريد المُرسل أو اسمه (مثل egyptian-drilling)" },
+            subject: { type: "string", description: "كلمة في الموضوع (مثل RFQ أو PO)" },
+            query: { type: "string", description: "كلمة في الموضوع/المُرسل" },
+            sinceDate: { type: "string", description: "بداية الفترة YYYY-MM-DD" },
+            beforeDate: { type: "string", description: "نهاية الفترة YYYY-MM-DD (غير شاملة)" },
+            mailbox: { type: "string", description: "بريد محدّد (اتركه فارغًا لكل البريد)" },
+            limit: {
+              type: "integer",
+              description:
+                "أقصى عدد رسائل تُفتح مرفقاتها (افتراضي 120). العدد المطابق الكلي يُعاد دائمًا.",
+            },
+            top: {
+              type: "integer",
+              description: "عدد البنود الأكثر تكرارًا في الملخص (افتراضي 50)",
+            },
+            exportCsv: { type: "boolean", description: "أرسل كل البنود كملف CSV" },
+            exportPdf: { type: "boolean", description: "أرسل ملخص البنود كملف PDF" },
           },
         },
       },
@@ -418,6 +469,7 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
       "search_emails",
       "search_sent_emails",
       "scan_emails",
+      "scan_email_items",
     ]);
     return defs.filter((d) => !readOnlyNames.has(d.function.name));
   }
@@ -796,6 +848,7 @@ export async function executeTool(
           mailbox: requested,
           folder: args.folder === "sent" ? "sent" : "inbox",
           limit: typeof args.limit === "number" ? args.limit : undefined,
+          includeAttachments: Boolean(args.includeAttachments),
           compare: useCompare
             ? (numbers, target) => compareNumbersWithSystem(numbers, target)
             : undefined,
@@ -812,6 +865,26 @@ export async function executeTool(
           });
         }
 
+        // The missing-number PDF is built HERE, from the complete server-side
+        // comparison — not from rows the model chose. Asking the model to pass
+        // the list to generate_pdf is what silently truncated the report to the
+        // first 20 numbers.
+        let pdfSent = false;
+        if (args.exportPdf) {
+          if (!census.compare) {
+            return {
+              ok: false,
+              error:
+                "لا يمكن إنشاء تقرير PDF بدون مقارنة. مرّر compareTable و compareColumn مع exportPdf.",
+            };
+          }
+          if (!ctx.settings.allowPdf) return { ok: false, error: "إنشاء PDF معطّل" };
+          const buffer = await generateMissingNumbersPdf(census.compare);
+          const filename = `missing-numbers-${new Date().toISOString().slice(0, 10)}.pdf`;
+          ctx.outbox.push({ buffer, filename, mimeType: "application/pdf" });
+          pdfSent = true;
+        }
+
         return {
           ok: true,
           data: {
@@ -825,12 +898,109 @@ export async function executeTool(
             byMonth: census.byMonth,
             bySender: census.bySender,
             comparison: census.compare ?? null,
+            attachmentCoverage: census.attachmentCoverage ?? null,
             numbers: census.numbers,
             numbersTruncated: census.numbersTruncated,
             returned: census.returned,
             emails: census.emails,
             csvSent: Boolean(args.exportCsv),
+            pdfSent,
             scope: census.scope,
+          },
+        };
+      }
+      case "scan_email_items": {
+        if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
+        const requested = args.mailbox ? String(args.mailbox) : "*";
+        // Reuse the census to find the matching messages (whole mailbox, exact
+        // count) and to DOWNLOAD their attachments once; the item parser then
+        // works on those bytes locally, with no model call.
+        const census = await scanEmails({
+          from: args.from ? String(args.from) : undefined,
+          subject: args.subject ? String(args.subject) : undefined,
+          query: args.query ? String(args.query) : undefined,
+          sinceDate: args.sinceDate ? String(args.sinceDate) : undefined,
+          beforeDate: args.beforeDate ? String(args.beforeDate) : undefined,
+          mailbox: requested,
+          folder: "inbox",
+          limit: typeof args.limit === "number" ? args.limit : undefined,
+          includeAttachments: true,
+          returnAllMatches: true,
+        });
+
+        const parsed = await parseItemsFromAttachments(census.attachmentMessages ?? []);
+        const top = Math.min(Math.max(Number(args.top ?? 50), 1), 300);
+
+        if (args.exportCsv) {
+          ctx.outbox.push({
+            buffer: Buffer.from(itemsCsv(parsed), "utf8"),
+            filename: `email-items-${new Date().toISOString().slice(0, 10)}.csv`,
+            mimeType: "text/csv",
+          });
+          ctx.outbox.push({
+            buffer: Buffer.from(itemsAggregateCsv(parsed.aggregate), "utf8"),
+            filename: `email-items-summary-${new Date().toISOString().slice(0, 10)}.csv`,
+            mimeType: "text/csv",
+          });
+        }
+
+        let pdfSent = false;
+        if (args.exportPdf) {
+          if (!ctx.settings.allowPdf) return { ok: false, error: "إنشاء PDF معطّل" };
+          const buffer = await generateAssistantPdf({
+            title: "بنود الطلبات من البريد الإلكتروني",
+            subtitle: `أكثر ${top} بندًا تكرارًا — من ${parsed.coverage.withItems} رسالة`,
+            sections: [
+              {
+                paragraphs: [
+                  `رسائل مطابقة: ${census.matched} — رسائل فُتحت مرفقاتها: ${parsed.coverage.messages}`,
+                  `بنود مقروءة: ${parsed.coverage.lines} سطرًا من ${parsed.coverage.attachments} ملف.`,
+                  parsed.coverage.unreadable || census.attachmentCoverage?.truncated
+                    ? "تنبيه: الحصر ناقص — بعض المرفقات لم تُقرأ أو لم تُفحص كلها."
+                    : "تم فحص كل المرفقات المطابقة.",
+                ],
+              },
+              {
+                table: {
+                  columns: ["رقم القطعة", "التوصيف", "إجمالي الكمية", "الوحدة", "مرات التكرار"],
+                  rows: parsed.aggregate
+                    .slice(0, top)
+                    .map((p) => [p.partNo ?? "", p.description, p.qty, p.uom ?? "", p.occurrences]),
+                },
+              },
+            ],
+          });
+          ctx.outbox.push({
+            buffer,
+            filename: `email-items-${new Date().toISOString().slice(0, 10)}.pdf`,
+            mimeType: "application/pdf",
+          });
+          pdfSent = true;
+        }
+
+        const coverage = parsed.coverage;
+        const complete =
+          coverage.unreadable === 0 && !(census.attachmentCoverage?.truncated ?? false);
+        return {
+          ok: true,
+          data: {
+            note:
+              `حصر بنود من مرفقات البريد: ${census.matched} رسالة مطابقة، فُتح مرفق ${coverage.messages} رسالة، ` +
+              `وقُرئ ${coverage.lines} سطر بند من ${coverage.attachments} ملف.` +
+              (complete
+                ? " الحصر كامل."
+                : ` تنبيه: الحصر ناقص (تعذّرت قراءة ${coverage.unreadable} رسالة` +
+                  (census.attachmentCoverage?.truncated ? "، ولم تُفحص كل الرسائل" : "") +
+                  ") — اذكر ذلك ولا تدّعِ الكمال."),
+            isComplete: complete,
+            matchedMessages: census.matched,
+            coverage,
+            attachmentCoverage: census.attachmentCoverage ?? null,
+            distinctParts: parsed.aggregate.length,
+            totalLines: coverage.lines,
+            topItems: parsed.aggregate.slice(0, top),
+            csvSent: Boolean(args.exportCsv),
+            pdfSent,
           },
         };
       }
@@ -910,12 +1080,24 @@ export async function executeTool(
         // `read: false` skips extraction for a plain "send me the file" request.
         const shouldRead = args.read !== false;
         if (shouldRead && isReadableDocumentMime(att.mimeType || "")) {
-          const extracted = await extractDocumentText(
-            att.content,
-            att.mimeType || "application/octet-stream",
-            ctx.settings.baseUrl,
-            ctx.settings.model,
-          );
+          // A PDF with a text layer is read LOCALLY first: the Gemini path is
+          // quota-limited (20 requests/day/model) and returns null once the day
+          // is spent, which is how "read the PDF" turned into a generic failure.
+          const isPdf = (att.mimeType || "").toLowerCase() === "application/pdf";
+          const extracted = isPdf
+            ? (await extractPdfText(att.content)).slice(0, MAX_DOCUMENT_CHARS) ||
+              (await extractDocumentText(
+                att.content,
+                att.mimeType || "application/octet-stream",
+                ctx.settings.baseUrl,
+                ctx.settings.model,
+              ))
+            : await extractDocumentText(
+                att.content,
+                att.mimeType || "application/octet-stream",
+                ctx.settings.baseUrl,
+                ctx.settings.model,
+              );
           if (extracted) {
             return {
               ok: true,

@@ -163,6 +163,46 @@ export function generateAssistantPdf(opts: AssistantPdfOptions): Promise<Buffer>
   });
 }
 
+/**
+ * Build a complete missing-number report directly from the server-side set
+ * difference. The model receives only a bounded sample of the census, so passing
+ * its rows to generate_pdf would silently lose the rest of the list.
+ */
+export function generateMissingNumbersPdf(
+  comparison: {
+    table: string;
+    column: string;
+    found: number;
+    missing: Array<{ number: string; subject: string; date: string; mailbox: string }>;
+  },
+  title = "أرقام البريد غير المسجلة في النظام",
+): Promise<Buffer> {
+  return generateAssistantPdf({
+    title,
+    subtitle: "مقارنة أرقام البريد الإلكتروني بسجل النظام",
+    sections: [
+      {
+        paragraphs: [
+          `تم فحص أرقام البريد مقابل جدول ${comparison.table} (عمود ${comparison.column}).`,
+          `الأرقام الموجودة في النظام: ${comparison.found} — الأرقام غير المسجلة: ${comparison.missing.length}.`,
+        ],
+      },
+      {
+        table: {
+          columns: ["رقم الطلب", "التاريخ", "البريد", "موضوع الرسالة"],
+          rows: comparison.missing.map((m) => [
+            m.number,
+            m.date?.slice(0, 10) ?? "",
+            m.mailbox,
+            m.subject,
+          ]),
+        },
+      },
+    ],
+    footer: `تم إنشاء التقرير من الحصر الكامل — ${new Date().toLocaleString("en-GB")}`,
+  });
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function renderTable(doc: any, table: PdfTable, startX: number, width: number): void {
   const cols = table.columns.length || 1;

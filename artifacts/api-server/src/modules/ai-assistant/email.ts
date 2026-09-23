@@ -15,6 +15,7 @@
 import { promises as dns } from "dns";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { logger } from "../../shared/logger";
 import {
   assertCanSend,
@@ -684,6 +685,8 @@ export interface EmailCensusNumber {
   number: string;
   count: number;
   sample: { uid: number; mailbox: string; folder: EmailFolder; subject: string; date: string };
+  /** Where the number was found: the subject, or inside a PDF attachment. */
+  source?: "subject" | "attachment";
 }
 
 /** Result of reconciling extracted numbers against the system of record. */
@@ -714,6 +717,13 @@ export interface EmailCensusResult {
   distinctNumbers: number;
   numbersTruncated: boolean;
   compare?: EmailNumberComparison;
+  /** Present when `includeAttachments` was set — how much of the mail was opened. */
+  attachmentCoverage?: AttachmentCoverage;
+  /**
+   * The downloaded attachments, for an internal caller that wants to parse them
+   * too (the item census). NEVER send this to the model — the tool strips it.
+   */
+  attachmentMessages?: MessageAttachments[];
   scope: EmailCensusScope;
   note: string;
 }
@@ -748,8 +758,249 @@ export function senderAddress(from: string): string {
   return raw.split(/\s+/)[0] || "";
 }
 
+/**
+ * One PDF text row, reconstructed from the glyph positions on the page.
+ *
+ * pdf-parse's default renderer concatenates items in reading order WITHOUT a
+ * separator, so "Line No." becomes "LineNo." and a table row's columns run
+ * together ("124Each5720.001."). Rebuilding each visual line from the item
+ * coordinates (items share a baseline; `transform[4]` is x, `transform[5]` is y)
+ * keeps columns separable, which is what makes the line-item tables of the EDC
+ * RFQ/PO attachments parseable at all.
+ */
+async function renderPdfPage(pageData: unknown): Promise<string> {
+  const page = pageData as {
+    getTextContent: (opts?: Record<string, unknown>) => Promise<{
+      items?: Array<{ str?: string; transform?: number[] }>;
+    }>;
+  };
+  const content = await page.getTextContent({
+    normalizeWhitespace: false,
+    disableCombineTextItems: false,
+  });
+  const rows: Array<{ y: number; parts: Array<{ x: number; str: string }> }> = [];
+  for (const item of content.items ?? []) {
+    const str = (item.str ?? "").trim();
+    if (!str) continue;
+    const t = item.transform ?? [1, 0, 0, 1, 0, 0];
+    const x = Number(t[4] ?? 0);
+    const y = Number(t[5] ?? 0);
+    const row = rows.find((r) => Math.abs(r.y - y) < 2);
+    if (row) row.parts.push({ x, str });
+    else rows.push({ y, parts: [{ x, str }] });
+  }
+  return rows
+    .map((r) =>
+      r.parts
+        .sort((a, b) => a.x - b.x)
+        .map((p) => p.str)
+        .join(" "),
+    )
+    .join("\n");
+}
+
+/**
+ * Read a PDF's text LOCALLY, with no model call.
+ *
+ * The Gemini `inline_data` path is the fallback for scanned documents and
+ * images, but it is quota-limited (20 requests/day/model) and returns null the
+ * moment the day's budget is spent — which is how a request for an EDC
+ * attachment ended as «تعذّر معالجة طلبك». A text-layer PDF (which is what EDC
+ * sends) needs no model at all, so this runs first for bulk work and as the
+ * fallback for a single attachment.
+ *
+ * Returns "" when the file has no text layer (a scan) or cannot be parsed, so
+ * the caller reports "could not read" instead of inventing content.
+ */
+export async function extractPdfText(buffer: Buffer): Promise<string> {
+  try {
+    const res = await pdfParse(buffer, { pagerender: renderPdfPage });
+    return (res.text || "").replace(/\n{3,}/g, "\n\n").trim();
+  } catch (err) {
+    logger.warn({ err }, "AI assistant: local PDF text extraction failed");
+    return "";
+  }
+}
+
+/** Messages whose attachments are opened per census. Envelope+body fetch is
+ * expensive, so an attachment scan is bounded much more tightly than the
+ * envelope census. Overridable so the truncation path is testable. */
+export function attachmentScanBudget(): number {
+  return Number(process.env.AI_ATTACHMENT_SCAN_BUDGET) || 120;
+}
+
+/** Wall-clock ceiling for one attachment fetch pass. */
+const ATTACHMENT_SCAN_TIME_BUDGET_MS = 60_000;
+
+/** Coverage of an attachment pass — never report a partial read as complete. */
+export interface AttachmentCoverage {
+  /** Matched messages the pass considered. */
+  messages: number;
+  /** Messages whose attachments were downloaded and parsed. */
+  scanned: number;
+  /** Messages with at least one readable PDF. */
+  readable: number;
+  /** Messages that could not be downloaded or had no readable attachment. */
+  unreadable: number;
+  /** PDF attachments opened. */
+  attachments: number;
+  /** True when the budget stopped the pass short of every matched message. */
+  truncated: boolean;
+}
+
+/** The attachments of one message, ready for local parsing. */
+export interface MessageAttachments {
+  uid: number;
+  mailbox: string;
+  folder: EmailFolder;
+  subject: string;
+  date: string;
+  from: string;
+  attachments: Array<{ filename: string; mimeType: string | null; content: Buffer | null }>;
+}
+
+/**
+ * Download the attachments of the matched messages.
+ *
+ * This is the ONE place the mail is opened for content, so the number census
+ * (numbers hidden in the PDF) and the item census (the line tables) share a
+ * single IMAP pass instead of doubling the connections. Grouped by mailbox — a
+ * UID is unique only inside one mailbox — and chunked so the time budget can be
+ * honoured mid-pass rather than after an unbounded fetch.
+ */
+export async function fetchMessageAttachments(
+  matches: EmailCensusMatch[],
+  budget = attachmentScanBudget(),
+): Promise<{ messages: MessageAttachments[]; coverage: AttachmentCoverage }> {
+  const considered = matches.slice(0, budget);
+  const coverage: AttachmentCoverage = {
+    messages: considered.length,
+    scanned: 0,
+    readable: 0,
+    unreadable: 0,
+    attachments: 0,
+    truncated: matches.length > budget,
+  };
+  const out: MessageAttachments[] = [];
+
+  const byMailbox = new Map<string, EmailCensusMatch[]>();
+  for (const m of considered) {
+    const list = byMailbox.get(m.mailbox) ?? [];
+    list.push(m);
+    byMailbox.set(m.mailbox, list);
+  }
+
+  const startedAt = Date.now();
+  for (const [mailboxAddress, group] of byMailbox) {
+    if (Date.now() - startedAt > ATTACHMENT_SCAN_TIME_BUDGET_MS) {
+      coverage.truncated = true;
+      break;
+    }
+    try {
+      await withMailbox(async (client) => {
+        const path = await resolveFolderPath(client, group[0].folder);
+        const lock = await client.getMailboxLock(path);
+        try {
+          const uids = group.map((m) => m.uid);
+          for (let i = 0; i < uids.length; i += 25) {
+            if (Date.now() - startedAt > ATTACHMENT_SCAN_TIME_BUDGET_MS) {
+              coverage.truncated = true;
+              break;
+            }
+            const chunk = uids.slice(i, i + 25);
+            for await (const msg of client.fetch(
+              chunk,
+              { uid: true, source: true },
+              { uid: true },
+            )) {
+              coverage.scanned += 1;
+              const source = (msg as { source?: Buffer }).source;
+              const match = group.find((m) => m.uid === msg.uid);
+              if (!source) {
+                coverage.unreadable += 1;
+                continue;
+              }
+              try {
+                const parsed = await simpleParser(source);
+                const attachments = (parsed.attachments ?? [])
+                  .filter((a) => (a.contentType ?? "").toLowerCase() === "application/pdf")
+                  .map((a) => ({
+                    filename: a.filename ?? "attachment.pdf",
+                    mimeType: a.contentType ?? null,
+                    content: (a.content as Buffer) ?? null,
+                  }));
+                coverage.attachments += attachments.length;
+                if (attachments.length) coverage.readable += 1;
+                else coverage.unreadable += 1;
+                out.push({
+                  uid: msg.uid,
+                  mailbox: mailboxAddress,
+                  folder: group[0].folder,
+                  subject: match?.subject ?? parsed.subject ?? "",
+                  date: match?.date ?? "",
+                  from: match?.from ?? parsed.from?.text ?? "",
+                  attachments,
+                });
+              } catch {
+                coverage.unreadable += 1;
+              }
+            }
+          }
+        } finally {
+          lock.release();
+        }
+      }, mailboxAddress);
+    } catch (err) {
+      logger.warn({ err, mailbox: mailboxAddress }, "AI assistant: attachment fetch failed");
+      coverage.truncated = true;
+    }
+  }
+
+  return { messages: out, coverage };
+}
+
 /** Max distinct numbers returned before the list is declared truncated. */
 const CENSUS_NUMBER_CAP = 400;
+
+/**
+ * Document numbers found INSIDE the attachments, not just in the subject.
+ *
+ * EDC's «Quotation Import» notices carry the number in the document, so a
+ * subject-only census under-counts them. Returns census-shaped rows so the
+ * caller can merge them without a second code path. Lives here (not in
+ * `email-items`) so `scanEmails` does not depend on the item parser.
+ */
+async function numbersInAttachments(
+  messages: MessageAttachments[],
+  patterns: string[],
+): Promise<EmailCensusNumber[]> {
+  const map = new Map<string, EmailCensusNumber>();
+  for (const message of messages) {
+    for (const att of message.attachments) {
+      if (!att.content) continue;
+      const text = await extractPdfText(att.content);
+      if (!text) continue;
+      for (const n of extractNumbers(text, patterns)) {
+        const hit = map.get(n);
+        if (hit) hit.count += 1;
+        else
+          map.set(n, {
+            number: n,
+            count: 1,
+            source: "attachment",
+            sample: {
+              uid: message.uid,
+              mailbox: message.mailbox,
+              folder: message.folder,
+              subject: message.subject,
+              date: message.date,
+            },
+          });
+      }
+    }
+  }
+  return [...map.values()].sort((a, b) => a.number.localeCompare(b.number));
+}
 
 /**
  * Census / reconciliation scan over a whole mailbox (or a date range of one).
@@ -792,6 +1043,19 @@ export async function scanEmails(opts: {
     matchedSample: Array<{ number: string; value: string }>;
   }>;
   compareTarget?: { table: string; column: string };
+  /**
+   * Also open each matched message's PDF attachments and extract numbers from
+   * them. A subject-only census cannot see a number that lives inside the
+   * document (EDC's «Quotation Import» notices), so it under-counts. Bounded by
+   * `attachmentScanBudget()` and reported via `attachmentCoverage`.
+   */
+  includeAttachments?: boolean;
+  /**
+   * Return every matched envelope to an internal aggregation caller. The public
+   * tool still caps `emails` at `limit`; a year-wide item census must not inherit
+   * that cap and accidentally analyse only the newest 500 messages.
+   */
+  returnAllMatches?: boolean;
   unseenOnly?: boolean;
 }): Promise<EmailCensusResult> {
   const startedAt = Date.now();
@@ -862,6 +1126,7 @@ export async function scanEmails(opts: {
         numberMap.set(n, {
           number: n,
           count: 1,
+          source: "subject",
           sample: {
             uid: e.uid,
             mailbox: e.mailbox,
@@ -872,6 +1137,28 @@ export async function scanEmails(opts: {
         });
     }
   }
+
+  /*
+   * A number can live INSIDE the attached document rather than the subject —
+   * EDC's «Quotation Import» notices do exactly that — so a subject-only census
+   * under-counts them. When asked, the matched messages are opened once here and
+   * the numbers found in their PDFs are merged in, tagged `source: "attachment"`
+   * so the model can tell the two apart. The same downloaded attachments are
+   * handed back for the item census, so the mail is never fetched twice.
+   */
+  let attachmentCoverage: AttachmentCoverage | undefined;
+  let attachmentMessages: MessageAttachments[] | undefined;
+  if (opts.includeAttachments && all.length) {
+    const fetched = await fetchMessageAttachments(all);
+    attachmentCoverage = fetched.coverage;
+    attachmentMessages = fetched.messages;
+    for (const n of await numbersInAttachments(fetched.messages, patterns)) {
+      const hit = numberMap.get(n.number);
+      if (hit) hit.count += n.count;
+      else numberMap.set(n.number, n);
+    }
+  }
+
   const allNumbers = [...numberMap.values()].sort((a, b) => a.number.localeCompare(b.number));
   const distinctNumbers = allNumbers.length;
   const numbersTruncated = distinctNumbers > CENSUS_NUMBER_CAP;
@@ -925,8 +1212,8 @@ export async function scanEmails(opts: {
 
   return {
     matched: all.length,
-    returned: Math.min(all.length, limit),
-    emails: all.slice(0, limit),
+    returned: opts.returnAllMatches ? all.length : Math.min(all.length, limit),
+    emails: opts.returnAllMatches ? all : all.slice(0, limit),
     byMailbox,
     byMonth,
     bySender,
@@ -934,6 +1221,8 @@ export async function scanEmails(opts: {
     distinctNumbers,
     numbersTruncated,
     compare,
+    attachmentCoverage,
+    attachmentMessages,
     scope,
     note: censusNote(scope, all.length),
   };
