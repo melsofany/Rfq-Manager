@@ -889,3 +889,69 @@ false` and `procurement: 0 رسالة (ناقص)`. Per-mailbox budgets → `scan
   4,144 scanned, 3,317 distinct numbers, `isTotal: true`; byMonth sums exactly to
   the total; the **April slice = 528**, identical to the year's own April bucket —
   the cross-check that proves the window is applied.
+
+## Attachment reading + the missing-number report (PR #156, `fix/ai-assistant-mail-census`)
+
+Same operator thread as the census section above, but the failures that remained
+once the count was right:
+
+- **The missing-number PDF was truncated.** `exportPdf` handed the rows to the
+  model, which relayed them into `generate_pdf` — and the model's payload is
+  capped, so a 1,800-row difference produced a report with a handful of numbers.
+  **Build the report in the SERVER from the comparison result**, never ask the
+  model to carry the rows. `generateMissingNumbersPdf(comparison)` is called
+  inside the `scan_emails` tool right after the comparison; the tool returns
+  `pdfSent` + a `comparison` summary, and the model only announces the file.
+  `exportPdf` without `compareTable`/`compareColumn` is refused rather than
+  emitting an empty report.
+- **Numbers may live inside the attachment, not the subject.** EDC's «Quotation
+  Import» notices carry the number in the PDF, so a subject-only census
+  under-counts them. `includeAttachments` opens the matched messages ONCE
+  (`fetchMessageAttachments`, grouped by mailbox — UID is unique only inside one
+  mailbox) and hands the same download to both the number merge (`source:
+"attachment"`) and the item parser. Bounded by `AI_ATTACHMENT_SCAN_BUDGET`
+  (default 120) + a 60s wall clock, reported via `attachmentCoverage` so a
+  partial read is never called complete.
+- **Items are read LOCALLY, no model call.** `scan_email_items` (new
+  `email-items.ts`) parses part no / description / qty / UOM straight out of the
+  PDFs. This is the point: the only pre-existing file reader was Gemini
+  `inline_data`, capped at **20 requests/day/model**, so the operator's «البنود
+  اللي في الملفات» request died with a quota error even though the files were
+  perfectly readable. `pdf-parse` needs no quota and no API key.
+- **pdf.js concatenates text items with NO separator** — "Line No." → "LineNo.",
+  and a table row becomes "124Each5720.001.". `renderPdfPage` rebuilds each
+  visual line from the glyph transform (`transform[4]` = x, `transform[5]` = y),
+  grouping items within 2 units of a baseline and sorting by x. Without this the
+  item tables are unparseable. Keep it as the `pagerender` option.
+- **Never mock pdf.js to "make a fixture work"** — the pdf.js path is not
+  reproducible under vitest (synthetic pdfkit fixtures need a warm-up pass that
+  never happens in the test harness), so the PDF tests mock `pdf-parse` with the
+  REAL captured EDC text while the tool wiring and column parsing are asserted
+  exactly. The real attachments parse 8/8 in plain Node, which is how the service
+  runs. Don't chase the vitest-only empty-first-parse.
+- **The Render Postgres IS reachable externally** (correcting the note above):
+  `GET /v1/postgres/<id>/connection-info` returns `externalConnectionString` on
+  `dpg-…-a.oregon-postgres.render.com`, and it works from this sandbox. The
+  internal hostname inside `DATABASE_URL` is not resolvable here, but the
+  external one is — so the DB comparison that "cannot run locally" can. Two
+  gotchas: append `sslmode=require` (the raw URL omits it and drizzle fails with
+  `SSL/TLS required`), and use the whole external URL; a bare `dpg-…-a` host is
+  what produced the `ENOTFOUND`.
+- **Live verification (real mailbox + real DB)**: EDC 2026 = **3,734** matched,
+  3,339 distinct numbers, **1,477 already in `customer_rfqs`, 1,862 missing**,
+  and the report generated + queued (1.5 MB PDF, `pdfSent: true`). Run it through
+  `executeTool("scan_emails", …)` so the probe exercises the same path the model
+  does — a hand-rolled equivalent missed the tool-level bugs.
+- **The font ENOENT is source-run-only.** `fontPath()` resolves
+  `assets/fonts/Amiri-Regular.ttf` relative to the MODULE, which exists only in
+  `dist/` (build.mjs copies `src/assets` → `dist/assets`). Running from `src/`
+  reports ENOENT for every PDF; production is the bundle, so this is not a prod
+  bug. Stage a copy only to run a probe.
+- Tests: `ai-pdf-local-read.test.ts` (6), `ai-email-items.test.ts` (7),
+  `ai-email-items-tool.test.ts` (7), extended `ai-scan-emails-tool.test.ts` (the
+  full-comparison PDF + the no-comparison refusal). **571 api-server tests** (was
+  545); tsc (libs + api-server + portal) clean; repo-wide prettier clean;
+  api-server build clean (font asset + pdf-parse both in the bundle).
+- PR #156 squash-merged `5c5fa8e`; CI (Type Check / Tests / Format Check) green;
+  Deploy-to-Render workflow success; Render `dep-dapn7qk9v7es7397u9f0` **live** at
+  `5c5fa8e`; `/api/healthz` 200 and the `/api/ai-assistant/*` routes 401.
