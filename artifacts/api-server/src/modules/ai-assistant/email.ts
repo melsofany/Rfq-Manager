@@ -114,6 +114,32 @@ export function clearScanCache(): void {
   scanCache.clear();
 }
 
+/**
+ * Read a cached value without producing one.
+ *
+ * A resumable scan needs to READ its session (to continue it) without the
+ * producer semantics of `memoizeScan`, which would recompute on a miss. A miss
+ * here means "no session yet", which is exactly the first batch.
+ */
+export function getScanCacheEntry<T>(key: string): T | undefined {
+  const ttl = cacheTtlMs();
+  if (ttl <= 0) return undefined;
+  const hit = scanCache.get(key) as CacheEntry<T> | undefined;
+  if (!hit || hit.expiresAt <= Date.now()) return undefined;
+  return hit.value;
+}
+
+/** Store a value under `key`, evicting the oldest entry when the cache is full. */
+export function putScanCacheEntry<T>(key: string, value: T): void {
+  const ttl = cacheTtlMs();
+  if (ttl <= 0) return;
+  if (scanCache.size >= SCAN_CACHE_MAX) {
+    const oldest = scanCache.keys().next().value;
+    if (oldest !== undefined) scanCache.delete(oldest);
+  }
+  scanCache.set(key, { value, expiresAt: Date.now() + ttl });
+}
+
 /** Stable string key for a scan's options — argument order must not matter. */
 export function scanCacheKey(prefix: string, opts: Record<string, unknown>): string {
   const norm: Record<string, unknown> = {};
@@ -946,13 +972,17 @@ export function attachmentScanBudget(): number {
 }
 
 /**
- * Wall-clock ceiling for one attachment fetch pass.
+ * Wall-clock ceiling for ONE attachment fetch pass.
  *
- * Above the observed 27s for 400 messages so the message budget normally bites
- * first, and comfortably below the agent's own 150s ceiling — a census that
- * overruns it must still have time to answer with what it read.
+ * One pass is one BATCH of a resumable scan, so this is pacing, not a limit on
+ * completeness: when it bites, the cursor stops and the next call continues.
+ * Set comfortably below the per-call scan budget in the tool layer (45s) so a
+ * batch returns its own honest "partial" result instead of being cut by the
+ * generic per-tool timeout. Overridable so the truncation path is testable.
  */
-const ATTACHMENT_SCAN_TIME_BUDGET_MS = 75_000;
+function attachmentScanTimeBudget(): number {
+  return Number(process.env.AI_ATTACHMENT_TIME_BUDGET_MS) || 40_000;
+}
 
 /** Coverage of an attachment pass — never report a partial read as complete. */
 export interface AttachmentCoverage {
@@ -968,6 +998,18 @@ export interface AttachmentCoverage {
   attachments: number;
   /** True when the budget stopped the pass short of every matched message. */
   truncated: boolean;
+  /**
+   * Matched messages this pass did NOT reach (because of the count cap or the
+   * clock). Lets a resumable caller ask for the next window instead of
+   * presenting the first batch as the whole year.
+   */
+  remaining?: number;
+  /**
+   * Exclusive index into the matched list where the next resumable call should
+   * start. Advances by exactly the messages this pass fetched, so consecutive
+   * batches tile the whole set without overlap or gaps.
+   */
+  nextSkip?: number;
   /**
    * WHY the pass stopped: `count` when the message cap was reached, `time` when
    * the wall-clock ceiling was. Null when the pass was complete. The model must
@@ -1000,16 +1042,24 @@ export interface MessageAttachments {
 export async function fetchMessageAttachments(
   matches: EmailCensusMatch[],
   budget = attachmentScanBudget(),
+  skip = 0,
 ): Promise<{ messages: MessageAttachments[]; coverage: AttachmentCoverage }> {
-  const considered = matches.slice(0, budget);
+  // The caller's set is the matched list. `skip` walks FORWARD from the previous
+  // batch's end so a large year is read in resumable windows: each call opens
+  // the next slice instead of re-opening the same newest one. The list is fixed
+  // for the life of a scan session, so windows do not overlap or leave gaps.
+  const start = Math.max(0, skip);
+  const considered = matches.slice(start, start + budget);
+  const notReached = Math.max(0, matches.length - start - considered.length);
   const coverage: AttachmentCoverage = {
     messages: considered.length,
     scanned: 0,
     readable: 0,
     unreadable: 0,
     attachments: 0,
-    truncated: matches.length > budget,
-    truncatedReason: matches.length > budget ? "count" : null,
+    truncated: notReached > 0,
+    truncatedReason: notReached > 0 ? "count" : null,
+    remaining: notReached,
   };
   const out: MessageAttachments[] = [];
 
@@ -1022,7 +1072,7 @@ export async function fetchMessageAttachments(
 
   const startedAt = Date.now();
   for (const [mailboxAddress, group] of byMailbox) {
-    if (Date.now() - startedAt > ATTACHMENT_SCAN_TIME_BUDGET_MS) {
+    if (Date.now() - startedAt > attachmentScanTimeBudget()) {
       coverage.truncated = true;
       coverage.truncatedReason = "time";
       break;
@@ -1034,7 +1084,7 @@ export async function fetchMessageAttachments(
         try {
           const uids = group.map((m) => m.uid);
           for (let i = 0; i < uids.length; i += 25) {
-            if (Date.now() - startedAt > ATTACHMENT_SCAN_TIME_BUDGET_MS) {
+            if (Date.now() - startedAt > attachmentScanTimeBudget()) {
               coverage.truncated = true;
               coverage.truncatedReason = "time";
               break;
@@ -1096,6 +1146,19 @@ export async function fetchMessageAttachments(
       coverage.truncated = true;
       coverage.truncatedReason = "error";
     }
+  }
+
+  // How far the cursor advanced. `scanned` is the number of messages actually
+  // fetched — fewer than `considered` only when the clock stopped a chunk early,
+  // and those unread messages are deliberately retried by the next batch rather
+  // than counted as done.
+  coverage.nextSkip = start + coverage.scanned;
+  coverage.remaining = Math.max(0, matches.length - coverage.nextSkip);
+  if (coverage.remaining > 0) {
+    coverage.truncated = true;
+    coverage.truncatedReason = coverage.truncatedReason ?? "time";
+  } else {
+    coverage.truncatedReason = null;
   }
 
   return { messages: out, coverage };
@@ -1193,6 +1256,12 @@ export async function scanEmails(opts: {
    */
   includeAttachments?: boolean;
   /**
+   * Exclusive index into the matched list at which to begin the attachment pass.
+   * A resumable caller advances it by the window it actually read, so a year too
+   * large for one pass is read in successive windows without overlap or gaps.
+   */
+  attachmentSkip?: number;
+  /**
    * Return every matched envelope to an internal aggregation caller. The public
    * tool still caps `emails` at `limit`; a year-wide item census must not inherit
    * that cap and accidentally analyse only the newest 500 messages.
@@ -1248,6 +1317,7 @@ async function runScanEmails(opts: {
   }>;
   compareTarget?: { table: string; column: string };
   includeAttachments?: boolean;
+  attachmentSkip?: number;
   returnAllMatches?: boolean;
   unseenOnly?: boolean;
 }): Promise<EmailCensusResult> {
@@ -1342,7 +1412,11 @@ async function runScanEmails(opts: {
   let attachmentCoverage: AttachmentCoverage | undefined;
   let attachmentMessages: MessageAttachments[] | undefined;
   if (opts.includeAttachments && all.length) {
-    const fetched = await fetchMessageAttachments(all);
+    const fetched = await fetchMessageAttachments(
+      all,
+      attachmentScanBudget(),
+      opts.attachmentSkip ?? 0,
+    );
     attachmentCoverage = fetched.coverage;
     attachmentMessages = fetched.messages;
     for (const n of await numbersInAttachments(fetched.messages, patterns)) {

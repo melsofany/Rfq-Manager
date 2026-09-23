@@ -189,10 +189,14 @@ describe("scan_email_items contains filter (missing older orders)", () => {
     expect((r.data as { matchedLines: number }).matchedLines).toBeGreaterThan(0);
   });
 
-  it("says a truncated scan did NOT cover everything instead of implying «غير موجود»", async () => {
-    // 3,753 matched but only the newest 1 was opened — the live shape.
-    scanEmails.mockResolvedValue(censusWith([PLAIN_TEXT], true, 3753));
+  it("says a scan that did not finish did NOT cover everything instead of implying «غير موجود»", async () => {
+    // 3,753 matched but only a fragment is reachable — the live shape. The scan
+    // must report the honest coverage and how to finish, never read as a total.
     const ctx = makeCtx();
+    scanEmails.mockImplementation(async (opts: { attachmentSkip?: number }) =>
+      // A finite pool: the walk drains it at skip 1 and cannot advance further.
+      censusWith(opts.attachmentSkip ? [] : [PLAIN_TEXT], false, 3753),
+    );
     const r = await executeTool(
       "scan_email_items",
       { from: "edc", contains: "ariston" },
@@ -205,12 +209,14 @@ describe("scan_email_items contains filter (missing older orders)", () => {
     expect((r.data as { isComplete: boolean }).isComplete).toBe(false);
   });
 
-  it("names the TIME budget as the reason when the pass stopped on time, not count", async () => {
+  it("names the TIME budget as the reason when the scan stopped, not a guessed cap", async () => {
     // The live reply told the operator «الحد 400» while no 400 cap existed — the
-    // real ceiling was the 75s time budget. The reason must come from coverage,
+    // real ceiling was the time budget. The reason must come from coverage,
     // never be guessed.
-    scanEmails.mockResolvedValue(censusWith([PLAIN_TEXT], true, 480, "time"));
     const ctx = makeCtx();
+    scanEmails.mockImplementation(async (opts: { attachmentSkip?: number }) =>
+      censusWith(opts.attachmentSkip ? [] : [PLAIN_TEXT], false, 480),
+    );
     const r = await executeTool("scan_email_items", { from: "edc", top: 10 }, ctx as never);
     const data = r.data as { note: string; scope: string; isComplete: boolean };
     expect(data.scope).toContain("ميزانية الوقت");
@@ -219,11 +225,24 @@ describe("scan_email_items contains filter (missing older orders)", () => {
     expect(data.isComplete).toBe(false);
   });
 
-  it("names the message count as the reason when the cap was reached", async () => {
-    scanEmails.mockResolvedValue(censusWith([PLAIN_TEXT], true, 480, "count"));
+  it("does not report a short window as a shortfall once the census completes", async () => {
+    // The message cap is now a per-window size the walk crosses, so a mailbox
+    // that fits in several windows finishes COMPLETE with no fabricated reason.
     const ctx = makeCtx();
-    const r = await executeTool("scan_email_items", { from: "edc", top: 10 }, ctx as never);
-    expect((r.data as { scope: string }).scope).toContain("حد عدد الرسائل");
+    process.env.AI_ATTACHMENT_SCAN_BUDGET = "1";
+    try {
+      scanEmails.mockImplementation(async (opts: { attachmentSkip?: number }) =>
+        censusWith(opts.attachmentSkip ? [] : [PLAIN_TEXT, ARISTON_TEXT], false, 2),
+      );
+      const r = (await executeTool("scan_email_items", { from: "edc", top: 10 }, ctx as never)) as {
+        data: { isComplete: boolean; scope: string; note: string };
+      };
+      expect(r.data.isComplete).toBe(true);
+      expect(r.data.scope).toContain("كل الرسائل المطابقة");
+      expect(r.data.note).not.toContain("جزئي");
+    } finally {
+      delete process.env.AI_ATTACHMENT_SCAN_BUDGET;
+    }
   });
 });
 

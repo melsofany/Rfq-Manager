@@ -83,6 +83,7 @@ function censusWithAttachments(
     uid: number;
     mailbox: string;
     subject: string;
+    date?: string;
     attachments: Array<{ filename: string; mimeType: string | null; content: Buffer | null }>;
   }>,
   overrides: Record<string, unknown> = {},
@@ -267,38 +268,43 @@ describe("scan_email_items tool", () => {
     expect(res.data.scope).toContain("كل الرسائل المطابقة");
   });
 
-  it("names the scanned scope when the attachment pass was truncated", async () => {
-    // The live failure's shape: thousands matched, only the newest scanned. The
-    // ranking is a fact about the sample, so the note has to say so.
+  it("names the scanned scope honestly when the mailbox outgrew the scan", async () => {
+    // The live failure's shape: thousands matched, only a few opened. The scan
+    // now RESUMES rather than claiming a sample is the whole — and it must still
+    // report exactly how much it covered and how much remains.
     extractPdfText.mockResolvedValue("Quantity UOM Part No Line Item\n1 5 Each X-1 THING\n");
-    scanEmails.mockResolvedValue({
-      matched: 3749,
-      truncated: false,
-      emails: [],
-      attachmentMessages: [
-        {
-          uid: 1,
-          mailbox: "info@cortoba-supplies.com",
-          subject: "EDC RFQ",
-          attachments: pdfAttachments([{ filename: "a.pdf", content: Buffer.from("pdf") }]),
-        },
-      ],
-      attachmentCoverage: {
-        messages: 1,
-        scanned: 1,
-        readable: 1,
-        unreadable: 0,
-        attachments: 1,
-        truncated: true,
-      },
-    });
+    // `scanEmails` as the resumable tool drives it: the pool is windowed by
+    // `attachmentSkip`, so each call opens the next messages instead of the same
+    // newest ones. Six available, 3749 matched on the wire.
+    const pool = [1, 2, 3, 4, 5, 6].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC RFQ ${uid}`,
+      attachments: pdfAttachments([{ filename: `a${uid}.pdf`, content: Buffer.from("pdf") }]),
+    }));
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 3749,
+        }),
+    );
 
     const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
-      data: { isComplete: boolean; scope: string; note: string };
+      data: {
+        isComplete: boolean;
+        scope: string;
+        note: string;
+        scannedMessages: number;
+        remainingMessages: number;
+      };
     };
     expect(res.data.isComplete).toBe(false);
-    expect(res.data.scope).toContain("أحدث 1 رسالة من 3749");
+    expect(res.data.scannedMessages).toBe(pool.length);
+    expect(res.data.remainingMessages).toBe(3749 - pool.length);
+    expect(res.data.scope).toContain(`فُتح ${pool.length} من 3749`);
     expect(res.data.note).toContain("ولم تُفحص كل الرسائل");
+    // The model is told how to finish, not left to present the sample as a total.
+    expect(res.data.note).toContain("أعد نداء scan_email_items");
   });
 
   it("sends both the full line list and the summary as CSV", async () => {
@@ -400,31 +406,140 @@ describe("scan_email_items tool", () => {
     expect(paragraphs).toContain("النطاق");
   });
 
-  it("does not claim a complete scan when the attachment cap cut the pass short", async () => {
+  it("does not claim a complete scan when the mailbox outgrew the attachment pass", async () => {
     // The live bug, pinned: the ENVELOPE scan covered every match, but the
-    // attachment pass stopped at its budget — so the old scope said "complete"
-    // while only a sample of PDFs had been read.
+    // attachment pass had only read a sample — so an incomplete census must
+    // never be reported as complete, and it must say what is left.
     extractPdfText.mockImplementation(async (buf: Buffer) => buf.toString("utf8"));
-    scanEmails.mockResolvedValue({
-      ...censusWithAttachments([
-        {
-          uid: 40,
-          mailbox: "info@cortoba-supplies.com",
-          subject: "EDC PO No P26E14630",
-          attachments: pdfAttachments([{ filename: "po.pdf", content: Buffer.from(PO_TEXT) }]),
-        },
-      ]),
-      matched: 480,
-      scope: { truncated: false },
-    });
+    const pool = [40, 41, 42].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC PO No P26E1463${uid}`,
+      attachments: pdfAttachments([{ filename: "po.pdf", content: Buffer.from(PO_TEXT) }]),
+    }));
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 480,
+        }),
+    );
 
     const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
-      data: { isComplete: boolean; scope: string; note: string };
+      data: { isComplete: boolean; scope: string; note: string; remainingMessages: number };
     };
-    // attachmentCoverage.messages (1) is less than matched (480) → not complete.
+    // Only 3 of 480 opened → not complete, and the shortfall is stated.
     expect(res.data.isComplete).toBe(false);
+    expect(res.data.remainingMessages).toBe(477);
     expect(res.data.note).toContain("جزئي");
     expect(res.data.note).not.toContain("الحصر كامل على كل الرسائل المطابقة");
+  });
+
+  it("completes the census across calls instead of stopping at one batch", async () => {
+    // The core of Phase 3: a mailbox too large for one call is finished over
+    // several calls. Each call resumes from the cursor; the LAST call reports a
+    // complete census covering every matched message, with no batch lost.
+    extractPdfText.mockResolvedValue("Quantity UOM Part No Line Item\n1 5 Each X-1 THING\n");
+    process.env.AI_SCAN_CALL_BUDGET_MS = "0";
+    process.env.AI_ATTACHMENT_SCAN_BUDGET = "2";
+    try {
+      const pool = [1, 2, 3, 4, 5].map((uid) => ({
+        uid,
+        mailbox: "info@cortoba-supplies.com",
+        subject: `EDC PO ${uid}`,
+        attachments: pdfAttachments([{ filename: `po${uid}.pdf`, content: Buffer.from("pdf") }]),
+      }));
+      const skips: number[] = [];
+      scanEmails.mockImplementation(
+        async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) => {
+          if (opts.includeAttachments) skips.push(opts.attachmentSkip ?? 0);
+          // The envelope pass returns the whole pool; the attachment pass is the
+          // window the engine asked for, mirroring the real `fetchMessageAttachments`.
+          return censusWithAttachments(
+            opts.includeAttachments
+              ? pool.slice(opts.attachmentSkip ?? 0, (opts.attachmentSkip ?? 0) + 2)
+              : pool,
+            { matched: pool.length, returned: pool.length },
+          );
+        },
+      );
+
+      // Three calls: 2 + 2 + 1 messages, then the census is complete.
+      const data = [] as Array<{ isComplete: boolean; scannedMessages: number }>;
+      for (let i = 0; i < 3; i++) {
+        const r = (await executeTool("scan_email_items", {}, ctx as never)) as {
+          data: { isComplete: boolean; scannedMessages: number };
+        };
+        data.push(r.data);
+      }
+
+      expect(data[0].isComplete).toBe(false);
+      expect(data[1].isComplete).toBe(false);
+      expect(data[2].isComplete).toBe(true);
+      expect(data[2].scannedMessages).toBe(pool.length);
+      // The cursor advanced monotonically — no window was re-read.
+      expect(skips).toEqual([0, 2, 4]);
+    } finally {
+      delete process.env.AI_SCAN_CALL_BUDGET_MS;
+      delete process.env.AI_ATTACHMENT_SCAN_BUDGET;
+    }
+  });
+
+  it("keeps parsed rows when a call is cut mid-batch, and resumes from there", async () => {
+    // The live failure distilled: a timeout during the parse must not discard
+    // the batch already read. Proven by counting the parse calls and by the
+    // resume cursor picking up exactly where the cut happened.
+    process.env.AI_SCAN_CALL_BUDGET_MS = "0";
+    process.env.AI_ITEM_PARSE_CHUNK = "2";
+    process.env.AI_ATTACHMENT_SCAN_BUDGET = "100";
+    try {
+      const pool = [1, 2, 3, 4, 5, 6].map((uid) => ({
+        uid,
+        mailbox: "info@cortoba-supplies.com",
+        subject: `EDC PO ${uid}`,
+        // Unique bytes per message so `extractPdfText` can tag which one it saw.
+        attachments: pdfAttachments([
+          { filename: `po${uid}.pdf`, content: Buffer.from(`pdf-${uid}`) },
+        ]),
+      }));
+      scanEmails.mockImplementation(
+        async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+          censusWithAttachments(
+            opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [],
+            {
+              matched: pool.length,
+              returned: pool.length,
+            },
+          ),
+      );
+
+      // parseItemsFromAttachments is the real parser; count the messages it sees
+      // per call so a lost batch would show as a gap in the cursor sequence.
+      const seen: number[] = [];
+      extractPdfText.mockImplementation(async (buf: Buffer) => {
+        seen.push(Number(buf.toString().replace(/\D/g, "")) || 0);
+        return "Quantity UOM Part No Line Item\n1 5 Each X-1 THING\n";
+      });
+
+      const first = (await executeTool("scan_email_items", {}, ctx as never)) as {
+        data: { isComplete: boolean; scannedMessages: number; remainingMessages: number };
+      };
+      // One 2-message chunk per call (budget 1ms), so the first call reads 2.
+      expect(first.data.isComplete).toBe(false);
+      const readFirst = first.data.scannedMessages;
+      expect(readFirst).toBeGreaterThan(0);
+
+      const second = (await executeTool("scan_email_items", {}, ctx as never)) as {
+        data: { scannedMessages: number };
+      };
+      // The second call CONTINUED the census rather than restarting it.
+      expect(second.data.scannedMessages).toBeGreaterThan(readFirst);
+      // Every message was read exactly once across the two calls.
+      expect(new Set(seen).size).toBe(seen.length);
+    } finally {
+      delete process.env.AI_SCAN_CALL_BUDGET_MS;
+      delete process.env.AI_ITEM_PARSE_CHUNK;
+      delete process.env.AI_ATTACHMENT_SCAN_BUDGET;
+    }
   });
 
   it("refuses when email access is disabled", async () => {
