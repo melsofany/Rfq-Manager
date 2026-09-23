@@ -234,9 +234,21 @@ export async function chatCompletion(opts: {
     else opts.signal.addEventListener("abort", onCallerAbort, { once: true });
   }
 
+  /**
+   * Time ONE model may consume before the chain moves on.
+   *
+   * Without this, an overloaded model that answers 503 slowly (observed: ~40s
+   * per attempt live) spent the entire completion budget on its own retries, so
+   * the reliable fallbacks were never reached and the operator got a timeout
+   * instead of an answer. Sharing the budget evenly is what guarantees every
+   * candidate gets a turn.
+   */
+  const perModelMs = Math.max(5_000, Math.floor(budgetMs / Math.max(candidates.length, 1)));
+
   try {
     outer: for (const model of candidates) {
       let waitedForQuota = false;
+      const modelDeadline = Date.now() + perModelMs;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         // Stop the moment EITHER budget is spent. Checking the caller's signal
         // too means an expired agent-run budget ends the chain here instead of
@@ -300,7 +312,7 @@ export async function chatCompletion(opts: {
           // attempts are spent, fall through to the next candidate rather than
           // failing — an overloaded model is exactly when a different model
           // succeeds.
-          if (attempt < MAX_ATTEMPTS) {
+          if (attempt < MAX_ATTEMPTS && Date.now() < modelDeadline) {
             if (Date.now() + 300 >= deadline) {
               throw new AiError(`LLM request budget of ${budgetMs}ms exhausted before an answer`);
             }

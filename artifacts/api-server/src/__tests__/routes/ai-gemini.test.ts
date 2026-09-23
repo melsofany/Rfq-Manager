@@ -20,11 +20,15 @@ describe("Gemini integration (llm.ts)", () => {
   });
 
   it("defaults the base URL to Gemini's OpenAI-compatible endpoint", async () => {
-    const { DEFAULT_BASE_URL, DEFAULT_MODEL, isGeminiEndpoint } =
+    const { DEFAULT_BASE_URL, DEFAULT_MODEL, FALLBACK_MODELS, isGeminiEndpoint } =
       await import("../../modules/ai-assistant/config");
     expect(DEFAULT_BASE_URL).toContain("generativelanguage.googleapis.com");
     expect(DEFAULT_BASE_URL).toContain("/openai");
-    expect(DEFAULT_MODEL).toBe("gemini-3.8-flash");
+    // The default is the measured-RELIABLE model, not the newest. Live probing
+    // showed 3.8-flash answering 503 on most requests; defaulting to it is what
+    // made the assistant appear to stop replying.
+    expect(DEFAULT_MODEL).toBe("gemini-3.6-flash");
+    expect(FALLBACK_MODELS).not.toContain(DEFAULT_MODEL);
     expect(isGeminiEndpoint(null)).toBe(true);
     expect(isGeminiEndpoint("https://api.openai.com/v1")).toBe(false);
   });
@@ -143,10 +147,11 @@ describe("Gemini integration (llm.ts)", () => {
       caught = e;
     }
     expect(isQuotaError(caught)).toBe(true);
-    // Primary + every configured fallback, each tried once. Derived from the
-    // chain so extending it (to multiply the free-tier quota) does not break
-    // this test.
-    expect(fetchMock).toHaveBeenCalledTimes(1 + FALLBACK_MODELS.length);
+    // Primary + every configured fallback, each DISTINCT candidate tried once.
+    // Derived from the chain so reordering/extending it (to multiply the
+    // free-tier quota) does not break this test.
+    const expectedCandidates = new Set(["gemini-3.8-flash", ...FALLBACK_MODELS]).size;
+    expect(fetchMock).toHaveBeenCalledTimes(expectedCandidates);
     // Every candidate was actually attempted, and no model twice.
     const tried = fetchMock.mock.calls.map((c: any[]) => JSON.parse(c[1].body).model);
     expect(tried[0]).toBe("gemini-3.8-flash");
@@ -275,4 +280,33 @@ describe("Gemini integration (llm.ts)", () => {
     expect(isTimeoutError(new Error("This operation was aborted"))).toBe(true);
     expect(isTimeoutError(new Error("LLM request failed (400): bad request"))).toBe(false);
   });
+
+  it("reaches a working model even when the primary is slow AND overloaded", async () => {
+    // The production failure (live, 2026-09-23): the configured primary answered
+    // 503 after a long wait, twice; its retries consumed the whole completion
+    // budget and the run died with "budget ... exhausted before an answer" — the
+    // operator saw the assistant answer nothing. Failing fast on the dead model
+    // is what lets a healthy fallback actually serve the request.
+    process.env.AI_COMPLETION_BUDGET_MS = "20000";
+    try {
+      const slowOverloaded = { ok: false, status: 503, text: async () => "high demand" };
+      fetchMock
+        .mockResolvedValueOnce(slowOverloaded)
+        .mockResolvedValueOnce(slowOverloaded)
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => JSON.stringify({ choices: [{ message: { content: "رد فعلي" } }] }),
+        });
+      const { chatCompletion, resetModelState } = await import("../../modules/ai-assistant/llm");
+      resetModelState();
+      const res = await chatCompletion({ model: "gemini-3.8-flash", messages: [] });
+      expect(res.content).toBe("رد فعلي");
+      // The fallback was reached: it did NOT keep retrying the dead primary.
+      const tried = fetchMock.mock.calls.map((c: any[]) => JSON.parse(c[1].body).model);
+      expect(tried.filter((m) => m === "gemini-3.8-flash")).toHaveLength(2);
+      expect(tried[2]).not.toBe("gemini-3.8-flash");
+    } finally {
+      delete process.env.AI_COMPLETION_BUDGET_MS;
+    }
+  }, 20000);
 });

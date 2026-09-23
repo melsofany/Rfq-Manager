@@ -62,6 +62,18 @@ import {
 import type { AiSettings } from "./config";
 import { logger } from "../../shared/logger";
 
+/**
+ * MIME type used to upload CSV files to WhatsApp.
+ *
+ * WhatsApp's media upload rejects `text/csv` outright — observed live as
+ * `(#100) Param file must be a file with one of the following types: … Received
+ * file of type 'text/csv'` — so every CSV the assistant generated was silently
+ * lost (the send failed, the operator received no file). `text/plain` is on the
+ * accepted list and WhatsApp preserves the `.csv` filename, so the operator
+ * still gets a file their spreadsheet app opens. Do NOT set `text/csv` here.
+ */
+export const CSV_UPLOAD_MIME = "text/plain";
+
 export interface OutboxAttachment {
   buffer: Buffer;
   filename: string;
@@ -861,7 +873,7 @@ export async function executeTool(
           ctx.outbox.push({
             buffer: Buffer.from(censusCsv(census), "utf8"),
             filename: `email-census-${new Date().toISOString().slice(0, 10)}.csv`,
-            mimeType: "text/csv",
+            mimeType: CSV_UPLOAD_MIME,
           });
         }
 
@@ -935,12 +947,12 @@ export async function executeTool(
           ctx.outbox.push({
             buffer: Buffer.from(itemsCsv(parsed), "utf8"),
             filename: `email-items-${new Date().toISOString().slice(0, 10)}.csv`,
-            mimeType: "text/csv",
+            mimeType: CSV_UPLOAD_MIME,
           });
           ctx.outbox.push({
             buffer: Buffer.from(itemsAggregateCsv(parsed.aggregate), "utf8"),
             filename: `email-items-summary-${new Date().toISOString().slice(0, 10)}.csv`,
-            mimeType: "text/csv",
+            mimeType: CSV_UPLOAD_MIME,
           });
         }
 

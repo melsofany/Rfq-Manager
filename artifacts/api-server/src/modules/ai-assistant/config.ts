@@ -9,7 +9,13 @@ import { db, aiAssistantUsersTable, aiAssistantSettingsTable, employeesTable } f
 import { eq } from "drizzle-orm";
 import { logger } from "../../shared/logger";
 
-export const DEFAULT_MODEL = process.env.AI_MODEL || "gemini-3.8-flash";
+// Default to a model measured as RELIABLE, not merely the newest. Live probing
+// (2026-09) gave gemini-3.8-flash 1/5 success and gemini-3.7-flash 1/5 — both
+// answering 503 "high demand" — while 3.6-flash, 3.1-flash-lite and the
+// flash-lite aliases answered 5/5. The 503 Storm is what made the assistant
+// appear to stop replying: the reliable models were reached only after the
+// overloaded primary had burned the whole completion budget on retries.
+export const DEFAULT_MODEL = process.env.AI_MODEL || "gemini-3.6-flash";
 // Default to Google Gemini's OpenAI-compatible endpoint. Any OpenAI-compatible
 // gateway still works by setting AI_BASE_URL.
 export const DEFAULT_BASE_URL =
@@ -23,10 +29,16 @@ export const DEFAULT_BASE_URL =
  * The chain is deliberately long: the free-tier quota is PER MODEL, so each
  * extra working model multiplies the daily request budget. Keep the ordering in
  * sync with `listModels()` output when Gemini retires ids.
+ *
+ * Ordered most-reliable-first (live probe, 5 requests each). An overloaded model
+ * early in the chain is not free: its failed attempts spend the shared
+ * completion budget, so a dead primary placed first can cost the run its whole
+ * time allowance before a working model is ever tried. Keep the measured-reliable
+ * models ahead of the flaky ones.
  */
 export const FALLBACK_MODELS = (
   process.env.AI_FALLBACK_MODELS ||
-  "gemini-3.6-flash,gemini-3.1-flash-lite,gemini-3.7-flash,gemini-3.5-flash-lite,gemini-flash-latest,gemini-flash-lite-latest"
+  "gemini-3.1-flash-lite,gemini-3.5-flash-lite,gemini-flash-lite-latest,gemini-flash-latest,gemini-3.8-flash,gemini-3.7-flash"
 )
   .split(",")
   .map((m) => m.trim())
