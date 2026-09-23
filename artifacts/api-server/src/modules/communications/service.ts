@@ -285,16 +285,69 @@ export function formatQty(qty: string | null | undefined): string | null {
 // The library doesn't expose a typed multipart-form helper for uploadMedia, so
 // we use its authenticated `$$apiFetch$$` escape hatch — still the official,
 // token-authenticated client, just for an operation the wrapper leaves generic.
+/**
+ * Media types WhatsApp's upload endpoint accepts. Anything else is rejected with
+ * `(#100) Param file must be a file with one of the following types`, and the
+ * send then fails — so the file never reaches the operator. Notably absent:
+ * `text/csv`, which is exactly what a CSV export looks like.
+ */
+const WHATSAPP_UPLOAD_MIMES = new Set([
+  "audio/aac",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/amr",
+  "audio/ogg",
+  "audio/opus",
+  "application/vnd.ms-powerpoint",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/pdf",
+  "text/plain",
+  "application/vnd.ms-excel",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "video/mp4",
+  "video/3gpp",
+]);
+
+/**
+ * Coerce a media type into one WhatsApp accepts.
+ *
+ * A rejected upload is an invisible failure: the operator asked for a file and
+ * simply never receives it. Mapping the near-misses (CSV → text/plain, unknown
+ * → text/plain) keeps the file deliverable, and the `.csv`/`.xlsx` filename is
+ * what tells the recipient's device how to open it.
+ *
+ * The final fallback is deliberately `text/plain` and NOT
+ * `application/octet-stream`: octet-stream is itself absent from WhatsApp's
+ * accepted list, so using it would leave the file just as undeliverable.
+ */
+export function whatsappSafeMime(mimeType: string): string {
+  const mime = (mimeType || "").trim().toLowerCase();
+  if (WHATSAPP_UPLOAD_MIMES.has(mime)) return mime;
+  return "text/plain";
+}
+
 export async function uploadWhatsAppMedia(
   buffer: Buffer,
   filename: string,
   mimeType: string,
 ): Promise<string> {
   requireConfigured();
-  const blob = new Blob([new Uint8Array(buffer)], { type: mimeType });
+  const safeMime = whatsappSafeMime(mimeType);
+  if (safeMime !== mimeType) {
+    logger.warn(
+      { filename, requested: mimeType, sent: safeMime },
+      "WhatsApp media: unsupported type remapped so the file is still delivered",
+    );
+  }
+  const blob = new Blob([new Uint8Array(buffer)], { type: safeMime });
   const form = new FormData();
   form.append("messaging_product", "whatsapp");
-  form.append("type", mimeType);
+  form.append("type", safeMime);
   form.append("file", blob, filename);
 
   const res = await Whatsapp.$$apiFetch$$(

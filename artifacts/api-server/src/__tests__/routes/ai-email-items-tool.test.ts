@@ -263,7 +263,10 @@ describe("scan_email_items tool", () => {
     };
     expect(res.data.csvSent).toBe(true);
     expect(ctx.outbox).toHaveLength(2);
-    expect(ctx.outbox.every((f) => f.mimeType === "text/csv")).toBe(true);
+    // NOT text/csv: WhatsApp's media upload rejects that type (#100) and the
+    // file is silently lost. text/plain is accepted and keeps the .csv name.
+    expect(ctx.outbox.every((f) => f.mimeType === "text/plain")).toBe(true);
+    expect(ctx.outbox.every((f) => f.filename.endsWith(".csv"))).toBe(true);
     const all = ctx.outbox.map((f) => f.buffer.toString("utf8")).join("\n");
     expect(all).toContain("0666.000.GENRAL.0006");
     expect(all).toContain("PADLOCK");

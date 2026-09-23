@@ -285,7 +285,8 @@ describe("scan_emails tool", () => {
     };
     expect(res.data.csvSent).toBe(true);
     expect(ctx.outbox).toHaveLength(1);
-    expect(ctx.outbox[0].mimeType).toBe("text/csv");
+    // WhatsApp rejects text/csv at upload (#100), losing the file silently.
+    expect(ctx.outbox[0].mimeType).toBe("text/plain");
     expect(ctx.outbox[0].filename).toMatch(/^email-census-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(ctx.outbox[0].buffer.toString("utf8")).toContain("26R011936");
   });
