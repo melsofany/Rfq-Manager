@@ -163,10 +163,19 @@ export function parseLineItems(text: string, docId: string | null = null): Parse
     const unitPrice = priceOn ? parseMoney(priceOn[1]) : null;
     const lineTotal = priceOn ? parseMoney(priceOn[2]) : null;
 
+    const described = collectDescription(lines, i, rest, partNo);
+    // An ERP writes its tax row as a part with no prose: a real part number
+    // (`0600.000.GENRAL.0005`) and a quantity, immediately followed by the totals
+    // marker `VALUE ADDED TAX LOCAL`. Live, that pseudo-line sat atop "most
+    // repeated" across 134 orders. A genuine line item always carries prose, so
+    // an un-described row whose next content line is the totals boundary is
+    // accounting, not stock.
+    if (!described.text && described.hitTotals) continue;
+
     items.push({
       lineNo: Number(noStr),
       partNo,
-      description: collectDescription(lines, i, rest, partNo),
+      description: described.text,
       qty: Number(qtyStr),
       uom: normaliseUom(word),
       unitPrice,
@@ -199,8 +208,9 @@ function collectDescription(
   startIndex: number,
   rowRest: string,
   partNo: string | null,
-): string {
+): { text: string; hitTotals: boolean } {
   const parts: string[] = [];
+  let hitTotals = false;
   const at = partNo ? rowRest.indexOf(partNo) : -1;
   const head = (at >= 0 ? rowRest.slice(at + (partNo as string).length) : rowRest)
     // Drop the overflowing Part No cell's leftover ("5.70243E+") and any wrapped
@@ -215,7 +225,10 @@ function collectDescription(
 
   for (let j = startIndex + 1; j < lines.length && j <= startIndex + 7; j++) {
     const raw = lines[j];
-    if (TABLE_END_RE.test(raw)) break;
+    if (TABLE_END_RE.test(raw)) {
+      hitTotals = true;
+      break;
+    }
     if (ITEM_ROW_RE.test(raw)) break;
     // A stamp or running footer is never the description: SKIP it and keep
     // looking at the following lines, because the real prose sits after it on
@@ -231,7 +244,7 @@ function collectDescription(
     if (/^[A-Za-z\u0600-\u06FF]/.test(next)) parts.push(next);
     else break;
   }
-  return parts.join(" ").replace(/\s+/g, " ").trim();
+  return { text: parts.join(" ").replace(/\s+/g, " ").trim(), hitTotals };
 }
 
 /**

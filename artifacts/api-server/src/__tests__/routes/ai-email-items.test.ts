@@ -107,16 +107,18 @@ describe("parseLineItems — EDC RFQ layout", () => {
 });
 
 describe("parseLineItems — EDC PO layout", () => {
-  it("reads both lines, with the description from the following lines", () => {
+  it("reads the real line and drops the ERP's VAT pseudo-line", () => {
     const items = parseLineItems(PO_TEXT);
-    // Exactly two — the page-2 «Purchase Order Distribution List» restates line 2
-    // and must not be counted again.
-    expect(items).toHaveLength(2);
-    expect(items.map((i) => i.partNo)).toEqual(["0666.000.GENRAL.0006", "0600.000.GENRAL.0005"]);
+    // Exactly ONE: the page-2 «Purchase Order Distribution List» restates line 2,
+    // and line 2 itself is not stock — the ERP prints «VALUE ADDED TAX LOCAL» as
+    // a part-numbered row (0600.000.GENRAL.0005, qty 1) right before the totals.
+    // Counting it put a tax row atop "most repeated" across 134 live orders.
+    expect(items).toHaveLength(1);
+    expect(items.map((i) => i.partNo)).toEqual(["0666.000.GENRAL.0006"]);
     expect(items[0].qty).toBe(12);
-    expect(items[1].qty).toBe(1);
     expect(items[0].description).toContain("PADLOCK");
     expect(items[0].description).toContain("KEYS-CHINA");
+    expect(items.some((i) => i.partNo === "0600.000.GENRAL.0005")).toBe(false);
   });
 
   it("does not read a page stamp as the description (the «Page 2 of 4» row)", () => {
@@ -152,6 +154,24 @@ Total Price 250.00`;
   it("does not treat the totals rows as items", () => {
     const items = parseLineItems(PO_TEXT);
     expect(items.some((i) => /Grand Total|VALUE ADDED TAX/i.test(i.description))).toBe(false);
+  });
+
+  it("drops a described-less row that precedes the totals marker", () => {
+    // The live top row: a real-looking part number with no prose, immediately
+    // before «VALUE ADDED TAX LOCAL». It counted as an order for a tax line.
+    const text = `Line
+No.
+Quantity UOM Part No Line Item Delivery Date Unit Price Total (EGP)
+1 4 Each 05-OCT-2026 10.00 40.00
+1111.111.GENRAL.0001
+STEEL PIPE 2 INCH
+2 1 Each 05-OCT-2026 6.00 6.00
+0600.000.GENRAL.0005
+VALUE ADDED TAX LOCAL
+Total Price 46.00`;
+    const items = parseLineItems(text);
+    expect(items).toHaveLength(1);
+    expect(items[0].partNo).toBe("1111.111.GENRAL.0001");
   });
 });
 
