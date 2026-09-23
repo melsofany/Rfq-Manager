@@ -97,6 +97,27 @@ describe("router: deep path (analysis, email, reports)", () => {
     expect(plan.intent).toBe("analytics");
     expect(plan.path).toBe("deep");
   });
+
+  it("routes an outstanding-work question to the procurement ops intent", () => {
+    const plan = routeQuestion("إيه التسليمات المتأخرة عند العملاء؟");
+    expect(plan.intent).toBe("procurement_ops");
+    expect(plan.path).toBe("deep");
+    // The hint must name the DB-first tool; otherwise the model answers from
+    // whatever rows it happened to read.
+    expect(routeHint(plan)).toContain("get_overdue_deliveries");
+  });
+
+  it("routes late/unreceived PO wording to the procurement ops intent", () => {
+    const plan = routeQuestion("افتح أوامر الشراء اللي لسه ما وصلتش");
+    expect(plan.intent).toBe("procurement_ops");
+    expect(routeHint(plan)).toContain("get_unfulfilled_orders");
+  });
+
+  it("routes an English overdue question the same way", () => {
+    const plan = routeQuestion("any overdue deliveries?");
+    expect(plan.intent).toBe("procurement_ops");
+    expect(plan.path).toBe("deep");
+  });
 });
 
 describe("router: safe default and hint", () => {

@@ -51,6 +51,7 @@ import {
   type EmailCensusResult,
   type EmailCensusNumber,
 } from "./email";
+import { matchesPartQuery } from "./part-aliases";
 import {
   itemsCsv,
   itemsAggregateCsv,
@@ -67,9 +68,13 @@ import {
   getOpenSupplierInvoices,
   detectDuplicates,
   findMissingRecords,
+  getOverdueDeliveries,
+  compareSupplierQuotes,
 } from "./procurement-tools";
 import { defaultMailbox, mailboxes } from "./mailboxes";
 import { rememberFact, recallMemories, forgetMemory } from "./memory";
+import { listJobs, getJob, describeJob, startCensusJob, type CensusJobArgs } from "./jobs";
+import { sendWhatsAppText, sendWhatsAppDocument } from "../communications/service";
 import { generateAssistantPdf, generateMissingNumbersPdf, type PdfSection } from "./pdf";
 import {
   extractDocumentText,
@@ -321,6 +326,40 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
     {
       type: "function",
       function: {
+        name: "get_overdue_deliveries",
+        description:
+          "بنود أوامر شراء العملاء التي فات تاريخ تسليمها ولم تُسلَّم (متأخرة)، مع عدد أيام التأخير " +
+          "والكمية المتبقية، محسوبة في قاعدة البيانات. لأسئلة «إيه المتأخر في التسليم؟» أو «تسليمات فات موعدها».",
+        parameters: {
+          type: "object",
+          properties: {
+            customer: { type: "string", description: "اسم العميل (اختياري)" },
+            limit: { type: "integer" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "compare_supplier_quotes",
+        description:
+          "قارن عروض الموردين لطلب عرض واحد، بندًا بندًا: سعر كل مورد لكل بند + أرخص مورد لكل بند " +
+          "(وأي سعر معتمد isApproved). تجميع في قاعدة البيانات. لأسئلة «قارن عروض الموردين» أو «مين أرخص». " +
+          "حدّد الطلب بـ rfqNo (الرقم الداخلي أو رقم العميل) أو rfqId.",
+        parameters: {
+          type: "object",
+          properties: {
+            rfqNo: { type: "string", description: "رقم طلب العرض (داخلي أو رقم العميل)" },
+            rfqId: { type: "integer", description: "معرّف الطلب (بديل عن rfqNo)" },
+            limit: { type: "integer" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "detect_duplicates",
         description:
           "كشف القيم المكرَّرة في عمود داخل جدول (مثال: أرقام فواتير مكرَّرة). تجميع في قاعدة البيانات.",
@@ -542,6 +581,17 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             },
             exportCsv: { type: "boolean", description: "أرسل كل البنود كملف CSV" },
             exportPdf: { type: "boolean", description: "أرسل ملخص البنود كملف PDF" },
+            question: {
+              type: "string",
+              description:
+                "سؤال المستخدم كما هو (يُستخدم كعنوان مهمة الحصر الخلفي عند تفعيلها تلقائيًا).",
+            },
+            noAutoJob: {
+              type: "boolean",
+              description:
+                "مرّر true لتمنع التحويل التلقائي لمهمة خلفية، فتُعاد النتيجة الجزئية مع نطاقها " +
+                "ويستمر الحصر بالنداء التالي. استخدمها فقط إذا أردت إجابة فورية على ما فُحص حتى الآن.",
+            },
           },
         },
       },
@@ -732,6 +782,45 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
           properties: {
             key: { type: "string", description: "مفتاح المعلومة" },
             id: { type: "integer", description: "معرّف المعلومة (بديل عن key)" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "job_status",
+        description:
+          "حالة المهام الخلفية لهذا المستخدم (الحصر الكبير للبريد يعمل في الخلفية): " +
+          "لكل مهمة الحالة والتقدم ووقت البدء/الانتهاء والنتيجة إن وُجدت. " +
+          "استخدمها عندما يسأل «خلص الحصر؟» أو «إيه حالة المهمة؟» أو بعد بدء مهمة.",
+        parameters: {
+          type: "object",
+          properties: {
+            id: { type: "integer", description: "رقم مهمة بعينها (اتركه فارغًا لعرض الأحدث)" },
+            limit: { type: "integer", description: "عدد المهام المعروضة (افتراضي 5)" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "start_census_job",
+        description:
+          "ابدأ حصر بنود البريد في الخلفية (مهمة غير متزامنة) عندما يكون الحصر كبيرًا " +
+          "(سنة كاملة/مئات الرسائل) ولا يمكن إكماله داخل الرد. تعود فورًا برقم المهمة، " +
+          "ويكمل العامل الحصر في الخلفية ويرسل النتيجة والتقرير على واتساب عند الانتهاء. " +
+          "لا تستخدمها لحصر صغير — تلك يكفيها scan_email_items.",
+        parameters: {
+          type: "object",
+          properties: {
+            mailbox: { type: "string", description: "صندوق البريد (افتراضي * = الكل)" },
+            from: { type: "string", description: "المُرسل" },
+            subject: { type: "string", description: "موضوع الرسالة" },
+            query: { type: "string", description: "كلمات في النص" },
+            sinceDate: { type: "string", description: "من تاريخ YYYY-MM-DD" },
+            beforeDate: { type: "string", description: "إلى تاريخ YYYY-MM-DD" },
           },
         },
       },
@@ -1039,12 +1128,129 @@ export function scanCallBudgetMs(): number {
   return Number(process.env.AI_SCAN_CALL_BUDGET_MS ?? 45_000);
 }
 
+/**
+ * How many unopened messages make a census "too big to finish interactively".
+ *
+ * Below this the next tool call completes the scan and the operator gets a real
+ * answer in the same reply; above it, resuming interactively would take several
+ * more model round-trips, each spending the day's scarce quota, so the tool
+ * queues a background job instead. Env-tunable because the right threshold
+ * depends on measured per-message cost on the live mailbox.
+ */
+function autoCensusMinRemaining(): number {
+  return Number(process.env.AI_AUTO_JOB_MIN_REMAINING ?? 150);
+}
+
 /** Raised when a tool exceeds `toolTimeoutMs()`. */
 export class ToolTimeoutError extends Error {
   constructor(public readonly toolName: string) {
     super(`انتهت مهلة الأداة ${toolName}`);
     this.name = "ToolTimeoutError";
   }
+}
+
+/**
+ * Launch (or rejoin) the background item census for this scope and return the
+ * payload the model relays. Extracted so `start_census_job` and the automatic
+ * oversize-scan hand-off share ONE implementation — the two paths must behave
+ * identically or the model would have to know which one it triggered.
+ */
+async function launchCensusJob(
+  ctx: ToolContext,
+  scanArgs: CensusJobArgs,
+  question: string,
+): Promise<ToolResult> {
+  const key = scanCacheKey("items", scanArgs as unknown as Record<string, unknown>);
+  const { job, reused } = await startCensusJob({
+    phone: ctx.phone,
+    question,
+    args: scanArgs,
+    runBatch: async (deadline) => {
+      const { runItemScan } = await import("./item-scan-session");
+      return runItemScan(key, scanArgs, deadline);
+    },
+    finish: async ({ phone, session }) => {
+      const s = session as {
+        census?: { matched?: number };
+        coverage?: { messages?: number; lines?: number; attachments?: number };
+        items?: unknown[];
+        complete?: boolean;
+      };
+      const matched = s?.census?.matched ?? 0;
+      const opened = s?.coverage?.messages ?? 0;
+      const lines = s?.coverage?.lines ?? 0;
+      const files = s?.coverage?.attachments ?? 0;
+      const complete = Boolean(s?.complete);
+      const scope = complete
+        ? `النطاق: كل الرسائل المطابقة (${matched}).`
+        : `النطاق: فُتح ${opened} من ${matched} رسالة — الحصر ناقص.`;
+      const text =
+        `انتهى الحصر الخلفي لبنود البريد.\n` +
+        `رسائل مطابقة: ${matched} — رسائل فُتحت: ${opened} — ملفات: ${files} — بنود: ${lines}.\n` +
+        scope;
+      await sendWhatsAppText(phone, text);
+      if (ctx.settings.allowPdf && Array.isArray(s?.items) && s.items.length) {
+        try {
+          const { generateAssistantPdf } = await import("./pdf");
+          const ranked = aggregateItems(s.items as never);
+          const buffer = await generateAssistantPdf({
+            title: "حصر بنود البريد (مهمة خلفية)",
+            subtitle: `${ranked.length} بندًا مميزًا من ${lines} سطرًا`,
+            sections: [
+              {
+                paragraphs: [
+                  `رسائل مطابقة: ${matched}، فُتح مرفق ${opened} رسالة، وقُرئ ${lines} سطر بند من ${files} ملف.`,
+                  scope,
+                ],
+              },
+              {
+                table: {
+                  columns: ["رقم القطعة", "التوصيف", "عدد الأوامر", "الكمية", "الوحدة"],
+                  rows: ranked.slice(0, 100).map((p: never) => {
+                    const it = p as {
+                      partNo?: string;
+                      description: string;
+                      occurrences: number;
+                      qty: number;
+                      uom?: string;
+                    };
+                    return [
+                      it.partNo ?? "—",
+                      it.description,
+                      it.occurrences,
+                      it.qty,
+                      it.uom ?? "—",
+                    ];
+                  }),
+                },
+              },
+            ],
+          });
+          await sendWhatsAppDocument(
+            phone,
+            buffer,
+            `email-items-job-${new Date().toISOString().slice(0, 10)}.pdf`,
+            "application/pdf",
+          );
+        } catch (err) {
+          logger.warn({ err, phone }, "AI assistant: census job PDF failed");
+        }
+      }
+    },
+  });
+  return {
+    ok: true,
+    data: {
+      jobId: job.id,
+      status: job.status,
+      reused,
+      note: reused
+        ? `هناك مهمة حصر قائمة بنفس النطاق (#${job.id}) — سأكملها ولم أبدأ واحدة جديدة.`
+        : `بدأت مهمة الحصر #${job.id} في الخلفية. ستصلك النتيجة على واتساب عند الانتهاء. ` +
+          `لا تنتظرها في هذه الجولة — أخبر المستخدم برقم المهمة ويمكنه السؤال job_status.`,
+      progress: job.progress,
+    },
+  };
 }
 
 export async function executeTool(
@@ -1189,6 +1395,29 @@ async function executeToolInner(
           ok: true,
           data: await getOpenSupplierInvoices({
             supplier: args.supplier ? String(args.supplier) : undefined,
+            limit: typeof args.limit === "number" ? args.limit : undefined,
+          }),
+        };
+      }
+      case "get_overdue_deliveries": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        return {
+          ok: true,
+          data: await getOverdueDeliveries({
+            customer: args.customer ? String(args.customer) : undefined,
+            limit: typeof args.limit === "number" ? args.limit : undefined,
+          }),
+        };
+      }
+      case "compare_supplier_quotes": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        return {
+          ok: true,
+          data: await compareSupplierQuotes({
+            rfqId: typeof args.rfqId === "number" ? args.rfqId : undefined,
+            rfqNo: args.rfqNo ? String(args.rfqNo) : undefined,
             limit: typeof args.limit === "number" ? args.limit : undefined,
           }),
         };
@@ -1397,12 +1626,15 @@ async function executeToolInner(
         const truncated = scanCoverage.truncated;
 
         // A brand/part lookup («فين السخانات الأريستون؟») is a filter over the
-        // rows already parsed — it must never look like a fresh census.
-        const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
-        const needle = norm(contains);
+        // rows already parsed — it must never look like a fresh census. The
+        // match is BRAND-AWARE (see matchesPartQuery): «أريستون» must find a
+        // part printed `...ARSTON...`, otherwise the lookup reports a false
+        // «not found» for data that exists.
         const matchedItems = contains
           ? parsed.items.filter(
-              (i) => norm(i.description).includes(needle) || norm(i.partNo ?? "").includes(needle),
+              (i) =>
+                matchesPartQuery(i.description, contains) ||
+                matchesPartQuery(i.partNo ?? "", contains),
             )
           : parsed.items;
 
@@ -1439,6 +1671,38 @@ async function executeToolInner(
           coverage.unreadable === 0 &&
           !truncated &&
           allOpened;
+
+        // ── Oversize census → hand off to a background job ──────────────────
+        // A resumable scan still makes the OPERATOR drive the resumption: each
+        // «أعد النداء» costs a model round-trip from the day's scarce quota. When
+        // the remaining work is clearly too large to finish in a couple of
+        // interactive calls, the tool decides once, queues the job itself and
+        // returns — the worker then walks the cursor to the end unattended and
+        // pushes the finished report to WhatsApp. The model is told the job is
+        // running so it does not promise a partial sample as the answer.
+        //
+        // Deliberately NOT applied to a `contains` lookup: that question is «فين
+        // البند ده؟» and is best answered from what has already been read, with
+        // its scope stated. Turning it into a job would replace an answer with a
+        // «جاري الحصر» notice, which is a worse reply for a lookup.
+        if (
+          !complete &&
+          !contains &&
+          !args.noAutoJob &&
+          session.remaining >= autoCensusMinRemaining()
+        ) {
+          const scopeLabel = [
+            args.from ? `من ${String(args.from)}` : "",
+            args.subject ? `موضوع ${String(args.subject)}` : "",
+          ]
+            .filter(Boolean)
+            .join("، ");
+          return launchCensusJob(
+            ctx,
+            scanArgs as CensusJobArgs,
+            `حصر بنود البريد${scopeLabel ? " — " + scopeLabel : ""}`,
+          );
+        }
         // The item counts are only ever facts about the messages actually OPENED.
         // State the scope beside them so a staged scan cannot be relayed as the
         // whole year — the mailbox matched thousands, and a sample is not a total.
@@ -1878,6 +2142,46 @@ async function executeToolInner(
             note: removed ? "تم إنهاء صلاحية المعلومة." : "لم أجد معلومة مطابقة.",
           },
         };
+      }
+      case "job_status": {
+        const one = typeof args.id === "number" ? await getJob(args.id) : null;
+        const rows = one ? [one] : await listJobs(ctx.phone, Math.min(Number(args.limit ?? 5), 20));
+        if (!rows.length) {
+          return {
+            ok: true,
+            data: { count: 0, note: "لا توجد مهام خلفية لهذا الرقم." },
+          };
+        }
+        return {
+          ok: true,
+          data: {
+            count: rows.length,
+            jobs: rows.map((j) => ({
+              id: j.id,
+              kind: j.kind,
+              status: j.status,
+              question: j.question,
+              progress: j.progress,
+              error: j.error,
+              summary: describeJob(j),
+              startedAt: j.startedAt,
+              finishedAt: j.finishedAt,
+            })),
+            note: "هذه حالة المهام كما هي في قاعدة البيانات — لا تخمّن تقدمًا غير مذكور هنا.",
+          },
+        };
+      }
+      case "start_census_job": {
+        if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
+        const scanArgs: CensusJobArgs = {
+          from: args.from ? String(args.from) : undefined,
+          subject: args.subject ? String(args.subject) : undefined,
+          query: args.query ? String(args.query) : undefined,
+          sinceDate: args.sinceDate ? String(args.sinceDate) : undefined,
+          beforeDate: args.beforeDate ? String(args.beforeDate) : undefined,
+          mailbox: args.mailbox ? String(args.mailbox) : "*",
+        };
+        return launchCensusJob(ctx, scanArgs, String(args.question ?? "") || "حصر بنود البريد");
       }
       default:
         // A hallucinated tool name is invisible without this log — the model

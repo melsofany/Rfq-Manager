@@ -213,6 +213,81 @@ export async function countJobsByStatus(): Promise<Record<string, number>> {
   return out;
 }
 
+/**
+ * Run an item census to completion in the BACKGROUND, writing progress after
+ * every batch, and announce the result.
+ *
+ * Why a job and not a tool call: the scan is resumable precisely because a year
+ * of mail cannot be read inside one reply budget, but a resumable tool still
+ * makes the OPERATOR drive the resumption («أعد النداء») — they must sit in the
+ * chat issuing the same request until the cursor reaches the end, and each of
+ * those calls spends the model's scarce daily quota. A job removes the operator
+ * from the loop: the worker walks the cursor to the end in one go, the progress
+ * is visible on the dashboard, and the finished report arrives on WhatsApp.
+ */
+export interface CensusJobArgs {
+  from?: string;
+  subject?: string;
+  query?: string;
+  sinceDate?: string;
+  beforeDate?: string;
+  mailbox: string;
+  limit?: number;
+}
+
+export async function startCensusJob(opts: {
+  phone: string;
+  question: string;
+  args: CensusJobArgs;
+  /** Called by the worker to produce the final WhatsApp payload. */
+  finish: (result: { phone: string; jobId: number; session: unknown }) => Promise<void>;
+  /** Per-batch scan deadline; the worker keeps looping until the census ends. */
+  runBatch: (deadline: number) => Promise<{ session: any }>;
+}): Promise<CreateJobResult> {
+  const jobKey = `census:${opts.args.mailbox}:${opts.args.from ?? ""}:${opts.args.subject ?? ""}:${
+    opts.args.query ?? ""
+  }:${opts.args.sinceDate ?? ""}:${opts.args.beforeDate ?? ""}`;
+
+  return createJob({
+    phone: opts.phone,
+    kind: "email_census",
+    question: opts.question,
+    params: opts.args,
+    jobKey,
+    run: async ({ jobId, report }) => {
+      let session: any;
+      // A bounded number of rounds: `runBatch` always opens at least one window,
+      // so progress is guaranteed, but the cap stops a pathological source (a
+      // window that never advances) from looping forever in the background.
+      const MAX_BATCHES = Number(process.env.AI_CENSUS_JOB_MAX_BATCHES) || 60;
+      for (let i = 0; i < MAX_BATCHES; i++) {
+        const deadline = Date.now() + censusJobBatchMs();
+        const out = await opts.runBatch(deadline);
+        session = out.session;
+        const cov = session?.coverage ?? {};
+        const matched = session?.census?.matched ?? 0;
+        const scanned = cov.messages ?? 0;
+        await report({
+          scanned,
+          matched,
+          attachments: cov.attachments ?? 0,
+          items: cov.lines ?? 0,
+          percent: matched > 0 ? Math.min(100, Math.round((scanned / matched) * 100)) : 100,
+        });
+        if (session?.complete) break;
+      }
+      await opts.finish({ phone: opts.phone, jobId, session });
+      return { result: { complete: Boolean(session?.complete) } };
+    },
+  });
+}
+
+/** Per-batch scan budget for background jobs. Longer than the interactive one:
+ *  nobody is waiting on a chat reply, so each round can do real work. */
+function censusJobBatchMs(): number {
+  return Number(process.env.AI_CENSUS_JOB_BATCH_MS) || 60_000;
+}
+
 /** A human-readable Arabic progress line for a running job. */
 export function describeJob(job: JobRecord): string {
   const labels: Record<JobStatus, string> = {

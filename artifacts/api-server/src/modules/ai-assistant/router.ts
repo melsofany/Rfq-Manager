@@ -27,6 +27,7 @@ export type QueryIntent =
   | "email_search"
   | "report"
   | "analytics"
+  | "procurement_ops"
   | "smalltalk";
 
 export type QueryPath = "fast" | "deep";
@@ -131,6 +132,17 @@ const SMALLTALK_EXACT_RE =
  *  is not mistaken for chit-chat. */
 const SMALLTALK_PREFIX_RE = /^(السلام عليكم|سلام عليكم|مرحبا|اهلا|صباح الخير|مساء الخير|شكرا)/;
 
+/**
+ * Procurement WORKING-SET wording: the operator asking what is outstanding right
+ * now — overdue deliveries, open/unreceived POs, unfulfilled lines, late
+ * suppliers. These map to the dedicated DB-first tools (get_overdue_deliveries /
+ * get_unfulfilled_orders) rather than to a generic analysis, so naming the tool
+ * here is what stops the model answering from a sample of rows it happened to
+ * read. Checked BEFORE the generic analytic rule (its words overlap it).
+ */
+const PROCUREMENT_OPS_RE =
+  /(متاخر|متأخر|فات\s*ميعاد|فات\s*موعد|تاخير|تسليمات|غير\s*مسلم|لسه\s*ما\s*وصل|لم\s*يصل|لم\s*تصل|open\s*po|overdue|late\s*deliver|unfulfilled|not\s*received|pending\s*(po|order|deliver))/;
+
 /** Group/plural supplier wording — a question about a SET is analytical, not a
  *  single-entity lookup («الموردين اللي عرضوا أسعار آخر شهر»). Checked AFTER the
  *  count rule so «أرقام الموردين» remains a count. */
@@ -211,11 +223,30 @@ export function routeQuestion(rawText: string): RoutePlan {
       maxRounds: DEEP_MAX_ROUNDS,
       verify: true,
       reason: "email/attachment wording",
-      hint: "سؤال بريد: search_emails للحصر النقطي، scan_emails للحصر الكامل، scan_email_items للبنود داخل المرفقات.",
+      hint:
+        "سؤال بريد: search_emails للحصر النقطي، scan_emails للحصر الكامل، scan_email_items للبنود داخل المرفقات. " +
+        "إن كان النطاق كبيرًا (سنة كاملة/مئات الرسائل) فاستخدم start_census_job ليعمل الحصر في الخلفية ويصل التقرير تلقائيًا.",
     };
   }
 
   // 3. Analytical / comparative / scope question → deep, verify is worthwhile.
+  //    Outstanding-work wording is checked FIRST: «متأخر»/«overdue» are also
+  //    analytic words, so if the generic rule ran first these questions would
+  //    lose the tool hint that makes the answer exact.
+  if (PROCUREMENT_OPS_RE.test(text)) {
+    return {
+      intent: "procurement_ops",
+      path: "deep",
+      maxRounds: DEEP_MAX_ROUNDS,
+      verify: true,
+      reason: "outstanding-work wording",
+      hint:
+        "سؤال عن المتأخر/المعلَّق: استخدم get_overdue_deliveries لتسليمات العملاء المتأخرة، " +
+        "وget_unfulfilled_orders لبنود أوامر الشراء غير المستلمة. النتيجة محسوبة في قاعدة البيانات " +
+        "للفترة/المورد المطلوب؛ اذكر العدد الإجمالي وأقدم الحالات، ولا تعتمد على عيّنة قرأتها.",
+    };
+  }
+
   if (ANALYTIC_RE.test(text)) {
     return {
       intent: "analytics",

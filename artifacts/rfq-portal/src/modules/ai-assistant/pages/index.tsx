@@ -93,6 +93,12 @@ interface AiMetrics {
     avgRounds: number;
     timeoutRate: number;
     verificationRate: number;
+    avgToolCalls?: number;
+    fallbackRate?: number;
+    byIntent?: Record<string, number>;
+    byPath?: Record<string, number>;
+    byModel?: Record<string, number>;
+    byConfidence?: Record<string, number>;
   };
   recent: Array<{
     phone: string;
@@ -103,6 +109,9 @@ interface AiMetrics {
     verified: boolean;
     latencyMs: number;
     outcome: string;
+    model?: string;
+    fallbackUsed?: boolean;
+    confidence?: "VERIFIED" | "PARTIALLY_VERIFIED" | "INSUFFICIENT_EVIDENCE";
   }>;
 }
 
@@ -117,10 +126,83 @@ interface AiJob {
   createdAt: string;
 }
 
+/**
+ * Example questions shown on the admin page, grouped by the capability they
+ * exercise. Each corresponds to a real tool the assistant has (database lookup,
+ * email census, supplier-quote comparison, delivery follow-up) — so the list
+ * stays honest about what the agent can actually do.
+ */
+const EXAMPLE_QUESTIONS: Array<{ title: string; items: string[] }> = [
+  {
+    title: "بيانات النظام",
+    items: [
+      "آخر أوامر توريد واردة من العملاء",
+      "كل أوامر الشراء الخاصة بمورد «هاي فولت»",
+      "أعطني أرقام طلبات التسعير غير الموجودة في النظام",
+      "إجمالي المبيعات الشهر ده",
+    ],
+  },
+  {
+    title: "المقارنة والتسعير",
+    items: [
+      "قارن أسعار الموردين لبند رقم X",
+      "أنسب مورد لطلب التسعير CRFQ-2026-000123",
+      "إيه هامش الربح المتوقع لأمر شراء العميل كذا؟",
+      "أقل سعر مسجل للقطعة X من مين؟",
+    ],
+  },
+  {
+    title: "التوريد والمتابعة",
+    items: [
+      "إيه التوريدات المتأخرة عن موعدها؟",
+      "حالة استلام أمر الشراء P26E11407",
+      "أوامر الشراء اللي لسه متمش استلامها من الموردين",
+      "بنود العميل اللي اترفض تسليمها",
+    ],
+  },
+  {
+    title: "البريد والمستندات",
+    items: [
+      "عمره كام رسالة طلب تسعير وردت سنة 2026؟",
+      "اكتر بند اتكرر في أوامر التوريد الواردة",
+      "هات ملف الـ PDF الخاص بأمر شراء Jaz Almaza",
+      "إيه البنود اللي في آخر أمر توريد ورد من EDC؟",
+    ],
+  },
+];
+
 async function apiGet<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
   if (!r.ok) throw new Error(`${r.status}`);
   return (await r.json()) as T;
+}
+
+type ConfidenceLevel = "VERIFIED" | "PARTIALLY_VERIFIED" | "INSUFFICIENT_EVIDENCE";
+
+function confidenceLabel(level: ConfidenceLevel | undefined): string {
+  switch (level) {
+    case "VERIFIED":
+      return "موثّق";
+    case "PARTIALLY_VERIFIED":
+      return "جزئي";
+    case "INSUFFICIENT_EVIDENCE":
+      return "غير كافٍ";
+    default:
+      return "—";
+  }
+}
+
+function confidenceClass(level: ConfidenceLevel | undefined): string {
+  switch (level) {
+    case "VERIFIED":
+      return "border-emerald-400 text-emerald-700";
+    case "PARTIALLY_VERIFIED":
+      return "border-amber-400 text-amber-700";
+    case "INSUFFICIENT_EVIDENCE":
+      return "border-red-400 text-red-700";
+    default:
+      return "text-muted-foreground";
+  }
 }
 
 export default function AiAssistantPage() {
@@ -412,6 +494,27 @@ export default function AiAssistantPage() {
           </Card>
         )}
 
+        {/* Operator onboarding: the assistant answers a specific set of questions
+            well and poorly on others. Concrete examples turn a vague «اسألني عن
+            أي حاجة» into a usable tool — and each maps to a real tool/intent. */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">أمثلة أسئلة يفهمها المساعد</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2">
+            {EXAMPLE_QUESTIONS.map((group) => (
+              <div key={group.title} className="rounded-lg border p-3">
+                <p className="mb-2 text-sm font-semibold">{group.title}</p>
+                <ul className="space-y-1 text-xs text-muted-foreground">
+                  {group.items.map((q) => (
+                    <li key={q}>• {q}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
         {metrics && metrics.summary.count > 0 && (
           <Card>
             <CardHeader>
@@ -444,15 +547,69 @@ export default function AiAssistantPage() {
                   </p>
                 </div>
               </div>
+
+              {/* P6 routing effectiveness: which path the router chose and how
+                  often a fallback model carried the answer. A rising fallback
+                  share means the primary model is quota-limited/overloaded. */}
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">متوسط استدعاءات الأدوات</p>
+                  <p className="text-xl font-bold">{metrics.summary.avgToolCalls ?? 0}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">نسبة الموديل البديل</p>
+                  <p className="text-xl font-bold">
+                    {((metrics.summary.fallbackRate ?? 0) * 100).toFixed(0)}%
+                  </p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">توزيع المسارات</p>
+                  <p className="text-sm font-semibold">
+                    سريع {metrics.summary.byPath?.fast ?? 0} · تحليلي{" "}
+                    {metrics.summary.byPath?.deep ?? 0}
+                  </p>
+                </div>
+              </div>
+
+              {metrics.summary.byConfidence &&
+                Object.keys(metrics.summary.byConfidence).length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">مستوى الدليل:</span>
+                    {Object.entries(metrics.summary.byConfidence)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([level, n]) => (
+                        <Badge
+                          key={level}
+                          variant="secondary"
+                          className={`text-xs ${confidenceClass(level as ConfidenceLevel)}`}
+                        >
+                          {confidenceLabel(level as ConfidenceLevel)}: {n}
+                        </Badge>
+                      ))}
+                  </div>
+                )}
+              {metrics.summary.byIntent && Object.keys(metrics.summary.byIntent).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(metrics.summary.byIntent)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([intent, n]) => (
+                      <Badge key={intent} variant="secondary" className="text-xs">
+                        {intent}: {n}
+                      </Badge>
+                    ))}
+                </div>
+              )}
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>النوع</TableHead>
                       <TableHead>المسار</TableHead>
+                      <TableHead>الموديل</TableHead>
                       <TableHead>الجولات</TableHead>
                       <TableHead>الأدوات</TableHead>
                       <TableHead>التحقق</TableHead>
+                      <TableHead>مستوى الدليل</TableHead>
                       <TableHead>الزمن</TableHead>
                       <TableHead>النتيجة</TableHead>
                     </TableRow>
@@ -464,9 +621,18 @@ export default function AiAssistantPage() {
                         <TableCell className="text-xs">
                           {r.path === "fast" ? "سريع" : "تحليلي"}
                         </TableCell>
+                        <TableCell className="text-xs">
+                          {r.model ?? "—"}
+                          {r.fallbackUsed ? " (بديل)" : ""}
+                        </TableCell>
                         <TableCell className="text-xs">{r.rounds}</TableCell>
                         <TableCell className="text-xs">{r.toolCalls}</TableCell>
                         <TableCell className="text-xs">{r.verified ? "نعم" : "لا"}</TableCell>
+                        <TableCell className="text-xs">
+                          <Badge variant="secondary" className={confidenceClass(r.confidence)}>
+                            {confidenceLabel(r.confidence)}
+                          </Badge>
+                        </TableCell>
                         <TableCell className="text-xs">
                           {(r.latencyMs / 1000).toFixed(1)} ث
                         </TableCell>

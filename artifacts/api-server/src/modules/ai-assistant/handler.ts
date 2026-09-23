@@ -15,6 +15,7 @@ import {
 import { findAuthorizedUser, loadSettings, isAiConfigured } from "./config";
 import { runAgent } from "./agent";
 import { isQuotaError, isTimeoutError } from "./llm";
+import { capInput, checkRateLimit, noteInjection } from "./guardrails";
 
 /** Minimal structural view of an inbound Meta message (matches routes.ts). */
 export interface WaInboundMessage {
@@ -69,6 +70,24 @@ export async function handleAiAssistantMessage(
   const user = await findAuthorizedUser(phone);
   if (!user) return false;
 
+  // Admission control BEFORE any quota is spent. A flooded number is told to
+  // wait rather than being answered until the day's quota is gone — the recorded
+  // way this assistant goes silent for everyone.
+  const rate = checkRateLimit(user.phone);
+  if (!rate.allowed) {
+    const waitSec = Math.ceil(rate.retryAfterMs / 1000);
+    logger.warn({ phone: user.phone }, "AI assistant: rate limit exceeded");
+    void sendWhatsAppText(
+      user.phone,
+      `وصلت للحد الأقصى من الرسائل في وقت قصير. حاول مرة أخرى بعد ${waitSec} ثانية.`,
+    ).catch(() => {
+      /* the notice must never break anything */
+    });
+    return true;
+  }
+
+  noteInjection(msg.text?.body ?? msg.image?.caption ?? "", user.phone);
+
   const ackTimer = setTimeout(() => {
     void sendWhatsAppText(user.phone, "⏳ جاري البحث في النظام... لحظات وأرسل لك الإجابة.").catch(
       () => {
@@ -104,7 +123,16 @@ async function respondToAuthorizedUser(phone: string, msg: WaInboundMessage): Pr
   }
 
   try {
-    const text = msg.text?.body?.trim() || msg.image?.caption?.trim() || "";
+    const raw = msg.text?.body?.trim() || msg.image?.caption?.trim() || "";
+    const { text: capped, truncated } = capInput(raw);
+    if (truncated) {
+      // Tell the operator rather than answering a silently-shortened question.
+      await sendWhatsAppText(
+        phone,
+        "رسالتك طويلة جدًا فتم اختصارها. أرسل السؤال الأهم في البداية لو أمكن.",
+      );
+    }
+    const text = capped;
     if (RESET_WORDS.includes(text.toLowerCase())) {
       const { resetHistory } = await import("./agent");
       await resetHistory(phone);

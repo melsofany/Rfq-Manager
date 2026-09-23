@@ -16,6 +16,19 @@ import { logger } from "../../shared/logger";
 // appear to stop replying: the reliable models were reached only after the
 // overloaded primary had burned the whole completion budget on retries.
 export const DEFAULT_MODEL = process.env.AI_MODEL || "gemini-3.6-flash";
+
+/**
+ * Preferred model for FAST-path questions (a single lookup, a count).
+ *
+ * The prompt asks for model routing: a simple question must not pay for the
+ * strongest model's cost, and — more importantly here — a fast path is a budget
+ * decision. A one-record lookup does not need the deep model's reasoning, and
+ * running it on a cheaper/faster model frees the primary's daily quota for the
+ * analytical questions that actually need it. The id must be a model measured as
+ * reliable on this endpoint (see FALLBACK_MODELS); it is skipped automatically if
+ * it is exhausted, since it joins the same fallback chain.
+ */
+export const FAST_MODEL = process.env.AI_FAST_MODEL || "gemini-3.1-flash-lite";
 // Default to Google Gemini's OpenAI-compatible endpoint. Any OpenAI-compatible
 // gateway still works by setting AI_BASE_URL.
 export const DEFAULT_BASE_URL =
@@ -82,6 +95,16 @@ export function isGeminiEndpoint(baseUrl?: string | null): boolean {
 }
 
 export const isAiConfigured = Boolean(AI_API_KEY);
+
+/**
+ * The model to use for a given route path. Fast-path questions use the light
+ * model; every other path uses the configured primary. Falls back to the primary
+ * when no dedicated fast model is configured (AI_FAST_MODEL="").
+ */
+export function modelForPath(primary: string, path: "fast" | "deep"): string {
+  if (path === "deep") return primary;
+  return FAST_MODEL || primary;
+}
 
 const MAX_HISTORY = 12;
 

@@ -143,3 +143,19 @@ export type AiAssistantSettings = typeof aiAssistantSettingsTable.$inferSelect;
 export type AiAssistantMemory = typeof aiAssistantMemoriesTable.$inferSelect;
 export type AiAssistantState = typeof aiAssistantStateTable.$inferSelect;
 export type AiAssistantJob = typeof aiAssistantJobsTable.$inferSelect;
+
+// ─── Persisted scan sessions ───────────────────────────────────────────────
+// A resumable email/item census lives in an in-process cache, so a restart
+// (deploy, crash, Render recycle) loses the cursor and the parsed rows — the
+// job then either restarts a multi-minute scan or fails outright. This table
+// mirrors the in-memory session to Postgres so a resumed scan continues from
+// where it stopped, and so the background worker's progress is durable. Only
+// DERIVED rows are stored (never the downloaded PDF buffers).
+export const aiAssistantScanSessionsTable = pgTable("ai_assistant_scan_sessions", {
+  /** The `scanCacheKey` of the census — one row per distinct scope. */
+  key: text("key").primaryKey(),
+  session: jsonb("session").$type<unknown>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AiAssistantScanSession = typeof aiAssistantScanSessionsTable.$inferSelect;
