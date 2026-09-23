@@ -106,6 +106,17 @@ interface AiMetrics {
   }>;
 }
 
+interface AiJob {
+  id: number;
+  phone: string;
+  kind: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  question: string | null;
+  progress: Record<string, unknown> | null;
+  error: string | null;
+  createdAt: string;
+}
+
 async function apiGet<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
   if (!r.ok) throw new Error(`${r.status}`);
@@ -121,6 +132,7 @@ export default function AiAssistantPage() {
   const [saving, setSaving] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [metrics, setMetrics] = useState<AiMetrics | null>(null);
+  const [jobs, setJobs] = useState<AiJob[]>([]);
 
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
@@ -166,6 +178,10 @@ export default function AiAssistantPage() {
       apiGet<AiMetrics>("/api/ai-assistant/metrics")
         .then(setMetrics)
         .catch(() => setMetrics(null));
+      // Async jobs are best-effort as well.
+      apiGet<{ jobs: AiJob[] }>("/api/ai-assistant/jobs")
+        .then((j) => setJobs(j.jobs))
+        .catch(() => setJobs([]));
       await loadMemories();
     } catch (err) {
       toast.error(getApiErrorMessage(err, "فشل تحميل بيانات المساعد الذكي"));
@@ -461,6 +477,63 @@ export default function AiAssistantPage() {
                         </TableCell>
                       </TableRow>
                     ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {jobs.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Activity className="h-5 w-5" /> المهام الخلفية (Async Jobs)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>النوع</TableHead>
+                      <TableHead>الحالة</TableHead>
+                      <TableHead>التقدم</TableHead>
+                      <TableHead>السؤال</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {jobs.map((j) => {
+                      const p = (j.progress ?? {}) as Record<string, unknown>;
+                      const prog = ["scanned", "matched", "attachments", "items"]
+                        .filter((k) => p[k] != null)
+                        .map((k) => `${k}: ${p[k]}`)
+                        .join(" · ");
+                      return (
+                        <TableRow key={j.id}>
+                          <TableCell className="text-xs">{j.id}</TableCell>
+                          <TableCell className="text-xs">{j.kind}</TableCell>
+                          <TableCell className="text-xs">
+                            <Badge
+                              variant={
+                                j.status === "completed"
+                                  ? "default"
+                                  : j.status === "failed"
+                                    ? "destructive"
+                                    : "secondary"
+                              }
+                            >
+                              {j.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs">{prog || "—"}</TableCell>
+                          <TableCell className="max-w-xs truncate text-xs">
+                            {j.question ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

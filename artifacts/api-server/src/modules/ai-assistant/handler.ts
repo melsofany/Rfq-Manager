@@ -108,6 +108,11 @@ async function respondToAuthorizedUser(phone: string, msg: WaInboundMessage): Pr
     if (RESET_WORDS.includes(text.toLowerCase())) {
       const { resetHistory } = await import("./agent");
       await resetHistory(phone);
+      // Also drop the "what are we talking about" context, or a stale part /
+      // supplier from before the reset would still resolve pronouns in the new
+      // conversation.
+      const { clearConversationState } = await import("./conversation");
+      await clearConversationState(phone);
       await sendWhatsAppText(phone, "تم تصفير المحادثة. اسألني عن أي شيء.");
       return;
     }
