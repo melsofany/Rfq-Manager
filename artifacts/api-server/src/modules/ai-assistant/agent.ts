@@ -127,6 +127,8 @@ export function systemPrompt(settings: AiSettings): string {
 - الحد الأقصى 4 استدعاءات متتالية؛ بعدها يجب أن تكون كتبت الرد.
 قواعد عامة:
 - عند السؤال عن رقم (أمر شراء/طلب/فاتورة) استخدم lookup_document أو search_database.
+- عند قول المستخدم «PO» أو «أمر شراء» دون ذكر البريد صراحةً، اعتبر المصدر الأساسي هو جدول أوامر الشراء الداخلي purchase_orders وبنوده purchase_order_items. لا تستخدم RFQ أو Quotation أو رسائل البريد كبديل، ولا تسمِّها PO. إذا طلب المستخدم فحص مرفقات البريد تحديدًا، استخدم scan_email_items فقط بعد التأكد أن الرسائل/المرفقات تحمل PO فعلًا؛ إن كانت RFQ/Quotation فقل إنها ليست POs.
+- لا تخلط أبدًا بين RFQ/Quotation وPO: رقم يبدأ بـ 26R أو عنوان REQUEST FOR QUOTE يدل على RFQ، بينما PO الداخلي أو مستند PURCHASE ORDER له هوية مختلفة. عند الشك، لا تصنّف المستند من نفسك واذكر أن نوعه غير مؤكد.
 - الأرقام المالية اكتبها كأرقام إنجليزية (مثل 1,234.50) والجنيه المصري عند اللزوم.
 - كن موجزًا ومرتبًا، واستخدم نقاطًا عند الحاجة.
 - رد دائمًا بال${lang} إلا إذا طلب المستخدم غير ذلك.
@@ -380,7 +382,13 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
           // instead of re-running the tool. The calls in one round already run
           // concurrently, so the promise is cached rather than the value.
           const key = toolCacheKey(call.function.name, parsed);
-          let pending = toolCache.get(key);
+          // Resumable census tools intentionally MUST NOT be memoized. A second
+          // identical call is the resume operation: the session cursor has
+          // advanced in shared cache and must be allowed to return the next
+          // batch. Memoizing it made the model receive the first partial 150
+          // messages forever, despite the prompt telling it to continue.
+          const resumable = call.function.name === "scan_email_items";
+          let pending = resumable ? undefined : toolCache.get(key);
           if (pending) {
             dedupedCount += 1;
           } else {
@@ -388,7 +396,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
               const res = await executeTool(call.function.name, parsed, ctx);
               return res.ok ? asText(res.data) : `ERROR: ${res.error}`;
             })();
-            toolCache.set(key, pending);
+            if (!resumable) toolCache.set(key, pending);
           }
           const content = await pending;
           for (const n of findGroundingNumbers(content)) groundedNumbers.add(n);
