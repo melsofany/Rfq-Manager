@@ -7,3 +7,4 @@ pnpm-lock.yaml
 *.jpg
 *.svg
 zipFile.zip
+AGENTS.md
