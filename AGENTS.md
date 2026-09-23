@@ -1314,3 +1314,61 @@ while the prose read as a total.
   attachment-cap honesty fix (`ai-email-items*.test.ts`). **646 api-server tests**
   (was 638) pass; tsc clean; prettier clean.
 - Deploy: pending — push/PR only on explicit request.
+
+## A page stamp is not a description, and a reason must not be invented
+
+Live follow-up after the census fix, from the same operator. Three things were
+wrong in one answer, and only one of them was about honesty.
+
+### 9. Page furniture leaked into the description (the «Page 2 of 4» row)
+
+- The top row of the live report — part `0600.000.GENRAL.0005`, in **134**
+  orders, described as `P26E11255 Page 2 of 4` — was not a hallucination. The
+  part number was real and printed on the row; the PDF text layer had placed the
+  document's own number (`P26E11255`) and the running footer (`Page N of M`)
+  **between** the part number and the real description, so the extractor read the
+  stamp as the description.
+- `collectDescription` now SKIPS a line matching `PAGE_FURNITURE_RE` and keeps
+  scanning, instead of stopping there. Stamp forms: `Page N of M`, a bare
+  document number (`P26E11255`, `P26E11255(RIG58)`), `PURCHASE ORDER`,
+  `REQUEST FOR QUOTE[/QUOTATION]`, `PO/RFQ number: …`.
+- The same regex guards the inline head, so a row whose only trailing text is a
+  stamp yields an empty description rather than a stamp.
+- **Test**: `does not read a page stamp as the description (the «Page 2 of 4»
+row)` — reproduces the interleaving exactly and fails when the `continue` is
+  removed.
+
+### 10. One tool could eat the whole run; now each call has its own ceiling
+
+- The run budget (150s) bounded the whole answer but nothing bounded a SINGLE
+  tool. One slow call could consume the turn and leave the model no time to
+  speak — which the operator experiences as silence, the oldest symptom here.
+- `executeTool` wraps the inner dispatch in `Promise.race` against
+  `toolTimeoutMs()` (env `AI_TOOL_TIMEOUT_MS`, default 100s). On expiry it
+  returns a tool ERROR that names the tool and says the data was not fully read,
+  so the model reports a partial call instead of treating it as complete.
+- **Tests**: `per-tool timeout wrapper` — a never-resolving tool returns the
+  partial-data error; a fast tool is unaffected.
+
+### 11. The truncation REASON is exposed, so it is never guessed
+
+- The live answer told the operator the cap was «400 رسالة» — but the deployed
+  budget was 1,200, and the real limiter was the **75s time budget**. The reason
+  was simply not in the payload, so the model filled the gap.
+- `AttachmentCoverage.truncatedReason` is now `"count" | "time" | "error" | null`,
+  set at each stop site (message cap, wall-clock, fetch failure). The tool's
+  scope/partial wording and the PDF scope line quote it, and the `limit`
+  parameter description no longer advertises the stale default of 400.
+- **Tests**: the reason is asserted for both shapes, plus that the word «400»
+  never appears when the cause was time.
+
+### The honest truth about a 480-message mailbox
+
+Completeness in ONE call is a throughput problem, not a flag: at the observed
+~430ms/message (IMAP fetch + MIME + PDF text) a 480-message pass needs ~3.5
+minutes, far past the 75s ceiling that exists to protect the operator's reply.
+So a large census is genuinely partial, and the correct behaviour — now the
+behaviour — is to state how many of how many were opened, name why it stopped,
+and never present the sample as the total.
+
+**Tests**: 652 api-server tests pass (was 647); tsc + prettier + build clean.

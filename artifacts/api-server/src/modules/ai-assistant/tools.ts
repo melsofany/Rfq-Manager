@@ -361,8 +361,9 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             limit: {
               type: "integer",
               description:
-                "أقصى عدد رسائل تُفتح مرفقاتها (افتراضي 400). العدد المطابق الكلي يُعاد دائمًا، " +
-                "وإن كان أكبر من الحد فاذكر أن الترتيب مبني على أحدث المفحوص فقط.",
+                "أقصى عدد رسائل تُفتح مرفقاتها (افتراضي 1200). العدد المطابق الكلي يُعاد دائمًا، " +
+                "وإن كان أكبر من الحد فاذكر أن الترتيب مبني على أحدث المفحوص فقط. " +
+                "قد يتوقف المرور قبل الحد بسبب ميزانية الوقت لا العدد — اقرأ attachmentCoverage.truncatedReason لتذكر السبب الصحيح.",
             },
             top: {
               type: "integer",
@@ -848,7 +849,59 @@ function censusCsv(census: EmailCensusResult): string {
   return lines.join("\n");
 }
 
+/**
+ * Ceiling on ONE tool call, independent of the run budget.
+ *
+ * The run budget (150s) bounds the whole answer, but nothing bounded a single
+ * tool: one slow call could consume the entire run and leave the model no time
+ * to speak, which surfaces to the operator as silence. A per-tool ceiling leaves
+ * room for the final answer even when a call misbehaves. Most tools are fast;
+ * `scan_email_items` does its own time-bounded work well under this, so the
+ * wrapper is a backstop, not the primary limiter.
+ *
+ * On expiry the call returns a tool ERROR naming the timeout — the model then
+ * reports that the tool did not finish rather than treating a truncated run as a
+ * complete result. Overridable so the timeout path is testable.
+ */
+export function toolTimeoutMs(): number {
+  return Number(process.env.AI_TOOL_TIMEOUT_MS) || 100_000;
+}
+
+/** Raised when a tool exceeds `toolTimeoutMs()`. */
+export class ToolTimeoutError extends Error {
+  constructor(public readonly toolName: string) {
+    super(`انتهت مهلة الأداة ${toolName}`);
+    this.name = "ToolTimeoutError";
+  }
+}
+
 export async function executeTool(
+  name: string,
+  args: Record<string, unknown>,
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const timeoutMs = toolTimeoutMs();
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new ToolTimeoutError(name)), timeoutMs);
+    });
+    return await Promise.race([executeToolInner(name, args, ctx), timeout]);
+  } catch (err) {
+    if (err instanceof ToolTimeoutError) {
+      logger.warn({ tool: name, timeoutMs }, "AI assistant: tool exceeded its time ceiling");
+      return {
+        ok: false,
+        error: `لم تكمل الأداة «${name}» خلال ${Math.round(timeoutMs / 1000)} ثانية. لم تُقرأ كل البيانات — اذكر ذلك ولا تدّعِ الكمال.`,
+      };
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function executeToolInner(
   name: string,
   args: Record<string, unknown>,
   ctx: ToolContext,
@@ -1109,13 +1162,24 @@ export async function executeTool(
         // The item counts are only ever facts about the messages actually OPENED.
         // State the scope beside them so a capped scan cannot be relayed as the
         // whole year — the mailbox matched thousands, and a sample is not a total.
+        // Name the REASON the pass stopped, from `truncatedReason`, so the model
+        // never has to invent one (a live reply told the operator «الحد 400» when
+        // the real ceiling was the time budget).
+        const reason =
+          census.attachmentCoverage?.truncatedReason === "time"
+            ? "بسبب ميزانية الوقت"
+            : census.attachmentCoverage?.truncatedReason === "error"
+              ? "بسبب تعذّر جلب بعض الرسائل"
+              : census.attachmentCoverage?.truncatedReason === "count"
+                ? "بسبب حد عدد الرسائل"
+                : "";
         const scope =
           !allOpened || truncated
-            ? `النطاق: أحدث ${coverage.messages} رسالة من ${census.matched} مطابقة (لم يُفحص الباقي)`
+            ? `النطاق: أحدث ${coverage.messages} رسالة من ${census.matched} مطابقة (لم يُفحص الباقي${reason ? " " + reason : ""})`
             : `النطاق: كل الرسائل المطابقة (${census.matched})`;
         const partialDetail = [
           coverage.unreadable > 0 ? `تعذّرت قراءة ${coverage.unreadable} رسالة` : "",
-          !allOpened || truncated ? "ولم تُفحص كل الرسائل" : "",
+          !allOpened || truncated ? `ولم تُفحص كل الرسائل${reason ? ` (${reason})` : ""}` : "",
         ]
           .filter(Boolean)
           .join("، ");
@@ -1142,7 +1206,7 @@ export async function executeTool(
           // documents invites the operator to trust a sample as a total.
           const scopeLine =
             !allOpened || truncated
-              ? `النطاق: أحدث ${parsed.coverage.messages} رسالة من ${census.matched} مطابقة — الحصر ناقص، لم تُفحص كل الرسائل.`
+              ? `النطاق: أحدث ${parsed.coverage.messages} رسالة من ${census.matched} مطابقة — الحصر ناقص، لم تُفحص كل الرسائل${reason ? ` (${reason})` : ""}.`
               : `النطاق: كل الرسائل المطابقة (${census.matched}) — الحصر كامل.`;
           const buffer = await generateAssistantPdf({
             title: "أكثر البنود تكرارًا في أوامر الشراء",

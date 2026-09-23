@@ -119,6 +119,29 @@ describe("parseLineItems — EDC PO layout", () => {
     expect(items[0].description).toContain("KEYS-CHINA");
   });
 
+  it("does not read a page stamp as the description (the «Page 2 of 4» row)", () => {
+    // The exact live shape: the extractor placed the document number and the
+    // running footer BETWEEN the row's part number and its real description, so
+    // the item surfaced as «P26E11255 Page 2 of 4» — a top-ranked row that says
+    // nothing. The stamp must be skipped, not used as the description.
+    const text = `PURCHASE ORDER
+PO number: P26E11255(RIG58)
+Line
+No.
+Quantity UOM Part No Line Item Delivery Date Unit Price Total (EGP)
+1 25 Piece 05-OCT-2026 10.00 250.00
+0600.000.GENRAL.0005
+P26E11255
+Page 2 of 4
+BRASS LONG SHACKLE PADLOCK WITH 3 KEYS
+Total Price 250.00`;
+    const items = parseLineItems(text);
+    expect(items).toHaveLength(1);
+    expect(items[0].description).toContain("PADLOCK");
+    expect(items[0].description).not.toContain("Page 2 of 4");
+    expect(items[0].description).not.toContain("P26E11255");
+  });
+
   it("does not double-count the restatement page", () => {
     const agg = aggregateItems(parseLineItems(PO_TEXT));
     const padlock = agg.find((a) => a.partNo === "0666.000.GENRAL.0006");
