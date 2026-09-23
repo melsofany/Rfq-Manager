@@ -149,6 +149,266 @@ export const EVAL_CASES: EvalCase[] = [
     expectedPath: "fast",
     note: "no facts to verify — must not spend a verification round",
   },
+  {
+    question: "صباح الخير يا هندسة",
+    expectedIntents: ["smalltalk"],
+    expectedPath: "fast",
+  },
+  {
+    question: "شكراً جداً",
+    expectedIntents: ["smalltalk"],
+    expectedPath: "fast",
+  },
+
+  // ── Purchase orders (volume coverage) ────────────────────────────────────
+  {
+    question: "P26E13477 اتبعت لمين؟",
+    expectedIntents: ["document_lookup"],
+    expectedPath: "fast",
+    allowedTools: ["lookup_document", "get_purchase_order_status"],
+  },
+  {
+    question: "وريني أمر الشراء 45001234",
+    expectedIntents: ["document_lookup"],
+    expectedPath: "fast",
+  },
+  {
+    question: "حالة أمر الشراء رقم 9001 ايه؟",
+    expectedIntents: ["document_lookup"],
+    expectedPath: "fast",
+  },
+  {
+    question: "امتى اتبعت أمر الشراء CPO-2026-000123؟",
+    expectedIntents: ["document_lookup"],
+    expectedPath: "fast",
+  },
+  {
+    question: "الـ PO بتاع مورد EDC وصل ولا لسه؟",
+    expectedIntents: ["document_lookup", "supplier_lookup"],
+    expectedPath: "fast",
+  },
+  {
+    question: "أوامر الشراء المفتوحة كام؟",
+    expectedIntents: ["count_aggregate", "analytics"],
+    expectedPath: "fast",
+    allowedTools: ["count_database", "get_unfulfilled_orders"],
+  },
+  {
+    question: "ليه فيه أوامر شراء لسه ما اتبعتتش؟",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["get_unfulfilled_orders"],
+  },
+  {
+    question: "إجمالي كميات البنود في أوامر الشراء",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["aggregate_po_items"],
+  },
+  {
+    question: "أوامر الشراء المتأخرة عن التسليم",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["get_overdue_deliveries", "get_unfulfilled_orders"],
+  },
+  {
+    question: "الأصناف اللي اتكررت في أوامر الشراء",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["aggregate_po_items", "detect_duplicates"],
+  },
+
+  // ── Suppliers (volume coverage) ──────────────────────────────────────────
+  {
+    question: "مين المورد بتاع القواطع الكهربائية؟",
+    expectedIntents: ["supplier_lookup"],
+    expectedPath: "fast",
+  },
+  {
+    question: "أرقام الموردين المسجلين",
+    expectedIntents: ["count_aggregate"],
+    expectedPath: "fast",
+  },
+  {
+    question: "قارن أداء الموردين في آخر سنة",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["get_supplier_performance"],
+  },
+  {
+    question: "أفضل مورد من حيث عدد أوامر الشراء",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["get_supplier_performance"],
+  },
+  {
+    question: "الموردين اللي عرضوا أسعار آخر شهر",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+  },
+  {
+    question: "كل مورد عندنا رصيده كام؟",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["get_supplier_performance"],
+  },
+
+  // ── Offers / quotations / pricing (volume coverage) ──────────────────────
+  {
+    question: "قارن عروض الموردين لطلب التسعير ده",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["compare_supplier_quotes"],
+  },
+  {
+    question: "أرخص عرض لبند الكابل النحاس",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["get_latest_supplier_price"],
+  },
+  {
+    question: "آخر سعر للمورد EDC على البند ده",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["get_latest_supplier_price"],
+  },
+  {
+    question: "الفرق بين أسعار العروض في RFQ رقم 26R011954",
+    expectedIntents: ["analytics", "document_lookup"],
+    expectedPath: "deep",
+    allowedTools: ["compare_supplier_quotes", "lookup_document"],
+  },
+  {
+    question: "كام عرض سعر وصل للطلب ده؟",
+    expectedIntents: ["count_aggregate", "analytics"],
+    expectedPath: "fast",
+  },
+
+  // ── Email / attachments (volume coverage, must all go deep) ──────────────
+  {
+    question: "ابحث في البريد عن إيميلات شركة EDC",
+    expectedIntents: ["email_search"],
+    expectedPath: "deep",
+    allowedTools: ["search_emails", "scan_emails"],
+  },
+  {
+    question: "هات آخر 10 إيميلات من المورد EDC",
+    expectedIntents: ["email_search"],
+    expectedPath: "deep",
+    allowedTools: ["search_emails"],
+  },
+  {
+    question: "فين بند الأريستون في المرفقات؟",
+    expectedIntents: ["email_search", "analytics"],
+    expectedPath: "deep",
+    allowedTools: ["scan_email_items"],
+  },
+  {
+    question: "اقرأ المرفق اللي في إيميل أمر الشراء ده",
+    expectedIntents: ["email_search"],
+    expectedPath: "deep",
+    allowedTools: ["get_email_attachment", "read_email"],
+  },
+  {
+    question: "اعمل حصر لكل أوامر الشراء في البريد خلال السنة",
+    expectedIntents: ["analytics", "email_search"],
+    expectedPath: "deep",
+    allowedTools: ["scan_emails", "scan_email_items"],
+  },
+  {
+    question: "قارن أرقام أوامر الشراء في البريد مع النظام",
+    expectedIntents: ["analytics", "email_search"],
+    expectedPath: "deep",
+    allowedTools: ["scan_emails", "find_missing_records"],
+  },
+  {
+    question: "إيه الإيميلات اللي فيها ملفات PDF للأسعار؟",
+    expectedIntents: ["email_search"],
+    expectedPath: "deep",
+    allowedTools: ["search_emails", "scan_email_items"],
+  },
+  {
+    question: "الأرقام اللي في البريد ومش موجودة في النظام",
+    expectedIntents: ["analytics", "email_search"],
+    expectedPath: "deep",
+    allowedTools: ["scan_emails", "find_missing_records"],
+  },
+  {
+    question: "ابعت تقرير بالأرقام الناقصة على PDF",
+    expectedIntents: ["report", "email_search"],
+    expectedPath: "deep",
+    allowedTools: ["scan_emails", "generate_pdf"],
+  },
+
+  // ── Invoices / payments (volume coverage) ────────────────────────────────
+  {
+    question: "فواتير الموردين المفتوحة كام؟",
+    expectedIntents: ["count_aggregate", "analytics"],
+    expectedPath: "fast",
+    allowedTools: ["get_open_supplier_invoices"],
+  },
+  {
+    question: "إيه الفواتير المستحقة على مورد EDC؟",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["get_open_supplier_invoices"],
+  },
+  {
+    question: "إجمالي الفواتير المستحقة هذا الشهر",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    allowedTools: ["get_open_supplier_invoices"],
+  },
+  {
+    question: "حالة فاتورة رقم 45009999",
+    expectedIntents: ["document_lookup"],
+    expectedPath: "fast",
+  },
+  {
+    question: "الضرائب على مشتريات الشهر",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+  },
+
+  // ── Ambiguous / misspelled (volume coverage) ─────────────────────────────
+  {
+    question: "عايز أشوف المورردين",
+    expectedIntents: ["analytics", "supplier_lookup"],
+    expectedPath: "deep",
+    note: "misspelling must not produce a confident wrong answer",
+  },
+  {
+    question: "الاوامر بتاعت الشراء",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+  },
+  {
+    question: "البنود اللي مش موجودة",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+  },
+  {
+    question: "طب وده ايه؟",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    note: "pronoun-only follow-up → deep; the conversation state supplies the noun",
+  },
+  {
+    question: "وطب آخر سعر له؟",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+    note: "the «وطب آخر سعر له» follow-up the conversation state exists to resolve",
+  },
+  {
+    question: "مين أكبر مورد في المعدات؟",
+    expectedIntents: ["supplier_lookup", "analytics"],
+    expectedPath: "fast",
+  },
+  {
+    question: "المخزون اللي خلص ولا لسه؟",
+    expectedIntents: ["analytics"],
+    expectedPath: "deep",
+  },
 ];
 
 export interface EvalCaseResult {

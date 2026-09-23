@@ -1199,6 +1199,77 @@ export async function initDb(): Promise<void> {
         ON ai_assistant_memories (phone, updated_at DESC);
     `);
 
+    // Conversation state (one row per phone). Its own statement — see the note
+    // above on implicit transactions.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_assistant_state (
+        id SERIAL PRIMARY KEY,
+        phone TEXT NOT NULL UNIQUE,
+        last_document_type TEXT,
+        last_document_number TEXT,
+        last_supplier TEXT,
+        last_customer TEXT,
+        last_part_no TEXT,
+        last_period TEXT,
+        last_job_id INTEGER,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // Async jobs (P4/P6). Indexed by phone + created_at for the job list, and a
+    // partial-ish lookup on (job_key, status) for idempotent re-issue.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_assistant_jobs (
+        id SERIAL PRIMARY KEY,
+        phone TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'queued',
+        question TEXT,
+        params JSONB,
+        progress JSONB,
+        result JSONB,
+        error TEXT,
+        job_key TEXT,
+        started_at TIMESTAMPTZ,
+        finished_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_jobs_phone
+        ON ai_assistant_jobs (phone, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_ai_jobs_key
+        ON ai_assistant_jobs (job_key, status);
+    `);
+
+    // ── Search / document-number indexes (P12) ──────────────────────────────
+    // The assistant resolves documents by number and suppliers/customers by name
+    // with ILIKE '%term%'. Without indexes those become sequential scans as the
+    // tables grow. pg_trgm makes a leading-wildcard ILIKE indexable; it is a
+    // standard Postgres extension and may be unavailable on a restricted server,
+    // so each extension/index is attempted independently and a failure is logged
+    // rather than aborting the whole init (which would stop the app booting).
+    for (const stmt of [
+      `CREATE EXTENSION IF NOT EXISTS pg_trgm`,
+      `CREATE INDEX IF NOT EXISTS idx_po_internal_no ON purchase_orders (internal_po_no)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_sheet_no ON purchase_orders (sheet_po_no)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_status ON purchase_orders (status)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_created ON purchase_orders (created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_items_supplier ON purchase_order_items (supplier_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_items_line_status ON purchase_order_items (line_status)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_rfq_no ON customer_rfqs (customer_rfq_no)`,
+      `CREATE INDEX IF NOT EXISTS idx_supplier_invoices_no ON supplier_invoices (invoice_no)`,
+      `CREATE INDEX IF NOT EXISTS idx_sales_invoices_no ON sales_invoices (invoice_no)`,
+      `CREATE INDEX IF NOT EXISTS idx_suppliers_name_trgm ON suppliers USING gin (name gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_customers_name_trgm ON customers USING gin (name gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_po_items_description_trgm ON purchase_order_items USING gin (description gin_trgm_ops)`,
+    ]) {
+      try {
+        await client.query(stmt);
+      } catch (err) {
+        logger.warn({ err, stmt }, "initDb: optional index/extension skipped");
+      }
+    }
+
     logger.info("initDb: seed complete");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");

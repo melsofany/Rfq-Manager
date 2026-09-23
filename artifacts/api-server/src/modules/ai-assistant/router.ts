@@ -83,15 +83,26 @@ export function normalizeArabic(input: string): string {
  * remaining words are unambiguous analysis signals.
  */
 const ANALYTIC_RE =
-  /(حصر|احصا|احصائ|احصيه|قارن|مقارن|تحليل|حلل|اجمالي|اجمال|اكثر|الاكثر|توزيع|نسبه|معدل|اتجاه|تطور|لسه|ناقص|متاخر|معلق|غير مكتمل|متبقي|متبقى|\brank\b|\btop\b|compare|analytics?|aggregate|total of|sum of|\boverdue\b|\boutstanding\b|\bpending\b)/;
+  /(حصر|احصا|احصائ|احصيه|قارن|مقارن|تحليل|حلل|اجمالي|اجمال|اكثر|الاكثر|افضل|فرق|رصيد|توزيع|نسبه|معدل|اتجاه|تطور|لسه\s*ما|ناقص|متاخر|معلق|غير\s*مدفوع|مستحق|غير مكتمل|متبقي|متبقى|اخر\s*سعر|\brank\b|\btop\b|compare|analytics?|aggregate|total of|sum of|\boverdue\b|\boutstanding\b|\bpending\b)/;
+
+/**
+ * Delivery-request wording: the operator is asking for a FILE/report to be sent
+ * back. Checked before the analytic rule so «ابعت تقرير بالأرقام الناقصة» is a
+ * report, not an analysis. Deliberately excludes the bare words «ملف»/«pdf» — they
+ * appear in questions ABOUT attachments («إيه الإيميلات اللي فيها ملفات PDF؟»),
+ * which are email searches and would be mis-labelled as report requests.
+ */
+const REPORT_DELIVERY_RE =
+  /(تقرير|اكسل|اكسيل|تصدير|export|نزلي|هاتلي تقرير|ارسل لي|ابعتلي|ابعت لي|csv)/;
 
 /** Email / attachment / WhatsApp surfaces. */
 const EMAIL_RE = /(بريد|ايميل|ايمل|ميل|رسائل|رساله|مرفق|مرفقات|صندوق|inbox|email|mail|attach)/;
 
 /** Counting questions. The «كام»/«كم» alternatives need a boundary — otherwise
  *  «كامل» (complete) reads as «كام» (how many) and a report request is mistaken
- *  for a count question. */
-const COUNT_RE = /(^|\s)(كام|كم|عدد|كميات|كميه)(\s|$|؟|\?)|\b(how many|count of)\b/;
+ *  for a count question. «أرقام» (numbers) is included because «أرقام الموردين»
+ *  is a count request that carries no «كام». */
+const COUNT_RE = /(^|\s)(كام|كم|عدد|ارقام|كميات|كميه)(\s|$|؟|\?)|\b(how many|count of)\b/;
 
 /** Document nouns (any document type the system holds). Arabic keeps the
  *  definite article inside the phrase («امر الشراء»), so allow an optional «ال». */
@@ -105,12 +116,25 @@ const DOC_NUMBER_RE = /\b(?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{4,}\b|\b\d{3,
 /** Supplier nouns. */
 const SUPPLIER_RE = /(مورد|موردين|الموردين|supplier|vendor)/;
 
-/** File/report verbs. */
-const REPORT_RE = /(تقرير|ملف|اكسل|اكسيل|pdf|تصدير|export|ارسل لي|نزلي|csv)/;
-
-/** Greetings / pure chit-chat. */
-const SMALLTALK_RE =
+/** A bare sheet-style PO/RFQ code (P26E11407, R26E…) — enough on its own to mean
+ *  "this document", without a document noun. Kept narrow so it cannot match a
+ *  price or a quantity. */
+const PO_CODE_RE = /\b[pqr]\d{2}[a-z]\d{4,}\b/;
+/** Greetings / pure chit-chat, as a whole message («هاي» alone). Matched ONLY
+ *  when it is the entire message, because «هاي» is also the start of a supplier
+ *  name («هاي فولت») — a prefix match there would swallow a real lookup. */
+const SMALLTALK_EXACT_RE =
   /^(السلام عليكم|سلام عليكم|مرحبا|اهلا|هاي|صباح الخير|مساء الخير|شكرا|تمام|ok|hello|hi|thanks)[!. ]*$/;
+
+/** A greeting that opens a short message («صباح الخير يا هندسة»). Requires no
+ *  data signal to be present (checked by the caller) so «تمام، كام أمر شراء؟»
+ *  is not mistaken for chit-chat. */
+const SMALLTALK_PREFIX_RE = /^(السلام عليكم|سلام عليكم|مرحبا|اهلا|صباح الخير|مساء الخير|شكرا)/;
+
+/** Group/plural supplier wording — a question about a SET is analytical, not a
+ *  single-entity lookup («الموردين اللي عرضوا أسعار آخر شهر»). Checked AFTER the
+ *  count rule so «أرقام الموردين» remains a count. */
+const SUPPLIER_PLURAL_RE = /(موردين|موردون|الموردين|الموردون|\bsuppliers\b|\bvendors\b)/;
 
 function words(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
@@ -139,21 +163,47 @@ export function routeQuestion(rawText: string): RoutePlan {
     };
   }
 
-  // 1. Analytical / comparative / scope question → deep, verify is worthwhile.
-  if (ANALYTIC_RE.test(text)) {
+  // 0. Pure greeting / chit-chat FIRST → fast, no verification (no facts to
+  //    check). Checked before everything else so «شكراً جداً» is not dragged into
+  //    the deep path by a stray word. Two forms: the whole message is a greeting,
+  //    or it OPENS with one and carries no data signal («صباح الخير يا هندسة»).
+  const hasDataSignal =
+    ANALYTIC_RE.test(text) ||
+    COUNT_RE.test(text) ||
+    EMAIL_RE.test(text) ||
+    REPORT_DELIVERY_RE.test(text) ||
+    (DOC_RE.test(text) && DOC_NUMBER_RE.test(text));
+  if (
+    (SMALLTALK_EXACT_RE.test(text) || (SMALLTALK_PREFIX_RE.test(text) && !hasDataSignal)) &&
+    words(text) <= 5
+  ) {
     return {
-      intent: "analytics",
+      intent: "smalltalk",
+      path: "fast",
+      maxRounds: FAST_MAX_ROUNDS,
+      verify: false,
+      reason: "greeting only",
+      hint: "",
+    };
+  }
+
+  // 1. A delivery/report request → deep (generation + delivery). Checked BEFORE
+  //    the analytic rule: «ابعت تقرير بالأرقام الناقصة» both asks for a file and
+  //    contains aggregate wording, and the FILE is the primary ask.
+  if (REPORT_DELIVERY_RE.test(text)) {
+    return {
+      intent: "report",
       path: "deep",
       maxRounds: DEEP_MAX_ROUNDS,
       verify: true,
-      reason: "aggregate/comparison wording",
-      hint:
-        "سؤال تحليلي/حصر: استخدم الأدوات التي تُجمِع في قاعدة البيانات أو adat الحصر في البريد، " +
-        "ولا تُجرِ الجمع يدويًا. اذكر دائمًا هل النتيجة كاملة أم عيّنة.",
+      reason: "report/file delivery wording",
+      hint: "طلب تقرير/ملف: استخدم أدوات الحصر مع exportCsv/exportPdf، أو generate_pdf.",
     };
   }
 
   // 2. Email / attachment questions → deep (mailbox reading is rarely one round).
+  //    Checked before analytics/supplier so «الفواتير غير المدفوعة للمورد EDC»
+  //    phrased with a mailbox is not reduced to a single supplier lookup.
   if (EMAIL_RE.test(text)) {
     return {
       intent: "email_search",
@@ -165,7 +215,21 @@ export function routeQuestion(rawText: string): RoutePlan {
     };
   }
 
-  // 3. Counting question → fast, but verification stays ON because the answer
+  // 3. Analytical / comparative / scope question → deep, verify is worthwhile.
+  if (ANALYTIC_RE.test(text)) {
+    return {
+      intent: "analytics",
+      path: "deep",
+      maxRounds: DEEP_MAX_ROUNDS,
+      verify: true,
+      reason: "aggregate/comparison wording",
+      hint:
+        "سؤال تحليلي/حصر: استخدم الأدوات التي تُجمِع في قاعدة البيانات أو أدوات الحصر في البريد، " +
+        "ولا تُجرِ الجمع يدويًا. اذكر دائمًا هل النتيجة كاملة أم عيّنة.",
+    };
+  }
+
+  // 4. Counting question → fast, but verification stays ON because the answer
   //    is numeric and a wrong count is exactly the failure mode we guard.
   if (COUNT_RE.test(text)) {
     return {
@@ -178,8 +242,10 @@ export function routeQuestion(rawText: string): RoutePlan {
     };
   }
 
-  // 4. A specific document number → fast single-record lookup.
-  if (DOC_RE.test(text) && DOC_NUMBER_RE.test(text)) {
+  // 5. A specific document number → fast single-record lookup. Either a document
+  //    noun WITH a number, or a bare sheet-style code that is unambiguous on its
+  //    own («P26E13477 اتبعت لمين؟»).
+  if ((DOC_RE.test(text) && DOC_NUMBER_RE.test(text)) || PO_CODE_RE.test(text)) {
     return {
       intent: "document_lookup",
       path: "fast",
@@ -190,8 +256,10 @@ export function routeQuestion(rawText: string): RoutePlan {
     };
   }
 
-  // 5. Question about a supplier → fast single-entity overview.
-  if (SUPPLIER_RE.test(text)) {
+  // 6. Question about a supplier → fast single-entity overview. The PLURAL form
+  //    («الموردين») is a set question and falls through to the analytics default,
+  //    which is correct: listing/comparing suppliers is analysis, not a lookup.
+  if (SUPPLIER_RE.test(text) && !SUPPLIER_PLURAL_RE.test(text)) {
     return {
       intent: "supplier_lookup",
       path: "fast",
@@ -199,30 +267,6 @@ export function routeQuestion(rawText: string): RoutePlan {
       verify: true,
       reason: "supplier wording",
       hint: "سؤال عن مورد: استخدم supplier_overview لجلب كل شيء في استدعاء واحد.",
-    };
-  }
-
-  // 6. A file/report request → deep (generation + delivery).
-  if (REPORT_RE.test(text)) {
-    return {
-      intent: "report",
-      path: "deep",
-      maxRounds: DEEP_MAX_ROUNDS,
-      verify: true,
-      reason: "report/file wording",
-      hint: "طلب تقرير/ملف: استخدم أدوات الحصر مع exportCsv/exportPdf، أو generate_pdf.",
-    };
-  }
-
-  // 7. Pure greeting / chit-chat → fast, no verification (no facts to check).
-  if (SMALLTALK_RE.test(text) && words(text) <= 4) {
-    return {
-      intent: "smalltalk",
-      path: "fast",
-      maxRounds: FAST_MAX_ROUNDS,
-      verify: false,
-      reason: "greeting only",
-      hint: "",
     };
   }
 

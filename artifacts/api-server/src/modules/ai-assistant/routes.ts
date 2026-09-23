@@ -23,6 +23,7 @@ import { isEmailReadConfigured } from "./email";
 import { listModels } from "./llm";
 import { rememberFact, normalizeCategory } from "./memory";
 import { recentMetrics, metricsSummary } from "./metrics";
+import { countJobsByStatus } from "./jobs";
 
 const router = Router();
 const guard = requireRole("admin", "manager");
@@ -325,6 +326,24 @@ router.delete("/ai-assistant/memories/:id", guard, async (req, res): Promise<voi
   await db.delete(aiAssistantMemoriesTable).where(eq(aiAssistantMemoriesTable.id, id));
   await audit(req, "ai_assistant.memory_deleted", `حذف ذاكرة ${id}`, id);
   res.json({ ok: true });
+});
+
+// ─── GET /ai-assistant/jobs — recent async jobs (all phones) ──────────────
+router.get("/ai-assistant/jobs", guard, async (req, res): Promise<void> => {
+  try {
+    const { db, aiAssistantJobsTable } = await import("@workspace/db");
+    const { desc } = await import("drizzle-orm");
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const rows = await db
+      .select()
+      .from(aiAssistantJobsTable)
+      .orderBy(desc(aiAssistantJobsTable.createdAt))
+      .limit(limit);
+    res.json({ jobs: rows, counts: await countJobsByStatus() });
+  } catch (err) {
+    logger.error({ err }, "AI assistant: listing jobs failed");
+    res.status(500).json({ error: "تعذّر جلب المهام" });
+  }
 });
 
 export default router;

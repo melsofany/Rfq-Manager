@@ -32,7 +32,14 @@ import {
 } from "./tools";
 import { entityVocabulary, findUnknownEntityNames, type EntityName } from "./db-tools";
 import { routeQuestion, routeHint, DEEP_MAX_ROUNDS } from "./router";
+import { verifyAnswer } from "./verifier";
 import { recordMetrics } from "./metrics";
+import {
+  loadConversationState,
+  saveConversationState,
+  renderConversationState,
+  inferStatePatch,
+} from "./conversation";
 
 /**
  * Rounds allowed for the DEEP path (the router picks it per question). Kept as
@@ -257,7 +264,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   // latencies together on the path of every single question. Nothing here
   // depends on anything else in the group, so the only correct behaviour is to
   // overlap them.
-  const [history, memories, vocabulary] = await Promise.all([
+  const [history, memories, vocabulary, conversationState] = await Promise.all([
     loadHistory(input.phone),
     // Core memory: the memories most relevant to THIS message are injected into
     // the system prompt, so a fact taught weeks ago is available without the model
@@ -276,13 +283,17 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     settings.allowDatabase
       ? entityVocabulary()
       : Promise.resolve({ suppliers: [] as EntityName[], customers: [] as EntityName[] }),
+    // What the conversation was last about, so «وطب آخر سعر له؟» resolves "له"
+    // without the operator restating the part. Read-only, best-effort.
+    loadConversationState(input.phone),
   ]);
   const memoryBlock = renderMemoryBlock(memories);
   const vocabularyBlock = renderVocabularyBlock(vocabulary);
+  const stateBlock = renderConversationState(conversationState);
 
   const system: ChatMessage = {
     role: "system",
-    content: systemPrompt(settings) + routeHint(plan) + memoryBlock + vocabularyBlock,
+    content: systemPrompt(settings) + routeHint(plan) + stateBlock + memoryBlock + vocabularyBlock,
   };
 
   let userContent: string | ContentPart[];
@@ -519,6 +530,31 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       }
       finalText = corrected;
     }
+
+    // ── Deterministic numeric verification (P2 / PR 5) ──────────────────────
+    // The pass above checks NAMES and IDENTIFIERS. This pass checks FIGURES: a
+    // large quantity/money total in the answer is reconciled against a fresh SQL
+    // aggregate. It is free (no model call) and runs even when the router said
+    // the answer had no facts to verify, because a wrong total is exactly the
+    // silent failure the operator cannot detect. On a mismatch the answer is NOT
+    // rewritten — the caveat is appended, so the model's own wording stays visible
+    // beside the correction.
+    if (finalText) {
+      try {
+        const v = await verifyAnswer({ answerText: finalText });
+        if (v.outcome === "disagreement" && v.note) {
+          finalText = `${finalText}\n\n⚠️ تحقق آلي: ${v.note} — لذا النتيجة PARTIALLY_VERIFIED.`;
+          verificationRan = true;
+          logger.warn(
+            { phone: input.phone, note: v.note },
+            "AI assistant: numeric verification disagreed",
+          );
+        }
+      } catch (err) {
+        // A verifier failure must never lose the answer.
+        logger.warn({ err }, "AI assistant: numeric verification skipped");
+      }
+    }
   } catch (err) {
     // A timeout or quota error still needs to be measured — those are the two
     // failure modes the operator actually reports, and without a metric here
@@ -567,6 +603,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       : userText;
   await saveMessage(input.phone, "user", historyText);
   await saveMessage(input.phone, "assistant", finalText, usedTools.length ? usedTools : null);
+
+  // Record what this turn was about, so a follow-up can resolve «له/بتاعه».
+  // Only explicitly-named entities are recorded (see inferStatePatch) and it is
+  // best-effort — a state-write failure must never surface to the operator.
+  void saveConversationState(input.phone, inferStatePatch({ userText })).catch(() => {});
 
   // Learn from the exchange. Fire-and-forget: the reply is already produced, and
   // a memory-write failure must never turn a good answer into an error the

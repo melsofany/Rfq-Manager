@@ -606,7 +606,10 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
       type: "function",
       function: {
         name: "send_email",
-        description: "إرسال بريد إلكتروني من حساب الشركة.",
+        description:
+          "إرسال بريد إلكتروني من حساب الشركة. هذا فعل خارجي حساس: يجب أولًا الاستدعاء بدون " +
+          "confirmed (فيُعاد لك ملخّص المستلم والموضوع والنص للتأكيد)، ثم اعرضه على المستخدم " +
+          "واطلب موافقته الصريحة، وبعدها فقط أعد الاستدعاء بـ confirmed=true.",
         parameters: {
           type: "object",
           properties: {
@@ -614,6 +617,10 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             subject: { type: "string" },
             body: { type: "string" },
             cc: { type: "string" },
+            confirmed: {
+              type: "boolean",
+              description: "true فقط بعد موافقة المستخدم الصريحة على الملخّص المعروض.",
+            },
           },
           required: ["to", "subject", "body"],
         },
@@ -1768,6 +1775,29 @@ async function executeToolInner(
       }
       case "send_email": {
         if (!ctx.settings.allowEmail) return { ok: false, error: "إرسال البريد معطّل" };
+        // P7: sending is an irreversible external action, so it is gated behind an
+        // explicit confirmation. Without it the tool returns the draft for review
+        // and sends NOTHING — the model must show it to the operator and re-call
+        // with confirmed:true. This is enforced here, in code, rather than trusted
+        // to the prompt, because a prompt rule is not a permission boundary.
+        if (args.confirmed !== true) {
+          return {
+            ok: true,
+            data: {
+              sent: false,
+              needsConfirmation: true,
+              draft: {
+                to: String(args.to ?? ""),
+                cc: args.cc ? String(args.cc) : undefined,
+                subject: String(args.subject ?? ""),
+                body: String(args.body ?? ""),
+              },
+              instructions:
+                "لم يُرسل البريد. اعرض هذا الملخّص على المستخدم واطلب تأكيدًا صريحًا، " +
+                "ثم أعد الاستدعاء بنفس البيانات مع confirmed=true.",
+            },
+          };
+        }
         await sendAssistantEmail({
           to: String(args.to ?? ""),
           subject: String(args.subject ?? ""),

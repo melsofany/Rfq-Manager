@@ -85,7 +85,61 @@ export const aiAssistantMemoriesTable = pgTable("ai_assistant_memories", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Conversation state (P4) ───────────────────────────────────────────────
+// A small per-phone "current context" so a follow-up question understands what
+// «وطب آخر سعر له؟» refers to without re-running the whole search. This is NOT
+// chat history (that is `ai_assistant_messages`): it is the last entity, period
+// and job the operator was talking about, refreshed on every answered turn.
+export const aiAssistantStateTable = pgTable("ai_assistant_state", {
+  id: serial("id").primaryKey(),
+  phone: text("phone").notNull().unique(),
+  /** Last document the conversation referred to. */
+  lastDocumentType: text("last_document_type"),
+  lastDocumentNumber: text("last_document_number"),
+  /** Last supplier / customer named in the conversation. */
+  lastSupplier: text("last_supplier"),
+  lastCustomer: text("last_customer"),
+  /** Last part referenced (feeds «آخر سعر له»). */
+  lastPartNo: text("last_part_no"),
+  /** Last time scope, as the operator phrased it (e.g. "2026", "آخر شهر"). */
+  lastPeriod: text("last_period"),
+  /** Last async job started from this conversation. */
+  lastJobId: integer("last_job_id"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Async jobs (P4/P6) ────────────────────────────────────────────────────
+// Large operations (a year-long email census, hundreds of attachments, a big
+// report) run as a tracked background job instead of blocking the WhatsApp
+// reply. Progress is written to this row so the operator can be told where the
+// job stands and a follow-up question can read its result.
+export const aiAssistantJobsTable = pgTable("ai_assistant_jobs", {
+  id: serial("id").primaryKey(),
+  phone: text("phone").notNull(),
+  /** e.g. "email_census", "email_items", "compare_email_db". */
+  kind: text("kind").notNull(),
+  /** queued | running | completed | failed | cancelled */
+  status: text("status").notNull().default("queued"),
+  /** The original question, for the job list. */
+  question: text("question"),
+  /** Input parameters, JSON. */
+  params: jsonb("params").$type<unknown>(),
+  /** Progress counters, JSON (e.g. {scanned, matched, processed}). */
+  progress: jsonb("progress").$type<unknown>(),
+  /** Final result summary, JSON. */
+  result: jsonb("result").$type<unknown>(),
+  error: text("error"),
+  /** Idempotency: a re-issued identical job resumes rather than restarts. */
+  jobKey: text("job_key"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type AiAssistantUser = typeof aiAssistantUsersTable.$inferSelect;
 export type AiAssistantMessage = typeof aiAssistantMessagesTable.$inferSelect;
 export type AiAssistantSettings = typeof aiAssistantSettingsTable.$inferSelect;
 export type AiAssistantMemory = typeof aiAssistantMemoriesTable.$inferSelect;
+export type AiAssistantState = typeof aiAssistantStateTable.$inferSelect;
+export type AiAssistantJob = typeof aiAssistantJobsTable.$inferSelect;
