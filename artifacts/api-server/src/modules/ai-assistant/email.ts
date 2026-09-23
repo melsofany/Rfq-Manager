@@ -85,6 +85,74 @@ export const DEFAULT_NUMBER_PATTERNS = [
   "\\bRFQ[- ]?\\d{5,10}\\b",
 ];
 
+/**
+ * Short-lived result cache for the expensive mailbox reads.
+ *
+ * A follow-up question about the SAME mail («ليه السخانات الأريستون مش في
+ * التقرير؟» right after «اكتر بند اتكرر») re-ran the whole scan — measured live
+ * at ~30s for a 400-message item census, and up to ~100s for 1000 — so a second
+ * question blew the agent's 150s ceiling and answered with a timeout. Mail does
+ * not change in the seconds between two questions, so the result is reused.
+ *
+ * Deliberately short (see `cacheTtlMs`) and bounded, and only ever applied to
+ * read-only scans — a stale entry can at worst report mail that arrived moments
+ * ago as missing, which the TTL keeps to a single conversation turn.
+ */
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+const scanCache = new Map<string, CacheEntry<unknown>>();
+const SCAN_CACHE_MAX = 24;
+
+/** How long a scan result stays warm. Overridable so tests can disable it. */
+export function cacheTtlMs(): number {
+  return Number(process.env.AI_SCAN_CACHE_TTL_MS ?? 5 * 60 * 1000);
+}
+
+export function clearScanCache(): void {
+  scanCache.clear();
+}
+
+/** Stable string key for a scan's options — argument order must not matter. */
+export function scanCacheKey(prefix: string, opts: Record<string, unknown>): string {
+  const norm: Record<string, unknown> = {};
+  for (const k of Object.keys(opts).sort()) {
+    const v = opts[k];
+    if (v === undefined || v === null || v === "" || v === false) continue;
+    // Functions (compare callbacks) are identified by name so two callers that
+    // pass different comparators never share an entry.
+    norm[k] = typeof v === "function" ? `fn:${(v as { name?: string }).name || "anon"}` : v;
+  }
+  return `${prefix}:${JSON.stringify(norm)}`;
+}
+
+/**
+ * Run `produce` once per key within the TTL window.
+ *
+ * Exported so the tool layer can memoize a small DERIVED result (e.g. the
+ * aggregated item summary) without retaining the downloaded PDF buffers the
+ * heavy scan produced — those are ~35MB per scan and must not be kept around.
+ */
+export async function memoizeScan<T>(key: string, produce: () => Promise<T>): Promise<T> {
+  const ttl = cacheTtlMs();
+  if (ttl > 0) {
+    const hit = scanCache.get(key) as CacheEntry<T> | undefined;
+    if (hit && hit.expiresAt > Date.now()) return hit.value;
+  }
+  const value = await produce();
+  if (ttl > 0) {
+    // Evict the oldest entry once bounded rather than growing without limit —
+    // the process is long-lived and every distinct question adds a key.
+    if (scanCache.size >= SCAN_CACHE_MAX) {
+      const oldest = scanCache.keys().next().value;
+      if (oldest !== undefined) scanCache.delete(oldest);
+    }
+    scanCache.set(key, { value, expiresAt: Date.now() + ttl });
+  }
+  return value;
+}
+
 let cachedIpv4Host: string | null = null;
 let cacheExpiry = 0;
 
@@ -1112,6 +1180,57 @@ export async function scanEmails(opts: {
    * tool still caps `emails` at `limit`; a year-wide item census must not inherit
    * that cap and accidentally analyse only the newest 500 messages.
    */
+  returnAllMatches?: boolean;
+  unseenOnly?: boolean;
+}): Promise<EmailCensusResult> {
+  // Cache the whole scan (including the downloaded attachments when
+  // `includeAttachments` is set). Without this a follow-up question about the
+  // same mail re-ran a ~30-100s scan and timed the answer out. Accesses
+  // (timestamps) are not part of the key so the cached envelopes keep working.
+  //
+  // A scan WITH attachments is NOT cached here: its result carries every
+  // downloaded PDF buffer (~35MB per run), which must not be held in a
+  // long-lived process. The item census memoizes its small DERIVED result
+  // instead (see `scan_email_items` in tools.ts).
+  if (opts.includeAttachments) return runScanEmails(opts);
+  const key = scanCacheKey("census", {
+    from: opts.from,
+    subject: opts.subject,
+    query: opts.query,
+    sinceDate: opts.sinceDate,
+    beforeDate: opts.beforeDate,
+    mailbox: opts.mailbox,
+    folder: opts.folder,
+    limit: opts.limit,
+    includeAttachments: opts.includeAttachments,
+    returnAllMatches: opts.returnAllMatches,
+    unseenOnly: opts.unseenOnly,
+    compareTarget: opts.compareTarget,
+    patterns: (opts.numberPatterns ?? DEFAULT_NUMBER_PATTERNS).join("|"),
+  });
+  return memoizeScan(key, () => runScanEmails(opts));
+}
+
+async function runScanEmails(opts: {
+  from?: string;
+  subject?: string;
+  query?: string;
+  sinceDate?: string;
+  beforeDate?: string;
+  mailbox?: string;
+  folder?: EmailFolder;
+  limit?: number;
+  numberPatterns?: string[];
+  compare?: (
+    numbers: string[],
+    target: { table: string; column: string },
+  ) => Promise<{
+    found: number;
+    missingNumbers: string[];
+    matchedSample: Array<{ number: string; value: string }>;
+  }>;
+  compareTarget?: { table: string; column: string };
+  includeAttachments?: boolean;
   returnAllMatches?: boolean;
   unseenOnly?: boolean;
 }): Promise<EmailCensusResult> {

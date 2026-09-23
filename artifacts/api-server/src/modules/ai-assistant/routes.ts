@@ -21,6 +21,7 @@ import {
 } from "./config";
 import { isEmailReadConfigured } from "./email";
 import { listModels } from "./llm";
+import { rememberFact, normalizeCategory } from "./memory";
 
 const router = Router();
 const guard = requireRole("admin", "manager");
@@ -223,6 +224,95 @@ router.put("/ai-assistant/settings", guard, async (req, res): Promise<void> => {
     .returning();
   await audit(req, "ai_assistant.settings_updated", "تحديث إعدادات المساعد الذكي");
   res.json(row);
+});
+
+// ─── Long-term memory (admin CRUD) ────────────────────────────────────────
+// The operator can see exactly what the assistant has learned, correct it, pin
+// the important facts, and remove stale ones. Memory is otherwise written by the
+// agent itself, so this is the human oversight path.
+
+// GET /ai-assistant/memories — list, optionally filtered
+router.get("/ai-assistant/memories", guard, async (req, res): Promise<void> => {
+  const { aiAssistantMemoriesTable } = await import("@workspace/db");
+  const { isNull, or, sql, desc, and, eq } = await import("drizzle-orm");
+  const phone = req.query.phone ? String(req.query.phone) : undefined;
+  const category = req.query.category ? String(req.query.category) : undefined;
+  const includeExpired = req.query.includeExpired === "true";
+  const rows = await db
+    .select()
+    .from(aiAssistantMemoriesTable)
+    .where(
+      and(
+        phone !== undefined ? eq(aiAssistantMemoriesTable.phone, phone) : undefined,
+        category ? eq(aiAssistantMemoriesTable.category, category) : undefined,
+        includeExpired
+          ? undefined
+          : or(
+              isNull(aiAssistantMemoriesTable.validUntil),
+              sql`${aiAssistantMemoriesTable.validUntil} > NOW()`,
+            ),
+      ),
+    )
+    .orderBy(desc(aiAssistantMemoriesTable.pinned), desc(aiAssistantMemoriesTable.updatedAt))
+    .limit(500);
+  res.json(rows);
+});
+
+// POST /ai-assistant/memories — teach a fact (company-wide by default)
+router.post("/ai-assistant/memories", guard, async (req, res): Promise<void> => {
+  const { phone, category, key, value, importance, pinned } = req.body ?? {};
+  if (!key || !value) {
+    res.status(400).json({ error: "المفتاح والقيمة مطلوبان" });
+    return;
+  }
+  try {
+    const row = await rememberFact({
+      phone: phone ? canonicalPhone(String(phone)) : "",
+      category: category ? String(category) : "fact",
+      key: String(key),
+      value: String(value),
+      importance: typeof importance === "number" ? importance : 80,
+      pinned: Boolean(pinned),
+      source: "admin",
+    });
+    await audit(req, "ai_assistant.memory_saved", `حفظ ذاكرة: ${row.key}`, row.id);
+    res.status(201).json(row);
+  } catch (err) {
+    logger.error({ err }, "AI assistant: saving memory failed");
+    res.status(400).json({ error: "تعذّر حفظ الذاكرة" });
+  }
+});
+
+// PATCH /ai-assistant/memories/:id — edit / pin
+router.patch("/ai-assistant/memories/:id", guard, async (req, res): Promise<void> => {
+  const { aiAssistantMemoriesTable } = await import("@workspace/db");
+  const id = Number(req.params.id);
+  const { value, importance, pinned, category } = req.body ?? {};
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  if (value !== undefined) patch.value = String(value);
+  if (importance !== undefined) patch.importance = Number(importance);
+  if (pinned !== undefined) patch.pinned = Boolean(pinned);
+  if (category !== undefined) patch.category = normalizeCategory(category);
+  const [row] = await db
+    .update(aiAssistantMemoriesTable)
+    .set(patch)
+    .where(eq(aiAssistantMemoriesTable.id, id))
+    .returning();
+  if (!row) {
+    res.status(404).json({ error: "غير موجود" });
+    return;
+  }
+  await audit(req, "ai_assistant.memory_updated", `تحديث ذاكرة ${id}`, id);
+  res.json(row);
+});
+
+// DELETE /ai-assistant/memories/:id — remove
+router.delete("/ai-assistant/memories/:id", guard, async (req, res): Promise<void> => {
+  const { aiAssistantMemoriesTable } = await import("@workspace/db");
+  const id = Number(req.params.id);
+  await db.delete(aiAssistantMemoriesTable).where(eq(aiAssistantMemoriesTable.id, id));
+  await audit(req, "ai_assistant.memory_deleted", `حذف ذاكرة ${id}`, id);
+  res.json({ ok: true });
 });
 
 export default router;

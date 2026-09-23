@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,6 +31,9 @@ import {
   Mail,
   Loader2,
   Sparkles,
+  Brain,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
@@ -48,6 +52,19 @@ interface AiEmployee {
   id: number;
   name: string;
   role: string;
+}
+
+interface AiMemory {
+  id: number;
+  phone: string;
+  category: string;
+  key: string;
+  value: string;
+  importance: number;
+  source: string;
+  pinned: boolean;
+  useCount: number;
+  updatedAt: string;
 }
 
 interface AiSettings {
@@ -86,6 +103,26 @@ export default function AiAssistantPage() {
   const [newName, setNewName] = useState("");
   const [newEmployeeId, setNewEmployeeId] = useState("");
 
+  // ── Long-term memory ─────────────────────────────────────────────────────
+  const [memories, setMemories] = useState<AiMemory[]>([]);
+  const [memCategory, setMemCategory] = useState("");
+  const [memSearch, setMemSearch] = useState("");
+  const [newMemKey, setNewMemKey] = useState("");
+  const [newMemValue, setNewMemValue] = useState("");
+  const [newMemShared, setNewMemShared] = useState(true);
+  const [savingMem, setSavingMem] = useState(false);
+
+  const loadMemories = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (memCategory) params.set("category", memCategory);
+      const qs = params.toString();
+      setMemories(await apiGet<AiMemory[]>(`/api/ai-assistant/memories${qs ? `?${qs}` : ""}`));
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "فشل تحميل الذاكرة"));
+    }
+  }, [memCategory]);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -101,12 +138,13 @@ export default function AiAssistantPage() {
       apiGet<{ models: string[] }>("/api/ai-assistant/models")
         .then((m) => setModels(m.models))
         .catch(() => setModels([]));
+      await loadMemories();
     } catch (err) {
       toast.error(getApiErrorMessage(err, "فشل تحميل بيانات المساعد الذكي"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadMemories]);
 
   useEffect(() => {
     load();
@@ -202,6 +240,81 @@ export default function AiAssistantPage() {
   }
 
   const roleLabel = (role: string) => (role === "admin" ? "مدير نظام" : "مدير");
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    fact: "معلومة",
+    preference: "تفضيل",
+    entity: "جهة/كيان",
+    rule: "قاعدة",
+    lesson: "درس مستفاد",
+  };
+
+  async function addMemory() {
+    if (!newMemKey.trim() || !newMemValue.trim()) {
+      toast.error("أدخل المفتاح والقيمة");
+      return;
+    }
+    setSavingMem(true);
+    try {
+      const r = await fetch("/api/ai-assistant/memories", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: newMemKey,
+          value: newMemValue,
+          shared: newMemShared,
+          importance: 80,
+        }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setNewMemKey("");
+      setNewMemValue("");
+      await loadMemories();
+      toast.success("تم حفظ المعلومة في ذاكرة المساعد");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "تعذّر حفظ الذاكرة"));
+    } finally {
+      setSavingMem(false);
+    }
+  }
+
+  async function patchMemory(id: number, patch: Partial<AiMemory>) {
+    try {
+      const r = await fetch(`/api/ai-assistant/memories/${id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setMemories((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "تعذّر تحديث الذاكرة"));
+    }
+  }
+
+  async function deleteMemory(id: number) {
+    try {
+      const r = await fetch(`/api/ai-assistant/memories/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setMemories((prev) => prev.filter((m) => m.id !== id));
+      toast.success("تم حذف المعلومة");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "تعذّر حذف الذاكرة"));
+    }
+  }
+
+  // Client-side filter over the loaded rows — the server already caps at 500,
+  // and a search is instant against what is in hand.
+  const shownMemories = memories.filter((m) => {
+    if (!memSearch.trim()) return true;
+    const q = memSearch.trim().toLowerCase();
+    return m.key.toLowerCase().includes(q) || m.value.toLowerCase().includes(q);
+  });
 
   return (
     <Layout>
@@ -464,6 +577,147 @@ export default function AiAssistantPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* ── Long-term memory ─────────────────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Brain className="h-5 w-5 text-primary" />
+              ذاكرة المساعد طويلة المدى
+              <Badge variant="secondary">{memories.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              المعلومة المحفوظة يعرفها المساعد في كل المحادثات القادمة. يتعلّم تلقائيًا عند قول
+              «افتكر إن…» أو تصحيح خطأ، ويمكنك هنا إضافة أو تعديل أو تثبيت أو حذف أي معلومة. تثبيت
+              المعلومة يجعلها تُحقن دائمًا في سياق المساعد.
+            </p>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label>المفتاح (مفتاح قصير يوصف المعلومة)</Label>
+                <Input
+                  value={newMemKey}
+                  onChange={(e) => setNewMemKey(e.target.value)}
+                  placeholder="مثال: اسم المورد المفضل للسلك"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>القيمة</Label>
+                <Textarea
+                  value={newMemValue}
+                  onChange={(e) => setNewMemValue(e.target.value)}
+                  placeholder="المعلومة كاملة كما يجب أن يعرفها المساعد"
+                  rows={2}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Switch checked={newMemShared} onCheckedChange={setNewMemShared} />
+                <Label>مشتركة لكل المستخدمين (بدونها تكون خاصة برقمك)</Label>
+              </div>
+              <Button onClick={addMemory} disabled={savingMem || !canManage}>
+                {savingMem ? (
+                  <Loader2 className="h-4 w-4 animate-spin ml-1" />
+                ) : (
+                  <Plus className="h-4 w-4 ml-1" />
+                )}
+                إضافة للذاكرة
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 items-center">
+              <Input
+                className="max-w-xs"
+                value={memSearch}
+                onChange={(e) => setMemSearch(e.target.value)}
+                placeholder="بحث في الذاكرة..."
+              />
+              <div className="flex flex-wrap gap-1">
+                {["", "fact", "preference", "entity", "rule", "lesson"].map((c) => (
+                  <Button
+                    key={c || "all"}
+                    size="sm"
+                    variant={memCategory === c ? "default" : "outline"}
+                    onClick={() => setMemCategory(c)}
+                  >
+                    {c ? CATEGORY_LABELS[c] : "الكل"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {shownMemories.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                لا توجد معلومات محفوظة بعد. علّم المساعد من واتساب أو أضف معلومة من هنا.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>النوع</TableHead>
+                    <TableHead>المفتاح</TableHead>
+                    <TableHead>القيمة</TableHead>
+                    <TableHead>النطاق</TableHead>
+                    <TableHead>الأهمية</TableHead>
+                    <TableHead>الاستخدام</TableHead>
+                    <TableHead className="text-left">إجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {shownMemories.map((m) => (
+                    <TableRow key={m.id}>
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {CATEGORY_LABELS[m.category] ?? m.category}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-medium">{m.key}</TableCell>
+                      <TableCell className="max-w-md whitespace-pre-wrap text-sm">
+                        {m.value}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={m.phone ? "outline" : "default"}>
+                          {m.phone ? m.phone : "مشتركة"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{m.importance}</TableCell>
+                      <TableCell>{m.useCount}</TableCell>
+                      <TableCell className="text-left">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            title={m.pinned ? "إلغاء التثبيت" : "تثبيت"}
+                            onClick={() => patchMemory(m.id, { pinned: !m.pinned })}
+                          >
+                            {m.pinned ? (
+                              <PinOff className="h-4 w-4" />
+                            ) : (
+                              <Pin className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-destructive"
+                            title="حذف"
+                            onClick={() => deleteMemory(m.id)}
+                            disabled={!canManage}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );

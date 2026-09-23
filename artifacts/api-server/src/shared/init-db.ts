@@ -1172,6 +1172,33 @@ export async function initDb(): Promise<void> {
        WHERE key = 'default' AND model IN ('gpt-4o', 'gpt-4o-mini', '');
     `);
 
+    // ─── AI assistant long-term memory ────────────────────────────────────
+    // Keep this its own statement: statements in one client.query share an
+    // implicit transaction, so a failure anywhere in a combined block rolls the
+    // whole thing back and the table silently never exists on Render.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_assistant_memories (
+        id SERIAL PRIMARY KEY,
+        phone TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT 'fact',
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        importance INTEGER NOT NULL DEFAULT 50,
+        source TEXT NOT NULL DEFAULT 'user',
+        pinned BOOLEAN NOT NULL DEFAULT false,
+        valid_from TIMESTAMPTZ,
+        valid_until TIMESTAMPTZ,
+        use_count INTEGER NOT NULL DEFAULT 0,
+        last_used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_memories_scope_key
+        ON ai_assistant_memories (phone, category, key);
+      CREATE INDEX IF NOT EXISTS idx_ai_memories_phone
+        ON ai_assistant_memories (phone, updated_at DESC);
+    `);
+
     logger.info("initDb: seed complete");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");

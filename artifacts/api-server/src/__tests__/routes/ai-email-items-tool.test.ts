@@ -136,9 +136,13 @@ function censusWithAttachments(
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   ctx.outbox.length = 0;
+  // The scan+parse memo is module-level; without this a previous test's mail
+  // would be served to the next case.
+  const { clearScanCache } = await import("../../modules/ai-assistant/email");
+  clearScanCache();
   // Unreadable files are modelled by content, so a scan can be simulated.
   extractPdfText.mockImplementation(async (buf: Buffer) =>
     buf.toString("latin1").includes("scanned") ? "" : PO_TEXT,

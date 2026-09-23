@@ -48,6 +48,8 @@ import {
   isPdfAttachment,
   fetchMessageAttachments,
   extractPdfText,
+  memoizeScan,
+  scanCacheKey,
   type EmailCensusResult,
   type EmailCensusNumber,
 } from "./email";
@@ -55,10 +57,12 @@ import {
   parseItemsFromAttachments,
   itemsCsv,
   itemsAggregateCsv,
+  aggregateItems,
   aggregateItemsByOccurrence,
   type ItemScanResult,
 } from "./email-items";
 import { defaultMailbox, mailboxes } from "./mailboxes";
+import { rememberFact, recallMemories, forgetMemory } from "./memory";
 import { generateAssistantPdf, generateMissingNumbersPdf, type PdfSection } from "./pdf";
 import {
   extractDocumentText,
@@ -371,6 +375,13 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
                 "ترتيب البنود: mostRepeated (افتراضي) = الأكثر تكرارًا/ورودًا، " +
                 "qty = الأكبر إجمالي كمية.",
             },
+            contains: {
+              type: "string",
+              description:
+                "فلترة النتائج على بند/ماركة/صنف معيّن (مثل «أريستون» أو «WATER HEATER» أو رقم قطعة). " +
+                "استخدمها لسؤال «فين بند كذا؟» أو «هل ظهر كذا في الطلبات؟» — تبحث داخل كل الأسطر المقروءة " +
+                "وتعيد المطابقات فقط. إن كان الحصر ناقصًا فاذكر أنه لم تُفحص كل الرسائل قبل قول «غير موجود».",
+            },
             exportCsv: { type: "boolean", description: "أرسل كل البنود كملف CSV" },
             exportPdf: { type: "boolean", description: "أرسل ملخص البنود كملف PDF" },
           },
@@ -483,6 +494,80 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             filename: { type: "string", description: "اسم الملف بدون امتداد" },
           },
           required: ["title", "sections"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "remember_fact",
+        description:
+          "احفظ معلومة دائمة في ذاكرتك طويلة المدى لتعرفها في كل المحادثات القادمة " +
+          "(تفضيلات المدير، قاعدة عمل متفق عليها، معلومة عن مورد/عميل، درس مستفاد من خطأ سابق). " +
+          "استخدمها عندما يقول المستخدم «افتكر إن…» أو «من الآن اعتبر…» أو عندما تكتشف قاعدة عمل " +
+          "يجب ألا تنساها. المفتاح (key) قصير وثابت: تعليم نفس المفتاح مرّة أخرى يُحدِّث القيمة بدل تكرارها. " +
+          "لا تحفظ فيها بيانات متغيّرة بكثرة (أسعار لحظية، عدد رسائل) — هذه تُقرأ من الأدوات كل مرّة.",
+        parameters: {
+          type: "object",
+          properties: {
+            key: {
+              type: "string",
+              description: "مفتاح قصير للبحث والتحديث (مثال: «اسم المورد المفضل للسلك»)",
+            },
+            value: { type: "string", description: "المعلومة كاملة كما يجب أن تُقال لاحقًا" },
+            category: {
+              type: "string",
+              enum: ["fact", "preference", "entity", "rule", "lesson"],
+              description: "نوع المعلومة (افتراضي fact).",
+            },
+            importance: {
+              type: "integer",
+              description: "أهمية 0-100 (افتراضي 50). ارفعها للمعلومات الحرجة.",
+            },
+            shared: {
+              type: "boolean",
+              description: "اجعلها مشتركة لكل المستخدمين (افتراضي: خاصة بهذا الرقم).",
+            },
+          },
+          required: ["key", "value"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "recall_memory",
+        description:
+          "ابحث في ذاكرتك طويلة المدى عن معلومة محفوظة (تفضيل/قاعدة/معلومة عن جهة/درس). " +
+          "استخدمها قبل أن تقول «لا أعرف» عن شيء قد يكون المستخدم قد علّمك إيّاه، أو عندما يسأل " +
+          "«إيه اللي تعرفه عن…» أو «فاكر إن…».",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "كلمات البحث (اتركه فارغًا لعرض الأهم)" },
+            category: {
+              type: "string",
+              enum: ["fact", "preference", "entity", "rule", "lesson"],
+            },
+            limit: { type: "integer", description: "أقصى عدد نتائج (افتراضي 12)" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "forget_memory",
+        description:
+          "أنهِ صلاحية معلومة في الذاكرة (تحتفظ بالسجل لكنها لا تُستخدم بعد الآن). " +
+          "استخدمها عندما يقول المستخدم إن معلومة قديمة/خاطئة أو «انسي كذا». " +
+          "مرّر key، أو id إن ظهر في نتائج recall_memory.",
+        parameters: {
+          type: "object",
+          properties: {
+            key: { type: "string", description: "مفتاح المعلومة" },
+            id: { type: "integer", description: "معرّف المعلومة (بديل عن key)" },
+          },
         },
       },
     },
@@ -941,31 +1026,59 @@ export async function executeTool(
       case "scan_email_items": {
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
         const requested = args.mailbox ? String(args.mailbox) : "*";
+        const contains = args.contains ? String(args.contains).trim() : "";
         // Reuse the census to find the matching messages (whole mailbox, exact
         // count) and to DOWNLOAD their attachments once; the item parser then
         // works on those bytes locally, with no model call.
-        const census = await scanEmails({
+        //
+        // The scan+parse is MEMOIZED on the scan arguments (NOT on `contains`,
+        // which is applied to the already-parsed rows). A follow-up question
+        // about the same mail — «ليه السخانات الأريستون مش في التقرير؟» right
+        // after «اكتر بند اتكرر» — otherwise re-ran a ~30-100s scan and blew the
+        // agent's budget, answering with a timeout. The memo holds the small
+        // parsed rows, never the downloaded PDF buffers.
+        const scanArgs = {
           from: args.from ? String(args.from) : undefined,
           subject: args.subject ? String(args.subject) : undefined,
           query: args.query ? String(args.query) : undefined,
           sinceDate: args.sinceDate ? String(args.sinceDate) : undefined,
           beforeDate: args.beforeDate ? String(args.beforeDate) : undefined,
           mailbox: requested,
-          folder: "inbox",
           limit: typeof args.limit === "number" ? args.limit : undefined,
-          includeAttachments: true,
-          returnAllMatches: true,
+        };
+
+        const { census, parsed } = await memoizeScan(scanCacheKey("items", scanArgs), async () => {
+          const c = await scanEmails({
+            ...scanArgs,
+            folder: "inbox",
+            includeAttachments: true,
+            returnAllMatches: true,
+          });
+          const p = await parseItemsFromAttachments(c.attachmentMessages ?? []);
+          return { census: c, parsed: p };
         });
 
-        const parsed = await parseItemsFromAttachments(census.attachmentMessages ?? []);
         const top = Math.min(Math.max(Number(args.top ?? 50), 1), 300);
+        const truncated = census.attachmentCoverage?.truncated ?? false;
+
+        // A brand/part lookup («فين السخانات الأريستون؟») is a filter over the
+        // rows already parsed — it must never look like a fresh census.
+        const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+        const needle = norm(contains);
+        const matchedItems = contains
+          ? parsed.items.filter(
+              (i) => norm(i.description).includes(needle) || norm(i.partNo ?? "").includes(needle),
+            )
+          : parsed.items;
 
         // Default to FREQUENCY: «أكتر بند اتكرر» is the common ask, and ranking
         // by quantity alone answers a different question (one huge one-off order
         // would top it). The quantity view stays available for volume questions.
         const ordering = args.ordering === "qty" ? "qty" : "mostRepeated";
         const ranked =
-          ordering === "qty" ? parsed.aggregate : aggregateItemsByOccurrence(parsed.items);
+          ordering === "qty"
+            ? aggregateItems(matchedItems)
+            : aggregateItemsByOccurrence(matchedItems);
 
         if (args.exportCsv) {
           ctx.outbox.push({
@@ -1022,7 +1135,6 @@ export async function executeTool(
         // items" — it means no attachment was recognised. Saying so prevents the
         // honest-looking "0 بنود، الحصر كامل" the model would otherwise report.
         const noAttachments = coverage.attachments === 0;
-        const truncated = census.attachmentCoverage?.truncated ?? false;
         const complete = !noAttachments && coverage.unreadable === 0 && !truncated;
         // The item counts are only ever facts about the messages actually OPENED.
         // State the scope beside them so a capped scan cannot be relayed as the
@@ -1036,6 +1148,44 @@ export async function executeTool(
         ]
           .filter(Boolean)
           .join("، ");
+
+        // A `contains` lookup answers about ONE brand/part: report its own
+        // count, and when the scan was capped say plainly that older messages
+        // were not searched — otherwise «مش موجود» reads as «لا يوجد في البريد»
+        // when the truth is «لم أفحص هذه الفترة». This is exactly how the
+        // Ariston follow-up looked wrong: the items were real but older than the
+        // 400-message window.
+        if (contains) {
+          const filterNote =
+            `بحث عن «${contains}» داخل ${coverage.messages} رسالة فُتحت ` +
+            `(${coverage.lines} سطر بند من ${coverage.attachments} ملف). ` +
+            `النتائج: ${matchedItems.length} سطرًا. ` +
+            (truncated
+              ? `تنبيه: لم تُفحص كل الرسائل — ${scope}. إن لم يظهر ما تبحث عنه فقد يكون في رسائل أقدم، ` +
+                "فوسّع النطاق (sinceDate) أو خفّض from ثم أعد المحاولة. لا تقل «غير موجود في البريد»."
+              : "تم فحص كل الرسائل المطابقة.");
+          return {
+            ok: true,
+            data: {
+              note: filterNote,
+              contains,
+              isComplete: complete,
+              scope,
+              hasAttachments: !noAttachments,
+              ordering,
+              matchedMessages: census.matched,
+              coverage,
+              attachmentCoverage: census.attachmentCoverage ?? null,
+              matchedLines: matchedItems.length,
+              distinctParts: ranked.length,
+              totalLines: coverage.lines,
+              topItems: ranked.slice(0, top),
+              csvSent: Boolean(args.exportCsv),
+              pdfSent,
+            },
+          };
+        }
+
         return {
           ok: true,
           data: {
@@ -1233,6 +1383,67 @@ export async function executeTool(
         const filename = `${String(args.filename || "report").replace(/[^\w\u0600-\u06FF.-]/g, "_")}.pdf`;
         ctx.outbox.push({ buffer, filename, mimeType: "application/pdf" });
         return { ok: true, data: { generated: true, filename, bytes: buffer.length } };
+      }
+      case "remember_fact": {
+        const row = await rememberFact({
+          phone: args.shared ? "" : ctx.phone,
+          category: args.category ? String(args.category) : "fact",
+          key: String(args.key ?? ""),
+          value: String(args.value ?? ""),
+          importance: typeof args.importance === "number" ? args.importance : undefined,
+          source: args.shared ? "admin" : "user",
+        });
+        return {
+          ok: true,
+          data: {
+            saved: true,
+            id: row.id,
+            key: row.key,
+            value: row.value,
+            scope: row.phone ? "خاص" : "مشترك",
+          },
+        };
+      }
+      case "recall_memory": {
+        const rows = await recallMemories({
+          phone: ctx.phone,
+          query: args.query ? String(args.query) : undefined,
+          category: args.category ? String(args.category) : undefined,
+          limit: typeof args.limit === "number" ? args.limit : undefined,
+          trackUse: true,
+        });
+        return {
+          ok: true,
+          data: {
+            count: rows.length,
+            memories: rows.map((m) => ({
+              id: m.id,
+              category: m.category,
+              key: m.key,
+              value: m.value,
+              importance: m.importance,
+              pinned: m.pinned,
+              scope: m.phone ? "خاص" : "مشترك",
+            })),
+            note: rows.length
+              ? "هذه معلومات محفوظة في ذاكرتك — استخدمها في الرد."
+              : "لا توجد معلومة محفوظة مطابقة. لا تدّعِ أنك تعرفها؛ اسأل المستخدم أو ابحث بالأدوات.",
+          },
+        };
+      }
+      case "forget_memory": {
+        const removed = await forgetMemory({
+          phone: ctx.phone,
+          key: args.key ? String(args.key) : undefined,
+          id: typeof args.id === "number" ? args.id : undefined,
+        });
+        return {
+          ok: true,
+          data: {
+            closed: removed,
+            note: removed ? "تم إنهاء صلاحية المعلومة." : "لم أجد معلومة مطابقة.",
+          },
+        };
       }
       default:
         // A hallucinated tool name is invisible without this log — the model
