@@ -1727,3 +1727,114 @@ mail held 3,706 messages / 332 `EDC PO No…` — nothing was wrong with the mai
   the conditional census assignment). +1 assertion in `ai-email-items-tool.test.ts`
   for the «الحصر لم يبدأ فعليًا» wording. **872 api-server tests** pass; tsc clean;
   repo-wide prettier clean.
+
+## A census report must be retrievable, and its DELIVERY proven (fix/ai-census-job-report)
+
+Live thread (24/09) on `/ai-assistant`: «اعمل حصر لكل أوامر شراء EDC … وليس من
+قاعدة البيانات». The assistant produced a report, then announced «لقد تم إرسال
+التقرير الكامل» while **no file ever arrived** — and the operator had no way to
+tell a sent report from a lost one.
+
+- **A delivery failure is its OWN terminal state, not `completed` and not
+  `failed`.** `JobStatus` gained `delivery_failed`, thrown by the job's `finish`
+  via `JobDeliveryError`. The scan succeeded, so the **artifact stays on the job
+  row** and can be re-sent — whereas `failed` means the work itself broke. A job
+  that reports success while nothing was delivered was the defect; the state is
+  what makes the claim impossible.
+- **`finish` now returns delivery EVIDENCE.** Its signature gained a `save`
+  callback (`save({ result })` persists the artifact as it becomes known, so a
+  later error cannot lose it) and returns `{ messageId }`. The worker records only
+  what the WhatsApp send actually returned; `null` means not delivered.
+- **`resend_job_report` re-sends a stored artifact WITHOUT re-scanning.** A
+  year-long census costs minutes and a slice of the model quota, so a failed
+  delivery must never trigger a second scan. `job_status` surfaces `delivered` /
+  `pdfMessageId` / `textMessageId`, and the prompt tells the model that only
+  `delivered=true` may be reported as sent.
+- **The PDF table could not paginate the very reports this asks for.** It drew one
+  header and a fixed row height, so continuation pages carried **no column
+  headings** and a long description was cut at the cell edge. `drawHeaderRow` is
+  now called before the first row **and after every `addPage()`**, and rows are
+  measured with `heightOfString` so a wrapped cell is not truncated. The report is
+  also limited to the operator's **top 20** (the artifact keeps up to 100).
+  `ai-pdf-pagination.test.ts` renders a real 200-row pdfkit document (4 pages) and
+  pins the structure — **both tests fail against the pre-fix source**. (The
+  header-repeat assertion is at the source level: pdfkit **compresses content
+  streams**, so colour operators are not greppable in the output bytes.)
+- **A test mock must be derived from the existing stub, not duplicated.**
+  `parseItemsFromAttachments` reads `extractPdfTextDetailed` (for the page count)
+  while fixtures were only stubbed on `extractPdfText`, so 3 tests silently broke.
+  Every suite mocking the email module supplies the detailed variant from the same
+  stub: `async (b) => ({ text: await extractPdfText(b), pages: 1 })`.
+- **The PDF font is loaded defensively** (`existsSync` → built-in fallback).
+  `fontPath()` resolves relative to the MODULE, so it exists only in `dist/`
+  after the build copies `src/assets`; without the fallback a source-run throws
+  ENOENT. `pdf.ts` has no logger import — don't add one just to log this.
+- **Live verification (production mailboxes + the EXTERNAL Render Postgres)**:
+  `from:"EDC"` → **3,713** matched, resolved to `noreply@egyptian-drilling.com`
+  (domain `egyptian-drilling.com`, so 7 individual senders are included too);
+  `subject:"EDC PO No"` → **332** PO messages vs **1,809** RFQ messages, and
+  `byMonth` sums to exactly **332** — the RFQ/PO confusion the operator reported,
+  now separated. The attachment pass reports `truncatedReason:"time"`, 825 of 1200
+  opened, `remaining: 2888` and a `continueHint`, so a partial pass is never
+  presented as a total. Fetch the DB URL via
+  `GET /v1/postgres/<id>/connection-info` → `externalConnectionString`, then
+  **append** `?sslmode=require` (`&` when a query already exists); a raw copy
+  fails `SSL/TLS required`.
+- **Delete the live-probe temp files afterwards** (`/tmp/env_exports.sh`,
+  `/tmp/dburl.txt`, any `zz-*.test.ts`) and `unset` the exported
+  `SMTP_*`/`AI_*`/`DATABASE_URL` vars before re-running the suite — the 4 tests
+  asserting the *unconfigured* state fail on a polluted shell and look like real
+  regressions.
+- Tests: `ai-jobs.test.ts` 13 (+3 — `delivery_failed`, delivery proof, artifact
+  survives), `ai-pdf-pagination.test.ts` (2, new), `ai-pdf-local-read.test.ts` +2
+  (page count), `ai-email-items-timeout.test.ts` mock. **880 api-server tests**
+  pass; tsc (libs + api-server + portal) clean; repo-wide prettier clean;
+  api-server build clean.
+- Deploy: pending — push/PR only on explicit request.
+
+
+## «التوصيف والـ Line Item مقصوصين» — a wrapped Part-No cell ended the description
+
+Reported live after the census itself was fixed: «وصف البند والـ line item كانوا مش
+بيجو كاملين في التقرير، مقصوص». Two independent truncations, both reproduced from
+real EDC attachments — the extraction one was a **silent data loss**, not a display
+issue.
+
+- **`collectDescription` stopped at a wrapped `Part No` cell.** When the ERP's
+  `Part No` value overflows its column, the text layer pushes the fragments onto
+  their OWN lines (`SFCTR3P30`, `A24VSA2L`, `EWL-X0000`, `LSGP-40-`). Such a line
+  carries no 4-letter word, so the collector read it as the END of the description
+  and discarded every line after it. Live on P26E09609 the row read
+  «P/N : SFCTR3P30A24VSA2L , CONTACTOR ,3P» and the report showed exactly that —
+  while «,30A 24VAC / SCREWS,24V COIL FOR TRANE SCR HVAC , ( OLD P/N : CTR02575 )»
+  was thrown away. `isPartNoFragment` now **SKIPS** such a line instead of ending
+  the description. It is deliberately narrow (almost-all uppercase/digits/dots/
+  dashes, ≤24 chars, must contain a digit) so a category word like
+  `VALUE ADDED TAX` is never mistaken for a fragment.
+- **The line cap (7) could end a long description early.** Now
+  `MAX_DESCRIPTION_LINES` (20), an explicit constant, because the longest real
+  descriptions wrap well past the old bound.
+- **A CONTINUATION fragment must not stop the collector either**: «prose with ≥2
+  words, or 1 word once the description has already started». A wrapped tail ends
+  in short fragments (`… FOR YORK A C`) that a 4-char-only rule rejected.
+- **pdfkit CLIPS text taller than the `height` it is given.** Passing
+  `height: height - 6` on the data cell cut the last line off a wrapped
+  description — the display half of «مقصوص». The cell is now drawn with **no**
+  `height` at all, since the row is already as tall as its tallest cell
+  (`heightOfString`). Do not reintroduce a `height` on a data cell.
+- **The header's `lineBreak:false` is correct** — it is a fixed-height bar. The
+  no-clip invariant therefore belongs to the DATA draw; asserting it on the whole
+  function reports a false failure.
+- **Measure the defect, don't assume it.** A sweep over **315 real documents /
+  848 parsed items** flagged descriptions whose tail was absent from the raw text:
+  10 before the fix, **7 after** — and all 7 are probe false positives (the raw
+  interleaves a stripped Line Item code `REF CODE 1001.001.USED.0441`, or the
+  date/money mid-sentence in Arabic prose). Real truncation is **zero**.
+- Tests: `ai-description-completeness.test.ts` (2) — both built from verbatim
+  extracts of real POs (P26E09609 wrapped-fragments; a 12-line description) and
+  **both fail against the pre-fix source** (verified by reverting the skip and the
+  cap: got «, CONTACTOR ,3P SFCTR3P30» and «… WRA…» respectively). **882 api-server
+  tests** in 73 files pass; tsc (libs + api-server + portal) clean; repo-wide
+  prettier clean; api-server build clean.
+- Deploy: pending — push/PR only on explicit request.
+

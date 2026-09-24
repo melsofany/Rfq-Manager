@@ -85,6 +85,7 @@ function emptyItemCoverage(): ItemScanCoverage {
     noAttachment: 0,
     attachments: 0,
     lines: 0,
+    pages: 0,
     poDocuments: 0,
     rfqDocuments: 0,
     unknownDocuments: 0,

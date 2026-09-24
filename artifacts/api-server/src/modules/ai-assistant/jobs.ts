@@ -22,7 +22,32 @@ import { logger } from "../../shared/logger";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type JobStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  /**
+   * The work finished, but its DELIVERABLE could not be delivered (the PDF
+   * upload/send failed). Distinct from `completed` on purpose: the live defect
+   * was a job that announced "التقرير وصل" while nothing was ever sent, and the
+   * operator cannot tell the two apart unless the state does. Also distinct from
+   * `failed` — the SCAN succeeded, so the result is kept and can be re-sent.
+   */
+  | "delivery_failed";
+
+/**
+ * Thrown by a job's `finish` callback when the result was produced but could
+ * not be delivered. The runner records `delivery_failed` (keeping the partial
+ * result) instead of `completed`, so the operator is told the truth.
+ */
+export class JobDeliveryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "JobDeliveryError";
+  }
+}
 
 export interface JobRecord {
   id: number;
@@ -130,7 +155,12 @@ export async function updateJob(
   if (patch.status) {
     set.status = patch.status;
     if (patch.status === "running") set.startedAt = new Date();
-    if (patch.status === "completed" || patch.status === "failed") set.finishedAt = new Date();
+    if (
+      patch.status === "completed" ||
+      patch.status === "failed" ||
+      patch.status === "delivery_failed"
+    )
+      set.finishedAt = new Date();
   }
   if (patch.progress !== undefined) set.progress = patch.progress;
   if (patch.result !== undefined) set.result = patch.result;
@@ -208,8 +238,12 @@ export async function createJob(opts: CreateJobOpts): Promise<CreateJobResult> {
       logger.info({ jobId: job.id, kind: opts.kind }, "AI assistant: job completed");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await updateJob(job.id, { status: "failed", error: message }).catch(() => {});
-      logger.warn({ err, jobId: job.id, kind: opts.kind }, "AI assistant: job failed");
+      // A delivery failure is NOT a job failure: the scan produced a result that
+      // is still stored and re-sendable. Recording it as `completed` is the
+      // defect that let the assistant claim a report was sent when it was not.
+      const status: JobStatus = err instanceof JobDeliveryError ? "delivery_failed" : "failed";
+      await updateJob(job.id, { status, error: message }).catch(() => {});
+      logger.warn({ err, jobId: job.id, kind: opts.kind, status }, "AI assistant: job failed");
     }
   })();
   running.add(task);
@@ -264,8 +298,20 @@ export async function startCensusJob(opts: {
   phone: string;
   question: string;
   args: CensusJobArgs;
-  /** Called by the worker to produce the final WhatsApp payload. */
-  finish: (result: { phone: string; jobId: number; session: unknown }) => Promise<void>;
+  /**
+   * Called by the worker to produce the final WhatsApp payload. MUST return the
+   * delivery evidence (the WhatsApp message id) so the job records that the
+   * report was actually sent — and MUST throw `JobDeliveryError` when it was
+   * produced but not delivered, so the job ends `delivery_failed` rather than
+   * claiming success.
+   */
+  finish: (result: {
+    phone: string;
+    jobId: number;
+    session: unknown;
+    /** Writes the artifact/result onto the job row as it becomes known. */
+    save: (patch: { result?: unknown; error?: string | null }) => Promise<void>;
+  }) => Promise<{ messageId: string | null } | void>;
   /** Per-batch scan deadline; the worker keeps looping until the census ends. */
   runBatch: (deadline: number) => Promise<{ session: any }>;
 }): Promise<CreateJobResult> {
@@ -305,14 +351,36 @@ export async function startCensusJob(opts: {
           matched,
           attachments: cov.attachments ?? 0,
           items: cov.lines ?? 0,
+          // Pages actually rendered, plus the documents whose text could not be
+          // read — the operator's progress questions, answered from the run
+          // rather than estimated.
+          pages: cov.pages ?? 0,
+          poDocuments: cov.poDocuments ?? 0,
+          rfqDocuments: cov.rfqDocuments ?? 0,
+          unreadable: cov.unreadable ?? 0,
           percent: matched > 0 ? Math.min(100, Math.round((scanned / matched) * 100)) : 100,
         });
         if (session?.complete) break;
       }
+      let messageId: string | null = null;
       if (!cancelled) {
-        await opts.finish({ phone: opts.phone, jobId, session });
+        const out = await opts.finish({
+          phone: opts.phone,
+          jobId,
+          session,
+          save: (patch) => updateJob(jobId, patch),
+        });
+        messageId = out?.messageId ?? null;
       }
-      return { result: { complete: Boolean(session?.complete) && !cancelled, cancelled } };
+      return {
+        result: {
+          complete: Boolean(session?.complete) && !cancelled,
+          cancelled,
+          // Proof of delivery: the WhatsApp message id. `null` means the report
+          // was NOT delivered, so the assistant must not claim it was.
+          messageId,
+        },
+      };
     },
   });
 }
@@ -330,6 +398,7 @@ export function describeJob(job: JobRecord): string {
     running: "قيد التنفيذ",
     completed: "اكتملت",
     failed: "فشلت",
+    delivery_failed: "فشل الإرسال",
     cancelled: "أُلغيت",
   };
   const p = job.progress ?? {};
@@ -341,6 +410,8 @@ export function describeJob(job: JobRecord): string {
   push("مطابق", p.matched);
   push("مرفقات", p.attachments);
   push("بنود", p.items);
+  push("صفحات", p.pages);
+  push("تعذّر قراءتها", p.unreadable);
   push("نسبة التقدم", p.percent != null ? `${p.percent}%` : undefined);
   return `المهمة #${job.id} (${labels[job.status]})${bits.length ? " — " + bits.join(" · ") : ""}`;
 }

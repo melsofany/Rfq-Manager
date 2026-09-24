@@ -26,6 +26,9 @@ vi.mock("../../modules/ai-assistant/email", async (importOriginal) => ({
   scanEmails,
   searchEmails: vi.fn(),
   extractPdfText,
+  // `parseItemsFromAttachments` reads the detailed variant for the page count,
+  // so the mock derives it from the same stub — every fixture stays in one place.
+  extractPdfTextDetailed: async (b: Buffer) => ({ text: await extractPdfText(b), pages: 1 }),
   isEmailReadConfigured: () => true,
 }));
 

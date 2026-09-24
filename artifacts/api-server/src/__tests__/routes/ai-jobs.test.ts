@@ -96,8 +96,16 @@ vi.mock("../../shared/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-const { createJob, getJob, listJobs, cancelJob, describeJob, pendingAiJobs, startCensusJob } =
-  await import("../../modules/ai-assistant/jobs");
+const {
+  createJob,
+  getJob,
+  listJobs,
+  cancelJob,
+  describeJob,
+  pendingAiJobs,
+  startCensusJob,
+  JobDeliveryError,
+} = await import("../../modules/ai-assistant/jobs");
 
 describe("async jobs", () => {
   beforeEach(() => {
@@ -313,5 +321,70 @@ describe("async jobs", () => {
     const first = await slow;
     expect(again.job.id).toBe(first.job.id);
     await pendingAiJobs();
+  });
+
+  it("ends delivery_failed — NOT completed — when the report cannot be sent", async () => {
+    // The live defect: the job announced «تم إرسال التقرير» while nothing ever
+    // arrived, and the operator had no way to tell. A delivery failure is its own
+    // terminal state so the claim is impossible.
+    const { job } = await createJob({
+      phone: "2010",
+      kind: "email_census",
+      run: async () => {
+        throw new JobDeliveryError("تعذّر إرسال التقرير");
+      },
+    });
+    await pendingAiJobs();
+    const done = await getJob(job.id);
+    expect(done?.status).toBe("delivery_failed");
+    expect(done?.error).toContain("تعذّر إرسال التقرير");
+    expect(done?.status).not.toBe("completed");
+  });
+
+  it("records the delivery proof (messageId) returned by finish", async () => {
+    const { job } = await startCensusJob({
+      phone: "2010",
+      question: "حصر",
+      args: { mailbox: "*" },
+      runBatch: async () => ({
+        session: { census: { matched: 1 }, coverage: { messages: 1 }, items: [], complete: true },
+      }),
+      finish: async () => ({ messageId: "wamid.ABC" }),
+    });
+    expect(job.id).toBeGreaterThan(0);
+    await pendingAiJobs();
+    const done = await getJob((await listJobs("2010", 1))[0].id);
+    expect((done?.result as any)?.messageId).toBe("wamid.ABC");
+    expect(done?.status).toBe("completed");
+  });
+
+  it("keeps the artifact on the job row even when delivery fails", async () => {
+    // «النتيجة محفوظة ويمكن إعادة إرسالها» — the whole point of the fix. The
+    // result written via `save` must survive the thrown delivery error.
+    await startCensusJob({
+      phone: "2010",
+      question: "حصر",
+      args: { mailbox: "*" },
+      runBatch: async () => ({
+        session: {
+          census: { matched: 5 },
+          coverage: { messages: 5, pages: 12, lines: 9 },
+          items: [],
+          complete: true,
+        },
+      }),
+      finish: async ({ save }) => {
+        await save({
+          result: { matched: 5, pages: 12, lines: 9, topItems: [{ description: "X" }] },
+        });
+        throw new JobDeliveryError("failed to send");
+      },
+    });
+    await pendingAiJobs();
+    const done = await getJob((await listJobs("2010", 1))[0].id);
+    expect(done?.status).toBe("delivery_failed");
+    // The artifact is intact despite the delivery failure.
+    expect((done?.result as any)?.pages).toBe(12);
+    expect((done?.result as any)?.topItems).toHaveLength(1);
   });
 });
