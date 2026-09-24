@@ -2102,3 +2102,78 @@ are reimplemented, which also keeps the WhatsApp reply inside one 150s budget.
   reverting it), so they guard behaviour, not just code paths. **930 api-server tests**
   (was 911) pass; tsc (libs + api-server + portal) clean; repo-wide prettier clean;
   api-server + portal builds clean.
+
+## A report the model assembles cannot be complete — and an aggregate must be SQL (PR #186)
+
+Live report: the operator asked for every item supplied to customers in 2025–2026
+with quantities, and the PDF came back with **15 items**. Production holds **449
+products** across **1,971 customer-PO lines**. Three independent defects, all of
+them the same family — a capability silently doing something other than it claimed.
+
+- **There was no tool that aggregated `customer_po_items`.** The DB tools were
+  lookups; nothing grouped the table, so the model read a page of rows and
+  summarised them in prose. A sample then read as a total. `sql-registry.ts` adds
+  `aggregate_customer_po_items`, which groups in SQL (`SUM`/`COUNT … GROUP BY`) —
+  **never** totalling hundreds of rows in the model, which will approximate, drop
+  rows past its context window, or invent a figure the operator cannot audit.
+- **A file the MODEL builds cannot be complete.** `generate_pdf` takes its rows as
+  a tool argument, so the model must emit them in one response — and 449 rows
+  exceed its output limit, truncating the list at exactly the point the operator
+  noticed. This is the same trap already documented for the missing-number report
+  («Build the report in the SERVER from the comparison result»). The aggregate tool
+  now takes `exportPdf`/`exportCsv` and builds the artifact on the server from the
+  complete result; the model is shown a **bounded window** (`MODEL_ROW_WINDOW` = 50)
+  to describe, never the report. Do not reintroduce a path where the model carries
+  the rows.
+- **A count must travel with the rows.** `aggregate_customer_po_items` returns
+  `count` (real distinct products), `sourceRows` (lines that went in), `isComplete`
+  and `rowsReturned`, so a 50-row payload can never be described as the whole set.
+  The `note` says plainly «الصفوف المعروضة لك هنا أول 50 فقط» when no file was sent.
+  Same rule as the email census's `isTotal`.
+
+### Product identity is the hard part of «بدون تكرار»
+
+- `canonicalDescription` folds what makes ONE article look like two: case and
+  punctuation, Arabic spelling variants (hamza/taa-marbuta/yaa/harakat/tatweel),
+  and — critically — a **leading ERP line-item code** (`1531.032.GENRAL.7538
+  CIRCUIT BREAKER 30A` == `CIRCUIT BREAKER 30A`). Live data is full of both forms.
+- **Never fold a size that is part of the name.** `CABLE 50 MM` and `CABLE 70 MM`
+  are different articles; merging them invents a product that was never ordered. A
+  naive `group by lower(description)` passes the easy cases and fails this one —
+  the dedup tests are written against the real aggregation path precisely because
+  asserting on `canonicalDescription` in isolation missed it (verified: reverting
+  to naive dedup fails 1 test only once the ERP-code case goes through the tool).
+- `label` is NOT unique (two different meters both label `meter`), and a
+  duplicated-looking name is a failure in the operator's eyes. The report must
+  print `description`; the tool note says so.
+
+### Data-shape rules this data forced
+
+- **Accounting lines are not stock.** The ERP prints its VAT as a real row
+  (`0600.000.GENRAL.0005`, description `VALUE ADDED TAX LOCAL`), which otherwise
+  tops a frequency ranking. Dropped via `NON_PRODUCT_RE` and reported as
+  `droppedNonProduct` rather than silently.
+- **A category-scale total is FLAGGED, not dropped** (`productLevel`,
+  upper-quartile comparison — the overall median sits at ~1 on this skewed data
+  and flags everything). Dropping it would hide a real total.
+- Quantity filters (`minQty`) are echoed in `appliedFilters` and counted in
+  `droppedByMinQty`, so the reply can disclose the filter with its number.
+
+### `start_census_job` for a DATABASE question created a misleading email census
+
+A census job keyed on `email_census` was reachable for a question answerable from
+`customer_po_items`. With mail reading unconfigured it reported «0 messages» —
+which reads as «لا توجد بيانات». It now **refuses before creating a job row** and
+names `aggregate_customer_po_items`, so the model is redirected to the right
+source instead of reporting an empty email scan.
+
+- **Live verification (production DB, external connection string)**: 449 products
+  from 1,971 lines; a **92-page** valid PDF (743 KB) and a CSV carrying all 449.
+  `sql-registry.ts` is verified against real rows, not only fixtures.
+- Tests: `ai-sql-aggregate.test.ts` (21) + `ai-db-report-tool.test.ts` (7).
+  **958 api-server tests** (was 930) pass; tsc + api-server/portal builds + repo-wide
+  prettier clean. The dedup, PDF-completeness and census-guard tests fail against
+  the pre-fix source (each verified by reverting its fix).
+- Deploy: PR #186 squash-merged `8e179a4e5`; CI (Tests / Type Check / Format Check)
+  green; Deploy-to-Render workflow success; live at `8e179a4e5`; `/api/healthz` 200
+  and `/api/ai-assistant/*` 401 (mounted behind auth).
