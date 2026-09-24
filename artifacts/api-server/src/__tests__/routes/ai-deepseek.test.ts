@@ -297,3 +297,32 @@ describe("DeepSeek provider (second provider, cross-provider fallback)", () => {
     expect(models).toContain("deepseek-chat");
   });
 });
+
+describe("startup provider-capacity log", () => {
+  it("reports the failover capacity, and names a single provider as a warning", async () => {
+    // Diagnosing a whole-assistant outage from outside is near-impossible: a list
+    // of model names looks the same whether one provider or two are configured.
+    // The live service had ONE key and no DEEPSEEK_API_KEY, which is the fact that
+    // explains "the daily quota is exhausted" — so it is stated at startup.
+    const { logProviderCapacity, configuredProviderCount } =
+      await import("../../modules/ai-assistant/config");
+    const { logger } = await import("../../shared/logger");
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => undefined as never);
+    const info = vi.spyOn(logger, "info").mockImplementation(() => undefined as never);
+    expect(configuredProviderCount()).toBe(2);
+    logProviderCapacity();
+    // Both keys are set in this file, so the healthy path is taken.
+    expect(info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ready: expect.arrayContaining([expect.stringContaining("deepseek")]),
+      }),
+      expect.stringContaining("failover configured"),
+    );
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.objectContaining({ single: true }),
+      expect.anything(),
+    );
+    warn.mockRestore();
+    info.mockRestore();
+  });
+});

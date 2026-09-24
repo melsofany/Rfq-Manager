@@ -323,3 +323,30 @@ export function providerStatus(): ProviderStatus[] {
 export function configuredProviderCount(): number {
   return providerStatus().filter((p) => p.configured).length;
 }
+
+/**
+ * Log the failover capacity at startup.
+ *
+ * The failover chain is only as good as the number of CONFIGURED providers, and
+ * with one key every model shares a single 20-request/day budget. Diagnosing a
+ * whole-assistant outage ("the provider quota is exhausted") from the outside is
+ * near-impossible — the list of model names looks identical either way — so the
+ * one fact that explains it is stated where the operator can see it.
+ *
+ * A missing key is reported as a WARNING, not info: it is a silent single point
+ * of failure, not a normal state.
+ */
+export function logProviderCapacity(): void {
+  const status = providerStatus();
+  const ready = status.filter((p) => p.configured).map((p) => `${p.provider}:${p.model}`);
+  if (ready.length === 0) {
+    logger.error("AI assistant: NO provider configured — the assistant cannot answer");
+  } else if (ready.length === 1) {
+    logger.warn(
+      { ready, single: true },
+      "AI assistant: ONE provider configured — no failover when its daily quota is spent",
+    );
+  } else {
+    logger.info({ ready }, "AI assistant: provider failover configured");
+  }
+}
