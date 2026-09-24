@@ -954,6 +954,10 @@ describe("oversize census hands off to a background job", () => {
     const jobReport = src.slice(src.indexOf("finish: async ({ phone, session })")).slice(0, 4000);
     expect(jobReport).toContain("aggregateItemsByOccurrence");
     expect(jobReport).not.toContain("aggregateItems(s.items");
+    // And a census that inspected NOTHING must not be reported as a finished,
+    // verified zero — «النطاق: كل الرسائل المطابقة (0)» is how the operator was
+    // told a year of EDC orders did not exist.
+    expect(jobReport).toContain("الحصر لم يبدأ فعليًا");
   });
 
   it("hands a 100%-census request to a background job instead of a partial list", async () => {

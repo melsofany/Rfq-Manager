@@ -32,6 +32,7 @@ import {
   type MessageItems,
   type ParsedLineItem,
 } from "./email-items";
+import { logger } from "../../shared/logger";
 
 /** The filter arguments that identify one census. */
 export interface ItemScanArgs {
@@ -146,6 +147,41 @@ function parseChunkSize(): number {
 }
 
 /**
+ * Did this session actually inspect anything?
+ *
+ * `batches === 0` alone is NOT "no work": a window whose messages carry no
+ * readable attachment parses zero chunks yet still examined every message, which
+ * is recorded in the coverage counters. So work is judged by what was EXAMINED,
+ * not by how many parse chunks ran.
+ */
+function sessionDidWork(s: ItemScanSession): boolean {
+  return (
+    (s.batches ?? 0) > 0 ||
+    (s.coverage?.messages ?? 0) > 0 ||
+    (s.attachmentCoverage?.messages ?? 0) > 0 ||
+    (s.attachmentCoverage?.scanned ?? 0) > 0
+  );
+}
+
+/**
+ * Is this restored session a RESULT, or the imprint of a failed scan?
+ *
+ * A session that inspected nothing and matched nothing asserts an empty census
+ * that was never performed — and the two cases are indistinguishable from here:
+ * a `from` filter the mail server does not recognise returns zero envelopes
+ * exactly like an empty mailbox. Live, that is how a year of EDC purchase orders
+ * was answered «رسائل مطابقة: 0 — مكتمل» INSTANTLY: the empty session written
+ * while the sender shorthand was still unresolved was persisted, reloaded after
+ * the next deploy, believed because it said `complete`, and reused forever — each
+ * new request re-confirmed the zero without ever opening a message. Discarding
+ * it costs one envelope scan (already memoized) and is the only way a census that
+ * failed to start can ever start.
+ */
+function isUnstartedEmpty(s: ItemScanSession): boolean {
+  return !sessionDidWork(s) && (s.census?.matched ?? 0) === 0;
+}
+
+/**
  * Parse a window of messages in chunks, folding each chunk into the session and
  * persisting it — so the cursor and the rows are durable if a later chunk is cut
  * by the deadline or the per-tool timeout. Returns false when the deadline was
@@ -196,8 +232,14 @@ async function runBatch(session: ItemScanSession, key: string, deadline: number)
   });
   // `matched` and `emails` describe the WHOLE ask and are identical on every
   // window; only `attachmentMessages` is windowed. Keeping the latest census
-  // therefore keeps the authoritative totals.
-  session.census = census;
+  // therefore keeps the authoritative totals — EXCEPT when a window comes back
+  // with zero matches for an ask that has already matched: a transient IMAP
+  // failure narrows silently, and adopting its `matched: 0` would mark the census
+  // complete and end it on the spot. Only an authoritative answer may replace the
+  // total, so a zero that contradicts a known non-zero is refused.
+  if (census.matched > 0 || (session.census?.matched ?? 0) === 0) {
+    session.census = census;
+  }
 
   // A `from` shorthand that is not an address gets resolved on the first window
   // (the census matched nothing). Persist the REAL address into the session's
@@ -247,7 +289,20 @@ export async function runItemScan(
     // from Postgres so the census CONTINUES from its cursor instead of re-reading
     // a multi-minute scan from zero — or, for a large mailbox, never finishing.
     session = await loadPersistedScanSession<ItemScanSession>(key);
-    if (session) putScanCacheEntry(key, session);
+    if (session && isUnstartedEmpty(session)) {
+      // A claimed-empty session that examined nothing is not a result: it is the
+      // imprint of a scan that never started (see `isUnstartedEmpty`). Trusting it
+      // answers every future request «0 مطابقة» without opening a single message.
+      // Drop it and run a real scan — the persisted claim carries no evidence, so
+      // there is nothing to lose by re-checking.
+      logger.warn(
+        { key },
+        "AI assistant: discarding an unstarted empty scan session and re-scanning",
+      );
+      session = undefined;
+    } else if (session) {
+      putScanCacheEntry(key, session);
+    }
   }
 
   if (!session) {
@@ -267,7 +322,7 @@ export async function runItemScan(
     };
   }
 
-  if (!session.complete) {
+  if (!session.complete || !sessionDidWork(session)) {
     do {
       const keepGoing = await runBatch(session, key, deadline);
       ranBatches += 1;
