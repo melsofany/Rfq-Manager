@@ -541,7 +541,11 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
         parameters: {
           type: "object",
           properties: {
-            from: { type: "string", description: "بريد المُرسل أو اسمه (مثل egyptian-drilling)" },
+            from: {
+              type: "string",
+              description:
+                "المُرسل: بريد، أو نطاقه، أو اختصار اسم الشركة كما يقوله المستخدم (مثل EDC). الاختصار يُطابَق مع المُرسل الفعلي، وتُحصى الشركة كاملةً بكل عناوين نطاقها",
+            },
             subject: { type: "string", description: "كلمة في الموضوع (مثل RFQ أو PO)" },
             query: { type: "string", description: "كلمة في الموضوع/المُرسل" },
             sinceDate: { type: "string", description: "بداية الفترة YYYY-MM-DD" },
@@ -1588,6 +1592,11 @@ async function executeToolInner(
             byMailbox: census.byMailbox,
             byMonth: census.byMonth,
             bySender: census.bySender,
+            // A `from` filter that matched nothing is NOT "no mail from this
+            // company" — the shorthand may not be an address at all. Sending the
+            // resolution lets the model name the real sender (or ask which one)
+            // instead of announcing an absence it cannot support.
+            senderResolution: census.senderResolution ?? null,
             comparison: census.compare ?? null,
             attachmentCoverage: census.attachmentCoverage ?? null,
             numbers: census.numbers,
@@ -1843,10 +1852,11 @@ async function executeToolInner(
                     i + 1,
                     p.description || "غير متوفر",
                     p.partNo ?? "غير متوفر",
-                    // A Line Item is an internal row number that differs PO by PO,
-                    // so it is deliberately NOT the identity — it is not even
-                    // carried through aggregation. Say so rather than invent one.
-                    "غير متوفر",
+                    // A Line Item number differs PO by PO, so it is never the
+                    // identity — but the row DOES print it, so reporting «غير
+                    // متوفر» was a false absence for a value the operator asked
+                    // for by name.
+                    p.lineItems.length ? p.lineItems.join("، ") : "غير متوفر",
                     p.occurrences,
                     p.qty,
                     p.uom ?? "غير متوفر",
@@ -1912,8 +1922,20 @@ async function executeToolInner(
           ok: true,
           data: {
             note: noAttachments
-              ? `لم أجد أي مرفق PDF يمكن قراءته في ${census.matched} رسالة مطابقة. ` +
-                "لا تقل إن الطلبات بلا بنود — قل إنه لم يُعثر على ملفات بنود في هذا النطاق، وجرّب وسّع المدة أو غيّر المُرسل."
+              ? census.senderResolution && !census.senderResolution.resolved
+                ? // The sender filter matched NOBODY, so there is no scope to
+                  // report an absence over. Saying «no readable attachments»
+                  // here is what told the operator their POs were not in the
+                  // mailbox when the search string was simply wrong.
+                  `لم يطابق أي مُرسل «${census.senderResolution.requested}» — لم يُبحث بعد عن مُرسل صحيح، ` +
+                  `فلا يُدّعى أنه لا توجد أوامر شراء. المُرسلون الموجودون فعلًا: ` +
+                  `${census.senderResolution.observed?.join("، ") || "غير معروف"}.` +
+                  (census.senderResolution.candidates.length
+                    ? ` أو تطابق أكثر من مُرسل: ${census.senderResolution.candidates.join("، ")}.`
+                    : "") +
+                  " اطلب من المستخدم تحديد المُرسل الصحيح."
+                : `لم أجد أي مرفق PDF يمكن قراءته في ${census.matched} رسالة مطابقة. ` +
+                  "لا تقل إن الطلبات بلا بنود — قل إنه لم يُعثر على ملفات بنود في هذا النطاق، وجرّب وسّع المدة أو غيّر المُرسل."
               : `حصر بنود من مرفقات البريد: ${census.matched} رسالة مطابقة، فُتح مرفق ${coverage.messages} رسالة، ` +
                 `وقُرئ ${coverage.lines} سطر بند من ${coverage.attachments} ملف.` +
                 docMix +
@@ -1933,6 +1955,7 @@ async function executeToolInner(
             batches: session.batches,
             coverage,
             attachmentCoverage: scanCoverage,
+            senderResolution: census.senderResolution ?? null,
             distinctParts: parsed.aggregate.length,
             totalLines: coverage.lines,
             // The counts the operator asked for, so the final report relays facts

@@ -1580,3 +1580,48 @@ capability that silently did something other than what it claimed.
   (libs + api-server + portal) clean; repo-wide prettier clean; api-server +
   portal builds clean.
 - Deploy: pending — push/PR only on explicit request.
+
+## Sender shorthand, company scope, and the EDC PO census (fix/ai-edc-sender-scope)
+
+Live operator thread (24/09): «هتخش للميل info وهتشوف اوامر الشراء كلها الواردة من
+EDC … وليس من قاعدة البيانات». The assistant answered that there were **no EDC PO
+attachments at all** over a mailbox holding thousands of them. Two independent
+defects, plus one found while fixing them.
+
+- **`from:"EDC"` is not a sender.** `EDC` appears in the SUBJECTS
+  (`EDC PO No P26E14708`) and in no address — the mail is from
+  `noreply@egyptian-drilling.com`, with **no display name**. The census narrows
+  `from` SERVER-SIDE, so the filter matched nothing and «لا توجد مرفقات» was
+  reported over real orders. `scanEmails` now re-scans **without** the sender (the
+  operator's word searched across subject AND sender), resolves it against the
+  senders actually present (`resolveSenderFromCandidates`), and reports
+  `senderResolution` so the model names the address it really searched.
+- **The company is the unit, not one mailbox.** The first cut filtered on the
+  single resolved ADDRESS, which dropped the colleagues' mail — live EDC writes
+  from `noreply@` (3,610) **plus two individuals (62)**, all EDC orders. Filtering
+  now uses the resolved **DOMAIN** (`senderResolution.domain`, carried on the
+  result). Live: `matched` went **3,612 → 3,695**.
+- **An unresolvable shorthand must not read as «no mail».** When two domains tie
+  (a rival within 4x of the leader) the resolver returns `resolved: null` plus
+  `candidates`, and the note explicitly forbids the claim «لا توجد رسائل من هذا
+  المُرسل», naming the senders actually seen.
+- **Do NOT drop the other criteria on the retry.** The first cut passed only
+  `query` to the fallback scan, so a `subject` the operator gave was silently
+  discarded and the resolved census widened beyond the question. `subject` (and
+  the dates, unseen flag, folder) must survive — pinned by a test.
+- **A test fixture must reproduce the failure it claims to guard.** The first
+  census tests set the envelope display name to `"EDC"`, so the CLIENT-side filter
+  matched and the resolver never ran — three tests passed against the bug. The
+  fixture now sets a realistic display name (`Egyptian Drilling Company`) via a
+  `senderDisplayName` variable; the same trap hides a shorthand whose test address
+  itself contains the term (`info@edc-supplies.com` becomes
+  `info@delta-supplies.com`).
+- Tests: +7 in `ai-email-census.test.ts` (company-scope, other-criteria-preserved,
+  refusal wording, no needless resolution, plus the display-name fixture) and
+  +1 assertion in `ai-email-sender-resolution.test.ts` for `domain`. 4 of the new
+  guards fail against the pre-fix source (verified by staging the single-address
+  filter and the unstripped description/Line Item). **861 api-server tests** pass;
+  tsc + repo-wide prettier + api-server build clean.
+- Live verification: `matched: 3695 resolved: {requested:"EDC",
+  resolved:"noreply@egyptian-drilling.com", domain:"egyptian-drilling.com"}` and a
+  parsed line item with `lineItems=[1,2]` and a complete description.

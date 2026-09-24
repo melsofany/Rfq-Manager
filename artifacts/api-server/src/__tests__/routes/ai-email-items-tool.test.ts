@@ -231,6 +231,69 @@ describe("scan_email_items tool", () => {
     expect(qty.data.topItems[0]).toMatchObject({ qty: 12, uom: "Piece" });
   });
 
+  it("reports the resolved sender when the operator used a shorthand", async () => {
+    // Live (24/09): «اوامر الشراء الواردة من EDC» — «EDC» is the operator's
+    // shorthand, the address is `noreply@egyptian-drilling.com`, and the word
+    // only appears in the SUBJECT. The census resolves it and the tool must
+    // surface that so the model can say what it actually searched, instead of
+    // «لا توجد رسائل من هذا المُرسل».
+    scanEmails.mockResolvedValue(
+      censusWithAttachments(
+        [
+          {
+            uid: 30,
+            mailbox: "info@cortoba-supplies.com",
+            subject: "EDC PO No P26E14630",
+            attachments: pdfAttachments([{ filename: "po.pdf", content: Buffer.from("pdf") }]),
+          },
+        ],
+        {
+          senderResolution: {
+            requested: "EDC",
+            resolved: "noreply@egyptian-drilling.com",
+            matched: 1,
+            candidates: [],
+          },
+        },
+      ),
+    );
+
+    const res = (await executeTool(
+      "scan_email_items",
+      { from: "EDC", ordering: "qty" },
+      ctx as never,
+    )) as { data: { senderResolution: { resolved: string | null; requested: string } } };
+    expect(res.data.senderResolution.requested).toBe("EDC");
+    expect(res.data.senderResolution.resolved).toBe("noreply@egyptian-drilling.com");
+  });
+
+  it("surfaces the printed Line Item numbers per item", async () => {
+    // The operator asked for the Line Item column by name. It is not an identity
+    // (it differs PO by PO) but it IS printed, so it must reach the report.
+    extractPdfText.mockResolvedValue(
+      "PO number: P26E14630(RIG58)\nQuantity UOM Part No Line Item\n" +
+        "1 5 Each 05-OCT-2026 10.00 50.00\n0666.000.GENRAL.0006\nWIDGET\n",
+    );
+    const pool = [1, 2].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC PO No P26E1463${uid}`,
+      attachments: pdfAttachments([{ filename: `po${uid}.pdf`, content: Buffer.from("pdf") }]),
+    }));
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 2,
+        }),
+    );
+
+    const res = (await executeTool("scan_email_items", { ordering: "qty" }, ctx as never)) as {
+      data: { topItems: Array<{ partNo: string; lineItems: number[] }> };
+    };
+    expect(res.data.topItems[0].partNo).toBe("0666.000.GENRAL.0006");
+    expect(res.data.topItems[0].lineItems).toEqual([1]);
+  });
+
   it("asks the census for the WHOLE matched set, not the public 500-row page", async () => {
     // A year of mail must not be analysed from the newest page only — that is
     // how a partial census gets presented as the year's total.

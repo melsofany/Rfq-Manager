@@ -97,6 +97,25 @@ const PN_INLINE_RE = /\bP\s*\/\s*N\s*:?\s*([A-Z0-9][A-Z0-9./-]{4,})/i;
 const PART_CELL_JUNK_RE = /\b\d\.\d{3,}E[+-]?\b/;
 
 /**
+ * The date + money tail the PO prints at the END of a description's last line
+ * (`… WALL 05-OCT-2026 5,100.00 10,200.00`).
+ *
+ * The embedded columns are only separate visually; the text layer appends them to
+ * the prose, so the description the operator asked for ("الوصف كاملًا") carried a
+ * delivery date and two figures that are NOT part of the item's name. The money
+ * is already parsed as `unitPrice`/`lineTotal` and the date is a column of its
+ * own, so leaving them in the description duplicates data and makes two identical
+ * parts look different.
+ */
+const DESCRIPTION_TAIL_RE =
+  /\s*\b\d{2}-[A-Za-z]{3}-\d{4}\b\s+[\d,]+\.\d{2}(?:\s+[\d,]+\.\d{2})?.*$/;
+
+/** Strip the printed date/price tail from a description fragment. */
+function stripDescriptionTail(text: string): string {
+  return text.replace(DESCRIPTION_TAIL_RE, "").replace(/\s+/g, " ").trim();
+}
+
+/**
  * Page furniture that the PDF text layer interleaves with a row's real
  * description — never prose, always a stamp or a running footer.
  *
@@ -259,7 +278,9 @@ function collectDescription(
     .trim();
   // A real description has a word in it. This drops the PO row's date/price
   // tail ("05-OCT-2026 75.00 900.00"), whose description is on the lines below.
-  if (/[A-Za-z\u0600-\u06FF]{4,}/.test(head) && !PAGE_FURNITURE_RE.test(head)) parts.push(head);
+  if (/[A-Za-z\u0600-\u06FF]{4,}/.test(head) && !PAGE_FURNITURE_RE.test(head)) {
+    parts.push(stripDescriptionTail(head));
+  }
 
   for (let j = startIndex + 1; j < lines.length && j <= startIndex + 7; j++) {
     const raw = lines[j];
@@ -275,14 +296,14 @@ function collectDescription(
     if (PAGE_FURNITURE_RE.test(raw)) continue;
     // A continuation line carries the row's line number, and often the wrapped
     // fragment of an overflowing Part No cell: `12 GENRAL.0 RECIPROCATING …`.
-    const next = stripRowFurniture(raw);
+    const next = stripDescriptionTail(stripRowFurniture(raw));
     if (!next) continue;
     if (PART_NO_RE.test(next)) continue;
     if (/^Note:?$/i.test(next)) continue;
     if (/^[A-Za-z\u0600-\u06FF]/.test(next)) parts.push(next);
     else break;
   }
-  return { text: parts.join(" ").replace(/\s+/g, " ").trim(), hitTotals };
+  return { text: parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim(), hitTotals };
 }
 
 /**
@@ -333,6 +354,16 @@ export interface AggregatedPart {
    * presented as certain.
    */
   identityConfident: boolean;
+  /**
+   * The printed Line Item numbers, deduped and sorted.
+   *
+   * Deliberately NOT part of the identity: the same item is line 1 on one PO and
+   * line 3 on the next, so it can never be used for matching. It IS carried
+   * because the operator asked for the column and it is the one thing that lets
+   * them open the right row of the right order — and because «غير متوفر» for a
+   * value the documents DO print is a false absence.
+   */
+  lineItems: number[];
 }
 
 /** Unit of measure as it should appear beside an aggregated quantity. */
@@ -389,6 +420,7 @@ export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
     const lines = group.rows.map((r) => r.row);
     const docs = new Set<string>();
     const partNos = new Set<string>();
+    const lineItems = new Set<number>();
     let description = "";
     let qty = 0;
 
@@ -396,6 +428,7 @@ export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
       qty += it.qty ?? 0;
       const pn = (it.partNo || "").trim();
       if (pn) partNos.add(pn);
+      if (typeof it.lineNo === "number" && Number.isFinite(it.lineNo)) lineItems.add(it.lineNo);
       // A line with no document number still counts as its own occurrence, keyed
       // on the line so it can never silently vanish from the total.
       const doc = (it.docId || "").trim() || `__line_${idx}__${it.lineNo ?? ""}`;
@@ -424,6 +457,7 @@ export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
       documents: [...docs].filter((d) => !d.startsWith("__line_")),
       partNos: [...partNos],
       identityConfident: hasConfidentIdentity(group.identity),
+      lineItems: [...lineItems].sort((a, b) => a - b),
     });
   }
 
@@ -633,7 +667,7 @@ export function itemsCsv(result: ItemScanResult): string {
 export function itemsAggregateCsv(parts: AggregatedPart[]): string {
   const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [
-    "description,partNo,allPartNos,orders,totalQty,uom,avgUnitPrice,totalValue,identityConfident,documents",
+    "description,partNo,allPartNos,lineItems,orders,totalQty,uom,avgUnitPrice,totalValue,identityConfident,documents",
   ];
   for (const p of parts) {
     lines.push(
@@ -641,6 +675,7 @@ export function itemsAggregateCsv(parts: AggregatedPart[]): string {
         p.description,
         p.partNo ?? "",
         p.partNos.join(" | "),
+        p.lineItems.join(" | "),
         p.occurrences,
         p.qty,
         p.uom ?? "",

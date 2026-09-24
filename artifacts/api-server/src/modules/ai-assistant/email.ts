@@ -610,6 +610,96 @@ export function matchEmailFields(opts: { haystack: string; needle: string }): bo
   return tokens.every((t) => target.includes(t));
 }
 
+/**
+ * Resolve a sender filter that matched nothing to the address the mail really
+ * carries.
+ *
+ * A census with `from` is narrowed SERVER-SIDE, so a filter the server does not
+ * recognise («EDC» is nobody's address, and no display name either) returns
+ * empty — and the caller then cannot tell "no mail from this company" from "I
+ * searched the wrong string". Live, that produced «no readable PO attachments»
+ * over 3,688 real EDC messages whose SUBJECTS all read «EDC PO No …».
+ *
+ * So resolution is driven by the OPERATOR'S WORD, not by string distance on an
+ * address: the caller supplies the senders of the messages that word matches
+ * (subject OR sender), and the dominant sender among them is the company the
+ * operator means. Pure and deterministic so the rule is testable:
+ *  - no candidate senders ⇒ `resolved: null`, so the caller reports what it saw
+ *    rather than substituting a sender of its own choosing;
+ *  - candidates on two different domains with comparable volume ⇒ null, because
+ *    answering about the wrong company is worse than asking which one.
+ */
+export function resolveSenderFromCandidates(
+  requested: string,
+  senders: Array<{ from: string; count: number }>,
+): { resolved: string | null; domain: string | null; candidates: string[] } {
+  const term = (requested ?? "").trim();
+  if (!term) return { resolved: null, domain: null, candidates: [] };
+
+  const scored: Array<{ address: string; count: number }> = [];
+  for (const s of senders) {
+    const addr = senderAddress(s.from);
+    if (!addr) continue;
+    scored.push({ address: addr, count: s.count });
+  }
+  if (!scored.length) return { resolved: null, domain: null, candidates: [] };
+
+  // Merge senders on the SAME domain: a company writes from `noreply@` and from
+  // individuals' mailboxes, and every one of them is the same correspondent.
+  // Counts SUM per domain; the address reported is the busiest one on it.
+  const byDomain = new Map<string, { address: string; count: number; top: number }>();
+  for (const s of scored) {
+    const domain = s.address.slice(s.address.lastIndexOf("@") + 1);
+    const hit = byDomain.get(domain);
+    if (!hit) byDomain.set(domain, { address: s.address, count: s.count, top: s.count });
+    else {
+      hit.count += s.count;
+      if (s.count > hit.top) {
+        hit.top = s.count;
+        hit.address = s.address;
+      }
+    }
+  }
+  const domains = [...byDomain.entries()]
+    .map(([domain, v]) => ({ domain, ...v }))
+    .sort((a, b) => b.count - a.count || a.address.localeCompare(b.address));
+  const best = domains[0];
+  const rival = domains[1];
+  if (rival && rival.count >= best.count / 4) {
+    return {
+      resolved: null,
+      domain: null,
+      candidates: domains.slice(0, 8).map((d) => d.address),
+    };
+  }
+  // `domain` travels with the answer because the COMPANY is the unit the operator
+  // named, not one mailbox on it: filtering on `resolved` alone would drop the
+  // colleagues' mail (live EDC: 3,610 from `noreply@` plus 62 from two people).
+  return { resolved: best.address, domain: best.domain, candidates: [] };
+}
+
+/**
+ * Sender histogram for a set of matches, keyed on the ADDRESS.
+ *
+ * The address (not the display name) is what a follow-up filter must use: the
+ * same company writes from `noreply@` and from people's mailboxes, and every one
+ * of them is the same company. Shared by `bySender` aggregation and the
+ * sender-resolution fallback so both describe senders the same way.
+ */
+export function aggregateSenders(
+  matches: Array<{ from: string }>,
+): Array<{ from: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const e of matches) {
+    const addr = senderAddress(e.from) || e.from;
+    if (!addr) continue;
+    counts.set(addr, (counts.get(addr) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([from, count]) => ({ from, count }))
+    .sort((a, b) => b.count - a.count || a.from.localeCompare(b.from));
+}
+
 export interface EmailScope {
   mailbox: string;
   /** Which folder was searched ("inbox" / "sent"). */
@@ -880,6 +970,37 @@ export interface EmailCensusScope {
   elapsedMs: number;
 }
 
+/**
+ * What happened to a sender filter that matched nothing.
+ *
+ * Present only when `from` produced zero matches — the case where "no mail from
+ * this company" and "I searched the wrong string" are indistinguishable. When
+ * `resolved` is set the census was re-run for that address and the counts
+ * describe the CORRECTED set; otherwise the caller must tell the operator the
+ * filter was not recognised, and name the senders actually seen.
+ */
+export interface EmailSenderResolution {
+  /** The filter as the caller supplied it. */
+  requested: string;
+  /** The real sender address it resolved to, or null when unresolvable. */
+  resolved: string | null;
+  /**
+   * The domain the resolved address belongs to.
+   *
+   * The matches are filtered on the DOMAIN, because the operator named a COMPANY
+   * and its colleagues' mailboxes are that company — filtering on the single
+   * `resolved` address would drop them (live EDC: 3,610 from `noreply@` plus 62
+   * from two individuals, all EDC orders).
+   */
+  domain?: string | null;
+  /** Messages matched for the resolved company (0 when unresolved). */
+  matched: number;
+  /** Plural candidate addresses when the filter was ambiguous. */
+  candidates: string[];
+  /** Senders actually observed, for an actionable "did you mean" reply. */
+  observed?: string[];
+}
+
 /** One distinct document number found in the census, with an example message. */
 export interface EmailCensusNumber {
   number: string;
@@ -917,6 +1038,8 @@ export interface EmailCensusResult {
   distinctNumbers: number;
   numbersTruncated: boolean;
   compare?: EmailNumberComparison;
+  /** Present when a `from` filter matched nothing and had to be resolved. */
+  senderResolution?: EmailSenderResolution;
   /** Present when `includeAttachments` was set — how much of the mail was opened. */
   attachmentCoverage?: AttachmentCoverage;
   /**
@@ -1462,7 +1585,79 @@ async function runScanEmails(opts: {
     ),
   );
 
-  const all: EmailCensusMatch[] = perMailbox.flatMap((r) => r.matches);
+  let all: EmailCensusMatch[] = perMailbox.flatMap((r) => r.matches);
+
+  /*
+   * A sender filter that matched NOTHING is the failure this guards against.
+   * `from` is narrowed server-side, so a filter the server does not recognise
+   * («EDC» — the operator's shorthand, and nobody's address) returns zero and the
+   * caller cannot tell it apart from "this company never wrote to us". Live, that
+   * produced «no readable PO attachments» over 3,688 real EDC messages.
+   *
+   * So: re-scan without the sender (the other criteria still apply), resolve the
+   * shorthand against the senders actually present, and keep those matches. One
+   * extra envelope pass on the failure path only — the successful path is
+   * untouched.
+   */
+  let senderResolution: EmailSenderResolution | undefined;
+  if (opts.from?.trim() && all.length === 0) {
+    // Search the operator's WORD across subject AND sender (a mailbox-wide
+    // term), so a shorthand that exists only in the subject («EDC PO No …»
+    // sent by `noreply@egyptian-drilling.com`) is still findable.
+    const fallback = await Promise.all(
+      usable.map((m) =>
+        scanOneMailbox(m.email, {
+          from: undefined,
+          // The OTHER criteria must survive the retry, or resolving a sender
+          // would widen the census beyond what the operator asked for.
+          subject: opts.subject,
+          query: opts.from!.trim(),
+          unseenOnly: opts.unseenOnly,
+          since,
+          before,
+          folder,
+          startedAt: Date.now(),
+          patterns,
+        }),
+      ),
+    );
+    const observed = aggregateSenders(fallback.flatMap((r) => r.matches));
+    const { resolved, domain, candidates } = resolveSenderFromCandidates(opts.from, observed);
+    if (resolved && domain) {
+      // Filter on the DOMAIN, not the single address: the operator named a
+      // company, and its people's mailboxes are that company (live EDC writes
+      // from `noreply@` plus two individuals).
+      const onDomain = (m: EmailCensusMatch) => {
+        const addr = senderAddress(m.from).toLowerCase();
+        return addr.endsWith(`@${domain.toLowerCase()}`);
+      };
+      const filtered = fallback.flatMap((r) => r.matches.filter(onDomain));
+      senderResolution = {
+        requested: opts.from,
+        resolved,
+        domain,
+        matched: filtered.length,
+        candidates: [],
+      };
+      // Swap in the resolved company's matches so every downstream aggregate
+      // (byMonth/bySender/numbers/note) describes the CORRECTED census, not the
+      // empty one the shorthand produced.
+      perMailbox.forEach((r, i) => {
+        const box = usable[i]?.email;
+        r.matches = fallback.find((f) => f.mailbox === box)?.matches.filter(onDomain) ?? [];
+      });
+      all = filtered;
+    } else {
+      senderResolution = {
+        requested: opts.from,
+        resolved: null,
+        matched: 0,
+        candidates,
+        observed: observed.slice(0, 8).map((s) => s.from),
+      };
+    }
+  }
+
   all.sort((a, b) => b.date.localeCompare(a.date));
 
   const byMailbox: Record<string, number> = {};
@@ -1474,15 +1669,7 @@ async function runScanEmails(opts: {
     byMonth[month] = (byMonth[month] ?? 0) + 1;
   }
 
-  const senderCounts = new Map<string, number>();
-  for (const e of all) {
-    const addr = senderAddress(e.from) || e.from;
-    senderCounts.set(addr, (senderCounts.get(addr) ?? 0) + 1);
-  }
-  const bySender = [...senderCounts.entries()]
-    .map(([from, count]) => ({ from, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 15);
+  const bySender = aggregateSenders(all).slice(0, 15);
 
   // Distinct numbers, with one example message each — the identifiers the
   // operator actually reconciles against the system.
@@ -1599,10 +1786,11 @@ async function runScanEmails(opts: {
     distinctNumbers,
     numbersTruncated,
     compare,
+    senderResolution,
     attachmentCoverage,
     attachmentMessages,
     scope,
-    note: censusNote(scope, all.length),
+    note: censusNote(scope, all.length, senderResolution),
   };
 }
 
@@ -1611,7 +1799,11 @@ async function runScanEmails(opts: {
  * scan was complete; otherwise it is a lower bound, and saying so is what keeps
  * the answer honest.
  */
-function censusNote(scope: EmailCensusScope, matched: number): string {
+function censusNote(
+  scope: EmailCensusScope,
+  matched: number,
+  senderResolution?: EmailSenderResolution,
+): string {
   const covered = scope.mailboxes
     .map((m) => `${m.mailbox}: ${m.scanned} رسالة${m.truncated ? " (ناقص)" : ""}`)
     .join("؛ ");
@@ -1620,14 +1812,46 @@ function censusNote(scope: EmailCensusScope, matched: number): string {
       ? ` الفترة: ${scope.sinceDate?.slice(0, 10) ?? "البداية"} ← ${scope.beforeDate?.slice(0, 10) ?? "الآن"}.`
       : " الفترة: كل البريد المتاح.";
   const base = `حصر كامل${range} تم فحص ${scope.scanned} رسالة (${covered}) وطابق ${matched}.`;
+  // A corrected sender is stated up front: the filter the operator gave matched
+  // no address, and silently reporting a different sender's mail as theirs would
+  // be its own wrong answer.
+  const senderNote = senderNoteFor(senderResolution);
   if (scope.truncated) {
     return (
+      senderNote +
       base +
       " تحذير: لم تُفحص كل الرسائل في هذه الصناديق، فالعدد أعلاه حدّ أدنى وليس الإجمالي — " +
       "أعد الحصر بفترة أضيق (sinceDate/beforeDate) أو صندوق واحد."
     );
   }
-  return base + " العدد أعلاه إجمالي وليس عيّنة.";
+  return senderNote + base + " العدد أعلاه إجمالي وليس عيّنة.";
+}
+
+/**
+ * The sentence that tells the model what happened to a sender filter.
+ *
+ * Two distinct outcomes, and they must not be conflated: a RESOLVED filter means
+ * the census was re-run for the real address (the counts that follow are for
+ * that sender, and the model must name it); an UNRESOLVED one means nothing
+ * matched, so «لا توجد رسائل من X» is not a supported claim — the model has to
+ * ask which sender was meant, naming the ones actually seen.
+ */
+function senderNoteFor(resolution?: EmailSenderResolution): string {
+  if (!resolution) return "";
+  if (resolution.resolved) {
+    const scope = resolution.domain ? ` (كل رسائل نطاق ${resolution.domain})` : "";
+    return `تنبيه: «${resolution.requested}» ليس عنوان مُرسل؛ طابقناه مع المُرسل الفعلي «${resolution.resolved}»${scope} وأُعيد الحصر عليه. `;
+  }
+  const seen = resolution.observed?.length
+    ? ` المُرسلون الموجودون فعلًا: ${resolution.observed.join("، ")}.`
+    : "";
+  const amb = resolution.candidates.length
+    ? ` أكثر من مُرسل يطابق «${resolution.requested}»: ${resolution.candidates.join("، ")}.`
+    : "";
+  return (
+    `تنبيه: لم يطابق أي مُرسل «${resolution.requested}».${amb}${seen} ` +
+    "لا تقل «لا توجد رسائل من هذا المُرسل» — اسأل عن المُرسل الصحيح أو استخدم أحد العناوين أعلاه."
+  );
 }
 
 /** Parse a YYYY-MM-DD (or full ISO) argument; undefined when absent/unparseable. */

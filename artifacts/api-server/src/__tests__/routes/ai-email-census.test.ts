@@ -32,6 +32,13 @@ let searchCalls: Array<Record<string, unknown>> = [];
 let fetched: number[] = [];
 /** Max envelopes the fake server will return from one search (budget probe). */
 let serverCap = Number.POSITIVE_INFINITY;
+/**
+ * The sender's DISPLAY name in the envelope. Live EDC mail carries only the
+ * address (`noreply@egyptian-drilling.com`) with no company name, which is why a
+ * `from:"EDC"` filter matches nothing and the shorthand resolver exists. Tests
+ * that model that case set this; the rest keep a name for readability.
+ */
+let senderDisplayName = "EDC";
 
 function makeClient() {
   return class {
@@ -72,7 +79,7 @@ function makeClient() {
             yield {
               uid: e.uid,
               envelope: {
-                from: [{ name: "EDC", address: e.from }],
+                from: [{ name: senderDisplayName, address: e.from }],
                 to: [{ address: "info@cortoba-supplies.com" }],
                 subject: e.subject,
                 date: new Date(e.date),
@@ -156,6 +163,7 @@ beforeEach(async () => {
   searchCalls = [];
   fetched = [];
   serverCap = Number.POSITIVE_INFINITY;
+  senderDisplayName = "EDC";
   clientClass = makeClient();
   vi.clearAllMocks();
   // The scan result cache is module-level and would leak a previous test's mail
@@ -374,5 +382,138 @@ describe("scanEmails census", () => {
     const { scanEmails } = await import("../../modules/ai-assistant/email");
     const res = await scanEmails({ from: "egyptian-drilling", mailbox: "info@" });
     expect(res.scope.mailboxes[0].serverNarrowed).toBe(true);
+  });
+});
+
+describe("scanEmails sender shorthand resolution", () => {
+  /**
+   * Live (24/09): the operator asked for the POs «الواردة من EDC». «EDC» appears
+   * in the SUBJECTS (`EDC PO No P26E14708`) but in no address — the real sender
+   * is `noreply@egyptian-drilling.com`. Filtering `from:"EDC"` matched nothing
+   * and the assistant announced there were no EDC documents at all.
+   */
+  beforeEach(() => {
+    // Live shape: the display name is ABSENT and the address contains no «EDC» —
+    // the word is only in the subject. Anything else would let the client-side
+    // filter match and hide the bug the resolver exists for.
+    senderDisplayName = "Egyptian Drilling Company";
+    // A mailbox where the shorthand reaches messages from two addresses, plus a
+    // tiny slice from an unrelated domain.
+    envelopes = [
+      ...Array.from({ length: 300 }, (_, i) => ({
+        uid: i + 1,
+        subject: `EDC PO No P26E${14000 + i}`,
+        from: "noreply@egyptian-drilling.com",
+        date: "2026-09-01T08:00:00Z",
+      })),
+      ...Array.from({ length: 40 }, (_, i) => ({
+        uid: 1000 + i,
+        subject: `EDC PO No P26E${15000 + i}`,
+        from: "purchasing.manager@egyptian-drilling.com",
+        date: "2026-09-02T08:00:00Z",
+      })),
+      {
+        uid: 2000,
+        subject: "EDC PO No P26E19999",
+        from: "workspace-noreply@google.com",
+        date: "2026-09-03T08:00:00Z",
+      },
+    ];
+  });
+
+  it("resolves a shorthand sender to the real address instead of reporting zero", async () => {
+    const { scanEmails } = await import("../../modules/ai-assistant/email");
+    const res = await scanEmails({ from: "EDC", mailbox: "info@" });
+    expect(res.senderResolution?.requested).toBe("EDC");
+    expect(res.senderResolution?.resolved).toBe("noreply@egyptian-drilling.com");
+    expect(res.senderResolution?.domain).toBe("egyptian-drilling.com");
+    // 340 = the whole COMPANY: 300 from `noreply@` + 40 from a colleague's
+    // mailbox. The one Google message that also says «EDC» is a different domain
+    // and correctly excluded. Filtering the single address would have dropped the
+    // colleague's 40 real orders.
+    expect(res.matched).toBe(340);
+    // The disclosed resolution is what lets the model name the address it
+    // actually searched, rather than leaving the operator with «لا توجد رسائل».
+    expect(res.note).toContain("noreply@egyptian-drilling.com");
+    expect(res.note).toContain("egyptian-drilling.com");
+    expect(res.note).toContain("EDC");
+  });
+
+  it("counts the whole company, not one mailbox on its domain", async () => {
+    // The operator names a COMPANY («EDC»). Its orders arrive from `noreply@` AND
+    // from individual buyers; keeping only the busiest address would silently drop
+    // real orders from the census — a partial answer presented as the company's.
+    const { scanEmails } = await import("../../modules/ai-assistant/email");
+    const res = await scanEmails({ from: "EDC", mailbox: "info@" });
+    expect(res.matched).toBe(340);
+    const senders = res.bySender.map((s) => s.from);
+    expect(senders).toContain("noreply@egyptian-drilling.com");
+    expect(senders).toContain("purchasing.manager@egyptian-drilling.com");
+    // …and no unrelated domain is dragged in by a subject-only coincidence.
+    expect(senders).not.toContain("workspace-noreply@google.com");
+  });
+
+  it("leaves a real address alone (no needless resolution)", async () => {
+    const { scanEmails } = await import("../../modules/ai-assistant/email");
+    const res = await scanEmails({ from: "noreply@egyptian-drilling.com", mailbox: "info@" });
+    expect(res.matched).toBe(300);
+    expect(res.senderResolution ?? null).toBeNull();
+  });
+
+  it("keeps the OTHER criteria while it resolves a sender", async () => {
+    // Resolving the sender must not widen the census: a `subject` filter the
+    // operator gave is part of the question, not an accident of the retry.
+    senderDisplayName = "Egyptian Drilling Company";
+    envelopes = [
+      ...Array.from({ length: 20 }, (_, i) => ({
+        uid: i + 1,
+        subject: `EDC PO No P26E${14000 + i}`,
+        from: "noreply@egyptian-drilling.com",
+        date: "2026-09-01T08:00:00Z",
+      })),
+      ...Array.from({ length: 7 }, (_, i) => ({
+        uid: 100 + i,
+        subject: `EDC Quotation 26R${200000 + i}`,
+        from: "noreply@egyptian-drilling.com",
+        date: "2026-09-01T08:00:00Z",
+      })),
+    ];
+    const { scanEmails } = await import("../../modules/ai-assistant/email");
+    const res = await scanEmails({ from: "EDC", subject: "PO No", mailbox: "info@" });
+    expect(res.senderResolution?.resolved).toBe("noreply@egyptian-drilling.com");
+    // 20 (the PO subjects) — the 7 quotation messages must not be pulled in.
+    expect(res.matched).toBe(20);
+  });
+
+  it("discloses the senders it saw when it cannot resolve the shorthand", async () => {
+    // Two companies at comparable volume: choosing would answer about the wrong
+    // one, so the census refuses and hands back the candidates to ask about.
+    senderDisplayName = "Egyptian Drilling Company";
+    envelopes = [
+      ...Array.from({ length: 100 }, (_, i) => ({
+        uid: i + 1,
+        subject: `EDC PO No P26E${16000 + i}`,
+        from: "sales@egyptian-drilling.com",
+        date: "2026-09-01T08:00:00Z",
+      })),
+      ...Array.from({ length: 90 }, (_, i) => ({
+        uid: 500 + i,
+        subject: `EDC PO No P26E${17000 + i}`,
+        // NOTE: the address must not itself contain «edc», or the original
+        // server-side filter would match and the resolution path never runs —
+        // which would make this test pass without exercising the refusal.
+        from: "info@delta-supplies.com",
+        date: "2026-09-01T08:00:00Z",
+      })),
+    ];
+    const { scanEmails } = await import("../../modules/ai-assistant/email");
+    const res = await scanEmails({ from: "EDC", mailbox: "info@" });
+    expect(res.senderResolution?.requested).toBe("EDC");
+    expect(res.senderResolution?.resolved).toBeNull();
+    expect(res.senderResolution?.candidates.length).toBeGreaterThanOrEqual(2);
+    // The note must not read as «no EDC mail»: that is the reported failure.
+    expect(res.note).toContain("لم يطابق أي مُرسل");
+    expect(res.note).toContain("لا تقل «لا توجد رسائل من هذا المُرسل»");
+    expect(res.note).toContain("info@delta-supplies.com");
   });
 });

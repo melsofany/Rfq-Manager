@@ -199,6 +199,15 @@ async function runBatch(session: ItemScanSession, key: string, deadline: number)
   // therefore keeps the authoritative totals.
   session.census = census;
 
+  // A `from` shorthand that is not an address gets resolved on the first window
+  // (the census matched nothing). Persist the REAL address into the session's
+  // args so every later window filters on it directly: without this the
+  // resolution — and its extra full-mailbox pass — would be redone per window,
+  // and a resumed scan after a restart would start from the bad filter again.
+  if (census.senderResolution?.resolved && session.args.from !== census.senderResolution.resolved) {
+    session.args = { ...session.args, from: census.senderResolution.resolved };
+  }
+
   if (census.attachmentCoverage) {
     addAttachmentCoverage(session.attachmentCoverage, census.attachmentCoverage);
   }
