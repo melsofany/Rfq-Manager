@@ -183,6 +183,17 @@ export function systemPrompt(settings: AiSettings): string {
 - عند فتح رسالة بـ read_email أو جلب مرفق، مرّر نفس mailbox و folder اللذين ظهرا مع الرسالة في نتيجة البحث؛ فمعرّف UID لا يكون فريدًا إلا داخل مجلد واحد في صندوق واحد.
 - عند البحث في البريد ولا تجد شيئًا: جرّب search_sent_emails إن كان السؤال عن رسالة صادرة، أو وسّع المدة (sinceDays)، أو جرّب اسمًا بديلًا أو بريدًا آخر، وأخبر المستخدم بما بحثت فيه فعلًا بدل قول «لم أجد» فقط.
 
+قواعد تقارير قاعدة البيانات (مهمة جدًا — لا تُختصر القائمة ولا تُحسب الأرقام بنفسك):
+- إن كانت البيانات المطلوبة داخل النظام (أوامر شراء العملاء وبنودها، أوامر الشراء، الموردين، الفواتير) فاستخدم أدوات قاعدة البيانات. **لا تستخدم أدوات البريد إطلاقًا** إن كان الطلب من قاعدة البيانات: البريد والجدول مصدران مختلفان، وإجابة من المصدر الخطأ تبدو كأنها «لا توجد بيانات».
+- لحصر الأصناف المورَّدة للعملاء بكمياتها: استخدم aggregate_customer_po_items. هي تُجمِّع في SQL على جدول customer_po_items وتُعيد **كل** الأصناف مع إجمالي الكمية وعدد مرات الورود، وتدمج تكرارات نفس الصنف تلقائيًا (المطلوب في «بدون تكرار»). الإجمالي محسوب في قاعدة البيانات — ممنوع أن تجمعه بنفسك.
+- **كل صفوف result.rows مُلزَم أن تظهر في التقرير كاملة.** يُمنع منعًا باتًا أن تكتب «أعلى 20» أو «أهم الأصناف» أو «القائمة أطول من الحد» أو أن تعرض عيّنة، ما لم يطلب المستخدم صراحةً عددًا أو تصنيفًا. تقرير بـ15 بندًا من أصل مئات هو خطأ فادح يُضلّل المدير، وأسوأ من رسالة خطأ.
+- **لا تُمرّر صفوف الحصر إلى generate_pdf.** لن تحملها كلها، والملف سينقص. لطلب ملف: مرّر exportPdf=true (أو exportCsv=true) إلى أداة الحصر — الملف يُبنى على الخادم بكل الأصناف ويُرسل على واتساب. وإن مرّرت صفوفًا بنفسك فستُقتطع عند حد مخرجاتك وتُكرر عطل «الملف به 15 بند فقط».
+- لا تكتب «كل الأصناف» أو «شامل» إلا إذا كان isComplete=true وكان عدد الأصناف الحقيقي (count) هو ما تذكره. وإن كان هناك فلتر (minQty أو match) فاذكره صريحًا مع الرقم.
+- إن كان عدد الأصناف كبيرًا جدًا على نص الرسالة: مرّر exportPdf=true (و/أو exportCsv=true) واذكر count والإجماليات المهمة — الملف يجب أن يحمل **كل** الأصناف، لا عيّنة. لا تسأل المدير «هل تريد مهمة خلفية؟» ولا تعرض «أعلى N» لسؤال يمكن لأداة قاعدة بيانات أن تجيب عليه كاملًا في استدعاء واحد.
+- الأرقام: انقلها من نتيجة الأداة كما هي. ممنوع أي حساب ذهني لمجموع أو نسبة أو إجمالي لم ترجعه أداة.
+- إن ظهرت أصناف بإجمالي كبير جدًا (productLevel=true) فهي غالبًا وصف تصنيفي وليس صنفًا واحدًا: اعرضها بتفاصيلها ولا تجمعها في سطر واحد، واذكر أن الإجمالي يخص هذا الوصف كما هو مسجَّل.
+- عند طلب «اكتب البرومبت في الملف»: مرّر نص طلب المستخدم حرفيًا في الحقل source عند generate_pdf (وإن كان الطلب طويلًا فاختصر جملة واحدة مع الإبقاء على الشروط الأساسية)، ثم اذكر في الرد أن البرومبت مطبوع في الملف.
+
 المهام الخلفية (لعمليات الحصر الضخمة):
 - إن كان الحصر كبيرًا (سنة كاملة، أو مئات الرسائل، أو «افحص كل أوامر الشراء في البريد») ولا يمكن إكماله داخل هذا الرد، استخدم start_census_job. تعود فورًا برقم مهمة، ويكمل العامل الحصر في الخلفية ويرسل النتيجة والتقرير على واتساب تلقائيًا عند الانتهاء.
 - scan_email_items قد تحوّل نفسها إلى مهمة خلفية تلقائيًا إذا كان المتبقي كبيرًا، وتعيد jobId بدل قائمة بنود. إن حدث ذلك فأخبر المستخدم برقم المهمة — ولا تعد نداء scan_email_items بنفسك في هذه الجولة ولا تقل إن الحصر خلص. إن أردت إجابة فورية على ما فُحص حتى الآن مرّر noAutoJob=true.
@@ -283,7 +294,17 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     }
   }
 
-  const ctx: ToolContext = { settings, phone: input.phone, outbox: [] };
+  /** Real figures reported by data tools (row counts, totals, cuts). */
+  const traceData: Array<Record<string, unknown>> = [];
+  const ctx: ToolContext = {
+    settings,
+    phone: input.phone,
+    outbox: [],
+    // Data tools report their REAL row counts / totals / cuts here, so the run's
+    // figures are observable rather than inferred from the model's summary. The
+    // "15 items" report could not be diagnosed from the transcript otherwise.
+    trace: (summary) => traceData.push(summary),
+  };
 
   // The router is deterministic and free: it classifies the question before any
   // provider request, so a simple lookup does not pay for the budget an analysis
@@ -749,7 +770,10 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     latencyMs: Date.now() - startedAt,
     outcome: "answered",
     confidence: answerConfidence(usedTools.length, verificationRan, numericDisagreed),
-    task: trace.summary(),
+    // The data tools' own figures travel with the trace. A summary can claim
+    // "كل الأصناف" while the tool returned 15 rows; these numbers make that
+    // contradiction visible on the dashboard instead of only in a log line.
+    task: { ...trace.summary(), ...(traceData.length ? { data: traceData } : {}) },
   });
 
   // The extracted document text is intentionally kept out of the stored

@@ -64,6 +64,13 @@ export interface RequestMetrics {
     forcedAnswers: number;
     steers: number;
     detections: number;
+    /**
+     * Real figures reported by data tools on this run: how many source rows went
+     * into an aggregate, how many groups came out, and anything a filter or a
+     * ceiling cut. The "PDF had 15 items" report was undiagnosable from the
+     * transcript because a sample and a full set looked identical.
+     */
+    data?: Array<Record<string, unknown>>;
   };
 }
 

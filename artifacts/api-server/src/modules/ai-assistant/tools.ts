@@ -73,6 +73,7 @@ import {
   compareSupplierQuotes,
 } from "./procurement-tools";
 import { defaultMailbox, mailboxes } from "./mailboxes";
+import { aggregateCustomerPoItems, customerItemsCsv, customerItemsPdf } from "./sql-registry";
 import { rememberFact, recallMemories, forgetMemory } from "./memory";
 import {
   listJobs,
@@ -106,6 +107,16 @@ import { logger } from "../../shared/logger";
  */
 export const CSV_UPLOAD_MIME = "text/plain";
 
+/**
+ * How many aggregate rows the MODEL is shown.
+ *
+ * Bounded because a 400+ row payload would be truncated by the model's own
+ * output limit — that is the live «الملف به 15 بند فقط» failure. The operator's
+ * full set travels in a server-built PDF/CSV attachment instead, so this window
+ * is only what the model needs to describe the result, never the report itself.
+ */
+export const MODEL_ROW_WINDOW = 50;
+
 export interface OutboxAttachment {
   buffer: Buffer;
   filename: string;
@@ -116,6 +127,15 @@ export interface ToolContext {
   settings: AiSettings;
   phone: string;
   outbox: OutboxAttachment[];
+  /**
+   * When provided, a data tool records its real row count / totals / cuts here.
+   *
+   * The "PDF had 15 items" incident could not be diagnosed from the outside: the
+   * only evidence of what the tool actually returned was whatever the model chose
+   * to repeat, so a sample and a full set looked identical in the transcript.
+   * This makes the run's own totals observable.
+   */
+  trace?: (summary: Record<string, unknown>) => void;
 }
 
 export interface ToolResult {
@@ -261,6 +281,61 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
               description: "اسم المورد أو رقمه (اختياري — فارغ = كل الموردين)",
             },
             sinceDays: { type: "integer", description: "قصر النطاق على آخر عدد أيام" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "aggregate_customer_po_items",
+        description:
+          "تقرير كل الأصناف التي تم توريدها للعملاء من جدول بنود أوامر شراء العملاء (customer_po_items)، " +
+          "بتجميع SQL كامل — يقرأ كل السطور ولا يعرض عيّنة. " +
+          "يعيد الصنف ووصفه وإجمالي كميته وعدد مرات وروده، وبدون تكرار (يدمج الكتابات المختلفة لنفس الصنف). " +
+          "استخدمها لأي طلب تقرير/حصر للأصناف المورَّدة (مثال: «كل الأصناف المورَّدة في 2025 و2026 بكمياتها»). " +
+          "الأرقام محسوبة في قاعدة البيانات — لا تجمعها بنفسك ولا تختصر القائمة. " +
+          "لطلب «بدون تكرار» هذه الأداة تدمج تكرارات نفس الصنف تلقائيًا. " +
+          "**لطلب ملف/تقرير PDF مرّر exportPdf=true** (وللـCSV مرّر exportCsv=true): الملف يُبنى على الخادم " +
+          "بكل الأصناف تلقائيًا ويُرسل على واتساب. لا تُمرّر الصفوف إلى generate_pdf — لن تحملها كلها. " +
+          "حقل rows في الرد نافذة للعرض فقط، وعدد الأصناف الحقيقي في count.",
+        parameters: {
+          type: "object",
+          properties: {
+            fromDate: {
+              type: "string",
+              description: "تاريخ بداية (YYYY-MM-DD) على تاريخ أمر شراء العميل — مثال 2025-01-01",
+            },
+            toDate: {
+              type: "string",
+              description: "تاريخ نهاية غير شامل (YYYY-MM-DD) — مثال 2027-01-01",
+            },
+            match: {
+              type: "string",
+              description: "قصر على أصناف يحتوي وصفها/رقمها على هذه الكلمة",
+            },
+            minQty: {
+              type: "number",
+              description: "أقل كمية إجمالية لإظهار الصنف (لفلترة الأصناف الدقيقة)",
+            },
+            includeDetached: {
+              type: "boolean",
+              description: "تضمين البنود المحذوفة من أوامر الشراء (افتراضي لا)",
+            },
+            exportPdf: {
+              type: "boolean",
+              description: "أرسل ملف PDF بكل الأصناف والكميات على واتساب (يُبنى على الخادم)",
+            },
+            exportCsv: {
+              type: "boolean",
+              description: "أرسل ملف CSV بكل الأصناف (مفيد للأعداد الكبيرة والمراجعة)",
+            },
+            pdfTitle: { type: "string", description: "عنوان ملف الـPDF" },
+            source: {
+              type: "string",
+              description:
+                "نص طلب المستخدم/البرومبت حرفيًا ليُطبع داخل الملف (عندما يطلب «اكتب الملف بالبرومبت»)",
+            },
           },
         },
       },
@@ -720,6 +795,12 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
               },
             },
             filename: { type: "string", description: "اسم الملف بدون امتداد" },
+            source: {
+              type: "string",
+              description:
+                "المصدر/البرومبت الذي طلب به المستخدم التقرير — يُطبع في الملف. " +
+                "انسخ نص طلب المستخدم هنا حرفيًا عندما يطلب «اكتب الملف بالبرومبت».",
+            },
           },
           required: ["title", "sections"],
         },
@@ -1667,6 +1748,94 @@ async function executeToolInner(
           }),
         };
       }
+      case "aggregate_customer_po_items": {
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        const result = await aggregateCustomerPoItems({
+          fromDate: args.fromDate ? String(args.fromDate) : undefined,
+          toDate: args.toDate ? String(args.toDate) : undefined,
+          match: args.match ? String(args.match) : undefined,
+          minQty: typeof args.minQty === "number" ? args.minQty : undefined,
+          includeDetached: args.includeDetached === true,
+        });
+        // Surface the REAL numbers on the run trace. The 15-item report could not
+        // be diagnosed from the transcript because a sample and a full set looked
+        // identical; now the tool says how many rows went in and how many came out.
+        ctx.trace?.({
+          tool: "aggregate_customer_po_items",
+          sourceRows: result.sourceRows,
+          products: result.rows.length,
+          groupsBeforeFilter: result.groupsBeforeFilter,
+          droppedByMinQty: result.droppedByMinQty,
+          droppedNonProduct: result.droppedNonProduct,
+          truncated: result.truncated,
+        });
+
+        // The FILES are built here, from the complete result. The model cannot
+        // carry 400+ rows through a tool call without truncating them, so a
+        // model-assembled report would lose exactly the items this tool exists
+        // to include — the live «الملف به 15 بند فقط» failure.
+        const today = new Date().toISOString().slice(0, 10);
+        const sourceText = args.source ? String(args.source) : null;
+        let pdfSent = false;
+        let csvSent = false;
+        if (args.exportPdf) {
+          if (!ctx.settings.allowPdf) return { ok: false, error: "إنشاء PDF معطّل" };
+          const buffer = await customerItemsPdf(result, {
+            title: args.pdfTitle ? String(args.pdfTitle) : undefined,
+            source: sourceText,
+          });
+          ctx.outbox.push({
+            buffer,
+            filename: `customer-po-items-${today}.pdf`,
+            mimeType: "application/pdf",
+          });
+          pdfSent = true;
+        }
+        if (args.exportCsv) {
+          ctx.outbox.push({
+            buffer: Buffer.from(customerItemsCsv(result), "utf8"),
+            filename: `customer-po-items-${today}.csv`,
+            mimeType: CSV_UPLOAD_MIME,
+          });
+          csvSent = true;
+        }
+
+        return {
+          ok: true,
+          data: {
+            // A bounded window of rows for the model to DESCRIBE in the reply.
+            // The files above carry the whole set; this is not the report.
+            rows: result.rows.slice(0, MODEL_ROW_WINDOW),
+            count: result.rows.length,
+            rowsReturned: Math.min(result.rows.length, MODEL_ROW_WINDOW),
+            sourceRows: result.sourceRows,
+            groupsBeforeFilter: result.groupsBeforeFilter,
+            droppedByMinQty: result.droppedByMinQty,
+            droppedNonProduct: result.droppedNonProduct,
+            isComplete: !result.truncated,
+            appliedFilters: result.appliedFilters,
+            pdfSent,
+            csvSent,
+            method:
+              "تجميع SQL كامل على customer_po_items (بدون عيّنة)، ثم دمج تكرارات نفس الصنف بالوصف. " +
+              "الإجمالي = مجموع الكميات لكل الأوامر. الملف (PDF/CSV) يُبنى على الخادم من كل الأصناف.",
+            note:
+              `عدد الأصناف المميزة: ${result.rows.length} (من ${result.sourceRows} سطر أمر شراء). ` +
+              (pdfSent || csvSent
+                ? `الملف أُرسل على واتساب ويحمل كل الـ${result.rows.length} صنفًا — اذكر عدد الأصناف وأهم الإجماليات في الرد، ولا تسردها كلها في الرسالة. `
+                : `الصفوف المعروضة لك هنا أول ${Math.min(result.rows.length, MODEL_ROW_WINDOW)} فقط؛ إن طلب المستخدم ملفًا مرّر exportPdf=true (أو exportCsv=true) ليُبنى الملف بكل الأصناف. `) +
+              `استخدم حقل description كاسم الصنف (وهو فريد لكل صنف) لا الحقل المختصر label، ` +
+              `لأن صنفين مختلفين قد يبدآن بنفس الكلمة فيظهران كأنهما مكرر.` +
+              (result.droppedByMinQty
+                ? ` تم استثناء ${result.droppedByMinQty} صنفًا بفلتر minQty (كل كمياتها أقل من الحد).`
+                : "") +
+              (result.droppedNonProduct
+                ? ` تم تجاهل ${result.droppedNonProduct} سطرًا غير مخزني.`
+                : ""),
+          },
+        };
+      }
       case "aggregate_po_items": {
         if (!ctx.settings.allowDatabase)
           return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
@@ -2474,6 +2643,7 @@ async function executeToolInner(
           title: String(args.title ?? "تقرير"),
           subtitle: args.subtitle ? String(args.subtitle) : null,
           sections,
+          source: args.source ? String(args.source) : null,
         });
         const filename = `${String(args.filename || "report").replace(/[^\w\u0600-\u06FF.-]/g, "_")}.pdf`;
         ctx.outbox.push({ buffer, filename, mimeType: "application/pdf" });
@@ -2725,6 +2895,18 @@ async function executeToolInner(
       }
       case "start_census_job": {
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
+        // Refuse BEFORE creating a job row. A job that never opens a message still
+        // leaves a completed `email_census` record, and the operator is told an
+        // email census ran — which is how a question about DATABASE items produced
+        // a report of «0 messages» while the answer was in `customer_po_items`.
+        if (!isEmailReadConfigured()) {
+          return {
+            ok: false,
+            error:
+              "قراءة البريد غير مهيأة على الخادم، فلا يمكن بدء حصر بريد. " +
+              "إن كانت البيانات المطلوبة داخل النظام (أوامر شراء العملاء/البنود) فاستخدم أدوات قاعدة البيانات مثل aggregate_customer_po_items.",
+          };
+        }
         const scanArgs: CensusJobArgs = {
           from: args.from ? String(args.from) : undefined,
           subject: args.subject ? String(args.subject) : undefined,

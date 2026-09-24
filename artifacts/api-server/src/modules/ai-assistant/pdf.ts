@@ -39,6 +39,15 @@ export interface AssistantPdfOptions {
   subtitle?: string | null;
   sections: PdfSection[];
   footer?: string | null;
+  /**
+   * The operator's own request text, printed in the report.
+   *
+   * Asked for explicitly («اكتب ملف pdf بالبرومبت»): the report must state what
+   * was requested, so a reader can check the output against the ask rather than
+   * take a summary's word for it. Kept as its own field so the prompt is quoted
+   * verbatim, never paraphrased by the model into the body.
+   */
+  source?: string | null;
 }
 
 const ARABIC_RE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
@@ -143,6 +152,19 @@ export function generateAssistantPdf(opts: AssistantPdfOptions): Promise<Buffer>
         .lineWidth(1.5)
         .stroke();
       doc.moveDown(0.8);
+
+      // The request that produced this report, quoted verbatim. Rendered before
+      // the sections so the figures are read against the ask.
+      if (opts.source) {
+        doc
+          .fontSize(9)
+          .fillColor("#444")
+          .text(rtl(`الطلب/البرومبت: ${opts.source}`), {
+            width: CW,
+            align: "right",
+          });
+        doc.moveDown(0.6);
+      }
 
       for (const section of opts.sections) {
         if (doc.y > doc.page.height - 100) doc.addPage();
