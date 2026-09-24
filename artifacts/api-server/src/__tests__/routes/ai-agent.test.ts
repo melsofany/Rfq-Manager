@@ -779,6 +779,46 @@ describe("AI assistant agent loop", () => {
   });
 
   // ── Telemetry ──────────────────────────────────────────────────────────────
+  describe("source-scope enforcement", () => {
+    it("labels an email-scoped question that was answered from the database", async () => {
+      // «من الميل مش قاعدة البيانات» is a CONSTRAINT on the source. A run that
+      // never read the mailbox answered about a different dataset, so the reply
+      // must say so rather than pass itself off as the requested census.
+      chatCompletion.mockResolvedValueOnce({
+        content: "لا توجد أوامر شراء.",
+        finishReason: "stop",
+        toolCalls: [],
+      });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({
+        phone: "2010",
+        text: "هات أوامر الشراء الواردة من الميل مش قاعدة البيانات",
+      });
+      expect(out.reply).toContain("البريد الإلكتروني");
+      expect(out.reply).toContain("النظام الداخلي");
+    });
+
+    it("does NOT add the warning when an email tool actually ran", async () => {
+      chatCompletion
+        .mockResolvedValueOnce({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [
+            {
+              id: "c1",
+              type: "function",
+              function: { name: "search_emails", arguments: '{"query":"EDC PO"}' },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ content: "وجدت 12 رسالة.", finishReason: "stop", toolCalls: [] });
+      executeTool.mockResolvedValue({ ok: true, data: { results: [] } });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "أوامر الشراء من البريد" });
+      expect(out.reply).not.toContain("لم يُقرأ البريد");
+    });
+  });
+
   describe("request metrics", () => {
     it("records the intent, path, rounds and outcome for an answer", async () => {
       const { resetMetrics, recentMetrics } = await import("../../modules/ai-assistant/metrics");

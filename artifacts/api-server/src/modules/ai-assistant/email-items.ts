@@ -1,14 +1,14 @@
 /**
- * AI Assistant — line items read out of email attachments.
+ * AI Assistant ЕҢДҶГ¶ line items read out of email attachments.
  *
  * The document numbers live in the subject, but the ITEMS live inside the
- * attached RFQ/PO PDF (EDC sends a «REQUEST FOR QUOTE» or «PURCHASE ORDER» with
+ * attached RFQ/PO PDF (EDC sends a в”¬ВҪREQUEST FOR QUOTEв”¬в•— or в”¬ВҪPURCHASE ORDERв”¬в•— with
  * a line table). Reading them through the model is not viable for a year's mail:
  * Gemini's free tier is 20 requests/day/model, so extraction runs locally on the
  * PDF text layer.
  *
  * The parser understands the two EDC layouts explicitly, and every caller gets a
- * coverage record — an empty result must never be indistinguishable from an
+ * coverage record ЕҢДҶГ¶ an empty result must never be indistinguishable from an
  * unreadable file, which is how "this order has no items" would be reported for
  * a document nobody managed to open.
  */
@@ -17,8 +17,24 @@ import { groupByItemIdentity, hasConfidentIdentity } from "./item-identity";
 
 /** One parsed order line. */
 export interface ParsedLineItem {
+  /** The printed `Line No.` ЕҢДҶГ¶ a row number, NOT an identity. */
   lineNo: number | null;
+  /**
+   * The REAL Part Number (the `Part No` column, or a `P/N : ЕҢДҶвҖқ` written in the
+   * description). Frequently absent ЕҢДҶГ¶ the operator's rule is that it is never
+   * required and never sufficient on its own.
+   */
   partNo: string | null;
+  /**
+   * The ERP's `Line Item` code (`1531.032.GENRAL.7538`, `0600.000.GENRAL.0005`).
+   *
+   * This is what the operator means by в”¬ВҪLine Itemв”¬в•—, and what the previous
+   * implementation mislabelled as the Part Number: the PO prints it in the
+   * `Line Item` column, on the line BELOW the row. Because it is category-coded
+   * and stable per product it is the strongest identity key available, but it is
+   * still not merged blindly ЕҢДҶГ¶ the EDC generator re-codes items across seasons.
+   */
+  lineItemNo?: string | null;
   description: string;
   qty: number | null;
   uom: string | null;
@@ -35,12 +51,26 @@ export interface ParsedLineItem {
 }
 
 /**
- * Part numbers as they appear on EDC documents: four digits, a three-digit
- * group, a category word, then a running number (5720.001.GENRAL.0024). The
- * category varies in length (0600.000.GENRAL.0005), so the segment count is not
- * fixed.
+ * The ERP's В«Line ItemВ» code as printed on EDC documents: four digits, a
+ * three-digit group, a category word, then a running number
+ * (5720.001.GENRAL.0024). The category varies in length (0600.000.GENRAL.0005),
+ * so the segment count is not fixed.
+ *
+ * IMPORTANT: this is the LINE ITEM, not the Part Number. The PO prints it in its
+ * own `Line Item` column (on the line below the row); the real `Part No` column
+ * carries a short code (`UXL7-12`) or is empty. The previous implementation
+ * labelled this code as the Part Number and reported the row number as the В«Line
+ * ItemВ», which is exactly the mix-up the operator reported.
  */
-const PART_NO_RE = /\b\d{4}\.\d{3}\.[A-Z0-9]{2,}(?:\.[A-Z0-9]+)+\b/;
+const LINE_ITEM_RE = /\b\d{4}\.\d{3}\.[A-Z0-9]{2,}(?:\.[A-Z0-9]+)+\b/;
+
+/**
+ * The real `Part No` column value: a short alphanumeric code (`UXL7-12`,
+ * `DCL163`, `A9R41440`). Deliberately strict вҖ” it must contain BOTH letters and
+ * digits and must NOT be a Line Item code вҖ” so a category word or a stray number
+ * is never mistaken for a part number.
+ */
+const PART_NO_TOKEN_RE = /^[A-Z0-9][A-Z0-9./-]{2,24}$/i;
 
 /**
  * Units of measure seen on these documents. Restricted to a known set so a
@@ -58,7 +88,7 @@ const TABLE_END_RE =
  */
 const TABLE_NOISE_RE = /^(Page\s+\d|Note:?$|Line\s*$|No\.$)/i;
 
-/** Does this line begin a new item row (`1 24 Each …`)? */
+/** Does this line begin a new item row (`1 24 Each ЕҢДҶвҖқ`)? */
 const ITEM_ROW_RE = /^(\d{1,3})\s+(\d+(?:\.\d+)?)\s+([A-Za-z]{1,12})\b(.*)$/;
 
 /**
@@ -72,15 +102,15 @@ const PO_PRICE_RE = /\b\d{2}-[A-Za-z]{3}-\d{4}\b\s+(\d[\d,]*(?:\.\d+)?)\s+(\d[\d
 /**
  * The document's own number, printed on the PO (`PO number: P26E14630(RIG58)`)
  * and on the RFQ (`RFQ number: 26R011954`). This is the identity an item is
- * counted against — the operator asks how many ORDERS carried a part, and one
+ * counted against ЕҢДҶГ¶ the operator asks how many ORDERS carried a part, and one
  * PO that lists a part on three lines is still one order.
  */
 const DOC_NUMBER_RE = /\b(?:PO|RFQ)\s*(?:number|no\.?)\s*:?\s*([A-Z0-9][A-Z0-9-]{4,})/i;
 
 /**
- * The table's column header — where the item region starts. The RFQ prints it as
- * `Line Quantity UOM Part No …`; the PO splits it, with `Line` / `No.` on their
- * own lines before `Quantity UOM Part No …`, so matching the `Quantity UOM` pair
+ * The table's column header ЕҢДҶГ¶ where the item region starts. The RFQ prints it as
+ * `Line Quantity UOM Part No ЕҢДҶвҖқ`; the PO splits it, with `Line` / `No.` on their
+ * own lines before `Quantity UOM Part No ЕҢДҶвҖқ`, so matching the `Quantity UOM` pair
  * covers both.
  */
 const TABLE_HEADER_RE = /^(?:Line\s+)?Quantity\s+UOM\b/i;
@@ -90,18 +120,45 @@ const TABLE_HEADER_RE = /^(?:Line\s+)?Quantity\s+UOM\b/i;
  * in the Part No column. EDC's RFQ generator wraps/overflows the Part No cell
  * (observed: `5.70243E+` then `1854.027.` on the next visual line), so the
  * description's P/N is the reliable identifier for those rows.
+ *
+ * A digit-only value is deliberately rejected: `P/N : 2102024` on a HEATER row
+ * is the manufacturer's catalogue number, and carrying it as the item's Part
+ * Number would put an unrelated number in the report. A code is taken only when
+ * it carries a letter, or when it is long enough to be a real long part number.
  */
 const PN_INLINE_RE = /\bP\s*\/\s*N\s*:?\s*([A-Z0-9][A-Z0-9./-]{4,})/i;
+
+/** Accept a `P/N : …` value only when it looks like a genuine code, not a number. */
+function isUsableInlinePartNo(value: string | undefined): value is string {
+  if (!value) return false;
+  if (LINE_ITEM_RE.test(value)) return false;
+  if (/[A-Za-z]/.test(value)) return true;
+  // Digit-only: a real part number is long (`5702428662864`); the short numeric
+  // `P/N : 2102024` on a HEATER row is the maker's catalogue number, and carrying
+  // it would put an unrelated number in the report as the item's identity.
+  return /^\d{8,}$/.test(value);
+}
+
+/** The real part number of a row: the Part No cell, else a `P/N : …` code. */
+function partNoFromRow(head: string, rest: string): string | null {
+  const cell = extractPartNo(head);
+  if (cell) return cell;
+  // Only the ROW's own text: reading a multi-line lookahead picked up the NEIGHBOURING
+  // row's `P/N` (a MINI BAR row's code landed on the water-heater row above it), which
+  // is a false identity rather than a missing one.
+  const inline = PN_INLINE_RE.exec(rest)?.[1];
+  return isUsableInlinePartNo(inline) ? inline : null;
+}
 
 /** Junk left behind by the overflowing Part No cell, e.g. `5.70243E+`. */
 const PART_CELL_JUNK_RE = /\b\d\.\d{3,}E[+-]?\b/;
 
 /**
  * The date + money tail the PO prints at the END of a description's last line
- * (`… WALL 05-OCT-2026 5,100.00 10,200.00`).
+ * (`ЕҢДҶвҖқ WALL 05-OCT-2026 5,100.00 10,200.00`).
  *
  * The embedded columns are only separate visually; the text layer appends them to
- * the prose, so the description the operator asked for ("الوصف كاملًا") carried a
+ * the prose, so the description the operator asked for ("ЕҫВҰв”ҳГӨв”ҳЕӮЕҫД„в”ҳГј в”ҳДҒЕҫВҰв”ҳДЈв”ҳГӨв”ҳЕ—ЕҫВҰ") carried a
  * delivery date and two figures that are NOT part of the item's name. The money
  * is already parsed as `unitPrice`/`lineTotal` and the date is a column of its
  * own, so leaving them in the description duplicates data and makes two identical
@@ -117,13 +174,13 @@ function stripDescriptionTail(text: string): string {
 
 /**
  * Page furniture that the PDF text layer interleaves with a row's real
- * description — never prose, always a stamp or a running footer.
+ * description ЕҢДҶГ¶ never prose, always a stamp or a running footer.
  *
  * Seen live on EDC POs: every page repeats `P26E11255` (the document's own
  * number) and `Page N of M`, and the extractor can place them BETWEEN a row's
  * part number and its description. Left unhandled they became the description,
  * which is how a part ordered 100+ times surfaced as
- * «P26E11255 Page 2 of 4» — a row that looks authoritative and says nothing.
+ * в”¬ВҪP26E11255 Page 2 of 4в”¬в•— ЕҢДҶГ¶ a row that looks authoritative and says nothing.
  */
 const PAGE_FURNITURE_RE =
   /^(?:Page\s+\d+\s+of\s+\d+|[A-Z]\d{2}[A-Z]\d{5}(?:\([A-Z0-9]+\))?|PURCHASE ORDER|REQUEST FOR QUOTE|REQUEST FOR QUOTATION|(?:PO|RFQ)\s*(?:number|no\.?)\s*:.*)$/i;
@@ -134,8 +191,8 @@ const PAGE_FURNITURE_RE =
  * Two layouts, because the RFQ and the PO place the part number differently:
  *  - PO:  `1 0 Each 21-OCT-2026 34.00 0.00` followed by `5720.003.GENRAL.7539`
  *    and the description on the NEXT lines.
- *  - RFQ: `1 24 Each …` with the part number in the Part No column — and, when
- *    that cell overflows, recoverable only from the `P/N : …` in the
+ *  - RFQ: `1 24 Each ЕҢДҶвҖқ` with the part number in the Part No column ЕҢДҶГ¶ and, when
+ *    that cell overflows, recoverable only from the `P/N : ЕҢДҶвҖқ` in the
  *    description.
  *
  * Parsing is restricted to the region AFTER the table header, which is what
@@ -155,7 +212,7 @@ export function parseLineItems(text: string, docId: string | null = null): Parse
   for (let i = startAt; i < lines.length; i++) {
     const line = lines[i];
     // The totals / restatement pages END the item table. The PO prints a
-    // «Purchase Order Distribution List» on page 2 that restates every line, so
+    // в”¬ВҪPurchase Order Distribution Listв”¬в•— on page 2 that restates every line, so
     // continuing past the totals double-counts each item.
     if (TABLE_END_RE.test(line)) break;
     if (TABLE_NOISE_RE.test(line)) continue;
@@ -165,16 +222,22 @@ export function parseLineItems(text: string, docId: string | null = null): Parse
     if (!UOM_RE.test(word)) continue;
     const rest = restRaw.trim();
     const lookahead = lines.slice(i, i + 6).join(" ");
-    // The part number is on the row, within the next few lines (PO), or written
-    // as `P/N : …` in the description (RFQ). Without one of those this is not a
-    // table row.
-    const partNo =
-      PART_NO_RE.exec(rest)?.[0] ??
-      PART_NO_RE.exec(lookahead)?.[0] ??
-      PN_INLINE_RE.exec(rest)?.[1] ??
-      PN_INLINE_RE.exec(lookahead)?.[1] ??
-      null;
-    if (!partNo && headerAt < 0) continue; // no header → demand a part number
+    // The row's money tail splits it into a HEAD cell and the trailing
+    // columns. Whatever comes first on the row - a `Part No` code, or the
+    // description when that cell is empty - is in the head.
+    const priceOnRow = PO_PRICE_RE.exec(rest);
+    const head = (priceOnRow ? rest.slice(0, priceOnRow.index) : rest).trim();
+
+    // The `Line Item` code lives in its OWN column, printed on the line BELOW
+    // the row; on some restatements it is inline, so the row itself is checked
+    // too. It is never the Part Number — the two are separate fields.
+    const lineItemNo = LINE_ITEM_RE.exec(rest)?.[0] ?? LINE_ITEM_RE.exec(lookahead)?.[0] ?? null;
+
+    const partNo = partNoFromRow(head, rest);
+    // Without any identifier at all the row is not a table row - unless the
+    // document had no recognisable header, where the description alone still
+    // identifies it (a part number is never REQUIRED).
+    if (!lineItemNo && !partNo && headerAt < 0) continue;
 
     // Money and identity are read from the ROW plus its immediate lookahead: on
     // the PO the price sits on the row and the part number on the next lines, so
@@ -184,17 +247,18 @@ export function parseLineItems(text: string, docId: string | null = null): Parse
     const lineTotal = priceOn ? parseMoney(priceOn[2]) : null;
 
     const described = collectDescription(lines, i, rest, partNo);
-    // An ERP writes its tax row as a part with no prose: a real part number
+    // An ERP writes its tax row as a code with no prose: a Line Item code
     // (`0600.000.GENRAL.0005`) and a quantity, immediately followed by the totals
     // marker `VALUE ADDED TAX LOCAL`. Live, that pseudo-line sat atop "most
     // repeated" across 134 orders. A genuine line item always carries prose, so
-    // an un-described row whose next content line is the totals boundary is
-    // accounting, not stock.
-    if (!described.text && described.hitTotals) continue;
+    // an un-described row is dropped when it sits at the totals boundary вҖ” and
+    // also when it carries no Line Item code at all (nothing identifies it).
+    if (!described.text && (described.hitTotals || !lineItemNo)) continue;
 
     items.push({
       lineNo: Number(noStr),
       partNo,
+      lineItemNo,
       description: described.text,
       qty: Number(qtyStr),
       uom: normaliseUom(word),
@@ -210,6 +274,33 @@ export function parseLineItems(text: string, docId: string | null = null): Parse
 function parseMoney(token: string): number | null {
   const n = Number(token.replace(/,/g, ""));
   return Number.isFinite(n) ? n : null;
+}
+
+/** Words that appear in the column region but are never a part number. */
+const NON_PART_NO_WORDS =
+  /^(Each|Piece|Pieces|Pcs|Nos|Unit|Units|Set|Sets|Box|Boxes|Roll|Rolls|Meter|Metre|Mtr|Kg|Ton|Litre|Liter|Ltr|Bag|Drum|Pair|Line|No|Quantity|UOM|Part|Item|Delivery|Date|Unit|Price|Total|EGP)$/i;
+
+/**
+ * The real `Part No` cell at the head of a PO row, or null.
+ *
+ * The EDC PO prints the description immediately after the UOM and leaves the
+ * `Part No` cell empty on most rows, so the head is USUALLY prose. Scanning it for
+ * anything code-like would pull a model number out of the description and label it
+ * a part number — worse than reporting none. The cell is therefore accepted only
+ * when the head IS the code and nothing else; otherwise the item's part numbers
+ * come from an explicit `P/N : …` in the description (see PN_INLINE_RE).
+ */
+export function extractPartNo(head: string): string | null {
+  const tokens = head.split(/\s+/).filter(Boolean);
+  if (tokens.length !== 1) return null;
+  const t = tokens[0];
+  if (LINE_ITEM_RE.test(t)) return null;
+  if (!PART_NO_TOKEN_RE.test(t)) return null;
+  if (NON_PART_NO_WORDS.test(t)) return null;
+  // Require BOTH a letter and a digit: a plain quantity or a bare word is not a
+  // part number.
+  if (!/[A-Za-z]/.test(t) || !/\d/.test(t)) return null;
+  return t;
 }
 
 /**
@@ -230,17 +321,17 @@ export type DocumentKind = "po" | "rfq" | "unknown";
  *
  * The operator's rule is explicit: count POs, NOT RFQs or quotations. The two
  * arrive from the same sender with nearly identical item tables, so without this
- * the census mixes quotes into an order-frequency ranking — a part «ordered 5
- * times» could be a part merely quoted 5 times, which is a different fact.
+ * the census mixes quotes into an order-frequency ranking ЕҢДҶГ¶ a part в”¬ВҪordered 5
+ * timesв”¬в•— could be a part merely quoted 5 times, which is a different fact.
  *
  * Two independent signals, because neither alone is reliable:
  *  - the title (`PURCHASE ORDER` / `REQUEST FOR QUOTE|QUOTATION`), which the
  *    generator prints but a scanned copy may lose;
- *  - the document number's prefix — EDC writes `P26E14630` for a PO and
+ *  - the document number's prefix ЕҢДҶГ¶ EDC writes `P26E14630` for a PO and
  *    `26R011954` for an RFQ, so the leading letter identifies the type even when
  *    the title is unreadable.
  */
-export function documentKind(text: string): DocumentKind {
+export function documentKind(text: string, subject?: string | null): DocumentKind {
   const t = (text || "").toUpperCase();
   // The title wins when present: it is the generator's own statement of intent.
   const saysPo = /\bPURCHASE\s+ORDER\b/.test(t);
@@ -256,6 +347,15 @@ export function documentKind(text: string): DocumentKind {
   // The explicit label EDC prints beside the number (`PO number:` / `RFQ number:`).
   if (/\bPO\s*(?:number|no\.?)\s*:/.test(t)) return "po";
   if (/\bRFQ\s*(?:number|no\.?)\s*:/.test(t)) return "rfq";
+  // The SUBJECT is the last resort: EDC titles its mail «EDC PO No P26E14708» /
+  // «EDC RFQ No 26R011900», and a scanned copy whose text layer dropped the
+  // title would otherwise be counted as an unidentified PO — inflating the PO
+  // census the operator is asked to trust.
+  const s = (subject || "").toUpperCase();
+  if (/\bPO\s*(?:NO|NUMBER|#)/.test(s)) return "po";
+  if (/\bRFQ\s*(?:NO|NUMBER|#)/.test(s) || /\bREQUEST\s+FOR\s+(QUOTE|QUOTATION)\b/.test(s)) {
+    return "rfq";
+  }
   return "unknown";
 }
 
@@ -269,13 +369,15 @@ function collectDescription(
   const parts: string[] = [];
   let hitTotals = false;
   const at = partNo ? rowRest.indexOf(partNo) : -1;
-  const head = (at >= 0 ? rowRest.slice(at + (partNo as string).length) : rowRest)
-    // Drop the overflowing Part No cell's leftover ("5.70243E+") and any wrapped
-    // part-number fragments that landed on this row.
-    .replace(PART_CELL_JUNK_RE, " ")
-    .replace(PART_NO_RE, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const head = stripOverflowPartNo(
+    (at >= 0 ? rowRest.slice(at + (partNo as string).length) : rowRest)
+      // Drop the overflowing Part No cell's leftover ("5.70243E+") and any wrapped
+      // part-number fragments that landed on this row.
+      .replace(PART_CELL_JUNK_RE, " ")
+      .replace(LINE_ITEM_RE, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
   // A real description has a word in it. This drops the PO row's date/price
   // tail ("05-OCT-2026 75.00 900.00"), whose description is on the lines below.
   if (/[A-Za-z\u0600-\u06FF]{4,}/.test(head) && !PAGE_FURNITURE_RE.test(head)) {
@@ -291,16 +393,27 @@ function collectDescription(
     if (ITEM_ROW_RE.test(raw)) break;
     // A stamp or running footer is never the description: SKIP it and keep
     // looking at the following lines, because the real prose sits after it on
-    // the page (breaking here is what produced the live «P26E11255 Page 2 of 4»
+    // the page (breaking here is what produced the live в”¬ВҪP26E11255 Page 2 of 4в”¬в•—
     // description).
     if (PAGE_FURNITURE_RE.test(raw)) continue;
     // A continuation line carries the row's line number, and often the wrapped
-    // fragment of an overflowing Part No cell: `12 GENRAL.0 RECIPROCATING …`.
-    const next = stripDescriptionTail(stripRowFurniture(raw));
+    // fragment of an overflowing Part No cell: `12 GENRAL.0 RECIPROCATING ЕҢДҶвҖқ`.
+    // The line's Line Item code is a COLUMN of its own that the text layer can
+    // drop inside the prose (`CODE 1001.001.USED.0360 ) FOR ELECTRICAL`); the
+    // code is removed and the prose kept, rather than dropping the operator's
+    // description for containing it.
+    const next = stripDescriptionTail(
+      stripOverflowPartNo(stripRowFurniture(raw)).replace(LINE_ITEM_RE, " "),
+    )
+      .replace(/\s+/g, " ")
+      .trim();
     if (!next) continue;
-    if (PART_NO_RE.test(next)) continue;
     if (/^Note:?$/i.test(next)) continue;
-    if (/^[A-Za-z\u0600-\u06FF]/.test(next)) parts.push(next);
+    // Keep prose even when it OPENS with a number: a wrapped description
+    // legitimately continues as `10HP, SIEMENS …`, and rejecting it truncated the
+    // operator's «التوصيف الكامل» at the first line. A new row was already
+    // stopped above (`ITEM_ROW_RE`), and a money/date-only tail has no word.
+    if (/[A-Za-z\u0600-\u06FF]{4,}/.test(next)) parts.push(next);
     else break;
   }
   return { text: parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim(), hitTotals };
@@ -309,8 +422,8 @@ function collectDescription(
 /**
  * Remove the leading furniture the PDF's columns leave on a continuation line:
  * the row's line number and the wrapped fragment of an overflowing Part No cell
- * (observed on a real RFQ: `12 GENRAL.0 RECIPROCATING COMPRESSOR …` and
- * `084 MT100HS4EVE …`).
+ * (observed on a real RFQ: `12 GENRAL.0 RECIPROCATING COMPRESSOR ЕҢДҶвҖқ` and
+ * `084 MT100HS4EVE ЕҢДҶвҖқ`).
  */
 function stripRowFurniture(line: string): string {
   return line
@@ -321,6 +434,31 @@ function stripRowFurniture(line: string): string {
     .trim();
 }
 
+/**
+ * Drop the overflowing `Part No` cell's fragment from a continuation line.
+ *
+ * The EDC generator sometimes pushes the Part No cell onto the NEXT visual line,
+ * glued ahead of the description (`3RV20214AA P/N : 3RV20214AA10 , CIRCUIT
+ * BREAKER, 460V,`). The line then begins with a digit, so it was taken for a new
+ * table row and the row's description came out EMPTY — the item surfaced in the
+ * report with no name at all, which is the field the operator audits by.
+ *
+ * The fragment is removed only when CORROBORATED: the remainder still carries a
+ * `P/N :` marker and the fragment is a prefix of that value (or of it). A plain
+ * description that merely opens with a code-shaped word is left intact, because
+ * silently deleting its first word would damage real prose.
+ */
+function stripOverflowPartNo(line: string): string {
+  const m = /^([A-Z0-9][A-Z0-9./-]{2,24})\s+\S/i.exec(line);
+  if (!m) return line;
+  const frag = m[1].toUpperCase();
+  if (!/\d/.test(frag)) return line;
+  const rest = line.slice(m[0].length - 1);
+  const inline = PN_INLINE_RE.exec(rest)?.[1]?.toUpperCase();
+  if (inline && (inline.startsWith(frag) || frag.startsWith(inline))) return rest;
+  return line;
+}
+
 /** Canonical UOM label, preserving the document's own word. */
 function normaliseUom(word: string): string {
   const hit = UOM_RE.exec(word);
@@ -329,6 +467,7 @@ function normaliseUom(word: string): string {
 
 /** One part aggregated across every ORDERS it appeared on. */
 export interface AggregatedPart {
+  /** The real Part Number (short code), when the documents printed one. */
   partNo: string | null;
   description: string;
   /** Total quantity across all occurrences. */
@@ -336,32 +475,44 @@ export interface AggregatedPart {
   uom: string | null;
   /** How many distinct ORDER DOCUMENTS carried this part. */
   occurrences: number;
-  /** Average unit price over the lines that printed one, or null when none did. */
+  /**
+   * Average unit price over the lines that printed one, or null when none did.
+   * Present as an ANALYTICAL value only - never a basis for the total.
+   */
   avgUnitPrice: number | null;
-  /** Summed line totals over the lines that printed one, or null when none did. */
+  /**
+   * Total amount for the item = the SUM OF THE PRINTED LINE TOTALS across every
+   * order. The operator's rule: never `total qty x average unit price`. The two
+   * differ whenever the same item carried different quantities/prices across
+   * orders. Null when no line yielded a total.
+   */
   totalValue: number | null;
-  /** Distinct document numbers the part appeared in — the audit trail. */
+  /**
+   * True when at least one contributing line's total was COMPUTED (qty x the
+   * unit price printed on that SAME PO) rather than read from the document. The
+   * report must distinguish a transferred figure from a calculated one.
+   */
+  totalComputed: boolean;
+  /** Distinct document numbers the part appeared in - the audit trail. */
   documents: string[];
+  /** Every Line Item code seen for this item (the ERP's `1531.032.GENRAL.7538`). */
+  lineItemNos: string[];
   /**
    * Every part number seen for this item. More than one means the item was
    * written with different codes (or one order omitted it) and the identity
-   * grouping joined them — the operator asked for exactly this.
+   * grouping joined them - the operator asked for exactly this.
    */
   partNos: string[];
   /**
-   * True when a part number or model code pins the identity. False means the
-   * cluster rests on prose alone, which is reported separately rather than
-   * presented as certain.
+   * True when a Line Item code, part number or model code pins the identity.
+   * False means the cluster rests on prose alone, which is reported separately
+   * rather than presented as certain.
    */
   identityConfident: boolean;
   /**
-   * The printed Line Item numbers, deduped and sorted.
-   *
-   * Deliberately NOT part of the identity: the same item is line 1 on one PO and
-   * line 3 on the next, so it can never be used for matching. It IS carried
-   * because the operator asked for the column and it is the one thing that lets
-   * them open the right row of the right order — and because «غير متوفر» for a
-   * value the documents DO print is a false absence.
+   * The printed `Line No.` row numbers, deduped and sorted. Deliberately NOT
+   * part of the identity: the same item is row 1 on one PO and row 3 on the
+   * next. It is carried because it lets the operator open the right row.
    */
   lineItems: number[];
 }
@@ -399,8 +550,8 @@ function dominantUom(items: ParsedLineItem[]): string | null {
  * would let a single noisy document top a frequency ranking.
  *
  * Sort order is by QUANTITY: this function is the VOLUME view (the caller's
- * `ordering=qty`). The frequency view — «أكتر بند اتكرر», where a part on 10
- * orders outranks a part on 3 with a far larger quantity — is
+ * `ordering=qty`). The frequency view ЕҢДҶГ¶ в”¬ВҪЕҫЕ»в”ҳДҒЕҫВ¬Еҫв–’ ЕҫВ©в”ҳГҘЕҫВ» ЕҫВҰЕҫВ¬в”ҳДҒЕҫв–’Еҫв–’в”¬в•—, where a part on 10
+ * orders outranks a part on 3 with a far larger quantity ЕҢДҶГ¶ is
  * `aggregateItemsByOccurrence`, which sorts on `occurrences`.
  */
 export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
@@ -409,7 +560,10 @@ export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
   const usable = items.filter((it) => itemKey(it) !== "");
   const groups = groupByItemIdentity(
     usable.map((it) => ({
-      partNo: it.partNo,
+      // The ERP's Line Item code is the strongest identity an EDC document
+      // offers, so it leads; the real Part Number is the fallback for the
+      // (rare) row that prints one but no code.
+      partNo: it.lineItemNo || it.partNo,
       description: it.description,
       row: it,
     })),
@@ -420,29 +574,45 @@ export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
     const lines = group.rows.map((r) => r.row);
     const docs = new Set<string>();
     const partNos = new Set<string>();
+    const lineItemNos = new Set<string>();
     const lineItems = new Set<number>();
     let description = "";
     let qty = 0;
+    // Totals are summed PER ORDER, exactly as the operator requires. A line
+    // that printed no total is computed from ITS OWN PO's qty x unit price and
+    // flagged, never replaced by `total qty x average price`.
+    let totalValue = 0;
+    let sawTotal = false;
+    let totalComputed = false;
 
     lines.forEach((it, idx) => {
       qty += it.qty ?? 0;
       const pn = (it.partNo || "").trim();
       if (pn) partNos.add(pn);
+      const lin = (it.lineItemNo || "").trim();
+      if (lin) lineItemNos.add(lin);
       if (typeof it.lineNo === "number" && Number.isFinite(it.lineNo)) lineItems.add(it.lineNo);
+      if (it.lineTotal != null) {
+        totalValue += it.lineTotal;
+        sawTotal = true;
+      } else if (it.unitPrice != null && it.qty != null) {
+        totalValue += it.unitPrice * it.qty;
+        sawTotal = true;
+        totalComputed = true;
+      }
       // A line with no document number still counts as its own occurrence, keyed
       // on the line so it can never silently vanish from the total.
       const doc = (it.docId || "").trim() || `__line_${idx}__${it.lineNo ?? ""}`;
       docs.add(doc);
-      // Keep the LONGEST description seen — the operator asked for the full text,
+      // Keep the LONGEST description seen - the operator asked for the full text,
       // and the PDF wraps the same item across lines with varying completeness.
       if ((it.description || "").length > description.length) description = it.description;
     });
 
     const priced = lines.filter((l) => l.unitPrice != null && l.unitPrice > 0);
-    const valued = lines.filter((l) => l.lineTotal != null);
     out.push({
       // The most specific code seen, so a cluster that includes a part-numbered
-      // line is not reported as "غير متوفر".
+      // line is not reported as missing one.
       partNo: partNos.size ? [...partNos].sort((a, b) => b.length - a.length)[0] : null,
       description,
       qty,
@@ -451,10 +621,10 @@ export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
       avgUnitPrice: priced.length
         ? Number((priced.reduce((s, l) => s + (l.unitPrice ?? 0), 0) / priced.length).toFixed(4))
         : null,
-      totalValue: valued.length
-        ? Number(valued.reduce((s, l) => s + (l.lineTotal ?? 0), 0).toFixed(2))
-        : null,
+      totalValue: sawTotal ? Number(totalValue.toFixed(2)) : null,
+      totalComputed,
       documents: [...docs].filter((d) => !d.startsWith("__line_")),
+      lineItemNos: [...lineItemNos].sort(),
       partNos: [...partNos],
       identityConfident: hasConfidentIdentity(group.identity),
       lineItems: [...lineItems].sort((a, b) => a - b),
@@ -468,23 +638,23 @@ export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
  * The identity a line is grouped by.
  *
  * Deliberately NOT the part number: the operator's rule is that a Part Number is
- * not an item's identity — it may be missing, misspelled, or printed on one PO
+ * not an item's identity ЕҢДҶГ¶ it may be missing, misspelled, or printed on one PO
  * and absent from the next for the same item. Keying on it alone split one item
  * into several (the live case: the same breaker counted twice because one PO
  * printed `P/N : A9R41440` and another only the description).
  *
  * This function still returns a per-LINE key (used to dedupe an exact repeat and
  * as a cheap first pass); the authoritative grouping across wordings is
- * `groupByItemIdentity` in `item-identity.ts`, which compares the whole item —
- * part number, description, model, size, capacity, unit — and refuses to merge
+ * `groupByItemIdentity` in `item-identity.ts`, which compares the whole item ЕҢДҶГ¶
+ * part number, description, model, size, capacity, unit ЕҢДҶГ¶ and refuses to merge
  * two items whose model/size/capacity differ.
  *
  * Description keys are never number-stripped: stripping numbers would merge
- * genuinely different parts («50 MM» / «70 MM»), which is the opposite error.
+ * genuinely different parts (в”¬ВҪ50 MMв”¬в•— / в”¬ВҪ70 MMв”¬в•—), which is the opposite error.
  */
 export function itemKey(it: ParsedLineItem): string {
-  const partNo = (it.partNo || "").trim();
-  if (partNo) return partNo.toUpperCase();
+  const strong = (it.lineItemNo || it.partNo || "").trim();
+  if (strong) return strong.toUpperCase();
   const description = (it.description || "").trim();
   if (description.length < MIN_DESCRIPTION_KEY_LEN) return "";
   return description.toUpperCase();
@@ -499,7 +669,7 @@ const MIN_DESCRIPTION_KEY_LEN = 4;
 /**
  * Roll parsed lines up ranked by how often an ORDER carried the part.
  *
- * «أكتر بند اتكرر» is about FREQUENCY, not volume: a single huge line (1,000
+ * в”¬ВҪЕҫЕ»в”ҳДҒЕҫВ¬Еҫв–’ ЕҫВ©в”ҳГҘЕҫВ» ЕҫВҰЕҫВ¬в”ҳДҒЕҫв–’Еҫв–’в”¬в•— is about FREQUENCY, not volume: a single huge line (1,000
  * pcs ordered once) would top a quantity-ranked list over a small part that
  * appears on every order. The default quantity ranking answers a different
  * question, so the frequency view is its own sort rather than a re-slice.
@@ -549,7 +719,7 @@ export interface ItemScanCoverage {
   lines: number;
   /** Purchase-order documents read (the operator counts POs, not RFQs). */
   poDocuments: number;
-  /** RFQ / quotation documents read — parsed for coverage but excluded. */
+  /** RFQ / quotation documents read ЕҢДҶГ¶ parsed for coverage but excluded. */
   rfqDocuments: number;
   /** Documents whose type could not be determined. */
   unknownDocuments: number;
@@ -600,16 +770,16 @@ export async function parseItemsFromAttachments(
       const text = await extractPdfText(att.content);
       if (!text) continue;
       sawReadable = true;
-      // The document's own number when it prints one, else the message+file —
+      // The document's own number when it prints one, else the message+file ЕҢДҶГ¶
       // occurrences must key on the ORDER, and a message with two attachments
       // (PO plus its distribution copy) is one order, not two.
       const docId = documentNumber(text) ?? `${message.mailbox}#${message.uid}#${att.filename}`;
       // Only PURCHASE ORDERS count. The operator's rule is explicit: POs, not
-      // RFQs or quotations — the same sender sends both with identical item
-      // tables, so counting RFQs would report a part «ordered» on quotes that
+      // RFQs or quotations ЕҢДҶГ¶ the same sender sends both with identical item
+      // tables, so counting RFQs would report a part в”¬ВҪorderedв”¬в•— on quotes that
       // were never ordered. Non-PO documents are still READ (so coverage is
       // honest about what was opened) but their lines are not counted.
-      const kind = documentKind(text);
+      const kind = documentKind(text, message.subject);
       if (kind === "rfq") {
         coverage.rfqDocuments += 1;
         continue;
@@ -636,7 +806,7 @@ export async function parseItemsFromAttachments(
 export function itemsCsv(result: ItemScanResult): string {
   const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [
-    "mailbox,date,subject,filename,docId,lineNo,partNo,description,qty,uom,unitPrice,lineTotal",
+    "mailbox,date,subject,filename,docId,lineNo,lineItemNo,partNo,description,qty,uom,unitPrice,lineTotal",
   ];
   for (const m of result.messages) {
     for (const it of m.items) {
@@ -648,6 +818,7 @@ export function itemsCsv(result: ItemScanResult): string {
           m.filename,
           it.docId ?? "",
           it.lineNo ?? "",
+          it.lineItemNo ?? "",
           it.partNo ?? "",
           it.description,
           it.qty ?? "",
@@ -663,16 +834,17 @@ export function itemsCsv(result: ItemScanResult): string {
   return lines.join("\n");
 }
 
-/** Aggregate CSV — the summary the operator reads, one row per part. */
+/** Aggregate CSV ЕҢДҶГ¶ the summary the operator reads, one row per part. */
 export function itemsAggregateCsv(parts: AggregatedPart[]): string {
   const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [
-    "description,partNo,allPartNos,lineItems,orders,totalQty,uom,avgUnitPrice,totalValue,identityConfident,documents",
+    "description,lineItemNo,partNo,allPartNos,lineItems,orders,totalQty,uom,avgUnitPrice,totalValue,totalComputed,identityConfident,documents",
   ];
   for (const p of parts) {
     lines.push(
       [
         p.description,
+        p.lineItemNos.join(" | "),
         p.partNo ?? "",
         p.partNos.join(" | "),
         p.lineItems.join(" | "),
@@ -681,6 +853,7 @@ export function itemsAggregateCsv(parts: AggregatedPart[]): string {
         p.uom ?? "",
         p.avgUnitPrice ?? "",
         p.totalValue ?? "",
+        p.totalComputed ? "computed" : "from-document",
         p.identityConfident ? "yes" : "no",
         p.documents.join(" | "),
       ]

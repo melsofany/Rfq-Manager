@@ -99,6 +99,24 @@ export async function listJobs(phone: string, limit = 10): Promise<JobRecord[]> 
   return rows.map(toRecord);
 }
 
+/**
+ * Ask a background job to stop.
+ *
+ * The operator must be able to call off a long census — a live transcript had
+ * them ask to cancel repeatedly and the agent could only answer that no such
+ * capability existed, leaving a job that had already produced a wrong report
+ * eating the day's work. This flips the row to `cancelled`; the worker observes
+ * it between batches and stops, so the request takes effect within one batch
+ * rather than at the end of a 60-batch loop.
+ */
+export async function cancelJob(id: number): Promise<JobRecord | null> {
+  const job = await getJob(id);
+  if (!job) return null;
+  if (job.status !== "queued" && job.status !== "running") return job;
+  await updateJob(id, { status: "cancelled" });
+  return { ...job, status: "cancelled", finishedAt: new Date() };
+}
+
 export async function updateJob(
   id: number,
   patch: {
@@ -179,6 +197,13 @@ export async function createJob(opts: CreateJobOpts): Promise<CreateJobResult> {
           await updateJob(job.id, { progress });
         },
       });
+      // A job the operator cancelled while it ran must NOT be flipped back to
+      // `completed` — the cancellation is the final word on its status.
+      const latest = await getJob(job.id);
+      if (latest?.status === "cancelled") {
+        logger.info({ jobId: job.id, kind: opts.kind }, "AI assistant: job cancelled by operator");
+        return;
+      }
       await updateJob(job.id, { status: "completed", result: out?.result ?? null });
       logger.info({ jobId: job.id, kind: opts.kind }, "AI assistant: job completed");
     } catch (err) {
@@ -260,7 +285,15 @@ export async function startCensusJob(opts: {
       // so progress is guaranteed, but the cap stops a pathological source (a
       // window that never advances) from looping forever in the background.
       const MAX_BATCHES = Number(process.env.AI_CENSUS_JOB_MAX_BATCHES) || 60;
+      let cancelled = false;
       for (let i = 0; i < MAX_BATCHES; i++) {
+        // Honour a cancellation between batches: the operator called the job off,
+        // so stop and do NOT announce a report for a census they abandoned.
+        const current = await getJob(jobId);
+        if (current?.status === "cancelled") {
+          cancelled = true;
+          break;
+        }
         const deadline = Date.now() + censusJobBatchMs();
         const out = await opts.runBatch(deadline);
         session = out.session;
@@ -276,8 +309,10 @@ export async function startCensusJob(opts: {
         });
         if (session?.complete) break;
       }
-      await opts.finish({ phone: opts.phone, jobId, session });
-      return { result: { complete: Boolean(session?.complete) } };
+      if (!cancelled) {
+        await opts.finish({ phone: opts.phone, jobId, session });
+      }
+      return { result: { complete: Boolean(session?.complete) && !cancelled, cancelled } };
     },
   });
 }

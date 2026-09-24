@@ -73,7 +73,14 @@ import {
 } from "./procurement-tools";
 import { defaultMailbox, mailboxes } from "./mailboxes";
 import { rememberFact, recallMemories, forgetMemory } from "./memory";
-import { listJobs, getJob, describeJob, startCensusJob, type CensusJobArgs } from "./jobs";
+import {
+  listJobs,
+  getJob,
+  cancelJob,
+  describeJob,
+  startCensusJob,
+  type CensusJobArgs,
+} from "./jobs";
 import { sendWhatsAppText, sendWhatsAppDocument } from "../communications/service";
 import { generateAssistantPdf, generateMissingNumbersPdf, type PdfSection } from "./pdf";
 import {
@@ -810,6 +817,23 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
     {
       type: "function",
       function: {
+        name: "cancel_job",
+        description:
+          "أوقف مهمة خلفية قيد التنفيذ (مثل حصر بريد طويل). " +
+          "استخدمها عندما يقول المستخدم «الغيها» أو «وقف المهمة» أو «مش عايز الحصر ده». " +
+          "تتوقف المهمة فعليًا خلال الجولة الحالية ولا يُرسَل تقريرها.",
+        parameters: {
+          type: "object",
+          properties: {
+            id: { type: "integer", description: "رقم المهمة المطلوب إيقافها" },
+          },
+          required: ["id"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "start_census_job",
         description:
           "ابدأ حصر بنود البريد في الخلفية (مهمة غير متزامنة) عندما يكون الحصر كبيرًا " +
@@ -1217,7 +1241,11 @@ async function launchCensusJob(
       if (ctx.settings.allowPdf && Array.isArray(s?.items) && s.items.length) {
         try {
           const { generateAssistantPdf } = await import("./pdf");
-          const ranked = aggregateItems(s.items as never);
+          // The operator's ask is FREQUENCY («أكثر 20 بند … أكثر من مرة»), so the
+          // job report must rank by the number of ORDERS, like the interactive
+          // path — ranking by quantity here answered a different question and
+          // put a single huge one-off order on top.
+          const ranked = aggregateItemsByOccurrence(s.items as never, 2);
           const buffer = await generateAssistantPdf({
             title: "حصر بنود البريد (مهمة خلفية)",
             subtitle: `${ranked.length} بندًا مميزًا من ${lines} سطرًا`,
@@ -1230,21 +1258,37 @@ async function launchCensusJob(
               },
               {
                 table: {
-                  columns: ["رقم القطعة", "التوصيف", "عدد الأوامر", "الكمية", "الوحدة"],
-                  rows: ranked.slice(0, 100).map((p: never) => {
+                  columns: [
+                    "الترتيب",
+                    "وصف البند الكامل",
+                    "رقم القطعة (Part Number)",
+                    "Line Item",
+                    "عدد أوامر الشراء",
+                    "إجمالي الكمية",
+                    "الوحدة",
+                    "إجمالي المبلغ (مجموع Line Totals)",
+                  ],
+                  rows: ranked.slice(0, 100).map((p: never, i: number) => {
                     const it = p as {
                       partNo?: string;
+                      lineItemNos?: string[];
                       description: string;
                       occurrences: number;
                       qty: number;
                       uom?: string;
+                      totalValue?: number | null;
                     };
                     return [
+                      i + 1,
+                      it.description || "غير متوفر",
                       it.partNo ?? "—",
-                      it.description,
+                      it.lineItemNos?.length ? it.lineItemNos.join("، ") : "—",
                       it.occurrences,
                       it.qty,
                       it.uom ?? "—",
+                      it.totalValue != null
+                        ? it.totalValue.toFixed(2)
+                        : "المبلغ غير متوفر في المستند",
                     ];
                   }),
                 },
@@ -1664,7 +1708,10 @@ async function executeToolInner(
           ? parsed.items.filter(
               (i) =>
                 matchesPartQuery(i.description, contains) ||
-                matchesPartQuery(i.partNo ?? "", contains),
+                matchesPartQuery(i.partNo ?? "", contains) ||
+                // The Line Item code is what EDC prints, so «26R…»/«0666.001.ARSTON.0004»
+                // must be searchable even though it is not the Part Number.
+                matchesPartQuery(i.lineItemNo ?? "", contains),
             )
           : parsed.items;
 
@@ -1829,7 +1876,9 @@ async function executeToolInner(
                   `بنود لم يمكن تحديد هويتها بشكل مؤكد (لا رقم قطعة ولا كود موديل): ${
                     ranked.filter((p) => !p.identityConfident).length
                   } من ${ranked.length}.`,
-                  "متوسط سعر الوحدة والإجمالي مأخوذان حرفيًا من أسطر أوامر الشراء؛ «غير متوفر» تعني أن الأمر لم يطبع سعرًا لهذا البند.",
+                  "إجمالي المبلغ لكل بند = مجموع إجماليات الأسطر (Line Totals) من كل أمر شراء على حدة — وليس الكمية الإجمالية × متوسط سعر الوحدة.",
+                  "عمود «مصدر الإجمالي»: «من المستند» يعني أن المبلغ منقول من أمر الشراء مباشرةً، و«محسوب» يعني أنه حُسب من كمية × سعر نفس الأمر لعدم طبع إجمالي.",
+                  "«Line Item» هو كود البند كما يطبعه EDC (مثال 1531.032.GENRAL.7538)، وهو مختلف عن رقم القطعة (Part Number).",
                   "«عدد الأوامر» يحسب أوامر الشراء المختلفة فقط؛ تكرار البند داخل نفس الأمر لا يزيد العدد.",
                 ].filter(Boolean),
               },
@@ -1838,30 +1887,34 @@ async function executeToolInner(
                   columns: [
                     "الترتيب",
                     "وصف البند الكامل",
-                    "Part Number",
+                    "رقم القطعة (Part Number)",
                     "Line Item",
-                    "عدد الأوامر",
+                    "عدد أوامر الشراء",
                     "إجمالي الكمية",
                     "الوحدة",
-                    "متوسط سعر الوحدة",
-                    "إجمالي القيمة",
+                    "متوسط سعر الوحدة (للعلم)",
+                    "إجمالي المبلغ (مجموع Line Totals)",
+                    "مصدر الإجمالي",
                     "العملة",
-                    "أرقام الأوامر",
+                    "أرقام أوامر الشراء",
                   ],
                   rows: ranked.slice(0, top).map((p, i) => [
                     i + 1,
                     p.description || "غير متوفر",
                     p.partNo ?? "غير متوفر",
-                    // A Line Item number differs PO by PO, so it is never the
-                    // identity — but the row DOES print it, so reporting «غير
-                    // متوفر» was a false absence for a value the operator asked
-                    // for by name.
-                    p.lineItems.length ? p.lineItems.join("، ") : "غير متوفر",
+                    // The ERP's own `Line Item` code — the value the operator
+                    // asked for by name and by example (1531.032.GENRAL.7538).
+                    p.lineItemNos.length ? p.lineItemNos.join("، ") : "غير متوفر",
                     p.occurrences,
                     p.qty,
                     p.uom ?? "غير متوفر",
                     p.avgUnitPrice != null ? p.avgUnitPrice.toFixed(2) : "غير متوفر",
                     p.totalValue != null ? p.totalValue.toFixed(2) : "غير متوفر",
+                    p.totalValue == null
+                      ? "غير متوفر"
+                      : p.totalComputed
+                        ? "محسوب (كمية × سعر نفس الأمر)"
+                        : "من المستند",
                     p.avgUnitPrice != null || p.totalValue != null ? "EGP" : "غير متوفر",
                     p.documents.length ? p.documents.join("، ") : "غير متوفر",
                   ]),
@@ -2264,6 +2317,23 @@ async function executeToolInner(
               finishedAt: j.finishedAt,
             })),
             note: "هذه حالة المهام كما هي في قاعدة البيانات — لا تخمّن تقدمًا غير مذكور هنا.",
+          },
+        };
+      }
+      case "cancel_job": {
+        const id = Number(args.id);
+        if (!Number.isFinite(id)) return { ok: false, error: "حدّد رقم المهمة (id)." };
+        const job = await cancelJob(id);
+        if (!job) return { ok: false, error: `لا توجد مهمة بالرقم ${id}.` };
+        return {
+          ok: true,
+          data: {
+            id: job.id,
+            status: job.status,
+            note:
+              job.status === "cancelled"
+                ? `تم إيقاف المهمة #${job.id}. لن يُرسَل تقريرها.`
+                : `المهمة #${job.id} حالتها «${job.status}» بالفعل — لم أُوقفها.`,
           },
         };
       }

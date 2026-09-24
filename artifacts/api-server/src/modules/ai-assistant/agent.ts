@@ -160,7 +160,10 @@ export function systemPrompt(settings: AiSettings): string {
 قواعد هوية البند والتكرار (مهمة جدًا — هذه قواعد العمل التي طلبها المدير):
 - رقم القطعة (Part Number) ليس هوية البند. قد يكون غير موجود، أو مكتوبًا بتهجئة مختلفة، أو موجودًا في أمر وغائبًا في أمر آخر لنفس البند. لا تعتبر اختلاف رقم القطعة دليلًا على أن البندين مختلفان، ولا تشترط وجوده ليدخل البند في التحليل.
 - هوية البند تُبنى من مجموعة بياناته كاملة: الوصف الكامل، المواصفات الفنية، الموديل، الماركة/الشركة المصنعة، المقاس، القدرة/السعة، النوع، الوحدة، وأي أكواد أخرى. البند بدون رقم قطعة يبقى داخل التحليل ويُعرَّف من الوصف والمواصفات.
-- Line Item ليس معرفًا للمطابقة: رقم السطر يتغير من أمر لآخر. لكنه يُذكر في التقرير كما هو مطبوع في المستند (حقل lineItems في نتيجة الأداة)؛ إن لم تطبعه المستندات فاكتب «غير متوفر»، ولا تخترعه ولا تستخدمه لمطابقة بندين.
+- «Line Item» عند EDC هو كود البند الذي يطبعه نظامهم في عمود Line Item بصيغة مثل 1531.032.GENRAL.7538 أو 0666.001.ARSTON.0004 — وليس رقم السطر. هذا هو المقصود بكلمة Line Item في طلبات المدير، ويُذكر في التقرير كما هو مطبوع (حقل lineItemNos في نتيجة الأداة). وهو مختلف تمامًا عن «رقم القطعة» (Part Number) وليس بديلًا عنه.
+- إن لم تطبع المستندات Line Item فاكتب «غير متوفر» ولا تخترعه. ولا تعرض رقم السطر (lineNo) في خانة Line Item أبدًا.
+- إجمالي مبلغ البند = مجموع إجماليات الأسطر (Line Totals) من كل أمر شراء على حدة. ممنوع حساب الإجمالي بـ«إجمالي الكمية × متوسط سعر الوحدة». إن لم يطبع أمر الشراء إجماليًا للبند، احسبه من كمية × سعر نفس الأمر ووضّح في عمود «مصدر الإجمالي» أنها قيمة محسوبة وليست منقولة من المستند. متوسط سعر الوحدة معلومة تحليلية فقط.
+- لكل بند احتفظ بتفاصيله الأصلية: رقم أمر الشراء، الكمية وسعر الوحدة والإجمالي في كل أمر على حدة، وأرقام الأوامر التي ورد فيها البند.
 - معيار التكرار = عدد أوامر الشراء المختلفة التي ظهر فيها البند. ليس إجمالي الكمية، وليس عدد الأسطر، وليس عدد مرات ظهور النص. مثال: بند في 10 أوامر بـ50 قطعة أكثر تكرارًا من بند في 3 أوامر بـ500 قطعة — الكمية لا تحدد الترتيب.
 - لا تدمج بندين مختلفين لمجرد تشابه الوصف: أي اختلاف جوهري في الموديل أو المقاس أو القدرة أو السعة أو النوع أو الشركة المصنعة أو المواصفات يعني أنهما بندان مختلفان.
 - أوامر الشراء (PO) فقط هي المقصود — لا تحسب طلبات عروض الأسعار (RFQ) ولا عروض الأسعار (Quotation) كأوامر شراء، ولا تخلط بينهما في نفس القائمة. الأداة تستبعدها تلقائيًا وتخبرك بالعدد.
@@ -181,6 +184,7 @@ export function systemPrompt(settings: AiSettings): string {
 - scan_email_items قد تحوّل نفسها إلى مهمة خلفية تلقائيًا إذا كان المتبقي كبيرًا، وتعيد jobId بدل قائمة بنود. إن حدث ذلك فأخبر المستخدم برقم المهمة — ولا تعد نداء scan_email_items بنفسك في هذه الجولة ولا تقل إن الحصر خلص. إن أردت إجابة فورية على ما فُحص حتى الآن مرّر noAutoJob=true.
 - لا تنتظر انتهاء المهمة داخل الرد ولا تعد نداء الأدوات لإكمالها — أخبر المستخدم برقم المهمة وأن النتيجة ستصله، ويمكنه السؤال job_status.
 - استخدم job_status لعرض حالة المهام وتقدّمها وسؤال «خلص الحصر؟». لا تخمّن تقدمًا غير مذكور في نتيجتها.
+- إن طلب المستخدم إلغاء المهمة («الغيها»، «وقفها»، «مش عايز الحصر ده») استخدم cancel_job برقم المهمة وأخبره أنها أُوقفت ولن يُرسَل تقريرها. لا تقل إن الإلغاء غير متاح.
 - الفرق: scan_email_items للحصر الصغير/المتوسط الذي يكمله هذا الرد، وstart_census_job للحصر الكبير جدًا الذي يستحيل إكماله الآن.
 - أسماء الماركات لها تهجئات مختلفة: المستند قد يكتبها بحروف لاتينية مشوّهة (ARSTON بدل ARISTON، GENRAL بدل GENERAL) والمستخدم يسأل بالعربية (الأريستون). عند البحث عن بند بموديل/ماركة استخدم contains بالتسمية التي يعرفها المستخدم — المطابقة تفهم المرادفات تلقائيًا. وإن لم تجد، جرّب التهجئة اللاتينية المحتملة أو جزءًا من رقم القطعة قبل القول «غير موجود».
 
@@ -733,6 +737,25 @@ const EMAIL_TOOLS = new Set([
 ]);
 
 /**
+ * Tools that produce NO figures of their own — they launch or inspect work.
+ *
+ * They must not count as "database" when deciding whether an answer's numbers may
+ * be reconciled: a live email-census answer that also called `job_status` was
+ * classified as database-sourced and its (correct) email total was compared to a
+ * `purchase_order_items` sum, producing the bogus «المرصود … والمحسوب … ⇒
+ * PARTIALLY_VERIFIED» footer.
+ */
+const META_TOOLS = new Set([
+  "job_status",
+  "start_census_job",
+  "generate_pdf",
+  "remember_fact",
+  "recall_memory",
+  "forget_memory",
+  "list_models",
+]);
+
+/**
  * Which source an answer's figures came from.
  *
  * The numeric verifier reconciles a reported total against the DATABASE, so it
@@ -746,7 +769,10 @@ function answerSource(
   usedTools: Array<{ name: string }>,
 ): "database" | "email" | "mixed" | "unknown" {
   if (!usedTools.length) return "unknown";
-  const names = new Set(usedTools.map((t) => t.name));
+  // Meta tools carry no figures, so they must not decide the source: an email
+  // census that also asked `job_status` is still an EMAIL answer.
+  const names = new Set(usedTools.map((t) => t.name).filter((n) => !META_TOOLS.has(n)));
+  if (!names.size) return "unknown";
   const email = [...names].some((n) => EMAIL_TOOLS.has(n));
   const db = [...names].some((n) => !EMAIL_TOOLS.has(n));
   if (email && db) return "mixed";

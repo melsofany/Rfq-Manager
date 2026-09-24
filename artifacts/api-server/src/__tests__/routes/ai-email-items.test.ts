@@ -15,8 +15,14 @@
  */
 import { describe, it, expect } from "vitest";
 
-const { parseLineItems, aggregateItems, aggregateItemsByOccurrence, itemKey, documentNumber } =
-  await import("../../modules/ai-assistant/email-items");
+const {
+  parseLineItems,
+  aggregateItems,
+  aggregateItemsByOccurrence,
+  itemKey,
+  documentNumber,
+  documentKind,
+} = await import("../../modules/ai-assistant/email-items");
 
 /** Verbatim text of a real EDC RFQ attachment (26R011954). */
 const RFQ_TEXT = `Page 1 of 1
@@ -141,11 +147,15 @@ describe("parseLineItems — EDC PO layout", () => {
     // a part-numbered row (0600.000.GENRAL.0005, qty 1) right before the totals.
     // Counting it put a tax row atop "most repeated" across 134 live orders.
     expect(items).toHaveLength(1);
-    expect(items.map((i) => i.partNo)).toEqual(["0666.000.GENRAL.0006"]);
+    // The ERP's `Line Item` code is what the operator calls a Line Item; the
+    // Part No column is EMPTY on this row, so `partNo` must stay null rather
+    // than being filled with the Line Item code.
+    expect(items.map((i) => i.lineItemNo)).toEqual(["0666.000.GENRAL.0006"]);
+    expect(items[0].partNo).toBeNull();
     expect(items[0].qty).toBe(12);
     expect(items[0].description).toContain("PADLOCK");
     expect(items[0].description).toContain("KEYS-CHINA");
-    expect(items.some((i) => i.partNo === "0600.000.GENRAL.0005")).toBe(false);
+    expect(items.some((i) => i.lineItemNo === "0600.000.GENRAL.0005")).toBe(false);
   });
 
   it("does not read a page stamp as the description (the «Page 2 of 4» row)", () => {
@@ -173,7 +183,7 @@ Total Price 250.00`;
 
   it("does not double-count the restatement page", () => {
     const agg = aggregateItems(parseLineItems(PO_TEXT));
-    const padlock = agg.find((a) => a.partNo === "0666.000.GENRAL.0006");
+    const padlock = agg.find((a) => a.lineItemNos.includes("0666.000.GENRAL.0006"));
     expect(padlock?.occurrences).toBe(1);
     expect(padlock?.qty).toBe(12);
   });
@@ -198,7 +208,7 @@ VALUE ADDED TAX LOCAL
 Total Price 46.00`;
     const items = parseLineItems(text);
     expect(items).toHaveLength(1);
-    expect(items[0].partNo).toBe("1111.111.GENRAL.0001");
+    expect(items[0].lineItemNo).toBe("1111.111.GENRAL.0001");
   });
 });
 
@@ -361,18 +371,88 @@ describe("occurrences count ORDERS, not printed lines", () => {
     expect(documentNumber(RFQ_TEXT)).toBe("26R011954");
     expect(documentNumber("no number here")).toBeNull();
   });
+
+  it("recovers a description whose Part No cell overflowed onto its first line", () => {
+    // Live EDC PO P26E13704: the generator pushes the Part No cell onto the NEXT
+    // visual line, glued ahead of the description —
+    //   `3RV20214AA P/N : 3RV20214AA10 , CIRCUIT BREAKER, 460V,`
+    // The line then OPENS with a digit, so it was taken for a new table row and
+    // the item was reported with an EMPTY description — the very field the
+    // operator audits by. The overflow fragment is dropped when the remainder
+    // still carries a `P/N :` whose value it prefixes.
+    const text = `PURCHASE ORDER
+PO number: P26E13704
+Line
+No.
+Quantity UOM Part No Line Item Delivery Date Unit Price Total (EGP)
+1 25 Each 27-SEP-2026 2,650.00 66,250.00
+3RV20214AA P/N : 3RV20214AA10 , CIRCUIT BREAKER, 460V,
+10 10HP, SIEMENS  OLD PN. 3RV1021-4AA10 ( REF
+2211.003.GENRAL.0110
+CODE 1001.001.USED.0360 ) FOR ELECTRICAL
+GENERAL USE
+Total Price 223,725.00`;
+    const items = parseLineItems(text, "P26E13704");
+    expect(items).toHaveLength(1);
+    const it0 = items[0];
+    expect(it0.lineItemNo).toBe("2211.003.GENRAL.0110");
+    // The whole description, including the wrapped lines that OPEN with digits
+    // («10 10HP, SIEMENS …», «CODE 1001.001.USED.0360 ) FOR ELECTRICAL»).
+    expect(it0.description).toContain("CIRCUIT BREAKER, 460V,");
+    expect(it0.description).toContain("10HP, SIEMENS");
+    expect(it0.description).toContain("OLD PN. 3RV1021-4AA10");
+    expect(it0.description).toContain("FOR ELECTRICAL GENERAL USE");
+    // The overflow fragment is not left in the description as prose.
+    expect(it0.description.startsWith("3RV20214AA")).toBe(false);
+    // The Line Item code is a column, not description prose.
+    expect(it0.description).not.toContain("2211.003.GENRAL.0110");
+    expect(it0.unitPrice).toBe(2650);
+    expect(it0.lineTotal).toBe(66250);
+  });
+
+  it("leaves a description that merely begins with a code-shaped word intact", () => {
+    // The overflow fix must not eat the first word of ordinary prose: with no
+    // `P/N :` to corroborate it, a leading token is part of the description.
+    const text = `PURCHASE ORDER
+PO number: P26E13705
+Line
+No.
+Quantity UOM Part No Line Item Delivery Date Unit Price Total (EGP)
+1 2 Each 27-SEP-2026 10.00 20.00
+A9R41440 CONTACTOR 220V SIEMENS
+2201.003.GENRAL.0110
+Total Price 20.00`;
+    const items = parseLineItems(text, "P26E13705");
+    expect(items).toHaveLength(1);
+    expect(items[0].description).toContain("A9R41440");
+    expect(items[0].description).toContain("CONTACTOR 220V SIEMENS");
+  });
+
+  it("classifies a document from its SUBJECT when the text layer lost the title", () => {
+    // An EDC scanned copy whose text layer dropped the heading has no
+    // `PURCHASE ORDER` and no `PO number:` marker, but the mail is titled
+    // «EDC PO No P26E14708». Without the subject it counts as an unidentified
+    // document and inflates the PO census; with it, the RFQ/PO split stays true.
+    const noTitle = "Quantity UOM Part No Line Item\n1 5 Each SOME PART\n";
+    expect(documentKind(noTitle, "EDC PO No P26E14708")).toBe("po");
+    expect(documentKind(noTitle, "EDC RFQ No 26R011900")).toBe("rfq");
+    // No signal anywhere: still honestly unknown.
+    expect(documentKind(noTitle, "EDC mail")).toBe("unknown");
+    // The title in the TEXT still wins, so a subject typo cannot misclassify.
+    expect(documentKind(PO_TEXT, "EDC RFQ No 26R011900")).toBe("po");
+  });
 });
 
 describe("prices come from the PO rows", () => {
   it("extracts unit price and line total, and aggregates them", () => {
     const items = parseLineItems(PO_TEXT, "P26E14630");
-    const padlock = items.find((i) => i.partNo === "0666.000.GENRAL.0006");
+    const padlock = items.find((i) => i.lineItemNo === "0666.000.GENRAL.0006");
     expect(padlock?.unitPrice).toBe(75);
     expect(padlock?.lineTotal).toBe(900);
     expect(padlock?.docId).toBe("P26E14630");
 
     const agg = aggregateItems(items);
-    const a = agg.find((p) => p.partNo === "0666.000.GENRAL.0006");
+    const a = agg.find((p) => p.lineItemNos.includes("0666.000.GENRAL.0006"));
     expect(a?.avgUnitPrice).toBe(75);
     expect(a?.totalValue).toBe(900);
   });

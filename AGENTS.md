@@ -1625,3 +1625,57 @@ defects, plus one found while fixing them.
 - Live verification: `matched: 3695 resolved: {requested:"EDC",
   resolved:"noreply@egyptian-drilling.com", domain:"egyptian-drilling.com"}` and a
   parsed line item with `lineItems=[1,2]` and a complete description.
+
+## A PDF text layer can push a column onto the next line (fix/ai-edc-lineitem-totals-jobs)
+
+Live thread (24/09, `gos`): «هتشوف اوامر الشراء كلها الواردة من EDC … اكثر ٢٠ بند
+تم إصدار اوامر شراء بهم اكثر من مره مع اجمالي الكميه والتوصيف و line item كاملا
+وسعر الواحده وليس من قاعده البيانات». Four defects, all the same family: a
+capability that silently did something other than what it claimed.
+
+- **The sender shorthand is not a sender (already fixed in #174), re-verified
+  live.** `from:"EDC"` resolves to the whole COMPANY — the address is
+  `noreply@egyptian-drilling.com` (no display name) plus two individuals, and the
+  filter must widen to the DOMAIN or the colleagues' orders vanish. Live after
+  the fix: `matched: 3704`, `resolved: noreply@egyptian-drilling.com`,
+  `domain: egyptian-drilling.com`, all 3,704 in `info@` (0 in the other two
+  mailboxes) — the earlier «لا توجد اوامر شراء من EDC» was a filter artefact.
+- **The overflowing `Part No` cell produced an EMPTY description.** EDC's
+  generator sometimes pushes the Part No cell onto the NEXT visual line, glued
+  ahead of the prose: `3RV20214AA P/N : 3RV20214AA10 , CIRCUIT BREAKER, 460V,`.
+  The line then OPENS with a digit, so it was taken for a new table row and the
+  item surfaced with **no name** — the exact field the operator audits by.
+  `stripOverflowPartNo` drops the fragment **only when corroborated** (the
+  remainder still carries a `P/N :` the fragment prefixes), because deleting the
+  first word of ordinary prose would be a worse error than leaving it.
+- **A continuation line can OPEN with a digit and still be prose.** `10 10HP,
+  SIEMENS …` continues the description; the old `/^[A-Za-z]/` test dropped it and
+  truncated «التوصيف الكامل» at the first line. A new row is stopped by
+  `ITEM_ROW_RE` earlier, and a money/date-only tail has no word, so the prose
+  test is `[A-Za-z]{4,}` — keep it that way.
+- **The Line Item code is a COLUMN, not prose.** The text layer drops it *inside*
+  a description line (`CODE 1001.001.USED.0360 ) FOR ELECTRICAL`); removing the
+  code and keeping the prose is right, dropping the whole line is not.
+- **`documentKind` now takes the SUBJECT as a second signal.** EDC titles its
+  mail «EDC PO No P26E14708» / «EDC RFQ No 26R011900»; a scanned copy whose text
+  layer lost the heading has no `PURCHASE ORDER` and no `PO number:` marker, so it
+  was counted as an unidentified PO — inflating the census the operator is asked
+  to trust. The title in the TEXT still wins, so a subject typo cannot
+  misclassify. Live: 159 PO vs 1,603 RFQ vs 2 unknown — the reported «كلها RFQ
+  وليس POs» was wrong because the earlier scan never read the subject.
+- **The background census job must rank like the interactive path.** The job's PDF
+  used `aggregateItems` (sort by QUANTITY), so a single huge one-off order sat on
+  top of a «اكثر 20 بند تكرارا» list — a different question than the one asked.
+  It now uses `aggregateItemsByOccurrence(items, 2)`.
+- **The 3,700-message census does NOT finish in one call, and must say so.** The
+  attachment pass is budget-bounded (`AI_SCAN_CALL_BUDGET_MS`, 45s); live it got
+  ~1,725/3,704 with `remaining > 0`. That is why the explicit «100%» ask hands off
+  to a background job (`start_census_job`) — and why a partial reply must quote
+  `فُتح N من M` rather than calling the sample a total.
+- Tests: +2 in `ai-email-items.test.ts` (the overflow-description recovery — fails
+  against the pre-fix parser — and the "leading code-shaped word stays in prose"
+  counter-case), +1 subject-classification case, +1 source guard that the job
+  report still calls the occurrence aggregator. **870 api-server tests** pass;
+  tsc (libs + api-server + portal) clean; repo-wide prettier clean; 45 portal
+  tests pass.
+- Deploy: pending — push/PR only on explicit request.
