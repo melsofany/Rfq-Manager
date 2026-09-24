@@ -32,34 +32,6 @@ export interface VerificationResult {
   checks: Array<{ name: string; ok: boolean; detail?: string }>;
 }
 
-const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
-
-/**
- * Pull the money/quantity figures out of an answer so they can be cross-checked
- * against the database. Only figures that look like a TOTAL (a large number,
- * thousands-separated, or near a total keyword) are collected — a small incidental
- * integer like "3" from "3 PO lines" must not trigger a reconciliation query.
- */
-export function extractReportedTotals(text: string): number[] {
-  if (!text) return [];
-  // Normalise Arabic-Indic digits to Latin so the matcher sees one alphabet.
-  let t = text.replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)));
-  const out: number[] = [];
-  // Require either a thousands separator or 4+ digits, and reject any token that
-  // is part of an IDENTIFIER: `1531.032.GENRAL.7538`, `P26E14708`, `26R011936`.
-  // The old `\b\d{4,}\b` matched the leading `1531` of a Line Item code, which is
-  // exactly how a live answer about an email census was "reconciled" against the
-  // database and reported as a disagreement.
-  const re = /(?<![\w.])(\d{1,3}(?:,\d{3})+|\d{4,})(?![\w.]|\s*\.\s*\d)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(t))) {
-    const n = Number(m[1].replace(/,/g, ""));
-    if (Number.isFinite(n) && n >= 1000) out.push(n);
-  }
-  void t;
-  return out;
-}
-
 /**
  * Verify a quantity total for purchase-order items against a fresh aggregate.
  * `reported` is the number the model put in the answer; the DB is the authority.
@@ -115,24 +87,41 @@ export async function verifyAnswer(opts: {
   answerText: string;
   /** Tool data the answer was built from (its own reported aggregates). */
   toolData?: unknown;
+  /**
+   * Quantity totals a tool returned, WITH the tool that produced each one.
+   *
+   * The tool's own aggregate is the ONLY figure that may be reconciled: a number
+   * mined from the prose is not evidence of anything. The old code took
+   * `extractReportedTotals(text)[0]` — whatever large number appeared first — and
+   * compared it to the sum of every PO line, which produced the live
+   * «المرصود 2025 والمحسوب 14265 … PARTIALLY_VERIFIED» caveat on correct answers
+   * (2025 is a YEAR; 680632 is a Part Number).
+   */
+  toolAggregates?: Array<{ tool: string; total: number }>;
   /** Which source produced the figures: only "database" may be reconciled. */
   source?: "database" | "email" | "mixed" | "unknown";
 }): Promise<VerificationResult> {
   const checks: VerificationResult["checks"] = [];
 
-  // Look for a tool result that carries an explicit total the model should have
-  // echoed. Only then is a reconciliation meaningful.
-  const data = opts.toolData as any;
-  const reportedTotal =
-    data && typeof data === "object" && typeof data.totalQty === "number"
-      ? Number(data.totalQty)
-      : undefined;
+  // A figure may only be reconciled against the DB when the tool that produced
+  // it aggregates the SAME table the verifier sums. `aggregate_po_items` sums
+  // every PO line under the same `lineStatus != 'cancelled'` filter, so its total
+  // and `verifyPoQuantityTotal` describe one dataset. Any other tool's total
+  // describes a SUBSET — a single order, one supplier, unfulfilled lines only —
+  // and comparing it to the whole table would flag a correct answer. A false
+  // alarm is worse than no check, so anything else is SKIPPED.
+  const RECONCILABLE_TOOLS = new Set(["aggregate_po_items"]);
+  const reconcilable = (opts.toolAggregates ?? []).filter(
+    (a) => Number.isFinite(a.total) && a.total >= 1000 && RECONCILABLE_TOOLS.has(a.tool),
+  );
 
-  const answerTotals = extractReportedTotals(opts.answerText);
-
-  if (reportedTotal === undefined && answerTotals.length === 0) {
+  if (reconcilable.length === 0) {
+    // Nothing to reconcile. This is a SKIP, never a pass — a skip is not evidence
+    // that a figure was right, and the metrics record it as such.
     return { outcome: "skipped", checks };
   }
+
+  const answerTotals = reconcilable.map((a) => a.total);
 
   // A figure that came from email (or from both sources) cannot be checked
   // against the database: the two sets legitimately differ, so "disagreement"

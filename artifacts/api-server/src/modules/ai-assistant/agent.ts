@@ -137,6 +137,9 @@ export function systemPrompt(settings: AiSettings): string {
 قواعد عامة:
 - عند السؤال عن رقم (أمر شراء/طلب/فاتورة) استخدم lookup_document أو search_database.
 - عند قول المستخدم «PO» أو «أمر شراء» دون ذكر البريد صراحةً، اعتبر المصدر الأساسي هو جدول أوامر الشراء الداخلي purchase_orders وبنوده purchase_order_items. لا تستخدم RFQ أو Quotation أو رسائل البريد كبديل، ولا تسمِّها PO. إذا طلب المستخدم فحص مرفقات البريد تحديدًا، استخدم scan_email_items فقط بعد التأكد أن الرسائل/المرفقات تحمل PO فعلًا؛ إن كانت RFQ/Quotation فقل إنها ليست POs.
+- **تمييز جوهري — أوامر العميل مقابل أوامر المورد:** أرقام أوامر شراء العملاء الواردة من العملاء (مثل EDC) تُسجَّل في جدول **customer_pos** (رقم العميل customerPoNo أو الرقم الداخلي CPO-YYYY-NNNNNN)، وليست في purchase_orders. جدول purchase_orders هو أوامرنا نحن للموردين فقط (P26E… من الشيت) وهو صغير، بينما customer_pos يحمل كل أوامر العملاء. فعند سؤال عن «أوامر شراء واردة من العميل» أو رقم بصيغة العميل (مثل P25E26553 أو CPO-2025-000484) ابحث في **customer_pos** أولًا، ولا تستنتج «غير موجود» من فراغ في purchase_orders — فهذا ليس دليلًا على عدم وجوده.
+- **لا تقل «غير موجود» أبدًا إلا بعد أن تبحث في الموضع الصحيح:** إن لم تجد الرقم في الجدول الذي بحثت فيه، اذكر الجدول الذي بحثت فيه، ثم ابحث في الجدول الآخر (customer_pos ↔ purchase_orders) قبل أي حكم. وإن كنت لم تبحث في الجدول المناسب، قل «لم أبحث في الجدول المناسب بعد» ولا تقل «غير موجود».
+- **البرهان قبل النفي:** عند أي حكم بعدم الوجود، اذكر الأداة والجدول الذي استخدمته وعدد الصفوف التي رجعها البحث. عدم الوجود ادعاء يحتاج دليلًا مثل وجوده.
 - لا تخلط أبدًا بين RFQ/Quotation وPO: رقم يبدأ بـ 26R أو عنوان REQUEST FOR QUOTE يدل على RFQ، بينما PO الداخلي أو مستند PURCHASE ORDER له هوية مختلفة. عند الشك، لا تصنّف المستند من نفسك واذكر أن نوعه غير مؤكد.
 - الأرقام المالية اكتبها كأرقام إنجليزية (مثل 1,234.50) والجنيه المصري عند اللزوم.
 - كن موجزًا ومرتبًا، واستخدم نقاطًا عند الحاجة.
@@ -347,6 +350,14 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const tools = toolDefinitions(ctx);
   const usedTools: Array<{ name: string; args: unknown }> = [];
   let finalText: string | null = null;
+  // Quantity totals the tools actually returned, WITH the tool that produced
+  // each one. The numeric verifier reconciles a figure against the DATABASE, so
+  // it must be handed the tool's OWN aggregate; without it the check fell back to
+  // `extractReportedTotals(text)[0]` — the first large number in the prose — and
+  // compared a YEAR («2025») or a Part Number («680632») against the sum of every
+  // PO line. That produced the spurious
+  // «المرصود 2025 والمحسوب 14265 … PARTIALLY_VERIFIED» caveat on correct answers.
+  const toolAggregates: Array<{ tool: string; total: number }> = [];
   let rounds = 0;
   let fallbackUsed = false;
   // The model/provider that actually produced the answer. A cross-provider
@@ -485,6 +496,12 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
           }
           const content = await pending;
           for (const n of findGroundingNumbers(content)) groundedNumbers.add(n);
+          // Collect the tool's OWN quantity aggregates (never a figure from the
+          // prose) so the numeric verifier reconciles against what the database
+          // actually returned rather than against the first large number in the
+          // answer.
+          for (const t of collectToolTotals(call.function.name, content))
+            toolAggregates.push({ tool: call.function.name, total: t });
           return { call, content };
         }),
       );
@@ -614,7 +631,12 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     // beside the correction.
     if (finalText) {
       try {
-        const v = await verifyAnswer({ answerText: finalText, source: answerSource(usedTools) });
+        const v = await verifyAnswer({
+          answerText: finalText,
+          source: answerSource(usedTools),
+          // The tool's OWN aggregates, not a figure guessed from the prose.
+          toolAggregates,
+        });
         if (v.outcome === "disagreement" && v.note) {
           finalText = `${finalText}\n\n⚠️ تحقق آلي: ${v.note} — لذا النتيجة PARTIALLY_VERIFIED.`;
           verificationRan = true;
@@ -777,6 +799,41 @@ function answerSource(
   const db = [...names].some((n) => !EMAIL_TOOLS.has(n));
   if (email && db) return "mixed";
   return email ? "email" : "database";
+}
+
+/**
+ * Quantity/money totals a tool result reports about ITSELF, so the numeric
+ * verifier can reconcile the answer against the tool's own aggregate.
+ *
+ * Only aggregates that describe a WHOLE result are collected. A per-row `qty`
+ * (one line item) is deliberately ignored: the verifier compares a figure to a
+ * database SUM, so reconciling against a single line would report a disagreement
+ * on a perfectly correct answer.
+ */
+export function collectToolTotals(toolName: string, content: string): number[] {
+  const out: number[] = [];
+  const push = (v: unknown) => {
+    const n = typeof v === "number" ? v : Number(v);
+    if (Number.isFinite(n) && n >= 1000) out.push(n);
+  };
+  let parsed: any;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return out;
+  }
+  if (!parsed || typeof parsed !== "object") return out;
+  const data = parsed.data ?? parsed;
+  if (typeof data.totalQty === "number") push(data.totalQty);
+  if (typeof data.openQty === "number") push(data.openQty);
+  if (typeof data.qty === "number") push(data.qty);
+  // `aggregate_po_items` returns per-item rows; the sum of those rows IS the
+  // dataset total the operator would quote.
+  if (Array.isArray(data.items) && toolName === "aggregate_po_items") {
+    const sum = data.items.reduce((a: number, r: any) => a + (Number(r?.totalQty) || 0), 0);
+    push(sum);
+  }
+  return out;
 }
 
 function parseArgs(call: ToolCall): Record<string, unknown> {

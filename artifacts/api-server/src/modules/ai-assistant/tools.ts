@@ -985,6 +985,55 @@ async function lookupDocument(type: string, number: string): Promise<unknown> {
 }
 
 /**
+ * Document types the model may guess WRONG, mapped to the other table that can
+ * legitimately hold the same number.
+ *
+ * A supplier PO number and a customer PO number look alike («P26E14708»), and the
+ * live failure was an operator asking about an ORDER FROM THE CUSTOMER while the
+ * model searched `purchase_orders` (our supplier orders) — the number lived in
+ * `customer_pos` all along, and the model reported «غير موجود في قاعدة البيانات».
+ * A prompt rule alone had already failed to prevent this, so a miss now looks in
+ * the sibling table instead of returning a bare `found:false` — a negative claim
+ * needs evidence, and this is where it is gathered.
+ */
+const SIBLING_DOC_TYPES: Record<string, string[]> = {
+  supplier_po: ["customer_po"],
+  customer_po: ["supplier_po"],
+};
+
+/**
+ * Look a document number up, and on a miss check the sibling table before
+ * reporting absence. The original document is returned when either matches, plus
+ * a `note` naming which table actually held it — so the model relays the right
+ * source instead of an unsupported "not found".
+ */
+async function lookupDocumentWithFallback(type: string, number: string): Promise<unknown> {
+  const primary = (await lookupDocument(type, number)) as { found?: boolean };
+  if (primary?.found) return primary;
+
+  const siblings = SIBLING_DOC_TYPES[type] ?? [];
+  for (const sibling of siblings) {
+    const alt = (await lookupDocument(sibling, number)) as { found?: boolean };
+    if (alt?.found) {
+      return {
+        ...alt,
+        // Stated FIRST so the model reads it before the rows.
+        lookupNote: `لم يوجد في «${type}» لكنه موجود في «${sibling}» — هذا هو المصدر الصحيح لهذا الرقم.`,
+        wrongTableTried: type,
+        foundIn: sibling,
+      };
+    }
+  }
+
+  return {
+    found: false,
+    notFoundNote:
+      `بحثت في «${type}»${siblings.length ? ` و«${siblings.join("، ")}»` : ""} ولم يُوجد الرقم. ` +
+      `اذكر الجداول التي بحثتها عند إبلاغ المستخدم، ولا تقل «غير موجود» عن جدول لم تبحثه.`,
+  };
+}
+
+/**
  * Everything known about one supplier, in a single round-trip. The agent
  * previously needed 4–5 sequential calls (find supplier → find its offers → find
  * its POs → find their items) and often ran out of rounds mid-chase, answering
@@ -1596,7 +1645,10 @@ async function executeToolInner(
           return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
         return {
           ok: true,
-          data: await lookupDocument(String(args.type ?? ""), String(args.number ?? "")),
+          data: await lookupDocumentWithFallback(
+            String(args.type ?? ""),
+            String(args.number ?? ""),
+          ),
         };
       }
       case "get_purchase_order_status": {
