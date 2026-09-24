@@ -176,9 +176,15 @@ describe("scan_email_items contains filter (missing older orders)", () => {
       ctx as never,
     );
     expect(filtered.ok).toBe(true);
-    const data = filtered.data as { topItems: Array<{ partNo: string }>; matchedLines: number };
+    const data = filtered.data as {
+      topItems: Array<{ partNo: string | null; lineItemNos: string[] }>;
+      matchedLines: number;
+    };
     expect(data.topItems.length).toBe(1);
-    expect(data.topItems[0].partNo).toContain("ARSTON");
+    // The EDC generator prints «ARSTON» in the Line Item code, not the Part No.
+    expect([data.topItems[0].partNo, ...data.topItems[0].lineItemNos].join(" ")).toContain(
+      "ARSTON",
+    );
     expect(data.matchedLines).toBe(1);
   });
 

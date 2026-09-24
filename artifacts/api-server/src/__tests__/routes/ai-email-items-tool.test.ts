@@ -9,6 +9,7 @@
  * reported so a partial read is never presented as a complete census.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "fs";
 
 process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://user:pass@localhost:5432/test";
 
@@ -226,8 +227,10 @@ describe("scan_email_items tool", () => {
       "scan_email_items",
       { from: "egyptian-drilling", ordering: "qty" },
       ctx as never,
-    )) as { data: { topItems: Array<{ partNo: string; qty: number; uom: string }> } };
-    expect(qty.data.topItems.map((i) => i.partNo)).toEqual(["0666.000.GENRAL.0006"]);
+    )) as {
+      data: { topItems: Array<{ lineItemNos: string[]; qty: number; uom: string }> };
+    };
+    expect(qty.data.topItems.map((i) => i.lineItemNos[0])).toEqual(["0666.000.GENRAL.0006"]);
     expect(qty.data.topItems[0]).toMatchObject({ qty: 12, uom: "Piece" });
   });
 
@@ -288,9 +291,9 @@ describe("scan_email_items tool", () => {
     );
 
     const res = (await executeTool("scan_email_items", { ordering: "qty" }, ctx as never)) as {
-      data: { topItems: Array<{ partNo: string; lineItems: number[] }> };
+      data: { topItems: Array<{ lineItemNos: string[]; lineItems: number[] }> };
     };
-    expect(res.data.topItems[0].partNo).toBe("0666.000.GENRAL.0006");
+    expect(res.data.topItems[0].lineItemNos).toEqual(["0666.000.GENRAL.0006"]);
     expect(res.data.topItems[0].lineItems).toEqual([1]);
   });
 
@@ -473,22 +476,25 @@ describe("scan_email_items tool", () => {
     expect(table?.columns).toEqual([
       "الترتيب",
       "وصف البند الكامل",
-      "Part Number",
+      "رقم القطعة (Part Number)",
       "Line Item",
-      "عدد الأوامر",
+      "عدد أوامر الشراء",
       "إجمالي الكمية",
       "الوحدة",
-      "متوسط سعر الوحدة",
-      "إجمالي القيمة",
+      "متوسط سعر الوحدة (للعلم)",
+      "إجمالي المبلغ (مجموع Line Totals)",
+      "مصدر الإجمالي",
       "العملة",
-      "أرقام الأوامر",
+      "أرقام أوامر الشراء",
     ]);
-    const padlock = table?.rows.find((r) => r[2] === "0666.000.GENRAL.0006");
+    const padlock = table?.rows.find(
+      (r) => typeof r[3] === "string" && r[3].includes("0666.000.GENRAL.0006"),
+    );
     // Seen in two orders, price 75.00 each, and both PO numbers listed.
     expect(padlock?.[4]).toBe(2);
     expect(padlock?.[7]).toBe("75.00");
-    expect(padlock?.[10]).toContain("P26E14630");
-    expect(padlock?.[10]).toContain("P26E14631");
+    expect(padlock?.[11]).toContain("P26E14630");
+    expect(padlock?.[11]).toContain("P26E14631");
     // The scope paragraph is present and honest.
     const paragraphs = opts.sections.flatMap((s) => s.paragraphs ?? []).join("\n");
     expect(paragraphs).toContain("النطاق");
@@ -649,7 +655,7 @@ describe("scan_email_items tool", () => {
         {
           uid: 20,
           mailbox: "info@cortoba-supplies.com",
-          subject: "EDC RFQ No 26R011900",
+          subject: "EDC PO No P26E011900",
           attachments: pdfAttachments([
             {
               filename: "a.pdf",
@@ -662,7 +668,7 @@ describe("scan_email_items tool", () => {
         {
           uid: 21,
           mailbox: "info@cortoba-supplies.com",
-          subject: "EDC RFQ No 26R011901",
+          subject: "EDC PO No P26E011901",
           attachments: pdfAttachments([
             {
               filename: "b.pdf",
@@ -675,7 +681,7 @@ describe("scan_email_items tool", () => {
         {
           uid: 22,
           mailbox: "info@cortoba-supplies.com",
-          subject: "EDC RFQ No 26R011902",
+          subject: "EDC PO No P26E011902",
           attachments: pdfAttachments([
             {
               filename: "c.pdf",
@@ -691,23 +697,25 @@ describe("scan_email_items tool", () => {
     const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
       data: {
         ordering: string;
-        topItems: Array<{ partNo: string | null; occurrences: number; qty: number }>;
+        topItems: Array<{ lineItemNos: string[]; occurrences: number; qty: number }>;
       };
     };
 
     expect(res.data.ordering).toBe("mostRepeated");
     // The repeated small part outranks the single huge line.
-    expect(res.data.topItems[0].partNo).toBe("0101.001.GENRAL.0001");
+    expect(res.data.topItems[0].lineItemNos[0]).toBe("0101.001.GENRAL.0001");
     expect(res.data.topItems[0].occurrences).toBe(2);
     expect(res.data.topItems[0].qty).toBe(2);
     // The huge one-off is EXCLUDED: the operator's rule is that a part ordered
     // once — however large — is not "most repeated". minOrders=1 brings it back.
-    expect(res.data.topItems.find((i) => i.partNo === "0101.001.GENRAL.0002")).toBeUndefined();
+    expect(
+      res.data.topItems.find((i) => i.lineItemNos.includes("0101.001.GENRAL.0002")),
+    ).toBeUndefined();
 
     const all = (await executeTool("scan_email_items", { minOrders: 1 }, ctx as never)) as {
-      data: { topItems: Array<{ partNo: string | null; occurrences: number; qty: number }> };
+      data: { topItems: Array<{ lineItemNos: string[]; occurrences: number; qty: number }> };
     };
-    const big = all.data.topItems.find((i) => i.partNo === "0101.001.GENRAL.0002");
+    const big = all.data.topItems.find((i) => i.lineItemNos.includes("0101.001.GENRAL.0002"));
     expect(big?.qty).toBe(5000);
     expect(big?.occurrences).toBe(1);
   });
@@ -719,7 +727,7 @@ describe("scan_email_items tool", () => {
         {
           uid: 23,
           mailbox: "info@cortoba-supplies.com",
-          subject: "EDC RFQ No 26R011903",
+          subject: "EDC PO No P26E011903",
           attachments: pdfAttachments([
             {
               filename: "d.pdf",
@@ -733,9 +741,9 @@ describe("scan_email_items tool", () => {
     );
 
     const res = (await executeTool("scan_email_items", { ordering: "qty" }, ctx as never)) as {
-      data: { topItems: Array<{ partNo: string | null }> };
+      data: { topItems: Array<{ lineItemNos: string[] }> };
     };
-    expect(res.data.topItems[0].partNo).toBe("0101.001.GENRAL.0002");
+    expect(res.data.topItems[0].lineItemNos[0]).toBe("0101.001.GENRAL.0002");
   });
 
   it("never claims completeness when NO attachment could be opened", async () => {
@@ -923,13 +931,29 @@ describe("oversize census hands off to a background job", () => {
     const res = (await executeTool("scan_email_items", {}, ctx as never)) as {
       data: {
         distinctParts: number;
-        topItems: Array<{ occurrences: number; partNo: string | null; partNos: string[] }>;
+        topItems: Array<{ occurrences: number; lineItemNos: string[] }>;
       };
     };
     // ONE item, seen on TWO orders.
     expect(res.data.distinctParts).toBe(1);
     expect(res.data.topItems[0].occurrences).toBe(2);
-    expect(res.data.topItems[0].partNo).toBe("0666.000.GENRAL.0006");
+    expect(res.data.topItems[0].lineItemNos[0]).toBe("0666.000.GENRAL.0006");
+  });
+
+  it("the background job report ranks by ORDER COUNT, like the interactive path", async () => {
+    // The operator's ask is FREQUENCY («أكثر 20 بند … تم إصدار أوامر شراء بهم
+    // أكثر من مرة»). The job report once ranked by QUANTITY, so a single huge
+    // one-off order sat on top of the 20-item list — a different question than
+    // the one asked. Both paths must rank the same way, so the job report is
+    // pinned to the occurrence aggregator by source (it is built inside the job
+    // worker's finish closure, which is not reachable from a unit test).
+    const src = readFileSync(
+      new URL("../../modules/ai-assistant/tools.ts", import.meta.url),
+      "utf8",
+    );
+    const jobReport = src.slice(src.indexOf("finish: async ({ phone, session })")).slice(0, 4000);
+    expect(jobReport).toContain("aggregateItemsByOccurrence");
+    expect(jobReport).not.toContain("aggregateItems(s.items");
   });
 
   it("hands a 100%-census request to a background job instead of a partial list", async () => {

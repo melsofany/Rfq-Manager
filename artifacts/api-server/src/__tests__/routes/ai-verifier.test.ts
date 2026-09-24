@@ -61,6 +61,18 @@ describe("reported-total extraction", () => {
     expect(extractReportedTotals("الإجمالي ١٫٨٤٢")).toBeDefined();
     expect(extractReportedTotals("إجمالي ٣٧١٠ رسالة")).toContain(3710);
   });
+
+  it("does NOT read the leading digits of a Line Item / document code as a total", () => {
+    // The live false alarm: an answer about an email census listed codes like
+    // «1531.032.GENRAL.7538» and «P26E14708», and the bare `\d{4,}` matcher took
+    // the leading «1531» as a monetary total — reconciling an email figure
+    // against the database and printing «PARTIALLY_VERIFIED» on a correct answer.
+    expect(extractReportedTotals("البند 1531.032.GENRAL.7538 متكرر")).toHaveLength(0);
+    expect(extractReportedTotals("أمر الشراء P26E14708")).toHaveLength(0);
+    expect(extractReportedTotals("رقم 26R011936 واردة")).toHaveLength(0);
+    // A real, separated total is still found.
+    expect(extractReportedTotals("الإجمالي 3,710 رسالة")).toContain(3710);
+  });
 });
 
 describe("answer verification", () => {

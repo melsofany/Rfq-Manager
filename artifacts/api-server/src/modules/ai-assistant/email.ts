@@ -1569,93 +1569,128 @@ async function runScanEmails(opts: {
   const before = parseDateArg(opts.beforeDate);
   const patterns = opts.numberPatterns?.length ? opts.numberPatterns : DEFAULT_NUMBER_PATTERNS;
 
-  const perMailbox = await Promise.all(
-    usable.map((m) =>
-      scanOneMailbox(m.email, {
-        from: opts.from,
-        subject: opts.subject,
-        query: opts.query,
-        unseenOnly: opts.unseenOnly,
-        since,
-        before,
-        folder,
-        startedAt: Date.now(),
-        patterns,
-      }),
-    ),
-  );
+  // The ENVELOPE result is memoized across the resumable attachment windows.
+  //
+  // `attachmentSkip` moves the window, but the matched list itself is fixed for
+  // the life of one census — yet every `scan_email_items` batch called this with
+  // `includeAttachments: true` and paid for a full envelope re-scan, plus a
+  // second full-mailbox pass whenever a sender shorthand had to be resolved. A
+  // live background job spent ~40 minutes "running" for that reason alone. The
+  // key EXCLUDES `attachmentSkip`, so all the windows of one census reuse the
+  // same envelopes (and the same sender resolution).
+  const envelopeKey = scanCacheKey("envelope", {
+    from: opts.from,
+    subject: opts.subject,
+    query: opts.query,
+    sinceDate: opts.sinceDate,
+    beforeDate: opts.beforeDate,
+    mailbox: opts.mailbox,
+    folder,
+    unseenOnly: opts.unseenOnly,
+    patterns: patterns.join("|"),
+  });
+  type MailboxEnvelope = Awaited<ReturnType<typeof scanOneMailbox>>;
+  const cachedEnvelope = getScanCacheEntry<{
+    all: EmailCensusMatch[];
+    perMailbox: MailboxEnvelope[];
+    senderResolution?: EmailSenderResolution;
+  }>(envelopeKey);
 
-  let all: EmailCensusMatch[] = perMailbox.flatMap((r) => r.matches);
+  let perMailbox: MailboxEnvelope[] = cachedEnvelope
+    ? cachedEnvelope.perMailbox
+    : await Promise.all(
+        usable.map((m) =>
+          scanOneMailbox(m.email, {
+            from: opts.from,
+            subject: opts.subject,
+            query: opts.query,
+            unseenOnly: opts.unseenOnly,
+            since,
+            before,
+            folder,
+            startedAt: Date.now(),
+            patterns,
+          }),
+        ),
+      );
+  let all: EmailCensusMatch[] = cachedEnvelope
+    ? cachedEnvelope.all
+    : perMailbox.flatMap((r) => r.matches);
+  let senderResolution: EmailSenderResolution | undefined = cachedEnvelope?.senderResolution;
 
-  /*
-   * A sender filter that matched NOTHING is the failure this guards against.
-   * `from` is narrowed server-side, so a filter the server does not recognise
-   * («EDC» — the operator's shorthand, and nobody's address) returns zero and the
-   * caller cannot tell it apart from "this company never wrote to us". Live, that
-   * produced «no readable PO attachments» over 3,688 real EDC messages.
-   *
-   * So: re-scan without the sender (the other criteria still apply), resolve the
-   * shorthand against the senders actually present, and keep those matches. One
-   * extra envelope pass on the failure path only — the successful path is
-   * untouched.
-   */
-  let senderResolution: EmailSenderResolution | undefined;
-  if (opts.from?.trim() && all.length === 0) {
-    // Search the operator's WORD across subject AND sender (a mailbox-wide
-    // term), so a shorthand that exists only in the subject («EDC PO No …»
-    // sent by `noreply@egyptian-drilling.com`) is still findable.
-    const fallback = await Promise.all(
-      usable.map((m) =>
-        scanOneMailbox(m.email, {
-          from: undefined,
-          // The OTHER criteria must survive the retry, or resolving a sender
-          // would widen the census beyond what the operator asked for.
-          subject: opts.subject,
-          query: opts.from!.trim(),
-          unseenOnly: opts.unseenOnly,
-          since,
-          before,
-          folder,
-          startedAt: Date.now(),
-          patterns,
-        }),
-      ),
-    );
-    const observed = aggregateSenders(fallback.flatMap((r) => r.matches));
-    const { resolved, domain, candidates } = resolveSenderFromCandidates(opts.from, observed);
-    if (resolved && domain) {
-      // Filter on the DOMAIN, not the single address: the operator named a
-      // company, and its people's mailboxes are that company (live EDC writes
-      // from `noreply@` plus two individuals).
-      const onDomain = (m: EmailCensusMatch) => {
-        const addr = senderAddress(m.from).toLowerCase();
-        return addr.endsWith(`@${domain.toLowerCase()}`);
-      };
-      const filtered = fallback.flatMap((r) => r.matches.filter(onDomain));
-      senderResolution = {
-        requested: opts.from,
-        resolved,
-        domain,
-        matched: filtered.length,
-        candidates: [],
-      };
-      // Swap in the resolved company's matches so every downstream aggregate
-      // (byMonth/bySender/numbers/note) describes the CORRECTED census, not the
-      // empty one the shorthand produced.
-      perMailbox.forEach((r, i) => {
-        const box = usable[i]?.email;
-        r.matches = fallback.find((f) => f.mailbox === box)?.matches.filter(onDomain) ?? [];
-      });
-      all = filtered;
-    } else {
-      senderResolution = {
-        requested: opts.from,
-        resolved: null,
-        matched: 0,
-        candidates,
-        observed: observed.slice(0, 8).map((s) => s.from),
-      };
+  if (!cachedEnvelope) {
+    /*
+     * A sender filter that matched NOTHING is the failure this guards against.
+     * `from` is narrowed server-side, so a filter the server does not recognise
+     * («EDC» — the operator's shorthand, and nobody's address) returns zero and the
+     * caller cannot tell it apart from "this company never wrote to us". Live, that
+     * produced «no readable PO attachments» over 3,688 real EDC messages.
+     *
+     * So: re-scan without the sender (the other criteria still apply), resolve the
+     * shorthand against the senders actually present, and keep those matches. One
+     * extra envelope pass on the failure path only — the successful path is
+     * untouched.
+     */
+    let senderResolutionInner: EmailSenderResolution | undefined;
+    if (opts.from?.trim() && all.length === 0) {
+      // Search the operator's WORD across subject AND sender (a mailbox-wide
+      // term), so a shorthand that exists only in the subject («EDC PO No …»
+      // sent by `noreply@egyptian-drilling.com`) is still findable.
+      const fallback = await Promise.all(
+        usable.map((m) =>
+          scanOneMailbox(m.email, {
+            from: undefined,
+            // The OTHER criteria must survive the retry, or resolving a sender
+            // would widen the census beyond what the operator asked for.
+            subject: opts.subject,
+            query: opts.from!.trim(),
+            unseenOnly: opts.unseenOnly,
+            since,
+            before,
+            folder,
+            startedAt: Date.now(),
+            patterns,
+          }),
+        ),
+      );
+      const observed = aggregateSenders(fallback.flatMap((r) => r.matches));
+      const { resolved, domain, candidates } = resolveSenderFromCandidates(opts.from, observed);
+      if (resolved && domain) {
+        // Filter on the DOMAIN, not the single address: the operator named a
+        // company, and its people's mailboxes are that company (live EDC writes
+        // from `noreply@` plus two individuals).
+        const onDomain = (m: EmailCensusMatch) => {
+          const addr = senderAddress(m.from).toLowerCase();
+          return addr.endsWith(`@${domain.toLowerCase()}`);
+        };
+        const filtered = fallback.flatMap((r) => r.matches.filter(onDomain));
+        senderResolutionInner = {
+          requested: opts.from,
+          resolved,
+          domain,
+          matched: filtered.length,
+          candidates: [],
+        };
+        // Swap in the resolved company's matches so every downstream aggregate
+        // (byMonth/bySender/numbers/note) describes the CORRECTED census, not the
+        // empty one the shorthand produced.
+        perMailbox.forEach((r, i) => {
+          const box = usable[i]?.email;
+          r.matches = fallback.find((f) => f.mailbox === box)?.matches.filter(onDomain) ?? [];
+        });
+        all = filtered;
+      } else {
+        senderResolutionInner = {
+          requested: opts.from,
+          resolved: null,
+          matched: 0,
+          candidates,
+          observed: observed.slice(0, 8).map((s) => s.from),
+        };
+      }
     }
+    senderResolution = senderResolutionInner;
+    putScanCacheEntry(envelopeKey, { all, perMailbox, senderResolution });
   }
 
   all.sort((a, b) => b.date.localeCompare(a.date));

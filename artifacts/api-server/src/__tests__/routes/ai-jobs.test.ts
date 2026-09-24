@@ -96,7 +96,7 @@ vi.mock("../../shared/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-const { createJob, getJob, listJobs, describeJob, pendingAiJobs, startCensusJob } =
+const { createJob, getJob, listJobs, cancelJob, describeJob, pendingAiJobs, startCensusJob } =
   await import("../../modules/ai-assistant/jobs");
 
 describe("async jobs", () => {
@@ -239,6 +239,53 @@ describe("async jobs", () => {
     const done = await getJob(job.id);
     expect(done?.status).toBe("completed");
     expect(done?.progress?.percent).toBe(100);
+  });
+
+  it("cancelJob stops a running job and the worker does not announce a report", async () => {
+    // The operator asked to call a long census off and the agent previously could
+    // only answer that no such capability existed. Cancelling must take effect
+    // DURING the run (between batches), leave the status `cancelled` rather than
+    // flipping it to `completed`, and send no report.
+    let batches = 0;
+    let finished = 0;
+    const { job } = await startCensusJob({
+      phone: "2010",
+      question: "حصر طويل",
+      args: { mailbox: "*" },
+      runBatch: async () => {
+        batches += 1;
+        if (batches === 1) await cancelJob(job.id);
+        return {
+          session: {
+            census: { matched: 10 },
+            coverage: { messages: 1 },
+            items: [],
+            complete: false,
+          },
+        };
+      },
+      finish: async () => {
+        finished += 1;
+      },
+    });
+    await pendingAiJobs();
+    const done = await getJob(job.id);
+    expect(done?.status).toBe("cancelled");
+    expect(finished).toBe(0);
+    // Stopped early — it did not walk all 60 batches of an abandoned census.
+    expect(batches).toBe(1);
+  });
+
+  it("does not report a completed job as cancelled, and returns null for an unknown id", async () => {
+    expect(await cancelJob(999)).toBeNull();
+    const { job } = await createJob({
+      phone: "2010",
+      kind: "x",
+      run: async () => ({ result: { ok: true } }),
+    });
+    await pendingAiJobs();
+    const again = await cancelJob(job.id);
+    expect(again?.status).toBe("completed");
   });
 
   it("startCensusJob RESUMES an identical active census instead of double-scanning", async () => {

@@ -45,9 +45,12 @@ export function extractReportedTotals(text: string): number[] {
   // Normalise Arabic-Indic digits to Latin so the matcher sees one alphabet.
   let t = text.replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)));
   const out: number[] = [];
-  // Require either a thousands separator or 4+ digits, and not a document id
-  // (which is alphanumeric) — this is a heuristic to avoid false positives.
-  const re = /\b(\d{1,3}(?:,\d{3})+|\d{4,})\b/g;
+  // Require either a thousands separator or 4+ digits, and reject any token that
+  // is part of an IDENTIFIER: `1531.032.GENRAL.7538`, `P26E14708`, `26R011936`.
+  // The old `\b\d{4,}\b` matched the leading `1531` of a Line Item code, which is
+  // exactly how a live answer about an email census was "reconciled" against the
+  // database and reported as a disagreement.
+  const re = /(?<![\w.])(\d{1,3}(?:,\d{3})+|\d{4,})(?![\w.]|\s*\.\s*\d)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(t))) {
     const n = Number(m[1].replace(/,/g, ""));
