@@ -1896,3 +1896,31 @@ agent started it and the PROVIDER rejected it. Diagnosis, and the traps:
   75 files pass; tsc (libs + api-server + portal) clean; repo-wide prettier
   clean; api-server build clean.
 
+### An orphaned `running` job is a silent lie (found live, same incident)
+
+- **Evidence**: job **#38** sat `status='running'` with `progress=null` for SIX
+  hours after a deploy killed its worker. The runner is in-process by design, so
+  nothing observes the cancel and nothing writes the result — and
+  `findActiveJobByKey` treats `running` as ACTIVE, so an identical re-issue
+  RESUMES the corpse and promises progress that can never happen. The operator
+  waits; the symptom is indistinguishable from the assistant ignoring them.
+- `markOrphanedJobs()` flips `running` rows older than a 90s grace (one batch is
+  45s, so a live job is never touched) to `failed` with an explicit error, and is
+  called from `src/index.ts` at startup BEFORE the webhook serves traffic. The
+  grace is what makes it safe: it must not race a job that is genuinely working.
+- Re-issuing then starts a FRESH job, which is correct rather than merely
+  convenient: the census keeps its persisted scan cursor, so the new job
+  continues instead of re-reading the whole mailbox.
+- **Do not** "resume" an orphan by re-running it under the same row without a
+  worker: the status must stop claiming `running` the moment no worker owns it.
+  A job row that overstates its own progress is the `filter(Boolean)` /
+  `truncated` family of defect — a capability reporting something untrue.
+- Tests: the 2 orphan cases in `ai-jobs.test.ts` (stale → `failed`, fresh →
+  untouched). **896 api-server tests** in 75 files pass; tsc (libs + api-server +
+  portal) clean; repo-wide prettier clean; api-server build clean.
+- Deploy: PR #180 squash-merged `36e88a6`; CI green; Render
+  `dep-daqkl06k1f9s73cfdft0` live. Verified live: `attempts` column present in
+  `ai_assistant_jobs` on the production DB, `/api/healthz` 200, the
+  `/api/ai-assistant/*` routes 401 (mounted behind auth), and job #38 reset to
+  `failed` so the operator's next identical request starts fresh.
+

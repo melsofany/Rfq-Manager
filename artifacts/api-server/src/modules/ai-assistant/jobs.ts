@@ -341,6 +341,47 @@ async function runWithQuotaRetries(
   }
 }
 
+/**
+ * A job row can outlive the process that was running it.
+ *
+ * The runner is in-process (deliberately — no queue dependency), so a deploy,
+ * crash or Render recycle leaves any `running` row claiming to work forever:
+ * nothing observes the cancel, nothing writes the result, and the operator waits
+ * for a report that cannot arrive — the `running` row is a silent lie.
+ *
+ * Worse, `findActiveJobByKey` treats `queued`/`running` as active, so re-issuing
+ * the SAME request RESUMES the orphan and promises progress that never happens.
+ *
+ * Called once at startup, BEFORE the webhook serves traffic: a resumed census
+ * still has its persisted scan cursor, so re-running it continues from where it
+ * stopped rather than re-reading everything.
+ */
+export async function markOrphanedJobs(): Promise<number> {
+  const cutoff = new Date(Date.now() - 90_000); // grace > one batch (45s)
+  const orphans = (await (db as any)
+    .select()
+    .from(aiAssistantJobsTable)
+    .where(
+      and(
+        eq(aiAssistantJobsTable.status, "running"),
+        sql`${aiAssistantJobsTable.updatedAt} < ${cutoff.toISOString()}`,
+      ),
+    )
+    .limit(500)) as any[];
+  if (orphans.length === 0) return 0;
+  await (db as any)
+    .update(aiAssistantJobsTable)
+    .set({ status: "failed", error: "orphaned by a restart — stale cursor reset" })
+    .where(
+      and(
+        eq(aiAssistantJobsTable.status, "running"),
+        sql`${aiAssistantJobsTable.updatedAt} < ${cutoff.toISOString()}`,
+      ),
+    );
+  logger.warn({ count: orphans.length }, "AI assistant: marked orphaned jobs as failed");
+  return orphans.length;
+}
+
 export async function countJobsByStatus(): Promise<Record<string, number>> {
   const rows = (await (db as any)
     .select({

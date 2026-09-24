@@ -44,6 +44,12 @@ initDb()
     // does not match the authenticated account silently breaks DKIM alignment.
     verifySenderIdentity();
     logReadMailboxes();
+    // A `running` job row whose process died (deploy/crash) would otherwise
+    // promise work forever — and block a re-issued request from starting.
+    const { markOrphanedJobs } = await import("./modules/ai-assistant/jobs");
+    await markOrphanedJobs().catch((err) =>
+      logger.warn({ err }, "AI assistant: orphan-job sweep failed (non-fatal)"),
+    );
     try {
       await ensureWorkOrderTemplate();
       await ensurePoCancelTemplate();
