@@ -288,7 +288,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   // not spend the primary model's daily quota, which the analytical questions
   // need. The light model is part of the same fallback chain, so an exhausted
   // fast model degrades to the regular chain automatically.
-  const runModel = modelForPath(settings.model, plan.path);
+  const runModel = modelForPath(settings.model, plan.path, settings.baseUrl);
 
   // Independent loads run concurrently. Previously these were awaited in
   // sequence — history, then memories, then the vocabulary — which added their
@@ -344,6 +344,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   let finalText: string | null = null;
   let rounds = 0;
   let fallbackUsed = false;
+  // The model/provider that actually produced the answer. A cross-provider
+  // rescue (Gemini quota spent, DeepSeek answered) is otherwise invisible: the
+  // router's `runModel` would still be reported as if it had spoken.
+  let answeredModel: string | undefined;
+  let answeredProvider: string | undefined;
   let verificationRan = false;
   let numericDisagreed = false;
   const startedAt = Date.now();
@@ -394,6 +399,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       });
       rounds += 1;
       if (result.modelUsed && result.modelUsed !== runModel) fallbackUsed = true;
+      if (result.modelUsed) answeredModel = result.modelUsed;
+      if (result.providerUsed) answeredProvider = result.providerUsed;
 
       if (result.toolCalls.length === 0) {
         finalText = result.content;
@@ -421,6 +428,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         });
         rounds += 1;
         if (noTools.modelUsed && noTools.modelUsed !== runModel) fallbackUsed = true;
+        if (noTools.modelUsed) answeredModel = noTools.modelUsed;
+        if (noTools.providerUsed) answeredProvider = noTools.providerUsed;
         finalText = noTools.content ?? result.content ?? exhaustedAnswer(usedTools);
         break;
       }
@@ -429,10 +438,16 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       // every call in THIS round concurrently. The calls in one round are chosen
       // together by the model and are independent, so awaiting them in sequence
       // only added latency (a 3-line item scan cost 3 round-trips).
+      //
+      // `reasoning_content` is carried through when the provider returned it
+      // (DeepSeek thinking mode): the next request is rejected without it. A
+      // provider that returns none (Gemini) leaves the field unset, and
+      // `withReasoningEcho` supplies the placeholder DeepSeek accepts.
       messages.push({
         role: "assistant",
         content: result.content ?? null,
         tool_calls: result.toolCalls,
+        reasoning_content: result.reasoningContent,
       });
 
       const calls = result.toolCalls.map((call) => {
@@ -624,6 +639,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       verified: verificationRan,
       fallbackUsed,
       model: runModel,
+      modelUsed: answeredModel,
+      provider: answeredProvider,
       latencyMs: Date.now() - startedAt,
       outcome: isTimeoutError(err) ? "timeout" : isQuotaError(err) ? "quota" : "error",
     });
@@ -645,6 +662,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     verified: verificationRan,
     fallbackUsed,
     model: runModel,
+    modelUsed: answeredModel,
+    provider: answeredProvider,
     latencyMs: Date.now() - startedAt,
     outcome: "answered",
     confidence: answerConfidence(usedTools.length, verificationRan, numericDisagreed),

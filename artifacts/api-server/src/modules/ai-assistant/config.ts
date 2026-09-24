@@ -35,6 +35,67 @@ export const DEFAULT_BASE_URL =
   process.env.AI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai";
 
 /**
+ * DeepSeek — the SECOND provider, used as a fallback when Gemini's free tier is
+ * out of quota.
+ *
+ * Gemini's free tier caps a single model at 20 requests/day, so the whole
+ * assistant goes quiet once the day's budget is spent. A different provider has
+ * its own budget, so adding one is the only fix that does not depend on Google
+ * granting more. DeepSeek speaks the same OpenAI wire format, so it drops into
+ * the existing client with no new dependency.
+ *
+ * Two provider differences the client must handle:
+ * - The reasoning variant (`deepseek-v4-pro`) returns `reasoning_content` on its
+ *   assistant turns. The client captures it and echoes it back on a tool-call
+ *   turn. Measured live (2026-09): the API currently ACCEPTS a tool-call turn
+ *   with or without the field, so this is defensive compatibility with
+ *   DeepSeek's documented thinking-mode contract rather than a workaround for an
+ *   observed 400 — it preserves the real reasoning when present and supplies a
+ *   placeholder when absent. See `withReasoningEcho` in `llm.ts`.
+ * - There is no `/audio/transcriptions` endpoint and no PDF input (the files API
+ *   accepts images only), so voice notes and PDFs degrade to the local readers
+ *   rather than to a provider call. See `transcribeAudio`/`extractDocumentText`.
+ */
+export const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1";
+// `deepseek-chat` is the stable alias (measured resolving to `deepseek-flash`).
+// The models endpoint on this key lists exactly `deepseek-flash` and
+// `deepseek-v4-pro`.
+export const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+
+/**
+ * DeepSeek's own fallback chain.
+ *
+ * `deepseek-v4-pro` is listed FIRST because it is the only model on this key
+ * measured to accept an image part; `deepseek-chat` (`deepseek-flash`) answers
+ * text and tool calls but rejects images with a 400. An image question is a
+ * normal case here (the operator photographs a document), so the vision-capable
+ * model must get the first try. The order is also why a 400 capability mismatch
+ * advances the chain instead of aborting it — see `isCapabilityMismatch`.
+ */
+export const DEEPSEEK_FALLBACK_MODELS = (process.env.DEEPSEEK_FALLBACK_MODELS || "deepseek-v4-pro")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
+
+/**
+ * DeepSeek key. A dedicated variable (not AI_API_KEY) because both providers are
+ * configured at once — the Gemini key must keep working for voice notes and
+ * document reading, which DeepSeek cannot do.
+ */
+export const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || "";
+
+/** True when the configured endpoint is DeepSeek. */
+export function isDeepSeekEndpoint(baseUrl?: string | null): boolean {
+  return /api\.deepseek\.com/i.test(baseUrl || "");
+}
+
+/**
+ * Whether the DeepSeek fallback is available. Off unless a key is configured, so
+ * a deployment that only set AI_API_KEY behaves exactly as before.
+ */
+export const isDeepSeekConfigured = Boolean(DEEPSEEK_API_KEY);
+
+/**
  * Models tried, in order, when the primary model is unavailable or out of
  * quota (Gemini free tier is 20 requests/day/model). Only used on the Gemini
  * endpoint, where these ids exist. Override with AI_FALLBACK_MODELS.
@@ -94,15 +155,29 @@ export function isGeminiEndpoint(baseUrl?: string | null): boolean {
   return /generativelanguage\.googleapis\.com/i.test(base);
 }
 
-export const isAiConfigured = Boolean(AI_API_KEY);
+/**
+ * Whether the assistant can run at all. True when EITHER provider has a key, so
+ * a deployment that only set DEEPSEEK_API_KEY still works.
+ */
+export const isAiConfigured = Boolean(AI_API_KEY || DEEPSEEK_API_KEY);
 
 /**
  * The model to use for a given route path. Fast-path questions use the light
  * model; every other path uses the configured primary. Falls back to the primary
  * when no dedicated fast model is configured (AI_FAST_MODEL="").
+ *
+ * The fast model is a Gemini id, so it is only applied when the primary is
+ * Gemini. On another provider (DeepSeek) the id does not exist and would 404 on
+ * every fast-path question — the primary is used instead.
  */
-export function modelForPath(primary: string, path: "fast" | "deep"): string {
+export function modelForPath(
+  primary: string,
+  path: "fast" | "deep",
+  baseUrl?: string | null,
+): string {
   if (path === "deep") return primary;
+  if (isDeepSeekEndpoint(baseUrl)) return primary;
+  if (primary === DEEPSEEK_MODEL || DEEPSEEK_FALLBACK_MODELS.includes(primary)) return primary;
   return FAST_MODEL || primary;
 }
 

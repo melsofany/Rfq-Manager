@@ -94,6 +94,28 @@ describe("evaluation: router quality", () => {
     expect(REPORT.pathAccuracy).toBeGreaterThanOrEqual(0.95);
   });
 
+  it("meets the SOURCE-SCOPE threshold (the other safety-critical metric)", () => {
+    // A question that demanded the mailbox but was scoped "any" may be answered
+    // from the database — a complete census of the WRONG dataset, presented as
+    // the answer about the mail. That is a live incident, so it is scored as
+    // strictly as the path.
+    expect(REPORT.scopeCases).toBeGreaterThanOrEqual(4);
+    expect(REPORT.scopeAccuracy).toBe(1);
+  });
+
+  it("does not scope an ordinary question to a source it never named", () => {
+    // The scope warning fires on the answer when the run read no email, so a
+    // false positive would append a spurious warning to every database answer.
+    const plain = REPORT.results.filter((r) => r.sourceScope === "email");
+    for (const r of plain) {
+      const c = EVAL_CASES.find((x) => x.question === r.question);
+      expect(
+        c?.expectedSourceScope,
+        `«${r.question}» was scoped to email but the case names no source`,
+      ).toBe("email");
+    }
+  });
+
   it("keeps routing latency negligible (it must never be the bottleneck)", () => {
     // The router is pure regex over a short string; if this ever rises, an
     // expensive matcher has crept in and should be reviewed.

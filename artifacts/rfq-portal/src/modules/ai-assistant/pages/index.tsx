@@ -35,6 +35,7 @@ import {
   Pin,
   PinOff,
   Activity,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
@@ -83,6 +84,14 @@ interface AiSettings {
   fallbackModels?: string[];
   defaultBaseUrl: string;
   isGemini?: boolean;
+  /** The second provider (DeepSeek), used when the whole primary chain is out. */
+  deepseek?: {
+    configured: boolean;
+    model: string;
+    baseUrl: string;
+    fallbackModels: string[];
+    isPrimary: boolean;
+  };
 }
 
 interface AiMetrics {
@@ -110,6 +119,8 @@ interface AiMetrics {
     latencyMs: number;
     outcome: string;
     model?: string;
+    modelUsed?: string;
+    provider?: string;
     fallbackUsed?: boolean;
     confidence?: "VERIFIED" | "PARTIALLY_VERIFIED" | "INSUFFICIENT_EVIDENCE";
   }>;
@@ -469,6 +480,14 @@ export default function AiAssistantPage() {
               Google Gemini
             </Badge>
           )}
+          {settings?.deepseek?.configured && (
+            <Badge variant="secondary" className="gap-1">
+              <Layers className="h-3 w-3" />
+              {settings.deepseek.isPrimary
+                ? "DeepSeek (المزوّد الأساسي)"
+                : "DeepSeek (مزوّد احتياطي)"}
+            </Badge>
+          )}
         </div>
 
         {(!settings?.apiKeySet || !settings?.imapConfigured) && (
@@ -622,7 +641,10 @@ export default function AiAssistantPage() {
                           {r.path === "fast" ? "سريع" : "تحليلي"}
                         </TableCell>
                         <TableCell className="text-xs">
-                          {r.model ?? "—"}
+                          {r.modelUsed ?? r.model ?? "—"}
+                          {r.provider === "deepseek" && (
+                            <span className="text-muted-foreground"> (DeepSeek)</span>
+                          )}
                           {r.fallbackUsed ? " (بديل)" : ""}
                         </TableCell>
                         <TableCell className="text-xs">{r.rounds}</TableCell>
@@ -848,6 +870,12 @@ export default function AiAssistantPage() {
                     <p className="text-xs text-muted-foreground">
                       عند نفاد حصة الموديل (429) يتحوّل تلقائيًا إلى:{" "}
                       {settings.fallbackModels.join(" ← ")}
+                    </p>
+                  )}
+                  {settings.deepseek?.configured && !settings.deepseek.isPrimary && (
+                    <p className="text-xs text-muted-foreground">
+                      وإذا نفدت حصة كل موديلات المزوّد الأساسي يتحوّل إلى DeepSeek (
+                      {settings.deepseek.model}) تلقائيًا — لا يتوقّف المساعد عن الرد.
                     </p>
                   )}
                 </div>

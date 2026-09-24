@@ -15,12 +15,17 @@ import {
   isAiConfigured,
   DEFAULT_BASE_URL,
   DEFAULT_MODEL,
+  DEEPSEEK_BASE_URL,
+  DEEPSEEK_FALLBACK_MODELS,
+  DEEPSEEK_MODEL,
   FALLBACK_MODELS,
+  isDeepSeekConfigured,
+  isDeepSeekEndpoint,
   isGeminiEndpoint,
   canonicalPhone,
 } from "./config";
 import { isEmailReadConfigured } from "./email";
-import { listModels } from "./llm";
+import { listAllModels } from "./llm";
 import { rememberFact, normalizeCategory } from "./memory";
 import { recentMetrics, metricsSummary } from "./metrics";
 import { countJobsByStatus } from "./jobs";
@@ -143,6 +148,15 @@ router.get("/ai-assistant/settings", guard, async (_req, res): Promise<void> => 
     defaultBaseUrl: DEFAULT_BASE_URL,
     fallbackModels: FALLBACK_MODELS,
     isGemini: isGeminiEndpoint(settings.baseUrl),
+    // The second provider. Reported separately from `fallbackModels` because it
+    // is reached with a different key and endpoint, not merely a different id.
+    deepseek: {
+      configured: isDeepSeekConfigured,
+      model: DEEPSEEK_MODEL,
+      baseUrl: DEEPSEEK_BASE_URL,
+      fallbackModels: DEEPSEEK_FALLBACK_MODELS,
+      isPrimary: isDeepSeekEndpoint(settings.baseUrl),
+    },
   });
 });
 
@@ -201,8 +215,16 @@ router.get("/ai-assistant/mail-diagnostics", guard, async (_req, res): Promise<v
 // ─── GET /ai-assistant/models ─────────────────────────────────────────────
 router.get("/ai-assistant/models", guard, async (_req, res): Promise<void> => {
   const settings = await loadSettings();
-  const models = await listModels(settings.baseUrl);
-  res.json({ models, defaultModel: DEFAULT_MODEL, fallbackModels: FALLBACK_MODELS });
+  // Both providers' models, so an operator can select a DeepSeek model directly
+  // (it is routed to DeepSeek's endpoint even when AI_BASE_URL points at Gemini).
+  const models = await listAllModels(settings.baseUrl);
+  res.json({
+    models,
+    defaultModel: DEFAULT_MODEL,
+    fallbackModels: FALLBACK_MODELS,
+    deepseekModel: DEEPSEEK_MODEL,
+    deepseekFallbackModels: DEEPSEEK_FALLBACK_MODELS,
+  });
 });
 
 // ─── GET /ai-assistant/metrics — recent request telemetry ─────────────────

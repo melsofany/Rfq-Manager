@@ -211,7 +211,7 @@ async function respondToAuthorizedUser(phone: string, msg: WaInboundMessage): Pr
     const quota = isQuotaError(err);
     const timedOut = isTimeoutError(err);
     const message = quota
-      ? "المساعد الذكي وصل لحد الاستخدام المسموح للموديل حاليًا (حصة Gemini اليومية). حاول مرة أخرى بعد قليل."
+      ? "المساعد الذكي وصل لحد الاستخدام المسموح للمزودين حاليًا (حصة الموديلات اليومية). حاول مرة أخرى بعد قليل."
       : timedOut
         ? "استغرق الطلب وقتًا أطول من المسموح فتم إيقافه. جرّب سؤالًا أكثر تحديدًا (مثل رقم أمر التوريد) وسأجيب أسرع."
         : "تعذّر معالجة طلبك حاليًا. حاول مرة أخرى بعد قليل.";
