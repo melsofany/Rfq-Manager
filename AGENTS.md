@@ -1838,3 +1838,14 @@ issue.
   prettier clean; api-server build clean.
 - Deploy: pending — push/PR only on explicit request.
 
+## Report PDFs: measure the columns, and a continuation page must name itself
+
+Two layout defects the operator hit on the EDC census report, both of which made a correct result unreadable:
+
+- **Equal-width columns clipped the headers.** `renderTable` split the usable width evenly: 9 columns over 523pt = **52pt each**, while «رقم القطعة (Part Number)» needs **62pt** and «إجمالي المبلغ (مجموع Line Totals)» needs 56pt. The header was drawn with `lineBreak:false` in a 14pt box, so the overflow was silently cut — the operator «مبقتش عارف احدد دي تبع ايه». Hand-tuned `widths` constants had been used elsewhere and were equally fragile. `columnWidths(doc, table, width)` now MEASURES each column from its header and its widest cell (a single cell's contribution is capped at 150pt so one long description cannot starve the numeric columns); an explicit `table.widths` still wins. The header WRAPS (no `lineBreak:false`) and its box grows to fit, so it can never be clipped again.
+- **A continuation page carried no identity.** The report spans pages and only the FIRST had a footer; the trailing pages held unlabeled prose with no header and no page number, so a row on page 6 could not be attributed to a column or a table. `generateAssistantPdf` now sets `bufferPages:true` and, once the total is known, stamps **every** page with the running title and «صفحة X من Y» + the source line, then `flushPages()`. `renderTable` repeats the (wrapping) header on every page it continues onto.
+- **The detail prose blob was the actual «تبع ايه» complaint** — a list of `PO / qty / price` lines with nothing naming the item they belonged to. It is a real labeled table now (البند / أمر الشراء / الكمية / سعر الوحدة / إجمالي البند), with the item's rank + full description repeated on its first row.
+- **Testing PDF layout without a PDF reader**: the text is glyph-encoded through the Amiri subset, so extraction is unreliable — but pdfkit's fill colour survives verbatim. `ai-pdf-layout.test.ts` counts the header-fill operator (`0.10196078431372549 0.22745098039215686 0.3607843137254902 scn` + `f`) per page content stream to assert "this page names its columns", and the footer grey for the page stamp. **Note the op is `scn`, not `rg`** (pdfkit sets the colorspace first). The clipped-header regression is measured directly through the exported `columnWidths` (a column must get >58pt and fit its header in ≤3 lines).
+- Tests: `ai-pdf-layout.test.ts` (5; the footer-stamp and column-width guards fail against the pre-fix source). **887 api-server tests** in 74 files pass; tsc (libs + api-server) clean; repo-wide prettier clean; api-server build clean.
+- Deploy: pending — push/PR only on explicit request.
+
