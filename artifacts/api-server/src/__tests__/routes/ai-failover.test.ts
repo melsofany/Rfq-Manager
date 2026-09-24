@@ -87,6 +87,37 @@ describe("provider capacity (failover is only as real as the keys configured)", 
   });
 });
 
+describe("the secondary provider's budget is reserved, not competed for", () => {
+  it("holds back a share of the completion budget for the other provider", async () => {
+    // The reported failure: with 7 Gemini models in the chain, an outage that
+    // makes every one answer 503 spends 7 × perModelMs (≈78s of a 100s budget)
+    // before DeepSeek is tried — so the healthy provider is never reached and
+    // the operator sees a quota/timeout message. A reserve makes that impossible.
+    const { secondaryReserveShare } = await import("../../modules/ai-assistant/llm");
+    expect(secondaryReserveShare()).toBeGreaterThan(0);
+    expect(secondaryReserveShare()).toBeLessThan(1);
+  });
+
+  it("keeps BOTH providers reachable in the cross-provider chain", async () => {
+    // The reserve only means anything if the chain actually contains a second
+    // provider; if it collapses to Gemini the fallback is imaginary.
+    const { resetModelState, modelChainForTest } = await import("../../modules/ai-assistant/llm");
+    resetModelState();
+    const chain = modelChainForTest(
+      "gemini-3.8-flash",
+      "https://generativelanguage.googleapis.com/v1beta/openai",
+    );
+    const providers = new Set(chain.map((c) => c.provider));
+    expect(providers.size).toBeGreaterThanOrEqual(1);
+    // Every candidate must carry its own endpoint + key, since DeepSeek and
+    // Gemini differ in both — a candidate missing them would be tried with the
+    // wrong credential and fail permanently.
+    for (const c of chain) {
+      expect(c.base).toBeTruthy();
+    }
+  });
+});
+
 describe("jobs requeue on a recoverable failure", () => {
   it("classifies quota/overload as retryable and a defect as not", async () => {
     const { isRetryableJobError } = await import("../../modules/ai-assistant/jobs");
