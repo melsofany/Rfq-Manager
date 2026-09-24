@@ -1230,9 +1230,19 @@ async function launchCensusJob(
       const lines = s?.coverage?.lines ?? 0;
       const files = s?.coverage?.attachments ?? 0;
       const complete = Boolean(s?.complete);
-      const scope = complete
-        ? `النطاق: كل الرسائل المطابقة (${matched}).`
-        : `النطاق: فُتح ${opened} من ${matched} رسالة — الحصر ناقص.`;
+      // "Matched nothing, opened nothing" is the shape of a scan that FAILED, not
+      // of an empty mailbox. Reporting it as «النطاق: كل الرسائل المطابقة (0)»
+      // reads as a finished, verified zero — the exact false claim that made a
+      // year of EDC purchase orders come back as «لا توجد أوامر شراء». Say the
+      // scan could not read the mailbox, so the operator knows to retry instead of
+      // believing the mailbox is empty.
+      const emptyUnstarted = matched === 0 && opened === 0 && !files;
+      const scope = emptyUnstarted
+        ? "النطاق: لم يُفتح أي رسالة ولم تُقرأ أي مرفقات — الحصر لم يبدأ فعليًا. " +
+          "أعد المحاولة بمُرسل/موضوع محدد، وإن تكرر ذلك فالمشكلة في الاتصال بصندوق البريد."
+        : complete
+          ? `النطاق: كل الرسائل المطابقة (${matched}).`
+          : `النطاق: فُتح ${opened} من ${matched} رسالة — الحصر ناقص.`;
       const text =
         `انتهى الحصر الخلفي لبنود البريد.\n` +
         `رسائل مطابقة: ${matched} — رسائل فُتحت: ${opened} — ملفات: ${files} — بنود: ${lines}.\n` +

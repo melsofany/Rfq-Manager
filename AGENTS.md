@@ -1679,3 +1679,51 @@ capability that silently did something other than what it claimed.
   tsc (libs + api-server + portal) clean; repo-wide prettier clean; 45 portal
   tests pass.
 - Deploy: pending — push/PR only on explicit request.
+
+## A persisted "empty result" must not outlive the bug that produced it (PR #176)
+
+The morning after #175 shipped, the operator ran the same EDC ask and got
+**«رسائل مطابقة: 0 — رسائل فُتحت: 0 — ملفات: 0 … النطاق: كل الرسائل المطابقة (0)»**
+within ONE SECOND, then a job that "completed at 100%" and produced no file. Live
+mail held 3,706 messages / 332 `EDC PO No…` — nothing was wrong with the mail.
+
+- **The root cause was a POISONED PERSISTED SESSION, not the scan.** The resumable
+  census mirrors its session to `ai_assistant_scan_sessions`; a session written
+  *before* #174 (when `from:"EDC"` matched nothing) was `{matched:0, nextSkip:0,
+  batches:0, complete:true}`. `runItemScan` saw `complete` and returned instantly
+  without opening a message — forever, across deploys. Job #2 proves it: created
+  `08:55:52.775Z`, finished `08:55:53.435Z` (**0.66 s**) with `matched:0`. Query
+  the table and you see four such rows.
+- **`complete` is a claim; the coverage counters are evidence.** `isUnstartedEmpty`
+  discards a restored session that examined nothing AND matched nothing. Two cases
+  are indistinguishable from the session alone (a filter the IMAP server does not
+  recognise vs a genuinely empty mailbox), and discarding costs one envelope scan
+  (already memoized), so re-checking is strictly better than believing.
+- **Guard on the OUTCOME, not the flag** (the WhatsApp-scroll lesson, again):
+  `runItemScan` now runs a batch when `!complete || !sessionDidWork(session)`, and
+  work is judged by `coverage.messages`/`attachmentCoverage.messages`/`scanned` —
+  NOT by `batches`, because a window of messages with no readable attachment parses
+  zero chunks yet examined every message.
+- **`session.census = census` was an unconditional assignment.** A transient IMAP
+  failure returning `matched: 0` mid-census would set `remaining = 0` and mark the
+  census complete, ending a 3,700-message walk after its first window. A window may
+  only replace the total when it is authoritative (`census.matched > 0`), or when
+  there is no total yet.
+- **An emptiness with no evidence is a FAILURE, and must be said as one.** The job
+  report now checks `matched === 0 && opened === 0 && !files` and says
+  «الحصر لم يبدأ فعليًا … أعد المحاولة» instead of `النطاق: كل الرسائل المطابقة (0)`
+  — that sentence is what turned a broken scan into «لا توجد أوامر شراء من EDC».
+- **Live data was cleaned** (`DELETE FROM ai_assistant_scan_sessions`, 4 rows) so
+  the fix takes effect on the next request rather than after the first success.
+- **Diagnosing this class**: the Render Postgres IS reachable externally —
+  `GET /v1/postgres/<id>/connection-info` → `externalConnectionString`, then
+  `NODE_PATH=<repo>/.pnpm/pg@*/node_modules node -e "…"` (drizzle/`pg` are not
+  resolvable from `artifacts/api-server` directly). Read the jobs table first:
+  `created_at` vs `finished_at` exposes an "instant" job immediately.
+- Tests: `ai-scan-persistence.test.ts` +2 — the poisoned empty session is discarded
+  and a real scan runs (matched 3, not 0), and a transient zero-match window does
+  NOT end a census that already matched (total stays 4). **Both fail against the
+  pre-fix source** (verified by reverting `isUnstartedEmpty`, the outcome guard and
+  the conditional census assignment). +1 assertion in `ai-email-items-tool.test.ts`
+  for the «الحصر لم يبدأ فعليًا» wording. **872 api-server tests** pass; tsc clean;
+  repo-wide prettier clean.

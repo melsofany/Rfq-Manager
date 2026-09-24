@@ -147,4 +147,70 @@ describe("persisted scan sessions", () => {
     expect(second.session.nextSkip).toBe(4);
     expect(second.session.complete).toBe(true);
   });
+
+  it("discards a persisted EMPTY session that never examined a message", async () => {
+    // Live failure: while the sender shorthand was unresolved, an empty session
+    // (`matched: 0`, `complete: true`, no message ever opened) was persisted.
+    // Every later request — across deploys — reloaded it, believed it because it
+    // said `complete`, and answered «رسائل مطابقة: 0 — مكتمل» INSTANTLY. A claimed
+    // empty census with NO evidence of work is the imprint of a scan that never
+    // started, so it must be dropped and re-scanned, never answered from.
+    saved.set(
+      'items:{"from":"EDC","mailbox":"*"}',
+      JSON.stringify({
+        census: { matched: 0 },
+        items: [],
+        messages: [],
+        coverage: { messages: 0, lines: 0, attachments: 0 },
+        attachmentCoverage: { messages: 0, scanned: 0 },
+        nextSkip: 0,
+        remaining: 0,
+        batches: 0,
+        complete: true,
+        args: { from: "EDC", mailbox: "*" },
+      }),
+    );
+    const pool = [1, 2, 3].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC PO ${uid}`,
+    }));
+    scanEmails.mockImplementation(async (opts: { attachmentSkip?: number }) =>
+      census(pool.slice(opts.attachmentSkip ?? 0, (opts.attachmentSkip ?? 0) + 3), 3),
+    );
+
+    const key = scanCacheKey("items", { from: "EDC", mailbox: "*" });
+    const out = await runItemScan(key, { from: "EDC", mailbox: "*" }, Date.now() + 10_000);
+
+    // A REAL scan ran: the poisoned zero was not believed.
+    expect(scanEmails).toHaveBeenCalled();
+    expect(out.session.census.matched).toBe(3);
+    expect(out.session.coverage.messages).toBe(3);
+    expect(out.session.complete).toBe(true);
+  });
+
+  it("does not let a transient zero-match window end a census that already matched", async () => {
+    // `census.matched` is the authoritative size of the ask, but a transient IMAP
+    // failure narrows a window to zero. Adopting that zero would set
+    // `remaining = 0` and mark the census complete on the spot — ending a 3,700-
+    // message census after its first window and reporting the sample as the total.
+    const pool = [1, 2, 3, 4].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC PO ${uid}`,
+    }));
+    let call = 0;
+    scanEmails.mockImplementation(async (opts: { attachmentSkip?: number }) => {
+      call += 1;
+      // The second window fails transiently and reports nothing.
+      if (call === 2) return census([], 0);
+      return census(pool.slice(opts.attachmentSkip ?? 0, (opts.attachmentSkip ?? 0) + 2), 4);
+    });
+
+    const key = scanCacheKey("items", { mailbox: "*", from: "EDC" });
+    const out = await runItemScan(key, { mailbox: "*", from: "EDC" }, Date.now() + 10_000);
+
+    // The known total SURVIVED the bad window: 4, not 0.
+    expect(out.session.census.matched).toBe(4);
+  });
 });
