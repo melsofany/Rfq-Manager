@@ -299,16 +299,41 @@ export async function chatCompletion(opts: {
    */
   const perModelMs = Math.max(5_000, Math.floor(budgetMs / Math.max(candidates.length, 1)));
 
+  /**
+   * Time reserved for the SECOND provider, out of reach of the primary's chain.
+   *
+   * `perModelMs` alone is not a guarantee: with 7 Gemini models in the chain, an
+   * outage that makes EVERY one of them answer 503 spends 7 × perModelMs (≈78s of
+   * the 100s budget) before DeepSeek is ever tried — and a slow 503 (measured
+   * live at ~40s) exhausts the budget outright, so the healthy provider is never
+   * reached. The reserve makes that impossible: the primary's models cannot run
+   * the clock past `deadline - secondaryReserveMs`, so the alternative provider
+   * always gets at least its own slice.
+   *
+   * The reserve only exists when a secondary provider is actually in the chain —
+   * a single-provider deployment keeps the whole budget for its only provider.
+   */
+  const providersInChain = new Set(candidates.map((c) => c.provider)).size;
+  const secondaryReserveMs =
+    providersInChain > 1 ? Math.max(5_000, Math.floor(budgetMs * SECONDARY_RESERVE_SHARE)) : 0;
+  const primaryDeadline = deadline - secondaryReserveMs;
+  const deadlineFor = (provider: ModelProvider) =>
+    provider === candidates[0]?.provider && secondaryReserveMs > 0 ? primaryDeadline : deadline;
+
   try {
     outer: for (const candidate of candidates) {
       const { model, provider } = candidate;
       let waitedForQuota = false;
-      const modelDeadline = Date.now() + perModelMs;
+      const providerDeadline = deadlineFor(provider);
+      const modelDeadline = Math.min(Date.now() + perModelMs, providerDeadline);
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         // Stop the moment EITHER budget is spent. Checking the caller's signal
         // too means an expired agent-run budget ends the chain here instead of
         // walking the remaining models with requests that are already aborted.
-        if (budget.signal.aborted || Date.now() >= deadline) {
+        // ...and when only the invisible reserve ends it, skip to the provider
+        // that reserve exists for rather than failing the request.
+        if (budget.signal.aborted || Date.now() >= providerDeadline) {
+          if (providerDeadline < deadline) continue outer;
           throw new AiError(`LLM request budget of ${budgetMs}ms exhausted before an answer`);
         }
         try {
@@ -355,7 +380,7 @@ export async function chatCompletion(opts: {
               !waitedForQuota &&
               delayMs != null &&
               delayMs <= MAX_QUOTA_WAIT_MS &&
-              Date.now() + delayMs < deadline
+              Date.now() + delayMs < providerDeadline
             ) {
               waitedForQuota = true;
               logger.info(
@@ -393,7 +418,10 @@ export async function chatCompletion(opts: {
           // failing — an overloaded model is exactly when a different model
           // succeeds.
           if (attempt < MAX_ATTEMPTS && Date.now() < modelDeadline) {
-            if (Date.now() + 300 >= deadline) {
+            if (Date.now() + 300 >= providerDeadline) {
+              // This candidate has no time left. If it is only the reserved slice
+              // that ended here, move on so the other provider still gets a turn.
+              if (providerDeadline < deadline) continue outer;
               throw new AiError(`LLM request budget of ${budgetMs}ms exhausted before an answer`);
             }
             await sleep(300);
@@ -558,6 +586,22 @@ function rememberWorkingModel(model: string, provider: ModelProvider): void {
  * to stop the repeated probes, short enough to pick it back up after a reset.
  */
 const exhaustedUntil = new Map<string, number>();
+/**
+ * Fraction of one completion's budget held back for the SECOND provider.
+ *
+ * Not a tuning knob so much as a floor under the failover: without it, a primary
+ * chain of 7 models can consume the entire budget (7 × perModelMs ≈ 78s of 100s)
+ * before the alternative provider is tried, which is the failure the operator
+ * reported — a quota message while a healthy provider sat unused. 40% leaves the
+ * secondary roughly 40s, enough for a full tool-calling round on DeepSeek.
+ */
+const SECONDARY_RESERVE_SHARE = 0.4;
+
+/** Test seam: inspect the reserved secondary share without a request. */
+export function secondaryReserveShare(): number {
+  return SECONDARY_RESERVE_SHARE;
+}
+
 const EXHAUSTED_TTL_MS = 60 * 60 * 1000;
 
 function markModelExhausted(model: string): void {

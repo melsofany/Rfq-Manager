@@ -1956,3 +1956,101 @@ agent started it and the PROVIDER rejected it. Diagnosis, and the traps:
   in 75 files pass; tsc (libs + api-server + portal) clean; repo-wide prettier
   clean; api-server build clean.
 
+## A verifier that mines the ANSWER is not a verifier (PR #183)
+
+Two live assistant failures of one family: a capability that silently did
+something other than what it claimed.
+
+### The verifier compared a YEAR to the database
+
+- **Symptom**: every correct answer carried
+  «⚠️ تحقق آلي: المرصود 2025 والمحسوب 14265 — لذا النتيجة PARTIALLY_VERIFIED».
+- **Cause**: `verifyAnswer` fell back to `extractReportedTotals(answer)[0]` — the
+  first large number in the PROSE — and reconciled it against the sum of every PO
+  line. On an answer about 2025/2026 items that first number is a **YEAR**
+  («2025») or a **Part Number** («680632»), and `agent.ts` never passed
+  `toolData` at all, so the fallback was the only path.
+- **Fix**: reconcile ONLY a tool's own aggregate (`collectToolTotals`,
+  `agent.ts`) and only for the tool that sums the **same table** the verifier sums
+  (`aggregate_po_items`). Any other total describes a SUBSET (one order, one
+  supplier, unfulfilled lines only), so it is **SKIPPED** — a false alarm is worse
+  than no check, and the metrics record the skip. `extractReportedTotals` is
+  **deleted**, not left unused; nothing may mine a figure from the prose again.
+- **Do not widen `RECONCILABLE_TOOLS`** without checking the tool aggregates the
+  same rows under the same filter.
+
+### `lookup_document` said «غير موجود» from the WRONG table
+
+- **Symptom**: asked about an order from the CUSTOMER (EDC), the assistant
+  searched `purchase_orders` — our orders to **suppliers** — and reported the
+  order absent. It was in `customer_pos` the whole time (live: id 841,
+  `CPO-2025-000484` / `P25E26553`, EDC, sent).
+- **Cause**: supplier and customer PO numbers are shaped alike («P26E14708»), so
+  the `type` argument is a guess the model gets wrong; a bare `found:false` then
+  reads as «the record does not exist» rather than «I looked in the wrong place».
+  A prompt rule alone had already failed to prevent this.
+- **Fix**: `lookupDocumentWithFallback` checks the **sibling** table on a miss
+  (`SIBLING_DOC_TYPES`) and returns `lookupNote` naming the table that actually
+  held it. The negative path returns `notFoundNote` naming the tables searched —
+  **a negative claim must carry its evidence**, same rule as `scan_emails`'
+  `isTotal`/`note`.
+- `customer_pos` holds ALL customer orders (763 rows, 480 of them `P25E…`), while
+  `purchase_orders` is our supplier orders only (39). A miss in the small table is
+  NOT evidence about the large one.
+
+### Test-mock note
+
+`tools.ts` imports ~25 `@workspace/db` table bindings, so the fallback test mocks
+the module with a **Proxy** that returns a stable `{ _: propName }` identity for
+every export and resolves fixtures by that name. Enumerating tables by hand made
+the suite fail as a `res.json`-less `ok:false`; the Proxy keeps it correct as the
+import list grows. Prefer `vi.hoisted` when the mock factory needs shared state.
+
+- Tests: `ai-lookup-fallback.test.ts` (4; **3 fail** against the pre-fix source),
+  `ai-verifier.test.ts` (+6; **6 of 11 fail** against it), `ai-source-scope.test.ts`
+  updated to the new contract (the email-source guard must still win).
+  **905 api-server tests** pass; tsc + api-server build + repo-wide prettier clean.
+- Deploy: PR #183 squash-merged `652a990`; CI + Deploy success; Render
+  `dep-daqmreuk1f9s73cnj670` live at `652a990`; healthz 200, `/api/ai-assistant/*` 401.
+
+## Failover that exists but is never reached is not failover (quota-exhaustion fix)
+
+- **Symptom**: the operator was told «المساعد الذكي وصل لحد الاستخدام المسموح للمزودين
+  حاليًا (حصة الموديلات اليومية)» and the task stopped — yet `DEEPSEEK_API_KEY` was
+  configured and **healthy**. Probing every model with the real tool schema showed why
+  the message was misleading: 5 Gemini models + 2 DeepSeek models answer fine; only the
+  deployed primary (`gemini-3.8-flash`) is flaky (503/429 most of the time).
+- **The chain already failed over** (Gemini → DeepSeek, `modelChain`), and a live
+  `chatCompletion` with the deployed settings answered in 2.3s. So "add a second
+  provider" was **not** the missing piece.
+- **The real defect was budget starvation, not missing failover.** `perModelMs =
+  budgetMs / candidates.length` gives each model a slice, but the primary's chain is
+  tried FIRST and nothing reserves time for the second provider. With 7 Gemini models
+  and a **slow** 503 (measured ~40s live), the primary chain consumes the whole
+  completion budget before DeepSeek is ever dialled — the healthy provider is never
+  reached and the operator sees a quota/timeout message.
+- **A FAST failure hides this completely.** `perModelMs` works fine when every model
+  answers 503 in milliseconds: the chain walks all of them and still reaches the
+  secondary. Reproduce with a **slow** 503 and a short budget — a test that mocks an
+  instant 503 passes against BOTH the broken and the fixed code, so it guards nothing.
+- **Fix**: `SECONDARY_RESERVE_SHARE` (0.4) holds a slice of the completion budget out of
+  the primary chain's reach. `deadlineFor(provider)` returns `deadline - reserve` for the
+  primary and the full `deadline` for the secondary, and a per-candidate deadline expiry
+  `continue`s to the next candidate instead of throwing — so the reserve is spent where
+  it was meant to be. The reserve exists only when the chain actually contains two
+  providers, so a single-provider deployment keeps its whole budget.
+- **Every `deadline` comparison inside the attempt must use the per-provider deadline**
+  (the rate-limit wait, the 503 back-off): leaving one on the global `deadline` lets a
+  primary model block on a wait it is not entitled to.
+- **The reserved slice is not a quota check.** A provider whose daily cap is spent
+  returns 429 and the chain moves on immediately; the reserve is for the SLOWER failure
+  (an overloaded provider that answers 503 after tens of seconds), which unit tests with
+  an instant mock cannot see.
+- **Verify a fix by making the test fail on the OLD code.** With `llm.ts` reverted to
+  `HEAD`, the slow-503 test fails with the operator's exact error —
+  `LLM request budget of 12000ms exhausted before an answer` — and passes with the
+  reserve. That is the proof the change does something.
+- Tests: `ai-failover-behaviour.test.ts` (2 — the slow-503 failover and the
+  primary-still-wins case) + `ai-failover-reserve.test.ts` (2 — the share and both
+  providers present in the chain with their own endpoint + key). **911 api-server
+  tests** pass; tsc + repo-wide prettier + api-server build clean.
