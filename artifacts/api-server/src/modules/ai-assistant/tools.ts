@@ -1340,22 +1340,14 @@ async function launchCensusJob(
         },
       });
 
-      // Per-appearance detail: every PO that carried the item with its own
-      // quantity / unit price / line total, so a figure can be audited against
-      // the source document. Built from the SAME `linesFor` rows the artifact
-      // stores, so the PDF and the stored result can never disagree.
-      const detailOf = (desc: string): string => {
-        const parts = linesFor(desc).map((l) => {
-          const bits = [
-            `PO ${l.docId}`,
-            `كمية ${l.qty ?? "—"}`,
-            `سعر ${l.unitPrice ?? "غير متوفر"}`,
-          ];
-          if (l.lineTotal != null) bits.push(`إجمالي ${l.lineTotal}`);
-          return bits.join(" · ");
-        });
-        return parts.join("\n") || "لا تفاصيل";
-      };
+      // Per-appearance detail lives in the report's second table: every PO that
+      // carried the item with its own quantity / unit price / line total, so a
+      // figure can be audited against the source document. Built from the SAME
+      // `linesFor` rows the artifact stores, so the PDF and the stored result can
+      // never disagree. It is a TABLE (not prose) so each trailing page keeps its
+      // column headers and the item's name on the first row of each group —
+      // otherwise a continuation page held floating lines nobody could attribute
+      // («مبقتش عارف دي تبع ايه»).
 
       const text =
         `انتهى الحصر الخلفي لبنود البريد.\n` +
@@ -1428,9 +1420,33 @@ async function launchCensusJob(
               },
               {
                 heading: "تفاصيل كل ظهور (PO / كمية / سعر الوحدة)",
-                paragraphs: ranked
-                  .slice(0, 20)
-                  .map((p, i) => `${i + 1}. ${p.description}\n${detailOf(p.description)}`),
+                paragraphs: [
+                  "كل صف ظهر للبند في أمر شراء مستقل. البند مذكور في أول عمود من كل صف",
+                  "حتى تظل التفاصيل محددة المصدر لو انقسمت على أكثر من صفحة.",
+                ],
+                table: {
+                  columns: [
+                    "البند (الترتيب)",
+                    "أمر الشراء",
+                    "الكمية",
+                    "سعر الوحدة",
+                    "إجمالي البند",
+                  ],
+                  rightAligned: ["البند (الترتيب)"],
+                  rows: ranked.slice(0, 20).flatMap((p, i) => {
+                    const lines = linesFor(p.description);
+                    if (!lines.length) {
+                      return [[`${i + 1}. ${p.description}`, "لا تفاصيل", "—", "—", "—"]];
+                    }
+                    return lines.map((l, li) => [
+                      li === 0 ? `${i + 1}. ${p.description}` : "",
+                      l.docId,
+                      l.qty ?? "—",
+                      l.unitPrice ?? "غير متوفر",
+                      l.lineTotal ?? "—",
+                    ]);
+                  }),
+                },
               },
             ],
             footer:
@@ -2077,6 +2093,7 @@ async function executeToolInner(
                     "العملة",
                     "أرقام أوامر الشراء",
                   ],
+                  rightAligned: ["وصف البند الكامل", "Line Item", "رقم القطعة (Part Number)"],
                   rows: ranked.slice(0, top).map((p, i) => [
                     i + 1,
                     p.description || "غير متوفر",
