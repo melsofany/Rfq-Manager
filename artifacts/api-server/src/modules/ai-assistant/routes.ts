@@ -23,6 +23,8 @@ import {
   isDeepSeekEndpoint,
   isGeminiEndpoint,
   canonicalPhone,
+  configuredProviderCount,
+  providerStatus,
 } from "./config";
 import { isEmailReadConfigured } from "./email";
 import { listAllModels } from "./llm";
@@ -224,6 +226,11 @@ router.get("/ai-assistant/models", guard, async (_req, res): Promise<void> => {
     fallbackModels: FALLBACK_MODELS,
     deepseekModel: DEEPSEEK_MODEL,
     deepseekFallbackModels: DEEPSEEK_FALLBACK_MODELS,
+    // Failover capacity, so the dashboard can show that a one-provider
+    // deployment has NO failover — a single shared daily budget. Without this an
+    // outage looks like a mystery rather than a missing second key.
+    providers: providerStatus(),
+    configuredProviders: configuredProviderCount(),
   });
 });
 

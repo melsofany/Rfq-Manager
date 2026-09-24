@@ -260,3 +260,66 @@ export async function findAuthorizedUser(phone: string): Promise<AiAuthorizedUse
 }
 
 export { MAX_HISTORY };
+
+/**
+ * A quota error carries two different limits behind the same 429, and the
+ * RETRY DELAY CANNOT TELL THEM APART: measured live, the free tier's DAILY cap
+ * (`<...>PerDayPerProjectPerModel-FreeTier`, limit 20) answers «Please retry in
+ * 25.7s» — indistinguishable from a per-minute cap if you only read the delay.
+ * Waiting out that 25s and retrying loops on a limit that clears tomorrow.
+ *
+ * The `quotaId`/`quotaMetric` is the signal that does separate them, so the
+ * classification keys on it. Any 429 WITHOUT the per-day marker is treated as
+ * transient, because the costly mistake is the other direction: calling an
+ * available model "out for the day" silences the assistant, while waiting out a
+ * genuine daily cap only costs one wasted attempt.
+ */
+export function isDailyQuotaExhausted(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  // PerDay / PerDayPerProject / daily limits are the ones that do NOT clear
+  // within a reply budget.
+  return /per\s*day|perday/i.test(message);
+}
+
+/** True when a quota error is worth waiting out rather than switching away from. */
+export function isTransientQuota(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/per\s*day|perday/i.test(message)) return false;
+  const field = /"retryDelay"\s*:\s*"([\d.]+)s"/i.exec(message);
+  const phrase = /retry in ([\d.]+)s/i.exec(message);
+  const seconds = field?.[1] ?? phrase?.[1];
+  if (seconds == null) return false;
+  const ms = Number(seconds) * 1000;
+  return Number.isFinite(ms) && ms > 0 && ms <= 60_000;
+}
+
+export interface ProviderStatus {
+  /**
+   * A string literal, not the `ModelProvider` type from `llm.ts`: that module
+   * imports THIS one, so pulling the type in here would create an import cycle.
+   */
+  provider: "gemini" | "deepseek";
+  /** False when the provider has no key — it can only ever return 401. */
+  configured: boolean;
+  model: string;
+}
+
+/**
+ * Which providers are actually usable, for the operator's dashboard.
+ *
+ * The distinction matters operationally: the failover chain is only as good as
+ * the number of CONFIGURED providers, and with one key all of them share a
+ * single daily budget. A dashboard that says "failover configured: 1" explains
+ * an outage that a graph of model names cannot.
+ */
+export function providerStatus(): ProviderStatus[] {
+  return [
+    { provider: "gemini", configured: Boolean(AI_API_KEY), model: DEFAULT_MODEL },
+    { provider: "deepseek", configured: isDeepSeekConfigured, model: DEEPSEEK_MODEL },
+  ];
+}
+
+/** Number of providers that can actually answer — the failover capacity. */
+export function configuredProviderCount(): number {
+  return providerStatus().filter((p) => p.configured).length;
+}

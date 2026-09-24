@@ -210,15 +210,62 @@ async function respondToAuthorizedUser(phone: string, msg: WaInboundMessage): Pr
     logger.error({ err, phone }, "AI assistant: handling failed");
     const quota = isQuotaError(err);
     const timedOut = isTimeoutError(err);
-    const message = quota
-      ? "المساعد الذكي وصل لحد الاستخدام المسموح للمزودين حاليًا (حصة الموديلات اليومية). حاول مرة أخرى بعد قليل."
+    let message = quota
+      ? `المساعد الذكي وصل لحد الاستخدام المسموح من المزود حاليًا (حصة الموديلات المجانية). ${quotaResetHint()} جرّب سؤالًا أكثر تحديدًا (مثل رقم أمر التوريد) — كل سؤال يستهلك عدة طلبات من نفس الحصة.`
       : timedOut
         ? "استغرق الطلب وقتًا أطول من المسموح فتم إيقافه. جرّب سؤالًا أكثر تحديدًا (مثل رقم أمر التوريد) وسأجيب أسرع."
         : "تعذّر معالجة طلبك حاليًا. حاول مرة أخرى بعد قليل.";
+    if (quota) {
+      // A quota failure is NOT always a dead end: a census already handed to a
+      // background job keeps running (it reads mail locally and spends no model
+      // quota), so its report will still arrive. Saying only «quota exhausted»
+      // would make the operator re-send a request whose answer is already on the
+      // way — and each re-send is another wasted model call.
+      const active = await activeJobNote(phone).catch(() => "");
+      if (active) message = `${message}\n${active}`;
+    }
     try {
       await sendWhatsAppText(phone, message);
     } catch {
       /* ignore */
     }
   }
+}
+
+/**
+ * The Gemini free tier resets at midnight PACIFIC. Saying «حاول بعد قليل» invites
+ * the operator to retry during a window that CANNOT recover — a message that
+ * cannot be acted on. This is advisory only; if Google changes the reset the
+ * worst case is a stale hint, never a wrong action.
+ */
+function quotaResetHint(): string {
+  try {
+    const now = new Date();
+    const pacific = new Date(now.toLocaleString("en-US", { timeZone: "America/Los_Angeles" }));
+    const midnight = new Date(pacific);
+    midnight.setHours(24, 0, 0, 0);
+    const minutes = Math.max(1, Math.round((midnight.getTime() - pacific.getTime()) / 60_000));
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    const human = h > 0 ? `${h} ساعة${m ? ` و${m} دقيقة` : ""}` : `${m} دقيقة`;
+    return `تتجدد الحصة حوالي منتصف الليل بتوقيت الباسيفيك (بعد نحو ${human}). اضبط DEEPSEEK_API_KEY كمزوّد احتياطي لتجنّب التوقف.`;
+  } catch {
+    return "حاول مرة أخرى بعد قليل.";
+  }
+}
+
+/**
+ * A line telling the operator that a background job is still working (and will
+ * report on its own), or "" when there is nothing in flight. Kept here rather
+ * than in the prompt so it is stated even when the model never got a turn.
+ */
+async function activeJobNote(phone: string): Promise<string> {
+  const { listJobs } = await import("./jobs");
+  const jobs = await listJobs(phone, 5);
+  const active = jobs.find((j) => j.status === "queued" || j.status === "running");
+  if (!active) return "";
+  return (
+    `لكن مهمة الحصر #${active.id} لا تزال تعمل في الخلفية وتقرأ البريد مباشرة ` +
+    `(بدون استهلاك حصة الموديل)، وسيصلك تقريرها على واتساب عند الانتهاء.`
+  );
 }

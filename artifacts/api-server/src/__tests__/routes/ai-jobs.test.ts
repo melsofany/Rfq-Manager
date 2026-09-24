@@ -146,6 +146,50 @@ describe("async jobs", () => {
     expect(done?.progress).toEqual({ scanned: 100, matched: 42 });
   });
 
+  it("REQUEUES a job that hit a quota window instead of failing it", async () => {
+    // The operator's reported failure: 300 of 480 POs read, then the day's model
+    // quota ran out. The scan cursor is persisted, so the work is not lost — the
+    // job must continue rather than be reported as failed.
+    process.env.AI_JOB_RETRY_DELAY_MS = "1";
+    const { AiError } = await import("../../modules/ai-assistant/llm");
+    let calls = 0;
+    const { job } = await createJob({
+      phone: "2010",
+      kind: "email_census",
+      run: async () => {
+        calls += 1;
+        if (calls === 1) throw new AiError("429 quota exceeded (PerDay)", 429);
+        return { result: { complete: true } };
+      },
+    });
+    await pendingAiJobs();
+    const done = await getJob(job.id);
+    expect(calls).toBe(2);
+    expect(done?.status).toBe("completed");
+    expect(done?.attempts).toBe(1);
+  });
+
+  it("gives up (failed) once the requeue attempts are spent, never looping forever", async () => {
+    process.env.AI_JOB_RETRY_DELAY_MS = "1";
+    process.env.AI_JOB_MAX_ATTEMPTS = "2";
+    const { AiError } = await import("../../modules/ai-assistant/llm");
+    let calls = 0;
+    const { job } = await createJob({
+      phone: "2010",
+      kind: "email_census",
+      run: async () => {
+        calls += 1;
+        throw new AiError("429 quota exceeded (PerDay)", 429);
+      },
+    });
+    await pendingAiJobs();
+    const done = await getJob(job.id);
+    expect(calls).toBe(2); // bounded by AI_JOB_MAX_ATTEMPTS
+    expect(done?.status).toBe("failed");
+    delete process.env.AI_JOB_MAX_ATTEMPTS;
+    delete process.env.AI_JOB_RETRY_DELAY_MS;
+  });
+
   it("marks a job failed (never leaves it running) when the work throws", async () => {
     const { job } = await createJob({
       phone: "2010",
@@ -209,6 +253,7 @@ describe("async jobs", () => {
       result: null,
       error: null,
       jobKey: null,
+      attempts: 0,
       startedAt: null,
       finishedAt: null,
     });

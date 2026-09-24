@@ -19,6 +19,7 @@
 import { db, aiAssistantJobsTable } from "@workspace/db";
 import { and, eq, inArray, desc, sql } from "drizzle-orm";
 import { logger } from "../../shared/logger";
+import { isQuotaError } from "./llm";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -60,6 +61,8 @@ export interface JobRecord {
   result: unknown;
   error: string | null;
   jobKey: string | null;
+  /** How many times this job has been attempted (bounded requeue on quota). */
+  attempts: number;
   startedAt: Date | null;
   finishedAt: Date | null;
 }
@@ -82,6 +85,7 @@ function toRecord(r: any): JobRecord {
     result: r.result ?? null,
     error: r.error ?? null,
     jobKey: r.jobKey ?? null,
+    attempts: Number(r.attempts ?? 0),
     startedAt: r.startedAt ?? null,
     finishedAt: r.finishedAt ?? null,
   };
@@ -149,6 +153,7 @@ export async function updateJob(
     progress?: Record<string, unknown>;
     result?: unknown;
     error?: string | null;
+    attempts?: number;
   },
 ): Promise<void> {
   const set: Record<string, unknown> = { updatedAt: new Date() };
@@ -165,6 +170,7 @@ export async function updateJob(
   if (patch.progress !== undefined) set.progress = patch.progress;
   if (patch.result !== undefined) set.result = patch.result;
   if (patch.error !== undefined) set.error = patch.error;
+  if (patch.attempts !== undefined) set.attempts = patch.attempts;
   await (db as any).update(aiAssistantJobsTable).set(set).where(eq(aiAssistantJobsTable.id, id));
 }
 
@@ -221,17 +227,16 @@ export async function createJob(opts: CreateJobOpts): Promise<CreateJobResult> {
     }
     try {
       await updateJob(job.id, { status: "running" });
-      const out = await opts.run({
-        jobId: job.id,
-        report: async (progress) => {
-          await updateJob(job.id, { progress });
-        },
-      });
+      const out = await runWithQuotaRetries(opts, job);
       // A job the operator cancelled while it ran must NOT be flipped back to
       // `completed` — the cancellation is the final word on its status.
       const latest = await getJob(job.id);
       if (latest?.status === "cancelled") {
         logger.info({ jobId: job.id, kind: opts.kind }, "AI assistant: job cancelled by operator");
+        return;
+      }
+      if (latest?.status === "failed") {
+        // A quota-requeue gave up: the row already carries the reason.
         return;
       }
       await updateJob(job.id, { status: "completed", result: out?.result ?? null });
@@ -256,6 +261,83 @@ export async function createJob(opts: CreateJobOpts): Promise<CreateJobResult> {
 export async function pendingAiJobs(): Promise<void> {
   while (running.size > 0) {
     await Promise.allSettled([...running]);
+  }
+}
+
+/**
+ * How many times a job may be re-queued after a RECOVERABLE failure (an AI
+ * quota window, a provider outage). Bounded so a permanently broken job cannot
+ * retry forever, and the operator sees "failed" rather than an endless queue.
+ */
+function maxJobAttempts(): number {
+  return Number(process.env.AI_JOB_MAX_ATTEMPTS) || 3;
+}
+
+/** Backoff before re-running a requeued job — long enough for a quota to clear. */
+function jobRetryDelayMs(): number {
+  return Number(process.env.AI_JOB_RETRY_DELAY_MS) || 60_000;
+}
+
+/**
+ * True when a job failure is worth RETRYING rather than reporting.
+ *
+ * The distinction is the whole point of the quota work: a census that walked
+ * 300 of 480 POs and then hit the day's model quota has done real, DURABLE work
+ * (the scan session and cursor are persisted), so failing it discards a result
+ * that another provider or a later minute would finish. A malformed request or a
+ * code defect is NOT retried — retrying it just multiplies the failure.
+ */
+export function isRetryableJobError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  if (err instanceof JobDeliveryError) return false;
+  return (
+    isQuotaError(err) ||
+    /529|overloaded|capacity|rate limit|too many requests|timeout|timed out|ECONNRESET|ETIMEDOUT/i.test(
+      message,
+    )
+  );
+}
+
+/**
+ * Run the job body, re-queueing on a recoverable failure.
+ *
+ * A requeue is recorded on the ROW (`attempts` + `error`) before the retry, so
+ * an operator watching the dashboard sees why it is running again instead of a
+ * job that silently restarts. When the attempts are spent the failure is
+ * reported normally — a retry loop must not hide a real problem.
+ */
+async function runWithQuotaRetries(
+  opts: CreateJobOpts,
+  job: JobRecord,
+): Promise<{ result?: unknown } | void> {
+  const limit = maxJobAttempts();
+  let attempts = job.attempts ?? 0;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      return await opts.run({
+        jobId: job.id,
+        report: async (progress) => {
+          await updateJob(job.id, { progress });
+        },
+      });
+    } catch (err) {
+      if (!isRetryableJobError(err) || attempts + 1 >= limit) throw err;
+      attempts += 1;
+      const message = err instanceof Error ? err.message : String(err);
+      await updateJob(job.id, { attempts, error: message }).catch(() => {});
+      logger.warn(
+        { jobId: job.id, kind: opts.kind, attempt: attempts, limit, err },
+        "AI assistant: job hit a recoverable failure — re-queueing",
+      );
+      await new Promise((r) => setTimeout(r, jobRetryDelayMs()));
+      // The row may have been cancelled while we backed off.
+      const latest = await getJob(job.id);
+      if (latest?.status === "cancelled") {
+        throw err;
+      }
+      await updateJob(job.id, { status: "running", error: null }).catch(() => {});
+    }
   }
 }
 
