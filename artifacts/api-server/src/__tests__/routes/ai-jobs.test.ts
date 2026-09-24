@@ -36,6 +36,11 @@ vi.mock("@workspace/db", () => ({
     update: () => ({
       set: (v: any) => ({
         where: (w: any) => {
+          if (w?.__and) {
+            // The orphan sweep: marks every stale `running` row.
+            for (const r of rows) if (r.status === "running") Object.assign(r, v);
+            return Promise.resolve(rows);
+          }
           const id = w?.__eq?.[1];
           const row = rows.find((r) => r.id === id);
           if (row) Object.assign(row, v);
@@ -58,6 +63,17 @@ vi.mock("@workspace/db", () => ({
           limit: () => {
             // Either an id lookup (eq) or the active-job-by-key lookup (and).
             if (w?.__and) {
+              // The orphan sweep selects stale `running` rows and does NOT filter
+              // by jobKey — distinguish it from the active-by-key lookup.
+              const byKey = w.__and.some((x: any) => x.__eq?.[0] === jobsT.jobKey);
+              if (!byKey) {
+                const stale = rows.filter(
+                  (r) =>
+                    r.status === "running" &&
+                    (!r.updatedAt || r.updatedAt.getTime() < Date.now() - 60_000),
+                );
+                return Promise.resolve(stale.map((r) => ({ ...r })));
+              }
               const key = w.__and.find((x: any) => x.__eq?.[0] === jobsT.jobKey)?.__eq?.[1];
               const statuses =
                 w.__and.find((x: any) => x.__in?.[0] === jobsT.status)?.__in?.[1] ?? [];
@@ -105,6 +121,7 @@ const {
   pendingAiJobs,
   startCensusJob,
   JobDeliveryError,
+  markOrphanedJobs,
 } = await import("../../modules/ai-assistant/jobs");
 
 describe("async jobs", () => {
@@ -431,5 +448,43 @@ describe("async jobs", () => {
     // The artifact is intact despite the delivery failure.
     expect((done?.result as any)?.pages).toBe(12);
     expect((done?.result as any)?.topItems).toHaveLength(1);
+  });
+});
+
+describe("orphaned jobs (a restart must not leave a job promising work forever)", () => {
+  beforeEach(() => {
+    rows = [];
+    nextId = 1;
+  });
+
+  it("fails a stale `running` job whose worker died, so a re-issue starts fresh", async () => {
+    // Live evidence: job #38 sat `running` for 6 hours with progress=null after a
+    // deploy killed its worker. `findActiveJobByKey` counts `running` as active,
+    // so an identical re-issue RESUMED it and promised progress that could never
+    // happen — the "silence" failure again, this time invisible.
+    rows.push({
+      id: 38,
+      phone: "2010",
+      kind: "email_census",
+      status: "running",
+      jobKey: "census:*:EDC::::",
+      updatedAt: new Date(Date.now() - 6 * 3600_000),
+    });
+    const n = await markOrphanedJobs();
+    expect(n).toBe(1);
+    expect(rows[0].status).toBe("failed");
+  });
+
+  it("leaves a RECENTLY-started running job alone (it is genuinely working)", async () => {
+    rows.push({
+      id: 41,
+      phone: "2010",
+      kind: "email_census",
+      status: "running",
+      jobKey: "census:live",
+      updatedAt: new Date(),
+    });
+    expect(await markOrphanedJobs()).toBe(0);
+    expect(rows[0].status).toBe("running");
   });
 });
