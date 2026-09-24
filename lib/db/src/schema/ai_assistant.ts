@@ -131,6 +131,12 @@ export const aiAssistantJobsTable = pgTable("ai_assistant_jobs", {
   error: text("error"),
   /** Idempotency: a re-issued identical job resumes rather than restarts. */
   jobKey: text("job_key"),
+  /**
+   * How many times this job has been attempted. A job that failed on a
+   * recoverable cause (an AI quota window) is REQUEUED rather than failed, and
+   * this stops the retry from looping forever.
+   */
+  attempts: integer("attempts").notNull().default(0),
   startedAt: timestamp("started_at", { withTimezone: true }),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

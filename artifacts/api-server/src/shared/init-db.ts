@@ -1230,6 +1230,7 @@ export async function initDb(): Promise<void> {
         result JSONB,
         error TEXT,
         job_key TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
         started_at TIMESTAMPTZ,
         finished_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1240,6 +1241,14 @@ export async function initDb(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_ai_jobs_key
         ON ai_assistant_jobs (job_key, status);
     `);
+
+    // Existing job tables lack `attempts` (added with the quota-requeue work).
+    // Own statement: statements share an implicit transaction, so a sibling
+    // failure could roll this ALTER back silently and leave the requeue path
+    // writing to a column that does not exist.
+    await client.query(
+      `ALTER TABLE ai_assistant_jobs ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0`,
+    );
 
     // Persisted scan sessions. The resumable email/item census keeps its cursor
     // and parsed rows here, so a restart resumes instead of re-reading a

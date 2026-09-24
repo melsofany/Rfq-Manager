@@ -1849,3 +1849,50 @@ Two layout defects the operator hit on the EDC census report, both of which made
 - Tests: `ai-pdf-layout.test.ts` (5; the footer-stamp and column-width guards fail against the pre-fix source). **887 api-server tests** in 74 files pass; tsc (libs + api-server) clean; repo-wide prettier clean; api-server build clean.
 - Deploy: pending — push/PR only on explicit request.
 
+## Provider quota is the assistant's dominant failure mode — classify the 429, requeue the job
+
+Reported live (24/09): the operator sent an EDC-census task and the assistant
+answered only «المساعد الذكي وصل لحد الاستخدام المسموح للمزودين حاليًا (حصة
+الموديلات اليومية)». The operator was explicit that the TASK was fine — the
+agent started it and the PROVIDER rejected it. Diagnosis, and the traps:
+
+- **The retry delay cannot classify a 429.** Gemini's free tier has two limits
+  behind the same status, and measured live BOTH report a short delay: the
+  per-MINUTE cap and the **per-DAY** cap
+  (`quotaId=GenerateRequestsPerDayPerProjectPerModel-FreeTier`, `limit: 20`)
+  both say «Please retry in 25.7s». The delay-only classifier therefore called a
+  limit that clears TOMORROW a "short window" and busy-waited on it. The
+  discriminator is the `PerDay`/`perday` marker in the body — see
+  `isDailyQuotaExhausted` / `isTransientQuota` in `config.ts`. An unmarked 429 is
+  treated as transient on purpose: the expensive error is the other direction
+  (calling an available model "out for the day" silences the assistant).
+- **Blacklist a model only when the provider said it is out for the DAY.** The
+  old code remembered a model whenever no short delay was stated, so a
+  seconds-long window could drop the best model for an hour. A short cap that
+  could not be waited out is deliberately NOT remembered.
+- **Failover is only as real as the configured keys.** The deployed service had
+  `AI_API_KEY` (Gemini) and **no** `DEEPSEEK_API_KEY`, so the whole chain shared
+  ONE 20-request/day/model budget with nothing to fall back to. `providerStatus()`
+  / `configuredProviderCount()` surface this on `GET /ai-assistant/models` — a
+  dashboard that shows "configuredProviders: 1" explains the outage that a list
+  of model names cannot. `ProviderStatus.provider` is a string union, NOT the
+  `ModelProvider` type from `llm.ts`, because `llm.ts` imports `config.ts` and
+  the type import would be a cycle.
+- **A recoverable failure must REQUEUE the job, not fail it.**
+  `ai_assistant_jobs.attempts` (+ its own `ALTER TABLE`, per the SQL-comment
+  rule); `isRetryableJobError` treats quota/overload/timeouts as retryable and a
+  malformed request or code defect as permanent; `runWithQuotaRetries` backs off
+  `AI_JOB_RETRY_DELAY_MS` (60s) up to `AI_JOB_MAX_ATTEMPTS` (3). This matters
+  because the census has already done durable work — the scan cursor is
+  persisted — so failing it discards a result the next minute would finish.
+  A cancel that lands during the backoff is honoured (rethrow, do not restart).
+- **The quota message must not contradict a running job.** A background census
+  reads mail LOCALLY and spends no model quota, so its report still arrives after
+  the chat turn 429s. `activeJobNote()` appends that fact, so the operator does
+  not re-send a request whose answer is already on the way (every re-send is
+  another wasted model call).
+- Tests: `ai-failover.test.ts` (6 — 5 fail against the pre-fix source, verified
+  by stashing) + 2 requeue cases in `ai-jobs.test.ts`. **895 api-server tests** in
+  75 files pass; tsc (libs + api-server + portal) clean; repo-wide prettier
+  clean; api-server build clean.
+

@@ -15,6 +15,7 @@ import {
   DEEPSEEK_FALLBACK_MODELS,
   DEEPSEEK_MODEL,
   FALLBACK_MODELS,
+  isDailyQuotaExhausted,
   isDeepSeekEndpoint,
   isGeminiEndpoint,
 } from "./config";
@@ -339,12 +340,18 @@ export async function chatCompletion(opts: {
           }
 
           if (status != null && SWITCH_MODEL.has(status)) {
-            // Gemini states how long the limit lasts. Honour it once when it is
-            // short, so a brief per-minute cap doesn't demote us to a weaker
-            // model for the rest of the conversation.
+            // A 429 is two different things and the delay alone cannot tell them
+            // apart: the per-MINUTE cap says «retry in 25.7s» and so does the
+            // per-DAY cap (measured live — the daily one even reports a 25s
+            // delay). Only the daily marker means "switch model"; anything else
+            // is a short window the SAME model will serve after a wait, which
+            // keeps the better model instead of demoting the conversation to a
+            // weaker one for its remaining rounds.
             const delayMs = parseRetryDelayMs(err.message);
+            const daily = isDailyQuotaExhausted(err);
             if (
               status === 429 &&
+              !daily &&
               !waitedForQuota &&
               delayMs != null &&
               delayMs <= MAX_QUOTA_WAIT_MS &&
@@ -353,19 +360,30 @@ export async function chatCompletion(opts: {
               waitedForQuota = true;
               logger.info(
                 { model, delayMs },
-                "AI assistant: rate limited for a few seconds, waiting instead of downgrading",
+                "AI assistant: rate limited for a short window, waiting instead of downgrading",
               );
               await sleep(delayMs + 400);
               attempt--; // the wait is not a failed attempt against this model
               continue;
             }
-            // No short retry given: this model is out for the day. Remember it so
-            // the remaining tool-calling rounds don't re-probe it — each wasted
-            // probe is a round-trip the operator waits through.
-            if (delayMs == null) markModelExhausted(model);
+            // A daily cap is out until the provider's reset — remember it so the
+            // remaining tool-calling rounds don't re-probe it. A short cap that
+            // we could not wait out (no delay stated, or too long for the
+            // remaining budget) is NOT remembered: the model is likely fine on
+            // the next question, and a stale 1-hour blacklist would silence a
+            // model that has recovered.
+            if (daily) markModelExhausted(model);
             logger.warn(
-              { model, provider, status, retryAfter: delayMs != null ? delayMs / 1000 : undefined },
-              "AI assistant: model unavailable, trying next model",
+              {
+                model,
+                provider,
+                status,
+                daily,
+                retryAfter: delayMs != null ? delayMs / 1000 : undefined,
+              },
+              daily
+                ? "AI assistant: model out for the day, trying next model"
+                : "AI assistant: model unavailable, trying next model",
             );
             continue outer;
           }
