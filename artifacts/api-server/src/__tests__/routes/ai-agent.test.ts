@@ -899,4 +899,130 @@ describe("AI assistant agent loop", () => {
       expect(m.confidence).toBe("PARTIALLY_VERIFIED");
     });
   });
+
+  // ── Task execution control (OpenManus-derived) ─────────────────────────────
+  describe("task execution control", () => {
+    it("steers the model after a tool call fails the same way twice", async () => {
+      // The reported "fails at many tasks" loop: the model re-issues the SAME
+      // broken call until the budget is gone. The run must notice and inject a
+      // strategy-change instruction instead of looping blind.
+      let rounds = 0;
+      const seenSteer: boolean[] = [];
+      chatCompletion.mockImplementation((args: any) => {
+        rounds += 1;
+        // A correction-instructing user turn is present once steering has fired.
+        seenSteer.push(
+          args.messages.some(
+            (m: any) =>
+              m.role === "user" &&
+              typeof m.content === "string" &&
+              m.content.includes("غيّر الاستراتيجية"),
+          ),
+        );
+        if (args.toolChoice === "none") {
+          return Promise.resolve({ content: "تم.", finishReason: "stop", toolCalls: [] });
+        }
+        return Promise.resolve({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [
+            {
+              id: "c" + rounds,
+              type: "function",
+              // Identical args every time → the same signature failing repeatedly.
+              function: { name: "search_database", arguments: '{"table":"nope"}' },
+            },
+          ],
+        });
+      });
+      executeTool.mockResolvedValue({ ok: false, error: "Unknown table nope" });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      await runAgent({ phone: "2010", text: "?" });
+
+      // Before steering fired, no correction turn was present; afterwards it is.
+      expect(seenSteer[0]).toBe(false);
+      expect(seenSteer.some(Boolean)).toBe(true);
+    });
+
+    it("does not spend an extra round on a fast-path lookup that never answers", async () => {
+      // A model that repeats a COMPLETED lookup has not progressed, so the
+      // progress extension must not fire: the fast path stays at its 2 rounds.
+      let rounds = 0;
+      chatCompletion.mockImplementation((args: any) => {
+        rounds += 1;
+        if (args.toolChoice === "none") {
+          return Promise.resolve({ content: "تم.", finishReason: "stop", toolCalls: [] });
+        }
+        return Promise.resolve({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [
+            {
+              id: "c" + rounds,
+              type: "function",
+              function: { name: "lookup_document", arguments: '{"number":"P26E11407"}' },
+            },
+          ],
+        });
+      });
+      executeTool.mockResolvedValue({ ok: true, data: { found: true } });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const { FAST_MAX_ROUNDS } = await import("../../modules/ai-assistant/router");
+      await runAgent({ phone: "2010", text: "أمر الشراء P26E11407 تبع مين؟" });
+      expect(rounds).toBe(FAST_MAX_ROUNDS);
+    });
+
+    it("grants one extra round when a tool reports more work remains", async () => {
+      // The resumable-census case: the tool says «there is more, call again».
+      // The fixed budget used to abandon the scan here; one extra round is
+      // granted so the census can continue.
+      let rounds = 0;
+      chatCompletion.mockImplementation((args: any) => {
+        rounds += 1;
+        if (args.toolChoice === "none") {
+          return Promise.resolve({ content: "تم.", finishReason: "stop", toolCalls: [] });
+        }
+        return Promise.resolve({
+          content: null,
+          finishReason: "tool_calls",
+          toolCalls: [
+            {
+              id: "c" + rounds,
+              type: "function",
+              function: { name: "scan_email_items", arguments: '{"question":"EDC"}' },
+            },
+          ],
+        });
+      });
+      // A tool result that explicitly reports remaining work.
+      executeTool.mockResolvedValue({
+        ok: true,
+        data: { isComplete: false, remainingMessages: 2888, continueHint: "أكمل" },
+      });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const { DEEP_MAX_ROUNDS } = await import("../../modules/ai-assistant/router");
+      await runAgent({ phone: "2010", text: "اعمل حصر لكل PO في البريد خلال 2026" });
+      // Deep budget + exactly one progress extension.
+      expect(rounds).toBe(DEEP_MAX_ROUNDS + 1);
+    });
+
+    it("records the task trace on the answer metrics", async () => {
+      const metrics = await import("../../modules/ai-assistant/metrics");
+      metrics.resetMetrics();
+      chatCompletion.mockResolvedValueOnce({
+        content: "تم.",
+        finishReason: "stop",
+        toolCalls: [],
+      });
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      await runAgent({ phone: "2010", text: "مرحبا" });
+      const [m] = metrics.recentMetrics(1);
+      expect(m.task).toBeDefined();
+      expect(m.task?.steps).toBe(0);
+      expect(m.task?.steers).toBe(0);
+    });
+  });
 });
