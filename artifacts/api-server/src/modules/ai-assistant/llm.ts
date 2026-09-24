@@ -10,7 +10,12 @@ import {
   AI_API_KEY,
   DEFAULT_BASE_URL,
   DEFAULT_MODEL,
+  DEEPSEEK_API_KEY,
+  DEEPSEEK_BASE_URL,
+  DEEPSEEK_FALLBACK_MODELS,
+  DEEPSEEK_MODEL,
   FALLBACK_MODELS,
+  isDeepSeekEndpoint,
   isGeminiEndpoint,
 } from "./config";
 
@@ -55,6 +60,12 @@ export interface ChatMessage {
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   name?: string;
+  /**
+   * The reasoning variant returns the model's chain of thought on its assistant
+   * turns. Captured so it can be echoed back on a tool-call turn (DeepSeek's
+   * documented thinking-mode contract) — see `withReasoningEcho`.
+   */
+  reasoning_content?: string;
 }
 
 export interface ToolDefinition {
@@ -72,6 +83,24 @@ export interface ChatResult {
   finishReason: string | null;
   /** The model that actually produced this result (not necessarily the primary). */
   modelUsed?: string;
+  /** The provider that actually produced this result ("gemini" | "deepseek"). */
+  providerUsed?: ModelProvider;
+  /**
+   * The model's reasoning, when the provider returns it (DeepSeek thinking
+   * mode). Echoed back on the assistant tool-call turn — see `ChatMessage`.
+   */
+  reasoningContent?: string;
+}
+
+/** Provider identity, used for the per-model exhaustion memory and the logs. */
+export type ModelProvider = "gemini" | "deepseek";
+
+/** One model on one provider, with everything needed to call it. */
+interface ModelCandidate {
+  model: string;
+  base: string;
+  apiKey: string;
+  provider: ModelProvider;
 }
 
 export class AiError extends Error {
@@ -111,10 +140,26 @@ export function isTimeoutError(err: unknown): boolean {
   return /abort|timed? ?out|budget/i.test(msg);
 }
 
+/**
+ * True when a 400 means THIS model cannot handle the request's content rather
+ * than the request being malformed.
+ *
+ * Measured live: `deepseek-chat` rejects an image part with 400 while the
+ * reasoning model accepts it, and `tool_choice:"none"` is refused by some
+ * models. A 400 is normally permanent (the same request fails on every model),
+ * but a capability gap is the opposite — the next model may well serve it. The
+ * distinction has to be made from the message, because the status is identical.
+ */
+function isCapabilityMismatch(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /unsupported image|image_url|tool_choice|does not support (images?|tools?|vision)/i.test(
+    msg,
+  );
+}
+
 /** Single attempt against one model. Throws AiError; 429/503 are retryable. */
 async function requestCompletion(opts: {
-  model: string;
-  base: string;
+  candidate: ModelCandidate;
   body: string;
   /** Combined with the per-attempt timeout; aborts when the caller's budget ends. */
   signal?: AbortSignal;
@@ -129,11 +174,11 @@ async function requestCompletion(opts: {
     else opts.signal.addEventListener("abort", onOuterAbort, { once: true });
   }
   try {
-    const res = await fetch(`${opts.base}/chat/completions`, {
+    const res = await fetch(`${opts.candidate.base}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${AI_API_KEY}`,
+        Authorization: `Bearer ${opts.candidate.apiKey}`,
       },
       body: opts.body,
       signal: controller.signal,
@@ -144,15 +189,21 @@ async function requestCompletion(opts: {
     }
     const json = JSON.parse(text) as {
       choices?: Array<{
-        message?: { content?: string | null; tool_calls?: ToolCall[] };
+        message?: {
+          content?: string | null;
+          tool_calls?: ToolCall[];
+          reasoning_content?: string | null;
+        };
         finish_reason?: string;
       }>;
     };
     const choice = json.choices?.[0];
+    const reasoning = choice?.message?.reasoning_content;
     return {
       content: choice?.message?.content ?? null,
       toolCalls: choice?.message?.tool_calls ?? [],
       finishReason: choice?.finish_reason ?? null,
+      reasoningContent: typeof reasoning === "string" ? reasoning : undefined,
     };
   } catch (err) {
     if (err instanceof AiError) throw err;
@@ -184,16 +235,16 @@ export async function chatCompletion(opts: {
    */
   signal?: AbortSignal;
 }): Promise<ChatResult> {
-  if (!AI_API_KEY) {
+  if (!AI_API_KEY && !DEEPSEEK_API_KEY) {
     throw new AiError("AI_API_KEY / OPENAI_API_KEY not configured");
   }
-  const base = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const primaryBase = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const hasTools = Boolean(opts.tools && opts.tools.length);
   const toolChoice = opts.toolChoice ?? "auto";
   const buildBody = (model: string) =>
     JSON.stringify({
       model,
-      messages: opts.messages,
+      messages: withReasoningEcho(opts.messages),
       tools: hasTools ? opts.tools : undefined,
       tool_choice: hasTools ? toolChoice : undefined,
       temperature: opts.temperature ?? 0.2,
@@ -218,7 +269,7 @@ export async function chatCompletion(opts: {
    * switching models immediately.
    */
   const MAX_QUOTA_WAIT_MS = 5_000;
-  const candidates = modelChain(opts.model);
+  const candidates = modelChain(opts.model, primaryBase);
   let lastError: AiError | null = null;
 
   // One deadline for the whole chain. Checked before each attempt so the chain
@@ -248,7 +299,8 @@ export async function chatCompletion(opts: {
   const perModelMs = Math.max(5_000, Math.floor(budgetMs / Math.max(candidates.length, 1)));
 
   try {
-    outer: for (const model of candidates) {
+    outer: for (const candidate of candidates) {
+      const { model, provider } = candidate;
       let waitedForQuota = false;
       const modelDeadline = Date.now() + perModelMs;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -260,21 +312,29 @@ export async function chatCompletion(opts: {
         }
         try {
           const result = await requestCompletion({
-            model,
-            base,
+            candidate,
             body: buildBody(model),
             signal: budget.signal,
           });
-          rememberWorkingModel(model);
-          return { ...result, modelUsed: model };
+          rememberWorkingModel(model, provider);
+          return { ...result, modelUsed: model, providerUsed: provider };
         } catch (err) {
           if (!(err instanceof AiError)) throw err;
           lastError = err;
           const status = err.status;
 
           // A permanent error (bad request, auth) is the same on every model —
-          // surface it immediately instead of burning the fallbacks.
+          // surface it immediately instead of burning the fallbacks. The one
+          // exception is a capability gap: the model cannot read an image or
+          // refuses the tool choice, which the NEXT model may handle.
           if (status != null && !SWITCH_MODEL.has(status) && !RETRYABLE.has(status)) {
+            if (status === 400 && isCapabilityMismatch(err)) {
+              logger.warn(
+                { model, provider, status },
+                "AI assistant: model cannot handle this content, trying next model",
+              );
+              continue outer;
+            }
             throw err;
           }
 
@@ -304,7 +364,7 @@ export async function chatCompletion(opts: {
             // probe is a round-trip the operator waits through.
             if (delayMs == null) markModelExhausted(model);
             logger.warn(
-              { model, status, retryAfter: delayMs != null ? delayMs / 1000 : undefined },
+              { model, provider, status, retryAfter: delayMs != null ? delayMs / 1000 : undefined },
               "AI assistant: model unavailable, trying next model",
             );
             continue outer;
@@ -323,7 +383,7 @@ export async function chatCompletion(opts: {
         }
       }
       logger.warn(
-        { model, status: lastError?.status },
+        { model, provider, status: lastError?.status },
         "AI assistant: model exhausted, trying next",
       );
     }
@@ -335,40 +395,142 @@ export async function chatCompletion(opts: {
 }
 
 /**
- * Models to try, in order, for one completion.
+ * Which provider a model id belongs to.
  *
- * The first choice is whatever last succeeded for this process. Without this,
- * every round of the same tool-calling conversation re-walked the chain from
- * the top: a primary model that is out for the day (429) got re-probed on each
- * of up to 5 rounds, adding a wasted round-trip each time — the difference
- * between a snappy answer and a visibly slow one. Known-exhausted models are
- * skipped entirely.
+ * The endpoint decides in the normal case. The exception is an operator picking
+ * a DeepSeek model in the settings while `AI_BASE_URL` still points at Gemini
+ * (the default): the id must be routed to DeepSeek's own endpoint, or the
+ * request would ask Gemini for a model it has never heard of and 404.
  */
-function modelChain(primary: string): string[] {
+function resolveProvider(model: string, base: string): ModelProvider {
+  if (isDeepSeekEndpoint(base)) return "deepseek";
+  if (model === DEEPSEEK_MODEL || DEEPSEEK_FALLBACK_MODELS.includes(model)) return "deepseek";
+  return isGeminiEndpoint(base) ? "gemini" : "deepseek";
+}
+
+/** Everything needed to call one provider: base URL, key and its own chain. */
+function providerConfig(provider: ModelProvider, primaryBase: string) {
+  if (provider === "deepseek") {
+    return {
+      base: DEEPSEEK_BASE_URL.replace(/\/+$/, ""),
+      apiKey: DEEPSEEK_API_KEY,
+      chain: [DEEPSEEK_MODEL, ...DEEPSEEK_FALLBACK_MODELS],
+    };
+  }
+  return { base: primaryBase, apiKey: AI_API_KEY, chain: FALLBACK_MODELS };
+}
+
+/**
+ * Models to try, in order, for one completion, across BOTH providers.
+ *
+ * Order of business:
+ *  1. Whatever last succeeded for this process (a warm model is the cheapest
+ *     and most likely to answer again).
+ *  2. The requested model on its own endpoint.
+ *  3. The rest of that provider's chain.
+ *  4. The OTHER provider's chain — this is the point of the change: when
+ *     Gemini's per-model daily quota is spent, its whole chain is out and only
+ *     a different provider can answer.
+ *
+ * Known-exhausted models are skipped entirely. Each candidate carries its own
+ * base URL and key, because the two providers differ in both.
+ */
+function modelChain(primary: string, primaryBase: string): ModelCandidate[] {
+  let primaryProvider = resolveProvider(primary, primaryBase);
+  // A provider with no key can only ever return 401 — a permanent error that
+  // would short-circuit the chain. Use the other provider instead.
+  const keyFor = (p: ModelProvider) => (p === "deepseek" ? DEEPSEEK_API_KEY : AI_API_KEY);
+  if (!keyFor(primaryProvider)) {
+    const other: ModelProvider = primaryProvider === "deepseek" ? "gemini" : "deepseek";
+    if (keyFor(other)) {
+      logger.warn(
+        { model: primary, provider: primaryProvider },
+        "AI assistant: primary provider has no key — using the configured provider",
+      );
+      primaryProvider = other;
+    }
+  }
+
+  const cfg = providerConfig(primaryProvider, primaryBase);
+  const primaryChain: ModelCandidate[] = [primary, ...cfg.chain.filter((m) => m !== primary)].map(
+    (m) => ({ model: m, base: cfg.base, apiKey: cfg.apiKey, provider: primaryProvider }),
+  );
+
+  // The secondary provider is offered only when it is configured and is
+  // genuinely a different provider — pointing AI_BASE_URL at DeepSeek must not
+  // enqueue DeepSeek twice.
+  const secondaryChain: ModelCandidate[] = [];
+  const secondaryProvider: ModelProvider | null =
+    primaryProvider === "deepseek" ? "gemini" : DEEPSEEK_API_KEY ? "deepseek" : null;
+  if (secondaryProvider) {
+    const sec = providerConfig(secondaryProvider, primaryBase);
+    if (sec.apiKey) {
+      for (const m of sec.chain) {
+        secondaryChain.push({
+          model: m,
+          base: sec.base,
+          apiKey: sec.apiKey,
+          provider: secondaryProvider,
+        });
+      }
+    }
+  }
+
+  const ordered = [...primaryChain, ...secondaryChain];
+
+  // A warm model is promoted to the front.
   const preferred = lastWorkingModel();
-  const ordered = [
-    ...(preferred && preferred !== primary ? [preferred] : []),
-    primary,
-    ...FALLBACK_MODELS.filter((m) => m !== primary && m !== preferred),
-  ];
-  const usable = ordered.filter((m) => !isModelExhausted(m));
+  if (preferred) {
+    const i = ordered.findIndex((c) => c.model === preferred);
+    if (i > 0) ordered.unshift(ordered.splice(i, 1)[0]);
+  }
+
+  const usable = ordered.filter((c) => !isModelExhausted(c.model));
   // If every model is remembered as out, the memory is stale rather than the
   // world having ended — try them all again instead of failing instantly, so
   // the caller still surfaces the provider's own quota error.
   return usable.length > 0 ? usable : ordered;
 }
 
+/**
+ * Populate `reasoning_content` on every assistant tool-call turn.
+ *
+ * DeepSeek's thinking mode documents that the reasoning must be passed back on
+ * the following request; the turn may have come from Gemini (which returns no
+ * such field) or from the non-reasoning DeepSeek model, so the echo cannot rely
+ * on it having been captured. An empty string is accepted as the placeholder
+ * (measured live 2026-09), which satisfies the contract without inventing
+ * reasoning. Measured on this key the API also accepts the field being absent,
+ * so this is compatibility rather than a workaround — but it is the documented
+ * shape and costs nothing.
+ *
+ * Only tool-call turns are touched: a plain assistant text turn is accepted
+ * either way, and adding a field there would be noise.
+ */
+export function withReasoningEcho(messages: ChatMessage[]): ChatMessage[] {
+  let changed = false;
+  const out = messages.map((m) => {
+    if (m.role !== "assistant" || !m.tool_calls?.length) return m;
+    if (typeof m.reasoning_content === "string") return m;
+    changed = true;
+    return { ...m, reasoning_content: "" };
+  });
+  return changed ? out : messages;
+}
+
 /** Model that most recently answered, reused for the next request. */
 let cachedWorkingModel: string | null = null;
+let cachedWorkingProvider: ModelProvider | null = null;
 
 function lastWorkingModel(): string | null {
   return cachedWorkingModel;
 }
 
-function rememberWorkingModel(model: string): void {
-  if (cachedWorkingModel !== model) {
+function rememberWorkingModel(model: string, provider: ModelProvider): void {
+  if (cachedWorkingModel !== model || cachedWorkingProvider !== provider) {
     cachedWorkingModel = model;
-    logger.info({ model }, "AI assistant: using model");
+    cachedWorkingProvider = provider;
+    logger.info({ model, provider }, "AI assistant: using model");
   }
 }
 
@@ -397,7 +559,13 @@ function isModelExhausted(model: string): boolean {
 /** Test seam: clear the model-selection memory between cases. */
 export function resetModelState(): void {
   cachedWorkingModel = null;
+  cachedWorkingProvider = null;
   exhaustedUntil.clear();
+}
+
+/** Test seam: inspect the cross-provider candidate chain without a request. */
+export function modelChainForTest(primary: string, primaryBase: string) {
+  return modelChain(primary, primaryBase);
 }
 
 /**
@@ -426,11 +594,14 @@ export function isQuotaError(err: unknown): boolean {
  * Used by the admin UI to offer valid choices instead of free text.
  */
 export async function listModels(baseUrl?: string | null): Promise<string[]> {
-  if (!AI_API_KEY) return [];
   const base = (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  // Each provider is queried with its OWN key: asking the Gemini endpoint with
+  // the DeepSeek key (or vice versa) only yields an empty list.
+  const key = isDeepSeekEndpoint(base) ? DEEPSEEK_API_KEY : AI_API_KEY;
+  if (!key) return [];
   try {
     const res = await fetch(`${base}/models`, {
-      headers: { Authorization: `Bearer ${AI_API_KEY}` },
+      headers: { Authorization: `Bearer ${key}` },
     });
     if (!res.ok) return [];
     const json = (await res.json()) as { data?: Array<{ id?: string }> };
@@ -442,6 +613,22 @@ export async function listModels(baseUrl?: string | null): Promise<string[]> {
     logger.warn({ err }, "AI assistant: model listing failed");
     return [];
   }
+}
+
+/**
+ * List the models the configured PRIMARY provider offers, followed by the
+ * DeepSeek fallback's when it is configured. The admin UI shows one list so an
+ * operator can pick a model from either provider; the provider is inferred from
+ * the chosen id's chain when the request is made.
+ */
+export async function listAllModels(baseUrl?: string | null): Promise<string[]> {
+  const primary = await listModels(baseUrl);
+  const base = (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const extras: string[] = [];
+  if (!isDeepSeekEndpoint(base) && DEEPSEEK_API_KEY) {
+    extras.push(...(await listModels(DEEPSEEK_BASE_URL)));
+  }
+  return Array.from(new Set([...primary, ...extras])).sort();
 }
 
 /**
@@ -466,6 +653,11 @@ export async function transcribeAudio(
   if (isGeminiEndpoint(baseUrl)) {
     return extractWithGemini(buffer, mimeType, TRANSCRIBE_PROMPT, baseUrl, model);
   }
+  // DeepSeek exposes no /audio/transcriptions endpoint (404) and its files API
+  // takes images only, so a voice note cannot be transcribed there. Returning
+  // null lets the caller degrade to its "could not transcribe" notice instead of
+  // posting a request that can only fail.
+  if (isDeepSeekEndpoint(baseUrl)) return null;
   return transcribeWithWhisper(buffer, mimeType, baseUrl);
 }
 
@@ -495,6 +687,8 @@ export async function extractDocumentText(
   model?: string | null,
 ): Promise<string | null> {
   if (!AI_API_KEY) return null;
+  // DeepSeek accepts images but not PDFs (its files API rejects a PDF upload), so
+  // it cannot read a document; the local pdf-parse path handles PDFs instead.
   if (!isGeminiEndpoint(baseUrl)) return null;
   return extractWithGemini(buffer, mimeType, DOCUMENT_PROMPT, baseUrl, model);
 }

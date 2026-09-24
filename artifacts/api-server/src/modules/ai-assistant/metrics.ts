@@ -32,6 +32,14 @@ export interface RequestMetrics {
   fallbackUsed: boolean;
   /** The primary model the router selected for this path (P6 model routing). */
   model: string;
+  /**
+   * The model that actually answered, when it differs from `model` — set on a
+   * fallback. On the two-provider setup this is how a DeepSeek rescue is visible:
+   * `model` stays the Gemini id the router picked, `modelUsed` names what spoke.
+   */
+  modelUsed?: string;
+  /** The provider that answered ("gemini" | "deepseek"). */
+  provider?: string;
   latencyMs: number;
   /** Set when the run ended in a timeout/quota error instead of an answer. */
   outcome: "answered" | "timeout" | "quota" | "error";
@@ -62,6 +70,8 @@ export function recordMetrics(m: RequestMetrics): void {
       verified: m.verified,
       fallbackUsed: m.fallbackUsed,
       model: m.model,
+      modelUsed: m.modelUsed,
+      provider: m.provider,
       latencyMs: m.latencyMs,
       outcome: m.outcome,
     },
