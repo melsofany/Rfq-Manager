@@ -356,6 +356,12 @@ const TEACH_PATTERNS = [
   /خلي\s+في\s+بالك\s+(?:إن|ان|أن)?\s*(.+)/i,
   /من\s+الآن\s+(?:اعتبر|اعتبرها|خد\s+بالك)?\s*(.+)/i,
   /(?:اعتمد|اعمل)\s+القاعدة\s+(?:إن|ان|أن)?\s*(.+)/i,
+  // An explicit RULE directive is a teaching even without «افتكر»: live, the
+  // operator wrote «أريد منك تسجيل هذه القاعدة كـ قاعدة أساسية ثابتة … وتطبيقها
+  // في جميع المهام المستقبلية المشابهة» — a standing instruction the assistant
+  // must apply to every future request, not a one-off task description.
+  /(?:سجل|خذ|اعتبر)\s+هذه\s+القاعدة\s*(.+)/i,
+  /قاعدة\s+(?:أساسية|ثابتة)\s*(.+)/i,
   /\bremember\s+(?:that\s+)?(.+)/i,
 ];
 

@@ -306,6 +306,19 @@ describe("distillMemories (quota-free learning)", () => {
     expect(rows.some((r) => r.category === "lesson")).toBe(true);
   });
 
+  it("learns an explicit RULE directive that never says «افتكر»", async () => {
+    // The operator's real wording — a standing instruction to apply to every
+    // future task. Missing it means the rule he asked to be recorded is never
+    // stored, so the assistant has nothing to recall on the next request.
+    await distillMemories({
+      phone: "2010",
+      userText:
+        "أريد منك تسجيل هذه القاعدة كـ قاعدة أساسية ثابتة في منطق تحليل أوامر الشراء، وتطبيقها في جميع المهام المستقبلية المشابهة.",
+      assistantText: "تم الحفظ",
+    });
+    expect(rows.some((r) => r.category === "rule")).toBe(true);
+  });
+
   it("stores nothing for an ordinary question (no false learning)", async () => {
     await distillMemories({
       phone: "2010",
