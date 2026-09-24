@@ -57,6 +57,7 @@ import {
   itemsAggregateCsv,
   aggregateItems,
   aggregateItemsByOccurrence,
+  type ParsedLineItem,
 } from "./email-items";
 import { runItemScan, sessionAttachmentCoverage } from "./item-scan-session";
 import {
@@ -79,6 +80,7 @@ import {
   cancelJob,
   describeJob,
   startCensusJob,
+  JobDeliveryError,
   type CensusJobArgs,
 } from "./jobs";
 import { sendWhatsAppText, sendWhatsAppDocument } from "../communications/service";
@@ -834,6 +836,22 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
     {
       type: "function",
       function: {
+        name: "resend_job_report",
+        description:
+          "أعِد إرسال تقرير مهمة حصر مكتملة على واتساب من النتيجة المحفوظة، **بدون** إعادة " +
+          "الفحص. استخدمها عندما يقول المستخدم «لم يصل الملف» أو «ابعته تاني» أو «مفيش تقرير " +
+          "وصل» بعد مهمة انتهت. لا تعِد تشغيل الحصر — النتيجة محفوظة ويمكن إرسالها كما هي.",
+        parameters: {
+          type: "object",
+          properties: {
+            id: { type: "integer", description: "رقم المهمة (اتركه فارغًا لآخر مهمة مكتملة)" },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
         name: "start_census_job",
         description:
           "ابدأ حصر بنود البريد في الخلفية (مهمة غير متزامنة) عندما يكون الحصر كبيرًا " +
@@ -1218,18 +1236,34 @@ async function launchCensusJob(
       const { runItemScan } = await import("./item-scan-session");
       return runItemScan(key, scanArgs, deadline);
     },
-    finish: async ({ phone, session }) => {
+    finish: async ({ phone, session, save }) => {
       const s = session as {
         census?: { matched?: number };
-        coverage?: { messages?: number; lines?: number; attachments?: number };
-        items?: unknown[];
+        coverage?: {
+          messages?: number;
+          lines?: number;
+          attachments?: number;
+          pages?: number;
+          readable?: number;
+          unreadable?: number;
+          noAttachment?: number;
+          poDocuments?: number;
+          rfqDocuments?: number;
+          unknownDocuments?: number;
+        };
+        items?: ParsedLineItem[];
         complete?: boolean;
       };
+      const cov = s?.coverage ?? {};
       const matched = s?.census?.matched ?? 0;
-      const opened = s?.coverage?.messages ?? 0;
-      const lines = s?.coverage?.lines ?? 0;
-      const files = s?.coverage?.attachments ?? 0;
+      const opened = cov.messages ?? 0;
+      const lines = cov.lines ?? 0;
+      const files = cov.attachments ?? 0;
+      const pages = cov.pages ?? 0;
+      const unreadable = cov.unreadable ?? 0;
       const complete = Boolean(s?.complete);
+      const allItems = Array.isArray(s?.items) ? (s.items as ParsedLineItem[]) : [];
+
       // "Matched nothing, opened nothing" is the shape of a scan that FAILED, not
       // of an empty mailbox. Reporting it as «النطاق: كل الرسائل المطابقة (0)»
       // reads as a finished, verified zero — the exact false claim that made a
@@ -1243,26 +1277,119 @@ async function launchCensusJob(
         : complete
           ? `النطاق: كل الرسائل المطابقة (${matched}).`
           : `النطاق: فُتح ${opened} من ${matched} رسالة — الحصر ناقص.`;
+
+      // ── The artifact. Persisted on the job row BEFORE any send, so the result
+      // survives the process, the restart and the delivery failure — that is what
+      // the operator's "احتفظ بنتيجة الـscan كـartifact قابل للاسترجاع" asks for.
+      // Previously the scan result lived only in memory and in the WhatsApp
+      // message, so once the send failed the assistant re-ran the search from
+      // zero and reported the opposite answer.
+      const ranked = aggregateItemsByOccurrence(allItems, 2).slice(0, 100);
+
+      // Every PO appearance of one item, deduped by document, newest first —
+      // the audit trail behind the summed figures.
+      const linesFor = (desc: string) => {
+        const byDoc = new Map<
+          string,
+          { docId: string; qty: number | null; unitPrice: number | null; lineTotal: number | null }
+        >();
+        for (const it of allItems) {
+          if ((it.description || "").trim() !== desc) continue;
+          const doc = (it.docId || "").trim();
+          if (!doc || byDoc.has(doc)) continue;
+          byDoc.set(doc, {
+            docId: doc,
+            qty: it.qty ?? null,
+            unitPrice: it.unitPrice ?? null,
+            lineTotal: it.lineTotal ?? null,
+          });
+        }
+        return [...byDoc.values()];
+      };
+
+      await save({
+        result: {
+          matched,
+          opened,
+          files,
+          pages,
+          lines,
+          unreadable,
+          poDocuments: cov.poDocuments ?? 0,
+          rfqDocuments: cov.rfqDocuments ?? 0,
+          unknownDocuments: cov.unknownDocuments ?? 0,
+          complete,
+          emptyUnstarted,
+          scope,
+          // Each item carries its PER-PO appearances (quantity, unit price,
+          // line total) so the report can be regenerated and re-sent from this
+          // row alone — the operator asked for the result to be a retrievable
+          // artifact instead of a fresh search. Derived rows only (no buffers).
+          topItems: ranked.map((p) => ({
+            description: p.description,
+            partNo: p.partNo,
+            lineItemNos: p.lineItemNos,
+            orders: p.occurrences,
+            qty: p.qty,
+            uom: p.uom,
+            avgUnitPrice: p.avgUnitPrice,
+            totalValue: p.totalValue,
+            documents: p.documents,
+            lines: linesFor(p.description),
+          })),
+        },
+      });
+
+      // Per-appearance detail: every PO that carried the item with its own
+      // quantity / unit price / line total, so a figure can be audited against
+      // the source document. Built from the SAME `linesFor` rows the artifact
+      // stores, so the PDF and the stored result can never disagree.
+      const detailOf = (desc: string): string => {
+        const parts = linesFor(desc).map((l) => {
+          const bits = [
+            `PO ${l.docId}`,
+            `كمية ${l.qty ?? "—"}`,
+            `سعر ${l.unitPrice ?? "غير متوفر"}`,
+          ];
+          if (l.lineTotal != null) bits.push(`إجمالي ${l.lineTotal}`);
+          return bits.join(" · ");
+        });
+        return parts.join("\n") || "لا تفاصيل";
+      };
+
       const text =
         `انتهى الحصر الخلفي لبنود البريد.\n` +
-        `رسائل مطابقة: ${matched} — رسائل فُتحت: ${opened} — ملفات: ${files} — بنود: ${lines}.\n` +
+        `رسائل مطابقة: ${matched} — رسائل فُتحت: ${opened} — ملفات: ${files} — ` +
+        `صفحات: ${pages} — بنود: ${lines}.\n` +
         scope;
-      await sendWhatsAppText(phone, text);
-      if (ctx.settings.allowPdf && Array.isArray(s?.items) && s.items.length) {
+
+      // The message is only one half of the outcome; the PDF is the deliverable
+      // the operator actually asked for. Track both so a failure to produce or
+      // send the file is reported instead of swallowed.
+      let textMessageId: string | null = null;
+      try {
+        textMessageId = await sendWhatsAppText(phone, text);
+      } catch (err) {
+        logger.warn({ err, phone }, "AI assistant: census job summary text failed");
+      }
+
+      let pdfMessageId: string | null = null;
+      let pdfError: string | null = null;
+      if (ctx.settings.allowPdf && allItems.length) {
         try {
           const { generateAssistantPdf } = await import("./pdf");
-          // The operator's ask is FREQUENCY («أكثر 20 بند … أكثر من مرة»), so the
-          // job report must rank by the number of ORDERS, like the interactive
-          // path — ranking by quantity here answered a different question and
-          // put a single huge one-off order on top.
-          const ranked = aggregateItemsByOccurrence(s.items as never, 2);
           const buffer = await generateAssistantPdf({
             title: "حصر بنود البريد (مهمة خلفية)",
-            subtitle: `${ranked.length} بندًا مميزًا من ${lines} سطرًا`,
+            subtitle: `${Math.min(20, ranked.length)} بندًا الأكثر تكرارًا من ${lines} سطرًا`,
             sections: [
               {
                 paragraphs: [
-                  `رسائل مطابقة: ${matched}، فُتح مرفق ${opened} رسالة، وقُرئ ${lines} سطر بند من ${files} ملف.`,
+                  `رسائل مطابقة: ${matched}، فُتح مرفق ${opened} رسالة، ` +
+                    `وتمت معالجة ${pages} صفحة، وقُرئ ${lines} سطر بند من ${files} ملف.`,
+                  `بنود تعذّر استخراجها (ملفات بلا نص): ${unreadable}.`,
+                  `مستندات أوامر شراء: ${cov.poDocuments ?? 0} — مستندات RFQ مستبعدة: ${
+                    cov.rfqDocuments ?? 0
+                  }.`,
                   scope,
                 ],
               },
@@ -1276,45 +1403,87 @@ async function launchCensusJob(
                     "عدد أوامر الشراء",
                     "إجمالي الكمية",
                     "الوحدة",
+                    "متوسط سعر الوحدة",
                     "إجمالي المبلغ (مجموع Line Totals)",
                   ],
-                  rows: ranked.slice(0, 100).map((p: never, i: number) => {
-                    const it = p as {
-                      partNo?: string;
-                      lineItemNos?: string[];
-                      description: string;
-                      occurrences: number;
-                      qty: number;
-                      uom?: string;
-                      totalValue?: number | null;
-                    };
-                    return [
+                  rightAligned: ["وصف البند الكامل", "Line Item", "رقم القطعة (Part Number)"],
+                  // The operator asked for the TOP 20; the artifact keeps up to
+                  // 100 so more is retrievable, but the report itself is the 20.
+                  rows: ranked
+                    .slice(0, 20)
+                    .map((p, i) => [
                       i + 1,
-                      it.description || "غير متوفر",
-                      it.partNo ?? "—",
-                      it.lineItemNos?.length ? it.lineItemNos.join("، ") : "—",
-                      it.occurrences,
-                      it.qty,
-                      it.uom ?? "—",
-                      it.totalValue != null
-                        ? it.totalValue.toFixed(2)
+                      p.description || "غير متوفر",
+                      p.partNo ?? "—",
+                      p.lineItemNos?.length ? p.lineItemNos.join("، ") : "—",
+                      p.occurrences,
+                      p.qty,
+                      p.uom ?? "—",
+                      p.avgUnitPrice != null ? p.avgUnitPrice.toFixed(2) : "—",
+                      p.totalValue != null
+                        ? p.totalValue.toFixed(2)
                         : "المبلغ غير متوفر في المستند",
-                    ];
-                  }),
+                    ]),
                 },
               },
+              {
+                heading: "تفاصيل كل ظهور (PO / كمية / سعر الوحدة)",
+                paragraphs: ranked
+                  .slice(0, 20)
+                  .map((p, i) => `${i + 1}. ${p.description}\n${detailOf(p.description)}`),
+              },
             ],
+            footer:
+              "المصدر: مرفقات أوامر الشراء في البريد الإلكتروني — وليس قاعدة البيانات. " +
+              `تم الإنشاء ${new Date().toLocaleString("en-GB")}`,
           });
-          await sendWhatsAppDocument(
+          pdfMessageId = await sendWhatsAppDocument(
             phone,
             buffer,
             `email-items-job-${new Date().toISOString().slice(0, 10)}.pdf`,
             "application/pdf",
+            `تقرير حصر بنود EDC — ${ranked.length} بندًا`,
           );
+          if (!pdfMessageId) throw new Error("no message id returned for the PDF");
         } catch (err) {
+          pdfError = err instanceof Error ? err.message : String(err);
           logger.warn({ err, phone }, "AI assistant: census job PDF failed");
         }
+      } else if (ctx.settings.allowPdf) {
+        pdfError = "لا توجد بنود لإنشاء تقرير منها";
+      } else {
+        pdfError = "إنشاء PDF معطّل في الإعدادات";
       }
+
+      await save({
+        result: {
+          matched,
+          opened,
+          files,
+          pages,
+          lines,
+          complete,
+          textMessageId,
+          pdfMessageId,
+          pdfError,
+          items: ranked.length,
+        },
+      });
+
+      // A FAILED DELIVERY MUST NOT READ AS SUCCESS. The live defect was a job
+      // that announced «تم إرسال التقرير» while nothing arrived; the operator
+      // then had no way to tell, and a later question got a fresh, contradictory
+      // answer. Throwing here makes the job end `delivery_failed` with the
+      // artifact still stored.
+      if (!textMessageId) {
+        throw new JobDeliveryError("تعذّر إرسال ملخص الحصر على واتساب");
+      }
+      if (ctx.settings.allowPdf && allItems.length && !pdfMessageId) {
+        throw new JobDeliveryError(
+          `تعذّر إنشاء/إرسال تقرير الـPDF: ${pdfError ?? "سبب غير معروف"}`,
+        );
+      }
+      return { messageId: pdfMessageId ?? textMessageId };
     },
   });
   return {
@@ -2315,18 +2484,46 @@ async function executeToolInner(
           ok: true,
           data: {
             count: rows.length,
-            jobs: rows.map((j) => ({
-              id: j.id,
-              kind: j.kind,
-              status: j.status,
-              question: j.question,
-              progress: j.progress,
-              error: j.error,
-              summary: describeJob(j),
-              startedAt: j.startedAt,
-              finishedAt: j.finishedAt,
-            })),
-            note: "هذه حالة المهام كما هي في قاعدة البيانات — لا تخمّن تقدمًا غير مذكور هنا.",
+            jobs: rows.map((j) => {
+              const r = (j.result ?? {}) as Record<string, unknown>;
+              // Delivery evidence, read straight from the stored artifact. The
+              // assistant must not tell the operator "تم الإرسال" without a
+              // message id being present here — that claim is what made a lost
+              // report look delivered.
+              const delivered = Boolean(r.pdfMessageId || r.textMessageId);
+              return {
+                id: j.id,
+                kind: j.kind,
+                status: j.status,
+                question: j.question,
+                progress: j.progress,
+                error: j.error,
+                summary: describeJob(j),
+                startedAt: j.startedAt,
+                finishedAt: j.finishedAt,
+                delivered,
+                textMessageId: r.textMessageId ?? null,
+                pdfMessageId: r.pdfMessageId ?? null,
+                pdfError: r.pdfError ?? null,
+                resultSummary:
+                  r.matched != null
+                    ? {
+                        matched: r.matched,
+                        opened: r.opened,
+                        files: r.files,
+                        pages: r.pages,
+                        lines: r.lines,
+                        complete: r.complete,
+                      }
+                    : null,
+                topItems: Array.isArray(r.topItems) ? r.topItems : null,
+              };
+            }),
+            note:
+              "هذه حالة المهام كما هي في قاعدة البيانات — لا تخمّن تقدمًا غير مذكور هنا. " +
+              "‏`delivered=true` وحدها تعني أن التقرير أُرسل فعلًا (مع pdfMessageId). " +
+              "إن كانت `delivery_failed` أو `delivered=false` فلا تقل إن التقرير وصل؛ " +
+              "أخبر المستخدم بفشل الإرسال وأن النتيجة محفوظة ويمكن إعادة إرسالها.",
           },
         };
       }
@@ -2346,6 +2543,116 @@ async function executeToolInner(
                 : `المهمة #${job.id} حالتها «${job.status}» بالفعل — لم أُوقفها.`,
           },
         };
+      }
+      case "resend_job_report": {
+        // Re-send the STORED artifact. A re-scan would be the wrong answer on
+        // two counts: it costs minutes, and it can disagree with the report the
+        // operator already has (the earlier contradiction was exactly a second
+        // search returning a different story).
+        const id = Number(args.id);
+        const jobs =
+          Number.isFinite(id) && id > 0
+            ? [await getJob(id)].filter(Boolean)
+            : (await listJobs(ctx.phone, 20)).filter((j) => j.result != null);
+        const job = jobs[0] as (typeof jobs)[number] | undefined;
+        if (!job) {
+          return {
+            ok: false,
+            error:
+              Number.isFinite(id) && id > 0
+                ? `لا توجد مهمة بالرقم ${id}.`
+                : "لا توجد مهمة حصر مكتملة بنتيجة محفوظة — ابدأ الحصر أولًا.",
+          };
+        }
+        const r = (job.result ?? {}) as Record<string, any>;
+        if (!Array.isArray(r.topItems) || !r.topItems.length) {
+          return { ok: false, error: `المهمة #${job.id} لا تحتوي على بنود محفوظة لإرسالها.` };
+        }
+        try {
+          const { generateAssistantPdf } = await import("./pdf");
+          const buffer = await generateAssistantPdf({
+            title: "حصر بنود البريد (إعادة إرسال)",
+            subtitle: `${Math.min(20, r.topItems.length)} بندًا محفوظًا من المهمة #${job.id}`,
+            sections: [
+              {
+                paragraphs: [
+                  `رسائل مطابقة: ${r.matched ?? 0}، فُتحت: ${r.opened ?? 0}، ` +
+                    `صفحات: ${r.pages ?? 0}، بنود: ${r.lines ?? 0}.`,
+                  String(r.scope ?? ""),
+                ],
+              },
+              {
+                table: {
+                  columns: [
+                    "الترتيب",
+                    "وصف البند الكامل",
+                    "رقم القطعة (Part Number)",
+                    "Line Item",
+                    "عدد أوامر الشراء",
+                    "إجمالي الكمية",
+                    "الوحدة",
+                    "متوسط سعر الوحدة",
+                    "إجمالي المبلغ",
+                  ],
+                  rightAligned: ["وصف البند الكامل", "Line Item", "رقم القطعة (Part Number)"],
+                  rows: (r.topItems as any[])
+                    .slice(0, 20)
+                    .map((p, i) => [
+                      i + 1,
+                      p.description || "غير متوفر",
+                      p.partNo ?? "—",
+                      Array.isArray(p.lineItemNos) && p.lineItemNos.length
+                        ? p.lineItemNos.join("، ")
+                        : "—",
+                      p.orders ?? 0,
+                      p.qty ?? 0,
+                      p.uom ?? "—",
+                      p.avgUnitPrice != null ? Number(p.avgUnitPrice).toFixed(2) : "—",
+                      p.totalValue != null ? Number(p.totalValue).toFixed(2) : "غير متوفر",
+                    ]),
+                },
+              },
+              {
+                heading: "تفاصيل كل ظهور (PO / كمية / سعر الوحدة)",
+                paragraphs: (r.topItems as any[]).slice(0, 20).map((p, i) => {
+                  const ls = Array.isArray(p.lines) ? p.lines : [];
+                  const det = ls
+                    .map(
+                      (l: any) =>
+                        `PO ${l.docId} · كمية ${l.qty ?? "—"} · سعر ${
+                          l.unitPrice ?? "غير متوفر"
+                        }${l.lineTotal != null ? ` · إجمالي ${l.lineTotal}` : ""}`,
+                    )
+                    .join("\n");
+                  return `${i + 1}. ${p.description}\n${det || "لا تفاصيل"}`;
+                }),
+              },
+            ],
+            footer: "إعادة إرسال من النتيجة المحفوظة — لم يُعَد الفحص.",
+          });
+          const messageId = await sendWhatsAppDocument(
+            ctx.phone,
+            buffer,
+            `email-items-job-${job.id}.pdf`,
+            "application/pdf",
+            `تقرير حصر بنود EDC (إعادة إرسال) — ${r.topItems.length} بندًا`,
+          );
+          if (!messageId) {
+            return { ok: false, error: "تعذّر إرسال التقرير على واتساب (لا يوجد messageId)." };
+          }
+          return {
+            ok: true,
+            data: {
+              jobId: job.id,
+              messageId,
+              items: r.topItems.length,
+              note: `أُعيد إرسال تقرير المهمة #${job.id} من النتيجة المحفوظة (لم يُعَد الفحص).`,
+            },
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { ok: false, error: `فشل إعادة إرسال التقرير: ${msg}` };
+        }
       }
       case "start_census_job": {
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };

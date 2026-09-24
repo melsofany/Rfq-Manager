@@ -17,7 +17,7 @@ import { describe, it, expect, vi } from "vitest";
 const fakeParse = vi.fn();
 vi.mock("pdf-parse/lib/pdf-parse.js", () => ({ default: fakeParse }));
 
-const { extractPdfText, extractNumbers, DEFAULT_NUMBER_PATTERNS } =
+const { extractPdfText, extractPdfTextDetailed, extractNumbers, DEFAULT_NUMBER_PATTERNS } =
   await import("../../modules/ai-assistant/email");
 
 /** A page whose glyph items sit on baselines, out of x-order. */
@@ -62,6 +62,27 @@ describe("renderPdfPage (via extractPdfText)", () => {
   it("returns empty string for a file whose text layer is empty (a scan)", async () => {
     fakeParse.mockResolvedValue({ text: "\n\n   \n" });
     expect(await extractPdfText(Buffer.from("scan"))).toBe("");
+  });
+
+  it("counts the PAGES it actually rendered, so progress is evidence not an estimate", async () => {
+    // «عدد الصفحات التي تمت معالجتها» — the count must come from the pages the
+    // parser rendered. A document whose attachments span several pages is the
+    // reason a single-order read felt instant while the year-long census did not.
+    fakeParse.mockImplementation(async (_buf, opts) => {
+      for (let i = 0; i < 3; i++) {
+        await opts.pagerender(pageData([{ str: `page ${i + 1}`, x: 30, y: 500 }]));
+      }
+      return { text: "p1p2p3" };
+    });
+    const out = await extractPdfTextDetailed(Buffer.from("pdf"));
+    expect(out.pages).toBe(3);
+  });
+
+  it("reports zero pages for a file that cannot be parsed, not a bogus count", async () => {
+    fakeParse.mockRejectedValue(new Error("bad pdf"));
+    const out = await extractPdfTextDetailed(Buffer.from("broken"));
+    expect(out.pages).toBe(0);
+    expect(out.text).toBe("");
   });
 });
 

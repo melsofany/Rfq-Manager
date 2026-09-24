@@ -14,6 +14,8 @@ import { existsSync } from "fs";
 export interface PdfTable {
   columns: string[];
   rows: Array<Array<string | number | null | undefined>>;
+  /** Column names rendered right-aligned (e.g. free-text descriptions). */
+  rightAligned?: string[];
 }
 
 export interface PdfSection {
@@ -75,8 +77,16 @@ export function generateAssistantPdf(opts: AssistantPdfOptions): Promise<Buffer>
       doc.on("end", () => settle(() => resolvePromise(Buffer.concat(chunks))));
       doc.on("error", (e: Error) => settle(() => reject(e)));
 
-      doc.registerFont("Amiri", fontPath());
-      doc.font("Amiri");
+      // The Arabic font ships in `assets/` (copied into dist by the build). When
+      // it is missing — a source-run, or a bundle that lost the asset — fall back
+      // to a built-in font rather than throwing, so a report is still produced.
+      const font = fontPath();
+      if (existsSync(font)) {
+        doc.registerFont("Amiri", font);
+        doc.font("Amiri");
+      } else {
+        doc.font("Helvetica");
+      }
       const PAGE_W = doc.page.width;
       const M = 36;
       const CW = PAGE_W - M * 2;
@@ -204,31 +214,66 @@ export function generateMissingNumbersPdf(
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Render a table, repeating the COLUMN HEADER at the top of every page.
+ *
+ * The operator's report spanned several pages and the continuation pages carried
+ * no header, so the columns could not be identified on them. The header is now
+ * re-drawn whenever the table pushes onto a new page.
+ *
+ * A cell whose text does not fit the column height is WRAPPED (pdfkit splits it
+ * over multiple lines) and the row is made as tall as its tallest cell, so a
+ * full description is never silently cut off — truncating it was a reported
+ * defect. `lineBreak:false` is therefore no longer used for data cells.
+ */
 function renderTable(doc: any, table: PdfTable, startX: number, width: number): void {
   const cols = table.columns.length || 1;
   const colW = width / cols;
-  const rowH = 22;
+  const padding = 6;
+  const fontSize = 9;
 
-  const drawRow = (values: Array<string | number | null | undefined>, header: boolean) => {
-    if (doc.y + rowH > doc.page.height - 70) doc.addPage();
+  const drawHeaderRow = () => {
     const y = doc.y;
-    if (header) {
-      doc.rect(startX, y, width, rowH).fill("#1a3a5c");
-    } else {
-      doc.rect(startX, y, width, rowH).fill("#f4f6f9");
-    }
-    doc.fillColor(header ? "#ffffff" : "#222").fontSize(9);
-    values.forEach((v, i) => {
-      doc.text(cell(v), startX + i * colW + 4, y + 6, {
-        width: colW - 8,
-        height: rowH,
+    doc.rect(startX, y, width, 18).fill("#1a3a5c");
+    doc.fillColor("#ffffff").fontSize(fontSize);
+    table.columns.forEach((c, i) => {
+      doc.text(cell(c), startX + i * colW + 3, y + 5, {
+        width: colW - padding,
+        height: 14,
         align: "center",
         lineBreak: false,
       });
     });
-    doc.y = y + rowH;
+    doc.y = y + 18;
   };
 
-  drawRow(table.columns, true);
-  for (const row of table.rows) drawRow(row, false);
+  /** Height a cell needs at the current width, measured by pdfkit itself. */
+  const cellHeight = (v: string | number | null | undefined): number =>
+    doc.heightOfString(cell(v) || " ", { width: colW - padding });
+
+  drawHeaderRow();
+  table.rows.forEach((row, rowIdx) => {
+    const height = Math.max(18, ...row.map((v) => cellHeight(v)));
+    // Start a new page BEFORE drawing a row that does not fit, and re-draw the
+    // header on it so the row is readable there.
+    if (doc.y + height > doc.page.height - 70) {
+      doc.addPage();
+      drawHeaderRow();
+    }
+    const y = doc.y;
+    doc.rect(startX, y, width, height).fill(rowIdx % 2 === 0 ? "#f4f6f9" : "#ffffff");
+    doc.fillColor("#222").fontSize(fontSize);
+    const rightCols = table.rightAligned ?? [];
+    row.forEach((v, i) => {
+      // NO `height` here on purpose: pdfkit CLIPS text taller than the box it is
+      // given, so passing the measured height (or anything derived from it) cut
+      // the last line off a wrapped description — the «مقصوص» defect. The row is
+      // already as tall as its tallest cell, so the text fits without a limit.
+      doc.text(cell(v), startX + i * colW + 3, y + 4, {
+        width: colW - padding,
+        align: rightCols.includes(table.columns[i]) ? "right" : "center",
+      });
+    });
+    doc.y = y + height;
+  });
 }

@@ -1136,12 +1136,29 @@ async function renderPdfPage(pageData: unknown): Promise<string> {
  * the caller reports "could not read" instead of inventing content.
  */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
+  return (await extractPdfTextDetailed(buffer)).text;
+}
+
+/**
+ * As `extractPdfText`, but also reports how many PAGES were rendered — the
+ * operator's progress asks for "عدد الصفحات التي تمت معالجتها", and a page count
+ * derived from what was actually rendered is evidence, not an estimate.
+ */
+export async function extractPdfTextDetailed(
+  buffer: Buffer,
+): Promise<{ text: string; pages: number }> {
+  let pages = 0;
   try {
-    const res = await pdfParse(buffer, { pagerender: renderPdfPage });
-    return (res.text || "").replace(/\n{3,}/g, "\n\n").trim();
+    const res = await pdfParse(buffer, {
+      pagerender: async (pageData: unknown) => {
+        pages += 1;
+        return renderPdfPage(pageData);
+      },
+    });
+    return { text: (res.text || "").replace(/\n{3,}/g, "\n\n").trim(), pages };
   } catch (err) {
     logger.warn({ err }, "AI assistant: local PDF text extraction failed");
-    return "";
+    return { text: "", pages };
   }
 }
 

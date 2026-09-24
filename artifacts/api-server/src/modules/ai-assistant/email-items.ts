@@ -12,7 +12,7 @@
  * unreadable file, which is how "this order has no items" would be reported for
  * a document nobody managed to open.
  */
-import { extractPdfText, type MessageAttachments } from "./email";
+import { extractPdfTextDetailed, type MessageAttachments } from "./email";
 import { groupByItemIdentity, hasConfidentIdentity } from "./item-identity";
 
 /** One parsed order line. */
@@ -63,6 +63,15 @@ export interface ParsedLineItem {
  * ItemВ», which is exactly the mix-up the operator reported.
  */
 const LINE_ITEM_RE = /\b\d{4}\.\d{3}\.[A-Z0-9]{2,}(?:\.[A-Z0-9]+)+\b/;
+
+/**
+ * How many continuation lines beyond the row a description may span.
+ *
+ * The EDC description wraps across several visual lines and a multi-page PDF can
+ * break a row's prose across a page boundary. The previous 7 was not enough for
+ * the longest real descriptions, which is why «التوصيف الكامل» came back cut.
+ */
+const MAX_DESCRIPTION_LINES = 20;
 
 /**
  * The real `Part No` column value: a short alphanumeric code (`UXL7-12`,
@@ -384,7 +393,7 @@ function collectDescription(
     parts.push(stripDescriptionTail(head));
   }
 
-  for (let j = startIndex + 1; j < lines.length && j <= startIndex + 7; j++) {
+  for (let j = startIndex + 1; j < lines.length && j <= startIndex + MAX_DESCRIPTION_LINES; j++) {
     const raw = lines[j];
     if (TABLE_END_RE.test(raw)) {
       hitTotals = true;
@@ -409,14 +418,39 @@ function collectDescription(
       .trim();
     if (!next) continue;
     if (/^Note:?$/i.test(next)) continue;
-    // Keep prose even when it OPENS with a number: a wrapped description
-    // legitimately continues as `10HP, SIEMENS …`, and rejecting it truncated the
-    // operator's «التوصيف الكامل» at the first line. A new row was already
-    // stopped above (`ITEM_ROW_RE`), and a money/date-only tail has no word.
-    if (/[A-Za-z\u0600-\u06FF]{4,}/.test(next)) parts.push(next);
+    // Prose with ≥2 words is kept, and so is a continuation after one has
+    // started. A wrapped «التوصيف الكامل» ends in short fragments that carry a
+    // word but are fewer than 4 characters, and a 4-char-only rule stopped there
+    // and cut the description mid-phrase. The word count is what still rejects
+    // a money/date-only tail (which has no letters at all).
+    const words = next.split(/\s+/).filter((w) => /[A-Za-z\u0600-\u06FF]{4,}/.test(w));
+    if (words.length >= 2 || (words.length === 1 && parts.length > 0)) parts.push(next);
+    else if (isPartNoFragment(next)) continue;
     else break;
   }
   return { text: parts.filter(Boolean).join(" ").replace(/\s+/g, " ").trim(), hitTotals };
+}
+
+/**
+ * A wrapped `Part No` cell that the text layer pushed onto its own line, with no
+ * prose of its own (`SFCTR3P30`, `A24VSA2L`, `EWL-X0000`, `LSGP-40-`).
+ *
+ * Such a line carries no 4-letter word, so the description collector used to
+ * treat it as the END of the description and stop — silently dropping the real
+ * prose that followed it on the next lines. Seen live on EDC P26E09609: the row
+ * read «P/N : SFCTR3P30A24VSA2L , CONTACTOR ,3P» and then `SFCTR3P30` /
+ * `A24VSA2L` on their own lines, after which «,30A 24VAC / SCREWS,24V COIL FOR
+ * TRANE SCR HVAC , ( OLD P/N : CTR02575 )» was lost. The fragment is SKIPPED
+ * rather than treated as prose or as an end marker.
+ *
+ * Deliberately narrow — a code is only a fragment when it is ALMOST ALL uppercase
+ * letters, digits, dots and dashes (a category word such as `VALUE ADDED TAX` is
+ * prose and must never match).
+ */
+function isPartNoFragment(line: string): boolean {
+  const t = line.trim();
+  if (!t || t.length > 24 || !/\d/.test(t)) return false;
+  return /^[A-Z0-9][A-Z0-9./-]*$/.test(t);
 }
 
 /**
@@ -606,6 +640,8 @@ export function aggregateItems(items: ParsedLineItem[]): AggregatedPart[] {
       docs.add(doc);
       // Keep the LONGEST description seen - the operator asked for the full text,
       // and the PDF wraps the same item across lines with varying completeness.
+      // `it.description` is already the merged prose for one line, so comparing
+      // the merged strings picks the most complete rendering of the item.
       if ((it.description || "").length > description.length) description = it.description;
     });
 
@@ -717,6 +753,8 @@ export interface ItemScanCoverage {
   attachments: number;
   /** Total parsed lines. */
   lines: number;
+  /** PDF pages actually rendered — evidence of how much was really processed. */
+  pages: number;
   /** Purchase-order documents read (the operator counts POs, not RFQs). */
   poDocuments: number;
   /** RFQ / quotation documents read ЕҢДҶГ¶ parsed for coverage but excluded. */
@@ -750,6 +788,7 @@ export async function parseItemsFromAttachments(
     noAttachment: 0,
     attachments: 0,
     lines: 0,
+    pages: 0,
     poDocuments: 0,
     rfqDocuments: 0,
     unknownDocuments: 0,
@@ -767,7 +806,8 @@ export async function parseItemsFromAttachments(
     for (const att of message.attachments) {
       if (!att.content) continue;
       coverage.attachments += 1;
-      const text = await extractPdfText(att.content);
+      const { text, pages } = await extractPdfTextDetailed(att.content);
+      coverage.pages += pages;
       if (!text) continue;
       sawReadable = true;
       // The document's own number when it prints one, else the message+file ЕҢДҶГ¶

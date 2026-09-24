@@ -26,6 +26,13 @@ vi.mock("../../modules/ai-assistant/email", async (importOriginal) => ({
   scanEmails,
   searchEmails: vi.fn(),
   extractPdfText,
+  // The parser needs the page count too, so it calls the detailed variant. It is
+  // derived from the same mock so every existing `extractPdfText` stub still
+  // drives the parse — the fixtures stay in ONE place.
+  extractPdfTextDetailed: async (b: Buffer) => ({
+    text: await extractPdfText(b),
+    pages: 1,
+  }),
   isEmailReadConfigured: () => true,
 }));
 
@@ -951,13 +958,21 @@ describe("oversize census hands off to a background job", () => {
       new URL("../../modules/ai-assistant/tools.ts", import.meta.url),
       "utf8",
     );
-    const jobReport = src.slice(src.indexOf("finish: async ({ phone, session })")).slice(0, 4000);
+    const jobReport = src.slice(src.indexOf("finish: async ({ phone, session")).slice(0, 12000);
     expect(jobReport).toContain("aggregateItemsByOccurrence");
     expect(jobReport).not.toContain("aggregateItems(s.items");
     // And a census that inspected NOTHING must not be reported as a finished,
     // verified zero — «النطاق: كل الرسائل المطابقة (0)» is how the operator was
     // told a year of EDC orders did not exist.
     expect(jobReport).toContain("الحصر لم يبدأ فعليًا");
+    // The report must state the page count the operator asked for.
+    expect(jobReport).toContain("pages");
+    // A delivery failure must NOT be recorded as success: the live defect was a
+    // job that announced «تم إرسال التقرير» while nothing arrived.
+    expect(jobReport).toContain("JobDeliveryError");
+    // The result must be persisted on the job row BEFORE any send, so it can be
+    // retrieved and re-sent instead of re-running the search.
+    expect(jobReport).toContain("await save(");
   });
 
   it("hands a 100%-census request to a background job instead of a partial list", async () => {
