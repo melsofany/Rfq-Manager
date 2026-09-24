@@ -15,6 +15,7 @@ import {
 import { scheduleDailyBackup } from "./modules/backup/service";
 import { verifySenderIdentity } from "./shared/mail-identity";
 import { logReadMailboxes } from "./modules/ai-assistant/mailboxes";
+import { logProviderCapacity } from "./modules/ai-assistant/config";
 
 const rawPort = process.env["PORT"];
 
@@ -50,6 +51,7 @@ initDb()
     await markOrphanedJobs().catch((err) =>
       logger.warn({ err }, "AI assistant: orphan-job sweep failed (non-fatal)"),
     );
+    logProviderCapacity();
     try {
       await ensureWorkOrderTemplate();
       await ensurePoCancelTemplate();

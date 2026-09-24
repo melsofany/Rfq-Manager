@@ -1924,3 +1924,35 @@ agent started it and the PROVIDER rejected it. Diagnosis, and the traps:
   `/api/ai-assistant/*` routes 401 (mounted behind auth), and job #38 reset to
   `failed` so the operator's next identical request starts fresh.
 
+### Failover capacity must be visible at startup, not only behind auth
+
+- `providerStatus()` / `configuredProviderCount()` were reachable ONLY through
+  `GET /ai-assistant/models`, which is behind `requireAuth` — so the one fact
+  that explains a whole-assistant outage (`configuredProviders: 1`) could not be
+  read from outside, and a list of model names looks identical whether one
+  provider or two are configured.
+- `logProviderCapacity()` is called from `src/index.ts` at startup and reports:
+  INFO with the ready provider:model list when two are configured, **WARN
+  «ONE provider configured — no failover when its daily quota is spent»** when
+  one is, and ERROR when none is. A single provider is a warning because it is a
+  silent single point of failure, not a normal state; the live outage ran in
+  exactly that shape and nothing said so.
+- **Env-var note**: adding a variable via `PUT /v1/services/<id>/env-vars` does
+  NOT trigger a Render deploy (observed: the live deploy stayed on the old
+  commit). Does that matter? No — the next deploy of `main` carries both the new
+  code and the new variable. Confirm the commit with
+  `GET /v1/services/<id>/deploys`, not by assuming the env change shipped.
+- **`DEEPSEEK_API_KEY` is a SEPARATE variable, not `AI_API_KEY`** — deliberately,
+  because both providers are configured at once and the Gemini key must keep
+  working for voice notes and document reading, which DeepSeek cannot do. Putting
+  a DeepSeek key in `AI_API_KEY` breaks those two capabilities. Optional
+  companions, all with working defaults: `DEEPSEEK_BASE_URL`
+  (`https://api.deepseek.com/v1`), `DEEPSEEK_MODEL` (`deepseek-chat`),
+  `DEEPSEEK_FALLBACK_MODELS` (`deepseek-v4-pro`). The key is verified live with
+  `GET /v1/models` (lists `deepseek-flash`, `deepseek-v4-pro`) AND a
+  `tools`-bearing completion — a plain completion succeeds on payloads that fail
+  once the agent's tool schema is attached.
+- Tests: 1 capacity-log case in `ai-deepseek.test.ts`. **899 api-server tests**
+  in 75 files pass; tsc (libs + api-server + portal) clean; repo-wide prettier
+  clean; api-server build clean.
+
