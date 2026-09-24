@@ -106,6 +106,33 @@ describe("parseLineItems — EDC RFQ layout", () => {
   });
 });
 
+describe("parseLineItems — the printed date/price tail", () => {
+  it("keeps the date and money OUT of the description", () => {
+    // The embedded columns are separate only visually; pdf.js appends them to the
+    // prose, so the live description read
+    // «TANK PRO RO WATER FILTER + UV - WALL 05-OCT-2026 5,100.00 10,200.00».
+    // Those figures are the row's price columns (already parsed) and the delivery
+    // date is its own column — not part of the item's name.
+    const text = `PURCHASE ORDER
+PO number: P26E14373(RIG58)
+Line
+No.
+Quantity UOM Part No Line Item Delivery Date Unit Price Total (EGP)
+1 2 Each 05-OCT-2026 5,100.00 10,200.00
+1822.008.GENRAL.0069
+TANK PRO RO WATER FILTER + UV - WALL 05-OCT-2026 5,100.00 10,200.00
+Total Price 10,200.00`;
+    const items = parseLineItems(text);
+    expect(items).toHaveLength(1);
+    expect(items[0].description).toBe("TANK PRO RO WATER FILTER + UV - WALL");
+    expect(items[0].description).not.toContain("05-OCT-2026");
+    expect(items[0].description).not.toContain("5,100.00");
+    // …while the money is still parsed as the row's price, not discarded.
+    expect(items[0].unitPrice).toBe(5100);
+    expect(items[0].lineTotal).toBe(10200);
+  });
+});
+
 describe("parseLineItems — EDC PO layout", () => {
   it("reads the real line and drops the ERP's VAT pseudo-line", () => {
     const items = parseLineItems(PO_TEXT);
@@ -230,6 +257,27 @@ describe("aggregateItems", () => {
     ]);
     expect(agg).toHaveLength(1);
     expect(agg[0].description).toBe("REAL PART NAME");
+  });
+
+  it("carries the printed Line Item numbers without using them for identity", () => {
+    // The operator asked for the Line Item column by name. Reporting «غير متوفر»
+    // for a value the documents DO print is a false absence — but the number
+    // differs PO by PO, so it must never drive the grouping. The same part on
+    // line 1 of one order and line 2 of the next is ONE item, with both numbers.
+    const agg = aggregateItems([
+      { lineNo: 1, partNo: "A.1", description: "x", qty: 2, uom: "Each", docId: "PO-1" },
+      { lineNo: 2, partNo: "A.1", description: "x", qty: 3, uom: "Each", docId: "PO-2" },
+    ]);
+    expect(agg).toHaveLength(1);
+    expect(agg[0].lineItems).toEqual([1, 2]);
+    expect(agg[0].occurrences).toBe(2);
+  });
+
+  it("reports an empty Line Item list when the document prints none", () => {
+    const agg = aggregateItems([
+      { lineNo: null, partNo: "A.1", description: "x", qty: 1, uom: "Each" },
+    ]);
+    expect(agg[0].lineItems).toEqual([]);
   });
 });
 
