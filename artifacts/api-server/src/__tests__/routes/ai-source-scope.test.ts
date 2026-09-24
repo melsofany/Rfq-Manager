@@ -129,14 +129,33 @@ describe("verifyAnswer — a figure is only reconciled against its own source", 
 
   it("still reconciles a database-sourced figure", async () => {
     poItemTotal = 999;
-    const r = await verifyAnswer({ answerText: "إجمالي الكميات 1,842 وحدة", source: "database" });
+    const r = await verifyAnswer({
+      answerText: "إجمالي الكميات 1,842 وحدة",
+      source: "database",
+      toolAggregates: [{ tool: "aggregate_po_items", total: 1842 }],
+    });
     expect(r.outcome).toBe("disagreement");
   });
 
-  it("keeps the old behaviour when no source is given", async () => {
+  it("reconciles a tool's aggregate even when no source is given", async () => {
     // Existing callers that do not pass a source must not silently lose the check.
     poItemTotal = 1842;
-    const r = await verifyAnswer({ answerText: "إجمالي الكميات 1,842 وحدة" });
+    const r = await verifyAnswer({
+      answerText: "إجمالي الكميات 1,842 وحدة",
+      toolAggregates: [{ tool: "aggregate_po_items", total: 1842 }],
+    });
     expect(r.outcome).toBe("verified");
+  });
+
+  it("SKIPS email-scoped figures even when a tool aggregate is present", async () => {
+    // The source guard must win: an email census and the database legitimately
+    // hold different numbers, so reconciling one against the other is a false alarm.
+    poItemTotal = 14_265;
+    const r = await verifyAnswer({
+      answerText: "إجمالي الكميات في الميل 235800",
+      source: "email",
+      toolAggregates: [{ tool: "aggregate_po_items", total: 235800 }],
+    });
+    expect(r.outcome).toBe("skipped");
   });
 });
