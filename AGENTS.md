@@ -2054,3 +2054,51 @@ import list grows. Prefer `vi.hoisted` when the mock factory needs shared state.
   primary-still-wins case) + `ai-failover-reserve.test.ts` (2 — the share and both
   providers present in the chain with their own endpoint + key). **911 api-server
   tests** pass; tsc + repo-wide prettier + api-server build clean.
+
+## OpenManus-derived task execution layer (feat/ai-openmanus-task-loop)
+
+The operator reported the assistant «بيفشل في تنفيذ الكثير من المهام» — it failed at
+many tasks. The hand-rolled loop gave the model a fixed number of rounds and then
+abandoned the turn: it repeated the same failing tool call until the budget was gone,
+never reflected on a tool error, and the operator got either a bare timeout or an
+answer built on the one result it did get. `task-loop.ts` ports the execution-control
+ideas from **OpenManus** (https://github.com/FoundationAgents/OpenManus) — the agent
+framework, not a dependency: Node cannot install the Python package, so the *patterns*
+are reimplemented, which also keeps the WhatsApp reply inside one 150s budget.
+
+- **Stuck detection** (`BaseAgent.is_stuck`, `handle_stuck_state`): a duplicate
+  assistant thought (`DUPLICATE_THRESHOLD` = 2, whitespace-normalised) OR the same
+  `(tool, canonical args)` returning an error ≥ 2× counts as stuck. On the first
+  detection the run is **steered ONCE** with a strategy-change instruction
+  (`STUCK_PROMPT`); a repeated FAILING call additionally names the tool
+  (`errorCorrectionPrompt`). One steer only — an open loop would spend the day's quota.
+- **Budget is a budget, not a guillotine** (`max_steps` semantics): the planned rounds
+  come from the router, and ONE extra round may be granted — **only when a tool result
+  explicitly reported more work remains** (`hasPendingWork`: `isComplete:false` /
+  `remainingMessages>0` / `continueHint` / `truncated:true`). This is what stops a
+  multi-window census being abandoned mid-read. **Do NOT loosen this to "a tool
+  succeeded"**: a model that repeats a completed lookup has not progressed, and
+  extending it would break the fast-path 2-round guarantee (there is a regression test).
+- **Error classification** (`isValidationError`): a malformed-argument / unknown-tool
+  error is the model's fault and a correction instruction can fix it; a timeout or an
+  empty result is the data's and retrying it unchanged is wasted quota.
+  `isErrorObservation` accepts both shapes the registry produces (`ERROR:` string and
+  `{ok:false}`).
+- **Hard cap** `HARD_MAX_STEPS` = 6 (above the router's deep 5) and
+  `EXTEND_MIN_REMAINING_MS` = 25s must remain — so an extension can never loop on a dead
+  run or leave no time to answer.
+- **Deliberately NOT ported**: the planner/executor/reporter multi-agent split, the
+  Python sandbox, and browser automation. Those need a long-lived process and a Python
+  runtime; this agent answers inside one WhatsApp reply. Only execution control is
+  borrowed, not the tool surface.
+- **Telemetry**: `trace.summary()` (`steps/toolCalls/toolErrors/distinctTools/
+  successfulTools/forcedAnswers/steers/detections`) is attached to `RequestMetrics.task`,
+  so a stall is a number on the dashboard rather than only a log line.
+- Tests: `ai-task-loop.test.ts` (20 — detection, classification, extension guards,
+  steering text) + 4 integration cases in `ai-agent.test.ts` (steering fires after a
+  repeated failure; a completed fast-path lookup is NOT extended; a tool reporting
+  remaining work IS granted exactly one extra round; the trace reaches the metrics).
+  **3 of the 4 integration tests fail against the pre-fix `agent.ts`** (verified by
+  reverting it), so they guard behaviour, not just code paths. **930 api-server tests**
+  (was 911) pass; tsc (libs + api-server + portal) clean; repo-wide prettier clean;
+  api-server + portal builds clean.

@@ -49,6 +49,22 @@ export interface RequestMetrics {
    * so "was this reply verified?" must be visible, not inferred from a flag.
    */
   confidence?: Confidence;
+  /**
+   * Task-execution trace (OpenManus-derived control flow): steps taken, tool
+   * errors, how often the run was steered out of a loop or granted an extra
+   * round. The "assistant fails at many tasks" reports are execution problems,
+   * and without these numbers a stall is only visible by reading logs.
+   */
+  task?: {
+    steps: number;
+    toolCalls: number;
+    toolErrors: number;
+    distinctTools: number;
+    successfulTools: number;
+    forcedAnswers: number;
+    steers: number;
+    detections: number;
+  };
 }
 
 const HISTORY_LIMIT = 100;

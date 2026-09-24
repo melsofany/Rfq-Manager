@@ -32,6 +32,7 @@ import {
 } from "./tools";
 import { entityVocabulary, findUnknownEntityNames, type EntityName } from "./db-tools";
 import { routeQuestion, routeHint, DEEP_MAX_ROUNDS } from "./router";
+import { TaskTrace, steeringMessage, logTraceEvent, HARD_MAX_STEPS } from "./task-loop";
 import { verifyAnswer } from "./verifier";
 import { recordMetrics } from "./metrics";
 import type { Confidence } from "./evidence";
@@ -291,7 +292,17 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const plan = routeQuestion(userText);
   // Rounds actually allowed for THIS question. The last one still forbids tools
   // (see FORCE_ANSWER_ON_LAST_ROUND) so an answer is always produced.
-  const maxRounds = plan.maxRounds;
+  //
+  // This is a BUDGET, not a guillotine (OpenManus `max_steps` semantics): a run
+  // that keeps producing real progress — the recorded failure is a resumable
+  // census abandoned half-read — may be granted one extra round, up to
+  // `HARD_MAX_STEPS`, while a run that is looping is stopped early by the
+  // stuck detection below.
+  const plannedRounds = plan.maxRounds;
+  let effectiveRounds = plannedRounds;
+  const trace = new TaskTrace();
+  let steered = false;
+  let extended = false;
   // Model routing (P6): a fast-path lookup runs on the light model so it does
   // not spend the primary model's daily quota, which the analytical questions
   // need. The light model is part of the same fallback chain, so an exhausted
@@ -399,11 +410,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const runTimer = setTimeout(() => runBudget.abort(), AGENT_BUDGET_MS);
 
   try {
-    for (let round = 0; round < maxRounds; round++) {
+    for (let round = 0; round < effectiveRounds; round++) {
       // Last round: forbid tool calls so the model has to answer with what it
       // already gathered. Without this a model that keeps calling tools drains
       // the budget and leaves nothing to send.
-      const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === maxRounds - 1;
+      const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === effectiveRounds - 1;
       const roundStartedAt = Date.now();
       const result = await chatCompletion({
         model: runModel,
@@ -523,6 +534,50 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         },
         "AI assistant: tool round complete",
       );
+
+      // Record the think/act cycle so the execution control below can see whether
+      // this run is progressing, looping, or failing the same call repeatedly.
+      trace.record({
+        step: round + 1,
+        thought: result.content ?? "",
+        toolCalls: calls.map((c) => ({ name: c.call.function.name, args: c.parsed })),
+        results: outcomes.map((o) => o.content),
+      });
+
+      // ── Stuck handling (OpenManus `is_stuck` / `handle_stuck_state`) ───────
+      // The recorded "fails at many tasks" behaviour is the model re-issuing the
+      // same failing call until the round budget is gone. Steer it once — change
+      // approach, or answer with what it has — instead of letting it loop.
+      if (!steered && trace.isStuck()) {
+        const reason = trace.stuckReason();
+        trace.noteDetection();
+        trace.noteSteering();
+        steered = true;
+        messages.push({ role: "user", content: steeringMessage(trace) });
+        logTraceEvent(input.phone, "stuck", { round, reason });
+        // A malformed-argument call is answered by correction, and a repeated
+        // FAILING call is worth one more round to retry intelligently. A merely
+        // repeated thought (no progress) gets no extension — that is the stall.
+        if (reason === "repeated_failed_call" && effectiveRounds < HARD_MAX_STEPS) {
+          effectiveRounds += 1;
+          logTraceEvent(input.phone, "extend", { to: effectiveRounds, reason });
+        }
+      }
+
+      // ── Progress-based budget extension (OpenManus `max_steps` is a budget) ─
+      // A run still producing NEW successful tool results may take one extra
+      // round, so a multi-window census is not abandoned mid-read. Guarded by the
+      // remaining budget and the hard cap so this can never loop on a dead run.
+      if (
+        !extended &&
+        !steered &&
+        trace.canExtend(round + 1, AGENT_BUDGET_MS - (Date.now() - startedAt), steered) &&
+        effectiveRounds < HARD_MAX_STEPS
+      ) {
+        effectiveRounds += 1;
+        extended = true;
+        logTraceEvent(input.phone, "extend", { to: effectiveRounds, reason: "progress" });
+      }
     }
 
     if (!finalText) {
@@ -694,6 +749,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     latencyMs: Date.now() - startedAt,
     outcome: "answered",
     confidence: answerConfidence(usedTools.length, verificationRan, numericDisagreed),
+    task: trace.summary(),
   });
 
   // The extracted document text is intentionally kept out of the stored
