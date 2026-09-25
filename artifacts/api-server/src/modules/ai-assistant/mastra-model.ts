@@ -52,6 +52,27 @@ function textOf(content: unknown): string {
 }
 
 /**
+ * Normalise whatever Mastra hands us for an image into a data URL.
+ *
+ * Accepted: a URL/string that is already a URL or a data URL, a base64 payload,
+ * or the raw bytes Mastra downloads. Anything unreadable returns null so the
+ * caller can fall back to text rather than send a broken part.
+ */
+function toImageUrl(data: unknown, mediaType: string): string | null {
+  if (typeof data === "string") {
+    if (data.startsWith("data:") || data.startsWith("http://") || data.startsWith("https://")) {
+      return data;
+    }
+    return `data:${mediaType};base64,${data}`;
+  }
+  if (data instanceof Uint8Array) {
+    return `data:${mediaType};base64,${Buffer.from(data).toString("base64")}`;
+  }
+  if (data instanceof URL) return data.toString();
+  return null;
+}
+
+/**
  * `allowEmpty` distinguishes a genuinely empty assistant text turn from a
  * malformed one. An assistant turn that ONLY calls tools has no text, and
  * feeding it back as `null` (rather than "") is what the provider contract
@@ -65,15 +86,30 @@ function toChatMessage(msg: LanguageModelV3Message): ChatMessage | null {
   }
 
   if (role === "user") {
-    // Text-only user turns stay plain strings; an image turn becomes content
-    // parts, because that is what the provider layer understands.
-    const parts = msg.content.map((p: any) => {
-      if (p?.type === "file" && typeof p.mediaType === "string" && p.mediaType.startsWith("image/")) {
-        const url = typeof p.data === "string" ? p.data : null;
-        if (url) return { type: "image_url" as const, image_url: { url } };
+    // Text-only user turns stay plain strings; a turn carrying an image becomes
+    // content parts, because that is what the provider layer understands.
+    //
+    // Mastra DOWNLOADS an image and passes its bytes, so `data` is a
+    // Uint8Array (or a base64 string) rather than a URL. Both forms are turned
+    // into the data-URL the provider expects; assuming a URL here dropped the
+    // operator's photo silently.
+    const parts: Array<
+      { type: "image_url"; image_url: { url: string } } | { type: "text"; text: string }
+    > = [];
+    for (const p of msg.content as any[]) {
+      if (
+        p?.type === "file" &&
+        typeof p.mediaType === "string" &&
+        p.mediaType.startsWith("image/")
+      ) {
+        const url = toImageUrl(p.data, p.mediaType);
+        if (url) {
+          parts.push({ type: "image_url", image_url: { url } });
+          continue;
+        }
       }
-      return { type: "text" as const, text: String(p?.text ?? "") };
-    });
+      parts.push({ type: "text", text: String(p?.text ?? "") });
+    }
     const hasImage = parts.some((p) => p.type === "image_url");
     if (!hasImage) return { role: "user", content: parts.map((p: any) => p.text).join("") };
     return { role: "user", content: parts };
@@ -178,7 +214,12 @@ function usageFrom(result: {
 }
 
 const EMPTY_USAGE: LanguageModelV3Usage = {
-  inputTokens: { total: undefined, noCache: undefined, cacheRead: undefined, cacheWrite: undefined },
+  inputTokens: {
+    total: undefined,
+    noCache: undefined,
+    cacheRead: undefined,
+    cacheWrite: undefined,
+  },
   outputTokens: { total: undefined, text: undefined, reasoning: undefined },
 };
 
@@ -227,7 +268,9 @@ export class CortobaLanguageModel implements LanguageModelV3 {
         toolCallId: call.id,
         toolName: call.function.name,
         input: call.function.arguments,
-        providerMetadata: signature ? { [PROVIDER_ID]: { thoughtSignature: signature } } : undefined,
+        providerMetadata: signature
+          ? { [PROVIDER_ID]: { thoughtSignature: signature } }
+          : undefined,
       });
     }
 
@@ -251,7 +294,9 @@ export class CortobaLanguageModel implements LanguageModelV3 {
     };
   }
 
-  async doStream(options: LanguageModelV3CallOptions): Promise<{ stream: ReadableStream<LanguageModelV3StreamPart> }> {
+  async doStream(
+    options: LanguageModelV3CallOptions,
+  ): Promise<{ stream: ReadableStream<LanguageModelV3StreamPart> }> {
     // Non-streaming internally, replayed as a stream: this assistant answers over
     // WhatsApp in one message, so there is nothing to stream to a UI. Emitting a
     // single text block keeps Mastra's streaming path functional without a second

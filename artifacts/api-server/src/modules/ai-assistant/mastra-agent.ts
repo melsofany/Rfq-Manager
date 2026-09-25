@@ -23,7 +23,7 @@ import { createTool } from "@mastra/core/tools";
 import { logger } from "../../shared/logger";
 import { CortobaLanguageModel } from "./mastra-model";
 import { executeTool, asText, toolDefinitions, type ToolContext } from "./tools";
-import type { ChatMessage } from "./llm";
+import type { ChatMessage, ContentPart } from "./llm";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -80,7 +80,11 @@ export async function runToolLoop(opts: {
         // Our executor already returns text for text results; only a structured
         // payload is flattened. Calling asText on a string would JSON-quote it.
         const text =
-          typeof res.data === "string" ? res.data : res.ok ? asText(res.data) : `ERROR: ${res.error}`;
+          typeof res.data === "string"
+            ? res.data
+            : res.ok
+              ? asText(res.data)
+              : `ERROR: ${res.error}`;
         return res.ok ? text : `ERROR: ${res.error}`;
       },
     });
@@ -103,10 +107,30 @@ export async function runToolLoop(opts: {
 
   // History is replayed as prior turns so a follow-up keeps its context. Each
   // stored turn becomes its own message rather than one concatenated blob.
-  const history = turns.map((m) => ({
-    role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
-    content: typeof m.content === "string" ? m.content : asText(m.content),
-  }));
+  //
+  // A turn carrying an IMAGE is kept as content parts. Flattening it to text
+  // would drop the image silently — `asText` only reads text parts, so the
+  // operator's photo would arrive as an empty string and the failure would look
+  // like the model ignoring it.
+  const isImageTurn = (m: ChatMessage) =>
+    Array.isArray(m.content) && m.content.some((p) => p.type === "image_url");
+
+  const history = turns.map((m) => {
+    if (isImageTurn(m)) {
+      return {
+        role: "user" as const,
+        content: (m.content as ContentPart[]).map((p) =>
+          p.type === "image_url"
+            ? { type: "image" as const, image: p.image_url.url, mediaType: "image/jpeg" }
+            : { type: "text" as const, text: p.text },
+        ),
+      };
+    }
+    return {
+      role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+      content: typeof m.content === "string" ? m.content : asText(m.content),
+    };
+  });
   if (!history.length) history.push({ role: "user" as const, content: "(رسالة فارغة)" });
 
   const exchanges: ToolExchange[] = [];
@@ -152,7 +176,21 @@ export async function runToolLoop(opts: {
   return { finalText, rounds, toolCallCount: exchanges.length, exchanges };
 }
 
-/** Whether the Mastra engine is selected. Defaults to the proven legacy loop. */
+/**
+ * Whether the Mastra engine is selected.
+ *
+ * Defaults to the proven legacy loop ON PURPOSE. The Mastra engine is complete
+ * and live-verified (a real Gemini tool round, provider failover and a real DB
+ * answer), but four hardened behaviours still live only in the legacy loop:
+ * identical-call dedup, the forced tool-free final round, stuck steering, and
+ * the progress-based budget extension for a resumable census. Those are the
+ * recorded fixes for the operator's reports («بيعيد نفس البحث», the assistant
+ * going silent, a census abandoned mid-read), so switching the default before
+ * they are ported would silently regress them.
+ *
+ * Enable for a live A/B with `AI_AGENT_ENGINE=mastra`; that is a one-variable,
+ * no-redeploy rollback in the other direction too.
+ */
 export function mastraEngineEnabled(): boolean {
   return (process.env.AI_AGENT_ENGINE ?? "legacy").toLowerCase() === "mastra";
 }

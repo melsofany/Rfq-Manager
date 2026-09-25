@@ -459,175 +459,175 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         }
       }
     } else
-    for (let round = 0; round < effectiveRounds; round++) {
-      // Last round: forbid tool calls so the model has to answer with what it
-      // already gathered. Without this a model that keeps calling tools drains
-      // the budget and leaves nothing to send.
-      const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === effectiveRounds - 1;
-      const roundStartedAt = Date.now();
-      const result = await chatCompletion({
-        model: runModel,
-        baseUrl: settings.baseUrl,
-        messages,
-        tools,
-        toolChoice: isLastRound ? "none" : "auto",
-        signal: runBudget.signal,
-      });
-      rounds += 1;
-      if (result.modelUsed && result.modelUsed !== runModel) fallbackUsed = true;
-      if (result.modelUsed) answeredModel = result.modelUsed;
-      if (result.providerUsed) answeredProvider = result.providerUsed;
-
-      if (result.toolCalls.length === 0) {
-        finalText = result.content;
-        break;
-      }
-
-      // Some providers (observed: Gemini) still return tool calls under
-      // tool_choice "none". Dropping the tool schemas entirely removes the option
-      // and reliably yields text; if even that fails, report what did run rather
-      // than silently swallowing the turn.
-      if (isLastRound) {
-        logger.warn(
-          {
-            providerToolChoiceIgnored: true,
-            model: runModel,
-            calls: result.toolCalls.length,
-          },
-          "AI assistant: model ignored tool_choice=none on the final round",
-        );
-        const noTools = await chatCompletion({
+      for (let round = 0; round < effectiveRounds; round++) {
+        // Last round: forbid tool calls so the model has to answer with what it
+        // already gathered. Without this a model that keeps calling tools drains
+        // the budget and leaves nothing to send.
+        const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === effectiveRounds - 1;
+        const roundStartedAt = Date.now();
+        const result = await chatCompletion({
           model: runModel,
           baseUrl: settings.baseUrl,
           messages,
-          toolChoice: "none",
+          tools,
+          toolChoice: isLastRound ? "none" : "auto",
+          signal: runBudget.signal,
         });
         rounds += 1;
-        if (noTools.modelUsed && noTools.modelUsed !== runModel) fallbackUsed = true;
-        if (noTools.modelUsed) answeredModel = noTools.modelUsed;
-        if (noTools.providerUsed) answeredProvider = noTools.providerUsed;
-        finalText = noTools.content ?? result.content ?? exhaustedAnswer(usedTools);
-        break;
-      }
+        if (result.modelUsed && result.modelUsed !== runModel) fallbackUsed = true;
+        if (result.modelUsed) answeredModel = result.modelUsed;
+        if (result.providerUsed) answeredProvider = result.providerUsed;
 
-      // Echo the assistant's tool-call turn back into the conversation, then run
-      // every call in THIS round concurrently. The calls in one round are chosen
-      // together by the model and are independent, so awaiting them in sequence
-      // only added latency (a 3-line item scan cost 3 round-trips).
-      //
-      // `reasoning_content` is carried through when the provider returned it
-      // (DeepSeek thinking mode): the next request is rejected without it. A
-      // provider that returns none (Gemini) leaves the field unset, and
-      // `withReasoningEcho` supplies the placeholder DeepSeek accepts.
-      messages.push({
-        role: "assistant",
-        content: result.content ?? null,
-        tool_calls: result.toolCalls,
-        reasoning_content: result.reasoningContent,
-      });
+        if (result.toolCalls.length === 0) {
+          finalText = result.content;
+          break;
+        }
 
-      const calls = result.toolCalls.map((call) => {
-        const parsed = parseArgs(call);
-        usedTools.push({ name: call.function.name, args: parsed });
-        return { call, parsed };
-      });
-      let dedupedCount = 0;
-      const outcomes = await Promise.all(
-        calls.map(async ({ call, parsed }) => {
-          // Identical (tool, args) in the SAME run: reuse the earlier result
-          // instead of re-running the tool. The calls in one round already run
-          // concurrently, so the promise is cached rather than the value.
-          const key = toolCacheKey(call.function.name, parsed);
-          // Resumable census tools intentionally MUST NOT be memoized. A second
-          // identical call is the resume operation: the session cursor has
-          // advanced in shared cache and must be allowed to return the next
-          // batch. Memoizing it made the model receive the first partial 150
-          // messages forever, despite the prompt telling it to continue.
-          const resumable = call.function.name === "scan_email_items";
-          let pending = resumable ? undefined : toolCache.get(key);
-          if (pending) {
-            dedupedCount += 1;
-          } else {
-            pending = (async () => {
-              const res = await executeTool(call.function.name, parsed, ctx);
-              return res.ok ? asText(res.data) : `ERROR: ${res.error}`;
-            })();
-            if (!resumable) toolCache.set(key, pending);
-          }
-          const content = await pending;
-          for (const n of findGroundingNumbers(content)) groundedNumbers.add(n);
-          // Collect the tool's OWN quantity aggregates (never a figure from the
-          // prose) so the numeric verifier reconciles against what the database
-          // actually returned rather than against the first large number in the
-          // answer.
-          for (const t of collectToolTotals(call.function.name, content))
-            toolAggregates.push({ tool: call.function.name, total: t });
-          return { call, content };
-        }),
-      );
-      for (const { call, content } of outcomes) {
+        // Some providers (observed: Gemini) still return tool calls under
+        // tool_choice "none". Dropping the tool schemas entirely removes the option
+        // and reliably yields text; if even that fails, report what did run rather
+        // than silently swallowing the turn.
+        if (isLastRound) {
+          logger.warn(
+            {
+              providerToolChoiceIgnored: true,
+              model: runModel,
+              calls: result.toolCalls.length,
+            },
+            "AI assistant: model ignored tool_choice=none on the final round",
+          );
+          const noTools = await chatCompletion({
+            model: runModel,
+            baseUrl: settings.baseUrl,
+            messages,
+            toolChoice: "none",
+          });
+          rounds += 1;
+          if (noTools.modelUsed && noTools.modelUsed !== runModel) fallbackUsed = true;
+          if (noTools.modelUsed) answeredModel = noTools.modelUsed;
+          if (noTools.providerUsed) answeredProvider = noTools.providerUsed;
+          finalText = noTools.content ?? result.content ?? exhaustedAnswer(usedTools);
+          break;
+        }
+
+        // Echo the assistant's tool-call turn back into the conversation, then run
+        // every call in THIS round concurrently. The calls in one round are chosen
+        // together by the model and are independent, so awaiting them in sequence
+        // only added latency (a 3-line item scan cost 3 round-trips).
+        //
+        // `reasoning_content` is carried through when the provider returned it
+        // (DeepSeek thinking mode): the next request is rejected without it. A
+        // provider that returns none (Gemini) leaves the field unset, and
+        // `withReasoningEcho` supplies the placeholder DeepSeek accepts.
         messages.push({
-          role: "tool",
-          tool_call_id: call.id,
-          name: call.function.name,
-          content,
+          role: "assistant",
+          content: result.content ?? null,
+          tool_calls: result.toolCalls,
+          reasoning_content: result.reasoningContent,
         });
-      }
-      logger.info(
-        {
-          phone: input.phone,
-          round,
-          ms: Date.now() - roundStartedAt,
-          toolCalls: calls.map((c) => c.call.function.name),
-          deduped: dedupedCount,
-        },
-        "AI assistant: tool round complete",
-      );
 
-      // Record the think/act cycle so the execution control below can see whether
-      // this run is progressing, looping, or failing the same call repeatedly.
-      trace.record({
-        step: round + 1,
-        thought: result.content ?? "",
-        toolCalls: calls.map((c) => ({ name: c.call.function.name, args: c.parsed })),
-        results: outcomes.map((o) => o.content),
-      });
+        const calls = result.toolCalls.map((call) => {
+          const parsed = parseArgs(call);
+          usedTools.push({ name: call.function.name, args: parsed });
+          return { call, parsed };
+        });
+        let dedupedCount = 0;
+        const outcomes = await Promise.all(
+          calls.map(async ({ call, parsed }) => {
+            // Identical (tool, args) in the SAME run: reuse the earlier result
+            // instead of re-running the tool. The calls in one round already run
+            // concurrently, so the promise is cached rather than the value.
+            const key = toolCacheKey(call.function.name, parsed);
+            // Resumable census tools intentionally MUST NOT be memoized. A second
+            // identical call is the resume operation: the session cursor has
+            // advanced in shared cache and must be allowed to return the next
+            // batch. Memoizing it made the model receive the first partial 150
+            // messages forever, despite the prompt telling it to continue.
+            const resumable = call.function.name === "scan_email_items";
+            let pending = resumable ? undefined : toolCache.get(key);
+            if (pending) {
+              dedupedCount += 1;
+            } else {
+              pending = (async () => {
+                const res = await executeTool(call.function.name, parsed, ctx);
+                return res.ok ? asText(res.data) : `ERROR: ${res.error}`;
+              })();
+              if (!resumable) toolCache.set(key, pending);
+            }
+            const content = await pending;
+            for (const n of findGroundingNumbers(content)) groundedNumbers.add(n);
+            // Collect the tool's OWN quantity aggregates (never a figure from the
+            // prose) so the numeric verifier reconciles against what the database
+            // actually returned rather than against the first large number in the
+            // answer.
+            for (const t of collectToolTotals(call.function.name, content))
+              toolAggregates.push({ tool: call.function.name, total: t });
+            return { call, content };
+          }),
+        );
+        for (const { call, content } of outcomes) {
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            name: call.function.name,
+            content,
+          });
+        }
+        logger.info(
+          {
+            phone: input.phone,
+            round,
+            ms: Date.now() - roundStartedAt,
+            toolCalls: calls.map((c) => c.call.function.name),
+            deduped: dedupedCount,
+          },
+          "AI assistant: tool round complete",
+        );
 
-      // ── Stuck handling (OpenManus `is_stuck` / `handle_stuck_state`) ───────
-      // The recorded "fails at many tasks" behaviour is the model re-issuing the
-      // same failing call until the round budget is gone. Steer it once — change
-      // approach, or answer with what it has — instead of letting it loop.
-      if (!steered && trace.isStuck()) {
-        const reason = trace.stuckReason();
-        trace.noteDetection();
-        trace.noteSteering();
-        steered = true;
-        messages.push({ role: "user", content: steeringMessage(trace) });
-        logTraceEvent(input.phone, "stuck", { round, reason });
-        // A malformed-argument call is answered by correction, and a repeated
-        // FAILING call is worth one more round to retry intelligently. A merely
-        // repeated thought (no progress) gets no extension — that is the stall.
-        if (reason === "repeated_failed_call" && effectiveRounds < HARD_MAX_STEPS) {
+        // Record the think/act cycle so the execution control below can see whether
+        // this run is progressing, looping, or failing the same call repeatedly.
+        trace.record({
+          step: round + 1,
+          thought: result.content ?? "",
+          toolCalls: calls.map((c) => ({ name: c.call.function.name, args: c.parsed })),
+          results: outcomes.map((o) => o.content),
+        });
+
+        // ── Stuck handling (OpenManus `is_stuck` / `handle_stuck_state`) ───────
+        // The recorded "fails at many tasks" behaviour is the model re-issuing the
+        // same failing call until the round budget is gone. Steer it once — change
+        // approach, or answer with what it has — instead of letting it loop.
+        if (!steered && trace.isStuck()) {
+          const reason = trace.stuckReason();
+          trace.noteDetection();
+          trace.noteSteering();
+          steered = true;
+          messages.push({ role: "user", content: steeringMessage(trace) });
+          logTraceEvent(input.phone, "stuck", { round, reason });
+          // A malformed-argument call is answered by correction, and a repeated
+          // FAILING call is worth one more round to retry intelligently. A merely
+          // repeated thought (no progress) gets no extension — that is the stall.
+          if (reason === "repeated_failed_call" && effectiveRounds < HARD_MAX_STEPS) {
+            effectiveRounds += 1;
+            logTraceEvent(input.phone, "extend", { to: effectiveRounds, reason });
+          }
+        }
+
+        // ── Progress-based budget extension (OpenManus `max_steps` is a budget) ─
+        // A run still producing NEW successful tool results may take one extra
+        // round, so a multi-window census is not abandoned mid-read. Guarded by the
+        // remaining budget and the hard cap so this can never loop on a dead run.
+        if (
+          !extended &&
+          !steered &&
+          trace.canExtend(round + 1, AGENT_BUDGET_MS - (Date.now() - startedAt), steered) &&
+          effectiveRounds < HARD_MAX_STEPS
+        ) {
           effectiveRounds += 1;
-          logTraceEvent(input.phone, "extend", { to: effectiveRounds, reason });
+          extended = true;
+          logTraceEvent(input.phone, "extend", { to: effectiveRounds, reason: "progress" });
         }
       }
-
-      // ── Progress-based budget extension (OpenManus `max_steps` is a budget) ─
-      // A run still producing NEW successful tool results may take one extra
-      // round, so a multi-window census is not abandoned mid-read. Guarded by the
-      // remaining budget and the hard cap so this can never loop on a dead run.
-      if (
-        !extended &&
-        !steered &&
-        trace.canExtend(round + 1, AGENT_BUDGET_MS - (Date.now() - startedAt), steered) &&
-        effectiveRounds < HARD_MAX_STEPS
-      ) {
-        effectiveRounds += 1;
-        extended = true;
-        logTraceEvent(input.phone, "extend", { to: effectiveRounds, reason: "progress" });
-      }
-    }
 
     if (!finalText) {
       finalText = exhaustedAnswer(usedTools);
