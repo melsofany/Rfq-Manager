@@ -16,6 +16,7 @@ import { scheduleDailyBackup } from "./modules/backup/service";
 import { verifySenderIdentity } from "./shared/mail-identity";
 import { logReadMailboxes } from "./modules/ai-assistant/mailboxes";
 import { logProviderCapacity } from "./modules/ai-assistant/config";
+import { mastraEngineEnabled } from "./modules/ai-assistant/mastra-agent";
 
 const rawPort = process.env["PORT"];
 
@@ -52,6 +53,17 @@ initDb()
       logger.warn({ err }, "AI assistant: orphan-job sweep failed (non-fatal)"),
     );
     logProviderCapacity();
+    // Which tool-loop engine this process will use. The choice is an env var with
+    // no other visible surface, and "did my switch take effect?" was a real
+    // question during the Mastra rollout — a one-line startup record answers it
+    // from the deploy logs instead of from a live conversation.
+    logger.info(
+      {
+        engine: mastraEngineEnabled() ? "mastra" : "legacy",
+        env: process.env.AI_AGENT_ENGINE ?? null,
+      },
+      "AI assistant: agent engine selected",
+    );
     try {
       await ensureWorkOrderTemplate();
       await ensurePoCancelTemplate();
