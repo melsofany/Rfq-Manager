@@ -382,7 +382,24 @@ export async function withMailbox<T>(
   let auth: { user: string; pass?: string; accessToken?: string };
 
   if (usingDelegation) {
-    auth = { user: mailbox.email, accessToken: await gmailAccessToken(mailbox.email) };
+    try {
+      auth = { user: mailbox.email, accessToken: await gmailAccessToken(mailbox.email) };
+    } catch (err) {
+      // Delegation is configured but NOT granted (unauthorized_client), which
+      // makes every mailbox read fail — including the legacy one whose app
+      // password still works. A working credential for this mailbox beats no
+      // mail at all, so fall back rather than inheriting the delegation outage.
+      const legacyUser = (cfg.user ?? "").toLowerCase();
+      if (mailbox.email.toLowerCase() === legacyUser && cfg.pass) {
+        logger.warn(
+          { mailbox: mailbox.email, err: (err as Error).message },
+          "AI assistant: delegation failed — falling back to the app password for the legacy mailbox",
+        );
+        auth = { user: mailbox.email, pass: cfg.pass };
+      } else {
+        throw err;
+      }
+    }
   } else {
     // Legacy path: a single mailbox with an app password. Refuse to read an
     // address other than the authenticated one — the password only works for it,

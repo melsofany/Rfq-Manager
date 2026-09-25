@@ -336,6 +336,45 @@ export function steeringMessage(trace: TaskTrace): string {
   return failing ? `${errorCorrectionPrompt(failing)}\n\n${STUCK_PROMPT}` : STUCK_PROMPT;
 }
 
+/**
+ * Stable cache key for one tool call: the tool name plus its arguments in a
+ * canonical form, so `{"a":1,"b":2}` and `{"b":2,"a":1}` dedupe to one entry.
+ * Nested objects are sorted recursively; a non-object value falls back to its
+ * string form.
+ *
+ * Lives here (a pure, dependency-free module) rather than in `agent.ts` so the
+ * Mastra engine can reuse the identical rule without importing `agent.ts` back
+ * — a cycle that would make either engine untestable in isolation.
+ */
+export function toolCacheKey(name: string, args: unknown): string {
+  const canonical = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(canonical);
+    if (v && typeof v === "object") {
+      return Object.keys(v as Record<string, unknown>)
+        .sort()
+        .reduce<Record<string, unknown>>((acc, k) => {
+          acc[k] = canonical((v as Record<string, unknown>)[k]);
+          return acc;
+        }, {});
+    }
+    return v;
+  };
+  try {
+    return `${name}:${JSON.stringify(canonical(args ?? {}))}`;
+  } catch {
+    return `${name}:${String(args)}`;
+  }
+}
+
+/**
+ * The last-round instruction: stop calling tools and answer from what has
+ * already been gathered. Shared so both engines force the answer identically.
+ */
+export const FORCE_ANSWER_INSTRUCTION =
+  "لم يعد لديك استدعاءات أدوات. استخدم النتائج التي جمعتها بالفعل واكتب الإجابة " +
+  "النهائية الآن بالعربية. إذا كانت البيانات ناقصة فاذكر ما توصلت إليه صراحةً وما " +
+  "لم تستطع الوصول إليه، ولا تخترع أرقامًا.";
+
 /** Log one stuck/forced event so the new control flow is visible in production. */
 export function logTraceEvent(
   phone: string,

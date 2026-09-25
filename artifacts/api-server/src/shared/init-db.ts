@@ -1264,6 +1264,31 @@ export async function initDb(): Promise<void> {
         ON ai_assistant_scan_sessions (updated_at DESC);
     `);
 
+    // Organization profiles — what the assistant learned about a counterparty
+    // (aliases, mail domains, document-number formats). Own statement: statements
+    // share an implicit transaction, so a sibling failure could roll this CREATE
+    // back silently and the learned knowledge would never persist.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_assistant_org_profiles (
+        id SERIAL PRIMARY KEY,
+        slug TEXT NOT NULL UNIQUE,
+        name_ar TEXT,
+        name_en TEXT,
+        aliases JSONB NOT NULL DEFAULT '[]'::jsonb,
+        domains JSONB NOT NULL DEFAULT '[]'::jsonb,
+        mailboxes JSONB NOT NULL DEFAULT '[]'::jsonb,
+        document_formats JSONB NOT NULL DEFAULT '[]'::jsonb,
+        notes TEXT,
+        confidence INTEGER NOT NULL DEFAULT 0,
+        evidence_count INTEGER NOT NULL DEFAULT 0,
+        sources JSONB NOT NULL DEFAULT '[]'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_org_profiles_updated
+        ON ai_assistant_org_profiles (updated_at DESC);
+    `);
+
     // ── Search / document-number indexes (P12) ──────────────────────────────
     // The assistant resolves documents by number and suppliers/customers by name
     // with ILIKE '%term%'. Without indexes those become sequential scans as the

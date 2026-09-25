@@ -25,6 +25,14 @@ async function buildAll() {
     logLevel: "info",
     external: [
       "*.node",
+      // Mastra + the AI SDK are kept OUT of the bundle on purpose. Bundling the
+      // full Mastra tree produced a 12 MB output that died at runtime with
+      // `Dynamic require of "events" is not supported` (a CJS `ws` dependency
+      // reaching for a Node builtin inside an ESM bundle). Left external, the
+      // output is ~120 KB and Node resolves them from node_modules at runtime —
+      // which is where `pnpm install` has already put them on Render.
+      "@mastra/*",
+      "@ai-sdk/*",
       "sharp",
       "better-sqlite3",
       "sqlite3",

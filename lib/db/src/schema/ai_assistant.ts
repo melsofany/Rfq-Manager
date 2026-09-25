@@ -165,3 +165,43 @@ export const aiAssistantScanSessionsTable = pgTable("ai_assistant_scan_sessions"
 });
 
 export type AiAssistantScanSession = typeof aiAssistantScanSessionsTable.$inferSelect;
+
+// ─── Organization profiles (learned counterparts) ──────────────────────────
+// What the assistant has learned about a counterparty: the names/aliases it goes
+// by, the mail domains and mailboxes its documents arrive from, and the FORMATS
+// of the document numbers it issues (`26R…` = their RFQ, `P26E…` = their PO).
+//
+// Two sources, both recorded in `sources`:
+//   - "mail": inferred from a census (sender domain + the number shapes that
+//     recur across their documents). Pure analysis — no model call, so it costs
+//     no quota.
+//   - "user": stated by the operator, including what the parts of a number MEAN
+//     (which layout analysis alone cannot prove).
+//
+// `slug` is the identity key: the same company spelled two ways must not create
+// two rows, or the learned formats would be split across them.
+export const aiAssistantOrgProfilesTable = pgTable("ai_assistant_org_profiles", {
+  id: serial("id").primaryKey(),
+  /** Canonical identity key (normalised name/alias), unique. */
+  slug: text("slug").notNull().unique(),
+  nameAr: text("name_ar"),
+  nameEn: text("name_en"),
+  /** Every name it is known by, including learned aliases. */
+  aliases: jsonb("aliases").$type<string[]>().notNull().default([]),
+  /** Mail domains belonging to it. */
+  domains: jsonb("domains").$type<string[]>().notNull().default([]),
+  /** Mailboxes its documents land in. */
+  mailboxes: jsonb("mailboxes").$type<string[]>().notNull().default([]),
+  /** Learned document-number formats (see `org-profiles.ts`). */
+  documentFormats: jsonb("document_formats").$type<unknown>().notNull().default([]),
+  notes: text("notes"),
+  /** 0-100, grows with corroboration; never used to hide a rule. */
+  confidence: integer("confidence").notNull().default(0),
+  evidenceCount: integer("evidence_count").notNull().default(0),
+  /** Which sources contributed: "mail" and/or "user". */
+  sources: jsonb("sources").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AiAssistantOrgProfile = typeof aiAssistantOrgProfilesTable.$inferSelect;
