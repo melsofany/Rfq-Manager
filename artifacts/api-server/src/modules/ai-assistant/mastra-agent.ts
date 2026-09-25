@@ -23,6 +23,7 @@ import { createTool } from "@mastra/core/tools";
 import { logger } from "../../shared/logger";
 import { CortobaLanguageModel } from "./mastra-model";
 import { executeTool, asText, toolDefinitions, type ToolContext } from "./tools";
+import { wrapUntrustedOutput, unwrapUntrustedOutput } from "./guardrails";
 import {
   TaskTrace,
   steeringMessage,
@@ -153,7 +154,12 @@ export async function runToolLoop(opts: {
       // Our executor already returns text for text results; only a structured
       // payload is flattened. Calling asText on a string would JSON-quote it.
       if (!res.ok) return `ERROR: ${res.error}`;
-      return typeof res.data === "string" ? res.data : asText(res.data);
+      const content = typeof res.data === "string" ? res.data : asText(res.data);
+      // Mail/document text is attacker-controlled; the model must see where the
+      // untrusted region begins and ends (OWASP ASI01). The raw `content` is what
+      // the caller's evidence ledger parses, so only the string handed to Mastra
+      // is wrapped.
+      return wrapUntrustedOutput(name, content);
     })();
     if (!resumable) toolCache.set(toolCacheKey(name, args), pending);
     return pending;
@@ -303,11 +309,15 @@ export async function runToolLoop(opts: {
             // exact string the executor produced.
             const text = typeof raw === "string" ? raw : asText(raw);
             const name = String(res?.toolName ?? "unknown");
+            // Unwrap before recording: the caller's evidence ledger parses these
+            // strings as JSON, so a security delimiter left in place would silently
+            // disable the numeric verifier and the resumable-census detection.
+            const ledgerText = unwrapUntrustedOutput(text);
             // Attach the result to its matching call so the caller sees one
             // (call → result) pair per exchange.
             const match = [...exchanges].reverse().find((e) => e.name === name && !e.content);
-            if (match) match.content = text;
-            else exchanges.push({ name, args: {}, content: text });
+            if (match) match.content = ledgerText;
+            else exchanges.push({ name, args: {}, content: ledgerText });
           }
         },
       });

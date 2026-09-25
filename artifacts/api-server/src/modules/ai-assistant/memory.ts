@@ -26,6 +26,7 @@
 import { db, aiAssistantMemoriesTable, type AiAssistantMemory } from "@workspace/db";
 import { and, eq, desc, isNull, or, sql } from "drizzle-orm";
 import { logger } from "../../shared/logger";
+import { checkMemoryWrite } from "./guardrails";
 
 /** Memory families. `rule`/`lesson` are the ones the user explicitly asked for. */
 export const MEMORY_CATEGORIES = ["fact", "preference", "entity", "rule", "lesson"] as const;
@@ -125,6 +126,20 @@ export async function rememberFact(input: MemoryInput): Promise<AiAssistantMemor
   const key = canonicalKey(input.key || input.value);
   const value = (input.value ?? "").toString().trim().slice(0, 4000);
   if (!value) throw new Error("قيمة الذاكرة فارغة");
+
+  // Refuse instruction-shaped or secret-shaped content BEFORE it reaches the
+  // table. `remember_fact` takes its value from the model, and the model reads
+  // mail — so this is the boundary where attacker-controlled text would become a
+  // permanent instruction injected into every later conversation (OWASP ASI06).
+  const rejection = checkMemoryWrite(value);
+  if (rejection === "instruction") {
+    logger.warn({ phone, category, key }, "AI assistant: refused instruction-shaped memory");
+    throw new Error("لا يمكن حفظ نص يشبه تعليمات موجّهة للمساعد داخل الذاكرة");
+  }
+  if (rejection === "secret") {
+    logger.warn({ phone, category, key }, "AI assistant: refused secret-shaped memory");
+    throw new Error("لا يمكن حفظ بيانات حساسة (مفتاح/كلمة مرور) في الذاكرة");
+  }
 
   const now = new Date();
   const [row] = await db

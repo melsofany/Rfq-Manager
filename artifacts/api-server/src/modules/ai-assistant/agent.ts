@@ -40,6 +40,7 @@ import {
   type OrgProfile,
 } from "./org-profiles";
 import { routeQuestion, routeHint, DEEP_MAX_ROUNDS } from "./router";
+import { wrapUntrustedOutput } from "./guardrails";
 import {
   TaskTrace,
   steeringMessage,
@@ -627,7 +628,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
             role: "tool",
             tool_call_id: call.id,
             name: call.function.name,
-            content,
+            // Mail/document text is attacker-controlled, so the model sees where
+            // the untrusted region begins and ends (OWASP ASI01). Wrapping happens
+            // ONLY here: the ledger and `collectToolTotals` above read the raw
+            // content, and a delimiter would break their JSON parsing.
+            content: wrapUntrustedOutput(call.function.name, content),
           });
         }
         logger.info(
