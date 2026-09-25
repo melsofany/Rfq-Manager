@@ -2311,3 +2311,48 @@ never been shown.
   re-write of a repeated batch). The fingerprint guard was verified to FAIL when
   disabled. **1030 api-server + 45 portal tests** pass; tsc, repo-wide prettier
   and both builds clean; the new routes return 401 (not 404) on the built server.
+
+## Mastra engine hardening
+
+The opt-in Mastra engine (`AI_AGENT_ENGINE=mastra`) was brought to parity with
+the legacy loop and then hardened. Four real defects were found and fixed; each is
+covered by a test that FAILS when the fix is reverted.
+
+- **Mastra's own retry multiplied the provider calls.** `chatCompletion` already
+  retries a transient 503 on the same model and then walks the fallback chain
+  (429/404 switch immediately, because Gemini caps each model at 20 req/day).
+  Mastra's default `maxRetries` (2) sat ON TOP of that, so one overloaded model
+  could be probed three times per round before the chain was consulted — on that
+  budget it turns a slow model into a whole-day outage. Every agent the engine
+  creates now passes `maxRetries: 0`. Retrying is the provider layer's job.
+- **The engine's own trace was thrown away.** `runToolLoop` builds its own
+  `TaskTrace` (steps, tool errors, steers, forced answers) and now returns it as
+  `taskTrace`; `agent.ts` merges it over the legacy summary. Before this, every
+  Mastra answer recorded `steps: 0, toolCalls: 0` on the dashboard while the log
+  line carried the real numbers — the telemetry described a different run than
+  the one that answered.
+- **A segment that ended on prose DROPPED its tool steps.** Mastra can call tools
+  and then answer inside the same segment (`maxSteps > 1`). The answer check used
+  to `break` before the trace was recorded, so those steps were lost: a populated
+  exchange ledger beside an empty control trace. Recording now happens FIRST.
+  This one was found by the real-runtime test below, not by inspection.
+- **Trace could read zero when a provider returned no `result.steps`.** Steps
+  delivered only through `onStepFinish` are now buffered and used as a fallback,
+  so stuck detection / the progress extension / the dashboard stay correct.
+- **A mid-segment fault now answers instead of going silent.** The `catch` used
+  to `break`, so the operator got the generic "exhausted" notice even with several
+  successful tool results already in the ledger. It now runs the same tool-free
+  answer turn (`answerWithoutTools`, extracted from the forced-answer path) before
+  giving up.
+- **`ai-mastra-runtime.test.ts` is the one that matters.** The other mastra
+  suites mock `@mastra/core/agent`, so they never prove Mastra accepts our
+  `CortobaLanguageModel` bridge, our JSON-schema tool definitions or our message
+  shapes. This suite leaves Mastra REAL and stubs only `fetch` (so the model quota
+  is untouched) and drives the actual loop. Do not mock `@mastra/core/agent` here
+  — that would restore the blind spot this test exists to remove.
+- Tests: `ai-mastra-loop.test.ts` (13) + `ai-mastra-runtime.test.ts` (3) +
+  `ai-mastra-bridge.test.ts` (16). **1037 api-server tests** pass; tsc clean;
+  repo-wide prettier clean; api-server build clean (Mastra is in the bundle).
+- **Activation is an env var, not a redeploy**: `AI_AGENT_ENGINE=mastra` on the
+  Render service. Setting it triggers a new deploy automatically. Unset it to roll
+  back to `legacy` instantly.

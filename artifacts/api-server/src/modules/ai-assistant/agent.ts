@@ -48,6 +48,7 @@ import {
   toolCacheKey,
 } from "./task-loop";
 import { runToolLoop, mastraEngineEnabled } from "./mastra-agent";
+import type { TraceSummary } from "./task-loop";
 import { verifyAnswer } from "./verifier";
 import { recordMetrics } from "./metrics";
 import type { Confidence } from "./evidence";
@@ -438,6 +439,13 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   // The model/provider that actually produced the answer. A cross-provider
   // rescue (Gemini quota spent, DeepSeek answered) is otherwise invisible: the
   // router's `runModel` would still be reported as if it had spoken.
+  /**
+   * The Mastra engine's own trace, when that engine ran.
+   *
+   * Set from `runToolLoop`'s result; left undefined on the legacy path, where
+   * `trace` (above) is the authority.
+   */
+  let engineTrace: TraceSummary | undefined;
   let answeredModel: string | undefined;
   let answeredProvider: string | undefined;
   let verificationRan = false;
@@ -494,6 +502,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       });
       rounds = loop.rounds;
       finalText = loop.finalText;
+      engineTrace = loop.taskTrace;
       // Rebuild the evidence ledger from the engine's raw exchanges, through the
       // SAME helpers the legacy loop uses, so the number check and the numeric
       // reconciliation behave identically on either engine.
@@ -879,7 +888,14 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     // The data tools' own figures travel with the trace. A summary can claim
     // "كل الأصناف" while the tool returned 15 rows; these numbers make that
     // contradiction visible on the dashboard instead of only in a log line.
-    task: { ...trace.summary(), ...(traceData.length ? { data: traceData } : {}) },
+    task: {
+      // The Mastra engine owns its own `TaskTrace`, so its summary replaces the
+      // (empty) legacy one. Without this the dashboard reported `steps: 0` for
+      // every Mastra run while the log line carried the real numbers — the
+      // telemetry described a different run than the one that answered.
+      ...(engineTrace ?? trace.summary()),
+      ...(traceData.length ? { data: traceData } : {}),
+    },
   });
 
   // The extracted document text is intentionally kept out of the stored
