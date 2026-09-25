@@ -33,6 +33,7 @@ import {
 import { entityVocabulary, findUnknownEntityNames, type EntityName } from "./db-tools";
 import { routeQuestion, routeHint, DEEP_MAX_ROUNDS } from "./router";
 import { TaskTrace, steeringMessage, logTraceEvent, HARD_MAX_STEPS } from "./task-loop";
+import { runToolLoop, mastraEngineEnabled } from "./mastra-agent";
 import { verifyAnswer } from "./verifier";
 import { recordMetrics } from "./metrics";
 import type { Confidence } from "./evidence";
@@ -431,6 +432,33 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const runTimer = setTimeout(() => runBudget.abort(), AGENT_BUDGET_MS);
 
   try {
+    if (mastraEngineEnabled()) {
+      // Swap-in tool loop. Everything around it — the router's plan, the run
+      // budget, the evidence ledger, verification, persistence and metrics —
+      // stays exactly as it is, so the engine can be changed back with one env
+      // var and nothing else in the pipeline has to be trusted twice.
+      const loop = await runToolLoop({
+        model: runModel,
+        baseUrl: settings.baseUrl,
+        messages,
+        ctx,
+        maxRounds: plan.maxRounds,
+        signal: runBudget.signal,
+        phone: input.phone,
+      });
+      rounds = loop.rounds;
+      finalText = loop.finalText;
+      // Rebuild the evidence ledger from the engine's raw exchanges, through the
+      // SAME helpers the legacy loop uses, so the number check and the numeric
+      // reconciliation behave identically on either engine.
+      for (const ex of loop.exchanges) {
+        usedTools.push({ name: ex.name, args: ex.args });
+        for (const n of findGroundingNumbers(ex.content)) groundedNumbers.add(n);
+        for (const t of collectToolTotals(ex.name, ex.content)) {
+          toolAggregates.push({ tool: ex.name, total: t });
+        }
+      }
+    } else
     for (let round = 0; round < effectiveRounds; round++) {
       // Last round: forbid tool calls so the model has to answer with what it
       // already gathered. Without this a model that keeps calling tools drains
