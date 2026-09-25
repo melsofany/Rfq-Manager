@@ -27,6 +27,7 @@ import {
   whatsappChatsTable,
 } from "@workspace/db";
 import { and, or, ilike, eq, desc, inArray } from "drizzle-orm";
+import { breakerAllow, breakerRecord } from "./guardrails";
 import type { SQL, AnyColumn } from "drizzle-orm";
 import {
   TABLES,
@@ -1811,21 +1812,34 @@ export async function executeTool(
   args: Record<string, unknown>,
   ctx: ToolContext,
 ): Promise<ToolResult> {
+  // Refuse fast when the tool's dependency is known to be down, instead of paying
+  // the full connect timeout on every request (OWASP ASI08). The refusal is an
+  // ordinary tool error, so the model reports a partial answer rather than hanging.
+  const verdict = breakerAllow(name);
+  if (!verdict.allowed) {
+    logger.warn({ tool: name }, "AI assistant: tool circuit breaker is open");
+    return { ok: false, error: verdict.message ?? "الخدمة غير متاحة مؤقتًا." };
+  }
+
   const timeoutMs = toolTimeoutMs();
   let timer: NodeJS.Timeout | undefined;
   try {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new ToolTimeoutError(name)), timeoutMs);
     });
-    return await Promise.race([executeToolInner(name, args, ctx), timeout]);
+    const result = await Promise.race([executeToolInner(name, args, ctx), timeout]);
+    breakerRecord(name, result.ok, result.error);
+    return result;
   } catch (err) {
     if (err instanceof ToolTimeoutError) {
       logger.warn({ tool: name, timeoutMs }, "AI assistant: tool exceeded its time ceiling");
+      breakerRecord(name, false, "timeout");
       return {
         ok: false,
         error: `لم تكمل الأداة «${name}» خلال ${Math.round(timeoutMs / 1000)} ثانية. لم تُقرأ كل البيانات — اذكر ذلك ولا تدّعِ الكمال.`,
       };
     }
+    breakerRecord(name, false, err instanceof Error ? err.message : String(err));
     throw err;
   } finally {
     if (timer) clearTimeout(timer);

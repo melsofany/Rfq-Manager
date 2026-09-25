@@ -135,6 +135,8 @@ interface AiMetrics {
     byModel?: Record<string, number>;
     byConfidence?: Record<string, number>;
   };
+  /** Remote dependencies currently marked down by the tool circuit breaker. */
+  breakers?: Record<string, { failures: number; open: boolean }>;
   recent: Array<{
     phone: string;
     intent: string;
@@ -741,6 +743,24 @@ export default function AiAssistantPage() {
                   </p>
                 </div>
               </div>
+
+              {metrics.breakers && Object.keys(metrics.breakers).length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                  <span className="text-xs text-muted-foreground">خدمات متعطلة مؤقتًا:</span>
+                  {Object.entries(metrics.breakers).map(([name, st]) => (
+                    <Badge
+                      key={name}
+                      variant="secondary"
+                      className="text-xs bg-red-100 text-red-800"
+                    >
+                      {name} ({st.failures} فشل)
+                    </Badge>
+                  ))}
+                  <span className="text-xs text-muted-foreground">
+                    قاطع الدائرة يمنع تكرار محاولة خدمة معطّلة ويُعيد المحاولة بعد دقيقة.
+                  </span>
+                </div>
+              )}
 
               {metrics.summary.byConfidence &&
                 Object.keys(metrics.summary.byConfidence).length > 0 && (

@@ -30,6 +30,7 @@ import { isEmailReadConfigured } from "./email";
 import { listAllModels } from "./llm";
 import { rememberFact, normalizeCategory } from "./memory";
 import { recentMetrics, metricsSummary } from "./metrics";
+import { breakerSnapshot } from "./guardrails";
 import { countJobsByStatus } from "./jobs";
 import {
   loadOrgProfiles,
@@ -249,7 +250,10 @@ router.get("/ai-assistant/models", guard, async (_req, res): Promise<void> => {
  * for the dashboard, not an audit trail.
  */
 router.get("/ai-assistant/metrics", guard, async (_req, res): Promise<void> => {
-  res.json({ summary: metricsSummary(), recent: recentMetrics(20) });
+  // `breakers` exposes which remote dependencies are currently marked down, so an
+  // operator can tell "the assistant is slow" from "IMAP is failing" without
+  // reading logs. An empty map means every dependency is healthy.
+  res.json({ summary: metricsSummary(), recent: recentMetrics(20), breakers: breakerSnapshot() });
 });
 
 // ─── PUT /ai-assistant/settings ───────────────────────────────────────────
