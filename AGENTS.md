@@ -2208,3 +2208,44 @@ source instead of reporting an empty email scan.
 - Deploy: PR #186 squash-merged `8e179a4e5`; CI (Tests / Type Check / Format Check)
   green; Deploy-to-Render workflow success; live at `8e179a4e5`; `/api/healthz` 200
   and `/api/ai-assistant/*` 401 (mounted behind auth).
+
+## Mastra engine reaches parity — the four hardened behaviours are ported (PR #188)
+
+The Mastra swap replaced the tool loop but left four behaviours only in the legacy
+loop, so `AI_AGENT_ENGINE=mastra` would have silently regressed the recorded
+operator reports. They now live in `mastra-agent.ts`'s `runToolLoop`, sharing the
+SAME `TaskTrace` / `toolCacheKey` / `steeringMessage` helpers as the legacy loop —
+one rule, two engines.
+
+- **How the control is expressed matters.** Mastra's `prepareStep` cannot express
+  "stop now" (`stopWhen` is a step-count, not a caller predicate), and returning
+  `activeTools: []` asks a provider for a tool-less turn _with tools still
+  declared_ — the exact `tool_choice:"none"` behaviour Gemini is recorded as
+  ignoring. So the engine drives Mastra in **segments**: `maxSteps` is set to the
+  rounds currently granted, and when the control layer grants an extension the
+  next segment continues from `result.response.messages` (a COMPLETE transcript,
+  including the assistant's tool-call turns and every tool result). Reconstructing
+  that transcript by hand is what a naive port would get wrong.
+- **`prepareStep.messages` REPLACES the conversation** (`composeStepInput` spreads
+  the result over the current step). Injecting a steering message through it would
+  drop every prior tool result; that is why steering appends to `convo` and
+  re-segments instead.
+- **Dedup belongs in the tool adapter**, not the loop: `executeOnce` caches the
+  _promise_ (the calls in one round already run concurrently) and **exempts
+  `scan_email_items`**, because a second identical census call IS the resume
+  operation — memoizing it froze the model on batch one.
+- **A granted-but-unspent round must not fall through to the forced answer.** The
+  first cut did exactly that, ending every run after one tool round (the "census
+  abandoned mid-read" regression, reproduced by the dedup/extension tests). The
+  loop now continues while `rounds < effectiveRounds`.
+- **`remainingBudgetMs` is passed from `agent.ts`** so the extension measures the
+  REAL remainder of `AGENT_BUDGET_MS`; passing a per-segment elapsed time instead
+  (the first cut) either stranded a resumable census or overran the deadline.
+- **`toolCacheKey` moved to `task-loop.ts`** (pure module) and is re-exported from
+  `agent.ts`, so the engine can share it without importing `agent.ts` back.
+- Tests: `ai-mastra-loop.test.ts` (9) drives the real `runToolLoop` against a
+  scripted Mastra `Agent` and asserts the control flow. **Each of the four guards
+  was verified to FAIL when its behaviour is disabled** (dedup → 2 failures,
+  forced answer → 1, steering → 1, extension → 1). **976 api-server tests** pass;
+  tsc (libs/api-server/portal) + repo-wide prettier + both builds clean.
+- The default stays `legacy`; the switch is one env var with no redeploy.

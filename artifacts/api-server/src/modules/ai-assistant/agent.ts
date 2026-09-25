@@ -32,7 +32,13 @@ import {
 } from "./tools";
 import { entityVocabulary, findUnknownEntityNames, type EntityName } from "./db-tools";
 import { routeQuestion, routeHint, DEEP_MAX_ROUNDS } from "./router";
-import { TaskTrace, steeringMessage, logTraceEvent, HARD_MAX_STEPS } from "./task-loop";
+import {
+  TaskTrace,
+  steeringMessage,
+  logTraceEvent,
+  HARD_MAX_STEPS,
+  toolCacheKey,
+} from "./task-loop";
 import { runToolLoop, mastraEngineEnabled } from "./mastra-agent";
 import { verifyAnswer } from "./verifier";
 import { recordMetrics } from "./metrics";
@@ -447,6 +453,10 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         maxRounds: plan.maxRounds,
         signal: runBudget.signal,
         phone: input.phone,
+        // The engine's budget extension measures the REAL remainder of the run
+        // budget, so it can never grant a round the operator's deadline cannot
+        // afford (nor strand a resumable census it still has time to finish).
+        remainingBudgetMs: AGENT_BUDGET_MS - (Date.now() - startedAt),
       });
       rounds = loop.rounds;
       finalText = loop.finalText;
@@ -1019,31 +1029,10 @@ function parseArgs(call: ToolCall): Record<string, unknown> {
   }
 }
 
-/**
- * Stable cache key for one tool call: the tool name plus its arguments in a
- * canonical form, so `{"a":1,"b":2}` and `{"b":2,"a":1}` dedupe to one entry.
- * Nested objects are sorted recursively; a non-object value falls back to its
- * string form.
- */
-export function toolCacheKey(name: string, args: unknown): string {
-  const canonical = (v: unknown): unknown => {
-    if (Array.isArray(v)) return v.map(canonical);
-    if (v && typeof v === "object") {
-      return Object.keys(v as Record<string, unknown>)
-        .sort()
-        .reduce<Record<string, unknown>>((acc, k) => {
-          acc[k] = canonical((v as Record<string, unknown>)[k]);
-          return acc;
-        }, {});
-    }
-    return v;
-  };
-  try {
-    return `${name}:${JSON.stringify(canonical(args ?? {}))}`;
-  } catch {
-    return `${name}:${String(args)}`;
-  }
-}
+// `toolCacheKey` moved to `./task-loop` (pure module) so the Mastra engine can
+// share the identical dedup rule without a circular import. Re-exported here
+// because it is part of this module's public surface.
+export { toolCacheKey };
 
 /**
  * Document-number-shaped tokens in a piece of text.
