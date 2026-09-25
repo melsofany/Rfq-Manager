@@ -36,6 +36,7 @@ import {
   PinOff,
   Activity,
   Layers,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
@@ -67,6 +68,31 @@ interface AiMemory {
   pinned: boolean;
   useCount: number;
   updatedAt: string;
+}
+
+interface AiOrgFormat {
+  kind: string;
+  pattern: string;
+  example: string;
+  evidence: number;
+  meaning?: string;
+}
+
+/** A counterparty the assistant has learned (aliases + document formats). */
+interface AiOrgProfile {
+  id: number;
+  slug: string;
+  nameAr?: string | null;
+  nameEn?: string | null;
+  aliases: string[];
+  domains: string[];
+  mailboxes: string[];
+  documentFormats: AiOrgFormat[];
+  notes?: string | null;
+  confidence: number;
+  evidenceCount: number;
+  sources: string[];
+  updatedAt?: string;
 }
 
 interface AiSettings {
@@ -240,6 +266,28 @@ export default function AiAssistantPage() {
   const [newMemShared, setNewMemShared] = useState(true);
   const [savingMem, setSavingMem] = useState(false);
 
+  // Learned organization profiles: what the assistant knows about each party
+  // (aliases, mail domains, document-number formats).
+  const [profiles, setProfiles] = useState<AiOrgProfile[]>([]);
+  const [profName, setProfName] = useState("");
+  const [profAliases, setProfAliases] = useState("");
+  const [profDomains, setProfDomains] = useState("");
+  const [profExamples, setProfExamples] = useState("");
+  const [profNotes, setProfNotes] = useState("");
+  const [profMeaning, setProfMeaning] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [classifyInput, setClassifyInput] = useState("");
+  const [classifyResult, setClassifyResult] = useState<string | null>(null);
+
+  const loadProfiles = useCallback(async () => {
+    try {
+      const r = await apiGet<{ profiles: AiOrgProfile[] }>("/api/ai-assistant/org-profiles");
+      setProfiles(r.profiles);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "فشل تحميل بروفايلات الجهات"));
+    }
+  }, []);
+
   const loadMemories = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -276,12 +324,13 @@ export default function AiAssistantPage() {
         .then((j) => setJobs(j.jobs))
         .catch(() => setJobs([]));
       await loadMemories();
+      await loadProfiles();
     } catch (err) {
       toast.error(getApiErrorMessage(err, "فشل تحميل بيانات المساعد الذكي"));
     } finally {
       setLoading(false);
     }
-  }, [loadMemories]);
+  }, [loadMemories, loadProfiles]);
 
   useEffect(() => {
     load();
@@ -386,6 +435,14 @@ export default function AiAssistantPage() {
     lesson: "درس مستفاد",
   };
 
+  const KIND_LABELS: Record<string, string> = {
+    po: "أمر شراء",
+    rfq: "طلب تسعير",
+    invoice: "فاتورة",
+    quotation: "عرض سعر",
+    other: "مستند",
+  };
+
   async function addMemory() {
     if (!newMemKey.trim() || !newMemValue.trim()) {
       toast.error("أدخل المفتاح والقيمة");
@@ -442,6 +499,101 @@ export default function AiAssistantPage() {
       toast.success("تم حذف المعلومة");
     } catch (err) {
       toast.error(getApiErrorMessage(err, "تعذّر حذف الذاكرة"));
+    }
+  }
+
+  /**
+   * Teach an organization by hand.
+   *
+   * The example numbers are what make the FORMAT learnable: the backend derives a
+   * rule from them (`P26E11407` → `^P\d{2}E\d{5}$`), so the assistant recognises
+   * the NEXT document from that company without ever having been shown it.
+   * One example per line: `NUMBER` or `NUMBER=po|rfq|invoice`.
+   */
+  async function addProfile() {
+    if (!profName.trim()) {
+      toast.error("أدخل اسم الجهة");
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      const examples = profExamples
+        .split(/[\n,]/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const [number, kind] = line.split("=").map((x) => x.trim());
+          return { number, kind: kind || undefined };
+        })
+        .filter((e) => e.number);
+      const r = await fetch("/api/ai-assistant/org-profiles", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: profName,
+          aliases: profAliases
+            .split(/[,\n]/)
+            .map((x) => x.trim())
+            .filter(Boolean),
+          domains: profDomains
+            .split(/[,\n]/)
+            .map((x) => x.trim())
+            .filter(Boolean),
+          examples,
+          meaning: profMeaning || undefined,
+          notes: profNotes || undefined,
+        }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setProfName("");
+      setProfAliases("");
+      setProfDomains("");
+      setProfExamples("");
+      setProfNotes("");
+      setProfMeaning("");
+      await loadProfiles();
+      toast.success("تم تعلّم بيانات الجهة وأنماط أرقامها");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "تعذّر حفظ البروفايل"));
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function deleteProfile(id: number) {
+    try {
+      const r = await fetch(`/api/ai-assistant/org-profiles/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setProfiles((prev) => prev.filter((p) => p.id !== id));
+      toast.success("تم حذف البروفايل");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "تعذّر حذف البروفايل"));
+    }
+  }
+
+  /** "What is this number?" — answered from the learned patterns, not a guess. */
+  async function classifyNumber() {
+    if (!classifyInput.trim()) return;
+    try {
+      const r = await fetch("/api/ai-assistant/classify-number", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ number: classifyInput }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      setClassifyResult(
+        d.matched
+          ? `${d.organization} — ${KIND_LABELS[d.kind] ?? d.kind} (النمط ${d.pattern})`
+          : "لا نمط معروف يطابق هذا الرقم — علّمني إيّاه لأتعرّف عليه لاحقًا.",
+      );
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "تعذّر تصنيف الرقم"));
     }
   }
 
@@ -1082,6 +1234,178 @@ export default function AiAssistantPage() {
                   ))}
                 </TableBody>
               </Table>
+            )}
+          </CardContent>
+        </Card>
+        {/* ── Learned organizations (profiles) ─────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Building2 className="h-5 w-5 text-primary" />
+              بروفايلات الجهات (ما تعلّمه المساعد عن كل شركة)
+              <Badge variant="secondary">{profiles.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              يتعلّم المساعد اسم كل جهة وأسماءها البديلة ونطاق بريدها، وأهم من ذلك{" "}
+              <strong>أنماط أرقام مستنداتها</strong> — فيتعرّف على رقم أمر شراء لم يره من قبل من
+              صيغته. يتعلّم تلقائيًا بالتحليل عند البحث في البريد، ويمكنك تعليمه يدويًا من هنا.
+            </p>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label>اسم الجهة</Label>
+                <Input
+                  value={profName}
+                  onChange={(e) => setProfName(e.target.value)}
+                  placeholder="مثال: شركة الحفر المصرية أو EDC"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>أسماء بديلة (فاصلة)</Label>
+                <Input
+                  value={profAliases}
+                  onChange={(e) => setProfAliases(e.target.value)}
+                  placeholder="EDC, Egyptian Drilling Company"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>نطاقات البريد (فاصلة)</Label>
+                <Input
+                  value={profDomains}
+                  onChange={(e) => setProfDomains(e.target.value)}
+                  placeholder="edc-egypt.com"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>ملاحظات</Label>
+                <Input
+                  value={profNotes}
+                  onChange={(e) => setProfNotes(e.target.value)}
+                  placeholder="مثال: أوامر الشراء تصل إلى صندوق info"
+                />
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <Label>معنى أجزاء الرقم (كما شرحه المستخدم)</Label>
+                <Input
+                  value={profMeaning}
+                  onChange={(e) => setProfMeaning(e.target.value)}
+                  placeholder="مثال: P = أمر شراء، 26 = السنة، E = EDC، والباقي رقم مسلسل"
+                />
+                <p className="text-xs text-muted-foreground">
+                  هذا الجزء لا يُستنتج من شكل المستند — يُتعلَّم من المستخدم ويُسجَّل قاعدة مع
+                  النمط.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label>
+                أمثلة على أرقام مستنداتهم — كل مثال في سطر، ويمكن إضافة النوع{" "}
+                <span className="text-muted-foreground">{"رقم=po|rfq|invoice"}</span>
+              </Label>
+              <Textarea
+                value={profExamples}
+                onChange={(e) => setProfExamples(e.target.value)}
+                placeholder={"P26E11407=po\nP26E14630=po\n26R011936=rfq"}
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                من هذه الأمثلة يُشتق نمط عام: من <code>P26E11407</code> يتعلّم النمط{" "}
+                <code>
+                  ^P\d{"{2}"}E\d{"{5}"}$
+                </code>{" "}
+                — فيتعرّف على كل أمر شراء قادم من EDC تلقائيًا.
+              </p>
+            </div>
+
+            <Button onClick={addProfile} disabled={savingProfile || !canManage}>
+              {savingProfile ? (
+                <Loader2 className="h-4 w-4 animate-spin ml-1" />
+              ) : (
+                <Sparkles className="h-4 w-4 ml-1" />
+              )}
+              علّم المساعد هذه الجهة
+            </Button>
+
+            {/* Ask what a number is — proves the learning works without a chat. */}
+            <div className="flex flex-wrap items-end gap-2 border-t pt-4">
+              <div className="space-y-1 flex-1 min-w-[220px]">
+                <Label>جرّب: ما هذا الرقم؟</Label>
+                <Input
+                  value={classifyInput}
+                  onChange={(e) => setClassifyInput(e.target.value)}
+                  placeholder="P26E99999"
+                />
+              </div>
+              <Button variant="outline" onClick={classifyNumber}>
+                <Layers className="h-4 w-4 ml-1" />
+                صنّف
+              </Button>
+              {classifyResult && (
+                <p className="text-sm text-muted-foreground basis-full">{classifyResult}</p>
+              )}
+            </div>
+
+            {profiles.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                لم يتعلّم المساعد أي جهة بعد. ابحث في البريد من واتساب ليتعلّم تلقائيًا، أو علّمه من
+                هنا.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {profiles.map((p) => (
+                  <div key={p.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{p.slug}</span>
+                      <Badge variant="outline">{p.confidence}% ثقة</Badge>
+                      {p.sources.map((s) => (
+                        <Badge key={s} variant="secondary">
+                          {s === "mail" ? "من البريد" : "من المستخدم"}
+                        </Badge>
+                      ))}
+                      <span className="text-xs text-muted-foreground">
+                        {p.evidenceCount} ملاحظة
+                      </span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-destructive mr-auto"
+                        title="حذف"
+                        onClick={() => deleteProfile(p.id)}
+                        disabled={!canManage}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {p.aliases.length > 0 && (
+                      <p className="text-xs text-muted-foreground">أسماء: {p.aliases.join("، ")}</p>
+                    )}
+                    {p.domains.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        بريد: {p.domains.join("، ")}
+                        {p.mailboxes.length > 0 && ` — صندوق: ${p.mailboxes.join("، ")}`}
+                      </p>
+                    )}
+                    {p.documentFormats.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {p.documentFormats.map((f) => (
+                          <div key={f.pattern} className="space-y-1">
+                            <Badge variant="default" className="font-mono text-xs">
+                              {KIND_LABELS[f.kind] ?? f.kind}: {f.pattern}
+                            </Badge>
+                            {f.meaning && (
+                              <p className="text-xs text-muted-foreground">{f.meaning}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {p.notes && <p className="text-xs">{p.notes}</p>}
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>

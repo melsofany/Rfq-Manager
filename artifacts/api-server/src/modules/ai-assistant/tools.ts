@@ -38,6 +38,13 @@ import {
   cols,
 } from "./db-tools";
 import {
+  saveOrgProfile,
+  loadOrgProfiles,
+  classifyByProfiles,
+  learnProfileFromMail,
+  deriveDocumentFormats,
+} from "./org-profiles";
+import {
   searchEmails,
   scanEmails,
   readEmail,
@@ -57,6 +64,7 @@ import {
   itemsAggregateCsv,
   aggregateItems,
   aggregateItemsByOccurrence,
+  documentKind,
   type ParsedLineItem,
 } from "./email-items";
 import { runItemScan, sessionAttachmentCoverage } from "./item-scan-session";
@@ -158,6 +166,68 @@ const asText = (data: unknown): string => {
     return String(data);
   }
 };
+
+/**
+ * Fingerprints of the mail batches already mined for org profiles.
+ *
+ * Auto-learning runs on the census result, and a census is re-read on every
+ * follow-up question (that is what the scan cache is for). Without this guard the
+ * same batch would be re-derived and re-written on each of those turns —
+ * pointless database writes for knowledge that has not changed. Bounded so a
+ * long-lived process cannot grow it without limit.
+ */
+const learnedMailFingerprints = new Set<string>();
+
+/** Test seam: forget which batches were mined. */
+export function resetMailLearning(): void {
+  learnedMailFingerprints.clear();
+}
+
+/**
+ * Learn organization profiles from mail that was just read — the "بالتحليل
+ * والمنطق" half of the operator's request, done WITHOUT a model call.
+ *
+ * Deliberately best-effort and never thrown: a learning failure must not fail the
+ * search the operator actually asked for. The caller passes only what the scan
+ * already produced, so this costs a little CPU and one write, never a provider
+ * request — the quota is what makes this assistant go silent.
+ */
+export async function learnProfilesFromMail(input: {
+  from: string;
+  subject?: string;
+  mailbox?: string;
+  numbers: Array<{ number: string; kind?: "po" | "rfq" | "invoice" | "quotation" | "other" }>;
+}): Promise<{ learned: boolean; slug?: string; formats?: number; reason?: string }> {
+  try {
+    const obs = input.numbers
+      .filter((n) => n.number)
+      .map((n) => ({
+        number: n.number,
+        kind: n.kind,
+        from: input.from,
+        subject: input.subject,
+        mailbox: input.mailbox,
+      }));
+    if (!obs.length) return { learned: false, reason: "لا أرقام مستندات في هذه الرسالة" };
+    const profile = learnProfileFromMail(obs);
+    if (!profile) return { learned: false, reason: "لا نمط متكرر ولا هوية يمكن استنتاجها" };
+    // A batch is identified by its identity + the set of numbers it proved.
+    const fingerprint = `${profile.slug}|${profile.documentFormats
+      .map((f) => f.pattern)
+      .sort()
+      .join(",")}`;
+    if (learnedMailFingerprints.has(fingerprint)) {
+      return { learned: false, slug: profile.slug, reason: "تعلّمته سابقًا" };
+    }
+    if (learnedMailFingerprints.size > 500) learnedMailFingerprints.clear();
+    learnedMailFingerprints.add(fingerprint);
+    const saved = await saveOrgProfile(profile);
+    return { learned: true, slug: saved.slug, formats: saved.documentFormats.length };
+  } catch (err) {
+    logger.warn({ err }, "AI assistant: learning from mail failed");
+    return { learned: false, reason: "تعذّر التعلّم" };
+  }
+}
 
 export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
   const defs: ToolDefinition[] = [
@@ -803,6 +873,95 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             },
           },
           required: ["title", "sections"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "learn_organization",
+        description:
+          "تعلّم كل ما يمكن معرفته عن جهة (شركة/مورد/عميل): اسمها وأسماؤها البديلة، " +
+          "نطاق بريدها، الصندوق الذي تصل إليه مستنداتها، و**أنماط أرقام مستنداتها** " +
+          "(مثال: طلبات التسعير تبدأ بـ 26 ثم R، وأوامر الشراء تبدأ بـ P ثم 26 ثم E). " +
+          "استخدمها عندما يشرح المستخدم أسماءً أو صيغ أرقام أو معاني أجزائها، أو عند استنتاج " +
+          "قاعدة من عدة مستندات رأيتها. النمط يُشتق تلقائيًا من الأمثلة التي تعطيها في examples. " +
+          "بعد التعلّم ستتعرّف على أرقام لم ترها من قبل — لا تعِد تعلّم نفس الشيء.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description:
+                "اسم الجهة كما نطقها المستخدم أو كما وردت في البريد (مثال: «شركة الحفر المصرية» أو EDC).",
+            },
+            aliases: {
+              type: "array",
+              items: { type: "string" },
+              description: "كل الأسماء التي تُعرف بها (EDC، Egyptian Drilling، الحفر المصرية…).",
+            },
+            domains: {
+              type: "array",
+              items: { type: "string" },
+              description: "نطاقات بريدها (مثال: edc-egypt.com).",
+            },
+            mailboxes: {
+              type: "array",
+              items: { type: "string" },
+              description: "صناديق البريد التي تصل إليها مستنداتها (مثال: info).",
+            },
+            examples: {
+              type: "array",
+              description:
+                "أمثلة على أرقام مستنداتها. كل مثال: {number, kind} حيث kind = po أو rfq أو invoice. " +
+                "كن صادقًا: مثال واحد كافٍ إذا أكّده المستخدم، لكن لا تخترع أمثلة.",
+              items: {
+                type: "object",
+                properties: {
+                  number: {
+                    type: "string",
+                    description: "رقم مستند فعلي رأيته (مثال: P26E11407).",
+                  },
+                  kind: {
+                    type: "string",
+                    enum: ["po", "rfq", "invoice", "quotation", "other"],
+                    description: "نوع المستند.",
+                  },
+                },
+                required: ["number"],
+              },
+            },
+            meaning: {
+              type: "string",
+              description:
+                "معنى أجزاء الرقم كما شرحه المستخدم (مثال: «26 = السنة، R = طلب تسعير» أو " +
+                "«P = أمر شراء، 26 = السنة، E = EDC، والباقي رقم مسلسل»). هذا هو الجزء الذي " +
+                "لا يمكن استنتاجه من شكل المستند وحده — يُسجَّل قاعدة مع النمط.",
+            },
+            notes: {
+              type: "string",
+              description: "أي معلومة أخرى عن الجهة (اتفاقيات، مواعيد، طريقة التعامل).",
+            },
+          },
+          required: ["name"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "classify_document_number",
+        description:
+          "اسأل عمّا تعرفه عن رقم مستند: أي جهة تُصدره وما نوعه (أمر شراء/طلب تسعير/فاتورة)، " +
+          "استنادًا إلى الأنماط التي تعلّمتها. استخدمها قبل أن تخمّن نوع رقم غير مألوف. " +
+          "إن لم تطابق أي نمط معروف فستُعيد matched=false — عندها قل إن النمط غير معروف " +
+          "ولا تجبره على نمط قريب.",
+        parameters: {
+          type: "object",
+          properties: {
+            number: { type: "string", description: "رقم المستند (مثال: P26E11407 أو 26R011936)." },
+          },
+          required: ["number"],
         },
       },
     },
@@ -2040,6 +2199,38 @@ async function executeToolInner(
           pdfSent = true;
         }
 
+        // LEARN from the mail that was just read — the operator's «يتعلمه
+        // بالتحليل والمنطق» — before answering. Envelope-only, no model call.
+        //
+        // The batch is grouped by SENDER, not by message: both the identity and
+        // the number formats need repetition to be trustworthy (a word seen once
+        // is prose, a number shape seen once is a coincidence), so handing
+        // `learnProfilesFromMail` one message at a time would learn nothing. The
+        // census's own distinct-number list is folded in, which also covers the
+        // numbers found INSIDE opened attachments.
+        const learnResults = await Promise.all(
+          [...new Set(census.emails.map((e) => e.from))].slice(0, 5).map((from) => {
+            const own = census.emails.filter((e) => e.from === from);
+            const numbers = new Map<string, "po" | "rfq" | "invoice" | "quotation" | undefined>();
+            for (const e of own) {
+              for (const n of e.numbers) {
+                // Ask about the NUMBER with the subject as context: the subject
+                // wording («EDC PO No P26E…») is what names the type, while the
+                // bare number carries no title.
+                const kind = documentKind(`${e.subject} ${n}`, e.subject);
+                numbers.set(n, kind === "unknown" ? undefined : kind);
+              }
+            }
+            return learnProfilesFromMail({
+              from,
+              subject: own[0]?.subject,
+              mailbox: own[0]?.mailbox,
+              numbers: [...numbers].map(([number, kind]) => ({ number, kind })),
+            });
+          }),
+        );
+        const learnedNow = learnResults.filter((r) => r.learned);
+
         return {
           ok: true,
           data: {
@@ -2047,6 +2238,12 @@ async function executeToolInner(
             // it reads the number — the whole point of the capability.
             note: census.note,
             isTotal: !census.scope.truncated,
+            learned: learnedNow.length
+              ? {
+                  profiles: learnedNow.map((r) => r.slug),
+                  note: "تعلّمت أنماط أرقام هذه الجهات من البريد؛ سأتعرّف عليها لاحقًا دون إعادة البحث.",
+                }
+              : null,
             matched: census.matched,
             distinctNumbers: census.distinctNumbers,
             byMailbox: census.byMailbox,
@@ -2648,6 +2845,90 @@ async function executeToolInner(
         const filename = `${String(args.filename || "report").replace(/[^\w\u0600-\u06FF.-]/g, "_")}.pdf`;
         ctx.outbox.push({ buffer, filename, mimeType: "application/pdf" });
         return { ok: true, data: { generated: true, filename, bytes: buffer.length } };
+      }
+      case "learn_organization": {
+        // The user-facing teaching tool: it records identity AND derives the
+        // number formats from the examples in one call, so the operator's
+        // «طلباتهم تبدأ بـ 26R» becomes a rule the assistant can apply to a
+        // number it has never seen.
+        const examples = Array.isArray(args.examples)
+          ? (args.examples as Array<Record<string, unknown>>)
+              .map((e) => ({
+                number: String(e?.number ?? "").trim(),
+                kind: (typeof e?.kind === "string" ? e.kind : undefined) as
+                  "po" | "rfq" | "invoice" | "quotation" | "other" | undefined,
+              }))
+              .filter((e) => e.number)
+          : [];
+        const name = String(args.name ?? "").trim();
+        if (!name) return { ok: false, error: "اسم الجهة مطلوب." };
+        const asList = (v: unknown) =>
+          Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : [];
+        const saved = await saveOrgProfile({
+          slug: name,
+          aliases: asList(args.aliases),
+          domains: asList(args.domains).map((d) => d.toLowerCase()),
+          mailboxes: asList(args.mailboxes),
+          documentFormats: examples.length
+            ? deriveDocumentFormats(examples, 1).map((f) => ({
+                ...f,
+                // The operator's explanation of the number's parts is attached to
+                // every rule the examples produced — it is knowledge only they
+                // have, and it is what makes the pattern MEANINGFUL rather than
+                // merely matching a shape.
+                meaning: args.meaning ? String(args.meaning) : f.meaning,
+              }))
+            : [],
+          notes: args.notes ? String(args.notes) : undefined,
+          evidenceCount: examples.length || 1,
+          sources: ["user"],
+        });
+        return {
+          ok: true,
+          data: {
+            learned: true,
+            profile: saved.slug,
+            aliases: saved.aliases,
+            domains: saved.domains,
+            documentFormats: saved.documentFormats.map((f) => ({
+              kind: f.kind,
+              pattern: f.pattern,
+              example: f.example,
+            })),
+            note:
+              saved.documentFormats.length > 0
+                ? "تعلّمت الأنماط؛ سأتعرّف على أرقام جديدة تطابقها."
+                : "حفظت بيانات الجهة، لكن لم أشتقّ أي نمط رقم — أعطني أمثلة إن أردت تعلّم صيغ الأرقام.",
+          },
+        };
+      }
+      case "classify_document_number": {
+        const number = String(args.number ?? "").trim();
+        if (!number) return { ok: false, error: "رقم المستند مطلوب." };
+        const profiles = await loadOrgProfiles();
+        const hit = classifyByProfiles(number, profiles);
+        if (!hit) {
+          return {
+            ok: true,
+            data: {
+              matched: false,
+              note:
+                "لا نمط معروف يطابق هذا الرقم. لا تجبره على نمط قريب ولا تخترع نوعه؛ " +
+                "قل إن النمط غير معروف، وإن كان الرقم مهمًا اطلب من المستخدم تعليمك هويته.",
+            },
+          };
+        }
+        return {
+          ok: true,
+          data: {
+            matched: true,
+            organization: hit.profile.slug,
+            aliases: hit.profile.aliases,
+            kind: hit.rule.kind,
+            pattern: hit.rule.pattern,
+            meaning: hit.rule.meaning ?? null,
+          },
+        };
       }
       case "remember_fact": {
         const row = await rememberFact({

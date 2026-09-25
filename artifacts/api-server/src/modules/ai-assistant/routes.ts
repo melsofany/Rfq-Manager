@@ -31,6 +31,13 @@ import { listAllModels } from "./llm";
 import { rememberFact, normalizeCategory } from "./memory";
 import { recentMetrics, metricsSummary } from "./metrics";
 import { countJobsByStatus } from "./jobs";
+import {
+  loadOrgProfiles,
+  saveOrgProfile,
+  classifyByProfiles,
+  deriveDocumentFormats,
+  resetOrgProfilesCache,
+} from "./org-profiles";
 
 const router = Router();
 const guard = requireRole("admin", "manager");
@@ -355,6 +362,104 @@ router.delete("/ai-assistant/memories/:id", guard, async (req, res): Promise<voi
   await db.delete(aiAssistantMemoriesTable).where(eq(aiAssistantMemoriesTable.id, id));
   await audit(req, "ai_assistant.memory_deleted", `حذف ذاكرة ${id}`, id);
   res.json({ ok: true });
+});
+
+// ─── Organization profiles — what the assistant learned about each party ──
+// The operator asked it to learn «كل شيء عن الشركة»: names, aliases, mail
+// domains and the FORMATS of their document numbers. These routes make that
+// knowledge visible and editable from the admin page instead of leaving it
+// buried in the prompt.
+
+// GET /ai-assistant/org-profiles — every learned profile
+router.get("/ai-assistant/org-profiles", guard, async (_req, res): Promise<void> => {
+  try {
+    const profiles = await loadOrgProfiles(true);
+    res.json({ profiles });
+  } catch (err) {
+    logger.error({ err }, "AI assistant: listing org profiles failed");
+    res.status(500).json({ error: "تعذّر جلب البروفايلات" });
+  }
+});
+
+// POST /ai-assistant/org-profiles — teach / merge a profile by hand
+router.post("/ai-assistant/org-profiles", guard, async (req, res): Promise<void> => {
+  const { name, aliases, domains, mailboxes, examples, notes, meaning } = req.body ?? {};
+  if (!name) {
+    res.status(400).json({ error: "اسم الجهة مطلوب" });
+    return;
+  }
+  try {
+    const asList = (v: unknown) =>
+      Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean) : [];
+    const parsedExamples = Array.isArray(examples)
+      ? (examples as Array<Record<string, unknown>>)
+          .map((e) => ({
+            number: String(e?.number ?? "").trim(),
+            kind: (typeof e?.kind === "string" ? e.kind : undefined) as
+              "po" | "rfq" | "invoice" | "quotation" | "other" | undefined,
+          }))
+          .filter((e) => e.number)
+      : [];
+    const formats = parsedExamples.length
+      ? deriveDocumentFormats(parsedExamples, 1).map((f) => ({
+          ...f,
+          // A human-entered profile is authoritative, so the explanation the
+          // admin typed is attached to every rule it produced.
+          meaning: meaning ? String(meaning) : f.meaning,
+        }))
+      : [];
+    const saved = await saveOrgProfile({
+      slug: String(name),
+      aliases: asList(aliases),
+      domains: asList(domains).map((d) => d.toLowerCase()),
+      mailboxes: asList(mailboxes),
+      documentFormats: formats,
+      notes: notes ? String(notes) : undefined,
+      evidenceCount: parsedExamples.length || 1,
+      sources: ["user"],
+    });
+    await audit(req, "ai_assistant.org_profile_saved", `تعلّم جهة: ${saved.slug}`);
+    res.status(201).json(saved);
+  } catch (err) {
+    logger.error({ err }, "AI assistant: saving org profile failed");
+    res.status(400).json({ error: "تعذّر حفظ البروفايل" });
+  }
+});
+
+// DELETE /ai-assistant/org-profiles/:id — forget a profile
+router.delete("/ai-assistant/org-profiles/:id", guard, async (req, res): Promise<void> => {
+  const { db, aiAssistantOrgProfilesTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+  const id = Number(req.params.id);
+  await db.delete(aiAssistantOrgProfilesTable).where(eq(aiAssistantOrgProfilesTable.id, id));
+  // The prompt is built from the cached list, so dropping the row is not enough:
+  // the cache must be invalidated or the deleted profile keeps being injected.
+  resetOrgProfilesCache();
+  await audit(req, "ai_assistant.org_profile_deleted", `حذف بروفايل جهة ${id}`, id);
+  res.json({ ok: true });
+});
+
+// POST /ai-assistant/classify-number — "what is this number?"
+router.post("/ai-assistant/classify-number", guard, async (req, res): Promise<void> => {
+  const number = String(req.body?.number ?? "").trim();
+  if (!number) {
+    res.status(400).json({ error: "رقم المستند مطلوب" });
+    return;
+  }
+  const profiles = await loadOrgProfiles();
+  const hit = classifyByProfiles(number, profiles);
+  res.json(
+    hit
+      ? {
+          matched: true,
+          organization: hit.profile.slug,
+          kind: hit.rule.kind,
+          pattern: hit.rule.pattern,
+          example: hit.rule.example,
+          meaning: hit.rule.meaning ?? null,
+        }
+      : { matched: false, number },
+  );
 });
 
 // ─── GET /ai-assistant/jobs — recent async jobs (all phones) ──────────────

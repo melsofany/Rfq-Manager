@@ -31,6 +31,14 @@ import {
   type OutboxAttachment,
 } from "./tools";
 import { entityVocabulary, findUnknownEntityNames, type EntityName } from "./db-tools";
+import {
+  loadOrgProfiles,
+  renderOrgProfilesBlock,
+  classifyByProfiles,
+  learnProfileFromUser,
+  matchOrgProfile,
+  type OrgProfile,
+} from "./org-profiles";
 import { routeQuestion, routeHint, DEEP_MAX_ROUNDS } from "./router";
 import {
   TaskTrace,
@@ -133,6 +141,19 @@ export function systemPrompt(settings: AiSettings): string {
 - عندما يقول المستخدم إن معلومة قديمة أو خاطئة، استخدم forget_memory لإنهاء صلاحيتها.
 - عند تعارض معلومة محفوظة مع نتيجة أداة حديثة، الأداة هي الأصح — وحدّث الذاكرة عبر remember_fact.
 - لا تحفظ في الذاكرة أرقامًا متغيّرة (عدد رسائل، رصيد لحظي، سعر متغيّر) — هذه تُقرأ من الأدوات كل مرّة.
+
+تعلُّم الجهات (الشركات والموردين والعملاء):
+- تتعلّم كل جهة من وجهين: **بالتحليل** من البريد الذي تقرأه، و**من المستخدم** عندما يشرح لك.
+- ما تتعلّمه عن الجهة: اسمها وأسماؤها البديلة، نطاق بريدها، وأهم شيء **أنماط أرقام مستنداتها**.
+- عندما يشرح المستخدم معنى أجزاء رقم — مثل «أرقام أوامر الشراء تبدأ بـ P ثم سنة 26 ثم E»، أو
+  «طلبات التسعير تبدأ بـ 26 ثم R» — استخدم learn_organization ومرّر له أمثلة حقيقية في examples.
+  النمط يُشتق من الأمثلة تلقائيًا، فتتعرّف بعدها على رقم لم تره من قبل.
+- قبل أن تخمّن نوع رقم غير مألوف، استخدم classify_document_number. إن لم يطابق أي نمط معروف
+  فقل إن النمط غير معروف ولا تجبره على نمط قريب.
+- **لا تخمّن معنى الأرقام من شكل المستند وحده**: ترتيب الأرقام ومعناها يُتعلَّم من المستخدم أو من
+  تكرار موثّق في البريد، ثم يُسجَّل قاعدة. الشكل وحده لا يكفي.
+- ما تعلّمته عن الجهات يُعرض لك في أعلى التعليمات تحت «بروفايلات الجهات». استخدمه ولا تعِد سؤال
+  المستخدم عن شيء علّمه لك بالفعل.
 
 أسلوب العمل (مهم جدًا):
 - استخدم supplier_overview عند السؤال عن مورد (تجلب كل شيء في استدعاء واحد).
@@ -342,7 +363,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   // latencies together on the path of every single question. Nothing here
   // depends on anything else in the group, so the only correct behaviour is to
   // overlap them.
-  const [history, memories, vocabulary, conversationState] = await Promise.all([
+  const [history, memories, vocabulary, conversationState, orgProfiles] = await Promise.all([
     loadHistory(input.phone),
     // Core memory: the memories most relevant to THIS message are injected into
     // the system prompt, so a fact taught weeks ago is available without the model
@@ -364,14 +385,27 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     // What the conversation was last about, so «وطب آخر سعر له؟» resolves "له"
     // without the operator restating the part. Read-only, best-effort.
     loadConversationState(input.phone),
+    // What the assistant has LEARNED about each counterparty: their aliases,
+    // mail domains and the FORMATS of the document numbers they issue
+    // (`26R…` = EDC's RFQ, `P26E…` = their PO). Injected so a number it has
+    // never seen is still recognised instead of guessed at. Best-effort: a read
+    // failure degrades to "nothing learned yet".
+    settings.allowDatabase ? loadOrgProfiles() : Promise.resolve([] as OrgProfile[]),
   ]);
   const memoryBlock = renderMemoryBlock(memories);
   const vocabularyBlock = renderVocabularyBlock(vocabulary);
   const stateBlock = renderConversationState(conversationState);
+  const orgProfilesBlock = renderOrgProfilesBlock(orgProfiles);
 
   const system: ChatMessage = {
     role: "system",
-    content: systemPrompt(settings) + routeHint(plan) + stateBlock + memoryBlock + vocabularyBlock,
+    content:
+      systemPrompt(settings) +
+      routeHint(plan) +
+      stateBlock +
+      memoryBlock +
+      vocabularyBlock +
+      orgProfilesBlock,
   };
 
   let userContent: string | ContentPart[];
@@ -958,6 +992,8 @@ const META_TOOLS = new Set([
   "remember_fact",
   "recall_memory",
   "forget_memory",
+  "learn_organization",
+  "classify_document_number",
   "list_models",
 ]);
 
