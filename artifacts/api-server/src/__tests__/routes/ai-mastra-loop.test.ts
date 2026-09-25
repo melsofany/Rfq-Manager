@@ -54,6 +54,13 @@ interface ScriptedRound {
   thought?: string;
   /** When set, invoking the tool rejects — a provider/segment fault. */
   throws?: boolean;
+  /**
+   * Simulate a provider/version that delivers steps ONLY through
+   * `onStepFinish` and returns an empty `result.steps`. The trace must still be
+   * populated from the callback buffer, or stuck detection and the dashboard
+   * numbers read zero on a run that clearly did work.
+   */
+  omitSteps?: boolean;
 }
 
 let script: ScriptedRound[] = [];
@@ -84,9 +91,12 @@ vi.mock("@mastra/core/agent", () => ({
       const hasTools = !!this.opts?.tools;
       const steps: any[] = [];
       let text = "";
+      // Hoisted: the returned `steps` depends on whether THIS round asked for
+      // the callback-only shape, and `round` must be visible outside the block.
+      let round: ScriptedRound | undefined;
 
       if (hasTools) {
-        const round = script[roundIdx++];
+        round = script[roundIdx++];
         if (round) {
           if (round.throws) throw new Error("provider exploded");
           const fn = this.tools[round.tool];
@@ -111,7 +121,7 @@ vi.mock("@mastra/core/agent", () => ({
         text,
         modelUsed: "gemini-3.6-flash",
         providerUsed: "gemini",
-        steps,
+        steps: round?.omitSteps ? [] : steps,
         response: {
           messages: [
             { role: "user", content: "سؤال" },
@@ -302,5 +312,66 @@ describe("mastra loop: degraded but honest exit", () => {
     // mid-run fault must not discard what was already gathered.
     expect(out.exchanges.some((e) => e.name === "count_database")).toBe(true);
     expect(logCalls.some((c) => c.msg === "AI assistant: mastra segment failed")).toBe(true);
+  });
+});
+
+describe("mastra loop: the engine's own trace is reported, not just logged", () => {
+  it("returns a populated taskTrace so the dashboard sees the real run", async () => {
+    // The engine builds its OWN TaskTrace. Before this was returned, every Mastra
+    // answer recorded `steps: 0, toolCalls: 0` on the dashboard while the log
+    // line carried the real numbers — telemetry describing a different run.
+    script = [{ tool: "count_database", args: { a: 1 }, result: "5" }];
+
+    const out = await run(3);
+
+    expect(out.taskTrace.steps).toBeGreaterThan(0);
+    expect(out.taskTrace.toolCalls).toBeGreaterThan(0);
+    expect(out.taskTrace.distinctTools).toBeGreaterThan(0);
+  });
+
+  it("still populates the trace when steps arrive only via onStepFinish", async () => {
+    // A provider/version returning an empty `result.steps` must not empty the
+    // control trace: stuck detection, the progress extension and the dashboard
+    // all read from it.
+    script = [{ tool: "count_database", args: { a: 1 }, result: "5", omitSteps: true }];
+
+    const out = await run(3);
+
+    expect(out.taskTrace.steps).toBeGreaterThan(0);
+  });
+});
+
+describe("mastra loop: the agent must not retry on top of chatCompletion", () => {
+  it("disables Mastra's own retries on every agent it creates", async () => {
+    // chatCompletion already retries a transient 503 and then walks the model
+    // chain, and Gemini caps each model at 20 requests/day. Mastra's default
+    // retry multiplies the provider calls per round, which is what turns one
+    // overloaded model into a whole-day outage.
+    script = [{ tool: "count_database", args: { a: 1 }, result: "5" }];
+
+    await run(3);
+
+    expect(agentsCreated.length).toBeGreaterThan(0);
+    for (const agent of agentsCreated) {
+      expect(agent.opts?.maxRetries).toBe(0);
+    }
+  });
+});
+
+describe("mastra loop: a mid-run fault answers from what it gathered", () => {
+  it("produces an answer from the transcript instead of silence", async () => {
+    script = [
+      { tool: "count_database", args: { page: 1 }, result: '{"rows":5}' },
+      { tool: "count_database", args: { page: 2 }, result: "{}", throws: true },
+    ];
+
+    // maxRounds 4 => a SECOND tool segment is attempted and it throws. With the
+    // fix the run still answers; without it the fault falls straight through and
+    // leaves finalText null, which the caller turns into a generic notice.
+    const out = await run(4);
+
+    // Enough evidence was already in the ledger; the operator gets an answer
+    // built from it rather than the generic "exhausted" notice.
+    expect(out.finalText).toBeTruthy();
   });
 });

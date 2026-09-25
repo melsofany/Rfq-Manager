@@ -30,6 +30,7 @@ import {
   HARD_MAX_STEPS,
   toolCacheKey,
   FORCE_ANSWER_INSTRUCTION,
+  type TraceSummary,
 } from "./task-loop";
 import type { ChatMessage, ContentPart } from "./llm";
 
@@ -47,6 +48,19 @@ export interface ToolLoopResult {
   rounds: number;
   toolCallCount: number;
   exchanges: ToolExchange[];
+  /**
+   * The engine's OWN execution trace (steps, tool errors, steers, forced
+   * answers, distinct tools).
+   *
+   * It is returned rather than merely logged because the operator dashboard
+   * reads the run trace from `recordMetrics`. The Mastra engine builds its own
+   * `TaskTrace`, so without this the engine's control-flow work was invisible:
+   * every Mastra answer reported `steps: 0, toolCalls: 0` while the log line
+   * showed the real numbers — the dashboard silently described a different run
+   * than the one that happened. `agent.ts` merges this over the legacy trace
+   * (which is empty on this path) so both engines report the same shape.
+   */
+  taskTrace: TraceSummary;
 }
 
 /**
@@ -57,6 +71,37 @@ export interface ToolLoopResult {
  * The engine asks for `maxRounds + 1` and this caps it.
  */
 const MAX_STEPS = 8;
+
+/**
+ * One tool-free turn whose only job is to produce prose from what is already in
+ * the transcript.
+ *
+ * Removing the tool schemas — rather than asking `tool_choice:"none"` — is what
+ * reliably yields text: the recorded Gemini behaviour was to ignore the
+ * instruction and keep calling tools until the budget was gone, leaving the
+ * operator with silence. A per-run `maxRetries: 0` keeps it consistent with the
+ * main agent (see the note there).
+ */
+async function answerWithoutTools(
+  convo: any[],
+  instructions: string,
+  opts: { model: string; baseUrl?: string | null; signal: AbortSignal; phone: string },
+): Promise<string | null> {
+  const agent = new Agent({
+    id: "cortoba-procurement-final",
+    name: "cortoba-procurement-final",
+    instructions,
+    model: new CortobaLanguageModel(opts.model, opts.baseUrl),
+    maxRetries: 0,
+  });
+  try {
+    const res = await agent.generate(convo as any, { maxSteps: 1, abortSignal: opts.signal });
+    return String(res?.text ?? "").trim() || null;
+  } catch (err) {
+    logger.warn({ err, phone: opts.phone }, "AI assistant: mastra forced-answer turn failed");
+    return null;
+  }
+}
 
 export async function runToolLoop(opts: {
   model: string;
@@ -141,12 +186,24 @@ export async function runToolLoop(opts: {
       ? systemMessage.content
       : "أنت مساعد المشتريات. استخدم الأدوات للوصول إلى البيانات الموثوقة.";
 
+  // `maxRetries: 0` is deliberate, not a default left unset.
+  //
+  // `chatCompletion` already owns retrying: it retries a transient 503 on the
+  // SAME model and then walks the fallback chain (429/404 switch immediately,
+  // because Gemini's free tier caps each model at 20 requests/day). Mastra's own
+  // retry sits ON TOP of that, so its default (2) multiplies the provider calls
+  // per round: a single overloaded model could be probed three times before the
+  // chain was even consulted. On a 20-req/day/model budget those extra calls are
+  // what turns one slow model into a whole-day outage — the recorded
+  // «مش بيرد عليا» failure. Retrying is the provider layer's job; the agent must
+  // not do it a second time.
   const agent = new Agent({
     id: "cortoba-procurement",
     name: "cortoba-procurement",
     instructions,
     model: new CortobaLanguageModel(opts.model, opts.baseUrl),
     tools,
+    maxRetries: 0,
   });
 
   // History is replayed as prior turns so a follow-up keeps its context. Each
@@ -215,12 +272,20 @@ export async function runToolLoop(opts: {
     const segmentSteps = Math.max(1, requestedSteps - rounds);
     const callStartedAt = Date.now();
 
+    // Steps observed through the callback, used only when the provider/version
+    // returns no `result.steps`. Without this fallback a run whose steps were
+    // delivered solely as callbacks would have a POPULATED exchange ledger
+    // (groundings, numeric aggregates) and an EMPTY control trace, so stuck
+    // detection, the progress extension and the dashboard numbers would all read
+    // zero on a run that clearly did work.
+    const observedSteps: any[] = [];
     let result: any;
     try {
       result = await agent.generate(convo as any, {
         maxSteps: segmentSteps,
         abortSignal: opts.signal,
         onStepFinish: (step: any) => {
+          if (step && typeof step === "object") observedSteps.push(step);
           // Step payloads are read defensively: the shape is Mastra's, and a tool
           // call or result we cannot parse must not abort the answer.
           for (const tc of step?.toolCalls ?? []) {
@@ -248,11 +313,17 @@ export async function runToolLoop(opts: {
       });
     } catch (err) {
       // A run that dies mid-segment (provider fault, abort) must not lose the
-      // turns it already completed. Answer with what is in the ledger.
+      // turns it already completed. Ask ONCE, with the tool schemas removed, for
+      // an answer built from the evidence already in the transcript. Falling
+      // straight through would hand the operator the generic "exhausted" notice
+      // even when several successful tool results were sitting in the ledger —
+      // the "census died mid-read and I got nothing" complaint. If even that
+      // turn fails, the caller's own exhausted-answer fallback still applies.
       logger.warn(
         { err, phone: opts.phone, engine: "mastra", segmentSteps },
         "AI assistant: mastra segment failed",
       );
+      finalText = await answerWithoutTools(convo, instructions, opts);
       break;
     }
 
@@ -277,13 +348,17 @@ export async function runToolLoop(opts: {
     if (Array.isArray(nextMessages) && nextMessages.length) convo = nextMessages;
     rounds = (result?.steps?.length as number | undefined) ?? rounds + segmentSteps;
 
-    if (!endedOnToolCall) {
-      finalText = String(result?.text ?? "").trim() || null;
-      break;
-    }
-
     // ── Record the segment's steps for the execution control ────────────────
-    const steps = (result?.steps ?? []) as any[];
+    // MUST happen before the answer check below. Mastra can end a segment on
+    // prose AFTER calling tools inside it (maxSteps > 1), and breaking out first
+    // dropped those tool steps: the exchange ledger was populated by the
+    // callback while the control trace read zero, so the dashboard reported
+    // `toolCalls: 0` for a run that clearly called tools — the exact telemetry
+    // defect this trace was added to fix.
+    // `result.steps` is the authoritative transcript; the callback buffer is the
+    // fallback described above.
+    const returnedSteps = (result?.steps ?? []) as any[];
+    const steps = returnedSteps.length ? returnedSteps : observedSteps;
     steps.forEach((step, i) => {
       const calls = (step?.toolCalls ?? []).map((tc: any) => {
         const call = tc?.payload ?? tc;
@@ -301,6 +376,11 @@ export async function runToolLoop(opts: {
         results,
       });
     });
+
+    if (!endedOnToolCall) {
+      finalText = String(result?.text ?? "").trim() || null;
+      break;
+    }
 
     const errCount = trace.summary().toolErrors;
     const noProgress = errCount > consecutiveErrors;
@@ -379,22 +459,8 @@ export async function runToolLoop(opts: {
     forcedAnswer = true;
     trace.noteForcedAnswer();
     logTraceEvent(opts.phone, "force", { round: rounds, engine: "mastra" });
-    const noToolsAgent = new Agent({
-      id: "cortoba-procurement-final",
-      name: "cortoba-procurement-final",
-      instructions,
-      model: new CortobaLanguageModel(opts.model, opts.baseUrl),
-    });
     convo = [...convo, { role: "user", content: FORCE_ANSWER_INSTRUCTION }];
-    try {
-      const noTools = await noToolsAgent.generate(convo as any, {
-        maxSteps: 1,
-        abortSignal: opts.signal,
-      });
-      finalText = String(noTools?.text ?? "").trim() || null;
-    } catch (err) {
-      logger.warn({ err, phone: opts.phone }, "AI assistant: mastra forced-answer turn failed");
-    }
+    finalText = await answerWithoutTools(convo, instructions, opts);
     break;
   }
 
@@ -412,7 +478,13 @@ export async function runToolLoop(opts: {
     "AI assistant: mastra tool loop complete",
   );
 
-  return { finalText, rounds, toolCallCount: exchanges.length, exchanges };
+  return {
+    finalText,
+    rounds,
+    toolCallCount: exchanges.length,
+    exchanges,
+    taskTrace: trace.summary(),
+  };
 }
 
 /**
