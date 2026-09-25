@@ -1,5 +1,36 @@
 # Rfq-Manager вЂљГ„Г® Repository Notes
 
+## An unread mailbox must never answer as an empty one (feat/mastra-agent-engine, PR #188)
+
+- **Live report**: «هتخش للميل info … أوامر الشراء الواردة من EDC» → «لم يتم العثور
+  على أي مرفقات». The truth: the mail **service account is not delegation-authorised**
+  (`unauthorized_client`, 401 from Google), so *every* mailbox read threw. The
+  assistant reported a false negative about a mailbox it never opened — the same
+  family as the `filter(Boolean)` and «10 رسائل» incidents.
+- **Diagnosis path that worked**: mint a delegated token directly with `googleapis`
+  (`new google.auth.JWT({email, key, subject, scopes:["https://mail.google.com/"]})`
+  → `authorize()`) to surface Google's OWN `unauthorized_client` — the wrapper in
+  `gmail-auth.ts` translates it into admin instructions and hides the code.
+- **Two defects**:
+  1. **Inheritable dead end** — delegation is preferred whenever configured, so the
+     legacy mailbox whose app password still works also failed. `withMailbox` now
+     falls back to the app password **for the legacy address only** when the
+     delegation token is refused; a working credential beats no mail.
+  2. **The answer lost the distinction** — `noteMailAccessFailure` records the error
+     from tool results, `findMailAccessFailure` reports it, and the caveat is
+     appended **LAST** so no correction can drop it. The refusal re-ask is
+     suppressed (`canReask && !mailFailure`) since it would burn a second scan to
+     fail identically.
+- **Rule**: a negative claim about the mail («لا توجد رسائل») may only be made when
+  the read actually happened. Verify the run, not the prompt.
+- **Local-mail gotcha**: the app password authenticates `procurement@` only —
+  `info@`/`finance@` need domain-wide delegation (`SMTP_PASS` fails for them). Run
+  live mail probes with `env -u AI_*` on a clean shell: exported `SMTP_*`/`AI_*`
+  vars make the config tests fail (11 false failures otherwise).
+- Tests: `ai-agent.test.ts` +2 (labels a mail-access failure; does not label a
+  successful read) — the first fails when the guard is removed. **967 tests / 82
+  files** pass; tsc + repo-wide prettier clean.
+
 ## Overview
 
 Cortoba Supplies RFQ (Request for Quotation) management system. Monorepo (pnpm workspaces).
