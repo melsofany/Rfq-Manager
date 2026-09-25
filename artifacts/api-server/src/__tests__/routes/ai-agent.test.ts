@@ -703,6 +703,59 @@ describe("AI assistant agent loop", () => {
   });
 
   // ── Router integration: the path decides the round budget ──────────────────
+  // ── A failed mail read must not read as an empty mailbox ───────────────────
+  describe("mail access failure honesty", () => {
+    it("labels the answer when the mailbox read threw, instead of 「لا توجد بيانات」", async () => {
+      const call = {
+        id: "c1",
+        type: "function",
+        function: { name: "search_emails", arguments: '{"query":"EDC PO","mailbox":"info"}' },
+      };
+      chatCompletion
+        .mockResolvedValueOnce({ content: null, finishReason: "tool_calls", toolCalls: [call] })
+        .mockResolvedValue({
+          content: "لم يتم العثور على أي مرفقات PDF لأوامر شراء من EDC في صندوق info.",
+          finishReason: "stop",
+          toolCalls: [],
+        });
+      executeTool.mockResolvedValue({
+        ok: false,
+        error:
+          "تعذّر قراءة info@cortoba-supplies.com: حساب الخدمة غير مُفوَّض للوصول إلى هذا البريد.",
+      });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "هات أوامر شراء EDC من ميل info" });
+
+      expect(out.reply).toContain("لم أتمكّن من قراءة البريد فعليًا");
+      expect(out.reply).toContain("حصر");
+      // No refusal re-ask: the refusal was a consequence of the failure, so a
+      // re-ask would just burn a second scan to fail identically.
+      expect(chatCompletion).toHaveBeenCalledTimes(2);
+    });
+
+    it("does NOT add the label when the mailbox was read successfully", async () => {
+      const call = {
+        id: "c1",
+        type: "function",
+        function: { name: "search_emails", arguments: '{"query":"EDC PO"}' },
+      };
+      chatCompletion
+        .mockResolvedValueOnce({ content: null, finishReason: "tool_calls", toolCalls: [call] })
+        .mockResolvedValue({
+          content: "لم يتم العثور على أرقام مطابقة.",
+          finishReason: "stop",
+          toolCalls: [],
+        });
+      executeTool.mockResolvedValue({ ok: true, data: { numbers: [] } });
+
+      const { runAgent } = await import("../../modules/ai-assistant/agent");
+      const out = await runAgent({ phone: "2010", text: "هات أوامر شراء EDC من ميل info" });
+
+      expect(out.reply).not.toContain("لم أتمكّن من قراءة البريد فعليًا");
+    });
+  });
+
   describe("router-driven budget", () => {
     it("caps a simple document lookup at the FAST path's rounds", async () => {
       // A fast-path question must not be allowed to run for the deep budget.

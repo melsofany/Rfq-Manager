@@ -382,6 +382,8 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
 
   const tools = toolDefinitions(ctx);
   const usedTools: Array<{ name: string; args: unknown }> = [];
+  // Mailbox read failures seen in this run; see `findMailAccessFailure`.
+  const mailFailureEvidence: string[] = [];
   let finalText: string | null = null;
   // Quantity totals the tools actually returned, WITH the tool that produced
   // each one. The numeric verifier reconciles a figure against the DATABASE, so
@@ -453,6 +455,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       // reconciliation behave identically on either engine.
       for (const ex of loop.exchanges) {
         usedTools.push({ name: ex.name, args: ex.args });
+        if (ex.content.startsWith("ERROR:")) noteMailAccessFailure(mailFailureEvidence, ex.content);
         for (const n of findGroundingNumbers(ex.content)) groundedNumbers.add(n);
         for (const t of collectToolTotals(ex.name, ex.content)) {
           toolAggregates.push({ tool: ex.name, total: t });
@@ -550,6 +553,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
             } else {
               pending = (async () => {
                 const res = await executeTool(call.function.name, parsed, ctx);
+                if (!res.ok) noteMailAccessFailure(mailFailureEvidence, res.error);
                 return res.ok ? asText(res.data) : `ERROR: ${res.error}`;
               })();
               if (!resumable) toolCache.set(key, pending);
@@ -633,6 +637,18 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       finalText = exhaustedAnswer(usedTools);
     }
 
+    // ── Mail-access failure must not read as an empty mailbox ───────────────
+    // Live: the service account was not delegation-authorised, every mailbox
+    // read threw, and the assistant relayed it as «لم يتم العثور على أي مرفقات
+    // في الرسائل الواردة من EDC» — a false negative about a mailbox it never
+    // opened. The tool returned the error correctly; only the answer was wrong.
+    // A negative claim is only allowed when the read actually happened.
+    //
+    // This is a CONSTRAINT on the checks below, not just a post-hoc label: a
+    // refusal re-ask would burn a second scan to fail identically, so it is
+    // suppressed. The label itself is appended LAST so no correction can drop it.
+    const mailFailure = findMailAccessFailure(usedTools, mailFailureEvidence);
+
     // ── Source-scope enforcement ────────────────────────────────────────────
     // The operator named the mailbox as the required source («بقولك من الميل
     // مش قاعده البيانات») and the run answered from the database instead — a
@@ -683,7 +699,10 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         isRefusalSentence(finalText) &&
         !looksLikeDataFound(finalText);
       const canReask =
-        looksLikeRefusal && refusals < MAX_REFUSAL_REASKS && remaining >= RETRY_MIN_REMAINING_MS;
+        !mailFailure &&
+        looksLikeRefusal &&
+        refusals < MAX_REFUSAL_REASKS &&
+        remaining >= RETRY_MIN_REMAINING_MS;
 
       if (!ungrounded.length && !unknownNames.length && !canReask) break;
 
@@ -754,6 +773,21 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         // A verifier failure must never lose the answer.
         logger.warn({ err }, "AI assistant: numeric verification skipped");
       }
+    }
+
+    // The mailbox caveat goes on LAST, after every correction, so nothing can
+    // silently drop it. (The original live bug was exactly that: the answer lost
+    // the caveat because a later step rewrote it.)
+    if (finalText && mailFailure) {
+      finalText =
+        `${finalText}\n\n⚠️ لم أتمكّن من قراءة البريد فعليًا: ${mailFailure}. ` +
+        `هذه ليست إجابة «لا توجد بيانات» — لم يحدث فحص للبريد الإلكتروني في هذه الجولة، ` +
+        `فلا تعتبر النتيجة أعلاه حصرًا.`;
+      verificationRan = true;
+      logger.warn(
+        { phone: input.phone, reason: mailFailure },
+        "AI assistant: email read failed — answer labelled as unread",
+      );
     }
   } catch (err) {
     // A timeout or quota error still needs to be measured — those are the two
@@ -865,6 +899,38 @@ const EMAIL_TOOLS = new Set([
   "get_email_attachment",
   "list_mailboxes",
 ]);
+
+/**
+ * Markers of a mailbox READ FAILURE, as opposed to an empty result.
+ *
+ * The distinction is the whole point: «لا توجد رسائل من EDC» is a claim about
+ * the mailbox, and it may only be made after the mailbox was actually opened.
+ * Live, an unauthorised service account made every read throw while the
+ * assistant reported an empty mailbox for it (see `findMailAccessFailure`).
+ */
+const MAIL_ACCESS_FAILURE_RE =
+  /غير مُفوَّض|unauthorized_client|invalid_grant|admin_policy_enforced|invalid delegation|تعذّر قراءة|لم يتمكّن من قراءة البريد|ACCESS_DENIED/i;
+
+/** Records a mailbox access failure seen in a tool result, keeping one reason. */
+function noteMailAccessFailure(evidence: string[], text: unknown): void {
+  if (typeof text !== "string" || !MAIL_ACCESS_FAILURE_RE.test(text)) return;
+  evidence.push(text.slice(0, 300));
+}
+
+/**
+ * Returns the recorded reason if the run tried to read mail and FAILED.
+ *
+ * A negative answer about the mail is only trustworthy when the read happened,
+ * so this is checked rather than trusting the prompt to caveat itself.
+ */
+function findMailAccessFailure(
+  usedTools: Array<{ name: string }>,
+  evidence: string[],
+): string | null {
+  if (!evidence.length) return null;
+  if (!usedTools.some((t) => EMAIL_TOOLS.has(t.name))) return null;
+  return evidence[0];
+}
 
 /**
  * Tools that produce NO figures of their own — they launch or inspect work.
