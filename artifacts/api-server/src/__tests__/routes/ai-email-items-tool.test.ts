@@ -1068,6 +1068,10 @@ describe("a zero-match census must not be blamed on the mailbox connection", () 
     expect(res.data.scope).not.toContain("مشكلة في الاتصال");
     // And it must redirect to the right kind of search for a part name.
     expect(res.data.note).toContain("contains");
+    // "All matched messages (0)" is the dishonest label this fix exists to
+    // remove — it reads as a finished, verified zero.
+    expect(res.data.scope).not.toContain("كل الرسائل المطابقة (0)");
+    expect(res.data.scope).toContain("1910");
   });
 
   it("still allows a connection diagnosis when NOTHING was read", async () => {
