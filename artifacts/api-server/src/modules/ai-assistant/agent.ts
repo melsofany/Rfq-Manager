@@ -49,6 +49,8 @@ import {
   toolCacheKey,
 } from "./task-loop";
 import { runToolLoop, mastraEngineEnabled } from "./mastra-agent";
+import type { ToolExchange } from "./mastra-agent";
+import { checkClaims } from "./claim-check";
 import type { TraceSummary } from "./task-loop";
 import { verifyAnswer } from "./verifier";
 import { recordMetrics } from "./metrics";
@@ -430,6 +432,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
 
   const tools = toolDefinitions(ctx);
   const usedTools: Array<{ name: string; args: unknown }> = [];
+  // Raw tool exchanges (name + args + the tool's OWN result text, before the
+  // untrusted-content delimiters are added). The claim check parses this JSON to
+  // compare the answer's claims against `matched`/`isComplete`; the delimited
+  // text the model sees would not parse.
+  const toolExchanges: ToolExchange[] = [];
   // Mailbox read failures seen in this run; see `findMailAccessFailure`.
   const mailFailureEvidence: string[] = [];
   let finalText: string | null = null;
@@ -515,6 +522,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       // reconciliation behave identically on either engine.
       for (const ex of loop.exchanges) {
         usedTools.push({ name: ex.name, args: ex.args });
+        toolExchanges.push(ex);
         if (ex.content.startsWith("ERROR:")) noteMailAccessFailure(mailFailureEvidence, ex.content);
         for (const n of findGroundingNumbers(ex.content)) groundedNumbers.add(n);
         for (const t of collectToolTotals(ex.name, ex.content)) {
@@ -619,6 +627,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
               if (!resumable) toolCache.set(key, pending);
             }
             const content = await pending;
+            toolExchanges.push({ name: call.function.name, args: parsed, content });
             for (const n of findGroundingNumbers(content)) groundedNumbers.add(n);
             // Collect the tool's OWN quantity aggregates (never a figure from the
             // prose) so the numeric verifier reconciles against what the database
@@ -768,7 +777,22 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         refusals < MAX_REFUSAL_REASKS &&
         remaining >= RETRY_MIN_REMAINING_MS;
 
-      if (!ungrounded.length && !unknownNames.length && !canReask) break;
+      // (d) The claim check — the NEGATIVE/COMPLETENESS contradiction. This is
+      // the «لا توجد مرفقات» failure: the answer denied data that a census in
+      // its own trace had already matched. `isRefusalSentence` above only fires
+      // on a bare refusal with no figures, so it MISSES exactly the case that
+      // was reported: a confident, well-formed denial. This check compares the
+      // claim against `matched`/`isComplete` instead of against the prose.
+      const claim = checkClaims({
+        answer: finalText,
+        // The RAW exchanges, so the check parses the tool's own JSON rather than
+        // the delimited text the model saw.
+        exchanges: toolExchanges,
+      });
+      const canCorrectClaim =
+        !mailFailure && !!claim.correction && remaining >= RETRY_MIN_REMAINING_MS;
+
+      if (!ungrounded.length && !unknownNames.length && !canReask && !canCorrectClaim) break;
 
       if (ungrounded.length || unknownNames.length) {
         logger.warn(
@@ -778,6 +802,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
             unknownNames: unknownNames.slice(0, 8),
           },
           "AI assistant: answer cites tokens absent from every tool result",
+        );
+      } else if (claim.correction) {
+        logger.warn(
+          { phone: input.phone, rule: claim.rule },
+          "AI assistant: answer contradicts the tool trace",
         );
       } else {
         refusals += 1;
@@ -792,6 +821,9 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         ungrounded,
         unknownNames,
         reask: canReask && !ungrounded.length && !unknownNames.length,
+        // The claim contradiction is passed as an explicit problem so the same
+        // single correction round fixes it — no extra provider request.
+        claimCorrection: claim.correction ?? undefined,
         signal: runBudget.signal,
       });
       // A verification that produced nothing leaves the draft in place — an
@@ -1224,6 +1256,13 @@ async function verifyGroundedAnswer(opts: {
   unknownNames: string[];
   /** True when the draft refused without evidence and should widen its search. */
   reask: boolean;
+  /**
+   * A deterministic contradiction between the answer and the tool trace (a
+   * negative claim against a census that matched, or a completeness claim against
+   * `isComplete=false`). Folded into the SAME correction round as the grounding
+   * problems, so fixing it costs no extra provider request.
+   */
+  claimCorrection?: string;
   signal: AbortSignal;
 }): Promise<string | null> {
   const problems: string[] = [];
@@ -1243,15 +1282,26 @@ async function verifyGroundedAnswer(opts: {
       "2) إن طُلب رقم مستند فجرّب البحث بالجزء منه (آخر أرقامه) لا بالرقم كاملًا فقط.\n" +
       "3) إن فشلت كل المحاولات فعلًا، اذكر بالضبط ما جرّبته (الجدول/الكلمة/المدة) — ولا تقل «غير متوفر» وحدها.\n" +
       "أعد نص الرد النهائي فقط، بدون شرح أو مقدمة."
-    : "مراجعة إلزامية قبل الإرسال: الردّ التالي يحتوي " +
-      problems.join(" و ") +
-      ".\n" +
-      "أعد كتابة الرد مع الالتزام الصارم بالآتي:\n" +
-      "1) احذف أي رقم مستند/طلب/أمر/فاتورة لم يظهر حرفيًا في نتيجة أداة، ولا تستبدله برقم مخمّن.\n" +
-      "2) احذف أو صحّح أي اسم مورد/عميل غير موجود في قوائم النظام المعطاة لك، ولا تخترع اسمًا شبيهًا.\n" +
-      "3) إن كانت المعلومة المطلوبة تعتمد على تلك الأرقام أو الأسماء، فاذكر صراحةً أنها غير متوفرة ولم تُعثر عليها.\n" +
-      "4) أبقِ باقي الرد كما هو — لا تُغيّر ما ظهر فعلًا في نتائج الأدوات.\n" +
-      "أعد نص الرد النهائي فقط، بدون شرح أو مقدمة.";
+    : opts.claimCorrection
+      ? "مراجعة إلزامية قبل الإرسال — تناقض بين ردّك وبين نتيجة الأداة:\n" +
+        opts.claimCorrection +
+        "\n\n" +
+        (problems.length ? `كذلك الرد يحتوي ${problems.join(" و ")}.\n\n` : "") +
+        "أعد كتابة الرد النهائي مع الالتزام بالآتي:\n" +
+        "1) لا تنفِ وجود بيانات رجعت الأداة بمطابقات لها — اذكر العدد الحقيقي الذي رجعته الأداة.\n" +
+        "2) لا تقل إن الحصر شامل إلا إذا كان isComplete=true في نتيجة الأداة.\n" +
+        "3) اذكر النطاق صريحًا: المطابق، والمفحوص، والمتبقي.\n" +
+        "4) أبقِ أي معلومة ظهرت فعلًا في نتائج الأدوات كما هي.\n" +
+        "أعد نص الرد النهائي فقط، بدون شرح أو مقدمة."
+      : "مراجعة إلزامية قبل الإرسال: الردّ التالي يحتوي " +
+        problems.join(" و ") +
+        ".\n" +
+        "أعد كتابة الرد مع الالتزام الصارم بالآتي:\n" +
+        "1) احذف أي رقم مستند/طلب/أمر/فاتورة لم يظهر حرفيًا في نتيجة أداة، ولا تستبدله برقم مخمّن.\n" +
+        "2) احذف أو صحّح أي اسم مورد/عميل غير موجود في قوائم النظام المعطاة لك، ولا تخترع اسمًا شبيهًا.\n" +
+        "3) إن كانت المعلومة المطلوبة تعتمد على تلك الأرقام أو الأسماء، فاذكر صراحةً أنها غير متوفرة ولم تُعثر عليها.\n" +
+        "4) أبقِ باقي الرد كما هو — لا تُغيّر ما ظهر فعلًا في نتائج الأدوات.\n" +
+        "أعد نص الرد النهائي فقط، بدون شرح أو مقدمة.";
 
   try {
     const res = await chatCompletion({

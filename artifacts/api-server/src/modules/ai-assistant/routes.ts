@@ -258,8 +258,17 @@ router.get("/ai-assistant/metrics", guard, async (_req, res): Promise<void> => {
 
 // ─── PUT /ai-assistant/settings ───────────────────────────────────────────
 router.put("/ai-assistant/settings", guard, async (req, res): Promise<void> => {
-  const { enabled, model, baseUrl, systemPrompt, language, allowEmail, allowDatabase, allowPdf } =
-    req.body ?? {};
+  const {
+    enabled,
+    model,
+    baseUrl,
+    systemPrompt,
+    language,
+    allowEmail,
+    allowDatabase,
+    allowReadOnlySql,
+    allowPdf,
+  } = req.body ?? {};
   const patch: Record<string, unknown> = { updatedAt: new Date() };
   if (enabled !== undefined) patch.enabled = Boolean(enabled);
   if (model !== undefined) patch.model = String(model);
@@ -268,6 +277,7 @@ router.put("/ai-assistant/settings", guard, async (req, res): Promise<void> => {
   if (language !== undefined) patch.language = language === "en" ? "en" : "ar";
   if (allowEmail !== undefined) patch.allowEmail = Boolean(allowEmail);
   if (allowDatabase !== undefined) patch.allowDatabase = Boolean(allowDatabase);
+  if (allowReadOnlySql !== undefined) patch.allowReadOnlySql = Boolean(allowReadOnlySql);
   if (allowPdf !== undefined) patch.allowPdf = Boolean(allowPdf);
 
   const [row] = await db

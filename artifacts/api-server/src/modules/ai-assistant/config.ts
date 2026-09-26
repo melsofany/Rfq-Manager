@@ -126,6 +126,14 @@ export interface AiSettings {
   language: string;
   allowEmail: boolean;
   allowDatabase: boolean;
+  /**
+   * Free-form read-only SQL (`run_readonly_query`). Separate from
+   * `allowDatabase` so general SQL can be granted without opening it everywhere.
+   * Safe to default ON because the read-only guarantee is enforced in code (a
+   * `BEGIN TRANSACTION READ ONLY` on the database plus a statement allowlist),
+   * not by trusting the model — see `query-exec.ts`.
+   */
+  allowReadOnlySql: boolean;
   allowPdf: boolean;
 }
 
@@ -137,6 +145,7 @@ export const DEFAULT_SETTINGS: AiSettings = {
   language: "ar",
   allowEmail: true,
   allowDatabase: true,
+  allowReadOnlySql: true,
   allowPdf: true,
 };
 
@@ -199,6 +208,7 @@ export async function loadSettings(): Promise<AiSettings> {
       language: row.language || "ar",
       allowEmail: row.allowEmail,
       allowDatabase: row.allowDatabase,
+      allowReadOnlySql: row.allowReadOnlySql,
       allowPdf: row.allowPdf,
     };
   } catch (err) {

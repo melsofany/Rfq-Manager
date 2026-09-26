@@ -84,6 +84,7 @@ import {
 import { defaultMailbox, mailboxes } from "./mailboxes";
 import { aggregateCustomerPoItems, customerItemsCsv, customerItemsPdf } from "./sql-registry";
 import { rememberFact, recallMemories, forgetMemory } from "./memory";
+import { runReadOnlyQuery, MAX_QUERY_ROWS } from "./query-exec";
 import {
   listJobs,
   getJob,
@@ -275,6 +276,29 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
         name: "system_overview",
         description: "نظرة شاملة: عدد السجلات في كل جداول النظام (طلبات، أوامر، فواتير، إلخ).",
         parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "run_readonly_query",
+        description:
+          "تنفيذ استعلام SQL **للقراءة فقط** على قاعدة بيانات النظام عندما لا تكفي الأدوات الجاهزة " +
+          "(مثل تجميع أو ربط لا تدعمه الأدوات، أو إحصاء بشروط مركّبة). " +
+          "القراءة فقط إلزاميًا: يُرفض أي INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/COPY وأي كلمة تعديل، " +
+          "ويُرفض تعدد الاستعلامات. لا يمكن حذف أو تعديل أي شيء من هذه الأداة — هذا قيد على مستوى قاعدة البيانات نفسها. " +
+          "استخدمها كخيار أخير بعد الأدوات الجاهزة، واكتب SELECT واضحًا مع LIMIT.",
+        parameters: {
+          type: "object",
+          properties: {
+            sql: {
+              type: "string",
+              description:
+                "استعلام SELECT واحد فقط (أو WITH … SELECT). بلا فاصلة منقوطة في المنتصف وبلا أي كلمة تعديل.",
+            },
+          },
+          required: ["sql"],
+        },
       },
     },
     {
@@ -2007,6 +2031,43 @@ async function executeToolInner(
         if (!ctx.settings.allowDatabase)
           return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
         return { ok: true, data: await systemSnapshot() };
+      }
+      case "run_readonly_query": {
+        // Gated on a SEPARATE flag from `allowDatabase`, so an administrator can
+        // hand the assistant general SQL without opening it up for every install.
+        if (!ctx.settings.allowDatabase)
+          return { ok: false, error: "الوصول لقاعدة البيانات معطّل" };
+        if (!ctx.settings.allowReadOnlySql) {
+          return {
+            ok: false,
+            error:
+              "الاستعلام الحر (run_readonly_query) معطّل من إعدادات المساعد. " +
+              "استخدم أدوات القراءة الجاهزة (search_database / aggregate_po_items / supplier_overview …).",
+          };
+        }
+        const sql = String(args.sql ?? "");
+        const res = await runReadOnlyQuery(sql);
+        if (!res.ok) {
+          // The refusal is a RESULT, not a crash: the model should learn the
+          // constraint and reformulate with a ready-made tool, so the reason is
+          // returned verbatim.
+          return { ok: false, error: `تم رفض الاستعلام: ${res.error}` };
+        }
+        return {
+          ok: true,
+          data: {
+            sql,
+            rowCount: res.rowCount,
+            truncated: res.truncated ?? false,
+            // State the read-only guarantee in the result itself, so the model
+            // never presents this as a general-purpose capability.
+            readonly: true,
+            note: res.truncated
+              ? `عُرضت أول ${MAX_QUERY_ROWS} صف فقط من ${res.rowCount}. ضيّق الاستعلام (WHERE/LIMIT) لرؤية الباقي.`
+              : "قراءة فقط — لا يمكن تنفيذ أي تعديل أو حذف.",
+            rows: res.rows,
+          },
+        };
       }
       case "supplier_overview": {
         if (!ctx.settings.allowDatabase)

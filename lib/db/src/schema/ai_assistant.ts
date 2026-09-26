@@ -42,6 +42,10 @@ export const aiAssistantSettingsTable = pgTable("ai_assistant_settings", {
   language: text("language").notNull().default("ar"),
   allowEmail: boolean("allow_email").notNull().default(true),
   allowDatabase: boolean("allow_database").notNull().default(true),
+  // Free-form read-only SQL. Safe to default ON: the read-only guarantee is
+  // enforced by the database (`BEGIN TRANSACTION READ ONLY`) and a statement
+  // allowlist, not by the prompt — see `ai-assistant/query-exec.ts`.
+  allowReadOnlySql: boolean("allow_read_only_sql").notNull().default(true),
   allowPdf: boolean("allow_pdf").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

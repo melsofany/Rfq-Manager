@@ -1156,6 +1156,7 @@ export async function initDb(): Promise<void> {
         language TEXT NOT NULL DEFAULT 'ar',
         allow_email BOOLEAN NOT NULL DEFAULT true,
         allow_database BOOLEAN NOT NULL DEFAULT true,
+        allow_read_only_sql BOOLEAN NOT NULL DEFAULT true,
         allow_pdf BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -1170,6 +1171,14 @@ export async function initDb(): Promise<void> {
       UPDATE ai_assistant_settings
          SET model = 'gemini-3.8-flash', updated_at = NOW()
        WHERE key = 'default' AND model IN ('gpt-4o', 'gpt-4o-mini', '');
+    `);
+
+    // Read-only-SQL flag on an EXISTING settings row. Its own statement, so a
+    // sibling failure cannot roll it back into a missing column (the class of
+    // silent migration loss this file has already been bitten by).
+    await client.query(`
+      ALTER TABLE ai_assistant_settings
+        ADD COLUMN IF NOT EXISTS allow_read_only_sql BOOLEAN NOT NULL DEFAULT true;
     `);
 
     // ─── AI assistant long-term memory ────────────────────────────────────
