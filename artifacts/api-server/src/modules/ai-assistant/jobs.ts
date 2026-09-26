@@ -415,6 +415,8 @@ export interface CensusJobArgs {
   beforeDate?: string;
   mailbox: string;
   limit?: number;
+  /** Which document kind the ranking is about (`po` default, `rfq`, `all`). */
+  docKind?: "po" | "rfq" | "all";
 }
 
 export async function startCensusJob(opts: {

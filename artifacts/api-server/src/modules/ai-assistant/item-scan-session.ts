@@ -43,6 +43,8 @@ export interface ItemScanArgs {
   beforeDate?: string;
   mailbox: string;
   limit?: number;
+  /** Which document kind the ranking is about (`po` default, `rfq`, `all`). */
+  docKind?: "po" | "rfq" | "all";
 }
 
 /** Accumulated state of one resumable census. */
@@ -92,7 +94,7 @@ function emptyItemCoverage(): ItemScanCoverage {
   };
 }
 
-const ITEM_COVERAGE_KEYS: Array<keyof ItemScanCoverage> = [
+export const ITEM_COVERAGE_KEYS: Array<keyof ItemScanCoverage> = [
   "messages",
   "readable",
   "withItems",
@@ -101,6 +103,12 @@ const ITEM_COVERAGE_KEYS: Array<keyof ItemScanCoverage> = [
   "noAttachment",
   "attachments",
   "lines",
+  // `pages` was omitted, so every report answered «صفحات: 0» no matter how many
+  // pages were rendered — the operator asked for that figure by name and the
+  // accumulator silently dropped it. Keys are listed explicitly, so a counter
+  // added to the interface but not here is lost; `ai-email-items.test.ts` guards
+  // the full set against the interface.
+  "pages",
   "poDocuments",
   "rfqDocuments",
   "unknownDocuments",
