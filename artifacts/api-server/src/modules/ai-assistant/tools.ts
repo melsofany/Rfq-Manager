@@ -2641,6 +2641,13 @@ async function executeToolInner(
         // «مشكلة في الاتصال بصندوق البريد»).
         const scannedEnvelopes = census.scope?.scanned ?? 0;
         const matchedNothing = census.matched === 0 && scannedEnvelopes > 0;
+        // `scope` is reported to the model as the honesty label. "All matched
+        // messages (0)" reads as a finished, verified zero — the very claim this
+        // fix exists to prevent — so a zero-match scan must say what was actually
+        // examined instead.
+        const honestScope = matchedNothing
+          ? `النطاق: فُحص ${scannedEnvelopes} رسالة ولم يطابق أي منها شرط البحث.`
+          : scope;
 
         return {
           ok: true,
@@ -2669,13 +2676,13 @@ async function executeToolInner(
                 `وقُرئ ${coverage.lines} سطر بند من ${coverage.attachments} ملف.` +
                 docMix +
                 " " +
-                scope +
+                honestScope +
                 (complete
                   ? " — الحصر كامل على كل الرسائل المطابقة."
                   : ` — تنبيه: الحصر جزئي (${partialDetail}). اذكر أن الترتيب مبني على المفحوص حتى الآن ولا تدّعِ الكمال.` +
                     continueHint),
             isComplete: complete,
-            scope,
+            scope: honestScope,
             hasAttachments: !noAttachments,
             ordering,
             matchedMessages: census.matched,
