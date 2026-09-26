@@ -2539,3 +2539,15 @@ the harness around it rather than the model behind it. Both are the same lesson:
 - **Env-leak reminder**: sourcing the Render env to run a live probe leaves
   `SMTP_*`/`AI_*` exported and makes `ai-email-attachment.test.ts` fail on 1 test.
   `unset` them before trusting a local `vitest run`.
+- **Live verification (the operator's «EDC PO NO» request), after the raise**:
+  the same tool call the assistant claimed had found nothing reads
+  **334 matched messages → 334 opened → 317 documents (688 pages) → 853 item
+  lines → 20 aggregated parts in ~70s**. Top part: `WATER HEATER ARISTON RUBIS
+  PRO 40 V EG` (181 pcs, 21 orders). So the infra serves the exact question the
+  operator asked and the earlier «0» was NOT a cap problem: `scan_email_items`
+  with a `subject` filter is **census-only**, while the subject search is a
+  separate path — the assistant must let the tool run rather than concluding from
+  a sample. Two things remain model-side and are prompt/envelope work, not caps:
+  the subject filter must be passed **into** `scan_email_items` (not used to
+  pre-judge the mailbox), and the reply must carry `avgUnitPrice` /
+  `lineItemNos` for every row.
