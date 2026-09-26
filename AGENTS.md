@@ -1160,6 +1160,112 @@ learns continuously" capability.
   clean; repo-wide prettier clean; api-server + portal builds clean.
 - Deploy: pending — push/PR only on explicit request.
 
+## The assistant may READ everything and DELETE nothing (feat/ai-readonly-query)
+
+The operator's requirement was absolute: make the agent stronger than the model
+around it, **but it must never erase anything from the database or the mail.**
+The project is safe by construction, and that is enforced in code — a prompt rule
+is not a permission boundary, as the `send_email` gate already proved.
+
+### The audit that grounds the claim
+
+Before adding anything, the existing surface was measured rather than assumed:
+
+- `grep` for `.insert(`/`.update(`/`.delete(` across every tool module
+  (`db-tools`, `procurement-tools`, `sql-registry`, `email`, `email-items`)
+  returns **no business-table write at all** — the only hits are the assistant's
+  OWN bookkeeping tables (messages, jobs, memories, org profiles, scan sessions).
+- `email.ts` has **no delete/move/flag API** — no `messageDelete`, no `del()`, no
+  `move()`. The mailbox is read-only today and was left that way.
+
+### `query-exec.ts` — five independent layers
+
+A single check is one bug away from being no check, so all five must fail before
+a write could land:
+
+1. **Reject, don't sanitise** — a strict statement allowlist (`SELECT`/`WITH`/
+   `TABLE`). Stripping a keyword from `DROP TABLE x` can leave something that
+   still runs.
+2. **Keyword denylist** over the whole text, comments stripped first.
+3. **No multi-statement** — `SELECT 1; DROP TABLE x` is refused. The `;` count is
+   taken on the **literal-blanked** form, so `WHERE note = 'a;b'` still reads (a
+   literal cannot start a second statement) while a real second statement cannot
+   hide.
+4. **`BEGIN TRANSACTION READ ONLY`** on a dedicated pooled connection — Postgres
+   itself refuses the write. This is the layer that makes the guarantee *true*
+   rather than merely likely.
+5. **`statement_timeout` + a row cap** (15s / 500 rows).
+
+**Keyword matching tolerates whitespace BETWEEN a keyword's characters**
+(`kw.split("").join("\\s*")`). Stripping whitespace instead — the obvious
+approach — **does not work**: it fuses the keyword into its neighbours
+(`select1deletefrom`), destroying the word boundary the match depends on, so the
+`DEL\nETE` split attack slips through. The adversarial test caught this; the
+naive version failed it.
+
+### The guarantee is proven against the real production database
+
+A mocked guard test proves the policy, not the database layer. Run against the
+live Render Postgres (external URL, `sslmode=require`):
+
+```
+baseline suppliers = 247
+read ok = true rows = 3
+delete refused = true | يُسمح باستعلامات القراءة فقط (SELECT/WITH)، وليس «DELETE»
+postgres refused the write = true | cannot execute DELETE in a read-only transaction
+unchanged = true (247 -> 247)
+```
+
+The fourth line is the important one: the guard was **deliberately bypassed** and
+Postgres still refused the write. Nothing changed.
+
+### `claim-check.ts` — the other half of the operator's complaint
+
+The census caps were not the «EDC PO NO» failure. The assistant searched a
+30-row SAMPLE, concluded from it, and stated «لم يتم العثور على أي مرفقات» as fact
+— then found 334 matched messages when pushed. The prompt already forbade this in
+three paragraphs and it still happened, so it is now a **constraint**:
+
+- a negative claim while a census returned `matched > 0` → correction naming the
+  real figure;
+- a negative claim built ONLY from `search_emails`/`search_database` (sample
+  tools) → correction naming the census tool to use;
+- a completeness claim while `isComplete === false` or `remainingMessages > 0` →
+  correction stating the real scope.
+
+**Deliberately narrow**, because a false flag would make the assistant "correct" a
+right answer: it fires only when the tool trace contradicts the claim, never on
+ordinary prose, and never when the run produced no evidence. It is folded into the
+**same** correction round as the grounding checks, so it costs no extra provider
+request — which matters at 20 requests/day/model.
+
+### `run_readonly_query`
+
+A new tool behind a SEPARATE flag (`allowReadOnlySql`, default on) so general SQL
+can be granted without opening `allowDatabase` everywhere. The refusal reason is
+returned verbatim as a tool ERROR so the model learns the constraint and
+reformulates with a ready-made tool.
+
+**The `vm` sandbox discussed for phase 3 was dropped on purpose.** It added a
+code-execution surface without adding a capability the read-only query path does
+not already provide. "No new attack surface" is worth more here than flexibility.
+
+### Tests
+
+`ai-readonly-guard.test.ts` (34) + `ai-claim-check.test.ts` (16): 30 write/escape
+forms (DELETE, DROP, TRUNCATE, multi-statement, comment-hidden, case-varied,
+newline-split, `COPY`, `pg_read_file`, `pg_sleep`, `dblink`, `lo_export`,
+`generate_series`, `SET TRANSACTION READ WRITE`, `DO` block…), plus the positive
+cases that must stay allowed (CTEs, joins, a description literally reading
+`UPDATE KIT`, an `inserted_at` column). **1119 api-server tests** pass; tsc (libs
++ api-server + portal) clean; prettier repo-wide clean; builds clean.
+
+- **Env-leak gotcha (again)**: `AI_AGENT_ENGINE`/`AI_*`/`SMTP_*`/`GOOGLE_ACCOUNT_BASE_64`
+  exported in the shell make 14 unrelated tests fail. Run the suite with
+  `env -i PATH="$PATH" HOME="$HOME" ./node_modules/.bin/vitest run` before
+  concluding anything about a regression — 1119/1119 pass on a clean env.
+- Deploy: pending — push/PR only on explicit request.
+
 ## The assistant stops repeating itself and stops inventing document numbers
 
 Two reliability upgrades to the tool loop, modelled on proven open-source agent
