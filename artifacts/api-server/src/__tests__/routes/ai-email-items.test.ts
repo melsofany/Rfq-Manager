@@ -22,7 +22,10 @@ const {
   itemKey,
   documentNumber,
   documentKind,
+  parseItemsFromAttachments,
 } = await import("../../modules/ai-assistant/email-items");
+const { ITEM_COVERAGE_KEYS } = await import("../../modules/ai-assistant/item-scan-session");
+import type { ItemScanCoverage } from "../../modules/ai-assistant/email-items";
 
 /** Verbatim text of a real EDC RFQ attachment (26R011954). */
 const RFQ_TEXT = `Page 1 of 1
@@ -476,5 +479,50 @@ describe("prices come from the PO rows", () => {
       },
     ]);
     expect(agg[0].description).toBe("SHORT WITH THE FULL DESCRIPTION TEXT");
+  });
+
+  it("every coverage counter is accumulated, so no figure is silently always 0", () => {
+    // `pages` was missing from the accumulator's key list, so every report
+    // answered «صفحات: 0» after rendering thousands of them — a counter added to
+    // the interface but not to the list is dropped without a type error. Compare
+    // the key list against a fully-populated object so a new counter cannot be
+    // forgotten the same way.
+    const sample = {
+      messages: 1,
+      readable: 1,
+      withItems: 1,
+      noItems: 1,
+      unreadable: 1,
+      noAttachment: 1,
+      attachments: 1,
+      lines: 1,
+      pages: 1,
+      poDocuments: 1,
+      rfqDocuments: 1,
+      unknownDocuments: 1,
+    } satisfies ItemScanCoverage;
+    expect([...ITEM_COVERAGE_KEYS].sort()).toEqual(Object.keys(sample).sort());
+  });
+
+  it("marks each line with its document kind instead of discarding RFQ lines", () => {
+    // The RFQ lines must survive parsing: the caller decides what to count, and a
+    // «طلبات التسعير» question needs them. The old code dropped them here, which
+    // is why a part sitting in two RFQs answered «0 بنود». `parseLineItems` is
+    // pure, so the kind is asserted on the real document text.
+    const rfqItems = parseLineItems(RFQ_TEXT, "26R011723").map((i) => ({
+      ...i,
+      docKind: documentKind(RFQ_TEXT, "EDC RFQ No 26R011723"),
+    }));
+    const poItems = parseLineItems(PO_TEXT, "P26E14630").map((i) => ({
+      ...i,
+      docKind: documentKind(PO_TEXT, "EDC PO"),
+    }));
+    expect(rfqItems.length).toBeGreaterThan(0);
+    expect(poItems.length).toBeGreaterThan(0);
+    expect(rfqItems.every((i) => i.docKind === "rfq")).toBe(true);
+    expect(poItems.every((i) => i.docKind === "po")).toBe(true);
+    // The RFQ line carries its real quantity and prose — nothing is thrown away.
+    expect(rfqItems.some((i) => i.qty === 1)).toBe(true);
+    expect(rfqItems.some((i) => /DANFOSS/.test(i.description))).toBe(true);
   });
 });

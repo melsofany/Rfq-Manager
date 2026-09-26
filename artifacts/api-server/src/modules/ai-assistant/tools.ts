@@ -748,6 +748,16 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
                 "استخدمها لسؤال «فين بند كذا؟» أو «هل ظهر كذا في الطلبات؟» — تبحث داخل كل الأسطر المقروءة " +
                 "وتعيد المطابقات فقط. إن كان الحصر ناقصًا فاذكر أنه لم تُفحص كل الرسائل قبل قول «غير موجود».",
             },
+            docKind: {
+              type: "string",
+              enum: ["po", "rfq", "all"],
+              description:
+                "نوع المستند المطلوب: po = أوامر الشراء فقط، rfq = طلبات التسعير/عروض السعر فقط، " +
+                "all = الاثنان معًا. الافتراضي في قائمة التكرار هو po، لكن أي سؤال عن «طلبات التسعير» " +
+                "أو «الطلبات الواردة» أو «هل ظهر البند في الطلبات؟» يجب أن يستخدم rfq أو all، " +
+                "وإلا فستكون الإجابة صفرًا لأن أوامر الشراء لا تحتوي الطلب الأصلي. " +
+                "في وضع all يُذكر لكل بند من أي نوع جاء العدد.",
+            },
             exportCsv: { type: "boolean", description: "أرسل كل البنود كملف CSV" },
             exportPdf: { type: "boolean", description: "أرسل ملخص البنود كملف PDF" },
             question: {
@@ -1508,6 +1518,30 @@ export function wantsCompleteCensus(args: Record<string, unknown>): boolean {
   );
 }
 
+/**
+ * Whether the question is about RFQs / quotations rather than purchase orders.
+ *
+ * The operator's own vocabulary for a request is «طلب تسعير» / «طلبات التسعير» /
+ * «الطلبات الواردة» / «العروض». Those are RFQs, and they outnumber the POs in
+ * the mailbox — so reading only POs answered «0» for a part that was sitting in
+ * two RFQs. Loud words that clearly mean a purchase order («أمر شراء»,
+ * «أوامر الشراء», «PO») win, so «إيه أكتر بند في أوامر الشراء؟» is not diverted.
+ *
+ * Deliberately conservative: a bare «الطلبات» is common in both senses, so it
+ * only counts when no PO word is present at all.
+ */
+export function asksAboutRfq(question: unknown, contains?: string): boolean {
+  const text = `${String(question ?? "")} ${String(contains ?? "")}`;
+  if (
+    /أوامر\s*الشراء|أمر\s*شراء|اوامر\s*الشراء|امر\s*شراء|\bP\.?O\.?\b|purchase\s+order/i.test(text)
+  ) {
+    return false;
+  }
+  return /طلبات?\s*التسعير|طلب\s*تسعير|طلبات?\s*الأسعار|عروض?\s*الأسعار|عرض\s*سعر|طلبات?\s*واردة|الطلبات\s*الواردة|\bRFQ\b|quotation|طلب\s*عرض/i.test(
+    text,
+  );
+}
+
 /** Raised when a tool exceeds `toolTimeoutMs()`. */
 export class ToolTimeoutError extends Error {
   constructor(public readonly toolName: string) {
@@ -1562,7 +1596,19 @@ async function launchCensusJob(
       const pages = cov.pages ?? 0;
       const unreadable = cov.unreadable ?? 0;
       const complete = Boolean(s?.complete);
-      const allItems = Array.isArray(s?.items) ? (s.items as ParsedLineItem[]) : [];
+      const allItemsRaw = Array.isArray(s?.items) ? (s.items as ParsedLineItem[]) : [];
+      // The census reads EVERY document, so the ranking must apply the same
+      // document-kind filter the interactive path uses. Without this the
+      // background report mixed RFQ lines into a PO ranking (or, with the old
+      // discard, reported 0 for a part that only ever appeared on an RFQ).
+      const jobDocKind: "po" | "rfq" | "all" = scanArgs.docKind ?? "po";
+      const allItems = allItemsRaw.filter((it) =>
+        jobDocKind === "all"
+          ? true
+          : jobDocKind === "rfq"
+            ? it.docKind === "rfq"
+            : it.docKind !== "rfq",
+      );
       // Envelopes actually EXAMINED. This is the evidence that separates a
       // mailbox that could not be read from a filter that matched nothing: a
       // scan that walked 1910 envelopes has proven the connection works.
@@ -1600,6 +1646,27 @@ async function launchCensusJob(
           : complete
             ? `النطاق: كل الرسائل المطابقة (${matched}).`
             : `النطاق: فُتح ${opened} من ${matched} رسالة — الحصر ناقص.`;
+
+      // A finished scan that produced ZERO rows while files WERE read is not
+      // «لا توجد بنود». The two real causes are a document-kind filter that
+      // excluded everything read and a parser that found no item tables — and
+      // both are visible in the coverage, so neither may be reported as an
+      // absence of data. Live: 1800 documents read, all classified RFQ, the
+      // report said «بنود: 0» with no explanation.
+      const kindMix =
+        (cov.poDocuments ?? 0) + (cov.rfqDocuments ?? 0) > 0
+          ? ` المستندات المقروءة: ${cov.poDocuments ?? 0} أمر شراء و${cov.rfqDocuments ?? 0} طلب تسعير.`
+          : "";
+      const emptyAfterRead =
+        files > 0 && allItemsRaw.length > 0 && allItems.length === 0
+          ? `\n⚠️ قُرئ ${files} ملفًا و${lines} سطرًا، لكن الفلتر المطلوب (${jobDocKind === "po" ? "أوامر الشراء فقط" : jobDocKind === "rfq" ? "طلبات التسعير فقط" : "الكل"}) استبعدها كلها.` +
+            kindMix +
+            (jobDocKind === "po" && (cov.rfqDocuments ?? 0) > 0
+              ? " البنود موجودة في طلبات تسعير — أعد الطلب بـ docKind=rfq أو all للاطلاع عليها."
+              : "")
+          : files > 0 && allItemsRaw.length === 0
+            ? `\n⚠️ قُرئ ${files} ملفًا ولم يُستخرج منها أي سطر بند — قد تكون ملفات بلا طبقة نصية أو بتنسيق غير معروف. لا تقل إن البنود غير موجودة.`
+            : "";
 
       // ── The artifact. Persisted on the job row BEFORE any send, so the result
       // survives the process, the restart and the delivery failure — that is what
@@ -1678,7 +1745,9 @@ async function launchCensusJob(
         `انتهى الحصر الخلفي لبنود البريد.\n` +
         `رسائل مطابقة: ${matched} — رسائل فُتحت: ${opened} — ملفات: ${files} — ` +
         `صفحات: ${pages} — بنود: ${lines}.\n` +
-        scope;
+        scope +
+        kindMix +
+        emptyAfterRead;
 
       // The message is only one half of the outcome; the PDF is the deliverable
       // the operator actually asked for. Track both so a failure to produce or
@@ -1696,7 +1765,12 @@ async function launchCensusJob(
         try {
           const { generateAssistantPdf } = await import("./pdf");
           const buffer = await generateAssistantPdf({
-            title: "حصر بنود البريد (مهمة خلفية)",
+            title:
+              jobDocKind === "rfq"
+                ? "حصر بنود طلبات التسعير (مهمة خلفية)"
+                : jobDocKind === "all"
+                  ? "حصر البنود في أوامر الشراء وطلبات التسعير (مهمة خلفية)"
+                  : "حصر بنود أوامر الشراء (مهمة خلفية)",
             subtitle: `${Math.min(20, ranked.length)} بندًا الأكثر تكرارًا من ${lines} سطرًا`,
             sections: [
               {
@@ -2366,16 +2440,39 @@ async function executeToolInner(
         // match is BRAND-AWARE (see matchesPartQuery): «أريستون» must find a
         // part printed `...ARSTON...`, otherwise the lookup reports a false
         // «not found» for data that exists.
+        // Which document kind this question is about. The operator's default for
+        // the FREQUENCY ranking is «أوامر الشراء», but their own words for a
+        // request («طلبات التسعير», «الطلبات الواردة», «هل ظهر في الطلبات؟») mean
+        // the RFQ — and answering those from POs alone returned a hard «0» for a
+        // part that was in the mailbox. Explicit arg first, then the question's
+        // own wording, then the PO default.
+        const docKind: "po" | "rfq" | "all" =
+          args.docKind === "rfq" || args.docKind === "all" || args.docKind === "po"
+            ? args.docKind
+            : asksAboutRfq(args.question, contains)
+              ? "all"
+              : "po";
+        const kindFilter = (it: ParsedLineItem) =>
+          docKind === "all"
+            ? true
+            : docKind === "rfq"
+              ? it.docKind === "rfq"
+              : // A line from a doc whose type is unknown is NOT excluded: it is
+                // an EDC item table with an unrecognised title, and dropping it
+                // would lose real orders to a classification gap.
+                it.docKind !== "rfq";
+
         const matchedItems = contains
           ? parsed.items.filter(
               (i) =>
-                matchesPartQuery(i.description, contains) ||
-                matchesPartQuery(i.partNo ?? "", contains) ||
-                // The Line Item code is what EDC prints, so «26R…»/«0666.001.ARSTON.0004»
-                // must be searchable even though it is not the Part Number.
-                matchesPartQuery(i.lineItemNo ?? "", contains),
+                kindFilter(i) &&
+                (matchesPartQuery(i.description, contains) ||
+                  matchesPartQuery(i.partNo ?? "", contains) ||
+                  // The Line Item code is what EDC prints, so «26R…»/«0666.001.ARSTON.0004»
+                  // must be searchable even though it is not the Part Number.
+                  matchesPartQuery(i.lineItemNo ?? "", contains)),
             )
-          : parsed.items;
+          : parsed.items.filter(kindFilter);
 
         // Default to FREQUENCY: «أكتر بند اتكرر» is the common ask, and ranking
         // by quantity alone answers a different question (one huge one-off order
@@ -2473,15 +2570,22 @@ async function executeToolInner(
           .filter(Boolean)
           .join("، ");
 
-        // Only POs are counted, so say so — and say how many RFQs were skipped,
-        // because the operator's rule is explicit that a quotation is not an
-        // order. Silence here would look like the RFQs were counted.
+        // Say which document kinds were read AND which of them the figures rest
+        // on. This used to claim the RFQs were «مستبعد» while they were in fact
+        // discarded before parsing — a statement that hid the bug. The counts are
+        // reported as read, and the filter actually applied is named, so the
+        // operator can see that a PO-only ranking is a choice rather than a
+        // property of the mailbox.
+        const kindLabel: Record<string, string> = {
+          po: "أوامر الشراء فقط (استُبعدت طلبات التسعير)",
+          rfq: "طلبات التسعير فقط (استُبعدت أوامر الشراء)",
+          all: "أوامر الشراء وطلبات التسعير معًا",
+        };
         const docMix =
-          coverage.rfqDocuments > 0
-            ? ` المستندات: ${coverage.poDocuments} أمر شراء (تُحسب) و${coverage.rfqDocuments} طلب عرض/عرض سعر (مستبعد).`
-            : coverage.poDocuments > 0
-              ? ` المستندات: ${coverage.poDocuments} أمر شراء.`
-              : "";
+          coverage.poDocuments || coverage.rfqDocuments
+            ? ` المستندات المقروءة: ${coverage.poDocuments} أمر شراء و${coverage.rfqDocuments} طلب تسعير.` +
+              ` الأرقام محسوبة على: ${kindLabel[docKind]}.`
+            : "";
 
         if (args.exportCsv) {
           ctx.outbox.push({
@@ -2508,7 +2612,12 @@ async function executeToolInner(
               ? `النطاق: فُتح ${parsed.coverage.messages} من ${census.matched} رسالة مطابقة — الحصر ناقص، لم تُفحص كل الرسائل${reason ? ` (${reason})` : ""}.`
               : `النطاق: كل الرسائل المطابقة (${census.matched}) — الحصر كامل.`;
           const buffer = await generateAssistantPdf({
-            title: "أكثر البنود تكرارًا في أوامر الشراء",
+            title:
+              docKind === "rfq"
+                ? "أكثر بنود طلبات التسعير تكرارًا"
+                : docKind === "all"
+                  ? "أكثر البنود تكرارًا في أوامر الشراء وطلبات التسعير"
+                  : "أكثر البنود تكرارًا في أوامر الشراء",
             subtitle:
               ordering === "qty"
                 ? `أكثر ${top} بندًا كمية — من ${parsed.coverage.withItems} رسالة`
@@ -2600,15 +2709,26 @@ async function executeToolInner(
         // Ariston follow-up looked wrong: the items were real but older than the
         // 400-message window.
         if (contains) {
+          // The kind the lookup was restricted to is named here too: a lookup
+          // that found nothing because the question was read as PO-only must say
+          // so, or the operator reads «0 نتائج» as «غير موجود في البريد».
+          const containsKindNote: Record<string, string> = {
+            po: " البحث مقصور على أوامر الشراء فقط",
+            rfq: " البحث مقصور على طلبات التسعير فقط",
+            all: " البحث في أوامر الشراء وطلبات التسعير",
+          };
           const filterNote =
             `بحث عن «${contains}» داخل ${coverage.messages} رسالة فُتحت ` +
-            `(${coverage.lines} سطر بند من ${coverage.attachments} ملف). ` +
-            `النتائج: ${matchedItems.length} سطرًا. ` +
+            `(${coverage.lines} سطر بند من ${coverage.attachments} ملف).` +
+            containsKindNote[docKind] +
+            ` النتائج: ${matchedItems.length} سطرًا. ` +
             (truncated
               ? `تنبيه: لم تُفحص كل الرسائل — ${scope}. إن لم يظهر ما تبحث عنه فقد يكون في رسائل أقدم، ` +
                 "فأعد النداء لإكمال الحصر، أو وسّع النطاق (sinceDate). لا تقل «غير موجود في البريد»." +
                 continueHint
-              : "تم فحص كل الرسائل المطابقة.");
+              : matchedItems.length === 0 && docKind !== "all"
+                ? "لم يظهر في هذا النوع — جرّب docKind=all للتأكد قبل قول «غير موجود»."
+                : "تم فحص كل الرسائل المطابقة.");
           return {
             ok: true,
             data: {
@@ -3264,6 +3384,12 @@ async function executeToolInner(
           sinceDate: args.sinceDate ? String(args.sinceDate) : undefined,
           beforeDate: args.beforeDate ? String(args.beforeDate) : undefined,
           mailbox: args.mailbox ? String(args.mailbox) : "*",
+          docKind:
+            args.docKind === "rfq" || args.docKind === "all" || args.docKind === "po"
+              ? args.docKind
+              : asksAboutRfq(args.question, args.subject ? String(args.subject) : undefined)
+                ? "all"
+                : "po",
         };
         return launchCensusJob(ctx, scanArgs, String(args.question ?? "") || "حصر بنود البريد");
       }

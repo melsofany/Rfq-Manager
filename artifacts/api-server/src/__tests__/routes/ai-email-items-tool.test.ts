@@ -904,8 +904,84 @@ describe("oversize census hands off to a background job", () => {
     // Only the PO contributed, so the part was seen on ONE order — not two.
     expect(res.data.topItems).toHaveLength(1);
     expect(res.data.topItems[0].occurrences).toBe(1);
-    // And the exclusion is stated, not silent.
-    expect(res.data.note).toContain("مستبعد");
+    // And the exclusion is stated, not silent: the note reports both kinds read
+    // and names the filter the figures rest on.
+    expect(res.data.note).toContain("استُبعدت طلبات التسعير");
+    expect(res.data.note).toContain("1 أمر شراء و1 طلب تسعير");
+  });
+
+  it("counts RFQ lines for a question about «طلبات التسعير» (they are not discarded)", async () => {
+    // The live failure this guards: the operator asked for «كل طلبات التسعير
+    // اتطلبت كام مره» for a part that was sitting in RFQ 26R011723/26R011829.
+    // The parser threw every RFQ line away before counting, so the answer was a
+    // hard zero however many quotes the mailbox held. A request IS an RFQ — a
+    // census that reads every document must be able to count them.
+    extractPdfText.mockImplementation(async (buf: Buffer) => buf.toString("utf8"));
+    const rfqText = `RFQ number: 26R011723\nREQUEST FOR QUOTATION\nQuantity UOM Part No Line Item\n1 4 Each 5720.011.GENRAL.2806 MAICO FAN EZQ 20/4\n`;
+    const poText = `PO number: P26E14630\nPURCHASE ORDER\nQuantity UOM Part No Line Item\n1 5 Each 0666.000.GENRAL.0006 PADLOCK\n`;
+    const pool = [
+      {
+        uid: 1,
+        mailbox: "info@cortoba-supplies.com",
+        subject: "EDC RFQ No 26R011723",
+        attachments: pdfAttachments([{ filename: "rfq.pdf", content: Buffer.from(rfqText) }]),
+      },
+      {
+        uid: 2,
+        mailbox: "info@cortoba-supplies.com",
+        subject: "EDC PO",
+        attachments: pdfAttachments([{ filename: "po.pdf", content: Buffer.from(poText) }]),
+      },
+    ];
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 2,
+          returned: 2,
+        }),
+    );
+
+    const res = (await executeTool(
+      "scan_email_items",
+      { contains: "MAICO", question: "في كل طلبات التسعير اتطلبت كام مره", minOrders: 1 },
+      ctx as never,
+    )) as { data: { topItems: Array<{ description: string; qty: number }>; note: string } };
+
+    // The fan is FOUND — the old code returned an empty list here.
+    expect(res.data.topItems).toHaveLength(1);
+    expect(res.data.topItems[0].description).toContain("MAICO FAN");
+    expect(res.data.topItems[0].qty).toBe(4);
+    // The question named «طلبات التسعير» without naming POs, so the search spans
+    // both kinds rather than silently narrowing to PO-only (which returned 0).
+    expect(res.data.note).toContain("أوامر الشراء وطلبات التسعير");
+  });
+
+  it("does not divert a PO question to RFQs when the wording says «أوامر الشراء»", async () => {
+    extractPdfText.mockImplementation(async (buf: Buffer) => buf.toString("utf8"));
+    const rfqText = `RFQ number: 26R011723\nREQUEST FOR QUOTATION\nQuantity UOM Part No Line Item\n1 4 Each 5720.011.GENRAL.2806 MAICO FAN\n`;
+    const poText = `PO number: P26E14630\nPURCHASE ORDER\nQuantity UOM Part No Line Item\n1 5 Each 0666.000.GENRAL.0006 MAICO FAN\n`;
+    const pool = [rfqText, poText].map((t, i) => ({
+      uid: i + 1,
+      mailbox: "info@cortoba-supplies.com",
+      subject: "EDC",
+      attachments: pdfAttachments([{ filename: `d${i}.pdf`, content: Buffer.from(t) }]),
+    }));
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 2,
+          returned: 2,
+        }),
+    );
+    const res = (await executeTool(
+      "scan_email_items",
+      { contains: "MAICO", question: "أكتر بند اتكرر في أوامر الشراء", minOrders: 1 },
+      ctx as never,
+    )) as { data: { topItems: Array<{ qty: number }>; note: string } };
+    expect(res.data.topItems).toHaveLength(1);
+    // The PO's quantity only: the explicit «أوامر الشراء» wins over any RFQ signal.
+    expect(res.data.topItems[0].qty).toBe(5);
+    expect(res.data.note).toContain("أوامر الشراء فقط");
   });
 
   it("groups the same item across POs even when one omits the part number", async () => {

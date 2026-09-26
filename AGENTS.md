@@ -2436,3 +2436,57 @@ guards all three; disabling the guards fails 5 of them, and disabling the breake
   401. `AI_AGENT_ENGINE=mastra` is set in production, and the Mastra path reuses
   the same `toolDefinitions`/`executeTool` + prompt, so the fix applies on the
   ACTIVE engine — confirm that when a fix lives in `tools.ts`.
+
+## An RFQ is a request, and discarding it answered «0 بنود» for a part in the mail
+
+The operator asked «هتخش للميل info … وامر الشراء كلها الوارده من EDC … اكتر ٢٠ بند
+تم اصدار اوامر شراء بهم اكثر من مره», then «تاتي بموضوع EDC PO NO», then — the real
+question — «في كل طلبات التسعير اتطلبت كام مره» for the explosion-proof fan
+**Maico EZQ 20/4 E Ex e**. The assistant answered «لم يتم العثور على أي مرفقات»
+and offered to debug mailboxes. The fan was in the mailbox the whole time.
+
+- **Three defects, one sentence of code.** `parseItemsFromAttachments` read each
+  PDF and then `if (kind === "rfq") { coverage.rfqDocuments += 1; continue; }` —
+  **the lines were parsed and thrown away**. A census of the year's mail opened
+  **1800 documents, classified every one `rfq`, and reported `lines: 0`**. The
+  part sat in RFQ `26R011723` / `26R011829` (qty 4 each, `EZQ 20/4 E Ex e MAICO
+  FAN … HAZARDOUS LOCATION ZONE 1`). **A delete of a capability is worse than a
+  bug in it**: the operator's own word for a request IS «طلب تسعير», so the one
+  question the feature existed for could only ever return zero.
+- **The kind now rides on the line (`ParsedLineItem.docKind`)** and the CALLER
+  filters, so a PO-only ranking and an RFQ census both come from one read. Keep
+  the PO default for «أكتر بند اتكرر» (the operator's stated rule that a quotation
+  is not an order) but honour their vocabulary: `asksAboutRfq()` switches to
+  `all` on «طلبات التسعير/الأسعار»، «العروض»، «الطلبات الواردة»، `RFQ`، `quotation`
+  — and a PO word («أوامر الشراء»، «أمر شراء»، `PO`) always wins, so a PO question
+  is never diverted. `docKind: "po" | "rfq" | "all"` is an explicit tool arg too.
+- **`pages` was never accumulated.** `ITEM_COVERAGE_KEYS` drives
+  `addItemCoverage` and listed every counter **except `pages`**, so every report
+  answered «صفحات: 0» after rendering thousands. A counter added to
+  `ItemScanCoverage` but not to that list is dropped with **no type error** — the
+  keys are now `export`ed and a test compares them against a fully-populated
+  object, so the omission cannot recur.
+- **A zero after reading files is not «لا توجد بنود».** The background report now
+  distinguishes `emptyAfterRead` (files read, filter excluded everything → says
+  which filter and points at `docKind=rfq/all`) from «no line extracted at all»
+  (unreadable/scanned PDFs). The `docMix` copy was also **lying** — it said the
+  RFQs were «مستبعد» while they had been discarded before parsing. Never let the
+  note describe an exclusion that the code performs by deletion.
+- **The `contains` note must name the kind filter.** It returned
+  `matchedItems.length = 0` with no mention of the restriction, which reads as
+  «غير موجود في البريد»; it now appends the kind and, when empty under a narrow
+  filter, says to retry with `docKind=all`.
+- **Two independent identifiers had to agree** before calling this a code bug, not
+  a mailbox one: the live DB (`customer_rfq_items` → part `1000108319`, line item
+  `5720.011.GENRAL.2806`, **13 RFQs**) and the live mailbox (RFQ `26R011723`
+  parses `qty=4`, description with `MAICO FAN`). `documentKind` then labelled the
+  file `rfq` — which is what the old `continue` dropped. Probe the real
+  `executeTool`, not a hand-rolled equivalent; the earlier probe missed it.
+- **Live verification of the fix**: `executeTool("scan_email_items", {query:
+  "26R011723", contains: "maico", docKind: "rfq", mailbox: "info"})` →
+  `pages: 1`, `rfqDocuments: 1`, and one item: `EZQ 20/4 E Ex e MAICO FAN …`,
+  `qty 4 Each`, `documents: ["26R011723"]`.
+- Tests: `ai-email-items.test.ts` (+2: the coverage-key guard, the docKind-marking
+  on real document text), `ai-email-items-tool.test.ts` (+2: RFQ lines counted for
+  a «طلبات التسعير» question — empty against the pre-fix source; and the PO-word
+  precedence). **1068 api-server tests** pass; tsc + prettier + build clean.

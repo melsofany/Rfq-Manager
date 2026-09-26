@@ -48,6 +48,15 @@ export interface ParsedLineItem {
    * restated on its distribution page) is ONE order, not three.
    */
   docId?: string | null;
+  /**
+   * Whether the line came from a PURCHASE ORDER, an RFQ/quotation, or a document
+   * whose type could not be determined.
+   *
+   * Carried on the line (not only in the coverage counters) so a report can say
+   * which kind each figure rests on — the operator asks about orders AND about
+   * quote requests, and the two must never be silently mixed.
+   */
+  docKind?: DocumentKind;
 }
 
 /**
@@ -814,19 +823,20 @@ export async function parseItemsFromAttachments(
       // occurrences must key on the ORDER, and a message with two attachments
       // (PO plus its distribution copy) is one order, not two.
       const docId = documentNumber(text) ?? `${message.mailbox}#${message.uid}#${att.filename}`;
-      // Only PURCHASE ORDERS count. The operator's rule is explicit: POs, not
-      // RFQs or quotations ЕҢДҶГ¶ the same sender sends both with identical item
-      // tables, so counting RFQs would report a part в”¬ВҪorderedв”¬в•— on quotes that
-      // were never ordered. Non-PO documents are still READ (so coverage is
-      // honest about what was opened) but their lines are not counted.
+      // The document's kind is recorded, NOT used to discard its lines.
+      //
+      // It used to `continue` on an RFQ: the lines were parsed and thrown away,
+      // so a question about «طلبات التسعير» — the operator's own words for RFQs —
+      // could only ever answer «0 بنود» however many quotes the mailbox held.
+      // Live: a census opened 1800 documents, classified every one `rfq`, and
+      // reported 0 items for a part that was sitting in RFQ 26R011723/26R011829.
+      // The kind now rides on each line and the CALLER filters, so a PO-only
+      // ranking and an RFQ census are both possible from one read.
       const kind = documentKind(text, message.subject);
-      if (kind === "rfq") {
-        coverage.rfqDocuments += 1;
-        continue;
-      }
-      if (kind === "unknown") coverage.unknownDocuments += 1;
+      if (kind === "rfq") coverage.rfqDocuments += 1;
+      else if (kind === "unknown") coverage.unknownDocuments += 1;
       else coverage.poDocuments += 1;
-      const items = parseLineItems(text, docId);
+      const items = parseLineItems(text, docId).map((it) => ({ ...it, docKind: kind }));
       if (!items.length) continue;
       sawItem = true;
       coverage.lines += items.length;
@@ -846,7 +856,7 @@ export async function parseItemsFromAttachments(
 export function itemsCsv(result: ItemScanResult): string {
   const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const lines = [
-    "mailbox,date,subject,filename,docId,lineNo,lineItemNo,partNo,description,qty,uom,unitPrice,lineTotal",
+    "mailbox,date,subject,filename,docId,docKind,lineNo,lineItemNo,partNo,description,qty,uom,unitPrice,lineTotal",
   ];
   for (const m of result.messages) {
     for (const it of m.items) {
@@ -857,6 +867,7 @@ export function itemsCsv(result: ItemScanResult): string {
           m.subject,
           m.filename,
           it.docId ?? "",
+          it.docKind ?? "",
           it.lineNo ?? "",
           it.lineItemNo ?? "",
           it.partNo ?? "",
