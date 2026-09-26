@@ -2398,3 +2398,41 @@ guards all three; disabling the guards fails 5 of them, and disabling the breake
   `now` so the cooldown is testable without sleeping.
 - Tests: **1056 api-server** (was 1037) + 45 portal pass; tsc (libs + api-server +
   portal) clean; repo-wide prettier clean.
+
+## A zero-match census is not a connection failure (PRs #192/#193)
+
+- **Symptom**: asked about a part («Maico EZQ»), the assistant answered «فيه
+  مشكلة في الاتصال بصندوق البريد» — a false diagnosis of a healthy system. The
+  job row showed **1910 envelopes scanned in 18.7s across 3 mailboxes** with
+  `matched: 0`, i.e. the mailboxes were read completely.
+- **Cause**: `matched === 0 && opened === 0 && !files` conflated two opposite
+  situations. The model had passed a **part description** as `query`, which
+  matches subject/sender only, while the part lives inside the PDF attachments —
+  so the census correctly matched 0 envelopes and the reply blamed the mailbox.
+- **Fix**: `scope.scanned` (envelopes actually examined) is the evidence that
+  separates the causes. `scanned > 0` ⇒ mailbox readable and the SEARCH TERM is
+  wrong (redirect to the attachment `contains` filter); only `scanned === 0` may
+  suggest a connection fault. Applied to BOTH the interactive path and the
+  **background-job finish callback**, which carried the same conflation.
+- **`scope` must be honest too** (#193): a zero-match scan still reported
+  «النطاق: كل الرسائل المطابقة (0)» — which reads as a verified, complete zero,
+  the exact false confidence being removed. It now names what was examined
+  («فُحص 4398 رسالة ولم يطابق أي منها شرط البحث»). Found only by running the real
+  tool against the real mailboxes — the unit tests were green.
+- **Verify the ADVICE, not just the wording**: the redirect is only useful if
+  `contains` actually finds the part. Confirmed live — `contains:"ariston"` over a
+  complete window returned 5 real rows (WATER HEATER ARISTON RUBIS PRO 40/50 V EG
+  plus spares). A wrong redirect is a second dead end.
+- **`P25E…`/`P26E…` is deliberately NOT pinned to one table**: all 39 supplier POs
+  share their `sheetPoNo` with a customer PO, so a router rule forcing one table
+  would be wrong half the time. Only the unambiguous `CPO-YYYY-NNNNNN` routes to
+  `aggregate_customer_po_items`; the code form stays a document lookup.
+- **Env-leak gotcha (recurring)**: sourcing the Render env vars to run a live
+  probe leaves `SMTP_*`/`AI_*` exported, and 4 tests asserting the UNCONFIGURED
+  state then fail (1060/1064). `unset` them before trusting a local `vitest run`.
+  Delete the probe + env file afterwards (`chmod 600` while they exist).
+- Deploy: #192 `553fa42`, #193 `255e1a9`; CI + Deploy-to-Render workflows success;
+  Render `dep-…` live at `255e1a9`; `/api/healthz` 200 and `/api/ai-assistant/*`
+  401. `AI_AGENT_ENGINE=mastra` is set in production, and the Mastra path reuses
+  the same `toolDefinitions`/`executeTool` + prompt, so the fix applies on the
+  ACTIVE engine — confirm that when a fix lives in `tools.ts`.
