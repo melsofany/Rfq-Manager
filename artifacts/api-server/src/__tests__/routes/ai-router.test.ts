@@ -145,3 +145,49 @@ describe("router: safe default and hint", () => {
     expect(routeHint(plan)).toContain("مسار سريع");
   });
 });
+
+describe("router: customer orders vs our supplier orders", () => {
+  /**
+   * Live failure: asked to aggregate the items supplied to customers, the agent
+   * used `aggregate_po_items` — the SUPPLIER table (39 headers / 65 lines) —
+   * and reported 39/65 as the total, then denied that a customer PO visible on
+   * screen (`CPO-2025-000484` / `P25E26553`, id 841) existed. The customer table
+   * holds 767 / 1,993. The hint must name the customer tool so the small table
+   * can never be mistaken for the whole history.
+   */
+  it("points a customer-items census at the customer table, not the supplier one", () => {
+    const plan = routeQuestion("هاتلي حصر كل الأصناف الموردة للعملاء بكمياتها");
+    expect(plan.hint).toContain("aggregate_customer_po_items");
+    expect(plan.hint).toContain("customer_po_items");
+  });
+
+  it("points an EDC customer-order question at the customer table", () => {
+    const plan = routeQuestion("أوامر شراء العملاء الواردة من EDC كام بند فيها؟");
+    expect(plan.hint).toContain("aggregate_customer_po_items");
+  });
+
+  it("recognises our internal customer-PO number as a customer-side document", () => {
+    const plan = routeQuestion("CPO-2025-000484 ده إيه بالظبط؟");
+    // A CPO- number exists only in customer_pos, so the hint may name it.
+    expect(plan.hint).toContain("aggregate_customer_po_items");
+  });
+
+  it("does NOT force a P26E code to the customer table — it lives in both", () => {
+    // All 39 supplier POs share their sheetPoNo with a customer PO, so a rule
+    // pinning that form to one table would be wrong half the time. It stays a
+    // document lookup, where the sibling-table fallback gathers the evidence.
+    const plan = routeQuestion("أمر الشراء P26E11407 تبع مين؟");
+    expect(plan.intent).toBe("document_lookup");
+    expect(plan.hint).not.toContain("aggregate_customer_po_items");
+  });
+
+  it("leaves a plain supplier-side aggregate question unadorned", () => {
+    const plan = routeQuestion("أكتر بند اتكرر في أوامر الشراء بتاعتنا للموردين");
+    expect(plan.hint).not.toContain("aggregate_customer_po_items");
+  });
+
+  it("adds the customer-table caveat to a customer-side COUNT question", () => {
+    const plan = routeQuestion("عدد الأصناف الموردة للعملاء كام؟");
+    expect(plan.hint).toContain("customer_po_items");
+  });
+});

@@ -416,8 +416,12 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
       function: {
         name: "aggregate_po_items",
         description:
-          "أكثر البنود تكرارًا/كمية عبر بنود أوامر الشراء، بتجميع SQL. " +
-          "by=qty (افتراضي) للترتيب بإجمالي الكمية، by=occurrences للترتيب بعدد مرات الورود.",
+          "أكثر البنود تكرارًا/كمية عبر بنود أوامر الشراء **الصادرة مننا للموردين** " +
+          "(purchase_order_items)، بتجميع SQL. " +
+          "by=qty (افتراضي) للترتيب بإجمالي الكمية، by=occurrences للترتيب بعدد مرات الورود. " +
+          "**لا تستخدمها لأوامر شراء العملاء** (EDC وأمثالها) — تلك في جدول customer_po_items " +
+          "وأداتها aggregate_customer_po_items. هذا الجدول صغير جدًا، فاستخدامه للسؤال عن " +
+          "أوامر العملاء يُرجع رقمًا صغيرًا وينفي آلاف السجلات الموجودة.",
         parameters: {
           type: "object",
           properties: {
@@ -702,7 +706,13 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
                 "المُرسل: بريد، أو نطاقه، أو اختصار اسم الشركة كما يقوله المستخدم (مثل EDC). الاختصار يُطابَق مع المُرسل الفعلي، وتُحصى الشركة كاملةً بكل عناوين نطاقها",
             },
             subject: { type: "string", description: "كلمة في الموضوع (مثل RFQ أو PO)" },
-            query: { type: "string", description: "كلمة في الموضوع/المُرسل" },
+            query: {
+              type: "string",
+              description:
+                "كلمة في **الموضوع أو المُرسل فقط** — وليس في محتوى الملفات. " +
+                "لا تمرّر هنا اسم بند/صنف/ماركة (مثل «Maico EZQ»): وصف البند لا يوجد في الموضوع، " +
+                "فيمرّ الفلتر بلا مطابقة ويبدو كأن البريد فارغ. للبحث عن بند/صنف/ماركة استخدم contains.",
+            },
             sinceDate: { type: "string", description: "بداية الفترة YYYY-MM-DD" },
             beforeDate: { type: "string", description: "نهاية الفترة YYYY-MM-DD (غير شاملة)" },
             mailbox: { type: "string", description: "بريد محدّد (اتركه فارغًا لكل البريد)" },
@@ -1528,7 +1538,7 @@ async function launchCensusJob(
     },
     finish: async ({ phone, session, save }) => {
       const s = session as {
-        census?: { matched?: number };
+        census?: { matched?: number; scope?: { scanned?: number } };
         coverage?: {
           messages?: number;
           lines?: number;
@@ -1553,20 +1563,43 @@ async function launchCensusJob(
       const unreadable = cov.unreadable ?? 0;
       const complete = Boolean(s?.complete);
       const allItems = Array.isArray(s?.items) ? (s.items as ParsedLineItem[]) : [];
+      // Envelopes actually EXAMINED. This is the evidence that separates a
+      // mailbox that could not be read from a filter that matched nothing: a
+      // scan that walked 1910 envelopes has proven the connection works.
+      const scanned = s?.census?.scope?.scanned ?? 0;
 
-      // "Matched nothing, opened nothing" is the shape of a scan that FAILED, not
-      // of an empty mailbox. Reporting it as «النطاق: كل الرسائل المطابقة (0)»
-      // reads as a finished, verified zero — the exact false claim that made a
-      // year of EDC purchase orders come back as «لا توجد أوامر شراء». Say the
-      // scan could not read the mailbox, so the operator knows to retry instead of
-      // believing the mailbox is empty.
-      const emptyUnstarted = matched === 0 && opened === 0 && !files;
+      /*
+       * "Matched nothing, opened nothing" has TWO causes, and they need opposite
+       * advice:
+       *  - `scanned === 0`: the mailbox itself was never read (connection/auth),
+       *    so nothing was searched and a retry is the right next step.
+       *  - `scanned > 0`: every envelope WAS read and the filter excluded them
+       *    all — the mailbox is fine, the SEARCH TERM is wrong.
+       *
+       * Live, only the first case existed here, and the operator was told «فيه
+       * مشكلة في الاتصال بصندوق البريد» while the session recorded 1910 messages
+       * scanned in 18.7s across all three mailboxes. The term («Maico EZQ», a
+       * part description) had been passed as `query`, which matches the
+       * subject/sender only — the part lives inside the PDFs, so the census
+       * correctly matched 0 envelopes and was then described as a connection
+       * failure. That is a false diagnosis of a healthy system, and it sent the
+       * operator to debug the mailbox instead of the search term.
+       */
+      const mailboxUnread = scanned === 0;
+      const emptyUnstarted = matched === 0 && opened === 0 && !files && mailboxUnread;
+      const filterMatchedNothing = matched === 0 && opened === 0 && !files && scanned > 0;
       const scope = emptyUnstarted
         ? "النطاق: لم يُفتح أي رسالة ولم تُقرأ أي مرفقات — الحصر لم يبدأ فعليًا. " +
           "أعد المحاولة بمُرسل/موضوع محدد، وإن تكرر ذلك فالمشكلة في الاتصال بصندوق البريد."
-        : complete
-          ? `النطاق: كل الرسائل المطابقة (${matched}).`
-          : `النطاق: فُتح ${opened} من ${matched} رسالة — الحصر ناقص.`;
+        : filterMatchedNothing
+          ? `النطاق: فُحص ${scanned} رسالة ولم يطابق أي منها شرط البحث. ` +
+            "صندوق البريد مقروء تمامًا — المشكلة في شرط البحث نفسه وليست في الاتصال. " +
+            "لا تقل إن هناك مشكلة في الاتصال بصندوق البريد. " +
+            "إن كان المطلوب بندًا/صنفًا/ماركة (وليس موضوع رسالة أو مُرسلًا) فالبحث الصحيح هو " +
+            "contains داخل مرفقات البريد (scan_email_items)، لأن الموضوع والمُرسل لا يحملان وصف البند."
+          : complete
+            ? `النطاق: كل الرسائل المطابقة (${matched}).`
+            : `النطاق: فُتح ${opened} من ${matched} رسالة — الحصر ناقص.`;
 
       // ── The artifact. Persisted on the job row BEFORE any send, so the result
       // survives the process, the restart and the delivery failure — that is what
@@ -1610,6 +1643,8 @@ async function launchCensusJob(
           unknownDocuments: cov.unknownDocuments ?? 0,
           complete,
           emptyUnstarted,
+          filterMatchedNothing,
+          scanned,
           scope,
           // Each item carries its PER-PO appearances (quantity, unit price,
           // line total) so the report can be regenerated and re-sent from this
@@ -2599,24 +2634,37 @@ async function executeToolInner(
           };
         }
 
+        // A filter that matched nothing while every envelope WAS read is a
+        // search-term problem, not an empty mailbox and not a broken connection.
+        // Surface the scanned count as evidence so the model cannot describe a
+        // healthy mailbox as unreachable (live: 1910 envelopes read, answer said
+        // «مشكلة في الاتصال بصندوق البريد»).
+        const scannedEnvelopes = census.scope?.scanned ?? 0;
+        const matchedNothing = census.matched === 0 && scannedEnvelopes > 0;
+
         return {
           ok: true,
           data: {
             note: noAttachments
-              ? census.senderResolution && !census.senderResolution.resolved
-                ? // The sender filter matched NOBODY, so there is no scope to
-                  // report an absence over. Saying «no readable attachments»
-                  // here is what told the operator their POs were not in the
-                  // mailbox when the search string was simply wrong.
-                  `لم يطابق أي مُرسل «${census.senderResolution.requested}» — لم يُبحث بعد عن مُرسل صحيح، ` +
-                  `فلا يُدّعى أنه لا توجد أوامر شراء. المُرسلون الموجودون فعلًا: ` +
-                  `${census.senderResolution.observed?.join("، ") || "غير معروف"}.` +
-                  (census.senderResolution.candidates.length
-                    ? ` أو تطابق أكثر من مُرسل: ${census.senderResolution.candidates.join("، ")}.`
-                    : "") +
-                  " اطلب من المستخدم تحديد المُرسل الصحيح."
-                : `لم أجد أي مرفق PDF يمكن قراءته في ${census.matched} رسالة مطابقة. ` +
-                  "لا تقل إن الطلبات بلا بنود — قل إنه لم يُعثر على ملفات بنود في هذا النطاق، وجرّب وسّع المدة أو غيّر المُرسل."
+              ? matchedNothing && !census.senderResolution
+                ? `فُحص ${scannedEnvelopes} رسالة في البريد ولم يطابق أي منها شرط البحث ` +
+                  "(المُرسل/الموضوع)، فلم يُفتح أي مرفق. صندوق البريد مقروء تمامًا — " +
+                  "لا توجد مشكلة اتصال. إن كان المطلوب بندًا/صنفًا/ماركة فابحث بـ contains " +
+                  "داخل المرفقات (scan_email_items) لأن وصف البند لا يوجد في الموضوع أو المُرسل."
+                : census.senderResolution && !census.senderResolution.resolved
+                  ? // The sender filter matched NOBODY, so there is no scope to
+                    // report an absence over. Saying «no readable attachments»
+                    // here is what told the operator their POs were not in the
+                    // mailbox when the search string was simply wrong.
+                    `لم يطابق أي مُرسل «${census.senderResolution.requested}» — لم يُبحث بعد عن مُرسل صحيح، ` +
+                    `فلا يُدّعى أنه لا توجد أوامر شراء. المُرسلون الموجودون فعلًا: ` +
+                    `${census.senderResolution.observed?.join("، ") || "غير معروف"}.` +
+                    (census.senderResolution.candidates.length
+                      ? ` أو تطابق أكثر من مُرسل: ${census.senderResolution.candidates.join("، ")}.`
+                      : "") +
+                    " اطلب من المستخدم تحديد المُرسل الصحيح."
+                  : `لم أجد أي مرفق PDF يمكن قراءته في ${census.matched} رسالة مطابقة. ` +
+                    "لا تقل إن الطلبات بلا بنود — قل إنه لم يُعثر على ملفات بنود في هذا النطاق، وجرّب وسّع المدة أو غيّر المُرسل."
               : `حصر بنود من مرفقات البريد: ${census.matched} رسالة مطابقة، فُتح مرفق ${coverage.messages} رسالة، ` +
                 `وقُرئ ${coverage.lines} سطر بند من ${coverage.attachments} ملف.` +
                 docMix +

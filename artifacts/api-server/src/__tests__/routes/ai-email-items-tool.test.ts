@@ -766,7 +766,12 @@ describe("scan_email_items tool", () => {
     };
     expect(res.data.hasAttachments).toBe(false);
     expect(res.data.isComplete).toBe(false);
-    expect(res.data.note).toContain("لم أجد أي مرفق");
+    // The note must say plainly that no attachment was opened, and — since the
+    // fixture reports 3875 envelopes examined — it must NOT attribute the zero
+    // to an unreadable mailbox. The old wording («لم أجد أي مرفق في 0 رسالة
+    // مطابقة») read as "the mailbox has nothing", which is a different claim.
+    expect(res.data.note).toContain("لم يُفتح أي مرفق");
+    expect(res.data.note).not.toContain("مشكلة في الاتصال");
   });
 });
 
@@ -958,7 +963,14 @@ describe("oversize census hands off to a background job", () => {
       new URL("../../modules/ai-assistant/tools.ts", import.meta.url),
       "utf8",
     );
-    const jobReport = src.slice(src.indexOf("finish: async ({ phone, session")).slice(0, 12000);
+    // The window must reach the END of the finish closure; a fixed 12000-char
+    // slice silently stopped covering it once the closure grew, and the
+    // assertions below then failed for a reason unrelated to their subject.
+    const finishStart = src.indexOf("finish: async ({ phone, session");
+    // Ends where the closure does — `launchCensusJob` returns right after the last
+    // `JobDeliveryError`, so anchor on the next top-level declaration instead.
+    const finishEnd = src.indexOf("export async function executeTool", finishStart);
+    const jobReport = src.slice(finishStart, finishEnd > finishStart ? finishEnd : undefined);
     expect(jobReport).toContain("aggregateItemsByOccurrence");
     expect(jobReport).not.toContain("aggregateItems(s.items");
     // And a census that inspected NOTHING must not be reported as a finished,
@@ -1002,5 +1014,89 @@ describe("oversize census hands off to a background job", () => {
     // A job, not a ranked sample.
     expect(res.data.jobId).toBe(1);
     expect(res.data.note).toContain("الخلفية");
+  });
+});
+
+describe("a zero-match census must not be blamed on the mailbox connection", () => {
+  /**
+   * Live failure: the operator asked about a part («Maico EZQ»). The model passed
+   * the part name as `query`, which matches the SUBJECT/SENDER only — the part
+   * lives inside the PDFs — so the census matched 0 envelopes. The answer then
+   * said «مشكلة في الاتصال بصندوق البريد» while the session recorded **1910
+   * messages scanned in 18.7s across all three mailboxes**. The mailbox was
+   * perfectly healthy; the search term was wrong.
+   *
+   * The distinction is `scope.scanned`: envelopes actually examined is the
+   * evidence that the connection works, so a zero-match result with scanned > 0
+   * must point at the search term, and only scanned === 0 may suggest a
+   * connection fault.
+   */
+  it("points at the search term (not the connection) when envelopes WERE read", async () => {
+    scanEmails.mockResolvedValue(
+      censusWithAttachments([], {
+        matched: 0,
+        returned: 0,
+        emails: [],
+        attachmentMessages: [],
+        scope: {
+          folder: "inbox",
+          sinceDate: null,
+          beforeDate: null,
+          mailboxes: [
+            { mailbox: "info@cortoba-supplies.com", scanned: 1820, truncated: false },
+            { mailbox: "procurement@cortoba-supplies.com", scanned: 85, truncated: false },
+            { mailbox: "finance@cortoba-supplies.com", scanned: 5, truncated: false },
+          ],
+          scanned: 1910,
+          truncated: false,
+          elapsedMs: 18677,
+        },
+      }),
+    );
+
+    const res = (await executeTool("scan_email_items", { query: "Maico EZQ" }, ctx as never)) as {
+      ok: boolean;
+      data: { note: string; scope: string; hasAttachments: boolean };
+    };
+
+    expect(res.ok).toBe(true);
+    // The proof that the mailbox was readable must be IN the reply.
+    expect(res.data.note).toContain("1910");
+    expect(res.data.note).toContain("مقروء");
+    // The false diagnosis is what this guards: never blame the connection.
+    expect(res.data.note).not.toContain("مشكلة في الاتصال");
+    expect(res.data.scope).not.toContain("مشكلة في الاتصال");
+    // And it must redirect to the right kind of search for a part name.
+    expect(res.data.note).toContain("contains");
+  });
+
+  it("still allows a connection diagnosis when NOTHING was read", async () => {
+    scanEmails.mockResolvedValue(
+      censusWithAttachments([], {
+        matched: 0,
+        returned: 0,
+        emails: [],
+        attachmentMessages: [],
+        scope: {
+          folder: "inbox",
+          sinceDate: null,
+          beforeDate: null,
+          mailboxes: [],
+          scanned: 0,
+          truncated: false,
+          elapsedMs: 20,
+        },
+      }),
+    );
+
+    const res = (await executeTool(
+      "scan_email_items",
+      { from: "egyptian-drilling" },
+      ctx as never,
+    )) as { ok: boolean; data: { note: string } };
+
+    // scanned === 0 means no envelope was examined, so the mailbox itself is the
+    // suspect and the operator should retry rather than reword.
+    expect(res.data.note).not.toContain("مقروء تمامًا");
   });
 });

@@ -166,6 +166,31 @@ const PROCUREMENT_OPS_RE =
 const SUPPLIER_PLURAL_RE = /(موردين|موردون|الموردين|الموردون|\bsuppliers\b|\bvendors\b)/;
 
 /**
+ * Customer-purchase-order wording: the operator asking about the orders a
+ * CUSTOMER sent us (EDC et al.) — a different table from our own supplier POs.
+ *
+ * This distinction is the whole point: `customer_pos` holds ~767 headers and
+ * ~1,993 lines, while `purchase_orders` holds 39 and 65. The model answered a
+ * customer-PO question from the supplier table and reported 39/65 as the total,
+ * then denied that a record visible on screen (`CPO-2025-000484` / `P25E26553`,
+ * id 841) existed. A hint naming the right tool is what keeps the small table
+ * from being mistaken for the whole history.
+ */
+const CUSTOMER_PO_RE =
+  /(اوامر\s*شراء\s*العملاء|امر\s*شراء\s*العميل|اوامر\s*العميل|من\s*العميل|الوارده\s*من|وارده\s*من|مورده\s*للعملاء|المورده|توريدات|client\s*po|customer\s*po)/;
+
+/** A customer-side document code that is UNAMBIGUOUS: our internal customer-PO
+ *  number `CPO-2025-000484` exists only in `customer_pos` (supplier POs use
+ *  `PO-2026-…`).
+ *
+ *  Deliberately does NOT include the `P25E…`/`P26E…` sheet codes: all 39 supplier
+ *  POs share their `sheetPoNo` with a customer PO (a supplier PO is raised
+ *  against a customer order), so that form lives in BOTH tables and a rule
+ *  forcing one of them would be wrong half the time. Those stay a document
+ *  lookup, where `lookup_document` already checks the sibling table on a miss. */
+const CUSTOMER_PO_CODE_RE = /\bcpo-\d{4}-\d{6}\b/i;
+
+/**
  * The operator NAMING the mailbox as the required source, or excluding the
  * internal system.
  *
@@ -302,7 +327,36 @@ export function routeQuestion(rawText: string): RoutePlan {
       reason: "aggregate/comparison wording",
       hint:
         "سؤال تحليلي/حصر: استخدم الأدوات التي تُجمِع في قاعدة البيانات أو أدوات الحصر في البريد، " +
-        "ولا تُجرِ الجمع يدويًا. اذكر دائمًا هل النتيجة كاملة أم عيّنة.",
+        "ولا تُجرِ الجمع يدويًا. اذكر دائمًا هل النتيجة كاملة أم عيّنة." +
+        // The table choice is the failure this hint prevents: the supplier table
+        // holds 39 headers / 65 lines against the customer table's 767 / 1,993,
+        // so answering a customer-order question from it reports a small number
+        // and denies real records. Naming the tool removes the choice.
+        (CUSTOMER_PO_RE.test(text) || CUSTOMER_PO_CODE_RE.test(text)
+          ? " هذه أسئلة عن أوامر شراء **العملاء**: استخدم aggregate_customer_po_items " +
+            "(جدول customer_po_items) وليس aggregate_po_items — الأخيرة تقرأ جدول أوامر " +
+            "الموردين وهو صغير جدًا وسيُنفي وجود آلاف السجلات الموجودة."
+          : ""),
+      sourceScope,
+    };
+  }
+
+  // 3b. A customer-PO internal number (CPO-YYYY-NNNNNN) is unambiguous: it exists
+  //     ONLY in customer_pos (supplier POs are numbered PO-YYYY-NNNNNN), so the
+  //     question is answerable without guessing between two tables. Checked
+  //     before the generic document rule, whose hint names the supplier tool by
+  //     default and would send the model to the small table.
+  if (CUSTOMER_PO_CODE_RE.test(text)) {
+    return {
+      intent: "document_lookup",
+      path: "fast",
+      maxRounds: FAST_MAX_ROUNDS,
+      verify: true,
+      reason: "customer-PO internal number",
+      hint:
+        "رقم أمر شراء عميل داخلي (CPO-…) — موجود في جدول customer_pos وحده. " +
+        "استخدم lookup_document بنوع customer_po، وللحصر/التجميع استخدم " +
+        "aggregate_customer_po_items (customer_po_items) وليس aggregate_po_items.",
       sourceScope,
     };
   }
@@ -316,7 +370,13 @@ export function routeQuestion(rawText: string): RoutePlan {
       maxRounds: FAST_MAX_ROUNDS,
       verify: true,
       reason: "counting wording",
-      hint: "سؤال عدّ: استخدم count_database أو دالة تجميع في قاعدة البيانات، لا تعتمد على عيّنة.",
+      hint:
+        "سؤال عدّ: استخدم count_database أو دالة تجميع في قاعدة البيانات، لا تعتمد على عيّنة." +
+        (CUSTOMER_PO_RE.test(text) || CUSTOMER_PO_CODE_RE.test(text)
+          ? " هذا عدّ لأوامر/أصناف **العملاء**: استخدم aggregate_customer_po_items أو " +
+            "count_database على customer_pos / customer_po_items — وليس purchase_orders " +
+            "(جدول الموردين الصغير) وإلا فسيكون العدد ناقصًا بشكل خطير."
+          : ""),
       sourceScope,
     };
   }
