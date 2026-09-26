@@ -455,7 +455,7 @@ export async function startCensusJob(opts: {
       // A bounded number of rounds: `runBatch` always opens at least one window,
       // so progress is guaranteed, but the cap stops a pathological source (a
       // window that never advances) from looping forever in the background.
-      const MAX_BATCHES = Number(process.env.AI_CENSUS_JOB_MAX_BATCHES) || 60;
+      const MAX_BATCHES = Number(process.env.AI_CENSUS_JOB_MAX_BATCHES) || 120;
       let cancelled = false;
       for (let i = 0; i < MAX_BATCHES; i++) {
         // Honour a cancellation between batches: the operator called the job off,
@@ -511,9 +511,13 @@ export async function startCensusJob(opts: {
 }
 
 /** Per-batch scan budget for background jobs. Longer than the interactive one:
- *  nobody is waiting on a chat reply, so each round can do real work. */
+ *  nobody is waiting on a chat reply, so each round can do real work.
+ *
+ * Raised 60s -> 120s with the concurrent fetch and the 5,000-message window: a
+ * background round can now genuinely read a large slice, and the batch cap is
+ * what stops a pathological source, not the clock. */
 function censusJobBatchMs(): number {
-  return Number(process.env.AI_CENSUS_JOB_BATCH_MS) || 60_000;
+  return Number(process.env.AI_CENSUS_JOB_BATCH_MS) || 120_000;
 }
 
 /** A human-readable Arabic progress line for a running job. */

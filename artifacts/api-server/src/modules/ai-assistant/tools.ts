@@ -1464,9 +1464,15 @@ function censusCsv(census: EmailCensusResult): string {
  * On expiry the call returns a tool ERROR naming the timeout — the model then
  * reports that the tool did not finish rather than treating a truncated run as a
  * complete result. Overridable so the timeout path is testable.
+ *
+ * Raised 100s -> 160s: `scan_email_items` now fetches its window concurrently,
+ * and one batch legitimately runs up to the attachment time budget (75s) before
+ * the cursor stops. A 100s ceiling left too little headroom for the parse +
+ * aggregation that follow, so a large batch was cut by the backstop instead of
+ * returning its own honest "partial, continue" payload.
  */
 export function toolTimeoutMs(): number {
-  return Number(process.env.AI_TOOL_TIMEOUT_MS) || 100_000;
+  return Number(process.env.AI_TOOL_TIMEOUT_MS) || 160_000;
 }
 
 /**
@@ -1474,14 +1480,18 @@ export function toolTimeoutMs(): number {
  * returns and lets the next call continue.
  *
  * The scan is resumable, so this is a pacing value, not a completeness limit: a
- * call stops here, reports `remainingMessages`, and the model calls again. Set
- * below the agent's whole-run budget (150s) so calls, verification and delivery
- * still have room after a batch, and below the per-tool ceiling so the tool
- * returns its own honest "partial, continue" result rather than a generic
- * timeout error. Overridable so the resume path is testable.
+ * call stops here, reports `remainingMessages`, and the model calls again.
+ *
+ * It must leave room for the model to answer afterwards, so it stays well below
+ * the whole-run budget (`AGENT_BUDGET_MS`, 150s) — the same reason a background
+ * job gets a larger batch. Raised 45s -> 120s to match that background batch:
+ * the fetch is now concurrent across mailboxes, so a 45s call was the binding
+ * constraint on how much mail one piece of work could read. The per-tool ceiling
+ * (160s) still sits above it, so a call that overruns returns its own honest
+ * "partial, continue" payload instead of a generic timeout.
  */
 export function scanCallBudgetMs(): number {
-  return Number(process.env.AI_SCAN_CALL_BUDGET_MS ?? 45_000);
+  return Number(process.env.AI_SCAN_CALL_BUDGET_MS ?? 120_000);
 }
 
 /**
