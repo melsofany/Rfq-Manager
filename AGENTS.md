@@ -2490,3 +2490,52 @@ and offered to debug mailboxes. The fan was in the mailbox the whole time.
   on real document text), `ai-email-items-tool.test.ts` (+2: RFQ lines counted for
   a «طلبات التسعير» question — empty against the pre-fix source; and the PO-word
   precedence). **1068 api-server tests** pass; tsc + prettier + build clean.
+
+## Raising the census ceiling — the fetch, not the number, was the limit
+
+The operator asked to raise the scan ceiling and to make the agent as capable as
+the harness around it rather than the model behind it. Both are the same lesson:
+**a limit expressed as a count is meaningless while the work is serialised.**
+
+- **The fetch ran one mailbox at a time.** `fetchMessageAttachments` looped over
+  mailboxes with `await` inside the loop, so raising the message cap changed
+  nothing measurable: the wall-clock budget (40s) hit first, always at the same
+  place, whatever `AI_ATTACHMENT_SCAN_BUDGET` said. One connection per mailbox,
+  and a UID is unique only inside one mailbox, so there was nothing to serialise —
+  the three mailboxes now fetch **concurrently** (`Promise.all`), ~3x faster for
+  the same work.
+- **Concurrency broke the resume cursor, and the fix had to come first.**
+  `nextSkip = start + coverage.scanned` is only a valid cursor while the fetch is
+  sequential. With `Promise.all`, `scanned` is a SUM across mailboxes: one that
+  finished its whole group plus another the clock stopped. Using it as the cursor
+  **skips the tail of the mailbox that stopped** — messages never opened, recorded
+  as read. That is the same silent-false-negative class as the RFQ discard, and it
+  would silently drop mail from a later window. `contiguousPrefix()` walks the
+  window in order and stops at the first unread message, so the cursor stays
+  gap-free. **When you parallelise a cursor-driven walk, re-derive the cursor from
+  per-worker progress — never from an aggregate.**
+- **The budgets contradicted each other.** The fetch's own default was a fixed
+  75s while its two callers define "one batch" differently: an interactive tool
+  call capped at 45s and a background job at 120s. The fixed default could honour
+  neither — it outlived the interactive call and left the job's larger allowance
+  unused, so raising the job's batch budget was a no-op. `attachmentTimeBudgetMs`
+  is now passed DOWN from the caller that owns the clock
+  (`deadline - Date.now()`), which is what makes the job's 120s real.
+- **New defaults** (all env-overridable, all set on Render): window 1,200 ->
+  **5,000**; fetch wall-clock 40s -> **75s**; per-call scan budget 45s -> **120s**
+  (the interactive ceiling was the binding constraint on how much mail one piece
+  of work could read); job batch 60s -> **120s**; job batches 60 -> **120**;
+  per-tool ceiling 100s -> **160s** (above the 75s fetch, so a large batch returns
+  its own honest "partial, continue" rather than being cut by the backstop).
+- **Order the ladder when changing any of them**: fetch (75s) < per-call scan
+  budget (120s) = job batch (120s) < per-tool ceiling (160s) < run budget (150s
+  for the model, which is why the background job exists). A value set above its
+  parent is silently ignored.
+- **Test**: `contiguousPrefix` is exported and unit-tested (a mailbox that
+  stopped early, a fully-read window, an absent mailbox). It **fails against the
+  naive sum**, verified by temporarily reverting the helper — it guards the
+  invariant, not the code path. 1,069 api-server tests pass; tsc + prettier +
+  build clean.
+- **Env-leak reminder**: sourcing the Render env to run a live probe leaves
+  `SMTP_*`/`AI_*` exported and makes `ai-email-attachment.test.ts` fail on 1 test.
+  `unset` them before trusting a local `vitest run`.

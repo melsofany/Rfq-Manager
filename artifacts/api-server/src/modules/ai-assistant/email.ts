@@ -1231,7 +1231,13 @@ export function attachmentScanBudget(): number {
   // above a realistic year of orders. When a mailbox genuinely exceeds it the
   // time budget bites first and `coverage.truncated` reports the shortfall —
   // the operator is told the scan was partial instead of being shown a sample.
-  return Number(process.env.AI_ATTACHMENT_SCAN_BUDGET) || 1_200;
+  //
+  // Raised again to 5,000 at the operator's request: a year of EDC mail is
+  // ~4,000 messages, so the old 1,200 still split a normal year into batches.
+  // The window is one call's slice of the matched list (`skip` walks it), so a
+  // larger window is only useful together with the parallel fetch below — the
+  // fetch, not this number, is what actually bounds wall-clock time.
+  return Number(process.env.AI_ATTACHMENT_SCAN_BUDGET) || 5_000;
 }
 
 /**
@@ -1239,12 +1245,17 @@ export function attachmentScanBudget(): number {
  *
  * One pass is one BATCH of a resumable scan, so this is pacing, not a limit on
  * completeness: when it bites, the cursor stops and the next call continues.
- * Set comfortably below the per-call scan budget in the tool layer (45s) so a
- * batch returns its own honest "partial" result instead of being cut by the
- * generic per-tool timeout. Overridable so the truncation path is testable.
+ * Set comfortably below the per-call scan budget in the tool layer so a batch
+ * returns its own honest "partial" result instead of being cut by the generic
+ * per-tool timeout. Overridable so the truncation path is testable.
+ *
+ * Raised 40s -> 75s together with the concurrent per-mailbox fetch: the same
+ * wall clock now covers roughly three times the mail, so the old ceiling was
+ * cutting a window that could have finished. It still sits below the tool-layer
+ * call budget, which is what keeps the "partial, continue" answer honest.
  */
 function attachmentScanTimeBudget(): number {
-  return Number(process.env.AI_ATTACHMENT_TIME_BUDGET_MS) || 40_000;
+  return Number(process.env.AI_ATTACHMENT_TIME_BUDGET_MS) || 75_000;
 }
 
 /** Coverage of an attachment pass — never report a partial read as complete. */
@@ -1294,6 +1305,37 @@ export interface MessageAttachments {
 }
 
 /**
+ * How many of `considered` were read as a CONTIGUOUS PREFIX.
+ *
+ * The attachment fetch runs one connection per mailbox concurrently, so the
+ * number of messages read is a SUM across mailboxes: one mailbox may finish its
+ * whole group while another stops early on the clock. Advancing the resume cursor
+ * by that sum would skip the tail of the mailbox that stopped — messages never
+ * opened, recorded as done. That is a silent false negative, the same class as
+ * the RFQ discard, and it would make a later window start past unread mail.
+ *
+ * Walking the window in order and stopping at the first message whose mailbox has
+ * no reads left keeps the cursor gap-free, so unread messages stay in the next
+ * batch. Extracted (and exported) because this is the invariant that decides
+ * whether a resumed census can miss mail — it must be unit-tested, not reasoned
+ * about.
+ */
+export function contiguousPrefix(
+  considered: Array<{ mailbox: string }>,
+  scannedByMailbox: Map<string, number>,
+): number {
+  const left = new Map(scannedByMailbox);
+  let contiguous = 0;
+  for (const m of considered) {
+    const n = left.get(m.mailbox) ?? 0;
+    if (n <= 0) break;
+    left.set(m.mailbox, n - 1);
+    contiguous += 1;
+  }
+  return contiguous;
+}
+
+/**
  * Download the attachments of the matched messages.
  *
  * This is the ONE place the mail is opened for content, so the number census
@@ -1306,6 +1348,7 @@ export async function fetchMessageAttachments(
   matches: EmailCensusMatch[],
   budget = attachmentScanBudget(),
   skip = 0,
+  timeBudgetMs?: number,
 ): Promise<{ messages: MessageAttachments[]; coverage: AttachmentCoverage }> {
   // The caller's set is the matched list. `skip` walks FORWARD from the previous
   // batch's end so a large year is read in resumable windows: each call opens
@@ -1334,12 +1377,35 @@ export async function fetchMessageAttachments(
   }
 
   const startedAt = Date.now();
-  for (const [mailboxAddress, group] of byMailbox) {
-    if (Date.now() - startedAt > attachmentScanTimeBudget()) {
+  // The caller owns the batch clock; fall back to this module's default for a
+  // direct caller (tests, probes) that has no batch concept.
+  const timeBudget = timeBudgetMs ?? attachmentScanTimeBudget();
+
+  // Messages actually fetched, per mailbox. The cursor is derived from these, so
+  // it MUST be per-mailbox: with the concurrent fetch below, a total alone cannot
+  // say WHICH messages were read.
+  const scannedByMailbox = new Map<string, number>();
+
+  /**
+   * Fetch one mailbox's messages. Runs once per mailbox, and the callers below
+   * run these CONCURRENTLY.
+   *
+   * This used to be a sequential `for` over mailboxes, which made the message cap
+   * meaningless: a 1,200-message window took the same wall-clock as a 400 one
+   * because the clock, not the count, hit first. Measured live at ~430ms/message
+   * (IMAP fetch + MIME parse + PDF text), so a full year was minutes no matter
+   * how the budget was set. The mailboxes are independent connections — a UID is
+   * unique only inside one mailbox — so there is nothing to serialise. With three
+   * mailboxes the fetch is now ~3x faster for the same work, and the raise to
+   * 5,000 messages is actually usable.
+   */
+  async function fetchMailbox(mailboxAddress: string, group: EmailCensusMatch[]): Promise<void> {
+    if (Date.now() - startedAt > timeBudget) {
       coverage.truncated = true;
       coverage.truncatedReason = "time";
-      break;
+      return;
     }
+    let fetched = 0;
     try {
       await withMailbox(async (client) => {
         const path = await resolveFolderPath(client, group[0].folder);
@@ -1347,7 +1413,7 @@ export async function fetchMessageAttachments(
         try {
           const uids = group.map((m) => m.uid);
           for (let i = 0; i < uids.length; i += 25) {
-            if (Date.now() - startedAt > attachmentScanTimeBudget()) {
+            if (Date.now() - startedAt > timeBudget) {
               coverage.truncated = true;
               coverage.truncatedReason = "time";
               break;
@@ -1359,6 +1425,8 @@ export async function fetchMessageAttachments(
               { uid: true },
             )) {
               coverage.scanned += 1;
+              fetched += 1;
+              scannedByMailbox.set(mailboxAddress, fetched);
               const source = (msg as { source?: Buffer }).source;
               const match = group.find((m) => m.uid === msg.uid);
               if (!source) {
@@ -1411,11 +1479,19 @@ export async function fetchMessageAttachments(
     }
   }
 
-  // How far the cursor advanced. `scanned` is the number of messages actually
-  // fetched — fewer than `considered` only when the clock stopped a chunk early,
-  // and those unread messages are deliberately retried by the next batch rather
-  // than counted as done.
-  coverage.nextSkip = start + coverage.scanned;
+  // One concurrent fetch per mailbox: they use separate connections, so waiting on
+  // them in series only made the scan slower.
+  await Promise.all([...byMailbox].map(([addr, group]) => fetchMailbox(addr, group)));
+
+  /*
+   * Advance the cursor over a CONTIGUOUS PREFIX of `considered`, never over a
+   * bare count — see `contiguousPrefix` for why the sum is unsafe.
+   */
+  const contiguous = contiguousPrefix(considered, scannedByMailbox);
+
+  // How far the cursor advanced. `scanned` remains the evidence of how much work
+  // was done; `contiguous` is what is safe to skip past.
+  coverage.nextSkip = start + contiguous;
   coverage.remaining = Math.max(0, matches.length - coverage.nextSkip);
   if (coverage.remaining > 0) {
     coverage.truncated = true;
@@ -1525,6 +1601,17 @@ export async function scanEmails(opts: {
    */
   attachmentSkip?: number;
   /**
+   * Wall-clock ceiling for the attachment fetch pass, in ms.
+   *
+   * The scan is driven by TWO callers with different notions of "one batch": an
+   * interactive tool call caps itself at `scanCallBudgetMs()` (45s), while a
+   * background job allows 120s. The fetch's own default (75s) could honour
+   * neither — it outlived the interactive call and wasted the job's larger
+   * allowance, so raising the job's batch budget changed nothing. The caller that
+   * owns the budget now passes it down.
+   */
+  attachmentTimeBudgetMs?: number;
+  /**
    * Return every matched envelope to an internal aggregation caller. The public
    * tool still caps `emails` at `limit`; a year-wide item census must not inherit
    * that cap and accidentally analyse only the newest 500 messages.
@@ -1581,6 +1668,7 @@ async function runScanEmails(opts: {
   compareTarget?: { table: string; column: string };
   includeAttachments?: boolean;
   attachmentSkip?: number;
+  attachmentTimeBudgetMs?: number;
   returnAllMatches?: boolean;
   unseenOnly?: boolean;
 }): Promise<EmailCensusResult> {
@@ -1778,6 +1866,7 @@ async function runScanEmails(opts: {
       all,
       attachmentScanBudget(),
       opts.attachmentSkip ?? 0,
+      opts.attachmentTimeBudgetMs,
     );
     attachmentCoverage = fetched.coverage;
     attachmentMessages = fetched.messages;

@@ -516,4 +516,56 @@ describe("scanEmails sender shorthand resolution", () => {
     expect(res.note).toContain("لا تقل «لا توجد رسائل من هذا المُرسل»");
     expect(res.note).toContain("info@delta-supplies.com");
   });
+  /**
+   * The resume cursor must advance over a CONTIGUOUS PREFIX, never over a sum.
+   *
+   * The attachment fetch opens one connection per mailbox concurrently, so a
+   * mailbox that finishes its whole group and one that stops early on the clock
+   * together produce a count that says nothing about WHICH messages were read.
+   * Advancing `nextSkip` by that sum skips the tail of the mailbox that stopped —
+   * mail that was never opened gets recorded as done, so a resumed census can
+   * miss it silently. That is the same false-negative class as the RFQ discard.
+   */
+  it("advances the cursor over a contiguous prefix, not across a mailbox that stopped early", async () => {
+    const { contiguousPrefix } = await import("../../modules/ai-assistant/email");
+
+    // Window interleaves info@, procurement@, finance@. Only info@ and
+    // procurement@ were read; finance@ stopped on the clock.
+    const considered = [
+      { mailbox: "info@" },
+      { mailbox: "procurement@" },
+      { mailbox: "finance@" }, // <- first unread message
+      { mailbox: "info@" },
+      { mailbox: "procurement@" },
+    ];
+    const scanned = new Map([
+      ["info@", 2],
+      ["procurement@", 2],
+      ["finance@", 0],
+    ]);
+
+    // The naive sum (4) would skip message index 3 and 4, though index 2 was
+    // never opened and index 3 may belong to a mailbox read only past a gap.
+    const naiveSum = [...scanned.values()].reduce((a, b) => a + b, 0);
+    expect(naiveSum).toBe(4);
+    expect(contiguousPrefix(considered, scanned)).toBe(2);
+
+    // Every mailbox fully read => the whole window is safely skipped.
+    expect(
+      contiguousPrefix(
+        considered,
+        new Map([
+          ["info@", 2],
+          ["procurement@", 2],
+          ["finance@", 1],
+        ]),
+      ),
+    ).toBe(5);
+
+    // A mailbox absent from the map has no reads: the prefix stops at the FIRST
+    // message of a mailbox that was not read — here `procurement@` at index 1,
+    // so only the leading `info@` message is safe to skip past.
+    expect(contiguousPrefix(considered, new Map([["info@", 2]]))).toBe(1);
+    expect(contiguousPrefix([], new Map())).toBe(0);
+  });
 });

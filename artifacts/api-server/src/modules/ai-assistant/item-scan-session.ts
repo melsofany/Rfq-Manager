@@ -238,6 +238,11 @@ async function runBatch(session: ItemScanSession, key: string, deadline: number)
     includeAttachments: true,
     returnAllMatches: true,
     attachmentSkip: session.nextSkip,
+    // The fetch must stop when THIS batch's clock runs out, not at its own
+    // default: an interactive call allows 45s while a background job allows 120s,
+    // so a fixed default either outlived one or wasted the other. Handing the
+    // remaining batch time down is what makes the job's larger allowance real.
+    attachmentTimeBudgetMs: Math.max(1_000, deadline - Date.now()),
   });
   // `matched` and `emails` describe the WHOLE ask and are identical on every
   // window; only `attachmentMessages` is windowed. Keeping the latest census
