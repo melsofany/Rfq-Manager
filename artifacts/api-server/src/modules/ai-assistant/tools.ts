@@ -1516,12 +1516,17 @@ export function toolTimeoutMs(): number {
  * Time kept in reserve so the model can still SPEAK after a tool returns.
  *
  * Every tool result is worthless until a completion turns it into an answer, so
- * no tool may consume the run's whole budget. Held here as one constant, used
- * both by the tool ceiling and by the `scan_email_items` background-job decision,
- * because two independently-chosen reserves is how the deployed settings drifted
- * into a tool ceiling that outlived the run.
+ * no tool may consume the run's whole budget. Kept as one set of constants, used
+ * by the tool ceiling, the `scan_email_items` background-job decision AND the
+ * engine's answer-funding gate, because independently-chosen reserves are how the
+ * deployed settings drifted into a tool ceiling that outlived the run.
+ *
+ * The values live in `./budgets` so the ENGINE can read them without importing
+ * this module (which dereferences ~25 table bindings at load); a test that mocks
+ * the registry therefore cannot silently lose a budget constant.
  */
-export const ANSWER_RESERVE_MS = 20_000;
+import { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS } from "./budgets";
+export { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS } from "./budgets";
 
 /**
  * How long ONE `scan_email_items` call may spend opening attachments before it
@@ -1989,7 +1994,10 @@ export function effectiveToolTimeoutMs(
 ): number {
   const remaining =
     typeof ctx.deadline === "number"
-      ? ctx.deadline - now - ANSWER_RESERVE_MS
+      ? // Reserve BOTH the answer's production and its delivery: a tool that
+        // uses the time the model needs to speak has not helped, however much it
+        // read — the operator gets «نفدت محاولات المعالجة» after the work.
+        ctx.deadline - now - ANSWER_RESERVE_MS - MIN_ANSWER_BUDGET_MS
       : Number.POSITIVE_INFINITY;
   return Math.max(1_000, Math.min(toolTimeoutMs(), remaining));
 }
@@ -2543,9 +2551,14 @@ async function executeToolInner(
         // it cannot coexist with answering (the model needs one completion after
         // the tool), the job is queued up front and the tool returns immediately.
         const runDeadline = typeof ctx.deadline === "number" ? ctx.deadline : Infinity;
+        // Reserve the answer's DELIVERY and PRODUCTION, in that order: the scan
+        // may only spend what is left after both. Without the second reserve the
+        // scan could run to its ceiling inside the run's window and leave nothing
+        // to fund the completion that turns its rows into a reply — the live
+        // «نفدت محاولات المعالجة» after a successful scan.
         const budgetForScan = Math.min(
           scanCallBudgetMs(),
-          runDeadline - Date.now() - ANSWER_RESERVE_MS,
+          runDeadline - Date.now() - ANSWER_RESERVE_MS - MIN_ANSWER_BUDGET_MS,
         );
         const tooBigForOneRun =
           !contains &&
@@ -2566,7 +2579,13 @@ async function executeToolInner(
           );
         }
 
-        const scanDeadline = Date.now() + scanCallBudgetMs();
+        // The scan may spend only what remains after the answer is funded — never
+        // its own ceiling when that is larger than the room left in the run.
+        // Deliberately unfloored: `runItemScan` already guarantees at least one
+        // window per call, so a nearly-spent run still makes progress, while a
+        // small budget must stay small — it is the pacing that lets the operator
+        // drive a resumed census.
+        const scanDeadline = Date.now() + budgetForScan;
         const { session } = await runItemScan(
           scanCacheKey("items", scanArgs),
           scanArgs,

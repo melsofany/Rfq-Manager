@@ -33,6 +33,10 @@
 import { logger } from "../../shared/logger";
 import { chatCompletion, type ChatMessage, type ToolCall } from "./llm";
 import { executeTool, asText, toolDefinitions, type ToolContext } from "./tools";
+// Read from `./budgets`, not `./tools`: the engine must not depend on the tool
+// registry for a timing constant, or a test that mocks the registry loses it and
+// the guarantee silently becomes `undefined`.
+import { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS } from "./budgets";
 import { filterToolDefinitions } from "./tool-scope";
 import { wrapUntrustedOutput, unwrapUntrustedOutput } from "./guardrails";
 import {
@@ -127,7 +131,14 @@ export function mastraEngineEnabled(): boolean {
  */
 async function answerWithoutTools(
   messages: ChatMessage[],
-  opts: { model: string; baseUrl?: string | null; signal: AbortSignal; phone: string },
+  opts: {
+    model: string;
+    baseUrl?: string | null;
+    signal: AbortSignal;
+    phone: string;
+    /** Instant by which the answer must be done (run deadline − reserve). */
+    deadlineMs?: number;
+  },
 ): Promise<string | null> {
   try {
     const res = await chatCompletion({
@@ -136,6 +147,7 @@ async function answerWithoutTools(
       messages,
       toolChoice: "none",
       signal: opts.signal,
+      deadlineMs: opts.deadlineMs,
     });
     const text = String(res.content ?? "").trim();
     if (!text && res.finishReason === "length") {
@@ -238,6 +250,16 @@ export async function runToolLoop(opts: {
   let finalText: string | null = null;
   let rounds = 0;
 
+  /**
+   * The instant a completion must be DONE by: the run's deadline minus the slice
+   * kept for DELIVERING the answer (WhatsApp upload, session write).
+   *
+   * A completion started after this point cannot finish before the run ends, so
+   * the loop must stop calling tools and speak with what it already has.
+   */
+  const answerDeadlineMs = (): number =>
+    opts.ctx.deadline == null ? Number.POSITIVE_INFINITY : opts.ctx.deadline - ANSWER_RESERVE_MS;
+
   try {
     for (let round = 0; round < effectiveRounds; round++) {
       // Last round: forbid tool calls so the model has to answer with what it
@@ -245,6 +267,35 @@ export async function runToolLoop(opts: {
       // the budget and leaves nothing to send.
       const isLastRound = round === effectiveRounds - 1;
       const roundStartedAt = Date.now();
+
+      // ── Fund the answer BEFORE spending another tool round ──────────────
+      // A ~85s scan inside a 150s run leaves ~65s, which cannot fund a completion
+      // that asks for its 100s allowance: the provider call is aborted and throws
+      // «LLM request budget of 100000ms exhausted before an answer», on every
+      // attempt, so the run ends with the generic notice AFTER the mail was read.
+      // The tool's own ceiling does not prevent this — it is measured against the
+      // RUN, not against the completion that must follow it.
+      //
+      // Answering now is strictly better than a round that cannot finish: the
+      // operator gets text instead of a failure notice. The check is at the TOP
+      // of the round rather than the bottom, so it also covers the first round of
+      // a run that was already short on time when it started.
+      if (!isLastRound && opts.ctx.deadline != null) {
+        const leftAfterReserve = answerDeadlineMs() - Date.now();
+        if (leftAfterReserve < MIN_ANSWER_BUDGET_MS) {
+          logger.warn(
+            { phone: opts.phone, round, leftAfterReserve, engine: engineName() },
+            "AI assistant: no time left to fund another tool round — answering now",
+          );
+          forcedAnswer = true;
+          trace.noteForcedAnswer();
+          finalText = await answerWithoutTools(messages, {
+            ...opts,
+            deadlineMs: answerDeadlineMs(),
+          });
+          break;
+        }
+      }
 
       let result;
       try {
@@ -255,6 +306,7 @@ export async function runToolLoop(opts: {
           tools,
           toolChoice: isLastRound ? "none" : "auto",
           signal: opts.signal,
+          deadlineMs: answerDeadlineMs(),
         });
       } catch (err) {
         // A provider fault (or an abort) must not throw away the turns already
@@ -274,7 +326,7 @@ export async function runToolLoop(opts: {
           { err, phone: opts.phone, round, engine: engineName() },
           "AI assistant: provider round failed, answering from the transcript",
         );
-        finalText = await answerWithoutTools(messages, opts);
+        finalText = await answerWithoutTools(messages, { ...opts, deadlineMs: answerDeadlineMs() });
         break;
       }
       rounds += 1;
@@ -294,7 +346,10 @@ export async function runToolLoop(opts: {
           // The thinking was cut short, so the evidence is already in the
           // transcript and the schema-free re-ask genuinely can differ (a smaller
           // request leaves more of the budget for the reply itself).
-          finalText = await answerWithoutTools(messages, opts);
+          finalText = await answerWithoutTools(messages, {
+            ...opts,
+            deadlineMs: answerDeadlineMs(),
+          });
         }
         break;
       }
@@ -310,7 +365,7 @@ export async function runToolLoop(opts: {
         );
         forcedAnswer = true;
         trace.noteForcedAnswer();
-        finalText = await answerWithoutTools(messages, opts);
+        finalText = await answerWithoutTools(messages, { ...opts, deadlineMs: answerDeadlineMs() });
         break;
       }
 

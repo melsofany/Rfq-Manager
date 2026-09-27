@@ -145,6 +145,30 @@ export function completionBudgetMs(): number {
   return Number(process.env.AI_COMPLETION_BUDGET_MS) || 100_000;
 }
 
+/**
+ * The budget ONE completion may actually spend, capped by what the run has left.
+ *
+ * `completionBudgetMs` is a per-completion allowance, NOT a promise that the run
+ * can fund it. The recorded live failure is exactly that mismatch: a tool spent
+ * ~85s of a 150s run, the completion then asked for its full 100s, could not be
+ * honoured, was aborted, and threw «LLM request budget of 100000ms exhausted
+ * before an answer» — on every attempt — so `finalText` stayed null and the
+ * operator got the exhausted notice AFTER the work had been done. Doing the work
+ * guaranteed there was no time to speak.
+ *
+ * Returning the smaller of the two makes the budget honest: a completion that
+ * cannot be funded fails fast and cheaply, and the caller answers from what it
+ * already has, instead of burning the remainder of the run on an attempt that was
+ * never going to finish.
+ */
+export function completionBudgetFor(deadlineMs?: number, now: number = Date.now()): number {
+  const budget = completionBudgetMs();
+  if (typeof deadlineMs !== "number") return budget;
+  const left = deadlineMs - now;
+  if (!Number.isFinite(left)) return budget;
+  return Math.max(1_000, Math.min(budget, left));
+}
+
 /** True when an error means "we ran out of time", not "the model refused". */
 export function isTimeoutError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -264,6 +288,14 @@ export async function chatCompletion(opts: {
    * wait, no matter how many rounds or models it goes through.
    */
   signal?: AbortSignal;
+  /**
+   * Wall-clock instant by which this completion must be DONE — the caller's run
+   * deadline minus whatever it reserves for delivering the answer. Clamps the
+   * per-completion allowance to what the run can actually fund, so a completion
+   * that follows an expensive tool fails fast instead of spending the rest of the
+   * run on an attempt that cannot finish (see `completionBudgetFor`).
+   */
+  deadlineMs?: number;
 }): Promise<ChatResult> {
   if (!AI_API_KEY && !DEEPSEEK_API_KEY) {
     throw new AiError("AI_API_KEY / OPENAI_API_KEY not configured");
@@ -305,7 +337,7 @@ export async function chatCompletion(opts: {
   // One deadline for the whole chain. Checked before each attempt so the chain
   // cannot start work it has no time to finish, and passed to the request so an
   // in-flight attempt is cancelled the moment the budget expires.
-  const budgetMs = completionBudgetMs();
+  const budgetMs = completionBudgetFor(opts.deadlineMs);
   const deadline = Date.now() + budgetMs;
   const budget = new AbortController();
   const budgetTimer = setTimeout(() => budget.abort(), budgetMs);

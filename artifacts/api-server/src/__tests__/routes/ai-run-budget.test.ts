@@ -4,6 +4,8 @@ import {
   toolTimeoutMs,
   ANSWER_RESERVE_MS,
 } from "../../modules/ai-assistant/tools";
+import { MIN_ANSWER_BUDGET_MS } from "../../modules/ai-assistant/budgets";
+import { completionBudgetFor, completionBudgetMs } from "../../modules/ai-assistant/llm";
 import { exhaustedAnswer } from "../../modules/ai-assistant/agent";
 
 /**
@@ -26,10 +28,23 @@ describe("tool ceiling vs the run budget", () => {
   it("clamps a long tool to what is left of the run", () => {
     const now = 1_000_000;
     // 150s run, 160s tool ceiling, tool starts immediately: the ceiling must come
-    // down to the run's remainder minus the answer reserve.
+    // down to the run's remainder minus BOTH the answer's delivery and its
+    // production, or the tool eats the time the model needs to speak.
     const ms = effectiveToolTimeoutMs({ deadline: now + 150_000 }, now);
-    expect(ms).toBe(150_000 - ANSWER_RESERVE_MS);
+    expect(ms).toBe(150_000 - ANSWER_RESERVE_MS - MIN_ANSWER_BUDGET_MS);
     expect(ms).toBeLessThan(toolTimeoutMs());
+  });
+
+  it("holds back the time the ANSWER needs, not just its delivery", () => {
+    // The recorded live defect: the scan took ~85s of a 150s run. The old reserve
+    // held back only 20s, so the tool was allowed 130s and took ~85s — after which
+    // the completion could not be funded at all and the run ended with «نفدت
+    // محاولات المعالجة» despite having read the mail.
+    const now = 1_000_000;
+    const ms = effectiveToolTimeoutMs({ deadline: now + 150_000 }, now);
+    // What the tool may spend must leave a fundable completion behind it.
+    expect(ms).toBeLessThanOrEqual(150_000 - ANSWER_RESERVE_MS - MIN_ANSWER_BUDGET_MS);
+    expect(150_000 - ms).toBeGreaterThanOrEqual(MIN_ANSWER_BUDGET_MS + ANSWER_RESERVE_MS);
   });
 
   it("never lets the tool outlive the deadline (the live defect)", () => {
@@ -53,6 +68,33 @@ describe("tool ceiling vs the run budget", () => {
 
   it("behaves exactly as before when no deadline is provided", () => {
     expect(effectiveToolTimeoutMs({}, Date.now())).toBe(toolTimeoutMs());
+  });
+});
+
+describe("a completion may only ask for what the run can fund", () => {
+  it("caps the per-completion allowance by the run's remainder", () => {
+    // The live error was «LLM request budget of 100000ms exhausted before an
+    // answer» thrown by a run that had only ~65s left: the completion asked for
+    // its full allowance, could not be honoured, and threw — on every attempt —
+    // so the work already done produced no reply.
+    const now = 1_000_000;
+    expect(completionBudgetFor(now + 65_000, now)).toBe(65_000);
+    expect(completionBudgetFor(now + 65_000, now)).toBeLessThan(completionBudgetMs());
+  });
+
+  it("keeps the full allowance when the run has room for it", () => {
+    const now = 1_000_000;
+    expect(completionBudgetFor(now + 10 * 60_000, now)).toBe(completionBudgetMs());
+  });
+
+  it("never returns zero, so a nearly-spent run still makes one attempt", () => {
+    const now = 1_000_000;
+    expect(completionBudgetFor(now, now)).toBe(1_000);
+    expect(completionBudgetFor(now - 5_000, now)).toBe(1_000);
+  });
+
+  it("uses the full allowance when the caller passes no deadline", () => {
+    expect(completionBudgetFor(undefined, Date.now())).toBe(completionBudgetMs());
   });
 });
 
