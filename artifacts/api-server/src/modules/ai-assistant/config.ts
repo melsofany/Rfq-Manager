@@ -394,8 +394,16 @@ export interface ProviderStatus {
  * an outage that a graph of model names cannot.
  */
 export function providerStatus(): ProviderStatus[] {
+  // Each row must name a model that provider can actually serve. `DEFAULT_MODEL`
+  // is the CHAT default, which is a DeepSeek id in the default deployment — using
+  // it for the Gemini row logged `gemini:deepseek-v4-pro`, a provider:model pair
+  // that exists nowhere. The Gemini row therefore reports its own chain head.
   return [
-    { provider: "gemini", configured: Boolean(AI_API_KEY), model: DEFAULT_MODEL },
+    {
+      provider: "gemini",
+      configured: Boolean(AI_API_KEY),
+      model: FALLBACK_MODELS[0] || GEMINI_MEDIA_MODEL,
+    },
     { provider: "deepseek", configured: isDeepSeekConfigured, model: DEEPSEEK_MODEL },
   ];
 }
