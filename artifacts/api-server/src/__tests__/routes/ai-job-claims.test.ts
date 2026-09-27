@@ -15,7 +15,7 @@
 import { describe, it, expect } from "vitest";
 import { checkJobClaims } from "../../modules/ai-assistant/claim-check";
 import { toolsForIntent } from "../../modules/ai-assistant/tool-scope";
-import type { ToolExchange } from "../../modules/ai-assistant/mastra-agent";
+import type { ToolExchange } from "../../modules/ai-assistant/engine";
 
 const ex = (name: string, data: unknown): ToolExchange =>
   ({ name, args: {}, content: JSON.stringify(data) }) as ToolExchange;

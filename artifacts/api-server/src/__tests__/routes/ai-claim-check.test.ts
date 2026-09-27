@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { checkClaims } from "../../modules/ai-assistant/claim-check";
-import type { ToolExchange } from "../../modules/ai-assistant/mastra-agent";
+import type { ToolExchange } from "../../modules/ai-assistant/engine";
 
 function ex(name: string, data: unknown): ToolExchange {
   return { name, args: {}, content: JSON.stringify(data) };

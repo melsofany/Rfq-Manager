@@ -29,7 +29,7 @@
  *  - neither fires when the run produced no evidence at all (the model may be
  *    answering from history, or the tool may not have been reached).
  */
-import type { ToolExchange } from "./mastra-agent";
+import type { ToolExchange } from "./engine";
 
 /**
  * Phrases that assert ABSENCE. Arabic-first, matching how the operator writes and
