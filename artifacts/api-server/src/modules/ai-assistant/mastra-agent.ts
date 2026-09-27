@@ -43,6 +43,11 @@ export interface ToolExchange {
   name: string;
   args: unknown;
   content: string;
+  /**
+   * False when the call failed (unknown tool, timeout, tool error). The caller
+   * needs this to avoid reporting a failed call as work performed.
+   */
+  ok?: boolean;
 }
 
 export interface ToolLoopResult {
@@ -329,8 +334,13 @@ export async function runToolLoop(opts: {
             // Attach the result to its matching call so the caller sees one
             // (call → result) pair per exchange.
             const match = [...exchanges].reverse().find((e) => e.name === name && !e.content);
-            if (match) match.content = ledgerText;
-            else exchanges.push({ name, args: {}, content: ledgerText });
+            // The executor encodes failure as an `ERROR:` prefix, so the outcome
+            // is recoverable without a second field on the step payload.
+            const ok = !ledgerText.startsWith("ERROR:");
+            if (match) {
+              match.content = ledgerText;
+              match.ok = ok;
+            } else exchanges.push({ name, args: {}, content: ledgerText, ok });
           }
         },
       });

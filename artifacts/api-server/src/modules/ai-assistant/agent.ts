@@ -294,10 +294,15 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
 
   /** Real figures reported by data tools (row counts, totals, cuts). */
   const traceData: Array<Record<string, unknown>> = [];
+  // The run deadline, known before any tool runs. `executeTool` clamps its own
+  // ceiling to what is left of it, so a long tool returns a partial result the
+  // model can still report instead of completing after the run has aborted.
+  const runDeadline = Date.now() + AGENT_BUDGET_MS;
   const ctx: ToolContext = {
     settings,
     phone: input.phone,
     outbox: [],
+    deadline: runDeadline,
     // Data tools report their REAL row counts / totals / cuts here, so the run's
     // figures are observable rather than inferred from the model's summary. The
     // "15 items" report could not be diagnosed from the transcript otherwise.
@@ -403,7 +408,11 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     { phone: input.phone, intent: plan.intent, tools: tools.length, total: allTools.length },
     "AI assistant: tool catalogue scoped",
   );
-  const usedTools: Array<{ name: string; args: unknown }> = [];
+  // `ok` matters: the model can emit a tool name it was never offered, and the
+  // exhausted-budget message must not report that as work performed (live: it
+  // announced `run_readonly_query, search_database` on a mail question where the
+  // database tools were not even in the catalogue).
+  const usedTools: Array<{ name: string; args: unknown; ok: boolean }> = [];
   // Raw tool exchanges (name + args + the tool's OWN result text, before the
   // untrusted-content delimiters are added). The claim check parses this JSON to
   // compare the answer's claims against `matched`/`isComplete`; the delimited
@@ -494,7 +503,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       // SAME helpers the legacy loop uses, so the number check and the numeric
       // reconciliation behave identically on either engine.
       for (const ex of loop.exchanges) {
-        usedTools.push({ name: ex.name, args: ex.args });
+        usedTools.push({ name: ex.name, args: ex.args, ok: ex.ok !== false });
         toolExchanges.push(ex);
         if (ex.content.startsWith("ERROR:")) noteMailAccessFailure(mailFailureEvidence, ex.content);
         for (const n of findGroundingNumbers(ex.content)) groundedNumbers.add(n);
@@ -572,7 +581,6 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
 
         const calls = result.toolCalls.map((call) => {
           const parsed = parseArgs(call);
-          usedTools.push({ name: call.function.name, args: parsed });
           return { call, parsed };
         });
         let dedupedCount = 0;
@@ -600,7 +608,12 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
               if (!resumable) toolCache.set(key, pending);
             }
             const content = await pending;
-            toolExchanges.push({ name: call.function.name, args: parsed, content });
+            // `ERROR:` prefix is how a failed call is represented in the
+            // transcript, so `ok` is derived from it rather than carried
+            // separately — a deduped repeat must report the same outcome.
+            const ok = !content.startsWith("ERROR:");
+            toolExchanges.push({ name: call.function.name, args: parsed, content, ok });
+            usedTools.push({ name: call.function.name, args: parsed, ok });
             for (const n of findGroundingNumbers(content)) groundedNumbers.add(n);
             // Collect the tool's OWN quantity aggregates (never a figure from the
             // prose) so the numeric verifier reconciles against what the database
@@ -1344,14 +1357,28 @@ async function verifyGroundedAnswer(opts: {
  * request was worked on (and that retrying the same way will hit the same wall)
  * instead of the misleading "rephrase your question".
  */
-function exhaustedAnswer(usedTools: Array<{ name: string; args: unknown }>): string {
+export function exhaustedAnswer(
+  usedTools: Array<{ name: string; args: unknown; ok: boolean }>,
+): string {
   if (usedTools.length === 0) {
     return "لم أتمكن من الوصول لإجابة. جرّب إعادة صياغة السؤال.";
   }
-  const names = [...new Set(usedTools.map((t) => t.name))].join(", ");
+  // Only calls that actually SUCCEEDED count as «خطوات فعلية». A failed call did
+  // no work, and reporting it as work is a lie about the run — the live failure
+  // announced two database tools on a question whose scope had removed them.
+  const worked = [...new Set(usedTools.filter((t) => t.ok).map((t) => t.name))];
+  const failed = [...new Set(usedTools.filter((t) => !t.ok).map((t) => t.name))];
+  if (worked.length === 0) {
+    return (
+      "لم أتمكن من إتمام الطلب: لم تنجح أي من المحاولات التي نفّذتها" +
+      (failed.length ? ` (${failed.join(", ")})` : "") +
+      ". جرّب سؤالًا أكثر تحديدًا وسأعيد المحاولة."
+    );
+  }
   return (
     "نفدت محاولات المعالجة قبل الوصول لرد نهائي، لكن تم تنفيذ خطوات فعلية: " +
-    names +
+    worked.join(", ") +
+    (failed.length ? ` (وفشل: ${failed.join(", ")})` : "") +
     ". جرّب سؤالًا أكثر تحديدًا (مثل رقم أمر التوريد) وسأجيب مباشرة."
   );
 }

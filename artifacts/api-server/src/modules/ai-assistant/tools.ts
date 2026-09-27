@@ -146,6 +146,19 @@ export interface ToolContext {
    * This makes the run's own totals observable.
    */
   trace?: (summary: Record<string, unknown>) => void;
+  /**
+   * The run deadline. A tool must never outlive it: the operator is waiting in a
+   * chat window, so a tool that returns after the deadline has produced nothing
+   * usable. Live: a mail census legitimately needed ~140s (opening hundreds of
+   * PDFs), the tool ceiling was configured at 160s and the CALL budget at 120s
+   * while the whole run allowed 150s — so the scan finished after the run had
+   * already aborted and the reply was «نفدت محاولات المعالجة».
+   *
+   * When present, the effective ceiling becomes the smaller of the configured
+   * tool timeout and the time left before the deadline, so a tool gives up while
+   * its result can still be spoken instead of being discarded at abort.
+   */
+  deadline?: number;
 }
 
 export interface ToolResult {
@@ -1500,6 +1513,17 @@ export function toolTimeoutMs(): number {
 }
 
 /**
+ * Time kept in reserve so the model can still SPEAK after a tool returns.
+ *
+ * Every tool result is worthless until a completion turns it into an answer, so
+ * no tool may consume the run's whole budget. Held here as one constant, used
+ * both by the tool ceiling and by the `scan_email_items` background-job decision,
+ * because two independently-chosen reserves is how the deployed settings drifted
+ * into a tool ceiling that outlived the run.
+ */
+export const ANSWER_RESERVE_MS = 20_000;
+
+/**
  * How long ONE `scan_email_items` call may spend opening attachments before it
  * returns and lets the next call continue.
  *
@@ -1950,6 +1974,26 @@ async function launchCensusJob(
   };
 }
 
+/**
+ * The ceiling a tool may actually use: the smaller of the configured tool
+ * timeout and what is left of the run after reserving time to answer.
+ *
+ * The deadline is read at CALL time (it is a wall-clock instant, not a fixed
+ * duration). A tool that would outlive the run must fail early — its result
+ * would be discarded by the abort anyway, and a late failure at least tells the
+ * model to report a partial read instead of the run dying with no text.
+ */
+export function effectiveToolTimeoutMs(
+  ctx: Pick<ToolContext, "deadline">,
+  now: number = Date.now(),
+): number {
+  const remaining =
+    typeof ctx.deadline === "number"
+      ? ctx.deadline - now - ANSWER_RESERVE_MS
+      : Number.POSITIVE_INFINITY;
+  return Math.max(1_000, Math.min(toolTimeoutMs(), remaining));
+}
+
 export async function executeTool(
   name: string,
   args: Record<string, unknown>,
@@ -1964,7 +2008,7 @@ export async function executeTool(
     return { ok: false, error: verdict.message ?? "الخدمة غير متاحة مؤقتًا." };
   }
 
-  const timeoutMs = toolTimeoutMs();
+  const timeoutMs = effectiveToolTimeoutMs(ctx);
   let timer: NodeJS.Timeout | undefined;
   try {
     const timeout = new Promise<never>((_, reject) => {
@@ -2488,6 +2532,40 @@ async function executeToolInner(
 
         // Leave the agent room to answer after the scan stops (calls, verification
         // and delivery), so the scan deadline sits below the whole-run budget.
+        // A census that cannot finish inside THIS run is handed to a background
+        // job instead of spending the operator's whole wait on a partial read.
+        //
+        // This decision must be made BEFORE the first attachment is opened: a
+        // scan that stops at its own deadline returns a model round-trip late,
+        // and the run budget then expires with no text — the live «نفدت محاولات
+        // المعالجة» after two minutes of «⏳ جاري البحث». The window we would
+        // spend here (`scanCallBudgetMs`) is exactly what that job needs, so when
+        // it cannot coexist with answering (the model needs one completion after
+        // the tool), the job is queued up front and the tool returns immediately.
+        const runDeadline = typeof ctx.deadline === "number" ? ctx.deadline : Infinity;
+        const budgetForScan = Math.min(
+          scanCallBudgetMs(),
+          runDeadline - Date.now() - ANSWER_RESERVE_MS,
+        );
+        const tooBigForOneRun =
+          !contains &&
+          !args.noAutoJob &&
+          ctx.deadline != null &&
+          (wantsCompleteCensus(args) || budgetForScan < scanCallBudgetMs());
+        if (tooBigForOneRun) {
+          const scopeLabel = [
+            args.from ? `من ${String(args.from)}` : "",
+            args.subject ? `موضوع ${String(args.subject)}` : "",
+          ]
+            .filter(Boolean)
+            .join("، ");
+          return launchCensusJob(
+            ctx,
+            scanArgs as CensusJobArgs,
+            `حصر بنود البريد${scopeLabel ? " — " + scopeLabel : ""}`,
+          );
+        }
+
         const scanDeadline = Date.now() + scanCallBudgetMs();
         const { session } = await runItemScan(
           scanCacheKey("items", scanArgs),
