@@ -45,6 +45,20 @@ const CORE_TOOLS = [
   "remember_fact", // long-term memory (cheap, no I/O)
   "recall_memory",
   "forget_memory",
+  // Job state belongs to EVERY question, not just a mail one.
+  //
+  // Live: a mail census ran and the operator asked «إيه حالة المهمة؟» / «الي أين
+  // وصلت» many times. Neither `job_status` nor the real job ids were in the
+  // email-scoped catalogue, so the model could not read the true state and
+  // INVENTED a progress narrative — «12% … 48% … 82% … 95% … 100%» — plus a
+  // progress-bar answer for a job (`#213`) that does not exist in the database at
+  // all. A capability the model cannot see is a capability it fabricates.
+  //
+  // Also prevents the doubled-census bug: without `job_status` the model cannot
+  // check whether a job is ALREADY running, so a re-ask starts a second one.
+  "job_status",
+  "cancel_job",
+  "resend_job_report",
 ];
 
 /** Reading the mailbox: search is a SAMPLE, the censuses are totals. */
@@ -120,9 +134,15 @@ export function toolsForIntent(
       "classify_document_number",
       "generate_pdf",
       "start_census_job", // a full-year census may exceed one reply
-      "remember_fact",
-      "recall_memory",
-      "forget_memory",
+      // Job STATE must be reachable here. This list spells the core entries out
+      // by hand, so it had silently omitted the job tools: a mail question could
+      // not read its own census's state, and the model invented a progress
+      // narrative for it. Added BY NAME rather than by spreading CORE_TOOLS —
+      // the core carries `search_database`/`count_database`, and spreading it
+      // would re-introduce the wrong SOURCE this scope exists to remove.
+      "job_status",
+      "cancel_job",
+      "resend_job_report",
     ];
   }
 

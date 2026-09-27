@@ -170,3 +170,145 @@ export function checkClaims(input: ClaimCheckInput): ClaimCheckResult {
 
   return { correction: null };
 }
+
+/**
+ * Job-state claims: an INVENTED job number or progress percentage.
+ *
+ * ## The failure this exists for
+ *
+ * Live, a mail census was started for «MAICO EZ EX». The operator then asked
+ * «إيه حالة المهمة؟» / «الي أين وصلت» repeatedly, and the assistant produced a
+ * whole progress narrative — 12% … 48% … 82% … 95% … 100% — for **#213**, a job
+ * id that does not exist in the database (the max id at the time was 212, and no
+ * row had 213). When pressed, it blamed a failed WhatsApp delivery; then, asked
+ * again, it said «لم أجد أي مهمة برقم 213» and offered to start over. Every one
+ * of those progress figures was fabricated, and the operator rearranged their
+ * afternoon around them.
+ *
+ * ## Why the existing checks missed it
+ *
+ * `findGroundingNumbers` deliberately challenges only MIXED alphanumeric ids
+ * (letters AND digits) so ordinary money/quantities are never second-guessed. A
+ * bare job number (`213`) and a bare percentage (`82%`) are exactly the shapes it
+ * skips — so the two facts the operator most needed checked were the two the
+ * check could not see. The catalogue also did not OFFER `job_status` on a mail
+ * question, so the model had no way to read the truth even if it wanted to.
+ *
+ * ## Narrow, because a false positive is worse than the bug
+ *
+ * Only numbers in an explicit JOB context are challenged, and only percentages
+ * sitting next to job vocabulary. A margin figure, a delivery percentage or a
+ * year in ordinary prose is never touched.
+ */
+const JOB_WORD = "(?:المهم(?:ة|ات)|مهمة|الحصر|حصر|التقدم|job)";
+
+/** `المهمة رقم 213` / `مهمة #213` / `job 213`. */
+function citedJobNumbers(answer: string): string[] {
+  const out: string[] = [];
+  const re = new RegExp(`${JOB_WORD}\\s*(?:رقم|#|no\\.?)?\\s*#?\\s*(\\d{1,6})`, "gi");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(answer)) !== null) out.push(m[1]);
+  return [...new Set(out)];
+}
+
+/** Percentages asserted ABOUT a job: `تم 82%`, `82% من الحصر`, `اكتمل بنسبة 100%`. */
+function citedJobPercents(answer: string): string[] {
+  const out: string[] = [];
+  const patterns = [
+    new RegExp(`(\\d{1,3})\\s*%[^\\n]{0,25}${JOB_WORD}`, "gi"),
+    new RegExp(`${JOB_WORD}[^\\n]{0,25}?(\\d{1,3})\\s*%`, "gi"),
+    new RegExp(`(?:بنسبة|نسبة)\\s*(\\d{1,3})\\s*(?:%|بالمئة|بالمائة)`, "gi"),
+  ];
+  for (const re of patterns) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(answer)) !== null) out.push(m[1]);
+  }
+  return [...new Set(out)];
+}
+
+const JOB_TOOLS = new Set(["job_status", "start_census_job", "cancel_job", "resend_job_report"]);
+
+export interface JobClaimResult {
+  correction: string | null;
+  rule?: "job-id-not-found" | "job-progress-without-status" | "job-progress-mismatch";
+}
+
+/**
+ * Challenge a job number or progress percentage that no tool result supports.
+ *
+ * Grounded ids/percents are read from the job tools' own payloads, so a number
+ * the assistant legitimately relayed from `start_census_job` or `job_status` is
+ * never challenged.
+ */
+export function checkJobClaims(answer: string, exchanges: ToolExchange[]): JobClaimResult {
+  if (!answer?.trim()) return { correction: null };
+  const jobExchanges = (exchanges ?? []).filter((e) => JOB_TOOLS.has(e.name));
+  const ranJobTool = jobExchanges.length > 0;
+
+  const groundedIds = new Set<string>();
+  const groundedPercents = new Set<string>();
+  const notFoundIds = new Set<string>();
+  for (const ex of jobExchanges) {
+    const data = parseToolData(ex.content);
+    if (!data) continue;
+    const addId = (v: unknown) => {
+      if (typeof v === "number") groundedIds.add(String(v));
+      else if (typeof v === "string" && /^\d+$/.test(v)) groundedIds.add(v);
+    };
+    addId(data.id);
+    addId(data.jobId);
+    addId(data.askedId);
+    const jobs = Array.isArray(data.jobs) ? (data.jobs as Record<string, unknown>[]) : [];
+    for (const j of jobs) {
+      addId(j.id);
+      const p = j.progress as Record<string, unknown> | undefined;
+      if (p && p.percent != null) groundedPercents.add(String(p.percent));
+    }
+    const prog = data.progress as Record<string, unknown> | undefined;
+    if (prog && prog.percent != null) groundedPercents.add(String(prog.percent));
+    // An explicit "not found" verdict for a named id is itself evidence.
+    if (data.found === false && data.askedId != null) notFoundIds.add(String(data.askedId));
+  }
+
+  const citedIds = citedJobNumbers(answer);
+  const badId = citedIds.find((id) => notFoundIds.has(id) || !groundedIds.has(id));
+  if (badId) {
+    // Report the truth from the trace when we have it, so the correction is
+    // actionable rather than just "be careful".
+    const known = [...groundedIds].slice(0, 6).join("، ");
+    return {
+      rule: "job-id-not-found",
+      correction:
+        `ردّك يذكر المهمة رقم ${badId}، ولم تُرجِع أي أداة مهام هذا الرقم` +
+        (known ? ` (الأرقام الفعلية: ${known})` : "") +
+        `. لا تخترع رقم مهمة ولا حالة ولا نسبة تقدم لمهمة غير موجودة. ` +
+        `إن سأل المستخدم عن مهمة بهذا الرقم فقل صراحةً إنه غير موجود، واذكر أرقام المهام الحقيقية فقط من نتيجة job_status.`,
+    };
+  }
+
+  const citedPercents = citedJobPercents(answer);
+  if (citedPercents.length) {
+    if (!ranJobTool) {
+      return {
+        rule: "job-progress-without-status",
+        correction:
+          `ردّك يذكر نسبة تقدم لحصر/مهمة (${citedPercents.join("%، ")}%)، لكنك لم تقرأ حالة أي مهمة في هذه الجولة. ` +
+          `لا تُعلن أي نسبة تقدم أو اكتمال دون قراءتها من job_status فعلًا. ` +
+          `إن لم تكن قرأتها، اذكر أنك لا تعرف النسبة بدلًا من تقديرها.`,
+      };
+    }
+    const bad = citedPercents.find((p) => !groundedPercents.has(String(Number(p))));
+    if (bad) {
+      const knownPct = [...groundedPercents].slice(0, 5).join("، ");
+      return {
+        rule: "job-progress-mismatch",
+        correction:
+          `ردّك يذكر نسبة تقدم ${bad}%، لكن الأدوات لم تُرجِع هذه النسبة` +
+          (knownPct ? ` (النِسب الفعلية: ${knownPct}%)` : "") +
+          `. اذكر النسبة التي رجعتها job_status كما هي، ولا تقدّر نسبة من عندك.`,
+      };
+    }
+  }
+
+  return { correction: null };
+}

@@ -51,7 +51,7 @@ import {
 } from "./task-loop";
 import { runToolLoop, mastraEngineEnabled } from "./mastra-agent";
 import type { ToolExchange } from "./mastra-agent";
-import { checkClaims } from "./claim-check";
+import { checkClaims, checkJobClaims } from "./claim-check";
 import { toolsForIntent, filterToolDefinitions } from "./tool-scope";
 import type { TraceSummary } from "./task-loop";
 import { verifyAnswer } from "./verifier";
@@ -776,8 +776,14 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         // the delimited text the model saw.
         exchanges: toolExchanges,
       });
+      // (e) The JOB-STATE claim — an invented job number or progress percent.
+      // `findUngroundedNumbers` cannot see a bare `213` or `82%` (it challenges
+      // only mixed alphanumeric ids), so the live «المهمة 213 … 82%» narrative
+      // passed every existing check. This one reads the job tools' own payloads.
+      const jobClaim = checkJobClaims(finalText, toolExchanges);
+      const correctionText = claim.correction ?? jobClaim.correction;
       const canCorrectClaim =
-        !mailFailure && !!claim.correction && remaining >= RETRY_MIN_REMAINING_MS;
+        !mailFailure && !!correctionText && remaining >= RETRY_MIN_REMAINING_MS;
 
       if (!ungrounded.length && !unknownNames.length && !canReask && !canCorrectClaim) break;
 
@@ -790,9 +796,9 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
           },
           "AI assistant: answer cites tokens absent from every tool result",
         );
-      } else if (claim.correction) {
+      } else if (correctionText) {
         logger.warn(
-          { phone: input.phone, rule: claim.rule },
+          { phone: input.phone, rule: claim.rule ?? jobClaim.rule },
           "AI assistant: answer contradicts the tool trace",
         );
       } else {
@@ -810,7 +816,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
         reask: canReask && !ungrounded.length && !unknownNames.length,
         // The claim contradiction is passed as an explicit problem so the same
         // single correction round fixes it — no extra provider request.
-        claimCorrection: claim.correction ?? undefined,
+        claimCorrection: correctionText ?? undefined,
         signal: runBudget.signal,
       });
       // A verification that produced nothing leaves the draft in place — an

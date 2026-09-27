@@ -3330,7 +3330,34 @@ async function executeToolInner(
         };
       }
       case "job_status": {
-        const one = typeof args.id === "number" ? await getJob(args.id) : null;
+        const askedId = typeof args.id === "number" ? args.id : null;
+        const one = askedId !== null ? await getJob(askedId) : null;
+        // An EXPLICIT id that does not exist must say so.
+        //
+        // Live: the operator asked about «المهمة رقم 213» — an id the model had
+        // invented — and this branch silently fell through to "list the recent
+        // jobs", so the reply came back full of REAL job numbers. The model read
+        // that as confirmation the job existed and kept reporting its progress.
+        // A miss on a named id is evidence, not a reason to change the subject.
+        if (askedId !== null && !one) {
+          const existing = await listJobs(ctx.phone, 10);
+          return {
+            ok: true,
+            data: {
+              askedId,
+              found: false,
+              note:
+                `لا توجد مهمة بالرقم ${askedId}. لا تخترع لها حالة أو نسبة تقدم ولا تقل إنها اكتملت. ` +
+                `اذكر للمستخدم أن هذا الرقم غير موجود، واذكر أرقام المهام الفعلية إن وُجدت.`,
+              jobs: existing.map((j) => ({
+                id: j.id,
+                status: j.status,
+                summary: describeJob(j),
+              })),
+              count: existing.length,
+            },
+          };
+        }
         const rows = one ? [one] : await listJobs(ctx.phone, Math.min(Number(args.limit ?? 5), 20));
         if (!rows.length) {
           return {
