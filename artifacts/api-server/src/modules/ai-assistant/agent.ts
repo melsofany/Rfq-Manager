@@ -51,6 +51,7 @@ import {
 import { runToolLoop, mastraEngineEnabled } from "./mastra-agent";
 import type { ToolExchange } from "./mastra-agent";
 import { checkClaims } from "./claim-check";
+import { toolsForIntent, filterToolDefinitions } from "./tool-scope";
 import type { TraceSummary } from "./task-loop";
 import { verifyAnswer } from "./verifier";
 import { recordMetrics } from "./metrics";
@@ -430,7 +431,17 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
 
   const messages: ChatMessage[] = [system, ...history, { role: "user", content: userContent }];
 
-  const tools = toolDefinitions(ctx);
+  // Scope the catalogue to what this question plausibly needs. The model was
+  // measured choosing WRONG tools from the full 28-tool catalogue and RIGHT
+  // tools from a small one — see tool-scope.ts. The router is deterministic, so
+  // its classification is a free constraint; the prompt hint alone was ignored.
+  const allTools = toolDefinitions(ctx);
+  const allowedTools = toolsForIntent(plan.intent, plan.sourceScope);
+  const tools = filterToolDefinitions(allTools, allowedTools);
+  logger.info(
+    { phone: input.phone, intent: plan.intent, tools: tools.length, total: allTools.length },
+    "AI assistant: tool catalogue scoped",
+  );
   const usedTools: Array<{ name: string; args: unknown }> = [];
   // Raw tool exchanges (name + args + the tool's OWN result text, before the
   // untrusted-content delimiters are added). The claim check parses this JSON to
@@ -502,6 +513,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       // stays exactly as it is, so the engine can be changed back with one env
       // var and nothing else in the pipeline has to be trusted twice.
       const loop = await runToolLoop({
+        allowedTools,
         model: runModel,
         baseUrl: settings.baseUrl,
         messages,

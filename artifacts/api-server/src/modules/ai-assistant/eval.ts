@@ -130,9 +130,14 @@ export const EVAL_CASES: EvalCase[] = [
     allowedTools: ["aggregate_po_items", "scan_email_items"],
   },
   {
+    // Named the mail as the starting source («البريد») while comparing to the
+    // system. Scoping to email is correct and sufficient: `scan_emails` carries
+    // `compareTable`/`compareColumn` and performs the comparison from inside the
+    // mail tool, so the database tools it would otherwise reach for are not needed.
     question: "قارن البريد بالنظام وأقولي الأرقام الناقصة",
     expectedIntents: ["analytics", "email_search"],
     expectedPath: "deep",
+    expectedSourceScope: "email",
     allowedTools: ["scan_emails", "find_missing_records"],
   },
   {
@@ -356,6 +361,7 @@ export const EVAL_CASES: EvalCase[] = [
     question: "إيه الإيميلات اللي فيها ملفات PDF للأسعار؟",
     expectedIntents: ["email_search"],
     expectedPath: "deep",
+    expectedSourceScope: "email",
     allowedTools: ["search_emails", "scan_email_items"],
   },
   {
@@ -784,6 +790,25 @@ export const EVAL_CASES: EvalCase[] = [
     expectedSourceScope: "email",
     allowedEvidence: ["email", "attachment"],
     note: "the exclusion without a mailbox noun must still scope to email",
+  },
+  {
+    // The live WhatsApp phrasing that was MIS-classified as scope "any" — the
+    // collapsed definite article («للميل» = لـ+الميل) and the particle before the
+    // exclusion («وليس») both defeated the earlier patterns.
+    question: "هتخش للميل info وامر الشراء الوارده من EDC وليس من قاعده البيانات",
+    expectedIntents: ["email_search", "analytics", "report"],
+    expectedPath: "deep",
+    expectedSourceScope: "email",
+    allowedEvidence: ["email", "attachment"],
+    note: "the exact live phrasing that read the database instead of the mail",
+  },
+  {
+    question: "اكتر بند اتكرر في اوامر شراء EDC الواردة من الميل",
+    expectedIntents: ["email_search", "analytics", "report"],
+    expectedPath: "deep",
+    expectedSourceScope: "email",
+    allowedEvidence: ["email", "attachment"],
+    note: "«من الميل» — the collapsed article form",
   },
   {
     question: "افحص البريد واعمل حصر كامل بنسبة 100%",
