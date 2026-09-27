@@ -318,7 +318,20 @@ async function runWithQuotaRetries(
       return await opts.run({
         jobId: job.id,
         report: async (progress) => {
-          await updateJob(job.id, { progress });
+          // Progress is ADVISORY state; the census is the work. A failed
+          // progress write once discarded a scan that had already read 300
+          // messages and parsed 907 items (job 247 live: a transient
+          // `Failed query: update "ai_assistant_jobs"…` that the raw SQL
+          // reproduces fine afterwards). Losing a dashboard heartbeat must never
+          // destroy minutes of work — only the work itself decides the job's
+          // fate. The failure is still logged, so a persistent fault is visible
+          // instead of silent.
+          await updateJob(job.id, { progress }).catch((err) => {
+            logger.warn(
+              { jobId: job.id, kind: opts.kind, err },
+              "AI assistant: could not record job progress (continuing)",
+            );
+          });
         },
       });
     } catch (err) {

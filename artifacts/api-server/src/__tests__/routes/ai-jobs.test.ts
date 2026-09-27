@@ -163,6 +163,51 @@ describe("async jobs", () => {
     expect(done?.progress).toEqual({ scanned: 100, matched: 42 });
   });
 
+  it("keeps the WORK when only the progress write fails", async () => {
+    // Live evidence (job 247): the census had scanned 300 messages and parsed
+    // 907 items, then a transient `Failed query: update "ai_assistant_jobs"…`
+    // on a progress heartbeat marked the whole job `failed` and DISCARDED the
+    // result. Progress is advisory state; a dashboard write must never destroy
+    // minutes of work. Replaying the same update against the real database
+    // succeeds, which is what identifies this as transient rather than a schema
+    // problem.
+    const dbMod = await import("@workspace/db");
+    const db: any = (dbMod as any).db;
+    const originalUpdate = db.update;
+    let failedProgressWrites = 0;
+    db.update = () => ({
+      set: (v: any) => ({
+        where: (w: any) => {
+          // Fail ONLY a progress heartbeat — never the status/result write, and
+          // only the first time, exactly like a transient DB blip. `w` must be
+          // forwarded or the underlying mock cannot find the row.
+          if (v && "progress" in v && failedProgressWrites === 0) {
+            failedProgressWrites += 1;
+            return Promise.reject(new Error('Failed query: update "ai_assistant_jobs"'));
+          }
+          return originalUpdate().set(v).where(w);
+        },
+      }),
+    });
+    try {
+      const { job } = await createJob({
+        phone: "2010",
+        kind: "email_items",
+        run: async ({ report }) => {
+          await report({ scanned: 300, matched: 3650, items: 907 });
+          return { result: { items: 907 } };
+        },
+      });
+      await pendingAiJobs();
+      const done = await getJob(job.id);
+      expect(failedProgressWrites).toBe(1);
+      expect(done?.status).toBe("completed");
+      expect(done?.result).toEqual({ items: 907 });
+    } finally {
+      db.update = originalUpdate;
+    }
+  });
+
   it("REQUEUES a job that hit a quota window instead of failing it", async () => {
     // The operator's reported failure: 300 of 480 POs read, then the day's model
     // quota ran out. The scan cursor is persisted, so the work is not lost — the
