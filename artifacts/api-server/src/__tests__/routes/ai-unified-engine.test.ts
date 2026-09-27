@@ -407,3 +407,71 @@ describe("unified engine: a truncated answer is not an answer", () => {
     expect(out.finalText).toBeNull();
   });
 });
+
+describe("unified engine: the answer is always funded", () => {
+  it("answers from the transcript instead of starting a round it cannot afford", async () => {
+    // The recorded live failure: a scan took ~85s of the 150s run, so the next
+    // completion could not be funded. The provider was called anyway, threw
+    // «budget exhausted», and the retry threw identically — finalText stayed
+    // null and the operator got the exhausted notice AFTER the mail was read.
+    //
+    // No sleep: the ctx deadline is already in the past, which is exactly the
+    // state the run is in after an expensive tool returns.
+    script = [{ tool: "count_database" }, { answer: "answer from evidence" }];
+    // The tool round EATS the clock, exactly as the 85s scan did. Without this
+    // the run still looks fresh and the gate would never be reached.
+    let clock = 1_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    executeTool.mockImplementation(async () => {
+      clock += 90_000;
+      return { ok: true, data: { rows: 7 } };
+    });
+    try {
+      const pastCtx: any = {
+        settings: {},
+        phone: ctx.phone,
+        outbox: [],
+        deadline: clock + 150_000,
+      };
+      const res = await runToolLoop({
+        model: "gemini-3.6-flash",
+        messages: [{ role: "user", content: "q" }] as any,
+        ctx: pastCtx,
+        maxRounds: 5,
+        signal: new AbortController().signal,
+        phone: ctx.phone,
+        remainingBudgetMs: 150_000,
+      });
+      expect(res.finalText).toBe("answer from evidence");
+      // Round 1 must NOT have been requested as a tool round: the run answered
+      // with `toolChoice:"none"` instead of starting a round it cannot fund.
+      expect(toolChoices).toEqual(["auto", "none"]);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("passes its own deadline to the completion it does make", async () => {
+    script = [{ answer: "ok" }];
+    const withDeadline: any = {
+      settings: {},
+      phone: ctx.phone,
+      outbox: [],
+      deadline: Date.now() + 60_000,
+    };
+    await runToolLoop({
+      model: "gemini-3.6-flash",
+      messages: [{ role: "user", content: "q" }] as any,
+      ctx: withDeadline,
+      maxRounds: 3,
+      signal: new AbortController().signal,
+      phone: ctx.phone,
+      remainingBudgetMs: 150_000,
+    });
+    // Without a deadline the completion asks for its full allowance and throws on
+    // a run that cannot fund it; with one it is clamped to the run's remainder.
+    const deadline = chatCompletion.mock.calls[0]?.[0]?.deadlineMs;
+    expect(typeof deadline).toBe("number");
+    expect(deadline).toBeLessThanOrEqual(withDeadline.deadline);
+  });
+});
