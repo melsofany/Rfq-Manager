@@ -311,6 +311,40 @@ describe("async jobs", () => {
     expect(done?.progress?.percent).toBe(100);
   });
 
+  it("stops a census whose filter matched nothing instead of re-reading an empty ask 120×", async () => {
+    // Live: a wrong search term matched 0 messages and the job span the whole
+    // batch cap (~10 minutes) re-reading the same empty mailbox, then reported
+    // «100%» because `matched === 0` was treated as "nothing left to do".
+    let batches = 0;
+    let finished = 0;
+    const { job } = await startCensusJob({
+      phone: "2010",
+      question: "حصر بفلتر لا يطابق شيئًا",
+      args: { mailbox: "*" },
+      runBatch: async () => {
+        batches += 1;
+        return {
+          session: {
+            census: { matched: 0, scope: { scanned: 3978 } },
+            coverage: { messages: 0 },
+            items: [],
+            complete: false,
+          },
+        };
+      },
+      finish: async () => {
+        finished += 1;
+      },
+    });
+    await pendingAiJobs();
+    expect(batches).toBe(1); // one batch, not the 120-batch cap
+    expect(finished).toBe(1);
+    const done = await getJob(job.id);
+    expect(done?.status).toBe("completed");
+    // «100%» over an empty ask is the claim that read as a finished census.
+    expect(done?.progress?.percent).toBe(0);
+  });
+
   it("cancelJob stops a running job and the worker does not announce a report", async () => {
     // The operator asked to call a long census off and the agent previously could
     // only answer that no such capability existed. Cancelling must take effect

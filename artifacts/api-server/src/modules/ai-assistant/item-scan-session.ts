@@ -67,6 +67,16 @@ export interface ItemScanSession {
   batches: number;
   /** True only once the cursor has reached the end of the matched list. */
   complete: boolean;
+  /**
+   * Envelopes the source actually EXAMINED, across every batch.
+   *
+   * The evidence that separates the two ways a census can end with nothing:
+   * a mailbox that could not be read at all (0 examined) versus a filter that
+   * read a healthy mailbox and excluded every message (>0 examined). A census
+   * that claims completion without examining a single envelope has proven
+   * nothing, so `complete` must not be true for it.
+   */
+  examinedEnvelopes: number;
   /** Census arguments, replayed per batch so the walk is reproducible. */
   args: ItemScanArgs;
 }
@@ -92,6 +102,29 @@ function emptyItemCoverage(): ItemScanCoverage {
     rfqDocuments: 0,
     unknownDocuments: 0,
   };
+}
+
+/**
+ * Recompute the cursor-derived flags after a batch.
+ *
+ * The guard here is the whole point: `complete` must NEVER be true for a census
+ * that examined nothing. With a filter that matched no mail AND a mailbox that
+ * was never read, the cursor is trivially at the end (0 of 0) — which is how a
+ * background job recorded `{scanned: 0, matched: 0, complete: true}` and the
+ * assistant told the operator «اكتملت المهمة» over an event that read nothing.
+ * The two causes need opposite answers (a broken mailbox vs a wrong search
+ * term), and only the examined count can tell them apart.
+ */
+function refreshCompletion(session: ItemScanSession): void {
+  const matched = session.census?.matched ?? 0;
+  session.remaining = Math.max(0, matched - session.nextSkip);
+  // Complete only with EVIDENCE the source was actually read. `remaining === 0`
+  // on its own is satisfied by an empty ask (0 of 0) that examined nothing —
+  // exactly how a job recorded `complete: true` over an event that read no mail.
+  // A non-zero `matched` is itself evidence (the census found mail to open); an
+  // empty `matched` needs the examined count to prove the mailbox responded.
+  const readSomething = matched > 0 || session.examinedEnvelopes > 0;
+  session.complete = session.remaining === 0 && readSomething;
 }
 
 export const ITEM_COVERAGE_KEYS: Array<keyof ItemScanCoverage> = [
@@ -166,6 +199,7 @@ function parseChunkSize(): number {
 function sessionDidWork(s: ItemScanSession): boolean {
   return (
     (s.batches ?? 0) > 0 ||
+    (s.examinedEnvelopes ?? 0) > 0 ||
     (s.coverage?.messages ?? 0) > 0 ||
     (s.attachmentCoverage?.messages ?? 0) > 0 ||
     (s.attachmentCoverage?.scanned ?? 0) > 0
@@ -213,8 +247,7 @@ async function parseChunks(
     // The cursor advances by messages actually PARSED, so a message is never
     // counted as read before its rows are in the session.
     session.nextSkip += slice.length;
-    session.remaining = Math.max(0, session.census.matched - session.nextSkip);
-    session.complete = session.remaining === 0;
+    refreshCompletion(session);
     session.batches += 1;
     putScanCacheEntry(key, session);
     // Mirror to Postgres so the cursor survives a restart mid-census.
@@ -271,11 +304,27 @@ async function runBatch(session: ItemScanSession, key: string, deadline: number)
   const batch = census.attachmentMessages ?? [];
   await parseChunks(session, key, batch, deadline);
 
+  // Record the envelopes EXAMINED, not the fetched ones: this is the evidence
+  // that the mailbox was actually read, and it is the only thing that can tell
+  // "the connection failed" apart from "the filter matched nothing".
+  //
+  // A MAX, not a sum: the envelope census is shared across every window (the
+  // cached envelope scan re-reads the same mailbox), so its `scanned` is the
+  // same figure each batch. Adding it up would report a mailbox several times
+  // its real size. The attachment window's `scanned` is folded in as a fallback
+  // for a source that reports no envelope scope, so the evidence is never
+  // absent just because one field was omitted.
+  const examined = Math.max(
+    census.scope?.scanned ?? 0,
+    census.attachmentCoverage?.scanned ?? 0,
+    session.nextSkip,
+  );
+  session.examinedEnvelopes = Math.max(session.examinedEnvelopes, examined);
+
   // `matched` is the authoritative size of the ask; the cursor measures against
   // it. A window the source could not fill still leaves `remaining > 0`, so the
   // next call continues rather than treating the short window as the end.
-  session.remaining = Math.max(0, session.census.matched - session.nextSkip);
-  session.complete = session.remaining === 0;
+  refreshCompletion(session);
 
   return session.nextSkip > before && Date.now() < deadline;
 }
@@ -332,6 +381,7 @@ export async function runItemScan(
       remaining: 0,
       batches: 0,
       complete: false,
+      examinedEnvelopes: 0,
       args,
     };
   }
