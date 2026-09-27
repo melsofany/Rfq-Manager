@@ -16,7 +16,7 @@ import { scheduleDailyBackup } from "./modules/backup/service";
 import { verifySenderIdentity } from "./shared/mail-identity";
 import { logReadMailboxes } from "./modules/ai-assistant/mailboxes";
 import { logProviderCapacity } from "./modules/ai-assistant/config";
-import { mastraEngineEnabled } from "./modules/ai-assistant/engine";
+import { engineName } from "./modules/ai-assistant/engine";
 
 const rawPort = process.env["PORT"];
 
@@ -53,15 +53,18 @@ initDb()
       logger.warn({ err }, "AI assistant: orphan-job sweep failed (non-fatal)"),
     );
     logProviderCapacity();
-    // Which tool-loop engine this process will use. The choice is an env var with
-    // no other visible surface, and "did my switch take effect?" was a real
-    // question during the Mastra rollout — a one-line startup record answers it
-    // from the deploy logs instead of from a live conversation.
+    // Which tool-loop engine this process will use.
+    //
+    // There is only ONE engine now (`engine.ts` — the Mastra loop was removed
+    // with its dependencies), so this reports the real engine name rather than a
+    // switch that no longer exists. The old line printed "mastra" whenever the
+    // vestigial enablement flag was true — and that flag had been reduced to a
+    // constant `true` — so the deploy log claimed a Mastra engine while the
+    // bundle contained no `@mastra` code at all. A misleading log is not harmless
+    // here: it sent a verification of the reasoning-token fix to the wrong place
+    // before the code path was confirmed by hand.
     logger.info(
-      {
-        engine: mastraEngineEnabled() ? "mastra" : "legacy",
-        env: process.env.AI_AGENT_ENGINE ?? null,
-      },
+      { engine: engineName(), env: process.env.AI_AGENT_ENGINE ?? null },
       "AI assistant: agent engine selected",
     );
     try {

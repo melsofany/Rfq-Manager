@@ -132,7 +132,25 @@ function installScriptedModel() {
   });
 }
 
-const { runToolLoop } = await import("../../modules/ai-assistant/engine");
+const { runToolLoop, engineName } = await import("../../modules/ai-assistant/engine");
+
+describe("unified engine: the engine label is honest", () => {
+  it("reports its real name, not a switch that no longer exists", async () => {
+    // The startup log used to print `engine: "mastra"` from a ternary whose
+    // condition had been reduced to a constant `true`, while the bundle carried
+    // zero `@mastra` code. That label was believed during verification of the
+    // reasoning-token fix and pointed it at the wrong loop. A log line that
+    // describes something untrue is the same defect class as the census that
+    // reported 0 attachments for a readable mailbox.
+    expect(engineName()).toBe("unified");
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync(new URL("../../index.ts", import.meta.url), "utf8"),
+    );
+    // The selection log must call the real accessor, never the vestigial one.
+    expect(src).toContain("engine: engineName()");
+    expect(src).not.toContain("mastraEngineEnabled()");
+  });
+});
 
 const ctx: any = { settings: {}, phone: "201000000000", outbox: [] };
 
