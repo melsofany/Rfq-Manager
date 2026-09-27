@@ -2717,3 +2717,89 @@ the harness around it rather than the model behind it. Both are the same lesson:
   contacted). `tsx` is not installed; run the probe as a temporary vitest file and
   delete it afterward. `AI_API_KEY` is not available locally — fetch it from Render
   (`GET /v1/services/<id>/env-vars`) without printing the value.
+
+## Open-source agent prompt structure + a learning loop that actually closes
+
+The operator asked for an "open-source agent prompt installed on the engine" whose
+point is that the assistant learns the company over time and from the user. Two
+things were delivered, and the engine was not rewritten.
+
+### The prompt was restructured on the patterns that survive long tool runs
+
+Studied `dontriskit/awesome-ai-system-prompts` (Manus `Modules.md`/`AgentLoop.txt`,
+same.new, Cline, ChatGPT 4.5). Four conventions those prompts converge on, each
+answering a recorded failure of THIS assistant:
+
+- **One tagged section per concern** — `<agent_loop>`, `<action_rules>`,
+  `<communication_rules>`, `<source_selection>`, `<counting_rules>`,
+  `<knowledge_base>`, `<capabilities>`, `<security>`. The tags are load-bearing:
+  they keep the loop contract distinct from the business facts, which is what a
+  small model blurs when everything is one prose blob.
+- **An explicit loop, one tool per iteration** (Manus: "Choose only one tool call
+  per iteration"). Without it the model fires several tools at once — blind
+  spending of a 20-request/day/model quota.
+- **Message rules** (Manus `notify`/`ask`): reply immediately, announce a method
+  change, and **never name a tool to the operator**. The assistant used to answer
+  "سأستخدم أداة كذا" instead of the answer.
+- **Direct tone** (Cline): no filler openers, the request leads the reply.
+- Plus `التاريخ اليوم: <ISO>`, which all of them carry and this one needed for
+  relative windows ("خلال 2026").
+
+Body: **19.7k → 8.9k characters (`ai-prompt-budget.test.ts` guards `< 9_000`)**.
+Every cut removed a DUPLICATED mandate; no rule was dropped. The business
+knowledge with no code-level equivalent stays (`customer_pos` vs
+`purchase_orders`, Line Item, item identity, partial-result semantics) — and so do
+the **concrete tool and parameter names**. Removing those IS the #200 defect.
+
+- **`ai-prompt-structure.test.ts` is the guard that matters here**, not the budget
+  test: it asserts every tag opens and closes, the loop contract is stated, the
+  tool names/parameters are still present, and the no-narration rule exists. It
+  caught that the rewrite had silently dropped `search_sent_emails` — the same
+  "capability the prompt names but the model cannot reach" class as #200.
+
+### The learning loop needed both links, not just storage
+
+Storage already existed (memory, org profiles, mail-observed document formats).
+What was missing:
+
+- **The prompt recruits knowledge.** `renderLearningLead()` (in `agent.ts`) states
+  what is already known for this turn and tells the model to ASK the operator one
+  short question when a business rule, term or counterparty is unknown, then
+  record the answer. It is derived from memories/profiles **already loaded**, so it
+  costs no query and no model call — do not turn it into another fetch on the path
+  of every question.
+- **The answer is captured.** `distillMemories` gained `EXPLANATION_PATTERNS`
+  («قاعدة العمل هي…», «خلي بالك إن…»، «الشركة دي اسمها…») so an operator explaining
+  a rule in answer to the question is stored as a `rule`. Without this the loop is
+  "it asked, it forgot, it asks again".
+- **`looksLikeQuestion` guards the capture.** The assistant's own follow-up
+  arrives as the next user turn; storing it would teach the memory a question and
+  pollute every later prompt. The distiller runs on EVERY turn, so narrowness is
+  the feature — one-off task descriptions must not become rules.
+- **`\b` does NOT match an Arabic word boundary in JS.** `looksLikeQuestion`'s
+  single alternation mixing Arabic and English openers therefore classified every
+  Arabic interrogative as a statement. Use an explicit `(?![\p{L}])` lookahead for
+  the Arabic branch. This is a general trap for any Arabic-aware regex here.
+
+Learning stays **model-call free** on purpose: quota exhaustion (20/day/model) is
+this assistant's recorded failure mode, so spending quota to learn would trade
+answering for learning.
+
+### Live probe is the check code-reading cannot replace
+
+The deployed model can look fine in isolation and fail only under the real tool
+schema. A throwaway vitest that ran the REAL `systemPrompt` + the REAL scoped
+catalogue against the live provider confirmed: `SCOPE=email`,
+`DB TOOL PRESENT=false`, `MODEL CHOSE: scan_email_items`. A probe-only bug of my
+own (reading `plan.source` instead of `plan.sourceScope`) reported `SCOPE
+undefined` and made the first run look like a routing failure — check the probe's
+own field names before believing its negative.
+
+### Verification
+
+1149/1149 tests (93 files); `tsc --build` clean; repo-wide prettier clean;
+api-server build clean. Merged #202 (`76eacc2`), CI + Deploy-to-Render success,
+live at `76eacc2` (`/api/healthz` 200, `/api/ai-assistant/settings` 401).
+**Production `AI_MODEL` is `gemini-3.5-flash-lite`** with fallbacks
+`gemini-3.1-flash-lite, gemini-3.5-flash-lite, gemini-flash-lite-latest, …` —
+read it from Render before assuming the model, it drifts.
