@@ -2875,3 +2875,43 @@ were the newest offer LINES IN THE WHOLE DATABASE.
 - Tests: 2 regressions in `ai-procurement-tools.test.ts` (both fail pre-fix);
   1159 api-server tests pass; tsc + prettier clean. Deployed `54bcfb0` (code) then
   `070a6f2` (prompt rule); healthz 200.
+
+## A census must not claim completion without examining mail (PR #212)
+
+The operator's EDC request answered «لم يتم العثور على أي مرفقات EDC PO» for a
+mailbox holding thousands. `ai_assistant_jobs` showed four jobs that finished in
+**under 10 seconds** with `{scanned: 0, matched: 0, complete: true}` — a census
+that examined not one message — beside real ones (333 matched/849 items, 1803
+matched/1800 items).
+
+- **`complete` was `remaining === 0`, and the cursor is trivially at the end of an
+  empty ask (0 of 0).** So any filter that matched no mail, or a mailbox that
+  could not be read, produced a FINISHED census. A scan that read nothing must
+  never be complete — the same class as the `filter(Boolean)` hallucination.
+- **The examined count is the evidence that tells the two causes apart.**
+  `examinedEnvelopes` is tracked in the session; `complete` needs `matched > 0` OR
+  `examined > 0`. A zero-match reply then says «صندوق البريد مقروء تمامًا — المشكلة
+  في شرط البحث» instead of blaming the connection. Take the **MAX** across windows,
+  never a sum — the envelope census is shared, so summing reports a mailbox
+  several times its real size.
+- **A job must stop when the filter matched nothing** (`if (matched === 0) break`),
+  or a wrong term re-reads the same empty mailbox to the 120-batch cap (~10 min)
+  and `finish` reports on an event that never ran. `percent` is 0, not 100, when
+  `matched === 0`.
+- **The data and the tool were never the problem.** Live through the real
+  `scan_email_items`: `from: "EDC"` alone matched 3,733 and opened 150 (partial);
+  `from: "EDC"` + `subject: "EDC PO NO"` matched **334**, read all **334** in 89s,
+  and returned **853 parts** — ARISTON WATER HEATER on 20 orders (168 pcs @ 3200).
+  The model simply did not pass the subject the operator named; `routeHint` now
+  says a sender shorthand alone cannot finish, and the live re-test then picked
+  `{from:"EDC", subject:"EDC PO NO", mailbox:"info@..."}` on its own.
+- **Do not probe a deploy-triggering fix mid-deploy.** Job 281 hung 12 min because
+  the webhook landed on the OLD instance after the NEW one had booted, so
+  `markOrphanedJobs` claimed it. Confirm a single live instance first.
+- **Render logs API**: the filter param is `resource`, not `resourceId`/
+  `resources` (`?ownerId=…&resource=<srv-id>&limit=1000`); page with
+  `nextStartTime` before concluding a line is absent.
+- Tests: `ai-scan-completion-guard.test.ts` (3; the fake-complete case fails 1/3
+  pre-fix) + 1 new `ai-jobs` case. **1164 api-server tests** pass; tsc + prettier
+  clean. PR #212 → `b4a76e4`; verified live (job 282: 334/334, 853 items,
+  `messageId` present).
