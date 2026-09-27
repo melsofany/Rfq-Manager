@@ -125,6 +125,13 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const ATTEMPT_TIMEOUT_MS = Number(process.env.AI_ATTEMPT_TIMEOUT_MS) || 45_000;
 
 /**
+ * Output-token ceilings. See `maxTokensFor` for why a reasoning model needs the
+ * larger one: its thinking is charged against the same budget as its reply.
+ */
+const DEFAULT_MAX_TOKENS = Number(process.env.AI_MAX_TOKENS) || 1600;
+const REASONING_MAX_TOKENS = Number(process.env.AI_REASONING_MAX_TOKENS) || 8000;
+
+/**
  * Ceiling on ALL attempts for one completion, across every retry and fallback.
  *
  * Without this, the worst case was candidates × attempts × attempt-timeout — 7
@@ -159,6 +166,25 @@ function isCapabilityMismatch(err: unknown): boolean {
   return /unsupported image|image_url|tool_choice|does not support (images?|tools?|vision)/i.test(
     msg,
   );
+}
+
+/**
+ * Output-token ceiling for a request.
+ *
+ * A REASONING model spends this same budget on its invisible `reasoning_content`
+ * BEFORE any visible text. Measured live against `deepseek-v4-pro` with a real
+ * 120-row tool result: at `max_tokens:1600` the model returned
+ * `finish_reason:"length"` with `completion_tokens:1600` **all** attributed to
+ * `reasoning_tokens` and `content: ""` — the answer was empty, so the engine
+ * discarded a run that had done its work and the operator saw «نفدت محاولات
+ * المعالجة قبل الوصول لرد نهائي». At 4000 the same request answered in 440
+ * chars. The cap must therefore exceed the thinking, not just the reply.
+ *
+ * Non-reasoning ids keep the original ceiling: their budget is the whole reply,
+ * and raising it would only make a runaway response slower to cut off.
+ */
+export function maxTokensFor(model: string): number {
+  return /deepseek-(v\d|r\d|reasoner)/i.test(model) ? REASONING_MAX_TOKENS : DEFAULT_MAX_TOKENS;
 }
 
 /** Single attempt against one model. Throws AiError; 429/503 are retryable. */
@@ -252,7 +278,7 @@ export async function chatCompletion(opts: {
       tools: hasTools ? opts.tools : undefined,
       tool_choice: hasTools ? toolChoice : undefined,
       temperature: opts.temperature ?? 0.2,
-      max_tokens: opts.maxTokens ?? 1600,
+      max_tokens: opts.maxTokens ?? maxTokensFor(model),
     });
 
   // Transient provider errors worth retrying on the SAME model. Measured
