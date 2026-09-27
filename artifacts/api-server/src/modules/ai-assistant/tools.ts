@@ -90,10 +90,17 @@ import {
   getJob,
   cancelJob,
   describeJob,
+  describeCensusSearch,
   startCensusJob,
   JobDeliveryError,
   type CensusJobArgs,
 } from "./jobs";
+import {
+  buildScanReport,
+  describeStopReason,
+  renderScanReport,
+  type ScanReport,
+} from "./scan-report";
 import { sendWhatsAppText, sendWhatsAppDocument } from "../communications/service";
 import { generateAssistantPdf, generateMissingNumbersPdf, type PdfSection } from "./pdf";
 import {
@@ -1633,7 +1640,7 @@ async function launchCensusJob(
       const { runItemScan } = await import("./item-scan-session");
       return runItemScan(key, scanArgs, deadline);
     },
-    finish: async ({ phone, session, save }) => {
+    finish: async ({ phone, session, report, save }) => {
       const s = session as {
         census?: { matched?: number; scope?: { scanned?: number } };
         coverage?: {
@@ -1697,18 +1704,24 @@ async function launchCensusJob(
       const mailboxUnread = scanned === 0;
       const emptyUnstarted = matched === 0 && opened === 0 && !files && mailboxUnread;
       const filterMatchedNothing = matched === 0 && opened === 0 && !files && scanned > 0;
-      const scope = emptyUnstarted
-        ? "النطاق: لم يُفتح أي رسالة ولم تُقرأ أي مرفقات — الحصر لم يبدأ فعليًا. " +
-          "أعد المحاولة بمُرسل/موضوع محدد، وإن تكرر ذلك فالمشكلة في الاتصال بصندوق البريد."
-        : filterMatchedNothing
-          ? `النطاق: فُحص ${scanned} رسالة ولم يطابق أي منها شرط البحث. ` +
-            "صندوق البريد مقروء تمامًا — المشكلة في شرط البحث نفسه وليست في الاتصال. " +
-            "لا تقل إن هناك مشكلة في الاتصال بصندوق البريد. " +
-            "إن كان المطلوب بندًا/صنفًا/ماركة (وليس موضوع رسالة أو مُرسلًا) فالبحث الصحيح هو " +
-            "contains داخل مرفقات البريد (scan_email_items)، لأن الموضوع والمُرسل لا يحملان وصف البند."
-          : complete
-            ? `النطاق: كل الرسائل المطابقة (${matched}).`
-            : `النطاق: فُتح ${opened} من ${matched} رسالة — الحصر ناقص.`;
+      // The scope line now DERIVES from the canonical report instead of deciding
+      // for itself whether the census was complete — the earlier version could
+      // say «كل الرسائل المطابقة (0)» for a scan that examined nothing, because
+      // it only knew the cursor. `report.stopReason` already distinguishes the
+      // two empty causes, so this is presentation, not judgement.
+      const scope =
+        report.stopReason === "complete"
+          ? `النطاق: كل الرسائل المطابقة (${matched}).`
+          : emptyUnstarted
+            ? "النطاق: لم يُفتح أي رسالة ولم تُقرأ أي مرفقات — الحصر لم يبدأ فعليًا. " +
+              "أعد المحاولة بمُرسل/موضوع محدد، وإن تكرر ذلك فالمشكلة في الاتصال بصندوق البريد."
+            : filterMatchedNothing
+              ? `النطاق: فُحص ${scanned} رسالة ولم يطابق أي منها شرط البحث. ` +
+                "صندوق البريد مقروء تمامًا — المشكلة في شرط البحث نفسه وليست في الاتصال. " +
+                "لا تقل إن هناك مشكلة في الاتصال بصندوق البريد. " +
+                "إن كان المطلوب بندًا/صنفًا/ماركة (وليس موضوع رسالة أو مُرسلًا) فالبحث الصحيح هو " +
+                "contains داخل مرفقات البريد (scan_email_items)، لأن الموضوع والمُرسل لا يحملان وصف البند."
+              : `النطاق: فُتح ${opened} من ${matched} رسالة — الحصر ناقص (${describeStopReason(report)}).`;
 
       // A finished scan that produced ZERO rows while files WERE read is not
       // «لا توجد بنود». The two real causes are a document-kind filter that
@@ -1776,6 +1789,9 @@ async function launchCensusJob(
           filterMatchedNothing,
           scanned,
           scope,
+          // The run's ten answers, verbatim — so `job_status` reports what the
+          // scan measured rather than recomputing it from a later state.
+          report,
           // Each item carries its PER-PO appearances (quantity, unit price,
           // line total) so the report can be regenerated and re-sent from this
           // row alone — the operator asked for the result to be a retrievable
@@ -1812,12 +1828,25 @@ async function launchCensusJob(
         kindMix +
         emptyAfterRead;
 
+      /*
+       * The ten answers, appended LAST.
+       *
+       * The operator's requirement is that every job states what it searched,
+       * what it found, what it read, how long it took, how much is left and why
+       * it stopped — and the caveat goes last so nothing in the report can be
+       * read without it. `report` is the worker's own measurement, so this text
+       * and the stored artifact cannot disagree.
+       */
+      const reportText = renderScanReport(report);
+
       // The message is only one half of the outcome; the PDF is the deliverable
       // the operator actually asked for. Track both so a failure to produce or
       // send the file is reported instead of swallowed.
       let textMessageId: string | null = null;
       try {
-        textMessageId = await sendWhatsAppText(phone, text);
+        // The ten answers ride with the summary, last, so the operator sees the
+        // scope and the stop reason on the message itself — not only in the PDF.
+        textMessageId = await sendWhatsAppText(phone, `${text}\n\n${reportText}`);
       } catch (err) {
         logger.warn({ err, phone }, "AI assistant: census job summary text failed");
       }
@@ -1844,7 +1873,9 @@ async function launchCensusJob(
                   `مستندات أوامر شراء: ${cov.poDocuments ?? 0} — مستندات RFQ مستبعدة: ${
                     cov.rfqDocuments ?? 0
                   }.`,
-                  scope,
+                  // The report in the PDF too, so the scope/stop-reason travel
+                  // with the deliverable even when the chat message is missed.
+                  reportText,
                 ],
               },
               {
@@ -2676,6 +2707,33 @@ async function executeToolInner(
           !truncated &&
           allOpened;
 
+        // The SAME ten answers the background job records, computed for this
+        // interactive call too. The operator asks one set of questions of every
+        // census; having the interactive path phrase its own scope (and its own
+        // completion percentage) is how «الحد 400» got said when the real cause
+        // was the clock. `completionPct` below remains for backwards compat, but
+        // it is DERIVED from this report so the two can never disagree.
+        const scanReport = buildScanReport({
+          query: describeCensusSearch(
+            scanArgs,
+            typeof args.question === "string" ? args.question : undefined,
+          ),
+          matched: census.matched,
+          examined: census.scope?.scanned ?? 0,
+          opened: coverage.messages,
+          pdfs: coverage.attachments,
+          results: coverage.lines,
+          pages: coverage.pages,
+          unreadable: coverage.unreadable,
+          remaining: session.remaining,
+          reachedEnd: session.complete,
+          truncatedReason: scanCoverage.truncatedReason ?? null,
+          startedAt: Number((session as { startedAt?: number }).startedAt ?? Date.now()),
+          now: Date.now(),
+          deadline: null,
+        });
+        const scanReportText = renderScanReport(scanReport);
+
         // ── Oversize census → hand off to a background job ──────────────────
         // A resumable scan still makes the OPERATOR drive the resumption: each
         // «أعد النداء» costs a model round-trip from the day's scarce quota. When
@@ -2968,7 +3026,9 @@ async function executeToolInner(
                 (complete
                   ? " — الحصر كامل على كل الرسائل المطابقة."
                   : ` — تنبيه: الحصر جزئي (${partialDetail}). اذكر أن الترتيب مبني على المفحوص حتى الآن ولا تدّعِ الكمال.` +
-                    continueHint),
+                    continueHint) +
+                "\n\nسجل هذا المسح (انقله كما هو عند السؤال «عملت إيه بالظبط» — لا تعِد حساب الأرقام ولا تقل 100% إن لم يكن complete):\n" +
+                scanReportText,
             isComplete: complete,
             scope: honestScope,
             hasAttachments: !noAttachments,
@@ -2996,10 +3056,14 @@ async function executeToolInner(
             // `identityUncertain` counts the items whose identity rests on prose
             // alone (no part number, no model code) — the operator explicitly
             // asked for that count and for the scan to continue until 100%.
-            completionPct:
-              census.matched > 0
-                ? Math.min(100, Math.round((coverage.messages / census.matched) * 100))
-                : 100,
+            // DERIVED from the canonical report, so it can never claim 100% for
+            // a scan that opened fewer messages than it matched.
+            completionPct: scanReport.percent,
+            // The run's ten answers, machine-readable and pre-rendered. The model
+            // relays `reportText` verbatim when the operator asks what the scan
+            // actually did — it is not allowed to recompute these.
+            report: scanReport,
+            reportText: scanReportText,
             totalAttachments: coverage.attachments,
             identityUncertain: ranked.filter((p) => !p.identityConfident).length,
             // Ranked by how MANY orders carried the part by default — the
@@ -3420,6 +3484,14 @@ async function executeToolInner(
                         complete: r.complete,
                       }
                     : null,
+                // The run's own ten answers, when the artifact carries them. The
+                // model must relay THESE rather than recompute a figure from
+                // `progress` — that is what makes a sample impossible to report
+                // as a total, and it is the data behind «ماذا بحث / كم فحص /
+                // لماذا توقف».
+                report: (r.report as Record<string, unknown> | undefined) ?? null,
+                /** Pre-rendered Arabic lines — the model relays them, not invents. */
+                reportText: r.report ? renderScanReport(r.report as unknown as ScanReport) : null,
                 topItems: Array.isArray(r.topItems) ? r.topItems : null,
               };
             }),
@@ -3427,7 +3499,9 @@ async function executeToolInner(
               "هذه حالة المهام كما هي في قاعدة البيانات — لا تخمّن تقدمًا غير مذكور هنا. " +
               "‏`delivered=true` وحدها تعني أن التقرير أُرسل فعلًا (مع pdfMessageId). " +
               "إن كانت `delivery_failed` أو `delivered=false` فلا تقل إن التقرير وصل؛ " +
-              "أخبر المستخدم بفشل الإرسال وأن النتيجة محفوظة ويمكن إعادة إرسالها.",
+              "أخبر المستخدم بفشل الإرسال وأن النتيجة محفوظة ويمكن إعادة إرسالها. " +
+              "عند السؤال «عملت إيه بالظبط / ماذا بحث / لماذا توقفت» انقل `reportText` كما هو " +
+              "ولا تعِد حساب أي رقم بنفسك، ولا تقل 100% إلا إذا كانت `report.complete=true`.",
           },
         };
       }

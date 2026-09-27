@@ -20,6 +20,12 @@ import { db, aiAssistantJobsTable } from "@workspace/db";
 import { and, eq, inArray, desc, sql } from "drizzle-orm";
 import { logger } from "../../shared/logger";
 import { isQuotaError } from "./llm";
+import {
+  buildScanReport,
+  describeStopReason,
+  scanReportProgress,
+  type ScanReport,
+} from "./scan-report";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -239,7 +245,17 @@ export async function createJob(opts: CreateJobOpts): Promise<CreateJobResult> {
         // A quota-requeue gave up: the row already carries the reason.
         return;
       }
-      await updateJob(job.id, { status: "completed", result: out?.result ?? null });
+      // MERGE, never replace. The artifact is written by `finish` (the rich
+      // result: report, scope, topItems, delivery ids) and this line used to
+      // overwrite it wholesale with the worker's tiny return value — so every
+      // NORMALLY-completed job lost its result, while a crashed one kept it.
+      // Live proof: job 210 (orphaned) still held `topItems`/`scope`, jobs
+      // 211-213 (completed) held only `{complete,cancelled,messageId}`. The
+      // operator's «احتفظ بالنتيجة» requirement was broken for the common path.
+      const stored = latest?.result as Record<string, unknown> | null | undefined;
+      const returned = out?.result as Record<string, unknown> | null | undefined;
+      const merged = stored && returned ? { ...stored, ...returned } : (returned ?? stored ?? null);
+      await updateJob(job.id, { status: "completed", result: merged });
       logger.info({ jobId: job.id, kind: opts.kind }, "AI assistant: job completed");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -447,6 +463,12 @@ export async function startCensusJob(opts: {
     phone: string;
     jobId: number;
     session: unknown;
+    /**
+     * The run's report — the same ten answers the worker records on the job.
+     * Passed IN rather than rebuilt here so the summary text, the PDF and the
+     * stored artifact can never disagree with the progress the operator watched.
+     */
+    report: ScanReport;
     /** Writes the artifact/result onto the job row as it becomes known. */
     save: (patch: { result?: unknown; error?: string | null }) => Promise<void>;
   }) => Promise<{ messageId: string | null } | void>;
@@ -465,9 +487,39 @@ export async function startCensusJob(opts: {
     jobKey,
     run: async ({ jobId, report }) => {
       let session: any;
-      // A bounded number of rounds: `runBatch` always opens at least one window,
-      // so progress is guaranteed, but the cap stops a pathological source (a
-      // window that never advances) from looping forever in the background.
+      const startedAt = Date.now();
+
+      /**
+       * Build the job's report from the CURRENT session.
+       *
+       * Defined once so the per-batch progress and the final artifact can never
+       * disagree: they are the same ten answers over the same counters, and a
+       * field added here reaches both. `deadline` is a parameter because the
+       * per-batch view is measured against that batch's clock while the final
+       * artifact has none left to show.
+       */
+      const reportFor = (deadline: number | null, cancelled: boolean): ScanReport =>
+        buildScanReport({
+          query: describeCensusSearch(opts.args, opts.question),
+          matched: session?.census?.matched ?? 0,
+          examined: session?.census?.scope?.scanned ?? session?.examinedEnvelopes ?? 0,
+          opened: session?.coverage?.messages ?? 0,
+          pdfs: session?.coverage?.attachments ?? 0,
+          results: session?.coverage?.lines ?? 0,
+          pages: session?.coverage?.pages ?? 0,
+          unreadable: session?.coverage?.unreadable ?? 0,
+          remaining: session?.remaining ?? 0,
+          reachedEnd: Boolean(session?.complete),
+          truncatedReason: session?.attachmentCoverage?.truncatedReason ?? null,
+          startedAt: Number(session?.startedAt ?? startedAt),
+          now: Date.now(),
+          deadline,
+          cancelled,
+        });
+
+      // Bounded rounds: `runBatch` always opens at least one window, so progress
+      // is guaranteed, but the cap stops a pathological source (a window that
+      // never advances) from looping forever in the background.
       const MAX_BATCHES = Number(process.env.AI_CENSUS_JOB_MAX_BATCHES) || 120;
       let cancelled = false;
       for (let i = 0; i < MAX_BATCHES; i++) {
@@ -481,51 +533,72 @@ export async function startCensusJob(opts: {
         const deadline = Date.now() + censusJobBatchMs();
         const out = await opts.runBatch(deadline);
         session = out.session;
-        const cov = session?.coverage ?? {};
-        const matched = session?.census?.matched ?? 0;
-        const scanned = cov.messages ?? 0;
-        await report({
-          scanned,
-          matched,
-          attachments: cov.attachments ?? 0,
-          items: cov.lines ?? 0,
-          // Pages actually rendered, plus the documents whose text could not be
-          // read — the operator's progress questions, answered from the run
-          // rather than estimated.
-          pages: cov.pages ?? 0,
-          poDocuments: cov.poDocuments ?? 0,
-          rfqDocuments: cov.rfqDocuments ?? 0,
-          unreadable: cov.unreadable ?? 0,
-          // `matched === 0` means there is nothing to open — a percentage of
-          // "everything" over an empty ask reads as a finished census, which is
-          // what let a filter that matched no mail report 100%.
-          percent: matched > 0 ? Math.min(100, Math.round((scanned / matched) * 100)) : 0,
-        });
+        // ONE report per batch, built from the run's own counters — the operator
+        // asks the same ten questions of every job, and answers computed here
+        // cannot be omitted by a call site the way `pages` was.
+        await report(scanReportProgress(reportFor(deadline, false)));
         if (session?.complete) break;
         // A census with nothing to open makes no further progress: looping would
         // re-read the same empty mailbox until the batch cap. Either the search
         // term matched nothing or the mailbox could not be read, and BOTH are
         // reported by `finish` from the examined count — so stop and let it say
         // which. Without this, a wrong filter made the job spin for ~10 minutes.
-        if (matched === 0) break;
+        if ((session?.census?.matched ?? 0) === 0) break;
       }
       let messageId: string | null = null;
+      // A cancellation or an exhausted first window can leave `session` unset. A
+      // job that reports nothing is the «silent lie» the operator complained
+      // about, so load the persisted session if there is one — otherwise the
+      // report says 0 for a census that may have read thousands.
+      if (!session) {
+        try {
+          const { loadPersistedScanSession, scanCacheKey } = await import("./email");
+          const key = scanCacheKey("items", opts.args as unknown as Record<string, unknown>);
+          session = await loadPersistedScanSession(key);
+        } catch (err) {
+          logger.warn({ jobId, err }, "AI assistant: could not load persisted session for report");
+        }
+      }
+      const finalReport = reportFor(null, cancelled);
       if (!cancelled) {
         const out = await opts.finish({
           phone: opts.phone,
           jobId,
           session,
-          save: (patch) => updateJob(jobId, patch),
+          report: finalReport,
+          // MERGE the artifact, never replace it.
+          //
+          // `finish` calls `save` TWICE — once with the full artifact (report,
+          // scope, topItems) and once at the end with the delivery ids — and a
+          // plain `updateJob` replaced the whole column, so the second call threw
+          // the first one away. Live proof on the production rows: the job killed
+          // mid-flight (210) still held `topItems` and `scope`, while every job
+          // that completed NORMALLY (211-213) kept only
+          // `{complete, cancelled, messageId}`. The operator's «احتفظ بالنتيجة»
+          // requirement was broken on the common path, and nothing failed loudly
+          // because the job still reported success.
+          save: async (patch) => {
+            if (patch.result === undefined) return updateJob(jobId, patch);
+            const current = await getJob(jobId);
+            const previous = (current?.result ?? {}) as Record<string, unknown>;
+            return updateJob(jobId, {
+              ...patch,
+              result: { ...previous, ...(patch.result as Record<string, unknown>) },
+            });
+          },
         });
         messageId = out?.messageId ?? null;
       }
       return {
         result: {
-          complete: Boolean(session?.complete) && !cancelled,
+          complete: finalReport.complete,
           cancelled,
           // Proof of delivery: the WhatsApp message id. `null` means the report
           // was NOT delivered, so the assistant must not claim it was.
           messageId,
+          // The same ten answers, on the artifact, so a follow-up `job_status`
+          // reads them instead of recomputing (or inventing) them.
+          report: finalReport,
         },
       };
     },
@@ -542,6 +615,38 @@ function censusJobBatchMs(): number {
   return Number(process.env.AI_CENSUS_JOB_BATCH_MS) || 120_000;
 }
 
+/**
+ * What a census was asked to find, in words — the operator's first question
+ * («ماذا بحث؟») and the one piece of the report no counter can supply.
+ *
+ * Built from the args rather than the chat text, so the answer names the filters
+ * the scan actually ran with (sender, subject, dates, mailbox) instead of
+ * paraphrasing the request. Returns "" when nothing narrowed the scan, so a
+ * caller can fall back to the operator's own words rather than printing a
+ * meaningless «كل الرسائل» as if it were a search term.
+ */
+export function describeCensusQuery(args: CensusJobArgs | Record<string, any>): string {
+  const a = (args ?? {}) as Record<string, any>;
+  const bits: string[] = [];
+  if (a.from) bits.push(`من ${String(a.from)}`);
+  if (a.subject) bits.push(`موضوع «${String(a.subject)}»`);
+  if (a.query) bits.push(`نص «${String(a.query)}»`);
+  if (a.sinceDate) bits.push(`من تاريخ ${String(a.sinceDate)}`);
+  if (a.beforeDate) bits.push(`حتى ${String(a.beforeDate)}`);
+  if (a.mailbox) bits.push(`صندوق: ${String(a.mailbox)}`);
+  if (a.docKind === "rfq") bits.push("طلبات التسعير");
+  else if (a.docKind === "po") bits.push("أوامر الشراء");
+  return bits.join(" · ");
+}
+
+/** The search filters when they narrowed anything, else the operator's words. */
+export function describeCensusSearch(args: CensusJobArgs | Record<string, any>, question?: string) {
+  const filters = describeCensusQuery(args);
+  if (filters) return filters;
+  const q = (question ?? "").trim();
+  return q || "كل الرسائل";
+}
+
 /** A human-readable Arabic progress line for a running job. */
 export function describeJob(job: JobRecord): string {
   const labels: Record<JobStatus, string> = {
@@ -552,17 +657,27 @@ export function describeJob(job: JobRecord): string {
     delivery_failed: "فشل الإرسال",
     cancelled: "أُلغيت",
   };
-  const p = job.progress ?? {};
+  const p = (job.progress ?? {}) as Record<string, any>;
   const bits: string[] = [];
   const push = (label: string, v: unknown) => {
     if (v !== undefined && v !== null && v !== 0) bits.push(`${label}: ${v}`);
   };
-  push("تم فحص", p.scanned);
+  // The ten answers, when the progress carries them. Old rows recorded only five
+  // (`scanned`/`matched`/`attachments`/`items`/`percent`), so each field is
+  // emitted only when present — a row written before this change must not read
+  // as a scan that found nothing.
+  push("البحث عن", p.query);
   push("مطابق", p.matched);
-  push("مرفقات", p.attachments);
-  push("بنود", p.items);
+  push("فُحص", p.examined ?? p.scanned);
+  push("فُتح", p.opened);
+  push("ملفات", p.pdfs ?? p.attachments);
   push("صفحات", p.pages);
-  push("تعذّر قراءتها", p.unreadable);
-  push("نسبة التقدم", p.percent != null ? `${p.percent}%` : undefined);
+  push("نتائج", p.results ?? p.items);
+  if (p.elapsedSeconds != null) bits.push(`مضى: ${p.elapsedSeconds} ث`);
+  if (p.remainingSeconds != null) bits.push(`متبقٍ: ${p.remainingSeconds} ث`);
+  if (p.percent != null) bits.push(`النسبة: ${p.percent}%`);
+  if (p.complete === true) bits.push("مكتمل ✅");
+  else if (p.complete === false) bits.push(`جزئي — بقي ${p.remaining ?? "?"} رسالة ⚠️`);
+  if (p.stopReasonLabel) bits.push(`التوقف: ${p.stopReasonLabel}`);
   return `المهمة #${job.id} (${labels[job.status]})${bits.length ? " — " + bits.join(" · ") : ""}`;
 }

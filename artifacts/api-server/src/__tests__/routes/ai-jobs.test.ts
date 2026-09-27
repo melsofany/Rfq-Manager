@@ -566,4 +566,125 @@ describe("orphaned jobs (a restart must not leave a job promising work forever)"
     expect(await markOrphanedJobs()).toBe(0);
     expect(rows[0].status).toBe("running");
   });
+
+  it("KEEPS the rich artifact when finish saves twice (the completed-job data loss)", async () => {
+    // Live evidence from the production rows: the job killed mid-flight (210)
+    // still held `topItems`/`scope`, while every job that completed NORMALLY
+    // (211-213) kept only `{complete, cancelled, messageId}`. `finish` calls
+    // `save` twice — once with the full artifact and once with the delivery ids
+    // at the end — and a plain `updateJob` replaced the whole column, so the
+    // second call destroyed the first. The operator's «احتفظ بالنتيجة» was broken
+    // on the common path and nothing failed, because the job still said success.
+    const { job } = await startCensusJob({
+      phone: "2010",
+      question: "حصر EDC",
+      args: { mailbox: "*", subject: "EDC PO No" },
+      runBatch: async () => ({
+        session: {
+          census: { matched: 1, scope: { scanned: 10 } },
+          coverage: { messages: 1, attachments: 1, lines: 3, pages: 2 },
+          items: [],
+          complete: true,
+        },
+      }),
+      finish: async ({ report, save }) => {
+        // First save: the artifact the operator must be able to retrieve later.
+        await save({
+          result: {
+            report,
+            scope: "النطاق: كل الرسائل المطابقة (1).",
+            topItems: [{ description: "بند محفوظ" }],
+          },
+        });
+        // Second save: the delivery evidence, as the real finish does at the end.
+        await save({ result: { textMessageId: "wamid.X", pdfMessageId: "wamid.Y" } });
+        return { messageId: "wamid.Y" };
+      },
+    });
+    await pendingAiJobs();
+    const done = await getJob(job.id);
+    const r = done?.result as Record<string, any>;
+    // The artifact survived the second save…
+    expect(Array.isArray(r.topItems)).toBe(true);
+    expect(r.scope).toContain("كل الرسائل المطابقة");
+    // …and the delivery evidence was added alongside it, not instead of it.
+    expect(r.pdfMessageId).toBe("wamid.Y");
+    // The report the operator is shown is the run's own measurement.
+    expect(r.report?.complete).toBe(true);
+    expect(r.report?.percent).toBe(100);
+  });
+
+  it("records all ten answers on the job progress, not just five", async () => {
+    const { job } = await startCensusJob({
+      phone: "2010",
+      question: "حصر EDC",
+      args: { mailbox: "*", subject: "EDC PO No" },
+      runBatch: async () => ({
+        session: {
+          census: { matched: 10, scope: { scanned: 4399 } },
+          coverage: { messages: 4, attachments: 3, lines: 12, pages: 7, unreadable: 0 },
+          items: [],
+          remaining: 6,
+          complete: false,
+        },
+      }),
+      finish: async () => {},
+    });
+    await pendingAiJobs();
+    const p = (await getJob(job.id))?.progress as Record<string, unknown>;
+    // What was searched, and what it found / examined / opened / extracted.
+    expect(String(p.query)).toContain("EDC PO No");
+    expect(p.matched).toBe(10);
+    expect(p.examined).toBe(4399);
+    expect(p.opened).toBe(4);
+    expect(p.pdfs).toBe(3);
+    expect(p.results).toBe(12);
+    // How long it took, and how much is left to do.
+    expect(typeof p.elapsedSeconds).toBe("number");
+    expect(p.remaining).toBe(6);
+    // Whether it finished, and — since it did not — why it stopped.
+    expect(p.complete).toBe(false);
+    expect(p.stopReason).toBe("time");
+    expect(String(p.stopReasonLabel)).toContain("الوقت");
+    // And it never claims 100% for a partial scan.
+    expect(p.percent).not.toBe(100);
+  });
+
+  it("renders the ten answers into the job's human summary", () => {
+    const summary = describeJob({
+      id: 7,
+      phone: "2010",
+      kind: "email_census",
+      status: "running",
+      question: "q",
+      params: null,
+      progress: {
+        query: "من EDC",
+        matched: 480,
+        examined: 3704,
+        opened: 381,
+        pdfs: 332,
+        results: 853,
+        elapsedSeconds: 89,
+        remainingSeconds: 31,
+        remaining: 99,
+        complete: false,
+        percent: 79,
+        stopReasonLabel: "انتهت ميزانية الوقت المخصصة للمسح",
+      },
+      result: null,
+      error: null,
+      jobKey: null,
+      attempts: 0,
+      startedAt: null,
+      finishedAt: null,
+    } as any);
+    expect(summary).toContain("البحث عن: من EDC");
+    expect(summary).toContain("فُحص: 3704");
+    expect(summary).toContain("فُتح: 381");
+    expect(summary).toContain("مضى: 89 ث");
+    expect(summary).toContain("متبقٍ: 31 ث");
+    expect(summary).toContain("جزئي");
+    expect(summary).toContain("انتهت ميزانية الوقت");
+  });
 });
