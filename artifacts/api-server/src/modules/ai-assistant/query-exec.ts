@@ -240,7 +240,6 @@ export async function runReadOnlyQuery(sql: string): Promise<ReadOnlyQueryResult
     // Layer 5: bounded time and bounded rows.
     await client.query(`SET LOCAL statement_timeout = ${QUERY_TIMEOUT_MS}`);
     const result = await client.query(sql.replace(/;\s*$/, ""));
-    await client.query("ROLLBACK"); // a read has nothing to commit; end cleanly
 
     const rows = result.rows ?? [];
     const truncated = rows.length > MAX_QUERY_ROWS;
@@ -256,6 +255,21 @@ export async function runReadOnlyQuery(sql: string): Promise<ReadOnlyQueryResult
     logger.warn({ err: String(err).slice(0, 300) }, "AI assistant: read-only query failed");
     return { ok: false, error: String(err).slice(0, 300) };
   } finally {
+    // ALWAYS end the transaction before returning the client to the pool. A
+    // failed statement aborts the transaction, and a connection handed back in
+    // that state answers every later query with "current transaction is aborted,
+    // commands ignored until end of transaction block" — so one bad column name
+    // would poison that pooled connection for every subsequent request,
+    // including the assistant's own history insert. Guarded because ROLLBACK
+    // itself can fail (a dead connection); the release must still happen.
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackErr) {
+      logger.warn(
+        { err: String(rollbackErr).slice(0, 200) },
+        "AI assistant: read-only query rollback failed",
+      );
+    }
     client.release();
   }
 }
