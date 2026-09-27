@@ -2803,3 +2803,47 @@ live at `76eacc2` (`/api/healthz` 200, `/api/ai-assistant/settings` 401).
 **Production `AI_MODEL` is `gemini-3.5-flash-lite`** with fallbacks
 `gemini-3.1-flash-lite, gemini-3.5-flash-lite, gemini-flash-lite-latest, …` —
 read it from Render before assuming the model, it drifts.
+
+## A price table whose rows are unrelated to the question (feat `fix/price-item-identity`)
+
+Live: «آخر سعر لحربة الارث» returned ONE flat table — 84 / 1,575 / 151,000 /
+75,000 from three suppliers — as if it were one item's price history, with the gap
+explained away as «اختلاف المواصفات الفنية». Verified against the production
+database: **nothing matches «حربة الارث» at all** (zero rows). Those four prices
+were the newest offer LINES IN THE WHOLE DATABASE.
+
+- **The defect was a missing `where`, not a bad join.** `getLatestSupplierPrice`
+  queried `offer_items ⋈ offers`, hardcoded `partNo: null`, and had **no filter at
+  all** — `orderBy(created_at desc).limit(n)`. `offer_items.rfqItemId` exists, so
+  the item was always reachable; the join was simply never made. The rows were then
+  merged with PO prices into ONE list under a single «السعر» column.
+- **Root-cause class (the same family as the `filter(Boolean)` incident):** a
+  capability that silently returns something other than what it claims. Every row
+  printed was real, and the answer was still wrong — which is worse than an error,
+  because it looks documented. `search_database` already had this guard
+  (`searchApplied`); the price tool did not.
+- **A substring match is not an item.** «CABLE» matches 6 DISTINCT items live
+  (cable duct, cable lugs, under-voltage relay, cable gland, two cable ties).
+  Flattening them into one «السعر» column reads as one item's history. The result
+  is now grouped by **item identity** (`partNo|lineItem|description`) with an
+  explicit `itemCount` + warning when >1, so the reply can say WHICH item a price
+  belongs to. Group by identity; never emit one price column across items.
+- **A price difference is not evidence of a specification difference.** The model
+  invented that explanation to make an incoherent table look reasonable. When the
+  specs are not in the result, say the reason is unknown and ask for the part
+  number. An explanation that rescues a wrong answer is itself the bug.
+- **Regression test must reproduce the real shape** (`groups` absent → the
+  operator cannot tell rows apart) and is verified to FAIL against the pre-fix
+  source, or it guards nothing.
+- **Process trap that cost a round trip:** the prompt rule was edited but never
+  `git add`ed before `git commit --amend`, so git committed the **index** without
+  it and the rule was silently absent from PR #205. Always confirm a change landed
+  by reading the committed blob (`git show HEAD:<file>`), never the worktree.
+- **Verify against the real database, not only mocks.** The Render Postgres is
+  reachable externally via `GET /v1/postgres/<id>/connection-info` →
+  `externalConnectionString` (append `sslmode=require`). The mocked `select` never
+  actually collides or returns unrelated rows, so a green unit test cannot detect a
+  missing `where` clause — the live probe is what proved the term matched nothing.
+- Tests: 2 regressions in `ai-procurement-tools.test.ts` (both fail pre-fix);
+  1159 api-server tests pass; tsc + prettier clean. Deployed `54bcfb0` (code) then
+  `070a6f2` (prompt rule); healthz 200.
