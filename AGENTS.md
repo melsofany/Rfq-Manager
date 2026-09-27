@@ -1,5 +1,23 @@
 # Rfq-Manager вЂљГ„Г® Repository Notes
 
+## The engine log line lied about which loop was running
+
+- The startup log printed `engine: "mastra"` whenever the vestigial enablement
+  flag was true — and the flag had been reduced to a constant `true` once Mastra
+  was removed. The bundle carries **zero** `@mastra` code, so the deploy log
+  named an engine that was not running.
+- **A misleading log is not cosmetic.** It is the same defect class as a census
+  reporting `0` attachments for a readable mailbox: a surface that describes
+  something untrue. It cost a verification pass here — the reasoning-token fix
+  had to be confirmed by hand against `agent.ts`/`engine.ts` because the log
+  pointed at a loop that no longer exists.
+- `index.ts` now logs `engine: engineName()` (`"unified"`), and
+  `ai-unified-engine.test.ts` asserts the selection log calls the real accessor
+  and never the vestigial flag.
+- **When a guard greps source for a literal, keep that literal out of your own
+  explanatory comments** — the first cut of this comment contained the very token
+  the test forbade, so the guard failed on prose rather than on code.
+
 ## A reasoning model's thinking is charged against `max_tokens` (PR #217)
 
 - **Live report**: «نفدت محاولات المعالجة قبل الوصول لرد نهائي، لكن تم تنفيذ خطوات
