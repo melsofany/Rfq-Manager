@@ -1181,18 +1181,19 @@ export async function initDb(): Promise<void> {
     // `loadSettings()` reads the DB value first — leaving it at a Gemini id would
     // silently pin production to the exact provider being replaced.
     //
+    // The predicate is the GEMINI FAMILY (`ILIKE 'gemini%'`), not a list of
+    // retired ids. The deployed row held `gemini-3.5-flash-lite`, which is a
+    // perfectly live Gemini id and therefore was NOT in the earlier retired-only
+    // list — so the provider switch would have been silently inert in production
+    // while every unit test passed. An admin who deliberately wants Gemini can
+    // re-pick it in the settings UI; the default must be the un-capped provider.
+    //
     // Its own statement so a sibling failure can never roll it back.
     await client.query(`
       UPDATE ai_assistant_settings
          SET model = 'deepseek-v4-pro', updated_at = NOW()
        WHERE key = 'default'
-         AND model IN (
-           'gpt-4o',
-           'gpt-4o-mini',
-           'gemini-3.8-flash',
-           'gemini-3.6-flash',
-           ''
-         );
+         AND (model ILIKE 'gemini%' OR model ILIKE 'gpt-%' OR model = '');
     `);
 
     // Read-only-SQL flag on an EXISTING settings row. Its own statement, so a
