@@ -2915,3 +2915,55 @@ matched/1800 items).
   pre-fix) + 1 new `ai-jobs` case. **1164 api-server tests** pass; tsc + prettier
   clean. PR #212 → `b4a76e4`; verified live (job 282: 334/334, 853 items,
   `messageId` present).
+
+## DeepSeek is the primary provider; Gemini is media-only (PR #214, `ec57618`)
+
+The operator asked for the agent to stop depending on Gemini. The recorded
+failure modes were all provider/quota problems, not loop problems: Gemini's free
+tier caps **each model at 20 requests/day**, so once the day's budget was spent
+*every* message went unanswered, and an overloaded model burned the completion
+budget on 503 retries before a healthy one was reached.
+
+- **Defaults inverted**: `DEFAULT_MODEL = deepseek-v4-pro`,
+  `DEFAULT_BASE_URL = https://api.deepseek.com/v1`, `DEEPSEEK_MODEL =
+  deepseek-v4-pro` (flagship reasoning), `DEEPSEEK_FALLBACK_MODELS =
+  deepseek-chat` (~1.0s tool call measured live). Gemini stays configured as the
+  SECOND provider so the chain inverts rather than a provider disappearing.
+- **`loadSettings()` prefers the DB ROW over everything** — including code defaults
+  *and* `AI_MODEL`. The deployed row held `gemini-3.6-flash`, so the switch needed
+  a migration (`UPDATE ai_assistant_settings SET model = 'deepseek-v4-pro' WHERE
+  key='default' AND model IN ('gemini-3.6-flash','gemini-3.8-flash',…)`), not just
+  a change to the constant. Verified live: the production row now reads
+  `deepseek-v4-pro`. The DDL default must match `DEFAULT_MODEL` (guarded by
+  `init-db.test.ts`).
+- **Voice notes and document/PDF reading are pinned to GEMINI, not the chat
+  provider.** DeepSeek has no `/audio/transcriptions` endpoint and its files API
+  rejects PDFs, so `transcribeAudio`/`extractDocumentText` take their endpoint
+  from a new `GEMINI_BASE_URL` (and `GEMINI_MEDIA_MODEL`) instead of `baseUrl`.
+  Deriving them from the chat provider would silently disable both on the switch
+  — a voice note would degrade to «تعذّرت القراءة» with no error. The media chain
+  substitutes a Gemini model for the chat model via `isGeminiModelId`.
+- **Three real cross-provider defects this surfaced**: (1) `providerConfig` gave
+  the secondary Gemini chain the PRIMARY's base URL, so the cross-provider rescue
+  sent Gemini ids to DeepSeek — the rescue did not actually exist; (2) a null base
+  URL resolved a Gemini request to DeepSeek's endpoint; (3) the fast path could
+  hand Gemini's light-model id to DeepSeek (404 on every fast-path question).
+  Provider resolution now lets the **model id** decide first, then the endpoint,
+  in both `resolveProvider` and `modelForPath`.
+- **No new dependency was added.** The module already runs one unified engine
+  (`engine.ts`) that implements the hardened behaviours a stock agent framework
+  would drop (per-model daily-quota memory, warm-model promotion, cross-provider
+  rescue, run budget, identical-call dedup, stuck steering, forced final round) —
+  plus the Harness-style `TaskTrace` session log and tool-registry plugin
+  registry. Swapping in an open-source loop would reintroduce the "one exhausted model, then every
+  message goes unanswered" failure. `@ai-sdk/*` deps were
+  installed during the attempt and removed; the bundle has no `@ai-sdk`/`@mastra`
+  refs.
+- **Do not trust `AI_MODEL` to be the effective model** — read the
+  `ai_assistant_settings` row from production (external connection string +
+  `sslmode=require`). Production still sets `AI_MODEL=gemini-3.5-flash-lite`, which
+  is now inert on the chat path but worth clearing to avoid confusion.
+- Tests: 1165 api-server pass (was 1163). New guards assert the media readers
+  still hit Gemini when the chat provider is DeepSeek, the cross-provider
+  fallthrough works in the new direction, and the fast path never sends a Gemini
+  id to DeepSeek.
