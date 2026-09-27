@@ -380,6 +380,41 @@ const TEACH_PATTERNS = [
   /\bremember\s+(?:that\s+)?(.+)/i,
 ];
 
+/**
+ * Patterns that capture the EXPLANATION the operator gives after the assistant
+ * asked. Live phrasings: «قاعدة العمل هي…», «خلي بالك إن…», «بالنسبة لـ EDC اتعامل
+ * معاها كذا», «الشركة دي اسمها الكامل …», and the plain «ده اسمه/ده يعني …».
+ *
+ * Deliberately narrow: the distiller runs on EVERY turn, so a loose pattern would
+ * store ordinary task descriptions as rules and fill the memory with noise.
+ */
+const EXPLANATION_PATTERNS = [
+  /(?:قاعدة\s+العمل|القاعدة\s+هي|القاعده\s+هي)\s*(.+)/i,
+  /(?:خلي\s+بالك|خد\s+بالك|واتعلم|وخد\s+علم)\s+(?:إن|ان|أن)?\s*(.+)/i,
+  /(?:معنى|يعني)\s+(?:كلمة|مصطلح|رقم)\s*(.+)/i,
+  /(?:الشركة|الجهة|المورد|العميل)\s+دي\s+(?:اسمها|اسمه|بنتعامل|اتعامل)\s*(.+)/i,
+];
+
+/**
+ * A question must never be stored as knowledge. The assistant's own follow-up
+ * («إيه معنى الرقم ده؟») frequently arrives as the "explanation" turn, and
+ * storing it would teach the memory a question and pollute every later prompt.
+ * A trailing question mark, or an interrogative opener, disqualifies a candidate.
+ */
+export function looksLikeQuestion(text: string): boolean {
+  const t = (text ?? "").trim();
+  if (!t) return true;
+  if (/[?؟]\s*$/.test(t)) return true;
+  // \b does NOT match an Arabic word boundary in JS, so the Arabic alternatives
+  // must use an explicit "no following letter" lookahead; only the English ones
+  // can use \b. Mixing them into one alternation silently disabled every Arabic
+  // interrogative — caught by ai-learning-loop.test.ts.
+  return (
+    /^(?:ايه|إيه|هو|هي|هل|ليه|لماذا|كام|فين|أين|ازاي|إزاي)(?![\p{L}])/iu.test(t) ||
+    /^(?:what|how|why|which|when|where)\b/i.test(t)
+  );
+}
+
 /** Phrases that mean the assistant got something wrong — a lesson to keep. */
 const CORRECTION_PATTERNS = [
   /(?:ده|دا|هذا|كده)\s*غلط/i,
@@ -435,6 +470,25 @@ export async function distillMemories(opts: {
           source: "distilled",
         }),
       );
+    }
+    // The operator explaining a rule AFTER the assistant asked for it. This is
+    // the half of the loop that turns "it asked" into "it now knows" — without
+    // it the same question comes back in the next session. Guarded against
+    // storing a question as a rule.
+    if (!teach && !looksLikeQuestion(userText)) {
+      const explained = firstMatch(EXPLANATION_PATTERNS, userText);
+      if (explained && explained.length >= 8) {
+        written.push(
+          await rememberFact({
+            phone: opts.phone,
+            category: "rule",
+            key: explained.slice(0, 80),
+            value: explained.slice(0, 1000),
+            importance: 60,
+            source: "explained",
+          }),
+        );
+      }
     }
     // A correction is kept as a LESSON so the assistant does not repeat the
     // mistake — the "learn from mistakes" behaviour the operator asked for. The
