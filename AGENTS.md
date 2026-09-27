@@ -2657,3 +2657,63 @@ the harness around it rather than the model behind it. Both are the same lesson:
   the subject filter must be passed **into** `scan_email_items` (not used to
   pre-judge the mailbox), and the reply must carry `avgUnitPrice` /
   `lineItemNos` for every row.
+
+## Tool scope must cover every tool the prompt names (PR #200)
+
+- **The defect class**: `EMAIL_TOOLS` in `tool-scope.ts` omitted
+  `search_sent_emails` and `send_email` while the prompt instructed the model to
+  use them («ما أرسلناه نحن» → Sent folder; «ابعت إيميل»). An instruction naming a
+  tool that scoping then removes is **unsatisfiable** — the model cannot comply,
+  and the failure reads as "the assistant ignored me". When you add a tool name to
+  the prompt, add it to the scope that question routes to. `send_email` is gated
+  in CODE (`confirmed:true`), so exposing it in scope is safe.
+- **`learn_organization` belongs in `CORE_TOOLS`**: deriving/remembering a
+  document-number pattern is a cross-cutting capability, and the prompt tells the
+  model to record patterns and entity aliases it is taught.
+- **Guard**: `ai-tool-scope.test.ts` asserts every mail capability the prompt
+  names is present in the mail-only scope. Add a case whenever a tool joins a
+  prompt instruction.
+
+## A DB setting that shadows the code default is a production config drift (PR #200)
+
+- `loadSettings()` **prefers the `ai_assistant_settings.model` row** over
+  `DEFAULT_MODEL`. The DDL default and the seed migration still wrote
+  `gemini-3.8-flash` after the code moved to `gemini-3.6-flash`, so production ran
+  the model measured as overloaded and never touched the code's own default. The
+  symptom was the recorded "assistant sent only the ack": a bad primary burns the
+  per-model budget on 503s and the healthy fallbacks are never reached.
+- **Rule**: any value seeded into a table AND held as a code default must be kept
+  in step, and a guard test must fail when they diverge (`init-db.test.ts` now
+  compares the DDL/default migration against `DEFAULT_MODEL`). Real
+  latency/overload measurements are time-varying — re-measure before changing a
+  deployed model, but never let the DDL contradict the code.
+- Verify a migration actually applied to an existing production row by querying it
+  (Render `POST /v1/postgres/<id>/connection-info` → external URL +
+  `sslmode=require`), not by trusting that the deploy went live.
+
+## The prompt is a budget (PR #200)
+
+- The system prompt reached ~19.7k characters with 40+ overlapping rules. At that
+  size the model stops obeying selectively: the recorded symptoms were answering
+  from the wrong source and reaching for the wrong tool. Rules enforceable in code
+  were moved out of the prose; the body is now ~6.0k.
+- **Keep the business knowledge that has no code-level equivalent**:
+  `customer_pos` vs `purchase_orders`, Line Item, RFQ-vs-PO, item identity, and
+  partial-result semantics (`isComplete`/`completionPct`/`hasAttachments`/
+  `unreadable`). Do not "simplify" those away.
+- `ai-prompt-budget.test.ts` fails if the prompt grows past 9k, if the
+  no-fabrication mandate is repeated into noise, or if the business knowledge
+  disappears.
+
+## One live probe settles what code reading cannot (PR #200)
+
+- Run ONE request against the real provider with the REAL scoped catalogue and
+  print only the tool names chosen. That is what proved the scoping fix: the EDC
+  mail-census question selects `scan_email_items` (correct) with the database
+  tools absent, where the same question previously selected `search_database`.
+- Set `AI_API_KEY`/`AI_MODEL`/`AI_FALLBACK_MODELS` from the service's env BEFORE
+  importing the modules (copy for `config.ts` captures at load time; supply dummy
+  `IMAP_*` so email tools are not filtered out of the catalogue — no mailbox is
+  contacted). `tsx` is not installed; run the probe as a temporary vitest file and
+  delete it afterward. `AI_API_KEY` is not available locally — fetch it from Render
+  (`GET /v1/services/<id>/env-vars`) without printing the value.
