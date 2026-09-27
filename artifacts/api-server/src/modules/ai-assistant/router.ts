@@ -431,7 +431,19 @@ export function routeHint(plan: RoutePlan): string {
     plan.sourceScope === "email"
       ? "\n\nمصدر هذه الجولة مقيَّد: المستخدم طلب البيانات من البريد الإلكتروني تحديدًا (لا من قاعدة البيانات الداخلية). " +
         "استخدم أدوات البريد (scan_emails / scan_email_items / search_emails) فقط، " +
-        "ولا تبنِ الإجابة على جدول purchase_orders. إن كانت النتيجة ناقصة فاذكر النطاق بوضوح."
+        "ولا تبنِ الإجابة على جدول purchase_orders. إن كانت النتيجة ناقصة فاذكر النطاق بوضوح.\n" +
+        // Live evidence: the operator said «أوامر الشراء الواردة من EDC» and the
+        // agent scanned with `from: "EDC"` alone — 3,733 matched, the time budget
+        // stopped it at 150, and it reported «لا توجد مرفقات». The SAME mailbox
+        // narrowed by the subject he also named («EDC PO NO») matched 333 and was
+        // read to completion: 50 real parts, ARISTON on 20 orders. A sender
+        // shorthand alone matches almost the whole mailbox; the subject is what
+        // makes it a census that finishes.
+        "مهم: فلتر المُرسل وحده («EDC») قد يطابق آلاف الرسائل فلا يكتمل الحصر داخل ميزانية الوقت. " +
+        "إن ذكر المستخدم موضوعًا للرسالة (مثل «EDC PO NO» أو كلمات تظهر في عنوانها) فمرّره كـ subject مع from، " +
+        "لأن هذا ما يجعل الحصر يكتمل ويُخرج الأرقام الفعلية. " +
+        "وإن لم يذكر موضوعًا وكان النطاق واسعًا جدًّا فاذكر أن الحصر جزئي بدل عرض عيّنة كأنها الإجمالي.\n" +
+        "وحين يُطلب «أكثر بند تكرر»: إن كان الطلب عن أوامر الشراء فاستخدم docKind=po، وإن كان عن طلبات التسعير فـ docKind=rfq."
       : "";
   if (!plan.hint) return scopeHint;
   return `\n\nتوجيه هذه الجولة (${plan.path === "fast" ? "مسار سريع" : "مسار تحليلي"}): ${plan.hint}${scopeHint}`;

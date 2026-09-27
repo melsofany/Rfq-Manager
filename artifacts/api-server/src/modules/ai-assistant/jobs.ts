@@ -483,9 +483,18 @@ export async function startCensusJob(opts: {
           poDocuments: cov.poDocuments ?? 0,
           rfqDocuments: cov.rfqDocuments ?? 0,
           unreadable: cov.unreadable ?? 0,
-          percent: matched > 0 ? Math.min(100, Math.round((scanned / matched) * 100)) : 100,
+          // `matched === 0` means there is nothing to open — a percentage of
+          // "everything" over an empty ask reads as a finished census, which is
+          // what let a filter that matched no mail report 100%.
+          percent: matched > 0 ? Math.min(100, Math.round((scanned / matched) * 100)) : 0,
         });
         if (session?.complete) break;
+        // A census with nothing to open makes no further progress: looping would
+        // re-read the same empty mailbox until the batch cap. Either the search
+        // term matched nothing or the mailbox could not be read, and BOTH are
+        // reported by `finish` from the examined count — so stop and let it say
+        // which. Without this, a wrong filter made the job spin for ~10 minutes.
+        if (matched === 0) break;
       }
       let messageId: string | null = null;
       if (!cancelled) {
