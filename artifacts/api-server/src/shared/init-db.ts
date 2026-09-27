@@ -1150,7 +1150,7 @@ export async function initDb(): Promise<void> {
         id SERIAL PRIMARY KEY,
         key TEXT NOT NULL UNIQUE DEFAULT 'default',
         enabled BOOLEAN NOT NULL DEFAULT true,
-        model TEXT NOT NULL DEFAULT 'gemini-3.8-flash',
+        model TEXT NOT NULL DEFAULT 'gemini-3.6-flash',
         base_url TEXT,
         system_prompt TEXT,
         language TEXT NOT NULL DEFAULT 'ar',
@@ -1165,12 +1165,22 @@ export async function initDb(): Promise<void> {
         ON CONFLICT (key) DO NOTHING;
     `);
 
-    // Move the seeded row off the retired OpenAI default to the Gemini default.
+    // Pin the seeded row to the model the code actually defaults to.
+    //
+    // Two things had drifted apart: `DEFAULT_MODEL` is `gemini-3.6-flash`, while
+    // this DDL and the seed migration below both said `gemini-3.8-flash`. Because
+    // `loadSettings()` prefers the DB value, the code default was never reached in
+    // production — the deployed assistant ran the model measured as overloaded
+    // (answering 1 of 5 probes with the real tool schema), spending its per-model
+    // budget on 503s and starving the healthy fallbacks. One value now:
+    // `gemini-3.6-flash`, the measured-reliable primary.
+    //
     // Its own statement so a sibling failure can never roll it back.
     await client.query(`
       UPDATE ai_assistant_settings
-         SET model = 'gemini-3.8-flash', updated_at = NOW()
-       WHERE key = 'default' AND model IN ('gpt-4o', 'gpt-4o-mini', '');
+         SET model = 'gemini-3.6-flash', updated_at = NOW()
+       WHERE key = 'default'
+         AND model IN ('gpt-4o', 'gpt-4o-mini', 'gemini-3.8-flash', '');
     `);
 
     // Read-only-SQL flag on an EXISTING settings row. Its own statement, so a

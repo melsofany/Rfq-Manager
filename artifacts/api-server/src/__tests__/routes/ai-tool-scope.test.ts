@@ -80,6 +80,26 @@ describe("tool-scope: per-intent catalogue", () => {
     }
   });
 
+  it("exposes EVERY mail capability the prompt tells the model to use", () => {
+    // A regression guard for a real defect: `search_sent_emails` («what did WE
+    // send?») and `send_email` were scoped OUT of the mail-only catalogue while
+    // the prompt still instructed the model to use them — an unsatisfiable
+    // instruction, and exactly the class of bug this file exists to prevent.
+    const scoped = toolsForIntent("email_search", "email")!;
+    for (const t of [
+      "search_emails",
+      "search_sent_emails",
+      "scan_emails",
+      "scan_email_items",
+      "read_email",
+      "get_email_attachment",
+      "list_mailboxes",
+      "send_email",
+    ]) {
+      expect(scoped, t).toContain(t);
+    }
+  });
+
   it("offers a conversational turn no data tools", () => {
     const allowed = toolsForIntent("smalltalk")!;
     expect(allowed).not.toContain("cancel_job");
