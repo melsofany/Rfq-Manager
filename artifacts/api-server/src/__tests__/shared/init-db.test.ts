@@ -81,8 +81,15 @@ describe("init-db migrations", () => {
     // carrying the retired Gemini id is moved off it on the next boot (the
     // deployed row held `gemini-3.6-flash`, which `loadSettings()` would have
     // preferred over the new DeepSeek default forever).
+    // …and every Gemini-family id must be migrated off, because the deployed row
+    // held `gemini-3.5-flash-lite` — a LIVE id — which a retired-id list would
+    // have left in place, making the DeepSeek switch inert in production. The
+    // predicate is therefore the FAMILY (`ILIKE 'gemini%'`), not a list: a list
+    // can only ever enumerate the ids someone thought of.
     expect(source).toContain(`SET model = '${defaultModel}'`);
-    expect(source).toContain("'gemini-3.6-flash'");
-    expect(source).toContain("'gemini-3.8-flash'");
+    expect(source).toMatch(/model ILIKE 'gemini%'/);
+    // And a family predicate must not be a bare equality check, which the live id
+    // would not satisfy.
+    expect(source).not.toMatch(/model IN \(\s*'gemini-3\.6-flash'/);
   });
 });
