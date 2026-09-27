@@ -1150,7 +1150,7 @@ export async function initDb(): Promise<void> {
         id SERIAL PRIMARY KEY,
         key TEXT NOT NULL UNIQUE DEFAULT 'default',
         enabled BOOLEAN NOT NULL DEFAULT true,
-        model TEXT NOT NULL DEFAULT 'gemini-3.6-flash',
+        model TEXT NOT NULL DEFAULT 'deepseek-v4-pro',
         base_url TEXT,
         system_prompt TEXT,
         language TEXT NOT NULL DEFAULT 'ar',
@@ -1172,15 +1172,27 @@ export async function initDb(): Promise<void> {
     // `loadSettings()` prefers the DB value, the code default was never reached in
     // production — the deployed assistant ran the model measured as overloaded
     // (answering 1 of 5 probes with the real tool schema), spending its per-model
-    // budget on 503s and starving the healthy fallbacks. One value now:
-    // `gemini-3.6-flash`, the measured-reliable primary.
+    // budget on 503s and starving the healthy fallbacks.
+    //
+    // The primary provider is now DEEPSEEK. Gemini's free tier caps every model at
+    // 20 requests/day, which is what made the assistant go quiet and fail tasks
+    // mid-run; the operator's own DeepSeek key has no such cap and answered tool
+    // calls reliably. This migration moves the deployed row across, because
+    // `loadSettings()` reads the DB value first — leaving it at a Gemini id would
+    // silently pin production to the exact provider being replaced.
     //
     // Its own statement so a sibling failure can never roll it back.
     await client.query(`
       UPDATE ai_assistant_settings
-         SET model = 'gemini-3.6-flash', updated_at = NOW()
+         SET model = 'deepseek-v4-pro', updated_at = NOW()
        WHERE key = 'default'
-         AND model IN ('gpt-4o', 'gpt-4o-mini', 'gemini-3.8-flash', '');
+         AND model IN (
+           'gpt-4o',
+           'gpt-4o-mini',
+           'gemini-3.8-flash',
+           'gemini-3.6-flash',
+           ''
+         );
     `);
 
     // Read-only-SQL flag on an EXISTING settings row. Its own statement, so a

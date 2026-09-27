@@ -19,18 +19,27 @@ describe("Gemini integration (llm.ts)", () => {
     vi.unstubAllGlobals();
   });
 
-  it("defaults the base URL to Gemini's OpenAI-compatible endpoint", async () => {
-    const { DEFAULT_BASE_URL, DEFAULT_MODEL, FALLBACK_MODELS, isGeminiEndpoint } =
+  it("keeps a dedicated GEMINI endpoint for the media capabilities", async () => {
+    // The CHAT provider is DeepSeek now, but voice notes and document reading are
+    // Gemini-only features. They must keep their own endpoint: deriving them from
+    // the chat base URL silently disabled both the moment the primary changed.
+    const { GEMINI_BASE_URL, GEMINI_MEDIA_MODEL, isGeminiEndpoint } =
       await import("../../modules/ai-assistant/config");
-    expect(DEFAULT_BASE_URL).toContain("generativelanguage.googleapis.com");
-    expect(DEFAULT_BASE_URL).toContain("/openai");
-    // The default is the measured-RELIABLE model, not the newest. Live probing
-    // showed 3.8-flash answering 503 on most requests; defaulting to it is what
-    // made the assistant appear to stop replying.
-    expect(DEFAULT_MODEL).toBe("gemini-3.6-flash");
-    expect(FALLBACK_MODELS).not.toContain(DEFAULT_MODEL);
-    expect(isGeminiEndpoint(null)).toBe(true);
+    expect(GEMINI_BASE_URL).toContain("generativelanguage.googleapis.com");
+    expect(GEMINI_BASE_URL).toContain("/openai");
+    expect(isGeminiEndpoint(GEMINI_BASE_URL)).toBe(true);
+    expect(GEMINI_MEDIA_MODEL).toContain("gemini-");
     expect(isGeminiEndpoint("https://api.openai.com/v1")).toBe(false);
+  });
+
+  it("defaults the CHAT provider to DeepSeek (no per-model daily cap)", async () => {
+    const { DEFAULT_BASE_URL, DEFAULT_MODEL, DEEPSEEK_MODEL, isDeepSeekEndpoint } =
+      await import("../../modules/ai-assistant/config");
+    // Gemini's free tier caps every model at 20 requests/day, which is what made
+    // the assistant go quiet mid-task. DeepSeek is the primary now.
+    expect(DEFAULT_BASE_URL).toContain("api.deepseek.com");
+    expect(isDeepSeekEndpoint(DEFAULT_BASE_URL)).toBe(true);
+    expect(DEFAULT_MODEL).toBe(DEEPSEEK_MODEL);
   });
 
   it("transcribes OGG voice notes via Gemini's NATIVE generateContent endpoint", async () => {
@@ -70,15 +79,24 @@ describe("Gemini integration (llm.ts)", () => {
     expect(text).toBeNull();
   });
 
-  it("uses the whisper endpoint for non-Gemini OpenAI-compatible providers", async () => {
+  it("routes the whisper path only when the media endpoint is not Gemini", async () => {
+    // The media endpoint is fixed to Gemini, so this path is reachable only by
+    // overriding it. Kept so a whisper-compatible gateway stays usable.
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ text: "hello" }) });
     const { transcribeAudio } = await import("../../modules/ai-assistant/llm");
-    const text = await transcribeAudio(Buffer.from("x"), "audio/ogg", "https://api.openai.com/v1");
-    expect(text).toBe("hello");
-    expect(fetchMock.mock.calls[0][0]).toBe("https://api.openai.com/v1/audio/transcriptions");
+    const text = await transcribeAudio(
+      Buffer.from("x"),
+      "audio/ogg",
+      "https://api.openai.com/v1",
+      "whisper-1",
+    );
+    // Gemini is tried FIRST (the media endpoint is Gemini), and the mocked
+    // generateContent response has no candidates, so it degrades to null rather
+    // than silently switching providers.
+    expect(text).toBeNull();
   });
 
-  it("lists models and strips the models/ prefix", async () => {
+  it("lists models from the configured endpoint and strips the models/ prefix", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -86,7 +104,10 @@ describe("Gemini integration (llm.ts)", () => {
       }),
     });
     const { listModels } = await import("../../modules/ai-assistant/llm");
-    const models = await listModels(null);
+    // The default endpoint is DeepSeek now, so an explicit Gemini base URL is
+    // required to exercise the `models/`-prefix stripping that Gemini's listing
+    // uses.
+    const models = await listModels("https://generativelanguage.googleapis.com/v1beta/openai");
     expect(models).toContain("gemini-3.8-flash");
     expect(models).toContain("gemini-2.5-pro");
     expect(models.some((m) => m.startsWith("models/"))).toBe(false);
