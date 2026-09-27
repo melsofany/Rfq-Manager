@@ -23,6 +23,7 @@ import { createTool } from "@mastra/core/tools";
 import { logger } from "../../shared/logger";
 import { CortobaLanguageModel } from "./mastra-model";
 import { executeTool, asText, toolDefinitions, type ToolContext } from "./tools";
+import { filterToolDefinitions } from "./tool-scope";
 import { wrapUntrustedOutput, unwrapUntrustedOutput } from "./guardrails";
 import {
   TaskTrace,
@@ -113,6 +114,13 @@ export async function runToolLoop(opts: {
   signal: AbortSignal;
   phone: string;
   /**
+   * Tool names this question may use, from `toolsForIntent`. `null`/undefined
+   * keeps the full catalogue. Passed in rather than derived here so the engine
+   * has no opinion about routing — both engines receive the same set from the
+   * one deterministic router.
+   */
+  allowedTools?: string[] | null;
+  /**
    * Remaining wall-clock budget for the whole run, in ms. The caller owns the
    * run's clock (it also drives the abort signal), so the budget extension
    * measures the REAL remainder rather than a per-segment elapsed time — an
@@ -169,8 +177,13 @@ export async function runToolLoop(opts: {
   // already the single executor (it owns the per-tool timeout, the resumable
   // census and the audit), so each Mastra tool is a thin adapter over it rather
   // than a re-implementation.
+  //
+  // The catalogue is SCOPED to the routed intent: the model was measured choosing
+  // the wrong tools from the full set and the right ones from a small set, so the
+  // tools that cannot serve this question are removed rather than discouraged in
+  // prose (see tool-scope.ts).
   const tools: Record<string, any> = {};
-  for (const def of toolDefinitions(ctx)) {
+  for (const def of filterToolDefinitions(toolDefinitions(ctx), opts.allowedTools ?? null)) {
     const name = def.function.name;
     tools[name] = createTool({
       id: name,

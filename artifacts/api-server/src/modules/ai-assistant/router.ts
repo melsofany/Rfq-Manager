@@ -202,11 +202,11 @@ const CUSTOMER_PO_CODE_RE = /\bcpo-\d{4}-\d{6}\b/i;
  *  - an explicit exclusion: «مش قاعدة البيانات», «مش النظام», «لا من الداتا».
  */
 const EMAIL_SCOPE_RE =
-  /(من\s*ال(بريد|ايميل|ايمل|ميل)|في\s*ال(بريد|ايميل|ميل)|ادخل\s*ال(بريد|ايميل|ميل)|افحص\s*ال(بريد|ايميل|ميل|مرفقات)|من\s*(الميل|الايميل|الايمل)|فى\s*(الميل|الايميل)|from\s+(the\s+)?(email|mail|inbox)|from\s+email|in\s+the\s+mailbox)/;
+  /(?:[بفلو])?(?:ا?ل|ل)(?:بريد|ايميل|ايمل|ميل|ميلات)|from\s+(?:the\s+)?(?:email|mail|inbox|mailbox)|in\s+the\s+mailbox/i;
 
 /** The operator explicitly excluding the internal database as a source. */
 const NOT_DB_SCOPE_RE =
-  /(مش\s*(?:من\s*)?(?:قاعده|قاعدة)\s*البيانات|مش\s*ال(نظام|داتا|داتابيز|داتا\s*بيس)|لسه\s*مش\s*فرق|لا\s*من\s*ال(داتا|قاعده)|not\s+(?:from\s+)?(?:the\s+)?database|not\s+from\s+(the\s+)?(db|system))/;
+  /(?:مش|ماشي|ليس|لا|ولا|و?ليس)\s*(?:من\s*)?(?:قاعده|قاعدة)\s*البيانات|مش\s*ال(نظام|داتا|داتابيز|داتا\s*بيس)|not\s+(?:from\s+)?(?:the\s+)?database|not\s+from\s+(?:the\s+)?(?:db|system)/i;
 
 function words(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
