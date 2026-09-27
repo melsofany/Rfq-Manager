@@ -359,4 +359,18 @@ describe("startup provider-capacity log", () => {
     warn.mockRestore();
     info.mockRestore();
   });
+
+  it("names a model each provider can actually serve", async () => {
+    // `providerStatus()` used `DEFAULT_MODEL` for the Gemini row, which is a
+    // DeepSeek id in the default deployment — so production logged the pair
+    // `gemini:deepseek-v4-pro`, a provider:model that exists nowhere, and the
+    // startup line that exists to explain a failover problem read as nonsense.
+    const { providerStatus } = await import("../../modules/ai-assistant/config");
+    const status = providerStatus();
+    const gemini = status.find((s) => s.provider === "gemini");
+    const deepseek = status.find((s) => s.provider === "deepseek");
+    expect(gemini?.model).toMatch(/gemini/i);
+    expect(gemini?.model).not.toMatch(/deepseek/i);
+    expect(deepseek?.model).toMatch(/deepseek/i);
+  });
 });
