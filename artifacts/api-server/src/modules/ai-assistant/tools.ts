@@ -1172,6 +1172,20 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             query: { type: "string", description: "كلمات في النص" },
             sinceDate: { type: "string", description: "من تاريخ YYYY-MM-DD" },
             beforeDate: { type: "string", description: "إلى تاريخ YYYY-MM-DD" },
+            contains: {
+              type: "string",
+              description:
+                "بند/ماركة/كود Line Item للبحث عنه داخل المرفقات («EZQ 20/4»، «أريستون»). " +
+                "يُستخدم لسؤال «البند ده اتطلب كام مرة وكميته الإجمالية؟» — العدّ والإجمالي " +
+                "صحيحان فقط بعد قراءة كل المطابقات، ولهذا يُسلَّم للمهمة الخلفية.",
+            },
+            docKind: {
+              type: "string",
+              enum: ["po", "rfq", "all"],
+              description:
+                "po = أوامر الشراء فقط، rfq = طلبات التسعير فقط، all = الاثنان. " +
+                "أي سؤال عن «طلبات التسعير» يجب أن يستخدم rfq أو all.",
+            },
           },
         },
       },
@@ -1532,8 +1546,8 @@ export function toolTimeoutMs(): number {
  * this module (which dereferences ~25 table bindings at load); a test that mocks
  * the registry therefore cannot silently lose a budget constant.
  */
-import { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS } from "./budgets";
-export { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS } from "./budgets";
+import { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS, SCAN_RETURN_MARGIN_MS } from "./budgets";
+export { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS, SCAN_RETURN_MARGIN_MS } from "./budgets";
 
 /**
  * How long ONE `scan_email_items` call may spend opening attachments before it
@@ -1612,6 +1626,28 @@ export function asksAboutRfq(question: unknown, contains?: string): boolean {
   );
 }
 
+/**
+ * Whether the question asks for a COUNT or a TOTAL that only a complete census
+ * can answer honestly.
+ *
+ * «اتطلبت كام مرة؟ والكمية الإجمالية كام؟» is the live case: the occurrence
+ * count and the summed quantity are facts about EVERY matched document, so a
+ * partial read produces a smaller number presented as the answer. That is the
+ * same class as reporting a sample as a total — the defect this whole surface
+ * exists to remove.
+ *
+ * The distinction from an ordinary lookup («فين البند ده؟») matters: a lookup is
+ * satisfied by one appearance found anywhere, so it stays interactive; a count
+ * is only true at 100%, so it must be handed to the background job that can
+ * reach 100%.
+ */
+export function asksForExactCount(args: Record<string, unknown>): boolean {
+  const text = String(args.question ?? "");
+  return /كام\s*مر|كم\s*مر|عدد\s*المر|اتطلب|اتطلبت|إجمالي|اجمالي|الكمية\s*الإجمالية|الكمية\s*الاجمالية|كمية\s*إجمالية|كمية\s*اجمالية|total\s+qty|how\s+many\s+times/i.test(
+    text,
+  );
+}
+
 /** Raised when a tool exceeds `toolTimeoutMs()`. */
 export class ToolTimeoutError extends Error {
   constructor(public readonly toolName: string) {
@@ -1672,13 +1708,24 @@ async function launchCensusJob(
       // background report mixed RFQ lines into a PO ranking (or, with the old
       // discard, reported 0 for a part that only ever appeared on an RFQ).
       const jobDocKind: "po" | "rfq" | "all" = scanArgs.docKind ?? "po";
-      const allItems = allItemsRaw.filter((it) =>
+      const kindOk = (it: ParsedLineItem) =>
         jobDocKind === "all"
           ? true
           : jobDocKind === "rfq"
             ? it.docKind === "rfq"
-            : it.docKind !== "rfq",
-      );
+            : it.docKind !== "rfq";
+      // The part / brand / Line Item filter, applied to the PARSED rows exactly
+      // as the interactive path does — the whole point of the hand-off is that
+      // the SAME question is answered, only over every document instead of a
+      // sample. `contains` narrows by description/partNo/lineItem because the
+      // subject and sender never carry a part description.
+      const contains = (scanArgs.contains ?? "").trim();
+      const containsOk = (it: ParsedLineItem) =>
+        !contains ||
+        matchesPartQuery(it.description, contains) ||
+        matchesPartQuery(it.partNo ?? "", contains) ||
+        matchesPartQuery(it.lineItemNo ?? "", contains);
+      const allItems = allItemsRaw.filter((it) => kindOk(it) && containsOk(it));
       // Envelopes actually EXAMINED. This is the evidence that separates a
       // mailbox that could not be read from a filter that matched nothing: a
       // scan that walked 1910 envelopes has proven the connection works.
@@ -1733,9 +1780,12 @@ async function launchCensusJob(
         (cov.poDocuments ?? 0) + (cov.rfqDocuments ?? 0) > 0
           ? ` المستندات المقروءة: ${cov.poDocuments ?? 0} أمر شراء و${cov.rfqDocuments ?? 0} طلب تسعير.`
           : "";
+      const filterLabel = `${jobDocKind === "po" ? "أوامر الشراء فقط" : jobDocKind === "rfq" ? "طلبات التسعير فقط" : "الكل"}${
+        contains ? ` + البند «${contains}»` : ""
+      }`;
       const emptyAfterRead =
         files > 0 && allItemsRaw.length > 0 && allItems.length === 0
-          ? `\n⚠️ قُرئ ${files} ملفًا و${lines} سطرًا، لكن الفلتر المطلوب (${jobDocKind === "po" ? "أوامر الشراء فقط" : jobDocKind === "rfq" ? "طلبات التسعير فقط" : "الكل"}) استبعدها كلها.` +
+          ? `\n⚠️ قُرئ ${files} ملفًا و${lines} سطرًا، لكن الفلتر المطلوب (${filterLabel}) استبعدها كلها.` +
             kindMix +
             (jobDocKind === "po" && (cov.rfqDocuments ?? 0) > 0
               ? " البنود موجودة في طلبات تسعير — أعد الطلب بـ docKind=rfq أو all للاطلاع عليها."
@@ -1750,7 +1800,11 @@ async function launchCensusJob(
       // Previously the scan result lived only in memory and in the WhatsApp
       // message, so once the send failed the assistant re-ran the search from
       // zero and reported the opposite answer.
-      const ranked = aggregateItemsByOccurrence(allItems, 2).slice(0, 100);
+      // A targeted `contains` census («البند ده اتطلب كام مرة؟») must include a
+      // part that appeared on a SINGLE order — excluding it would answer «0» for
+      // exactly the part the operator asked about, and the occurrence count is the
+      // figure they want. The singleton exclusion belongs to the ranked list only.
+      const ranked = aggregateItemsByOccurrence(allItems, contains ? 1 : 2).slice(0, 100);
 
       // Every PO appearance of one item, deduped by document, newest first —
       // the audit trail behind the summed figures.
@@ -2547,6 +2601,19 @@ async function executeToolInner(
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
         const requested = args.mailbox ? String(args.mailbox) : "*";
         const contains = args.contains ? String(args.contains).trim() : "";
+        // Which document kind this question is about. The operator's default for
+        // the FREQUENCY ranking is «أوامر الشراء», but their own words for a
+        // request («طلبات التسعير»، «الطلبات الواردة»، «هل ظهر في الطلبات؟») mean
+        // the RFQ — and answering those from POs alone returned a hard «0» for a
+        // part that was in the mailbox. Explicit arg first, then the question's
+        // own wording, then the PO default. Computed HERE, before the hand-off, so
+        // the background job receives the same answer the interactive path would.
+        const docKind: "po" | "rfq" | "all" =
+          args.docKind === "rfq" || args.docKind === "all" || args.docKind === "po"
+            ? args.docKind
+            : asksAboutRfq(args.question, contains)
+              ? "all"
+              : "po";
         // Reuse the census to find the matching messages (whole mailbox, exact
         // count) and to DOWNLOAD their attachments once; the item parser then
         // works on those bytes locally, with no model call.
@@ -2568,6 +2635,18 @@ async function executeToolInner(
           mailbox: requested,
           limit: typeof args.limit === "number" ? args.limit : undefined,
         };
+        // The DOC KIND and the part filter are deliberately NOT part of the
+        // session key: the session holds every parsed row, so a lookup filters
+        // what has already been read instead of restarting the census. A JOB is a
+        // different consumer — it produces one finished report and never gets a
+        // follow-up call to apply a filter — so it must be handed both. Omitting
+        // them from the hand-off answered a PO question with an RFQ ranking and,
+        // for a part census, returned the whole mailbox's items.
+        const jobArgs = {
+          ...scanArgs,
+          contains: contains || undefined,
+          docKind: docKind,
+        };
 
         // Leave the agent room to answer after the scan stops (calls, verification
         // and delivery), so the scan deadline sits below the whole-run budget.
@@ -2587,15 +2666,31 @@ async function executeToolInner(
         // scan could run to its ceiling inside the run's window and leave nothing
         // to fund the completion that turns its rows into a reply — the live
         // «نفدت محاولات المعالجة» after a successful scan.
+        //
+        // The margin is subtracted HERE as well as from the tool ceiling,
+        // otherwise the two become EQUAL whenever the run deadline binds and the
+        // scan's own deadline fires on the same tick as the race that kills it —
+        // measured live at 58,013ms on both sides. The scan must return first, so
+        // it gets the smaller number.
         const budgetForScan = Math.min(
           scanCallBudgetMs(),
-          runDeadline - Date.now() - ANSWER_RESERVE_MS - MIN_ANSWER_BUDGET_MS,
+          runDeadline -
+            Date.now() -
+            ANSWER_RESERVE_MS -
+            MIN_ANSWER_BUDGET_MS -
+            SCAN_RETURN_MARGIN_MS,
         );
+        const wantsTotal = wantsCompleteCensus(args) || asksForExactCount(args);
+        // A COUNT/TOTAL question hands off REGARDLESS of `noAutoJob`: the number
+        // it asks for is only true once every matched document is read, so
+        // answering from a sample would be a WRONG number, not a partial one.
+        // Enforced here rather than by prompt so a model that passes noAutoJob
+        // cannot turn an unanswerable-on-a-sample question into a fabricated
+        // count. An ordinary lookup stays interactive (one appearance anywhere
+        // answers it), and is never handed off on a `contains` term.
         const tooBigForOneRun =
-          !contains &&
-          !args.noAutoJob &&
           ctx.deadline != null &&
-          (wantsCompleteCensus(args) || budgetForScan < scanCallBudgetMs());
+          (wantsTotal || (!args.noAutoJob && !contains && budgetForScan < scanCallBudgetMs()));
         if (tooBigForOneRun) {
           const scopeLabel = [
             args.from ? `من ${String(args.from)}` : "",
@@ -2605,7 +2700,7 @@ async function executeToolInner(
             .join("، ");
           return launchCensusJob(
             ctx,
-            scanArgs as CensusJobArgs,
+            jobArgs as CensusJobArgs,
             `حصر بنود البريد${scopeLabel ? " — " + scopeLabel : ""}`,
           );
         }
@@ -2634,23 +2729,6 @@ async function executeToolInner(
         const top = Math.min(Math.max(Number(args.top ?? 50), 1), 300);
         const truncated = scanCoverage.truncated;
 
-        // A brand/part lookup («فين السخانات الأريستون؟») is a filter over the
-        // rows already parsed — it must never look like a fresh census. The
-        // match is BRAND-AWARE (see matchesPartQuery): «أريستون» must find a
-        // part printed `...ARSTON...`, otherwise the lookup reports a false
-        // «not found» for data that exists.
-        // Which document kind this question is about. The operator's default for
-        // the FREQUENCY ranking is «أوامر الشراء», but their own words for a
-        // request («طلبات التسعير», «الطلبات الواردة», «هل ظهر في الطلبات؟») mean
-        // the RFQ — and answering those from POs alone returned a hard «0» for a
-        // part that was in the mailbox. Explicit arg first, then the question's
-        // own wording, then the PO default.
-        const docKind: "po" | "rfq" | "all" =
-          args.docKind === "rfq" || args.docKind === "all" || args.docKind === "po"
-            ? args.docKind
-            : asksAboutRfq(args.question, contains)
-              ? "all"
-              : "po";
         const kindFilter = (it: ParsedLineItem) =>
           docKind === "all"
             ? true
@@ -2661,6 +2739,11 @@ async function executeToolInner(
                 // would lose real orders to a classification gap.
                 it.docKind !== "rfq";
 
+        // A brand/part lookup («فين السخانات الأريستون؟») is a filter over the
+        // rows already parsed — it must never look like a fresh census. The
+        // match is BRAND-AWARE (see matchesPartQuery): «أريستون» must find a
+        // part printed `...ARSTON...`, otherwise the lookup reports a false
+        // «not found» for data that exists.
         const matchedItems = contains
           ? parsed.items.filter(
               (i) =>
@@ -2747,11 +2830,19 @@ async function executeToolInner(
         // البند ده؟» and is best answered from what has already been read, with
         // its scope stated. Turning it into a job would replace an answer with a
         // «جاري الحصر» notice, which is a worse reply for a lookup.
+        // A `contains` LOOKUP stays interactive (see above), but a `contains`
+        // CENSUS — «البند ده اتطلب كام مرة وكميته الإجمالية؟» — is a count, and a
+        // count is only true at 100%. Live: this exact question timed out five
+        // times running because the partial scan was retried interactively and
+        // the number it needed can never come from a sample.
+        //
+        // So a count/total question hands off REGARDLESS of `contains`; an
+        // ordinary lookup hands off only on size, and never for a `contains` term
+        // (a lookup is answered from what was already read).
         if (
           !complete &&
-          !contains &&
           !args.noAutoJob &&
-          (wantsCompleteCensus(args) || session.remaining >= autoCensusMinRemaining())
+          (wantsTotal || (!contains && session.remaining >= autoCensusMinRemaining()))
         ) {
           const scopeLabel = [
             args.from ? `من ${String(args.from)}` : "",
@@ -2761,7 +2852,7 @@ async function executeToolInner(
             .join("، ");
           return launchCensusJob(
             ctx,
-            scanArgs as CensusJobArgs,
+            jobArgs as CensusJobArgs,
             `حصر بنود البريد${scopeLabel ? " — " + scopeLabel : ""}`,
           );
         }
@@ -3653,6 +3744,7 @@ async function executeToolInner(
           sinceDate: args.sinceDate ? String(args.sinceDate) : undefined,
           beforeDate: args.beforeDate ? String(args.beforeDate) : undefined,
           mailbox: args.mailbox ? String(args.mailbox) : "*",
+          contains: args.contains ? String(args.contains).trim() : undefined,
           docKind:
             args.docKind === "rfq" || args.docKind === "all" || args.docKind === "po"
               ? args.docKind

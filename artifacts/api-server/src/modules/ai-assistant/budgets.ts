@@ -31,3 +31,21 @@ export const ANSWER_RESERVE_MS = 20_000;
  * nothing.
  */
 export const MIN_ANSWER_BUDGET_MS = 45_000;
+
+/**
+ * How far the resume-scan deadline must sit BELOW the tool timeout race.
+ *
+ * `executeTool` races every tool against `effectiveToolTimeoutMs(ctx)`, and that
+ * ceiling subtracts the same two reserves the scan's own budget does. When the
+ * run deadline is the binding constraint the two values are therefore EQUAL —
+ * measured live at exactly 58,013ms — so the scan's internal deadline and the
+ * race that kills it fire on the same tick. The scan loses the tie and its honest
+ * «فُتح N من M، أعد النداء» payload is replaced by a generic tool error, which is
+ * the «الفحص الفوري لم يكتمل خلال المهلة» the operator saw five times running.
+ *
+ * The scan must return FIRST and by a margin wide enough to serialise its result
+ * (the aggregation over thousands of rows plus the session mirror). Being killed
+ * one tick before it would have reported is indistinguishable, to the operator,
+ * from the scan having failed.
+ */
+export const SCAN_RETURN_MARGIN_MS = 2_000;

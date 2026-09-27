@@ -55,6 +55,7 @@ import { checkClaims, checkJobClaims } from "./claim-check";
 import { toolsForIntent, filterToolDefinitions } from "./tool-scope";
 import type { TraceSummary } from "./task-loop";
 import { verifyAnswer } from "./verifier";
+import { sanitizeAssistantReply, hadToolMarkup } from "./reply-sanitize";
 import { recordMetrics } from "./metrics";
 import type { Confidence } from "./evidence";
 import {
@@ -168,7 +169,7 @@ export function systemPrompt(settings: AiSettings): string {
 <counting_rules>
 - **scan_emails** هي المصدر المفضّل لأي سؤال حصر أو إحصاء (كم عدد / كل / الحصر / قارن البريد بالنظام): مرّر subject لتصفية الموضوع، وexportCsv=true لقائمة كاملة على واتساب، وcompareTable/compareColumn للمقارنة بالنظام، وincludeAttachments=true حين يكون الرقم داخل المرفق لا الموضوع. ولا تبنِ أي رقم على search_emails فهي عيّنة لا حصر. لا تقسّم العمل إلى أجزاء يدويًا ولا تقل إن العدد أكبر من الحد الأقصى — قسّم بالتواريخ (sinceDate/beforeDate) واجمع الأرقام بنفسك.
 - **لا تُمرّر صفوف الحصر إلى generate_pdf** — لن تحملها كلها فينقص الملف. اطلب الملف من أداة الحصر نفسها (exportPdf/exportCsv) ليُبنى على الخادم كاملًا.
-- **scan_email_items** للبنود والكميات داخل ملفات/طلبات/أوامر التوريد بالبريد (تقرأ داخل PDF وتجمّع البنود). ترتيبها الافتراضي بالتكرار وهو المقصود بـ«أكتر بند اتكرر»؛ وordering=qty للكمية، وcontains للبحث عن صنف/ماركة، وnoAutoJob=true لإجابة فورية على ما فُحص. لا تقل «البنود داخل الملفات ولا أستطيع قراءتها».
+- **scan_email_items** للبنود والكميات داخل ملفات البريد (تقرأ داخل PDF وتجمّع البنود). ترتيبها الافتراضي بالتكرار = «أكتر بند اتكرر»؛ وordering=qty للكمية، وcontains للبحث عن صنف/ماركة. سؤال عدد/إجمالي («اتطلب كام مرة؟») يُحوَّل تلقائيًا لمهمة خلفية تُكمل الحصر وترسل النتيجة. لا تقل «البنود داخل الملفات ولا أستطيع قراءتها».
 - للحصر الكبير جدًا الذي يستحيل إتمامه الآن: **start_census_job** يعيد رقم مهمة فورًا ويرسل النتيجة والتقرير على واتساب عند الانتهاء؛ أخبره برقم المهمة ولا تنتظر داخل الرد، ولا تعِد الحصر بنفسك في نفس الجولة. وjob_status لحالة المهام، وcancel_job لإلغائها.
 - **هوية البند ليست رقم القطعة.** هوية البند تُبنى من مجموع بياناته: الوصف الكامل، المواصفات، الموديل، الماركة، المقاس، القدرة/السعة، النوع، الوحدة. البند بلا رقم قطعة يبقى داخل التحليل. اختلاف رقم القطعة ليس دليلًا على بندين مختلفين، وأي اختلاف جوهري في المواصفات يعني بندان مختلفان.
 - **السعر يخص بندًا واحدًا:** إن تعدّدت البنود (itemCount>1) فلا تجمع أسعارها في جدول واحد.
@@ -933,6 +934,27 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
       ...(traceData.length ? { data: traceData } : {}),
     },
   });
+
+  // The mechanism must never reach the operator. The model sometimes writes a
+  // tool call as PROSE (it was asked for a tool-free turn and had none left), and
+  // DeepSeek's control markers leak through the OpenAI-compatible endpoint — both
+  // arrive as literal markup on WhatsApp. Sanitising here means every downstream
+  // consumer (the reply, the stored transcript, the distiller) sees clean text.
+  const sanitized = sanitizeAssistantReply(finalText);
+  if (hadToolMarkup(finalText)) {
+    logger.warn(
+      { phone: input.phone, before: finalText.length, after: sanitized.length },
+      "AI assistant: stripped tool-call markup from the reply",
+    );
+  }
+  finalText = sanitized || "";
+  if (!finalText) {
+    // A message that was ONLY markup describes a call it could not make. Saying
+    // so is honest; sending an empty WhatsApp message is not possible, and
+    // letting the markup through shows the operator the machinery.
+    finalText =
+      "لم أستطع إكمال الطلب داخل هذه المحاولة. جرّب سؤالًا أكثر تحديدًا (مثل رقم أمر التوريد أو اسم البند) وسأجيب مباشرة.";
+  }
 
   // The extracted document text is intentionally kept out of the stored
   // history: it is large and only relevant to this one turn. The label keeps

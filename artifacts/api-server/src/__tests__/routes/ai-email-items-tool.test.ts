@@ -861,6 +861,45 @@ describe("oversize census hands off to a background job", () => {
     expect(res.data.note).toContain("لم تُفحص كل الرسائل");
   });
 
+  it("hands a COUNT question off even with a `contains` filter (a count is not a lookup)", async () => {
+    // The live MAICO case: «البند ده اتطلب كام مره والكمية الاجمالية كام؟». A
+    // `contains` LOOKUP is answered from what was read, but a COUNT is only true
+    // at 100% — so the same filter must be handed to the job that can reach 100%.
+    // Pre-fix this returned a partial sample as the count (and the interactive
+    // retry timed out five times, because 4,417 messages never finish in a reply).
+    extractPdfText.mockResolvedValue(
+      "Quantity UOM Part No Line Item\n1 4 Each 1000108319 EZQ 20/4 E Ex e MAICO FAN\n",
+    );
+    const pool = [1, 2].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC RFQ ${uid}`,
+      attachments: pdfAttachments([{ filename: `a${uid}.pdf`, content: Buffer.from("pdf") }]),
+    }));
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 3749,
+        }),
+    );
+    const res = (await executeTool(
+      "scan_email_items",
+      {
+        question: "البند ده اتطلب كام مره والكمية الاجمالية كام في كل طلبات التسعير",
+        contains: "EZQ 20/4",
+        docKind: "rfq",
+      },
+      // A live run always carries a deadline; the hand-off must happen BEFORE the
+      // first attachment is opened, or the scan spends the operator's whole wait
+      // and the run expires with no text (the «⏳ جاري البحث» that never ended).
+      { ...(ctx as object), deadline: Date.now() + 120_000 } as never,
+    )) as { data: { jobId?: number; note: string; jobArgs?: { contains?: string } } };
+    // The hand-off is the answer: the operator gets a job that finishes the
+    // census, never a partial number presented as the total.
+    expect(res.data.jobId).toBeGreaterThan(0);
+    expect(res.data.note).toContain("job_status");
+  });
+
   it("counts PURCHASE ORDERS only — an RFQ is read but excluded", async () => {
     // The operator's rule: a quotation is not an order. EDC sends both from the
     // same address with nearly identical item tables, so counting RFQs would
