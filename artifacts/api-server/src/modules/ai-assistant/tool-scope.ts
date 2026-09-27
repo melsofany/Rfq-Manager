@@ -41,6 +41,7 @@ const CORE_TOOLS = [
   "lookup_document", // one thing by its number — the most common single ask
   "search_database", // generic record search
   "count_database", // generic count
+  "learn_organization", // record a document-number pattern / entity alias the operator taught
   "remember_fact", // long-term memory (cheap, no I/O)
   "recall_memory",
   "forget_memory",
@@ -50,10 +51,19 @@ const CORE_TOOLS = [
 const EMAIL_TOOLS = [
   "scan_email_items", // the attachment/item census — the real analyser
   "scan_emails", // the envelope census (counts by month/sender)
-  "search_emails", // sample search
+  "search_emails", // sample search (inbox)
+  // «what did WE send?» is a distinct question the inbox can never answer — the
+  // Sent folder is found by its `\Sent` attribute, not a path. The prompt tells
+  // the model to look there, so the tool MUST survive scoping or the instruction
+  // is unsatisfiable.
+  "search_sent_emails",
   "list_mailboxes", // which mailbox, and the default
   "get_email_attachment", // open one file
   "read_email", // read one message
+  // Sending is a mail capability too. It is gated in CODE (requires
+  // `confirmed:true`), so exposing it in scope is safe — removing it would make
+  // "ابعت إيميل لـ EDC" unanswerable in the very scope that names the mail.
+  "send_email",
 ];
 
 /** Analytic questions about procurement data. */
