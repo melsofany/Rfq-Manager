@@ -10,6 +10,8 @@ import {
   AI_API_KEY,
   DEFAULT_BASE_URL,
   DEFAULT_MODEL,
+  GEMINI_BASE_URL,
+  GEMINI_MEDIA_MODEL,
   DEEPSEEK_API_KEY,
   DEEPSEEK_BASE_URL,
   DEEPSEEK_FALLBACK_MODELS,
@@ -18,6 +20,7 @@ import {
   isDailyQuotaExhausted,
   isDeepSeekEndpoint,
   isGeminiEndpoint,
+  isGeminiModelId,
 } from "./config";
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
@@ -449,9 +452,16 @@ export async function chatCompletion(opts: {
  * request would ask Gemini for a model it has never heard of and 404.
  */
 function resolveProvider(model: string, base: string): ModelProvider {
-  if (isDeepSeekEndpoint(base)) return "deepseek";
+  // The MODEL ID decides, because a Gemini id sent to DeepSeek (or the reverse)
+  // 404s on every request. Order matters: an operator may set
+  // `AI_MODEL=deepseek-v4-pro` while `AI_BASE_URL` still points at Gemini, and
+  // that id must still reach DeepSeek.
   if (model === DEEPSEEK_MODEL || DEEPSEEK_FALLBACK_MODELS.includes(model)) return "deepseek";
-  return isGeminiEndpoint(base) ? "gemini" : "deepseek";
+  if (isGeminiModelId(model)) return "gemini";
+  // An unrecognised id has no provider of its own, so the configured endpoint
+  // decides; a null base means the default endpoint.
+  const effective = base || DEFAULT_BASE_URL;
+  return isDeepSeekEndpoint(effective) ? "deepseek" : "gemini";
 }
 
 /** Everything needed to call one provider: base URL, key and its own chain. */
@@ -463,7 +473,15 @@ function providerConfig(provider: ModelProvider, primaryBase: string) {
       chain: [DEEPSEEK_MODEL, ...DEEPSEEK_FALLBACK_MODELS],
     };
   }
-  return { base: primaryBase, apiKey: AI_API_KEY, chain: FALLBACK_MODELS };
+  // Gemini's endpoint is NOT `primaryBase` when DeepSeek is the primary: the
+  // secondary chain would otherwise send Gemini model ids to DeepSeek's URL,
+  // where they 404 (or, as measured here, the whole request is rejected) —
+  // i.e. the cross-provider rescue would silently not exist. A Gemini primaryBase
+  // is still honoured, so a custom gateway keeps working; a null one resolves to
+  // the default endpoint (DeepSeek), hence to `GEMINI_BASE_URL` here.
+  const effective = primaryBase || DEFAULT_BASE_URL;
+  const base = isGeminiEndpoint(effective) ? effective : GEMINI_BASE_URL;
+  return { base, apiKey: AI_API_KEY, chain: FALLBACK_MODELS };
 }
 
 /**
@@ -687,8 +705,14 @@ export async function listAllModels(baseUrl?: string | null): Promise<string[]> 
   const primary = await listModels(baseUrl);
   const base = (baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const extras: string[] = [];
+  // The OTHER provider's models are offered too, because they are genuinely
+  // selectable: the chain falls back across providers, and Gemini remains
+  // configured for the media capabilities. Only the secondary is added — adding
+  // the primary again would duplicate it.
   if (!isDeepSeekEndpoint(base) && DEEPSEEK_API_KEY) {
     extras.push(...(await listModels(DEEPSEEK_BASE_URL)));
+  } else if (isDeepSeekEndpoint(base) && AI_API_KEY) {
+    extras.push(...(await listModels(GEMINI_BASE_URL)));
   }
   return Array.from(new Set([...primary, ...extras])).sort();
 }
@@ -712,15 +736,19 @@ export async function transcribeAudio(
   model?: string | null,
 ): Promise<string | null> {
   if (!AI_API_KEY) return null;
-  if (isGeminiEndpoint(baseUrl)) {
-    return extractWithGemini(buffer, mimeType, TRANSCRIBE_PROMPT, baseUrl, model);
+  // Voice notes are read by GEMINI regardless of the configured CHAT provider:
+  // DeepSeek has no transcription endpoint. The media endpoint is therefore taken
+  // from `GEMINI_BASE_URL`, not from `baseUrl` (which now points at DeepSeek) —
+  // deriving it from the chat base silently disabled every voice note when the
+  // primary changed.
+  const mediaBase = GEMINI_BASE_URL;
+  if (isGeminiEndpoint(mediaBase)) {
+    return extractWithGemini(buffer, mimeType, TRANSCRIBE_PROMPT, mediaBase, model);
   }
-  // DeepSeek exposes no /audio/transcriptions endpoint (404) and its files API
-  // takes images only, so a voice note cannot be transcribed there. Returning
-  // null lets the caller degrade to its "could not transcribe" notice instead of
-  // posting a request that can only fail.
-  if (isDeepSeekEndpoint(baseUrl)) return null;
-  return transcribeWithWhisper(buffer, mimeType, baseUrl);
+  // Only reached when the operator explicitly points the media endpoint at a
+  // non-Gemini whisper-compatible gateway.
+  if (isDeepSeekEndpoint(mediaBase)) return null;
+  return transcribeWithWhisper(buffer, mimeType, mediaBase);
 }
 
 const TRANSCRIBE_PROMPT =
@@ -749,10 +777,12 @@ export async function extractDocumentText(
   model?: string | null,
 ): Promise<string | null> {
   if (!AI_API_KEY) return null;
-  // DeepSeek accepts images but not PDFs (its files API rejects a PDF upload), so
-  // it cannot read a document; the local pdf-parse path handles PDFs instead.
-  if (!isGeminiEndpoint(baseUrl)) return null;
-  return extractWithGemini(buffer, mimeType, DOCUMENT_PROMPT, baseUrl, model);
+  // Documents are read by GEMINI for the same reason as voice notes: its native
+  // `inline_data` path accepts PDF and image bytes directly, and DeepSeek's files
+  // API rejects PDFs. The chat provider is irrelevant here, so the media endpoint
+  // is fixed to Gemini rather than derived from `baseUrl`.
+  if (!isGeminiEndpoint(GEMINI_BASE_URL)) return null;
+  return extractWithGemini(buffer, mimeType, DOCUMENT_PROMPT, GEMINI_BASE_URL, model);
 }
 
 /** MIME types Gemini reads as inline document data. */
@@ -780,11 +810,13 @@ async function extractWithGemini(
   baseUrl?: string | null,
   model?: string | null,
 ): Promise<string | null> {
-  // Voice notes and documents are a small share of traffic but still count
-  // against the same per-model daily quota as text, so walk the same fallback
-  // chain.
-  const candidates = [model || DEFAULT_MODEL, ...FALLBACK_MODELS].filter(
-    (m, i, arr) => arr.indexOf(m) === i,
+  // The media chain is a GEMINI chain: the caller's `model` is the CHAT model,
+  // which is DeepSeek in the default deployment and would 404 against
+  // `generateContent`. `GEMINI_MEDIA_MODEL` heads the chain and the Gemini
+  // fallbacks follow, so a retired media id degrades instead of failing.
+  const mediaModel = isGeminiModelId(model) ? model : null;
+  const candidates = [mediaModel || GEMINI_MEDIA_MODEL, ...FALLBACK_MODELS].filter(
+    (m, i, arr) => Boolean(m) && arr.indexOf(m) === i,
   );
   for (const candidate of candidates) {
     const text = await extractWithGeminiModel(buffer, mimeType, prompt, baseUrl, candidate);

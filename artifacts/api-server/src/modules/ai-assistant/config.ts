@@ -9,13 +9,26 @@ import { db, aiAssistantUsersTable, aiAssistantSettingsTable, employeesTable } f
 import { eq } from "drizzle-orm";
 import { logger } from "../../shared/logger";
 
-// Default to a model measured as RELIABLE, not merely the newest. Live probing
-// (2026-09) gave gemini-3.8-flash 1/5 success and gemini-3.7-flash 1/5 — both
-// answering 503 "high demand" — while 3.6-flash, 3.1-flash-lite and the
-// flash-lite aliases answered 5/5. The 503 Storm is what made the assistant
-// appear to stop replying: the reliable models were reached only after the
-// overloaded primary had burned the whole completion budget on retries.
-export const DEFAULT_MODEL = process.env.AI_MODEL || "gemini-3.6-flash";
+/**
+ * The DEFAULT provider is DeepSeek, not Gemini.
+ *
+ * Gemini's free tier caps EACH model at 20 requests/day, which was the single
+ * biggest source of operator reports («الوكيل بيقف», quota errors, tasks failing
+ * mid-run): the whole assistant went quiet once the day's budget was spent, and
+ * an overloaded model could burn the completion budget on 503 retries before a
+ * healthy one was ever reached. DeepSeek has no such per-model daily cap on this
+ * key and was measured answering tool calls reliably (see `ai-deepseek.test.ts`
+ * and the live probe: `deepseek-flash`, `deepseek-v4-pro` both returned
+ * `tool_calls`).
+ *
+ * Gemini remains configured as the SECOND provider (it is still required for
+ * voice notes and document reading, which DeepSeek cannot do), so the provider
+ * chain simply inverts: DeepSeek primary, Gemini rescue.
+ *
+ * `AI_MODEL` still overrides everything, so a Gemini-only deployment is one env
+ * var away (`AI_MODEL=gemini-3.6-flash`).
+ */
+export const DEFAULT_MODEL = process.env.AI_MODEL || "deepseek-v4-pro";
 
 /**
  * Preferred model for FAST-path questions (a single lookup, a count).
@@ -27,22 +40,69 @@ export const DEFAULT_MODEL = process.env.AI_MODEL || "gemini-3.6-flash";
  * analytical questions that actually need it. The id must be a model measured as
  * reliable on this endpoint (see FALLBACK_MODELS); it is skipped automatically if
  * it is exhausted, since it joins the same fallback chain.
+ *
+ * GEMINI-ONLY. On a DeepSeek request the light model is DeepSeek's own fast id
+ * (the head of `DEEPSEEK_FALLBACK_MODELS`) — see `modelForPath`.
  */
 export const FAST_MODEL = process.env.AI_FAST_MODEL || "gemini-3.1-flash-lite";
-// Default to Google Gemini's OpenAI-compatible endpoint. Any OpenAI-compatible
-// gateway still works by setting AI_BASE_URL.
-export const DEFAULT_BASE_URL =
-  process.env.AI_BASE_URL || "https://generativelanguage.googleapis.com/v1beta/openai";
+// Default to DeepSeek's OpenAI-compatible endpoint. Any OpenAI-compatible
+// gateway still works by setting AI_BASE_URL; setting it back to the Gemini URL
+// makes Gemini primary again.
+export const DEFAULT_BASE_URL = process.env.AI_BASE_URL || "https://api.deepseek.com/v1";
 
 /**
- * DeepSeek — the SECOND provider, used as a fallback when Gemini's free tier is
- * out of quota.
+ * The Gemini endpoint, used for the capabilities DeepSeek does NOT have.
+ *
+ * Voice notes (ogg/opus) and document/PDF reading go through Gemini's native
+ * `generateContent` + `inline_data`, which accepts any MIME type; DeepSeek has
+ * no transcription endpoint and rejects PDFs. Those two features must therefore
+ * keep pointing at Gemini even when the CHAT provider is DeepSeek — deriving
+ * them from the chat base URL would silently disable both the moment the primary
+ * switched, and a voice note would degrade to «تعذّرت القراءة» with no error.
+ *
+ * `AI_GEMINI_BASE_URL` overrides it; otherwise it is the Gemini OpenAI-compat
+ * URL with the trailing `/openai` stripped by the caller that needs the native
+ * path.
+ */
+export const GEMINI_BASE_URL =
+  process.env.AI_GEMINI_BASE_URL ||
+  process.env.GEMINI_BASE_URL ||
+  "https://generativelanguage.googleapis.com/v1beta/openai";
+
+/**
+ * The Gemini model used for voice notes and document reading.
+ *
+ * Independent of `DEFAULT_MODEL`: when the chat provider is DeepSeek, feeding a
+ * DeepSeek model id to Gemini's native endpoint would 404 on every transcription.
+ * The chain of Gemini models is tried in `extractWithGemini`, and this is its
+ * head — kept as a plain reliable Gemini id rather than derived from the chat
+ * model.
+ */
+export const GEMINI_MEDIA_MODEL = process.env.AI_GEMINI_MEDIA_MODEL || "gemini-3.6-flash";
+
+/**
+ * Whether a MODEL ID is a Gemini model.
+ *
+ * Distinct from `isGeminiEndpoint`, which tests a URL. The media readers are
+ * handed the CHAT model (DeepSeek in the default deployment) and must substitute
+ * a Gemini id for it rather than send `deepseek-chat` to `generateContent`.
+ * Kept as a simple prefix test because the ids are stable and a false negative
+ * only costs the fallback chain one extra candidate.
+ */
+export function isGeminiModelId(model?: string | null): boolean {
+  return /(^|\/)gemini[-.]/i.test(model || "");
+}
+
+/**
+ * DeepSeek — the PRIMARY provider since the reliability rewrite.
  *
  * Gemini's free tier caps a single model at 20 requests/day, so the whole
- * assistant goes quiet once the day's budget is spent. A different provider has
- * its own budget, so adding one is the only fix that does not depend on Google
- * granting more. DeepSeek speaks the same OpenAI wire format, so it drops into
- * the existing client with no new dependency.
+ * assistant went quiet once the day's budget was spent; an overloaded model could
+ * also burn the completion budget on 503 retries before a healthy one was tried.
+ * DeepSeek has no such per-model daily cap on this key and speaks the same OpenAI
+ * wire format, so it drops into the existing client with no new dependency.
+ * Gemini stays configured as the second provider because the media readers below
+ * still need its native endpoint.
  *
  * Two provider differences the client must handle:
  * - The reasoning variant (`deepseek-v4-pro`) returns `reasoning_content` on its
@@ -53,26 +113,26 @@ export const DEFAULT_BASE_URL =
  *   observed 400 — it preserves the real reasoning when present and supplies a
  *   placeholder when absent. See `withReasoningEcho` in `llm.ts`.
  * - There is no `/audio/transcriptions` endpoint and no PDF input (the files API
- *   accepts images only), so voice notes and PDFs degrade to the local readers
- *   rather than to a provider call. See `transcribeAudio`/`extractDocumentText`.
+ *   accepts images only), so voice notes and PDFs are read by Gemini's native
+ *   endpoint instead of by the chat provider. See
+ *   `transcribeAudio`/`extractDocumentText`, which pin `GEMINI_BASE_URL`.
  */
 export const DEEPSEEK_BASE_URL = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1";
-// `deepseek-chat` is the stable alias (measured resolving to `deepseek-flash`).
-// The models endpoint on this key lists exactly `deepseek-flash` and
+// `deepseek-v4-pro` is the flagship reasoning model; the models endpoint on this
+// key lists exactly `deepseek-flash` (the alias `deepseek-chat`) and
 // `deepseek-v4-pro`.
-export const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-chat";
+export const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL || "deepseek-v4-pro";
 
 /**
- * DeepSeek's own fallback chain.
+ * DeepSeek's own fallback chain: the fast/cheap model behind the reasoning one.
  *
- * `deepseek-v4-pro` is listed FIRST because it is the only model on this key
- * measured to accept an image part; `deepseek-chat` (`deepseek-flash`) answers
- * text and tool calls but rejects images with a 400. An image question is a
- * normal case here (the operator photographs a document), so the vision-capable
- * model must get the first try. The order is also why a 400 capability mismatch
- * advances the chain instead of aborting it — see `isCapabilityMismatch`.
+ * `deepseek-chat` resolves to `deepseek-flash` and answered a tool call in ~1.0s
+ * live (measured `tool_calls: true` with a real tool schema), so it is the
+ * natural second try when the reasoning model is slow or unavailable. A 400
+ * capability mismatch (an image part, say) advances the chain rather than
+ * aborting it — see `isCapabilityMismatch`.
  */
-export const DEEPSEEK_FALLBACK_MODELS = (process.env.DEEPSEEK_FALLBACK_MODELS || "deepseek-v4-pro")
+export const DEEPSEEK_FALLBACK_MODELS = (process.env.DEEPSEEK_FALLBACK_MODELS || "deepseek-chat")
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);
@@ -185,8 +245,19 @@ export function modelForPath(
   baseUrl?: string | null,
 ): string {
   if (path === "deep") return primary;
-  if (isDeepSeekEndpoint(baseUrl)) return primary;
-  if (primary === DEEPSEEK_MODEL || DEEPSEEK_FALLBACK_MODELS.includes(primary)) return primary;
+  // Detection mirrors `resolveProvider`: the model ID decides first (a Gemini id
+  // sent to DeepSeek, or the reverse, 404s), then the endpoint. `baseUrl` is
+  // usually null — the default endpoint is used — so checking only the primary id
+  // against `DEEPSEEK_MODEL` would misroute an operator who picked `deepseek-chat`
+  // and hand Gemini's fast id to DeepSeek.
+  const isDeepSeek =
+    /^deepseek/i.test(primary) ||
+    (!isGeminiModelId(primary) && isDeepSeekEndpoint(baseUrl || DEFAULT_BASE_URL));
+  if (isDeepSeek) {
+    // Prefer a configured DeepSeek fallback as the light model; fall back to the
+    // primary when none is set so routing can never leave no model to call.
+    return DEEPSEEK_FALLBACK_MODELS[0] || primary;
+  }
   return FAST_MODEL || primary;
 }
 

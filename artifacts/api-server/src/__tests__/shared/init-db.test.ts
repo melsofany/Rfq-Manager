@@ -63,12 +63,14 @@ describe("init-db migrations", () => {
     // `loadSettings()` prefers the DB row, so a DDL default that drifts from
     // `DEFAULT_MODEL` pins production to a model the code never chose. That is how
     // the deployed assistant ended up on `gemini-3.8-flash` after the code moved
-    // to `gemini-3.6-flash`, spending its per-model budget on 503s.
+    // to `gemini-3.6-flash`, spending its per-model budget on 503s — and, after
+    // the provider switch, how it would have stayed on Gemini while the code
+    // defaulted to DeepSeek.
     const agentConfig = readFileSync(resolve(here, "../../modules/ai-assistant/config.ts"), "utf8");
     const match = agentConfig.match(
       /DEFAULT_MODEL\s*=\s*process\.env\.AI_MODEL\s*\|\|\s*"([^"]+)"/,
     );
-    expect(match, "DEFAULT_MODEL must be a literal Gemini id").not.toBeNull();
+    expect(match, "DEFAULT_MODEL must be a literal model id").not.toBeNull();
     const defaultModel = match![1];
 
     const ddlDefault = source.match(/model TEXT NOT NULL DEFAULT '([^']+)'/);
@@ -76,8 +78,11 @@ describe("init-db migrations", () => {
     expect(ddlDefault![1]).toBe(defaultModel);
 
     // …and the seed migration must pin to that same value, so an existing row
-    // carrying the retired id is moved off it on the next boot.
+    // carrying the retired Gemini id is moved off it on the next boot (the
+    // deployed row held `gemini-3.6-flash`, which `loadSettings()` would have
+    // preferred over the new DeepSeek default forever).
     expect(source).toContain(`SET model = '${defaultModel}'`);
+    expect(source).toContain("'gemini-3.6-flash'");
     expect(source).toContain("'gemini-3.8-flash'");
   });
 });

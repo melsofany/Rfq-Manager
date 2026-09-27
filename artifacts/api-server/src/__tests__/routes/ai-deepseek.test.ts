@@ -22,12 +22,16 @@ describe("DeepSeek provider (second provider, cross-provider fallback)", () => {
     const {
       DEEPSEEK_BASE_URL,
       DEEPSEEK_MODEL,
+      DEEPSEEK_FALLBACK_MODELS,
       isDeepSeekConfigured,
       isDeepSeekEndpoint,
       isAiConfigured,
     } = await import("../../modules/ai-assistant/config");
     expect(DEEPSEEK_BASE_URL).toBe("https://api.deepseek.com/v1");
-    expect(DEEPSEEK_MODEL).toBe("deepseek-chat");
+    // The flagship reasoning model is the default primary now; `deepseek-chat`
+    // (the `deepseek-flash` alias) is its first fallback.
+    expect(DEEPSEEK_MODEL).toBe("deepseek-v4-pro");
+    expect(DEEPSEEK_FALLBACK_MODELS).toContain("deepseek-chat");
     expect(isDeepSeekConfigured).toBe(true);
     expect(isAiConfigured).toBe(true);
     expect(isDeepSeekEndpoint(DEEPSEEK_BASE_URL)).toBe(true);
@@ -36,28 +40,30 @@ describe("DeepSeek provider (second provider, cross-provider fallback)", () => {
     );
   });
 
-  it("falls through to DeepSeek when EVERY Gemini model is out of quota", async () => {
-    // The failure this whole change exists for: the Gemini free tier is per
-    // model, so once the whole chain 429s the assistant used to go silent. With
-    // a second provider configured the chain must continue onto it.
+  it("falls through to Gemini when EVERY DeepSeek model is out of quota", async () => {
+    // The provider chain must survive either provider running dry. DeepSeek is the
+    // primary now, so this exercises the reverse direction: every DeepSeek model
+    // 429s and the chain continues onto Gemini, the second configured provider.
     fetchMock.mockImplementation(async (url: string, init: any) => {
-      const body = JSON.parse(init.body);
       if (String(url).includes("api.deepseek.com")) {
-        return {
-          ok: true,
-          text: async () =>
-            JSON.stringify({ choices: [{ message: { content: "إجابة من DeepSeek" } }] }),
-        };
+        return { ok: false, status: 429, text: async () => "quota exceeded" };
       }
-      return { ok: false, status: 429, text: async () => "quota exceeded" };
+      return {
+        ok: true,
+        text: async () =>
+          JSON.stringify({ choices: [{ message: { content: "إجابة من Gemini" } }] }),
+      };
     });
 
     const { chatCompletion } = await import("../../modules/ai-assistant/llm");
-    const res = await chatCompletion({ model: "gemini-3.6-flash", messages: [] });
+    const res = await chatCompletion({
+      model: "deepseek-v4-pro",
+      baseUrl: "https://api.deepseek.com/v1",
+      messages: [],
+    });
 
-    expect(res.content).toBe("إجابة من DeepSeek");
-    expect(res.providerUsed).toBe("deepseek");
-    expect(res.modelUsed).toBe("deepseek-chat");
+    expect(res.content).toBe("إجابة من Gemini");
+    expect(res.providerUsed).toBe("gemini");
     // The Gemini key must never be sent to DeepSeek, and vice versa.
     const deepseekCall = fetchMock.mock.calls.find((c) =>
       String(c[0]).includes("api.deepseek.com"),
@@ -181,14 +187,24 @@ describe("DeepSeek provider (second provider, cross-provider fallback)", () => {
     expect(chain[0].apiKey).toBe("deepseek-test-key");
   });
 
-  it("uses the primary model for the fast path on DeepSeek (the light id is Gemini-only)", async () => {
-    const { modelForPath, FAST_MODEL } = await import("../../modules/ai-assistant/config");
+  it("routes the DeepSeek fast path to the light DeepSeek model, not a Gemini id", async () => {
+    const { modelForPath, FAST_MODEL, DEEPSEEK_FALLBACK_MODELS } =
+      await import("../../modules/ai-assistant/config");
+    // Gemini primary: its own light model.
     expect(modelForPath("gemini-3.6-flash", "fast")).toBe(FAST_MODEL);
-    // On DeepSeek the Gemini fast id does not exist — use the primary.
-    expect(modelForPath("deepseek-chat", "fast", "https://api.deepseek.com/v1")).toBe(
-      "deepseek-chat",
+    // DeepSeek primary: the light DeepSeek model, because a Gemini fast id does
+    // not exist on DeepSeek and would 404 on every fast-path question.
+    expect(modelForPath("deepseek-v4-pro", "fast", "https://api.deepseek.com/v1")).toBe(
+      DEEPSEEK_FALLBACK_MODELS[0],
     );
-    expect(modelForPath("deepseek-v4-pro", "fast", null)).toBe("deepseek-v4-pro");
+    expect(modelForPath("deepseek-v4-pro", "fast", "https://api.deepseek.com/v1")).not.toBe(
+      "deepseek-v4-pro",
+    );
+    // An operator who picked the light DeepSeek model explicitly (and left
+    // `baseUrl` null) must still route to a DeepSeek id, never to Gemini's
+    // fast id, which DeepSeek does not serve.
+    expect(modelForPath("deepseek-chat", "fast", null)).toBe(DEEPSEEK_FALLBACK_MODELS[0]);
+    expect(modelForPath("deepseek-chat", "fast", null)).not.toBe(FAST_MODEL);
   });
 
   it("echoes reasoning_content on an assistant tool-call turn (DeepSeek rejects it otherwise)", async () => {
@@ -255,30 +271,48 @@ describe("DeepSeek provider (second provider, cross-provider fallback)", () => {
     expect(res.providerUsed).toBe("deepseek");
   });
 
-  it("does not attempt transcription on DeepSeek (no audio endpoint)", async () => {
-    // A 404 from a non-existent endpoint would be logged as a provider failure
-    // for something the provider simply does not offer.
+  it("still transcribes a voice note via Gemini when the CHAT provider is DeepSeek", async () => {
+    // The chat provider must not decide the media provider: DeepSeek has no
+    // transcription endpoint, so a voice note is read by Gemini regardless. This
+    // is the regression guard for the switch — deriving the media endpoint from
+    // the chat base URL silently disabled every voice note.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: "نص" }] } }] }),
+    });
     const { transcribeAudio } = await import("../../modules/ai-assistant/llm");
     const text = await transcribeAudio(
       Buffer.from("ogg"),
       "audio/ogg",
-      "https://api.deepseek.com/v1",
-      "deepseek-chat",
+      "https://api.deepseek.com/v1", // the CHAT provider
+      "deepseek-v4-pro", // the CHAT model
     );
-    expect(text).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(text).toBe("نص");
+    // It went to GEMINI's native endpoint, with a Gemini model id — never to
+    // DeepSeek's (non-existent) audio endpoint, and never with `deepseek-v4-pro`.
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).toContain("generativelanguage.googleapis.com");
+    expect(url).toContain(":generateContent");
+    expect(url).not.toContain("deepseek");
+    expect(url).not.toContain("deepseek-v4-pro");
   });
 
-  it("does not attempt document extraction on DeepSeek (no PDF input)", async () => {
+  it("still reads a document via Gemini when the CHAT provider is DeepSeek", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: "محتوى" }] } }] }),
+    });
     const { extractDocumentText } = await import("../../modules/ai-assistant/llm");
     const text = await extractDocumentText(
       Buffer.from("%PDF-1.4"),
       "application/pdf",
       "https://api.deepseek.com/v1",
-      "deepseek-chat",
+      "deepseek-v4-pro",
     );
-    expect(text).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(text).toBe("محتوى");
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).toContain("generativelanguage.googleapis.com");
+    expect(url).not.toContain("deepseek");
   });
 
   it("queries each provider with its own key when listing models", async () => {
