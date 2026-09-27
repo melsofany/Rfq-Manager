@@ -1642,6 +1642,34 @@ Closed the last gaps in the procurement-agent upgrade.
 - Tests: `ai-scan-persistence.test.ts` (2 — both fail when persistence is disabled) + 2 confidence tests in `ai-agent.test.ts` (both fail when `confidence` is not recorded) + the `byConfidence` breakdown. **783 api-server tests** pass; tsc (libs + api-server + portal) clean; repo-wide prettier clean; api-server + portal builds clean.
 - Deploy: PR #171 squash-merged `3907434`; CI + Deploy-to-Render workflows success; `/api/healthz` 200 and `/api/ai-assistant/{metrics,jobs}` 401 (mounted behind auth).
 
+## One unified agent engine replaces the duplicated legacy + Mastra loops (PR #209)
+
+Two tool-calling loops (`agent.ts` + `mastra-agent.ts`) implemented the same four
+hardened behaviours twice — how a defect appears in one engine and not the other
+(the `job_status`/invented-progress incident was diagnosed against one path while
+the other was live).
+
+- `engine.ts` is now the ONE loop, over `chatCompletion`. Model chain, per-model
+  quota memory, warm-model promotion, Gemini↔DeepSeek rescue and the run budget
+  all apply unchanged. Tools are the existing registry; control flow is the shared
+  `TaskTrace`. `runToolLoop` / `ToolExchange` / `ToolLoopResult` keep the same
+  shapes, so `agent.ts`, `claim-check.ts`, `index.ts` and the portal are untouched.
+- Removed `mastra-agent.ts`, `mastra-model.ts`, `@mastra/core` and the `@ai-sdk/*`
+  bridge (5 deps, ~2556 lockfile lines; bundle has 0 `@mastra` refs).
+- **A provider fault propagates when nothing was gathered** (`exchanges.length === 0`)
+  so the caller records an honest quota/timeout outcome; it salvages an answer from
+  the transcript only when evidence already exists. Do not swallow the zero-evidence
+  fault — it reads as a normal reply built from no data.
+- **`mastraEngineEnabled()` now always returns true** (no engine switch); `engineName()`
+  returns `"unified"` and is what the logs/metrics report.
+- The four guarantees are covered by `ai-unified-engine.test.ts` (11 tests; **4 fail
+  when the dedup cache, stuck branch, extension predicate or `toolChoice:"none"` are
+  removed**). The engine tests drive a scripted `chatCompletion` — now the only
+  provider seam to mock.
+- `pnpm` in this sandbox is only reachable at `~/.cache/node/corepack/v1/pnpm/12.6.0/pnpm`
+  (`pnpm` is not on PATH); `pnpm install --no-frozen-lockfile` then run
+  `--frozen-lockfile` to prove CI compatibility.
+
 ## Item identity, PO-only counting, source scope (feat/ai-item-identity)
 
 Live operator report («بقولك من الميل مش قاعده البيانات» + «PO فقط وليس RFQ او
