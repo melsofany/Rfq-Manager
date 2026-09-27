@@ -446,6 +446,17 @@ export interface CensusJobArgs {
   limit?: number;
   /** Which document kind the ranking is about (`po` default, `rfq`, `all`). */
   docKind?: "po" | "rfq" | "all";
+  /**
+   * A part / brand / Line Item filter applied to the PARSED rows.
+   *
+   * Required for «البند ده اتطلب كام مرة وكميته الإجمالية؟»: the occurrence count
+   * and the summed quantity are only true once EVERY matched document has been
+   * opened and filtered — a partial count is a different number, presented as the
+   * answer. Live, the operator asked exactly this about the MAICO EZQ 20/4 fan and
+   * got five consecutive timeouts, because `contains` was a filter the background
+   * path could not carry and the interactive scan could not finish.
+   */
+  contains?: string;
 }
 
 export async function startCensusJob(opts: {
@@ -477,7 +488,9 @@ export async function startCensusJob(opts: {
 }): Promise<CreateJobResult> {
   const jobKey = `census:${opts.args.mailbox}:${opts.args.from ?? ""}:${opts.args.subject ?? ""}:${
     opts.args.query ?? ""
-  }:${opts.args.sinceDate ?? ""}:${opts.args.beforeDate ?? ""}`;
+  }:${opts.args.sinceDate ?? ""}:${opts.args.beforeDate ?? ""}:${opts.args.docKind ?? ""}:${
+    opts.args.contains ?? ""
+  }`;
 
   return createJob({
     phone: opts.phone,
@@ -631,6 +644,10 @@ export function describeCensusQuery(args: CensusJobArgs | Record<string, any>): 
   if (a.from) bits.push(`من ${String(a.from)}`);
   if (a.subject) bits.push(`موضوع «${String(a.subject)}»`);
   if (a.query) bits.push(`نص «${String(a.query)}»`);
+  // The part / brand filter is the defining constraint of a targeted census
+  // («البند ده اتطلب كام مرة؟»), so the report must name it — otherwise the ten
+  // answers describe a search the operator cannot recognise as their own.
+  if (a.contains) bits.push(`بند «${String(a.contains)}»`);
   if (a.sinceDate) bits.push(`من تاريخ ${String(a.sinceDate)}`);
   if (a.beforeDate) bits.push(`حتى ${String(a.beforeDate)}`);
   if (a.mailbox) bits.push(`صندوق: ${String(a.mailbox)}`);
