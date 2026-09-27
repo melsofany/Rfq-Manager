@@ -1,5 +1,48 @@
 # Rfq-Manager вЂљГ„Г® Repository Notes
 
+## A reasoning model's thinking is charged against `max_tokens` (PR #217)
+
+- **Live report**: «نفدت محاولات المعالجة قبل الوصول لرد نهائي، لكن تم تنفيذ خطوات
+  فعلية: scan_email_items» — three times in a row on the same question, right after
+  a successful tool call.
+- **Cause**: `max_tokens` was a flat **1600**, a ceiling chosen for a chat model,
+  applied to a REASONING model (`deepseek-v4-pro`). DeepSeek charges
+  `reasoning_content` against the same budget as the reply. Reproduced against the
+  live API with a real 120-row tool result: at 1600 the reply came back
+  `finish_reason:"length"`, `completion_tokens:1600` **all** attributed to
+  `reasoning_tokens`, `content:""`; at 4000 the same request answered in 440 chars.
+- **The engine then treated the empty turn as the answer** (`finalText =
+  result.content`), so a run that had already done its work reported itself as
+  answered while the operator got the generic exhausted notice. Same family as the
+  `filter(Boolean)` and false-`truncated` incidents: a capability doing something
+  other than it claims.
+- **Fix**: `maxTokensFor(model)` gives reasoning ids (`deepseek-v4*`/`-r*`/
+  `-reasoner`) **8000** and leaves 1600 on ids whose budget *is* the reply. An empty
+  turn is no longer an answer, and a `finish_reason:"length"` response gets one
+  schema-free re-ask (genuinely different: less input leaves more room for the
+  reply). Both new tests **fail against the pre-fix engine** (verified by stashing).
+- **Latency at the new ceiling**: 17.8s / 24.9s / 32.6s live — inside the 45s
+  attempt timeout. Raising `max_tokens` does not lengthen a SHORT answer; the model
+  stops when it is done.
+- **Diagnose by replaying the request, not by reading the code**: the `finish_reason`
+  and the `reasoning_tokens` breakdown are visible in one live call. Check them
+  before blaming the prompt or the loop.
+
+## A progress heartbeat must never destroy the work (PR #217)
+
+- **Live evidence (job 247)**: the census had scanned 300 messages and parsed 907
+  items, then a transient `Failed query: update "ai_assistant_jobs"…` on a PROGRESS
+  write marked the whole job `failed` and discarded the result. Replaying the same
+  update against the real database succeeds — so it was transient, not a schema
+  problem.
+- **Fix**: `report()` writes progress best-effort (`.catch` + `logger.warn`). Progress
+  is advisory state; only the WORK decides the job's fate. A persistent fault stays
+  visible in the logs.
+- **Do not** extend this to `status`/`result` — those writes are the job's actual
+  outcome and must still surface a failure.
+- Test: `keeps the WORK when only the progress write fails` — **fails against the
+  pre-fix `jobs.ts`** (verified by stashing it).
+
 ## An unread mailbox must never answer as an empty one (feat/mastra-agent-engine, PR #188)
 
 - **Live report**: «هتخش للميل info … أوامر الشراء الواردة من EDC» → «لم يتم العثور
