@@ -63,6 +63,11 @@ interface ScriptedRound {
   throws?: boolean;
   /** When set, the round is the model's final answer (no tool calls). */
   answer?: string;
+  /**
+   * A reasoning model that exhausted its token budget on `reasoning_content`:
+   * empty text with `finishReason:"length"`. Measured live on `deepseek-v4-pro`.
+   */
+  truncated?: boolean;
 }
 
 const chatCompletion = vi.fn();
@@ -91,15 +96,19 @@ function installScriptedModel() {
     const round = script[roundIdx++];
     if (!round) return Promise.resolve({ content: "تم", toolCalls: [], finishReason: "stop" });
     // `toolChoice:"none"` forbids tool calls, exactly as a real provider would
-    // honour it on the forced final round.
+    // honour it on the forced final round. A `truncated` round models a reasoning
+    // model that spent its whole token budget thinking: empty text + `length`.
     if (opts.toolChoice === "none") {
       return Promise.resolve({
-        content: round.answer ?? round.thought ?? "تم",
+        content: round.truncated ? "" : (round.answer ?? round.thought ?? "تم"),
         toolCalls: [],
-        finishReason: "stop",
+        finishReason: round.truncated ? "length" : "stop",
       });
     }
     if (round.throws) return Promise.reject(new Error("provider exploded"));
+    if (round.truncated) {
+      return Promise.resolve({ content: "", toolCalls: [], finishReason: "length" });
+    }
     if (round.answer !== undefined || !round.tool) {
       return Promise.resolve({
         content: round.answer ?? "تم",
@@ -344,5 +353,39 @@ describe("unified engine: provider-agnostic by construction", () => {
     const first = chatCompletion.mock.calls[0][0];
     expect(first.model).toBe("gemini-3.6-flash");
     expect(first.toolChoice).toBe("auto");
+  });
+});
+
+describe("unified engine: a truncated answer is not an answer", () => {
+  it("re-asks tool-free when the model spends its whole budget thinking", async () => {
+    // The live failure: the model called its tool successfully, then returned an
+    // empty turn (reasoning tokens ate `max_tokens`) — and the loop assigned that
+    // empty string as the answer, so `finalText` was "" and the operator got
+    // «نفدت محاولات المعالجة قبل الوصول لرد نهائي» on three consecutive tries.
+    // The tool-free re-ask is genuinely different: fewer input tokens leave more
+    // budget for the reply.
+    script = [
+      { tool: "scan_email_items", args: {}, result: "853 items" },
+      { truncated: true },
+      { answer: "أكثر بند تكراراً: WATER HEATER ARISTON (20 أمر)" },
+    ];
+
+    const out = await run(3);
+
+    expect(out.finalText).toContain("WATER HEATER ARISTON");
+  });
+
+  it("does not report an empty turn as an answer", async () => {
+    // Guards the assignment itself: with no re-ask available the result must be
+    // null so the caller emits an honest notice, never "".
+    script = [
+      { tool: "scan_email_items", args: {}, result: "853 items" },
+      { truncated: true },
+      { truncated: true },
+    ];
+
+    const out = await run(3);
+
+    expect(out.finalText).toBeNull();
   });
 });

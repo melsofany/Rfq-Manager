@@ -374,3 +374,21 @@ describe("startup provider-capacity log", () => {
     expect(deepseek?.model).toMatch(/deepseek/i);
   });
 });
+
+describe("output-token ceiling by model kind", () => {
+  it("gives a reasoning model more room than its thinking needs", async () => {
+    // Measured live on `deepseek-v4-pro` with a real 120-row tool result: at
+    // `max_tokens:1600` the reply came back EMPTY with `finish_reason:"length"`
+    // and all 1600 completion tokens charged to `reasoning_tokens`. The answer
+    // was discarded and the operator saw «نفدت محاولات المعالجة» three times in a
+    // row. A reasoning model's thinking is charged against the same budget as its
+    // reply, so the ceiling has to exceed the thinking.
+    const { maxTokensFor } = await import("../../modules/ai-assistant/llm");
+    expect(maxTokensFor("deepseek-v4-pro")).toBeGreaterThan(4000);
+    expect(maxTokensFor("deepseek-reasoner")).toBeGreaterThan(4000);
+    // A non-reasoning id spends its whole budget on the reply, so it keeps the
+    // small ceiling.
+    expect(maxTokensFor("deepseek-chat")).toBeLessThanOrEqual(2000);
+    expect(maxTokensFor("gemini-3.6-flash")).toBeLessThanOrEqual(2000);
+  });
+});

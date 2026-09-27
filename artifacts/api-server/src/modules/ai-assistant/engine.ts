@@ -117,6 +117,13 @@ export function mastraEngineEnabled(): boolean {
  * instruction and keep emitting tool calls until the budget was gone, leaving
  * the operator with silence. Used both for the forced final round and as the
  * rescue when a provider faults mid-run.
+ *
+ * A truncated response is treated as NO answer, not as an empty one. A reasoning
+ * model that exhausts `max_tokens` on its invisible thinking returns
+ * `finish_reason:"length"` with `content:""` — and it does so exactly when the
+ * question is hardest, which is when the operator most needs the reply. The
+ * caller turns `null` into an honest notice; returning the empty string would
+ * let an empty turn be sent as the answer.
  */
 async function answerWithoutTools(
   messages: ChatMessage[],
@@ -130,7 +137,14 @@ async function answerWithoutTools(
       toolChoice: "none",
       signal: opts.signal,
     });
-    return String(res.content ?? "").trim() || null;
+    const text = String(res.content ?? "").trim();
+    if (!text && res.finishReason === "length") {
+      logger.warn(
+        { phone: opts.phone, model: opts.model },
+        "AI assistant: forced answer exhausted its token budget with no text",
+      );
+    }
+    return text || null;
   } catch (err) {
     logger.warn({ err, phone: opts.phone }, "AI assistant: forced-answer turn failed");
     return null;
@@ -266,7 +280,22 @@ export async function runToolLoop(opts: {
       rounds += 1;
 
       if (result.toolCalls.length === 0) {
-        finalText = result.content;
+        // An EMPTY turn is not an answer. A reasoning model that spent its whole
+        // `max_tokens` on thinking returns no text and `finish_reason:"length"`;
+        // assigning that empty string let the run be reported as "answered"
+        // while the operator received the generic «نفدت محاولات المعالجة» notice.
+        // Leaving it null makes the caller say what actually happened.
+        finalText = result.content?.trim() || null;
+        if (!finalText && result.finishReason === "length") {
+          logger.warn(
+            { phone: opts.phone, model: opts.model, round },
+            "AI assistant: answer truncated by the token budget",
+          );
+          // The thinking was cut short, so the evidence is already in the
+          // transcript and the schema-free re-ask genuinely can differ (a smaller
+          // request leaves more of the budget for the reply itself).
+          finalText = await answerWithoutTools(messages, opts);
+        }
         break;
       }
 
