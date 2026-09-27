@@ -298,8 +298,12 @@ describe("AI assistant agent loop", () => {
     executeTool.mockResolvedValue({ ok: false, error: "nope" });
     const { runAgent } = await import("../../modules/ai-assistant/agent");
     const out = await runAgent({ phone: "2010", text: "?" });
+    // The tool is NAMED so the operator can retry differently, but a FAILED call
+    // must never be reported as work performed — the live answer announced
+    // database tools as «خطوات فعلية» on a mail question that had removed them.
     expect(out.reply).toContain("search_database");
-    expect(out.reply).toContain("نفدت محاولات المعالجة");
+    expect(out.reply).not.toContain("تم تنفيذ خطوات فعلية");
+    expect(out.reply).toContain("لم تنجح");
   });
 
   it("reads a document and feeds the extracted text into the same turn", async () => {
