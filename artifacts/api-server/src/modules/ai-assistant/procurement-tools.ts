@@ -476,54 +476,125 @@ export async function getLatestSupplierPrice(opts: {
       price: offerItemsTable.price,
       date: sql<string>`${offerItemsTable.createdAt}::text`,
       source: sql<string>`'offer'`,
-      partNo: sql<string>`null`,
+      partNo: rfqItemsTable.partNo,
       supplierId: offersTable.supplierId,
       poId: sql<number>`null`,
+      // The asked-for row must be identifiable as the SAME item, so the reply can
+      // show which RFQ line each price came from instead of implying they are one.
+      description: rfqItemsTable.description,
+      lineItem: rfqItemsTable.lineItem,
       inspect: offerItemsTable.createdAt,
     })
     .from(offerItemsTable)
     .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+    // Joining the RFQ item is not an optimisation: without it this query had NO
+    // where clause and returned the newest offer LINES IN THE WHOLE DATABASE,
+    // then labelled them with the asked-for part.
+    //
+    // Live: «آخر سعر لحربة الارث» came back as 84 / 1,575 / 151,000 / 75,000 from
+    // three different suppliers, presented as one item's price history. Every row
+    // was real; none of them was that part. A price table whose rows are
+    // unrelated to the question is indistinguishable from a fabricated one.
+    .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+    .where(
+      and(
+        or(
+          ilike(rfqItemsTable.partNo, `%${term}%`),
+          ilike(rfqItemsTable.description, `%${term}%`),
+          ilike(rfqItemsTable.lineItem, `%${term}%`),
+        ),
+        isNotNull(offerItemsTable.price),
+      ) as SQL,
+    )
     .orderBy(desc(offerItemsTable.createdAt))
     .limit(limit)) as Row[];
 
-  // An offer price only counts if its rfq item is the part in question — join
-  // the description through rfq_items would be an extra hop; instead filter
-  // narrowly here by requiring partNo OR description to match using a subquery-
-  // free check the caller can reason about. Keep it simple: only PO prices are
-  // guaranteed to carry the part, so offers are advisory and labelled.
-  const prices = [
+  const identityOf = (partNo: unknown, lineItem: unknown, description: unknown) =>
+    [partNo ?? "", lineItem ?? "", description ?? ""]
+      .map((v) => String(v).trim().toLowerCase())
+      .join("|");
+
+  const all = [
     ...poPrices.map((r) => ({
       date: r.date,
       price: num(r.price),
       source: "أمر شراء للمورد",
       partNo: r.partNo,
+      lineItem: null as string | null,
+      description: null as string | null,
       supplierId: r.supplierId,
       poId: r.poId,
+      identity: identityOf(r.partNo, null, null),
     })),
     ...offerPrices.map((r) => ({
       date: r.date,
       price: num(r.price),
       source: "عرض سعر مورد",
       partNo: r.partNo,
+      lineItem: (r.lineItem as string | null) ?? null,
+      description: (r.description as string | null) ?? null,
       supplierId: r.supplierId,
       poId: r.poId,
+      identity: identityOf(r.partNo, r.lineItem, r.description),
     })),
   ]
     .filter((p) => p.price > 0)
-    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
-    .slice(0, limit);
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+  // ── Group by ITEM IDENTITY, never into one flat list ────────────────────
+  // The match is a substring, so «حربة الارث» legitimately matches several
+  // DIFFERENT items (different part numbers, or items identified only by their
+  // description). Flattening them into one table with one «السعر» column reads as
+  // a single item's price history and produces the live answer «84 / 1,575 /
+  // 151,000 / 75,000» — four unrelated items presented as one, which is
+  // indistinguishable from fabrication even though every row was real.
+  //
+  // Each identity keeps its own history, so the reply can say WHICH item a price
+  // belongs to and the operator can judge like-for-like.
+  const groupMap = new Map<string, (typeof all)[number][]>();
+  for (const row of all) {
+    const bucket = groupMap.get(row.identity) ?? [];
+    bucket.push(row);
+    groupMap.set(row.identity, bucket);
+  }
+  const groups = [...groupMap.entries()].map(([identity, rows]) => ({
+    identity,
+    partNo: rows[0]?.partNo ?? null,
+    lineItem: rows[0]?.lineItem ?? null,
+    description: rows[0]?.description ?? null,
+    priceCount: rows.length,
+    latest: rows[0] ?? null,
+    prices: rows.slice(0, limit).map((r) => ({
+      date: r.date,
+      price: r.price,
+      source: r.source,
+      partNo: r.partNo,
+      supplierId: r.supplierId,
+      poId: r.poId,
+    })),
+  }));
+
+  const prices = groups.flatMap((g) => g.prices).slice(0, limit);
+  const latest = all[0] ?? null;
 
   const warnings: string[] = [];
-  if (prices.length === 0) warnings.push(`لا يوجد سعر مسجَّل للبند «${term}».`);
+  if (groups.length === 0) warnings.push(`لا يوجد سعر مسجَّل للبند «${term}».`);
+  if (groups.length > 1) {
+    warnings.push(
+      `تطابق أكثر من بند (${groups.length}) مع «${term}» — الأسعار مجمّعة لكل بند على حدة، ` +
+        `ولا يجوز عرضها كتاريخ سعر واحد. راجع رقم القطعة والمواصفات قبل المقارنة.`,
+    );
+  }
 
   return evidence({
-    data: { prices, latest: prices[0] ?? null },
+    data: { prices, groups, latest, itemCount: groups.length },
     source: "database:purchase_order_items.referencePrice + offer_items.price",
     filters: { term, supplier: opts.supplier ?? null },
     recordCount: prices.length,
     warnings,
     method:
-      "آخر سعر للبند مرتَّبًا بتاريخ الإنشاء تنازليًا من أسعار بنود أوامر الشراء وأسعار العروض.",
+      "أسعار مسجَّلة للبند، مجمَّعة حسب هوية البند (رقم القطعة/بند السطر/الوصف) " +
+      "ومرتَّبة تنازليًا بتاريخ الإنشاء داخل كل بند. تطابق أكثر من بند لا يعني بندًا واحدًا.",
     evidence: prices.slice(0, 10).map((p) => ({
       date: p.date,
       price: p.price,

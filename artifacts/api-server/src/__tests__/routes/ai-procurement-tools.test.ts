@@ -291,6 +291,90 @@ describe("get_latest_supplier_price", () => {
     const res = await getLatestSupplierPrice({});
     expect(res.warnings[0]).toContain("حدّد");
   });
+
+  /**
+   * Live defect: «آخر سعر لحربة الارث» produced one flat table — 84 / 1,575 /
+   * 151,000 / 75,000 — from three suppliers, presented as one item's price
+   * history. Verified against production: nothing in the database matches
+   * «حربة الارث» at all; those were the newest offer lines in the WHOLE
+   * database, because the offer query had no WHERE clause and hardcoded
+   * `partNo: null`. Every row was real, none was the asked-for item.
+   */
+  it("keeps prices of DIFFERENT items apart instead of one flat list", async () => {
+    fixtures.set(T.purchaseOrderItemsTable, { plain: [] });
+    fixtures.set(T.offersTable, { plain: [] });
+    fixtures.set(T.offerItemsTable, {
+      plain: [
+        {
+          price: "84",
+          date: "2026-09-27",
+          partNo: "ER-1",
+          description: "EARTHING ROD 16MM",
+          lineItem: "1",
+          supplierId: 292,
+        },
+        {
+          price: "1575",
+          date: "2026-09-27",
+          partNo: "ER-2",
+          description: "EARTHING ROD 25MM",
+          lineItem: "2",
+          supplierId: 292,
+        },
+        {
+          price: "151000",
+          date: "2026-09-25",
+          partNo: "ER-3",
+          description: "EARTHING ROD ASSEMBLY",
+          lineItem: "3",
+          supplierId: 146,
+        },
+      ],
+    });
+
+    const res = await getLatestSupplierPrice({ description: "EARTHING ROD" });
+    const data = res.data as any;
+    expect(data.groups).toHaveLength(3);
+    expect(data.itemCount).toBe(3);
+    // Each group carries its OWN history — the 84 price cannot appear under ER-2.
+    const byPart = Object.fromEntries(data.groups.map((g: any) => [g.partNo, g]));
+    expect(byPart["ER-1"].latest.price).toBe(84);
+    expect(byPart["ER-2"].latest.price).toBe(1575);
+    expect(byPart["ER-1"].prices.map((p: any) => p.price)).toEqual([84]);
+    // The operator must be told the match was ambiguous, or a 4-row table still
+    // reads as one item.
+    expect(res.warnings.join(" ")).toContain("أكثر من بند");
+  });
+
+  it("reports a single group when only one item matches", async () => {
+    fixtures.set(T.purchaseOrderItemsTable, { plain: [] });
+    fixtures.set(T.offersTable, { plain: [] });
+    fixtures.set(T.offerItemsTable, {
+      plain: [
+        {
+          price: "100",
+          date: "2026-01-01",
+          partNo: "ER-1",
+          description: "EARTHING ROD",
+          lineItem: "1",
+          supplierId: 5,
+        },
+        {
+          price: "120",
+          date: "2026-05-01",
+          partNo: "ER-1",
+          description: "EARTHING ROD",
+          lineItem: "1",
+          supplierId: 6,
+        },
+      ],
+    });
+    const res = await getLatestSupplierPrice({ description: "EARTHING ROD" });
+    const data = res.data as any;
+    expect(data.itemCount).toBe(1);
+    expect(data.groups[0].prices.map((p: any) => p.price)).toEqual([120, 100]);
+    expect(res.warnings.join(" ")).not.toContain("أكثر من بند");
+  });
 });
 
 describe("get_open_supplier_invoices", () => {
