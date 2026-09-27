@@ -3028,3 +3028,55 @@ budget on 503 retries before a healthy one was reached.
   still hit Gemini when the chat provider is DeepSeek, the cross-provider
   fallthrough works in the new direction, and the fast path never sends a Gemini
   id to DeepSeek.
+
+## A live probe must answer "what did you actually do?" — the ten-answer scan report (PRs #220/#221/#222)
+
+The operator's question of every job was one question: **ماذا بحث، وكم فتح، ومتى
+توقف، ولماذا.** It was answered in five differently-shaped counters, and the two
+shapes disagreed — the interactive scope was phrased one way and the background
+job's another. A live reply blamed «الحد 400» when the real ceiling was the
+CLOCK; the payload never said which, so the model guessed. Same family as the
+`filter(Boolean)` incident: a capability reporting something other than what it
+did.
+
+- **`scan-report.ts` is the ONE place the ten answers are computed and rendered**:
+  what was searched, messages matched, examined, opened, PDFs opened, results
+  extracted, elapsed seconds, seconds remaining, complete/partial, and WHY it
+  stopped. Both the interactive `scan_email_items` and the background job build
+  it through `buildScanReport`/`renderScanReport`, so the WhatsApp summary, the
+  dashboard and the model read identical numbers. Do not add a second renderer.
+- **`percent === 100` is a claim about the RUN, not the request.** It requires
+  `complete` AND every matched message opened AND nothing unreadable AND no
+  truncation. A partial scan reports its real share (79%, never 100). The
+  zero-match case distinguishes a mailbox that was **read** («فُحص 4399 رسالة ولم
+  يطابق أي منها») from one that could not be read — the two need opposite advice,
+  and only the examined count tells them apart.
+- **`finish` calls `save` TWICE** (artifact, then delivery ids) and `updateJob`
+  replaced the whole `result` column, so the SECOND call threw the first away.
+  Live proof: job 210 (crashed mid-flight) kept `topItems`/`scope`; jobs 211-213
+  (completed normally) kept only `{complete,cancelled,messageId}` — the operator's
+  «احتفظ بالنتيجة» requirement was broken on the COMMON path, and nothing failed
+  loudly because the job still reported success. `save` now MERGES. Any writer
+  that saves partial result patches must merge, never replace.
+- **The session carries `startedAt`** so elapsed time spans every batch, tool
+  call and restart — not just the last window. Reporting the last window's
+  duration understates a multi-minute census by an order of magnitude.
+
+## The provider switch is inert while the DB row still names the old provider
+
+- `loadSettings()` prefers the `ai_assistant_settings` row over `DEFAULT_MODEL`
+  **and** over `AI_MODEL`. The migration to DeepSeek listed only specific
+  RETIRED Gemini ids; the deployed row held `gemini-3.5-flash-lite` — a LIVE id —
+  so the switch was silently inert: every test passed, the code defaulted to
+  DeepSeek, and production ran the capped provider. **The predicate must be the
+  FAMILY (`model ILIKE 'gemini%'`), not an enumeration** — a list can only ever
+  contain the ids someone thought of. An admin who wants Gemini can re-pick it in
+  the settings UI.
+- The guard (`init-db.test.ts`) asserts the family predicate AND that it is NOT a
+  bare equality list, so a refactor back to enumeration fails. Verified red
+  against the retired-list version.
+- Verify the effective model by querying production (`ai_assistant_settings`),
+  never by reading `AI_MODEL` — the env var can be stale and inert.
+- `AI_MODEL` on Render (`gemini-3.5-flash-lite`) is dead weight: `loadSettings()`
+  prefers the DB row, and the DB row is `deepseek-v4-pro`. Only a fresh DB with
+  no row would fall through to it.
