@@ -80,4 +80,12 @@ describe("agent prompt structure (Manus/same.new style)", () => {
   it("makes asking the operator the preferred move over guessing", () => {
     expect(prompt).toContain("اسأل المدير بوضوح بدل التخمين");
   });
+
+  it("requires relaying the scan report and forbids a false 100%", () => {
+    // The operator's tenth requirement: completeness is a claim about the run,
+    // not about the request. The model must relay `reportText` and may only say
+    // "100%"/"اكتمل" when the tool's own `complete` is true.
+    expect(prompt).toContain("reportText");
+    expect(prompt).toContain("complete=true");
+  });
 });

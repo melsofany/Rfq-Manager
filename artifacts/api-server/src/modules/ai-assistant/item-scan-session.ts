@@ -77,6 +77,12 @@ export interface ItemScanSession {
    * nothing, so `complete` must not be true for it.
    */
   examinedEnvelopes: number;
+  /**
+   * Epoch ms when this census began. Persisted with the session so the elapsed
+   * time spans every batch, call and restart — a resumed census must not report
+   * only its most recent window's duration.
+   */
+  startedAt: number;
   /** Census arguments, replayed per batch so the walk is reproducible. */
   args: ItemScanArgs;
 }
@@ -382,6 +388,12 @@ export async function runItemScan(
       batches: 0,
       complete: false,
       examinedEnvelopes: 0,
+      // When this census began. Carried on the session (and mirrored to the DB
+      // with it) so the elapsed time in the report is the real duration of the
+      // whole walk — across batches, calls and restarts — not the time since the
+      // last window. A report that understates its own duration is the kind of
+      // quiet inaccuracy this whole surface exists to remove.
+      startedAt: Date.now(),
       args,
     };
   }
