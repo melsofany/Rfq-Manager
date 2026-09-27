@@ -16,7 +16,7 @@ import { scheduleDailyBackup } from "./modules/backup/service";
 import { verifySenderIdentity } from "./shared/mail-identity";
 import { logReadMailboxes } from "./modules/ai-assistant/mailboxes";
 import { logProviderCapacity } from "./modules/ai-assistant/config";
-import { mastraEngineEnabled } from "./modules/ai-assistant/mastra-agent";
+import { mastraEngineEnabled } from "./modules/ai-assistant/engine";
 
 const rawPort = process.env["PORT"];
 

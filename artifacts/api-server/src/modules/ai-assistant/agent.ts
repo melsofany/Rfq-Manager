@@ -49,8 +49,8 @@ import {
   HARD_MAX_STEPS,
   toolCacheKey,
 } from "./task-loop";
-import { runToolLoop, mastraEngineEnabled } from "./mastra-agent";
-import type { ToolExchange } from "./mastra-agent";
+import { runToolLoop, mastraEngineEnabled } from "./engine";
+import type { ToolExchange } from "./engine";
 import { checkClaims, checkJobClaims } from "./claim-check";
 import { toolsForIntent, filterToolDefinitions } from "./tool-scope";
 import type { TraceSummary } from "./task-loop";
