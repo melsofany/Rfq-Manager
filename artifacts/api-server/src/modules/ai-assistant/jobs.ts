@@ -341,7 +341,7 @@ function startJobWorker(job: JobRecord, opts: CreateJobOpts): void {
       const stored = latest?.result as Record<string, unknown> | null | undefined;
       const returned = out?.result as Record<string, unknown> | null | undefined;
       const merged = stored && returned ? { ...stored, ...returned } : (returned ?? stored ?? null);
-      await updateJob(job.id, { status: "completed", result: merged });
+      await finalizeJob(job.id, { status: "completed", result: merged });
       logger.info({ jobId: job.id, kind: opts.kind }, "AI assistant: job completed");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -349,7 +349,15 @@ function startJobWorker(job: JobRecord, opts: CreateJobOpts): void {
       // is still stored and re-sendable. Recording it as `completed` is the
       // defect that let the assistant claim a report was sent when it was not.
       const status: JobStatus = err instanceof JobDeliveryError ? "delivery_failed" : "failed";
-      await updateJob(job.id, { status, error: message }).catch(() => {});
+      // The FINAL write must land even across a database blip — job 350's report
+      // was delivered while its row stayed `running` because this write (and the
+      // handler's own) failed on a restart.
+      await finalizeJob(job.id, { status, error: message }).catch((writeErr) =>
+        logger.error(
+          { err: writeErr, jobId: job.id, status },
+          "AI assistant: could not record the job's final status",
+        ),
+      );
       logger.warn({ err, jobId: job.id, kind: opts.kind, status }, "AI assistant: job failed");
     }
   })();
@@ -361,6 +369,41 @@ function startJobWorker(job: JobRecord, opts: CreateJobOpts): void {
 export async function pendingAiJobs(): Promise<void> {
   while (running.size > 0) {
     await Promise.allSettled([...running]);
+  }
+}
+
+/**
+ * Write a job's FINAL state, retrying a transient connection failure.
+ *
+ * Found live on job 350: the census completed and the report WAS delivered
+ * (summary text + PDF), then the final `completed` write failed with «the
+ * database system is not yet accepting connections» — a blip while the service
+ * restarted — and the catch handler's own write failed the same way and was
+ * swallowed by `.catch(() => {})`. The row then sat `running` with no worker:
+ * the orphan lie in its worst form, because the work is done AND delivered
+ * while the status claims it is still in progress.
+ *
+ * The final write is the one that must land: retry it a few times before
+ * giving up, so a seconds-long database recovery does not cost the operator a
+ * status they cannot trust.
+ */
+async function finalizeJob(
+  id: number,
+  patch: Record<string, unknown>,
+  attempts = 3,
+): Promise<void> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      await updateJob(id, patch as never);
+      return;
+    } catch (err) {
+      if (i === attempts - 1) throw err;
+      logger.warn(
+        { jobId: id, attempt: i + 1, err },
+        "AI assistant: final job write failed — retrying",
+      );
+      await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+    }
   }
 }
 

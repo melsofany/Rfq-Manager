@@ -21,6 +21,9 @@ const jobsT = {
 
 let rows: any[] = [];
 let nextId = 1;
+// كيف يُمثَّل انقطاع عابر في الكتابة النهائية (إعادة تشغيل الخدمة): كم مرة
+// يفشل تحديث الحالة النهائية قبل أن ينجح.
+let failFinalWriteTimes = 0;
 
 vi.mock("@workspace/db", () => ({
   db: {
@@ -48,6 +51,12 @@ vi.mock("@workspace/db", () => ({
             return Promise.resolve(rows);
           }
           const id = w?.__eq?.[1];
+          if (failFinalWriteTimes > 0 && (v?.status === "completed" || v?.status === "failed")) {
+            failFinalWriteTimes -= 1;
+            return Promise.reject(
+              new Error("the database system is not yet accepting connections"),
+            );
+          }
           const row = rows.find((r) => r.id === id);
           if (row) Object.assign(row, v);
           return Promise.resolve([row]);
@@ -134,6 +143,7 @@ const {
 
 describe("async jobs", () => {
   beforeEach(() => {
+    failFinalWriteTimes = 0;
     rows = [];
     nextId = 1;
   });
@@ -362,6 +372,38 @@ describe("async jobs", () => {
     const done = await getJob(job.id);
     expect(done?.status).toBe("completed");
     expect(done?.progress?.percent).toBe(100);
+  });
+
+  it("retries the FINAL status write so a transient DB blip cannot strand a delivered job", async () => {
+    // Live (job 350): the census completed AND the report was delivered (text +
+    // PDF), then the final `completed` write failed with «the database system is
+    // not yet accepting connections» during a restart — and the catch handler's
+    // own write failed identically. The row sat `running` with no worker while
+    // the work was done and delivered. The final write must survive the blip.
+    let finished = 0;
+    const { job } = await startCensusJob({
+      phone: "2010",
+      question: "حصر مع انقطاع في الكتابة",
+      args: { mailbox: "*" },
+      runBatch: async () => ({
+        session: {
+          census: { matched: 1, scope: { scanned: 1 } },
+          coverage: { messages: 1 },
+          items: [],
+          complete: true,
+        },
+      }),
+      finish: async () => {
+        finished += 1;
+        return { messageId: "wamid.test" };
+      },
+    });
+    // Fail the final write twice: the retry must still land it.
+    failFinalWriteTimes = 2;
+    await pendingAiJobs();
+    expect(finished).toBe(1);
+    const done = await getJob(job.id);
+    expect(done?.status).toBe("completed");
   });
 
   it("bounds the DELIVERY so a hung send cannot leave the job running forever", async () => {
