@@ -364,6 +364,38 @@ describe("async jobs", () => {
     expect(done?.progress?.percent).toBe(100);
   });
 
+  it("bounds the DELIVERY so a hung send cannot leave the job running forever", async () => {
+    // Live (job 350): the census completed with 334 messages and 853 items, then
+    // sat `running` for 20+ minutes because the WhatsApp send never returned.
+    // A job stuck in `finish` is indistinguishable from one that never ran.
+    const prev = process.env.AI_JOB_DELIVERY_TIMEOUT_MS;
+    process.env.AI_JOB_DELIVERY_TIMEOUT_MS = "40";
+    try {
+      const { job } = await startCensusJob({
+        phone: "2010",
+        question: "حصر بمهلة تسليم",
+        args: { mailbox: "*" },
+        runBatch: async () => ({
+          session: {
+            census: { matched: 1, scope: { scanned: 1 } },
+            coverage: { messages: 1 },
+            items: [],
+            complete: true,
+          },
+        }),
+        // Never resolves — the hung-send shape.
+        finish: () => new Promise(() => {}),
+      });
+      await pendingAiJobs();
+      const done = await getJob(job.id);
+      expect(done?.status).toBe("delivery_failed");
+      expect(String(done?.error)).toContain("مهلة إرسال");
+    } finally {
+      if (prev === undefined) delete process.env.AI_JOB_DELIVERY_TIMEOUT_MS;
+      else process.env.AI_JOB_DELIVERY_TIMEOUT_MS = prev;
+    }
+  });
+
   it("stops a census whose filter matched nothing instead of re-reading an empty ask 120×", async () => {
     // Live: a wrong search term matched 0 messages and the job span the whole
     // batch cap (~10 minutes) re-reading the same empty mailbox, then reported
