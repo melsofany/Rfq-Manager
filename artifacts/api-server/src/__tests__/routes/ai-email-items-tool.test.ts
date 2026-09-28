@@ -1218,4 +1218,37 @@ describe("a zero-match census must not be blamed on the mailbox connection", () 
     // suspect and the operator should retry rather than reword.
     expect(res.data.note).not.toContain("مقروء تمامًا");
   });
+
+  /**
+   * A `contains` lookup must name a mailbox it could not read.
+   *
+   * The live EDC failure: «0 نتائج» was read as «غير موجود في البريد» while the
+   * box that holds the mail (info@) was never opened because its service
+   * account is not delegation-authorised. The filter note now carries the same
+   * caveat the census note does, so the model cannot report a false absence.
+   */
+  it("names an unreadable mailbox in the contains note (the live false negative)", async () => {
+    scanEmails.mockResolvedValue(
+      censusWithAttachments([], {
+        mailboxErrors: [
+          {
+            mailbox: "info@cortoba-supplies.com",
+            error:
+              "تعذّر قراءة info@cortoba-supplies.com: حساب الخدمة غير مُفوَّض للوصول إلى هذا البريد.",
+          },
+        ],
+      }),
+    );
+
+    const res = (await executeTool(
+      "scan_email_items",
+      { from: "egyptian-drilling", contains: "MAICO FAN" },
+      ctx as never,
+    )) as { ok: boolean; data: { note: string } };
+
+    expect(res.data.note).toContain("info@cortoba-supplies.com");
+    expect(res.data.note).toContain("تعذّرت قراءة");
+    // And it must not let the model claim the mail simply is not there.
+    expect(res.data.note).toContain("لا تقل إنه لا توجد رسائل منه");
+  });
 });

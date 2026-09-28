@@ -16,6 +16,12 @@
  */
 
 import { normalizeText } from "./email";
+import {
+  canonicalPartNo,
+  itemTokens,
+  itemAttributes,
+  hasConflictingAttributes,
+} from "./item-identity";
 
 /**
  * Canonical brand → the spellings seen in operator data and questions.
@@ -120,4 +126,80 @@ export function matchesWithAliases(haystack: string, term: string): boolean {
  */
 export function matchesPartQuery(field: unknown, term: string): boolean {
   return matchesWithAliases(String(field ?? ""), term);
+}
+
+/** Minimum length of a query token worth matching — shorter ones are noise. */
+const MIN_QUERY_TOKEN = 2;
+
+/**
+ * The share of the operator's identity tokens that must be found in a row.
+ *
+ * Deliberately below 1: the operator describes an item in their own words and
+ * adds specifications the document does not carry («… MAX. AMBIENT TEMPERATURE
+ * +55 DEG C» over a row that stops at «HAZARDOU»), so requiring EVERY token
+ * reports «not found» for an item that is right there — the live failure. A
+ * measured 12 of 18 tokens matched that row; 0.6 accepts it while a query whose
+ * distinguishing values belong to ANOTHER item still fails, and the
+ * attribute-conflict rule below is the second, stricter guard.
+ */
+const MATCH_MIN_SHARE = 0.6;
+
+/**
+ * True when ONE parsed row matches the operator's `contains` term.
+ *
+ * The operator's term is free text and may be ANY of the ways the same item is
+ * known: a part number, a model code, a brand («أريستون»), or the description
+ * copied whole — wrapped across as many lines as the PDF used, often with extra
+ * specifications typed alongside. A single-field `includes` cannot serve that: a
+ * full description names the part number in one column and the prose in another,
+ * so requiring every token in ONE field reports «not found» for an item that is
+ * present. The operator's Maico fan was only the EXAMPLE — the defect is
+ * generality, and the next item they type must work too.
+ *
+ * Three independent signals, none of them fuzzy:
+ *  1. a punctuation-stripped part-number match (`1000108319`);
+ *  2. the brand-aware token match over the row's joined fields (short phrases);
+ *  3. a share of the row's identity tokens, REJECTED when the query and the row
+ *     disagree on a distinguishing value (a size, model, capacity, power).
+ *
+ * Signal 3 is what makes a whole pasted description work without letting a
+ * different size through: `itemTokens` keeps a number glued to its unit, and
+ * `hasConflictingAttributes` refuses `CABLE 70 MM` against a `CABLE 50 MM` row
+ * even though every other word matches.
+ */
+export function matchesItemQuery(
+  it: {
+    description?: unknown;
+    partNo?: unknown;
+    lineItemNo?: unknown;
+  },
+  rawTerm: string,
+): boolean {
+  const term = String(rawTerm ?? "").trim();
+  if (!term) return false;
+
+  // 1. An exact punctuation-stripped part-number match. This is what makes a
+  //    bare `1000108319` find the row even when the operator spaces it.
+  const flatTerm = canonicalPartNo(term);
+  if (flatTerm.length >= 4) {
+    const flatPart = canonicalPartNo(it.partNo);
+    const flatLine = canonicalPartNo(it.lineItemNo);
+    if (flatPart && flatPart.includes(flatTerm)) return true;
+    if (flatLine && flatLine.includes(flatTerm)) return true;
+  }
+
+  // 2. Every field in one haystack: a description naming the part number in a
+  //    different column must still match as one row.
+  const haystack = `${it.description ?? ""} ${it.partNo ?? ""} ${it.lineItemNo ?? ""}`;
+  if (matchesWithAliases(haystack, term)) return true;
+
+  // 3. Token coverage over the row's identity tokens, guarded by the rule that a
+  //    different measured value means a different item — a wrong match
+  //    misreports a purchasing decision, which is worse than an honest miss.
+  const rowTokens = itemTokens(it.description, it.partNo, it.lineItemNo);
+  const wanted = itemTokens(term).filter((t) => t.length >= MIN_QUERY_TOKEN);
+  if (!wanted.length) return false;
+  if (hasConflictingAttributes(itemAttributes(wanted), itemAttributes(rowTokens))) return false;
+  const found = wanted.filter((t) => rowTokens.some((r) => r.includes(t) || t.includes(r))).length;
+  return found / wanted.length >= MATCH_MIN_SHARE;
 }
