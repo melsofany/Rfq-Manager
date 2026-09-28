@@ -58,6 +58,7 @@ import {
   scanCacheKey,
   type EmailCensusResult,
   type EmailCensusNumber,
+  type EmailMailboxError,
 } from "./email";
 import { matchesPartQuery } from "./part-aliases";
 import {
@@ -1720,7 +1721,11 @@ async function buildCensusJobOpts(opts: {
     },
     finish: async ({ phone, session, report, save }) => {
       const s = session as {
-        census?: { matched?: number; scope?: { scanned?: number } };
+        census?: {
+          matched?: number;
+          scope?: { scanned?: number };
+          mailboxErrors?: EmailMailboxError[];
+        };
         coverage?: {
           messages?: number;
           lines?: number;
@@ -1885,6 +1890,10 @@ async function buildCensusJobOpts(opts: {
           filterMatchedNothing,
           scanned,
           scope,
+          // A mailbox that could not be read travels with the artifact, so the
+          // delivered report says which source is missing instead of presenting a
+          // partial total as the whole set.
+          mailboxErrors: s?.census?.mailboxErrors,
           // The run's ten answers, verbatim — so `job_status` reports what the
           // scan measured rather than recomputing it from a later state.
           report,
@@ -3090,6 +3099,10 @@ async function executeToolInner(
               batches: session.batches,
               coverage,
               attachmentCoverage: scanCoverage,
+              // A mailbox that could not be read is part of the answer, not an
+              // implementation detail: the operator must know the count excludes
+              // it. Same rule as the coverage caveats above.
+              mailboxErrors: census.mailboxErrors,
               matchedLines: matchedItems.length,
               distinctParts: ranked.length,
               totalLines: coverage.lines,
@@ -3160,6 +3173,7 @@ async function executeToolInner(
             coverage,
             attachmentCoverage: scanCoverage,
             senderResolution: census.senderResolution ?? null,
+            mailboxErrors: census.mailboxErrors,
             distinctParts: parsed.aggregate.length,
             totalLines: coverage.lines,
             // The counts the operator asked for, so the final report relays facts

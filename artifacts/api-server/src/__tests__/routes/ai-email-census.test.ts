@@ -39,6 +39,8 @@ let serverCap = Number.POSITIVE_INFINITY;
  * that model that case set this; the rest keep a name for readability.
  */
 let senderDisplayName = "EDC";
+/** Mailboxes whose login must FAIL, modelling a missing delegation grant. */
+let unreadableMailboxes = new Set<string>();
 
 function makeClient() {
   return class {
@@ -97,7 +99,15 @@ let clientClass: any;
 
 vi.mock("imapflow", () => ({
   ImapFlow: class {
-    constructor() {
+    constructor(_opts: any) {
+      const opts = _opts as { auth?: { user?: string } };
+      // Model the LIVE failure: `info@` has no Workspace delegation grant, so its
+      // login is refused, while `procurement@` authenticates with the app
+      // password. Without this, a test cannot tell "one box failed" from "the
+      // whole census failed".
+      if (unreadableMailboxes.has(String(opts?.auth?.user ?? "").toLowerCase())) {
+        throw new Error("unauthorized_client: Client is unauthorized to retrieve access tokens");
+      }
       return new clientClass();
     }
   },
@@ -164,6 +174,7 @@ beforeEach(async () => {
   fetched = [];
   serverCap = Number.POSITIVE_INFINITY;
   senderDisplayName = "EDC";
+  unreadableMailboxes = new Set<string>();
   clientClass = makeClient();
   vi.clearAllMocks();
   // The scan result cache is module-level and would leak a previous test's mail
@@ -219,6 +230,37 @@ describe("scanEmails census", () => {
     const { scanEmails } = await import("../../modules/ai-assistant/email");
     const res = await scanEmails({ from: "egyptian-drilling", mailbox: "info@" });
     expect(Object.keys(res.byMailbox)).toEqual(["info@cortoba-supplies.com"]);
+  });
+
+  it("keeps the mailboxes it CAN read when one mailbox is unreadable (the live EDC outage)", async () => {
+    // Live: `info@` had no Workspace delegation grant while `procurement@`
+    // answered fine. `Promise.all` rejected on the first failure, so the whole
+    // census threw its admin instructions and the readable mail was discarded —
+    // the operator got «تعذّر قراءة البريد» over a mailbox that worked.
+    const { scanEmails } = await import("../../modules/ai-assistant/email");
+    unreadableMailboxes = new Set(["info@cortoba-supplies.com"]);
+    const res = await scanEmails({ from: "egyptian-drilling" });
+
+    // The readable box is still counted...
+    expect(Object.keys(res.byMailbox)).toEqual(["procurement@cortoba-supplies.com"]);
+    expect(res.matched).toBe(900);
+    // ...and the unreadable one is NAMED rather than silently dropped, so the
+    // count is not mistaken for a complete census.
+    expect(res.mailboxErrors).toHaveLength(1);
+    expect(res.mailboxErrors?.[0].mailbox).toBe("info@cortoba-supplies.com");
+    expect(res.note).toContain("تعذّرت قراءة");
+    expect(res.note).toContain("لا تقل إنه لا توجد رسائل منه");
+  });
+
+  it("still fails when NO mailbox could be read (a partial answer needs a readable box)", async () => {
+    // Nothing was read, so there is no partial result to hand over — reporting
+    // zero matches here would be a false negative about the whole mailbox.
+    const { scanEmails } = await import("../../modules/ai-assistant/email");
+    unreadableMailboxes = new Set([
+      "info@cortoba-supplies.com",
+      "procurement@cortoba-supplies.com",
+    ]);
+    await expect(scanEmails({ from: "egyptian-drilling" })).rejects.toThrow(/unauthorized_client/);
   });
 
   it("counts the WHOLE mailbox, not a recent window (the 400-message bug)", async () => {
