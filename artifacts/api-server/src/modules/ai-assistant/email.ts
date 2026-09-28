@@ -1040,6 +1040,12 @@ export interface EmailNumberComparison {
   matchedSample: Array<{ number: string; value: string }>;
 }
 
+/** A configured mailbox that could not be read, with the reason. */
+export interface EmailMailboxError {
+  mailbox: string;
+  error: string;
+}
+
 export interface EmailCensusResult {
   /** Total matched messages across every mailbox — the exact count when not truncated. */
   matched: number;
@@ -1065,6 +1071,14 @@ export interface EmailCensusResult {
    */
   attachmentMessages?: MessageAttachments[];
   scope: EmailCensusScope;
+  /**
+   * Configured mailboxes that could not be read this run.
+   *
+   * Present so a partial census says WHICH mailbox is missing instead of
+   * silently under-reporting — the operator cannot act on a count that hides an
+   * unread source.
+   */
+  mailboxErrors?: EmailMailboxError[];
   note: string;
 }
 
@@ -1716,25 +1730,55 @@ async function runScanEmails(opts: {
     all: EmailCensusMatch[];
     perMailbox: MailboxEnvelope[];
     senderResolution?: EmailSenderResolution;
+    mailboxErrors?: EmailMailboxError[];
   }>(envelopeKey);
 
-  let perMailbox: MailboxEnvelope[] = cachedEnvelope
-    ? cachedEnvelope.perMailbox
-    : await Promise.all(
-        usable.map((m) =>
-          scanOneMailbox(m.email, {
-            from: opts.from,
-            subject: opts.subject,
-            query: opts.query,
-            unseenOnly: opts.unseenOnly,
-            since,
-            before,
-            folder,
-            startedAt: Date.now(),
-            patterns,
-          }),
-        ),
-      );
+  let mailboxErrors: EmailMailboxError[] = [];
+  let perMailbox: MailboxEnvelope[];
+  if (cachedEnvelope) {
+    perMailbox = cachedEnvelope.perMailbox;
+    mailboxErrors = cachedEnvelope.mailboxErrors ?? [];
+  } else {
+    // A mailbox that cannot be READ must not discard the ones that can.
+    //
+    // `Promise.all` rejected on the first failure, so one box needing a
+    // Workspace delegation grant aborted the WHOLE census and threw its admin
+    // instructions at the operator — while the other boxes were perfectly
+    // readable. Live: the EDC order census died this way because `info@` (where
+    // EDC writes) had no delegation, even though `procurement@` answered fine.
+    // Read what is reachable, report what is not.
+    const settled = await Promise.allSettled(
+      usable.map((m) =>
+        scanOneMailbox(m.email, {
+          from: opts.from,
+          subject: opts.subject,
+          query: opts.query,
+          unseenOnly: opts.unseenOnly,
+          since,
+          before,
+          folder,
+          startedAt: Date.now(),
+          patterns,
+        }),
+      ),
+    );
+    perMailbox = [];
+    settled.forEach((r, i) => {
+      if (r.status === "fulfilled") {
+        perMailbox.push(r.value);
+      } else {
+        mailboxErrors.push({
+          mailbox: usable[i]?.email ?? "(غير محدد)",
+          error: String((r.reason as Error)?.message ?? r.reason).slice(0, 300),
+        });
+      }
+    });
+    // Only a total failure is an error: nothing was read, so there is no
+    // partial answer to give. One unreadable sibling is a caveat, not a result.
+    if (perMailbox.length === 0 && mailboxErrors.length > 0) {
+      throw new Error(mailboxErrors[0].error);
+    }
+  }
   let all: EmailCensusMatch[] = cachedEnvelope
     ? cachedEnvelope.all
     : perMailbox.flatMap((r) => r.matches);
@@ -1758,7 +1802,9 @@ async function runScanEmails(opts: {
       // Search the operator's WORD across subject AND sender (a mailbox-wide
       // term), so a shorthand that exists only in the subject («EDC PO No …»
       // sent by `noreply@egyptian-drilling.com`) is still findable.
-      const fallback = await Promise.all(
+      // Same isolation as the primary pass: a box that cannot be read must not
+      // turn a sender-resolution retry into a hard failure.
+      const fallbackSettled = await Promise.allSettled(
         usable.map((m) =>
           scanOneMailbox(m.email, {
             from: undefined,
@@ -1775,6 +1821,9 @@ async function runScanEmails(opts: {
           }),
         ),
       );
+      const fallback = fallbackSettled
+        .filter((r): r is PromiseFulfilledResult<MailboxEnvelope> => r.status === "fulfilled")
+        .map((r) => r.value);
       const observed = aggregateSenders(fallback.flatMap((r) => r.matches));
       const { resolved, domain, candidates } = resolveSenderFromCandidates(opts.from, observed);
       if (resolved && domain) {
@@ -1812,7 +1861,7 @@ async function runScanEmails(opts: {
       }
     }
     senderResolution = senderResolutionInner;
-    putScanCacheEntry(envelopeKey, { all, perMailbox, senderResolution });
+    putScanCacheEntry(envelopeKey, { all, perMailbox, senderResolution, mailboxErrors });
   }
 
   all.sort((a, b) => b.date.localeCompare(a.date));
@@ -1948,7 +1997,8 @@ async function runScanEmails(opts: {
     attachmentCoverage,
     attachmentMessages,
     scope,
-    note: censusNote(scope, all.length, senderResolution),
+    mailboxErrors: mailboxErrors.length ? mailboxErrors : undefined,
+    note: censusNote(scope, all.length, senderResolution, mailboxErrors),
   };
 }
 
@@ -1961,6 +2011,7 @@ function censusNote(
   scope: EmailCensusScope,
   matched: number,
   senderResolution?: EmailSenderResolution,
+  mailboxErrors?: EmailMailboxError[],
 ): string {
   const covered = scope.mailboxes
     .map((m) => `${m.mailbox}: ${m.scanned} رسالة${m.truncated ? " (ناقص)" : ""}`)
@@ -1974,15 +2025,24 @@ function censusNote(
   // no address, and silently reporting a different sender's mail as theirs would
   // be its own wrong answer.
   const senderNote = senderNoteFor(senderResolution);
+  // An unreadable mailbox is stated as prominently as a truncation: the count is
+  // missing a whole source, and the operator cannot act on a total that hides one.
+  // The address and the admin instruction are named so the fix is obvious.
+  const unreadableNote = mailboxErrors?.length
+    ? " تحذير: تعذّرت قراءة " +
+      mailboxErrors.map((e) => `${e.mailbox} (${e.error})`).join("؛ ") +
+      " — فالعدد أعلاه لا يشمل هذا البريد. لا تقل إنه لا توجد رسائل منه."
+    : "";
   if (scope.truncated) {
     return (
       senderNote +
       base +
+      unreadableNote +
       " تحذير: لم تُفحص كل الرسائل في هذه الصناديق، فالعدد أعلاه حدّ أدنى وليس الإجمالي — " +
       "أعد الحصر بفترة أضيق (sinceDate/beforeDate) أو صندوق واحد."
     );
   }
-  return senderNote + base + " العدد أعلاه إجمالي وليس عيّنة.";
+  return senderNote + base + unreadableNote + " العدد أعلاه إجمالي وليس عيّنة.";
 }
 
 /**
