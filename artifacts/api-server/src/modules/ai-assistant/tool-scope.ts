@@ -78,7 +78,26 @@ const EMAIL_TOOLS = [
   // `confirmed:true`), so exposing it in scope is safe — removing it would make
   // "ابعت إيميل لـ EDC" unanswerable in the very scope that names the mail.
   "send_email",
+  // Starting a mail census job IS reading the mail — it just reads it in the
+  // background and answers on WhatsApp later. Found live: the model called
+  // `start_census_job`, the reply said «بدأت المهمة الجديدة من البريد», and the
+  // very same message carried «ولم يُقرأ البريد في هذه الجولة» — a self-
+  // contradictory warning produced because the scope check did not recognise
+  // the job-starting tool as a mail read. `job_status` / `resend_job_report`
+  // report on it, and `cancel_job` stops it, so all three belong to the scope.
+  "start_census_job",
+  "job_status",
+  "resend_job_report",
+  "cancel_job",
 ];
+
+/**
+ * The mail-tool set, exported so `agent.ts` classifies a run by the SAME list
+ * that scoped it. A second, hand-maintained copy had drifted (it lacked
+ * `send_email`/`start_census_job`/`job_status`) and mislabelled a live run that
+ * had started a mail census job as «لم يُقرأ البريد في هذه الجولة».
+ */
+export const EMAIL_TOOL_NAMES = new Set(EMAIL_TOOLS);
 
 /** Analytic questions about procurement data. */
 const ANALYTICS_TOOLS = [

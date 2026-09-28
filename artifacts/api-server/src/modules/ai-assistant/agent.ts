@@ -52,7 +52,7 @@ import {
 import { runToolLoop, mastraEngineEnabled } from "./engine";
 import type { ToolExchange } from "./engine";
 import { checkClaims, checkJobClaims } from "./claim-check";
-import { toolsForIntent, filterToolDefinitions } from "./tool-scope";
+import { toolsForIntent, filterToolDefinitions, EMAIL_TOOL_NAMES } from "./tool-scope";
 import type { TraceSummary } from "./task-loop";
 import { verifyAnswer } from "./verifier";
 import { sanitizeAssistantReply, hadToolMarkup } from "./reply-sanitize";
@@ -1007,16 +1007,17 @@ function answerConfidence(
   return "VERIFIED";
 }
 
-/** Tools whose figures come from the mailbox rather than the database. */
-const EMAIL_TOOLS = new Set([
-  "search_emails",
-  "search_sent_emails",
-  "scan_emails",
-  "scan_email_items",
-  "read_email",
-  "get_email_attachment",
-  "list_mailboxes",
-]);
+/**
+ * Tools whose figures come from the mailbox rather than the database.
+ *
+ * Imported from `tool-scope` rather than duplicated. The two copies had already
+ * drifted — the local one lacked `send_email`/`start_census_job`/`job_status` —
+ * so a live run that started a mail census job was labelled «لم يُقرأ البريد في
+ * هذه الجولة» by a set that simply did not recognise the tool. The scope module
+ * is also the one that decides which tools the model CAN call, so it is the only
+ * correct source for "what counts as reading the mail".
+ */
+const EMAIL_TOOLS = EMAIL_TOOL_NAMES;
 
 /**
  * Markers of a mailbox READ FAILURE, as opposed to an empty result.
