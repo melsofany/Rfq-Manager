@@ -373,6 +373,20 @@ function maxJobAttempts(): number {
   return Number(process.env.AI_JOB_MAX_ATTEMPTS) || 3;
 }
 
+/**
+ * Ceiling on the DELIVERY half of a job (producing + sending the report).
+ *
+ * Found live on job 350: the census finished `complete: true` with 334 messages
+ * and 853 items, then sat `running` for over 20 minutes because the WhatsApp
+ * send never returned. A job stuck in `finish` is indistinguishable to the
+ * operator from one that never ran — the same «promises work that never happens»
+ * defect as an orphaned row, only later. Bounding it turns a hang into a
+ * `delivery_failed` row that still carries the artifact.
+ */
+function jobDeliveryTimeoutMs(): number {
+  return Number(process.env.AI_JOB_DELIVERY_TIMEOUT_MS) || 90_000;
+}
+
 /** Backoff before re-running a requeued job — long enough for a quota to clear. */
 function jobRetryDelayMs(): number {
   return Number(process.env.AI_JOB_RETRY_DELAY_MS) || 60_000;
@@ -739,32 +753,46 @@ async function runCensusWork(
   }
   const finalReport = reportFor(null, cancelled);
   if (!cancelled) {
-    const out = await opts.finish({
-      phone: opts.phone,
-      jobId,
-      session,
-      report: finalReport,
-      // MERGE the artifact, never replace it.
-      //
-      // `finish` calls `save` TWICE — once with the full artifact (report,
-      // scope, topItems) and once at the end with the delivery ids — and a
-      // plain `updateJob` replaced the whole column, so the second call threw
-      // the first one away. Live proof on the production rows: the job killed
-      // mid-flight (210) still held `topItems` and `scope`, while every job
-      // that completed NORMALLY (211-213) kept only
-      // `{complete, cancelled, messageId}`. The operator's «احتفظ بالنتيجة»
-      // requirement was broken on the common path, and nothing failed loudly
-      // because the job still reported success.
-      save: async (patch) => {
-        if (patch.result === undefined) return updateJob(jobId, patch);
-        const current = await getJob(jobId);
-        const previous = (current?.result ?? {}) as Record<string, unknown>;
-        return updateJob(jobId, {
-          ...patch,
-          result: { ...previous, ...(patch.result as Record<string, unknown>) },
-        });
-      },
-    });
+    // Bound the delivery half. A send that never returns must not leave the row
+    // `running` forever (job 350 sat 20+ minutes after a complete census).
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const out = await Promise.race([
+      opts.finish({
+        phone: opts.phone,
+        jobId,
+        session,
+        report: finalReport,
+        // MERGE the artifact, never replace it.
+        //
+        // `finish` calls `save` TWICE — once with the full artifact (report,
+        // scope, topItems) and once at the end with the delivery ids — and a
+        // plain `updateJob` replaced the whole column, so the second call threw
+        // the first one away. Live proof on the production rows: the job killed
+        // mid-flight (210) still held `topItems` and `scope`, while every job
+        // that completed NORMALLY (211-213) kept only
+        // `{complete, cancelled, messageId}`. The operator's «احتفظ بالنتيجة»
+        // requirement was broken on the common path, and nothing failed loudly
+        // because the job still reported success.
+        save: async (patch) => {
+          if (patch.result === undefined) return updateJob(jobId, patch);
+          const current = await getJob(jobId);
+          const previous = (current?.result ?? {}) as Record<string, unknown>;
+          return updateJob(jobId, {
+            ...patch,
+            result: { ...previous, ...(patch.result as Record<string, unknown>) },
+          });
+        },
+      }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new JobDeliveryError(`انتهت مهلة إرسال تقرير الحصر (${jobDeliveryTimeoutMs()}ms)`),
+            ),
+          jobDeliveryTimeoutMs(),
+        );
+      }),
+    ]).finally(() => clearTimeout(timer));
     messageId = out?.messageId ?? null;
   }
   return {
