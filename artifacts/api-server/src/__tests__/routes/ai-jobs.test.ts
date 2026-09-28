@@ -140,6 +140,8 @@ const {
   markOrphanedJobs,
   registerJobRunner,
   hasJobRunner,
+  remainingCensusBatches,
+  censusJobMaxBatches,
 } = await import("../../modules/ai-assistant/jobs");
 
 describe("async jobs", () => {
@@ -752,7 +754,12 @@ describe("orphaned jobs (a restart must not leave a job promising work forever)"
     });
     expect(await markOrphanedJobs()).toBe(1);
     expect(rows[0].status).toBe("failed");
-    expect(String(rows[0].error)).toContain("orphaned by a restart");
+    // The wording describes what happened. The old «orphaned by a restart —
+    // stale cursor reset» blamed a cursor that was never lost and told the
+    // operator nothing about whether the work survived; this row never started,
+    // so it says exactly that.
+    expect(String(rows[0].error)).toContain("قبل أن يبدأ الحصر");
+    expect(String(rows[0].error)).not.toContain("stale cursor reset");
   });
 
   it("does NOT resume a job that has spent its attempt budget", async () => {
@@ -911,5 +918,137 @@ describe("orphaned jobs (a restart must not leave a job promising work forever)"
     expect(summary).toContain("متبقٍ: 31 ث");
     expect(summary).toContain("جزئي");
     expect(summary).toContain("انتهت ميزانية الوقت");
+  });
+
+  /**
+   * A long census is not written off because it was interrupted (live job 390).
+   *
+   * The operator asked for a YEAR of EDC RFQ mail; the job was marked `failed`
+   * at **3%** — 4294 of 7999 envelopes examined, 3705 still unread — with
+   * «orphaned by a restart — stale cursor reset», although its cursor sat intact
+   * in `ai_assistant_scan_sessions` and the next call continued from it. The
+   * worker had PROGRESSED; it was the budget arithmetic that dropped it:
+   *
+   *  - the 120-window allowance was counted PER WORKER RUN, so every restart got
+   *    a fresh one and the census restarted its budget instead of its work;
+   *  - `Number(env) || 3` turned the «no limit» setting `AI_JOB_MAX_ATTEMPTS=0`
+   *    into 3, so three ordinary deploys spent the whole allowance.
+   */
+  it("spends the window budget the census already used, not a fresh one", () => {
+    process.env.AI_CENSUS_JOB_MAX_BATCHES = "120";
+    try {
+      // A census that has opened 119 of its 120 windows has ONE left — the
+      // restart does not hand it another 120.
+      expect(censusJobMaxBatches()).toBe(120);
+      expect(remainingCensusBatches(119)).toBe(1);
+      // One already at the cap opens nothing more.
+      expect(remainingCensusBatches(120)).toBe(0);
+      // Live job 390's shape: a year-long census only a few windows in is still
+      // entitled to the rest of its budget after the restart.
+      expect(remainingCensusBatches(4)).toBe(116);
+    } finally {
+      delete process.env.AI_CENSUS_JOB_MAX_BATCHES;
+    }
+  });
+
+  it("treats an explicit zero attempt limit as unlimited, not as the default 3", () => {
+    // `|| 3` read `AI_JOB_MAX_ATTEMPTS=0` as 3, which is how a service that
+    // redeploys often spent a long census's allowance across three restarts.
+    // The parser must distinguish "unset" (default 3) from "0" (no limit).
+    const parse = (raw: string | undefined): number => {
+      const n = raw === undefined || raw === "" ? 3 : Number(raw);
+      return Number.isFinite(n) && n >= 0 ? n : 3;
+    };
+    expect(parse(undefined)).toBe(3);
+    expect(parse("")).toBe(3);
+    expect(parse("0")).toBe(0);
+    expect(parse("abc")).toBe(3);
+    expect(parse("5")).toBe(5);
+  });
+
+  /**
+   * An interrupted census must be RESUMED, and its report must not claim the
+   * cursor was lost.
+   *
+   * The operator read «ضاع المؤشر» about a census that had lost nothing, and the
+   * job that had already examined 4294 envelopes was dropped as if it had never
+   * run. Progress is what decides: a row that advanced resumes with a restored
+   * allowance; one that advanced nothing is the crash-loop shape.
+   */
+  it("resumes an interrupted census that made progress instead of failing it", async () => {
+    process.env.AI_JOB_MAX_ATTEMPTS = "0";
+    let runs = 0;
+    try {
+      registerJobRunner("email_census", {
+        resume: (job) => ({
+          phone: job.phone,
+          kind: job.kind,
+          question: job.question ?? "q",
+          params: job.params,
+          existingJobId: job.id,
+          run: async () => {
+            runs += 1;
+            return { result: { total: 1 } };
+          },
+        }),
+      });
+      const { job } = await createJob({
+        phone: "+201000000390",
+        kind: "email_census",
+        question: "حصر سنة كاملة",
+        params: { from: "egyptian-drilling" },
+        run: async () => ({ result: { ok: true } }),
+      });
+      await pendingAiJobs();
+      // Simulate the mid-scan interruption: the row is left `running` with
+      // counters that PROVE progress, and the deploy swapped the process out.
+      const row = rows.find((r) => r.id === job.id)!;
+      row.status = "running";
+      row.attempts = 3; // the allowance the old `|| 3` had already spent
+      row.progress = { scanned: 4294, matched: 3855, opened: 150, lines: 409 };
+      row.error = null;
+      row.result = null;
+      row.updatedAt = new Date(Date.now() - 10 * 60_000);
+      // Markers recorded at the previous resume are behind the current counters.
+      row.progress.resumeBaseline = { opened: 10, scanned: 100, lines: 1 };
+
+      const resumed = await markOrphanedJobs();
+      expect(resumed).toBe(1);
+      const after = await getJob(job.id);
+      // RESUMED, not failed — even with attempts already at the old limit,
+      // because the counters prove the census advanced.
+      expect(after?.status).not.toBe("failed");
+      expect(String(after?.error ?? "")).toContain("resumed");
+      expect(after?.attempts).toBe(1);
+      await pendingAiJobs();
+      expect(runs).toBe(1);
+    } finally {
+      delete process.env.AI_JOB_MAX_ATTEMPTS;
+    }
+  });
+
+  it("names the partial work when an interrupted census cannot be resumed", async () => {
+    // No registered runner for the kind → the row cannot be rebuilt. The message
+    // must say the partial results are kept and resumable, NOT that the cursor
+    // was reset — the old wording blamed a cursor that was never lost.
+    const { job } = await createJob({
+      phone: "+201000000391",
+      kind: "orphan_kind_without_runner",
+      question: "حصر",
+      run: async () => ({ result: {} }),
+    });
+    await pendingAiJobs();
+    const row = rows.find((r) => r.id === job.id)!;
+    row.status = "running";
+    row.attempts = 1;
+    row.progress = { scanned: 4294, opened: 150 };
+    row.updatedAt = new Date(Date.now() - 10 * 60_000);
+
+    expect(await markOrphanedJobs()).toBe(1);
+    const after = await getJob(job.id);
+    expect(after?.status).toBe("failed");
+    expect(String(after?.error)).toContain("4294");
+    expect(String(after?.error)).toContain("يمكن استئناف الحصر");
+    expect(String(after?.error)).not.toContain("stale cursor reset");
   });
 });
