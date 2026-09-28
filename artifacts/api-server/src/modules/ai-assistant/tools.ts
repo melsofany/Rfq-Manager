@@ -91,9 +91,12 @@ import {
   cancelJob,
   describeJob,
   describeCensusSearch,
-  startCensusJob,
+  createJob,
+  censusJobOpts,
+  registerJobRunner,
   JobDeliveryError,
   type CensusJobArgs,
+  type CreateJobOpts,
 } from "./jobs";
 import {
   buildScanReport,
@@ -109,7 +112,7 @@ import {
   MAX_DOCUMENT_CHARS,
   type ToolDefinition,
 } from "./llm";
-import type { AiSettings } from "./config";
+import { loadSettings, type AiSettings } from "./config";
 import { logger } from "../../shared/logger";
 
 /**
@@ -1667,9 +1670,48 @@ async function launchCensusJob(
   scanArgs: CensusJobArgs,
   question: string,
 ): Promise<ToolResult> {
+  const { job, reused } = await createJob({
+    ...(await buildCensusJobOpts({
+      phone: ctx.phone,
+      question,
+      scanArgs,
+      settings: ctx.settings,
+    })),
+  });
+  return {
+    ok: true,
+    data: {
+      jobId: job.id,
+      status: job.status,
+      reused,
+      note: reused
+        ? `هناك مهمة حصر قائمة بنفس النطاق (#${job.id}) — سأكملها ولم أبدأ واحدة جديدة.`
+        : `بدأت مهمة الحصر #${job.id} في الخلفية. ستصلك النتيجة على واتساب عند الانتهاء. ` +
+          `لا تنتظرها في هذه الجولة — أخبر المستخدم برقم المهمة ويمكنه السؤال job_status.`,
+      progress: job.progress,
+    },
+  };
+}
+
+/**
+ * Build the runnable census job for a scope.
+ *
+ * Extracted from `launchCensusJob` so the SAME job body can be rebuilt from a
+ * stored row after a restart (see the `registerJobRunner` call at the bottom of
+ * this file): a resumed job must run the code that created it, or the two paths
+ * drift and only one is ever tested. `existingJobId` makes it drive the
+ * interrupted row instead of inserting a duplicate.
+ */
+async function buildCensusJobOpts(opts: {
+  phone: string;
+  question: string;
+  scanArgs: CensusJobArgs;
+  settings: AiSettings;
+}): Promise<CreateJobOpts> {
+  const { phone, question, scanArgs, settings } = opts;
   const key = scanCacheKey("items", scanArgs as unknown as Record<string, unknown>);
-  const { job, reused } = await startCensusJob({
-    phone: ctx.phone,
+  return censusJobOpts({
+    phone,
     question,
     args: scanArgs,
     runBatch: async (deadline) => {
@@ -1907,7 +1949,7 @@ async function launchCensusJob(
 
       let pdfMessageId: string | null = null;
       let pdfError: string | null = null;
-      if (ctx.settings.allowPdf && allItems.length) {
+      if (settings.allowPdf && allItems.length) {
         try {
           const { generateAssistantPdf } = await import("./pdf");
           const buffer = await generateAssistantPdf({
@@ -2012,7 +2054,7 @@ async function launchCensusJob(
           pdfError = err instanceof Error ? err.message : String(err);
           logger.warn({ err, phone }, "AI assistant: census job PDF failed");
         }
-      } else if (ctx.settings.allowPdf) {
+      } else if (settings.allowPdf) {
         pdfError = "لا توجد بنود لإنشاء تقرير منها";
       } else {
         pdfError = "إنشاء PDF معطّل في الإعدادات";
@@ -2041,7 +2083,7 @@ async function launchCensusJob(
       if (!textMessageId) {
         throw new JobDeliveryError("تعذّر إرسال ملخص الحصر على واتساب");
       }
-      if (ctx.settings.allowPdf && allItems.length && !pdfMessageId) {
+      if (settings.allowPdf && allItems.length && !pdfMessageId) {
         throw new JobDeliveryError(
           `تعذّر إنشاء/إرسال تقرير الـPDF: ${pdfError ?? "سبب غير معروف"}`,
         );
@@ -2049,19 +2091,6 @@ async function launchCensusJob(
       return { messageId: pdfMessageId ?? textMessageId };
     },
   });
-  return {
-    ok: true,
-    data: {
-      jobId: job.id,
-      status: job.status,
-      reused,
-      note: reused
-        ? `هناك مهمة حصر قائمة بنفس النطاق (#${job.id}) — سأكملها ولم أبدأ واحدة جديدة.`
-        : `بدأت مهمة الحصر #${job.id} في الخلفية. ستصلك النتيجة على واتساب عند الانتهاء. ` +
-          `لا تنتظرها في هذه الجولة — أخبر المستخدم برقم المهمة ويمكنه السؤال job_status.`,
-      progress: job.progress,
-    },
-  };
 }
 
 /**
@@ -3766,5 +3795,45 @@ async function executeToolInner(
     return { ok: false, error: msg };
   }
 }
+
+/**
+ * Resume an interrupted census from its stored row.
+ *
+ * Registered here because THIS module owns the mailbox work — `jobs.ts` must not
+ * learn how to read mail. The row already carries everything the job needs
+ * (`phone`, `question`, `params`), and the scan continues from the cursor in
+ * `ai_assistant_scan_sessions`, so a restart resumes instead of restarting.
+ *
+ * Returns null when the row cannot be rebuilt (no params, no phone), which makes
+ * the sweep mark it `failed` — the honest outcome, rather than a `running` row
+ * that promises work forever.
+ */
+registerJobRunner("email_census", {
+  resume: (job) => {
+    const params = job.params as CensusJobArgs | null | undefined;
+    if (!params || !job.phone) return null;
+    const question = job.question ?? "حصر بنود البريد";
+    return {
+      phone: job.phone,
+      kind: job.kind,
+      question,
+      params,
+      jobKey: job.jobKey ?? undefined,
+      existingJobId: job.id,
+      run: async (helpers) => {
+        // Settings are read FRESH: a resume happens after a restart, so the
+        // configuration may have changed while the job was interrupted.
+        const settings = await loadSettings();
+        const opts = await buildCensusJobOpts({
+          phone: job.phone,
+          question,
+          scanArgs: params,
+          settings,
+        });
+        return opts.run(helpers);
+      },
+    };
+  },
+});
 
 export { asText };
