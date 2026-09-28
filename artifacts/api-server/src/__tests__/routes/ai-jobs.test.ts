@@ -135,6 +135,7 @@ const {
   describeJob,
   pendingAiJobs,
   startCensusJob,
+  censusJobOpts,
   JobDeliveryError,
   markOrphanedJobs,
   registerJobRunner,
@@ -517,6 +518,27 @@ describe("async jobs", () => {
     await pendingAiJobs();
     const again = await cancelJob(job.id);
     expect(again?.status).toBe("completed");
+  });
+
+  it("the LIVE census path carries a dedup key, so two identical questions cannot double-scan", async () => {
+    // The production path is the model's start_census_job tool, which goes
+    // launchCensusJob -> buildCensusJobOpts -> censusJobOpts. The key used to be
+    // built inside startCensusJob, a function that path NEVER reaches — so
+    // job_key was null on every model-started census and jobs 351/352 scanned
+    // the same mailbox twice. The guard must live on the shared builder.
+    const opts = censusJobOpts({
+      phone: "2010",
+      question: "حصر",
+      args: { mailbox: "info@", from: "egyptian-drilling", contains: "EZQ 20/4" },
+      runBatch: async () => ({ session: {} as any }),
+      finish: async () => {},
+    });
+    expect(opts.jobKey).toBe("census:info@:egyptian-drilling::::::EZQ 20/4");
+    const first = await createJob({ ...opts });
+    const again = await createJob({ ...opts });
+    expect(again.reused).toBe(true);
+    expect(again.job.id).toBe(first.job.id);
+    await pendingAiJobs();
   });
 
   it("startCensusJob RESUMES an identical active census instead of double-scanning", async () => {

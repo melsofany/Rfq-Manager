@@ -684,13 +684,10 @@ export async function startCensusJob(opts: {
    */
   existingJobId?: number;
 }): Promise<CreateJobResult> {
-  const jobKey = `census:${opts.args.mailbox}:${opts.args.from ?? ""}:${opts.args.subject ?? ""}:${
-    opts.args.query ?? ""
-  }:${opts.args.sinceDate ?? ""}:${opts.args.beforeDate ?? ""}:${opts.args.docKind ?? ""}:${
-    opts.args.contains ?? ""
-  }`;
-
-  return createJob({ ...censusJobOpts(opts), jobKey, existingJobId: opts.existingJobId });
+  // The dedup key lives on `censusJobOpts` (the shared builder), so it applies to
+  // every caller — including the model's `start_census_job` tool path, which
+  // never reaches this function.
+  return createJob({ ...censusJobOpts(opts), existingJobId: opts.existingJobId });
 }
 
 /**
@@ -707,6 +704,25 @@ export function censusJobOpts(opts: Parameters<typeof startCensusJob>[0]): Creat
     kind: "email_census",
     question: opts.question,
     params: opts.args,
+    /**
+     * The dedup key belongs HERE, on the ONE builder every creation path uses.
+     *
+     * Found live (jobs 351/352): the key was built inside `startCensusJob`, but
+     * that function is never called in production — the model's `start_census_job`
+     * tool goes `launchCensusJob -> buildCensusJobOpts -> censusJobOpts`, which
+     * went straight to `createJob` with NO key. So `job_key` was null on every
+     * model-started census, the idempotency lookup never ran, and two identical
+     * questions started two full scans of the same mailbox.
+     *
+     * The guard's own test called `startCensusJob`, so it passed while the live
+     * path stayed unguarded — a capability tested on a path that does not run.
+     * Keeping the key on the shared builder is what makes it apply to ALL callers.
+     */
+    jobKey: `census:${opts.args.mailbox}:${opts.args.from ?? ""}:${opts.args.subject ?? ""}:${
+      opts.args.query ?? ""
+    }:${opts.args.sinceDate ?? ""}:${opts.args.beforeDate ?? ""}:${opts.args.docKind ?? ""}:${
+      opts.args.contains ?? ""
+    }`,
     run: (helpers) => runCensusWork(opts, helpers),
   };
 }
