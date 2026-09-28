@@ -412,8 +412,23 @@ async function finalizeJob(
  * quota window, a provider outage). Bounded so a permanently broken job cannot
  * retry forever, and the operator sees "failed" rather than an endless queue.
  */
+/**
+ * How many attempts an interrupted job may have BEFORE it is written off.
+ *
+ * The `|| 3` was a silent typo of the intended `?? 3`, so `AI_JOB_MAX_ATTEMPTS=0`
+ * — the value that means «never give up», the natural setting on a service that
+ * redeploys frequently — read as `3`. Jobs 385-390 live on exactly that budget:
+ * every deploy ended their run mid-scan, the sweep spent one attempt per
+ * restart, and a census that had already advanced (390 reached 4294 envelopes /
+ * 3855 matched / 409 lines) was marked `failed — orphaned by a restart` with
+ * 3705 messages still to read. The label was also wrong: the cursor had NOT been
+ * reset — it sat intact in `ai_assistant_scan_sessions` and the very next call
+ * continued from it.
+ */
 function maxJobAttempts(): number {
-  return Number(process.env.AI_JOB_MAX_ATTEMPTS) || 3;
+  const raw = process.env.AI_JOB_MAX_ATTEMPTS;
+  const n = raw === undefined || raw === "" ? 3 : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 3;
 }
 
 /**
@@ -561,7 +576,13 @@ export async function markOrphanedJobs(): Promise<number> {
     // Only a job that can PROVE it has work left is resumed: no registered
     // runner, unreadable params, or an exhausted attempt budget all mean the row
     // must stop claiming to run.
-    if (opts && attempts <= maxJobAttempts()) {
+    //
+    // `maxJobAttempts() === 0` means «no limit» — a service that redeploys often
+    // interrupts long censuses by design, and the cursor makes each restart a
+    // continuation. A crash-loop is still bounded by the census being unable to
+    // advance: `attempts` is only reset to 1 when progress was proven.
+    const attemptLimit = maxJobAttempts();
+    if (opts && (attemptLimit === 0 || attempts <= attemptLimit)) {
       resumable.push({ job, opts, attempts });
     } else {
       dead.push(job.id);
@@ -569,12 +590,28 @@ export async function markOrphanedJobs(): Promise<number> {
   }
 
   if (dead.length) {
-    await (db as any)
-      .update(aiAssistantJobsTable)
-      .set({ status: "failed", error: "orphaned by a restart — stale cursor reset" })
-      .where(
-        and(inArray(aiAssistantJobsTable.id, dead), eq(aiAssistantJobsTable.status, "running")),
-      );
+    // The message must describe what happened. It used to say «stale cursor
+    // reset» while the cursor was intact in `ai_assistant_scan_sessions` and the
+    // next call continued from it — the operator read «ضاع المؤشر» about a
+    // census that had lost nothing. And a job that PROGRESSED is not dropped
+    // silently (that is what left 390 at 3%): its counters are named so the
+    // operator can see the work is resumable rather than gone.
+    const PARTIAL = "النتائج الجزئية محفوظة ويمكن استئناف الحصر من حيث توقف";
+    for (const job of orphans.filter((o) => dead.includes(o.id))) {
+      const advanced = advancedSinceResume(job) || (job.attempts ?? 0) > 0;
+      const p = (job.progress ?? {}) as Record<string, unknown>;
+      const reached = Number(p.scanned ?? 0);
+      const error = advanced
+        ? `توقف العامل مع إعادة تشغيل الخدمة بعد ` +
+          `${reached > 0 ? `فحص ${reached} رسالة — ` : ""}${PARTIAL}.`
+        : "توقف العامل مع إعادة تشغيل الخدمة قبل أن يبدأ الحصر — أعد المحاولة.";
+      await (db as any)
+        .update(aiAssistantJobsTable)
+        .set({ status: "failed", error })
+        .where(
+          and(eq(aiAssistantJobsTable.id, job.id), eq(aiAssistantJobsTable.status, "running")),
+        );
+    }
   }
 
   for (const { job, opts, attempts } of resumable) {
@@ -771,9 +808,24 @@ async function runCensusWork(
   // Bounded rounds: `runBatch` always opens at least one window, so progress
   // is guaranteed, but the cap stops a pathological source (a window that
   // never advances) from looping forever in the background.
-  const MAX_BATCHES = Number(process.env.AI_CENSUS_JOB_MAX_BATCHES) || 120;
+  //
+  // The windows are counted PER CENSUS, not per worker run. A restart used to
+  // restart the count, so a job interrupted by several deploys was cut off after
+  // only a few windows in TOTAL — live, job 390 reached 3% of a year (4294 of
+  // 7999 envelopes) and was then written off with 3705 messages still unread
+  // while its cursor sat intact. Measuring the budget from the beginning is what
+  // makes an interruption cost time instead of the whole census.
+  const maxBatches = censusJobMaxBatches();
+  const batchesDone = Number(session?.batches ?? 0);
+  const remainingBatches = remainingCensusBatches(batchesDone);
+  // The wall-clock ceiling exists to contain a pathological source, not to cap
+  // legitimate work: a year census at ~460ms/message needs hours, and the cursor
+  // checkpoints between windows so long runs stay safe. `AI_CENSUS_JOB_MAX_MS=0`
+  // disables the ceiling for an operator who wants the census to finish.
+  const jobDeadline = censusJobMaxMs() > 0 ? startedAt + censusJobMaxMs() : Infinity;
   let cancelled = false;
-  for (let i = 0; i < MAX_BATCHES; i++) {
+  let windowsRun = 0;
+  for (let i = 0; i < remainingBatches; i++) {
     // Honour a cancellation between batches: the operator called the job off,
     // so stop and do NOT announce a report for a census they abandoned.
     const current = await getJob(jobId);
@@ -781,9 +833,29 @@ async function runCensusWork(
       cancelled = true;
       break;
     }
+    if (Date.now() >= jobDeadline) {
+      logger.warn(
+        { jobId, batchesDone: batchesDone + windowsRun, maxBatches, maxMs: censusJobMaxMs() },
+        "AI assistant: census job hit its wall-clock ceiling",
+      );
+      break;
+    }
     const deadline = Date.now() + censusJobBatchMs();
     const out = await opts.runBatch(deadline);
+    windowsRun += 1;
     session = out.session;
+    // Land the cursor on disk BEFORE the next window. The per-chunk heartbeat is
+    // fire-and-forget, so a deploy kills the process with the mirror still
+    // holding an older (or contentless) session — live, job 390 read 4294
+    // envelopes and left nothing resumable behind. An awaited write at the batch
+    // boundary is what makes «استئناف من حيث توقف» true rather than claimed.
+    try {
+      const { persistScanSessionNow, scanCacheKey } = await import("./email");
+      const batchKey = scanCacheKey("items", opts.args as unknown as Record<string, unknown>);
+      await persistScanSessionNow(batchKey, session);
+    } catch {
+      // A persistence failure must not stop the census.
+    }
     // ONE report per batch, built from the run's own counters — the operator
     // asks the same ten questions of every job, and answers computed here
     // cannot be omitted by a call site the way `pages` was.
@@ -876,6 +948,46 @@ async function runCensusWork(
  * what stops a pathological source, not the clock. */
 function censusJobBatchMs(): number {
   return Number(process.env.AI_CENSUS_JOB_BATCH_MS) || 120_000;
+}
+
+/**
+ * Windows of mail ONE census may open, counted across every restart.
+ *
+ * Read as an integer so `0`/an empty value cannot silently mean something else,
+ * and stored on the session (`batches`) so a resumed job continues spending the
+ * same budget instead of receiving a fresh one.
+ */
+export function censusJobMaxBatches(): number {
+  const raw = process.env.AI_CENSUS_JOB_MAX_BATCHES;
+  const n = raw === undefined || raw === "" ? 120 : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 120;
+}
+
+/**
+ * How many windows a RUNNING worker may still open.
+ *
+ * Extracted so the rule is testable without a mailbox: the budget belongs to the
+ * CENSUS, not to the worker run. Live, job 390 was written off at 3% because
+ * every restart received a fresh 120-window allowance while the census had
+ * barely started — measuring from the census's own `batches` is what makes an
+ * interruption cost time instead of the whole scan.
+ */
+export function remainingCensusBatches(batchesDone: number): number {
+  return Math.max(0, censusJobMaxBatches() - Math.max(0, Number(batchesDone) || 0));
+}
+
+/**
+ * Wall-clock ceiling for one census (default 4h). `0` disables it.
+ *
+ * A census of a large mailbox is measured in hours, not minutes: this exists to
+ * contain a pathological source, not to truncate legitimate work. The cursor is
+ * checkpointed between windows, so a run that stops here is resumable.
+ */
+function censusJobMaxMs(): number {
+  const raw = process.env.AI_CENSUS_JOB_MAX_MS;
+  if (raw === undefined || raw === "") return 4 * 60 * 60 * 1000;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 4 * 60 * 60 * 1000;
 }
 
 /**

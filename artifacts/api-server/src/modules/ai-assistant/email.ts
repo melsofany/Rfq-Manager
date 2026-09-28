@@ -165,6 +165,29 @@ export function persistScanSession(key: string, session: unknown): void {
   })();
 }
 
+/**
+ * Mirror a session to Postgres, AWAITED.
+ *
+ * Used at the batch boundary, where the write must LAND before the job can be
+ * swept. `persistScanSession` is fire-and-forget (right for the per-chunk
+ * heartbeat — the scan must not wait on the database), but on a deploy the
+ * process dies before an in-flight write completes: the row then holds an older
+ * cursor, or the poisoned `{matched: 0, complete: true}` a pre-fix run wrote.
+ * Live, job 390 examined 4294 envelopes and its session was nowhere in
+ * `ai_assistant_scan_sessions`; only a contentless row from job 385 survived.
+ * That is what made «استئناف من حيث توقف» impossible in practice.
+ */
+export async function persistScanSessionNow(key: string, session: unknown): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const db = await scanSessionStore();
+    if (!db) return;
+    await db.save(key, session);
+  } catch {
+    // Persistence is an optimisation; a failure must not fail the census.
+  }
+}
+
 /** Load a persisted session (used when the in-memory cache misses after a restart). */
 export async function loadPersistedScanSession<T>(key: string): Promise<T | undefined> {
   if (!process.env.DATABASE_URL) return undefined;
