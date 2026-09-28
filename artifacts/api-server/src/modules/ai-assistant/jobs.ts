@@ -229,6 +229,34 @@ export interface JobRunner {
   resume(job: JobRecord): CreateJobOpts | null;
 }
 
+/**
+ * The scan counters a resume is judged by.
+ *
+ * A year-long census takes tens of minutes, so a busy deploy day can interrupt
+ * it several times. Charging every resume against a fixed attempt budget would
+ * then fail a job that was making real progress the whole way — the budget exists
+ * to stop a CRASH LOOP, not to cap how many times the operator's work survives a
+ * restart. So a resume that ADVANCED these counters resets the budget; one that
+ * advanced nothing (the genuine crash-loop shape) spends it.
+ */
+const PROGRESS_KEYS = ["opened", "scanned", "lines"] as const;
+
+function progressMarkers(job: JobRecord): Record<string, number> {
+  const p = (job.progress ?? {}) as Record<string, unknown>;
+  const out: Record<string, number> = {};
+  for (const k of PROGRESS_KEYS) out[k] = Number(p[k] ?? 0);
+  return out;
+}
+
+/** True when the job advanced past the markers recorded at its last resume. */
+function advancedSinceResume(job: JobRecord): boolean {
+  const p = (job.progress ?? {}) as Record<string, unknown>;
+  const baseline = p.resumeBaseline as Record<string, number> | undefined;
+  if (!baseline) return false;
+  const now = progressMarkers(job);
+  return PROGRESS_KEYS.some((k) => now[k] > Number(baseline[k] ?? 0));
+}
+
 const jobRunners = new Map<string, JobRunner>();
 
 /** Register a kind's resumable runner (called at module load by the tool layer). */
@@ -462,17 +490,22 @@ export async function markOrphanedJobs(): Promise<number> {
     .limit(500)) as any[];
   if (orphans.length === 0) return 0;
 
-  const resumable: Array<{ job: JobRecord; opts: CreateJobOpts }> = [];
+  const resumable: Array<{ job: JobRecord; opts: CreateJobOpts; attempts: number }> = [];
   const dead: number[] = [];
   for (const row of orphans) {
     const job = toRecord(row);
     const runner = jobRunners.get(job.kind);
     const opts = runner?.resume(job) ?? null;
+    // A resume that ADVANCED the scan counters proved it is working, so its
+    // budget restarts — otherwise a long census killed by several deploys would
+    // fail while making progress the whole way. One that advanced nothing is the
+    // crash-loop shape and spends the budget.
+    const attempts = advancedSinceResume(job) ? 1 : (job.attempts ?? 0) + 1;
     // Only a job that can PROVE it has work left is resumed: no registered
     // runner, unreadable params, or an exhausted attempt budget all mean the row
     // must stop claiming to run.
-    if (opts && (job.attempts ?? 0) < maxJobAttempts()) {
-      resumable.push({ job, opts });
+    if (opts && attempts <= maxJobAttempts()) {
+      resumable.push({ job, opts, attempts });
     } else {
       dead.push(job.id);
     }
@@ -487,19 +520,24 @@ export async function markOrphanedJobs(): Promise<number> {
       );
   }
 
-  for (const { job, opts } of resumable) {
-    // Charge the resume against the attempt budget BEFORE restarting, so a job
-    // that keeps dying mid-run cannot loop forever across restarts.
-    const attempts = (job.attempts ?? 0) + 1;
+  for (const { job, opts, attempts } of resumable) {
+    // Record the resume AND the markers it will be judged by next time, so a job
+    // that keeps dying without progress cannot loop forever across restarts.
+    const baseline = progressMarkers(job);
+    const progress = {
+      ...((job.progress ?? {}) as Record<string, unknown>),
+      resumeBaseline: baseline,
+    };
     await updateJob(job.id, {
       attempts,
+      progress,
       error: "resumed after a restart (continues from the saved cursor)",
     }).catch(() => {});
     logger.warn(
-      { jobId: job.id, kind: job.kind, attempts },
+      { jobId: job.id, kind: job.kind, attempts, baseline },
       "AI assistant: resuming a job interrupted by a restart",
     );
-    startJobWorker(job, { ...opts, existingJobId: job.id });
+    startJobWorker({ ...job, attempts, progress }, { ...opts, existingJobId: job.id });
   }
 
   logger.warn(

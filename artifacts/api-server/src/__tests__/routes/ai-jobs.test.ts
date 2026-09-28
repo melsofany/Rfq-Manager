@@ -604,6 +604,46 @@ describe("orphaned jobs (a restart must not leave a job promising work forever)"
     expect(rows[0].attempts).toBe(1);
   });
 
+  it("RESETS the budget when a resumed job made real progress", async () => {
+    // A year-long census takes tens of minutes, so a busy deploy day can kill it
+    // several times. Charging every resume against a fixed budget would fail a
+    // job that advanced the whole way — the budget exists to stop a crash LOOP,
+    // not to cap how often the operator's work survives a restart.
+    rows.push({
+      id: 350,
+      phone: "2010",
+      kind: "email_census",
+      status: "running",
+      attempts: 3, // the budget is spent …
+      params: { mailbox: "info@x.com" },
+      // … but the job advanced past the markers set at its last resume.
+      progress: {
+        opened: 900,
+        scanned: 2200,
+        resumeBaseline: { opened: 400, scanned: 1000, lines: 0 },
+      },
+      updatedAt: new Date(Date.now() - 6 * 3600_000),
+    });
+    let resumed = 0;
+    registerJobRunner("email_census", {
+      resume: (job) => ({
+        phone: job.phone,
+        kind: job.kind,
+        question: job.question ?? "q",
+        params: job.params,
+        run: async () => {
+          resumed += 1;
+          return undefined;
+        },
+      }),
+    });
+    await markOrphanedJobs();
+    expect(rows[0].status).not.toBe("failed");
+    await pendingAiJobs();
+    expect(resumed).toBe(1);
+    expect(rows[0].attempts).toBe(1);
+  });
+
   it("still FAILS a stale job whose kind has no runner (no silent `running` lie)", async () => {
     rows.push({
       id: 99,
