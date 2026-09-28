@@ -187,6 +187,16 @@ export interface CreateJobOpts {
   params?: unknown;
   /** Idempotency key; when set, an active job with the same key is reused. */
   jobKey?: string;
+  /**
+   * Drive an EXISTING row instead of inserting a new one.
+   *
+   * A job interrupted by a restart is resumed by re-running its work against the
+   * row that already holds the operator's question and params — inserting a
+   * second row would duplicate the job and split its progress. `createJob`
+   * therefore skips the insert and the idempotency lookup, and the caller gets
+   * the same lifecycle (worker, retries, status transitions) as a fresh job.
+   */
+  existingJobId?: number;
   /** The work. `report` writes progress/result; throwing marks the job failed. */
   run: (helpers: {
     jobId: number;
@@ -201,10 +211,49 @@ export interface CreateJobResult {
 }
 
 /**
+ * A job kind's ability to REBUILD its own work from a stored row.
+ *
+ * The runner is in-process, so a deploy/recycle kills whatever it was doing. The
+ * census keeps a durable cursor (`ai_assistant_scan_sessions`) and the row keeps
+ * `params` + `question` — everything needed to continue — but `jobs.ts` cannot
+ * know how to read a mailbox: that is the tool layer's job. So each kind
+ * REGISTERS a runner and the startup sweep resumes it instead of writing it off.
+ *
+ * Live (job 349): the process was recycled mid-census with 2,264 messages
+ * examined and 448 item rows parsed, and the old sweep discarded all of it —
+ * «orphaned by a restart — stale cursor reset» for work whose cursor was already
+ * in Postgres.
+ */
+export interface JobRunner {
+  /** Rebuild the work for a stored job. Returns null when it cannot be resumed. */
+  resume(job: JobRecord): CreateJobOpts | null;
+}
+
+const jobRunners = new Map<string, JobRunner>();
+
+/** Register a kind's resumable runner (called at module load by the tool layer). */
+export function registerJobRunner(kind: string, runner: JobRunner): void {
+  jobRunners.set(kind, runner);
+}
+
+export function hasJobRunner(kind: string): boolean {
+  return jobRunners.has(kind);
+}
+
+/**
  * Create AND start a job. Returns as soon as the row exists — the caller (the
  * WhatsApp handler) replies to the operator immediately with the job id.
  */
 export async function createJob(opts: CreateJobOpts): Promise<CreateJobResult> {
+  // Resuming an interrupted job: drive the EXISTING row. No insert, no
+  // idempotency lookup — the row already IS this job.
+  if (opts.existingJobId) {
+    const existing = await getJob(opts.existingJobId);
+    if (!existing) throw new Error(`job ${opts.existingJobId} not found for resume`);
+    startJobWorker(existing, opts);
+    return { job: existing, reused: true };
+  }
+
   if (opts.jobKey) {
     const existing = await findActiveJobByKey(opts.jobKey);
     if (existing) return { job: existing, reused: true };
@@ -223,8 +272,17 @@ export async function createJob(opts: CreateJobOpts): Promise<CreateJobResult> {
     .returning()) as any[];
   const job = toRecord(inserted[0]);
 
-  // Start in the background, respecting the concurrency cap. The promise is
-  // tracked so tests/shutdown can drain it.
+  startJobWorker(job, opts);
+
+  return { job, reused: false };
+}
+
+/**
+ * Run a job's work in the background, respecting the concurrency cap. Extracted
+ * from `createJob` so a RESUMED job is driven by exactly the same lifecycle as a
+ * fresh one — one code path, not two.
+ */
+function startJobWorker(job: JobRecord, opts: CreateJobOpts): void {
   const task = (async () => {
     // A crude but effective gate: wait while at capacity. Jobs are few and long,
     // so polling beats adding a scheduler dependency.
@@ -251,7 +309,7 @@ export async function createJob(opts: CreateJobOpts): Promise<CreateJobResult> {
       // NORMALLY-completed job lost its result, while a crashed one kept it.
       // Live proof: job 210 (orphaned) still held `topItems`/`scope`, jobs
       // 211-213 (completed) held only `{complete,cancelled,messageId}`. The
-      // operator's «احتفظ بالنتيجة» requirement was broken for the common path.
+      // operator's «احتفظ بالنتيجة» requirement was broken on the common path.
       const stored = latest?.result as Record<string, unknown> | null | undefined;
       const returned = out?.result as Record<string, unknown> | null | undefined;
       const merged = stored && returned ? { ...stored, ...returned } : (returned ?? stored ?? null);
@@ -269,8 +327,6 @@ export async function createJob(opts: CreateJobOpts): Promise<CreateJobResult> {
   })();
   running.add(task);
   void task.finally(() => running.delete(task));
-
-  return { job, reused: false };
 }
 
 /** Resolves when every in-flight job has finished (tests + graceful shutdown). */
@@ -381,33 +437,75 @@ async function runWithQuotaRetries(
  * Worse, `findActiveJobByKey` treats `queued`/`running` as active, so re-issuing
  * the SAME request RESUMES the orphan and promises progress that never happens.
  *
- * Called once at startup, BEFORE the webhook serves traffic: a resumed census
- * still has its persisted scan cursor, so re-running it continues from where it
- * stopped rather than re-reading everything.
+ * Called once at startup, BEFORE the webhook serves traffic.
+ *
+ * A stale row does not have to be written off: a census keeps a durable cursor
+ * and the row keeps its `params`, so when its kind has a registered runner the
+ * work is CONTINUED from where it stopped. Resuming is charged against the same
+ * `attempts` budget as a quota requeue, so a crash-looping job still ends
+ * `failed` instead of restarting forever.
  */
 export async function markOrphanedJobs(): Promise<number> {
-  const cutoff = new Date(Date.now() - 90_000); // grace > one batch (45s)
+  // The grace must exceed the LONGEST batch, or a job that is genuinely working
+  // is swept as an orphan. It was a fixed 90s while the background batch is
+  // `AI_CENSUS_JOB_BATCH_MS` (120s), so every long batch raced its own sweep.
+  const grace = Math.max(90_000, censusJobBatchMs() + 30_000);
+  const cutoff = new Date(Date.now() - grace);
+  const stale = and(
+    eq(aiAssistantJobsTable.status, "running"),
+    sql`${aiAssistantJobsTable.updatedAt} < ${cutoff.toISOString()}`,
+  );
   const orphans = (await (db as any)
     .select()
     .from(aiAssistantJobsTable)
-    .where(
-      and(
-        eq(aiAssistantJobsTable.status, "running"),
-        sql`${aiAssistantJobsTable.updatedAt} < ${cutoff.toISOString()}`,
-      ),
-    )
+    .where(stale)
     .limit(500)) as any[];
   if (orphans.length === 0) return 0;
-  await (db as any)
-    .update(aiAssistantJobsTable)
-    .set({ status: "failed", error: "orphaned by a restart — stale cursor reset" })
-    .where(
-      and(
-        eq(aiAssistantJobsTable.status, "running"),
-        sql`${aiAssistantJobsTable.updatedAt} < ${cutoff.toISOString()}`,
-      ),
+
+  const resumable: Array<{ job: JobRecord; opts: CreateJobOpts }> = [];
+  const dead: number[] = [];
+  for (const row of orphans) {
+    const job = toRecord(row);
+    const runner = jobRunners.get(job.kind);
+    const opts = runner?.resume(job) ?? null;
+    // Only a job that can PROVE it has work left is resumed: no registered
+    // runner, unreadable params, or an exhausted attempt budget all mean the row
+    // must stop claiming to run.
+    if (opts && (job.attempts ?? 0) < maxJobAttempts()) {
+      resumable.push({ job, opts });
+    } else {
+      dead.push(job.id);
+    }
+  }
+
+  if (dead.length) {
+    await (db as any)
+      .update(aiAssistantJobsTable)
+      .set({ status: "failed", error: "orphaned by a restart — stale cursor reset" })
+      .where(
+        and(inArray(aiAssistantJobsTable.id, dead), eq(aiAssistantJobsTable.status, "running")),
+      );
+  }
+
+  for (const { job, opts } of resumable) {
+    // Charge the resume against the attempt budget BEFORE restarting, so a job
+    // that keeps dying mid-run cannot loop forever across restarts.
+    const attempts = (job.attempts ?? 0) + 1;
+    await updateJob(job.id, {
+      attempts,
+      error: "resumed after a restart (continues from the saved cursor)",
+    }).catch(() => {});
+    logger.warn(
+      { jobId: job.id, kind: job.kind, attempts },
+      "AI assistant: resuming a job interrupted by a restart",
     );
-  logger.warn({ count: orphans.length }, "AI assistant: marked orphaned jobs as failed");
+    startJobWorker(job, { ...opts, existingJobId: job.id });
+  }
+
+  logger.warn(
+    { resumed: resumable.length, failed: dead.length },
+    "AI assistant: orphan sweep — resumed what it could, failed the rest",
+  );
   return orphans.length;
 }
 
@@ -485,6 +583,11 @@ export async function startCensusJob(opts: {
   }) => Promise<{ messageId: string | null } | void>;
   /** Per-batch scan deadline; the worker keeps looping until the census ends. */
   runBatch: (deadline: number) => Promise<{ session: any }>;
+  /**
+   * Drive an existing row (a census resumed after a restart) instead of creating
+   * a new one. Passed straight through to `createJob`.
+   */
+  existingJobId?: number;
 }): Promise<CreateJobResult> {
   const jobKey = `census:${opts.args.mailbox}:${opts.args.from ?? ""}:${opts.args.subject ?? ""}:${
     opts.args.query ?? ""
@@ -492,130 +595,152 @@ export async function startCensusJob(opts: {
     opts.args.contains ?? ""
   }`;
 
-  return createJob({
+  return createJob({ ...censusJobOpts(opts), jobKey, existingJobId: opts.existingJobId });
+}
+
+/**
+ * The census job's options — the ONE place its work is defined.
+ *
+ * Split out of `startCensusJob` so a job resumed after a restart can run the
+ * SAME body against its EXISTING row (`censusJobOpts(...).run({ jobId, report })`)
+ * instead of going through `createJob`, which would start a second worker on the
+ * same row.
+ */
+export function censusJobOpts(opts: Parameters<typeof startCensusJob>[0]): CreateJobOpts {
+  return {
     phone: opts.phone,
     kind: "email_census",
     question: opts.question,
     params: opts.args,
-    jobKey,
-    run: async ({ jobId, report }) => {
-      let session: any;
-      const startedAt = Date.now();
+    run: (helpers) => runCensusWork(opts, helpers),
+  };
+}
 
-      /**
-       * Build the job's report from the CURRENT session.
-       *
-       * Defined once so the per-batch progress and the final artifact can never
-       * disagree: they are the same ten answers over the same counters, and a
-       * field added here reaches both. `deadline` is a parameter because the
-       * per-batch view is measured against that batch's clock while the final
-       * artifact has none left to show.
-       */
-      const reportFor = (deadline: number | null, cancelled: boolean): ScanReport =>
-        buildScanReport({
-          query: describeCensusSearch(opts.args, opts.question),
-          matched: session?.census?.matched ?? 0,
-          examined: session?.census?.scope?.scanned ?? session?.examinedEnvelopes ?? 0,
-          opened: session?.coverage?.messages ?? 0,
-          pdfs: session?.coverage?.attachments ?? 0,
-          results: session?.coverage?.lines ?? 0,
-          pages: session?.coverage?.pages ?? 0,
-          unreadable: session?.coverage?.unreadable ?? 0,
-          remaining: session?.remaining ?? 0,
-          reachedEnd: Boolean(session?.complete),
-          truncatedReason: session?.attachmentCoverage?.truncatedReason ?? null,
-          startedAt: Number(session?.startedAt ?? startedAt),
-          now: Date.now(),
-          deadline,
-          cancelled,
-        });
+/**
+ * The census work, extracted from `startCensusJob` so a fresh job and a job
+ * RESUMED after a restart run the SAME body. The body reads its state from the
+ * persisted scan session, so a resume continues from its cursor rather than
+ * re-reading the mailbox.
+ */
+async function runCensusWork(
+  opts: Parameters<typeof startCensusJob>[0],
+  { jobId, report }: { jobId: number; report: (p: Record<string, unknown>) => Promise<void> },
+): Promise<{ result?: unknown } | void> {
+  let session: any;
+  const startedAt = Date.now();
 
-      // Bounded rounds: `runBatch` always opens at least one window, so progress
-      // is guaranteed, but the cap stops a pathological source (a window that
-      // never advances) from looping forever in the background.
-      const MAX_BATCHES = Number(process.env.AI_CENSUS_JOB_MAX_BATCHES) || 120;
-      let cancelled = false;
-      for (let i = 0; i < MAX_BATCHES; i++) {
-        // Honour a cancellation between batches: the operator called the job off,
-        // so stop and do NOT announce a report for a census they abandoned.
+  /**
+   * Build the job's report from the CURRENT session.
+   *
+   * Defined once so the per-batch progress and the final artifact can never
+   * disagree: they are the same ten answers over the same counters, and a
+   * field added here reaches both. `deadline` is a parameter because the
+   * per-batch view is measured against that batch's clock while the final
+   * artifact has none left to show.
+   */
+  const reportFor = (deadline: number | null, cancelled: boolean): ScanReport =>
+    buildScanReport({
+      query: describeCensusSearch(opts.args, opts.question),
+      matched: session?.census?.matched ?? 0,
+      examined: session?.census?.scope?.scanned ?? session?.examinedEnvelopes ?? 0,
+      opened: session?.coverage?.messages ?? 0,
+      pdfs: session?.coverage?.attachments ?? 0,
+      results: session?.coverage?.lines ?? 0,
+      pages: session?.coverage?.pages ?? 0,
+      unreadable: session?.coverage?.unreadable ?? 0,
+      remaining: session?.remaining ?? 0,
+      reachedEnd: Boolean(session?.complete),
+      truncatedReason: session?.attachmentCoverage?.truncatedReason ?? null,
+      startedAt: Number(session?.startedAt ?? startedAt),
+      now: Date.now(),
+      deadline,
+      cancelled,
+    });
+
+  // Bounded rounds: `runBatch` always opens at least one window, so progress
+  // is guaranteed, but the cap stops a pathological source (a window that
+  // never advances) from looping forever in the background.
+  const MAX_BATCHES = Number(process.env.AI_CENSUS_JOB_MAX_BATCHES) || 120;
+  let cancelled = false;
+  for (let i = 0; i < MAX_BATCHES; i++) {
+    // Honour a cancellation between batches: the operator called the job off,
+    // so stop and do NOT announce a report for a census they abandoned.
+    const current = await getJob(jobId);
+    if (current?.status === "cancelled") {
+      cancelled = true;
+      break;
+    }
+    const deadline = Date.now() + censusJobBatchMs();
+    const out = await opts.runBatch(deadline);
+    session = out.session;
+    // ONE report per batch, built from the run's own counters — the operator
+    // asks the same ten questions of every job, and answers computed here
+    // cannot be omitted by a call site the way `pages` was.
+    await report(scanReportProgress(reportFor(deadline, false)));
+    if (session?.complete) break;
+    // A census with nothing to open makes no further progress: looping would
+    // re-read the same empty mailbox until the batch cap. Either the search
+    // term matched nothing or the mailbox could not be read, and BOTH are
+    // reported by `finish` from the examined count — so stop and let it say
+    // which. Without this, a wrong filter made the job spin for ~10 minutes.
+    if ((session?.census?.matched ?? 0) === 0) break;
+  }
+  let messageId: string | null = null;
+  // A cancellation or an exhausted first window can leave `session` unset. A
+  // job that reports nothing is the «silent lie» the operator complained
+  // about, so load the persisted session if there is one — otherwise the
+  // report says 0 for a census that may have read thousands.
+  if (!session) {
+    try {
+      const { loadPersistedScanSession, scanCacheKey } = await import("./email");
+      const key = scanCacheKey("items", opts.args as unknown as Record<string, unknown>);
+      session = await loadPersistedScanSession(key);
+    } catch (err) {
+      logger.warn({ jobId, err }, "AI assistant: could not load persisted session for report");
+    }
+  }
+  const finalReport = reportFor(null, cancelled);
+  if (!cancelled) {
+    const out = await opts.finish({
+      phone: opts.phone,
+      jobId,
+      session,
+      report: finalReport,
+      // MERGE the artifact, never replace it.
+      //
+      // `finish` calls `save` TWICE — once with the full artifact (report,
+      // scope, topItems) and once at the end with the delivery ids — and a
+      // plain `updateJob` replaced the whole column, so the second call threw
+      // the first one away. Live proof on the production rows: the job killed
+      // mid-flight (210) still held `topItems` and `scope`, while every job
+      // that completed NORMALLY (211-213) kept only
+      // `{complete, cancelled, messageId}`. The operator's «احتفظ بالنتيجة»
+      // requirement was broken on the common path, and nothing failed loudly
+      // because the job still reported success.
+      save: async (patch) => {
+        if (patch.result === undefined) return updateJob(jobId, patch);
         const current = await getJob(jobId);
-        if (current?.status === "cancelled") {
-          cancelled = true;
-          break;
-        }
-        const deadline = Date.now() + censusJobBatchMs();
-        const out = await opts.runBatch(deadline);
-        session = out.session;
-        // ONE report per batch, built from the run's own counters — the operator
-        // asks the same ten questions of every job, and answers computed here
-        // cannot be omitted by a call site the way `pages` was.
-        await report(scanReportProgress(reportFor(deadline, false)));
-        if (session?.complete) break;
-        // A census with nothing to open makes no further progress: looping would
-        // re-read the same empty mailbox until the batch cap. Either the search
-        // term matched nothing or the mailbox could not be read, and BOTH are
-        // reported by `finish` from the examined count — so stop and let it say
-        // which. Without this, a wrong filter made the job spin for ~10 minutes.
-        if ((session?.census?.matched ?? 0) === 0) break;
-      }
-      let messageId: string | null = null;
-      // A cancellation or an exhausted first window can leave `session` unset. A
-      // job that reports nothing is the «silent lie» the operator complained
-      // about, so load the persisted session if there is one — otherwise the
-      // report says 0 for a census that may have read thousands.
-      if (!session) {
-        try {
-          const { loadPersistedScanSession, scanCacheKey } = await import("./email");
-          const key = scanCacheKey("items", opts.args as unknown as Record<string, unknown>);
-          session = await loadPersistedScanSession(key);
-        } catch (err) {
-          logger.warn({ jobId, err }, "AI assistant: could not load persisted session for report");
-        }
-      }
-      const finalReport = reportFor(null, cancelled);
-      if (!cancelled) {
-        const out = await opts.finish({
-          phone: opts.phone,
-          jobId,
-          session,
-          report: finalReport,
-          // MERGE the artifact, never replace it.
-          //
-          // `finish` calls `save` TWICE — once with the full artifact (report,
-          // scope, topItems) and once at the end with the delivery ids — and a
-          // plain `updateJob` replaced the whole column, so the second call threw
-          // the first one away. Live proof on the production rows: the job killed
-          // mid-flight (210) still held `topItems` and `scope`, while every job
-          // that completed NORMALLY (211-213) kept only
-          // `{complete, cancelled, messageId}`. The operator's «احتفظ بالنتيجة»
-          // requirement was broken on the common path, and nothing failed loudly
-          // because the job still reported success.
-          save: async (patch) => {
-            if (patch.result === undefined) return updateJob(jobId, patch);
-            const current = await getJob(jobId);
-            const previous = (current?.result ?? {}) as Record<string, unknown>;
-            return updateJob(jobId, {
-              ...patch,
-              result: { ...previous, ...(patch.result as Record<string, unknown>) },
-            });
-          },
+        const previous = (current?.result ?? {}) as Record<string, unknown>;
+        return updateJob(jobId, {
+          ...patch,
+          result: { ...previous, ...(patch.result as Record<string, unknown>) },
         });
-        messageId = out?.messageId ?? null;
-      }
-      return {
-        result: {
-          complete: finalReport.complete,
-          cancelled,
-          // Proof of delivery: the WhatsApp message id. `null` means the report
-          // was NOT delivered, so the assistant must not claim it was.
-          messageId,
-          // The same ten answers, on the artifact, so a follow-up `job_status`
-          // reads them instead of recomputing (or inventing) them.
-          report: finalReport,
-        },
-      };
+      },
+    });
+    messageId = out?.messageId ?? null;
+  }
+  return {
+    result: {
+      complete: finalReport.complete,
+      cancelled,
+      // Proof of delivery: the WhatsApp message id. `null` means the report
+      // was NOT delivered, so the assistant must not claim it was.
+      messageId,
+      // The same ten answers, on the artifact, so a follow-up `job_status`
+      // reads them instead of recomputing (or inventing) them.
+      report: finalReport,
     },
-  });
+  };
 }
 
 /** Per-batch scan budget for background jobs. Longer than the interactive one:
