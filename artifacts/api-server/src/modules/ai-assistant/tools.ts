@@ -60,7 +60,7 @@ import {
   type EmailCensusNumber,
   type EmailMailboxError,
 } from "./email";
-import { matchesPartQuery } from "./part-aliases";
+import { matchesItemQuery } from "./part-aliases";
 import {
   itemsCsv,
   itemsAggregateCsv,
@@ -1767,11 +1767,7 @@ async function buildCensusJobOpts(opts: {
       // sample. `contains` narrows by description/partNo/lineItem because the
       // subject and sender never carry a part description.
       const contains = (scanArgs.contains ?? "").trim();
-      const containsOk = (it: ParsedLineItem) =>
-        !contains ||
-        matchesPartQuery(it.description, contains) ||
-        matchesPartQuery(it.partNo ?? "", contains) ||
-        matchesPartQuery(it.lineItemNo ?? "", contains);
+      const containsOk = (it: ParsedLineItem) => !contains || matchesItemQuery(it, contains);
       const allItems = allItemsRaw.filter((it) => kindOk(it) && containsOk(it));
       // Envelopes actually EXAMINED. This is the evidence that separates a
       // mailbox that could not be read from a filter that matched nothing: a
@@ -2779,19 +2775,11 @@ async function executeToolInner(
 
         // A brand/part lookup («فين السخانات الأريستون؟») is a filter over the
         // rows already parsed — it must never look like a fresh census. The
-        // match is BRAND-AWARE (see matchesPartQuery): «أريستون» must find a
+        // match is BRAND-AWARE (see matchesItemQuery): «أريستون» must find a
         // part printed `...ARSTON...`, otherwise the lookup reports a false
         // «not found» for data that exists.
         const matchedItems = contains
-          ? parsed.items.filter(
-              (i) =>
-                kindFilter(i) &&
-                (matchesPartQuery(i.description, contains) ||
-                  matchesPartQuery(i.partNo ?? "", contains) ||
-                  // The Line Item code is what EDC prints, so «26R…»/«0666.001.ARSTON.0004»
-                  // must be searchable even though it is not the Part Number.
-                  matchesPartQuery(i.lineItemNo ?? "", contains)),
-            )
+          ? parsed.items.filter((i) => kindFilter(i) && matchesItemQuery(i, contains))
           : parsed.items.filter(kindFilter);
 
         // Default to FREQUENCY: «أكتر بند اتكرر» is the common ask, and ranking
@@ -3076,14 +3064,23 @@ async function executeToolInner(
             `بحث عن «${contains}» داخل ${coverage.messages} رسالة فُتحت ` +
             `(${coverage.lines} سطر بند من ${coverage.attachments} ملف).` +
             containsKindNote[docKind] +
-            ` النتائج: ${matchedItems.length} سطرًا. ` +
+            ` النتائج: ${matchedItems.length} سطرًا.` +
+            // A mailbox that could not be read is a MISSING SOURCE, not a
+            // filter that matched nothing. Saying it here is what stops «0
+            // نتائج» from being read as «غير موجود في البريد» when the box that
+            // holds the mail was never opened — the live EDC false negative.
+            (census.mailboxErrors?.length
+              ? " تحذير: تعذّرت قراءة " +
+                census.mailboxErrors.map((e) => `${e.mailbox} (${e.error})`).join("؛ ") +
+                " — فالبحث لم يشمل هذا البريد. لا تقل إنه لا توجد رسائل منه."
+              : "") +
             (truncated
-              ? `تنبيه: لم تُفحص كل الرسائل — ${scope}. إن لم يظهر ما تبحث عنه فقد يكون في رسائل أقدم، ` +
+              ? ` تنبيه: لم تُفحص كل الرسائل — ${scope}. إن لم يظهر ما تبحث عنه فقد يكون في رسائل أقدم، ` +
                 "فأعد النداء لإكمال الحصر، أو وسّع النطاق (sinceDate). لا تقل «غير موجود في البريد»." +
                 continueHint
               : matchedItems.length === 0 && docKind !== "all"
-                ? "لم يظهر في هذا النوع — جرّب docKind=all للتأكد قبل قول «غير موجود»."
-                : "تم فحص كل الرسائل المطابقة.");
+                ? " لم يظهر في هذا النوع — جرّب docKind=all للتأكد قبل قول «غير موجود»."
+                : " تم فحص كل الرسائل المطابقة.");
           return {
             ok: true,
             data: {
