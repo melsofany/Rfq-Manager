@@ -13,7 +13,11 @@
  * membership of the tool the question genuinely requires.
  */
 import { describe, it, expect } from "vitest";
-import { filterToolDefinitions, toolsForIntent } from "../../modules/ai-assistant/tool-scope";
+import {
+  filterToolDefinitions,
+  toolsForIntent,
+  EMAIL_TOOL_NAMES,
+} from "../../modules/ai-assistant/tool-scope";
 import { routeQuestion } from "../../modules/ai-assistant/router";
 
 const names = (defs: Array<{ function: { name: string } }>) => defs.map((d) => d.function.name);
@@ -111,6 +115,38 @@ describe("tool-scope: per-intent catalogue", () => {
     const full = Array.from({ length: 28 }, (_, i) => ({ function: { name: `t${i}` } }));
     for (const intent of ["email_search", "document_lookup", "count_aggregate"] as const) {
       expect(toolsForIntent(intent)!.length, intent).toBeLessThan(full.length);
+    }
+  });
+});
+
+describe("tool-scope: the mail-tool set is the ONE source of truth", () => {
+  it("counts starting a census job as reading the mail", () => {
+    // Live: the operator asked for a mail census, the model called
+    // `start_census_job`, the reply said «بدأت المهمة الجديدة من البريد» — and the
+    // SAME message carried «ولم يُقرأ البريد في هذه الجولة». The warning came from
+    // a second, drifted copy of the mail-tool set in `agent.ts` that did not list
+    // the job tool. Both now come from this exported set.
+    for (const t of ["start_census_job", "job_status", "resend_job_report", "cancel_job"]) {
+      expect(EMAIL_TOOL_NAMES.has(t), t).toBe(true);
+    }
+  });
+
+  it("covers every tool that genuinely reads the mailbox", () => {
+    // The set must list every mailbox-READING capability, or a run that used the
+    // mail is judged as "no mail was read". The list is explicit so adding a
+    // reader without classifying it here is a deliberate act, not an oversight.
+    for (const t of [
+      "scan_email_items",
+      "scan_emails",
+      "search_emails",
+      "search_sent_emails",
+      "read_email",
+      "get_email_attachment",
+      "list_mailboxes",
+      "send_email",
+      "start_census_job",
+    ]) {
+      expect(EMAIL_TOOL_NAMES.has(t), `${t} must count as a mail read`).toBe(true);
     }
   });
 });
