@@ -90,6 +90,31 @@ describe("tool-call markup never reaches the operator", () => {
     expect(clean).toBe("جاري البحث.");
   });
 
+  it("removes a DeepSeek full-width-pipe call block (the live leak)", () => {
+    // Reproduced verbatim from the operator's WhatsApp thread: DeepSeek emits its
+    // control markers with U+FF5C FULLWIDTH VERTICAL LINE, so every angle-bracket
+    // pattern missed them and the tool call the model could not make arrived as
+    // prose — with its ARGUMENTS reading like an answer:
+    //   «2026-08-01</｜｜parameter> EZQ 20/4</｜｜parameter> rfq</｜｜parameter>»
+    const raw = `<｜｜tool_calls｜｜>
+<｜｜invoke name="start_census_job"｜｜>
+<｜｜parameter name="from"｜｜>2026-08-01</｜｜parameter>
+<｜｜parameter name="contains"｜｜>EZQ 20/4</｜｜parameter>
+<｜｜parameter name="docKind"｜｜>rfq</｜｜parameter>
+</｜｜invoke>
+</｜｜tool_calls>`;
+    expect(hadToolMarkup(raw)).toBe(true);
+    const clean = sanitizeAssistantReply(raw);
+    expect(clean).not.toMatch(/[｜|]/);
+    expect(clean).not.toContain("parameter");
+    expect(clean).not.toContain("start_census_job");
+    expect(clean).not.toContain("2026-08-01"); // the argument must not leak either
+  });
+
+  it("removes a bare pipe marker without surrounding angle brackets", () => {
+    expect(sanitizeAssistantReply("جاري البحث ｜｜parameter｜｜")).not.toMatch(/[｜|]/);
+  });
+
   it("leaves ordinary prose that names a tool untouched", () => {
     // The operator legitimately reads «استخدمت حصر البريد» — the guard must only
     // remove call SYNTAX, or it would censor normal answers.
