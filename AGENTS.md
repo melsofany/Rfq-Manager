@@ -3231,3 +3231,40 @@ The MAICO thread (26/09, `gos`): «ادخل الميل وافحص كل أوام�
 - اختباران في `ai-tool-scope.test.ts`: «counts starting a census job as reading
   the mail» **يفشل ضد الكود قبل الإصلاح** (`job_status: expected false to be true`،
   تحقق بإزالة الأدوات مؤقتًا). **1210 اختبار api-server** يمر.
+
+## The census could never finish on the first attempt (job 390, measured)
+
+The operator asked for a YEAR of EDC RFQ mail and every long census died, so the
+work had to be re-requested over and over. Measured against the live service:
+
+- **`procurement@cortoba-supplies.com` holds 434 messages in 2026 and contains
+  ZERO from `egyptian-drilling`.** `from:"egyptian-drilling"` → matched **0**;
+  with no filter → matched **434**. Yet job 390 reported `matched: 3855` and the
+  monthly jobs 528/561/671 — those were read from the OTHER two mailboxes
+  (`info@`/`finance@`) at a time when the service account was still
+  delegation-authorised. They now return `unauthorized_client`, so the year-long
+  EDC census **cannot be reproduced today**: it depends entirely on the Google
+  Workspace delegation that is missing.
+- So the 3% failure had **two independent layers**: (a) the pre-#232 cursor never
+  landed (which is why a restart could not resume), and (b) the mail source is
+  currently unreachable. A code fix alone could not have made it finish.
+
+**Why it needed more than one attempt — the real timeline of job 390** (all
+rows created the same morning; ~18 minutes end to end), not a guess:
+
+| moment | event |
+|---|---|
+| ~07:55 | job 390 is created; the year-long EDC census starts (3,855 matched) |
+| ~07:55–08:13 | **an unrelated deploy lands**: job 391 (an `info@` test) and others are created in the same window while the census is still advancing |
+| mid-batch | the deploy restarts the service; the in-flight fire-and-forget cursor write dies with the process |
+| ~08:13 | a later deploy's `markOrphanedJobs` sweeps the row: `updatedAt` is 5+ min old (past the restored `censusJobBatchMs()+30s` grace), the resumed worker finds **no session** (only job 393's `{matched:0, complete:true}` exists), so `advancedSinceResume` is false → `attempts` exceeds the old `\|\| 3` limit → `failed` with «stale cursor reset» |
+
+**The restarts were NOT self-inflicted by the census.** A batch stamps
+`updatedAt` on every report, so a healthy year-census is continuously fresh; only
+a deploy can restart it. 4,294 envelopes at ~45s per 500 means job 390 had run
+roughly 13 minutes when it was swept — an ordinary deploy cadence, not a loop.
+
+**Rule**: a resumable scan is only as resumable as the durability of its cursor.
+`persistScanSession` is fire-and-forget and MUST be paired with an awaited write
+at the batch boundary (`persistScanSessionNow`), or every restart loses exactly
+the progress the cursor was supposed to protect.
