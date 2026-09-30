@@ -20,6 +20,10 @@ let cache = new Map<string, any>();
 
 vi.mock("../../modules/ai-assistant/email", () => ({
   scanEmails: async (args: any) => censusFor(args),
+  // The session mirrors itself through `slimCensus`; this suite replaces the
+  // whole module, so the helper must exist here too (it only drops the windowed
+  // attachment buffers, which this fixture does not carry).
+  slimCensus: (c: any) => ({ ...c, attachmentMessages: undefined }),
   getScanCacheEntry: (k: string) => cache.get(k),
   putScanCacheEntry: (k: string, v: any) => cache.set(k, v),
   persistScanSession: () => Promise.resolve(),

@@ -156,13 +156,42 @@ export function persistScanSession(key: string, session: unknown): void {
     try {
       const db = await scanSessionStore();
       if (!db) return;
-      await db.save(key, session);
+      await db.save(key, stripBinary(session));
     } catch {
       // Ignored on purpose — persistence is an optimisation, not a requirement.
     } finally {
       persisting.delete(key);
     }
   })();
+}
+
+/**
+ * Replace every binary value in a session with a size marker before it is
+ * written to Postgres.
+ *
+ * The session is DERIVED state and must never carry downloaded bytes; this is
+ * the backstop for that invariant. `JSON.stringify` turns a `Buffer` into a
+ * `{type:"Buffer",data:[...]}` object with one array entry PER BYTE, so a census
+ * that kept any attachment bytes wrote tens of megabytes of JSON on every
+ * heartbeat (and could exceed the statement/parameter limits). A `Buffer` that
+ * reaches here is a bug upstream, and it is worth a warning — but it must never
+ * be persisted.
+ */
+export function stripBinary(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (Buffer.isBuffer(value)) {
+    logger.warn({ bytes: value.length }, "AI assistant: dropped a buffer from a scan session");
+    return `<buffer:${value.length}>`;
+  }
+  if (value === null || typeof value !== "object") return value;
+  const obj = value as object;
+  if (seen.has(obj)) return undefined;
+  seen.add(obj);
+  if (Array.isArray(obj)) return obj.map((v) => stripBinary(v, seen));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    out[k] = stripBinary(v, seen);
+  }
+  return out;
 }
 
 /**
@@ -182,7 +211,7 @@ export async function persistScanSessionNow(key: string, session: unknown): Prom
   try {
     const db = await scanSessionStore();
     if (!db) return;
-    await db.save(key, session);
+    await db.save(key, stripBinary(session));
   } catch {
     // Persistence is an optimisation; a failure must not fail the census.
   }
@@ -1105,6 +1134,29 @@ export interface EmailCensusResult {
   note: string;
 }
 
+/**
+ * Strip a census result down to what a RESUMABLE SESSION needs to keep.
+ *
+ * A session is held in memory and mirrored to Postgres after every parsed chunk,
+ * so it must carry only small DERIVED values. The full result holds `emails`
+ * (every matched envelope — thousands of rows) and `attachmentMessages` (the
+ * downloaded PDF buffers), and storing either turns a year-long census into
+ * hundreds of megabytes of heap and multi-megabyte JSON writes. Live, the
+ * service died with «Reached heap limit Allocation failed» (heap 1281MB) while a
+ * census ran; this is the size that caused it. Only the fields the session and
+ * its reports actually read are kept.
+ */
+export function slimCensus(census: EmailCensusResult): EmailCensusResult {
+  return {
+    ...census,
+    // Kept at the request's cap, not the full match set: `emails` exists so a
+    // census ANSWER can list the newest matches, and the session only needs the
+    // totals. The session's own `items` are the per-message rows that matter.
+    emails: (census.emails ?? []).slice(0, 100),
+    attachmentMessages: undefined,
+  };
+}
+
 /** Extract document numbers from a subject using the given regex sources. */
 export function extractNumbers(subject: string, patterns: string[]): string[] {
   const found = new Set<string>();
@@ -1274,7 +1326,35 @@ export function attachmentScanBudget(): number {
   // The window is one call's slice of the matched list (`skip` walks it), so a
   // larger window is only useful together with the parallel fetch below — the
   // fetch, not this number, is what actually bounds wall-clock time.
+  //
+  // NOTE: this is the cap for a DIRECT caller (a probe, a test). The resumable
+  // item census reads `attachmentWindowSize()` per pass instead — see there.
   return Number(process.env.AI_ATTACHMENT_SCAN_BUDGET) || 5_000;
+}
+
+/**
+ * Messages opened per WINDOW of a resumable item census.
+ *
+ * `fetchMessageAttachments` keeps every opened message's PDF bytes in memory
+ * until the pass returns, so the window IS the peak memory of a census. That is
+ * why the resumable path reads a bounded window per pass instead of the whole
+ * match set: production had `AI_ATTACHMENT_SCAN_BUDGET=8000` set (a well-meant
+ * raise of the completeness cap), so ONE pass allocated 8,000 messages' worth of
+ * PDF buffers and the instance died with «Reached heap limit Allocation failed —
+ * JavaScript heap out of memory» (heap 1281MB) — repeatedly, on every resume,
+ * because the restarted job re-ran the same pass. A window of a few hundred
+ * messages is a few MB of live buffers, and the cursor still makes the walk cover
+ * every matched message: the next window starts where the last one stopped.
+ * Overridable so the window boundary is testable.
+ *
+ * The default is 1,000 — the size that was already safe in production. It is
+ * deliberately independent of `AI_ATTACHMENT_SCAN_BUDGET`, so raising that
+ * completeness cap (as 5,000 and then 8,000 did) can no longer raise the
+ * per-pass memory: the pass stays bounded and the cursor walks the rest.
+ */
+export function attachmentWindowSize(): number {
+  const raw = Number(process.env.AI_ATTACHMENT_WINDOW);
+  return Number.isFinite(raw) && raw > 0 ? raw : 1_000;
 }
 
 /**
@@ -1392,7 +1472,12 @@ export async function fetchMessageAttachments(
   // the next slice instead of re-opening the same newest one. The list is fixed
   // for the life of a scan session, so windows do not overlap or leave gaps.
   const start = Math.max(0, skip);
-  const considered = matches.slice(start, start + budget);
+  // `budget` is the WINDOW size for this pass — the number of messages whose
+  // bytes may be held at once. It is clamped by `attachmentWindowSize()` so a
+  // large `AI_ATTACHMENT_SCAN_BUDGET` cannot turn one pass into an unbounded
+  // allocation; the cursor still walks the whole match set, window by window.
+  const windowSize = Math.min(budget, attachmentWindowSize());
+  const considered = matches.slice(start, start + windowSize);
   const notReached = Math.max(0, matches.length - start - considered.length);
   const coverage: AttachmentCoverage = {
     messages: considered.length,

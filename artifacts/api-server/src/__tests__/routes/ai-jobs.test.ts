@@ -786,6 +786,94 @@ describe("orphaned jobs (a restart must not leave a job promising work forever)"
     expect(rows[0].status).toBe("failed");
   });
 
+  it("bounds an UNLIMITED attempt budget so a crash-looping job cannot restart forever", async () => {
+    // Live: `AI_JOB_MAX_ATTEMPTS=0` («no limit», the natural setting on a service
+    // that redeploys often) removed the only thing that stopped a job which
+    // CANNOT advance. Job 392 was resumed on every restart — attempts 1 → 16,
+    // each run OOMing the instance before its first checkpoint — so the service
+    // crash-looped with no operator-visible end. Progress resets the counter to
+    // 1, so the hard cap only ever bites the genuine crash-loop shape.
+    process.env.AI_JOB_MAX_ATTEMPTS = "0";
+    process.env.AI_JOB_RESUME_MAX_ATTEMPTS = "3";
+    try {
+      rows.push({
+        id: 392,
+        phone: "201098888170",
+        kind: "email_census",
+        status: "running",
+        attempts: 16,
+        params: { mailbox: "*" },
+        progress: { resumeBaseline: { opened: 0, scanned: 0, lines: 0 } },
+        updatedAt: new Date(Date.now() - 6 * 3600_000),
+      });
+      registerJobRunner("email_census", {
+        resume: (job) => ({
+          phone: job.phone,
+          kind: job.kind,
+          question: job.question ?? "q",
+          params: job.params,
+          existingJobId: job.id,
+          run: async () => undefined,
+        }),
+      });
+      await markOrphanedJobs();
+      expect(rows[0].status).toBe("failed");
+      // And the wording must not promise partial results that do not exist: the
+      // scan counters are all zero, so nothing was ever read.
+      expect(String(rows[0].error)).toContain("قبل أن يبدأ الحصر");
+      expect(String(rows[0].error)).not.toContain("النتائج الجزئية محفوظة");
+    } finally {
+      delete process.env.AI_JOB_MAX_ATTEMPTS;
+      delete process.env.AI_JOB_RESUME_MAX_ATTEMPTS;
+    }
+  });
+
+  it("still resumes past the hard cap when the census PROVED progress", async () => {
+    // The hard cap must never write off a census that is genuinely advancing:
+    // real progress resets the counter to 1, which stays under the cap.
+    process.env.AI_JOB_MAX_ATTEMPTS = "0";
+    process.env.AI_JOB_RESUME_MAX_ATTEMPTS = "3";
+    let runs = 0;
+    try {
+      rows.push({
+        id: 401,
+        phone: "2010",
+        kind: "email_census",
+        status: "running",
+        attempts: 16,
+        params: { mailbox: "*" },
+        progress: {
+          scanned: 2264,
+          opened: 300,
+          lines: 448,
+          resumeBaseline: { opened: 100, scanned: 900, lines: 100 },
+        },
+        updatedAt: new Date(Date.now() - 6 * 3600_000),
+      });
+      registerJobRunner("email_census", {
+        resume: (job) => ({
+          phone: job.phone,
+          kind: job.kind,
+          question: job.question ?? "q",
+          params: job.params,
+          existingJobId: job.id,
+          run: async () => {
+            runs += 1;
+            return { result: { ok: true } };
+          },
+        }),
+      });
+      await markOrphanedJobs();
+      await pendingAiJobs();
+      expect(rows[0].status).not.toBe("failed");
+      expect(rows[0].attempts).toBe(1);
+      expect(runs).toBe(1);
+    } finally {
+      delete process.env.AI_JOB_MAX_ATTEMPTS;
+      delete process.env.AI_JOB_RESUME_MAX_ATTEMPTS;
+    }
+  });
+
   it("leaves a RECENTLY-started running job alone (it is genuinely working)", async () => {
     rows.push({
       id: 41,

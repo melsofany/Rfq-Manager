@@ -18,6 +18,7 @@
  */
 import {
   scanEmails,
+  slimCensus,
   getScanCacheEntry,
   putScanCacheEntry,
   persistScanSession,
@@ -291,7 +292,10 @@ async function runBatch(session: ItemScanSession, key: string, deadline: number)
   // complete and end it on the spot. Only an authoritative answer may replace the
   // total, so a zero that contradicts a known non-zero is refused.
   if (census.matched > 0 || (session.census?.matched ?? 0) === 0) {
-    session.census = census;
+    // Slim before storing: the session is held in memory and mirrored to
+    // Postgres on every heartbeat, so it must never carry the full envelope
+    // list or the downloaded PDF buffers (`slimCensus`).
+    session.census = slimCensus(census);
   }
 
   // A `from` shorthand that is not an address gets resolved on the first window
