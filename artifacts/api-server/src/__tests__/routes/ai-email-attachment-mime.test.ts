@@ -168,4 +168,35 @@ describe("fetchMessageAttachments", () => {
     expect(coverage.unreadable).toBe(1);
     expect(messages[0].attachments).toHaveLength(0);
   });
+
+  it("bounds ONE pass to the window, however large the completeness cap is", async () => {
+    // Live OOM: production had `AI_ATTACHMENT_SCAN_BUDGET=8000`, so a single
+    // pass allocated 8,000 messages' worth of PDF buffers and the instance died
+    // with «Reached heap limit Allocation failed» (heap 1281MB) — on every
+    // restart, because the resumed job re-ran the same pass. `fetchMessageAttachments`
+    // holds every opened message's bytes until it returns, so the pass must read
+    // a bounded WINDOW; the cursor still walks the whole matched list.
+    process.env.AI_ATTACHMENT_SCAN_BUDGET = "8000";
+    process.env.AI_ATTACHMENT_WINDOW = "3";
+    try {
+      const all = Array.from({ length: 10 }, (_, i) => matches(i + 1)[0]);
+      for (let uid = 1; uid <= 10; uid++) sources.set(uid, PDF_SOURCE);
+
+      const first = await fetchMessageAttachments(all, 8000, 0);
+      // Three messages opened, not ten — the window caps the live buffers.
+      expect(first.coverage.messages).toBe(3);
+      expect(first.messages).toHaveLength(3);
+      expect(first.coverage.remaining).toBe(7);
+      expect(first.coverage.truncated).toBe(true);
+
+      // The next pass CONTINUES from the cursor rather than re-opening the first
+      // window, so the walk still covers every matched message.
+      const second = await fetchMessageAttachments(all, 8000, first.coverage.nextSkip);
+      expect(second.messages[0].uid).toBe(4);
+      expect(second.coverage.remaining).toBe(4);
+    } finally {
+      delete process.env.AI_ATTACHMENT_SCAN_BUDGET;
+      delete process.env.AI_ATTACHMENT_WINDOW;
+    }
+  });
 });

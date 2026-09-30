@@ -50,7 +50,11 @@ vi.mock("@workspace/db", async (importOriginal) => ({
 const { clearScanCache, scanCacheKey } = await import("../../modules/ai-assistant/email");
 const { runItemScan } = await import("../../modules/ai-assistant/item-scan-session");
 
-function census(msgs: Array<{ uid: number; mailbox: string; subject: string }>, matched: number) {
+function census(
+  msgs: Array<{ uid: number; mailbox: string; subject: string }>,
+  matched: number,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     matched,
     returned: msgs.length,
@@ -87,6 +91,7 @@ function census(msgs: Array<{ uid: number; mailbox: string; subject: string }>, 
         { filename: "po.pdf", mimeType: "application/pdf", content: Buffer.from("pdf") },
       ],
     })),
+    ...overrides,
   };
 }
 
@@ -212,5 +217,49 @@ describe("persisted scan sessions", () => {
 
     // The known total SURVIVED the bad window: 4, not 0.
     expect(out.session.census.matched).toBe(4);
+  });
+
+  it("never persists the PDF buffers or the full envelope list (the OOM crash)", async () => {
+    // Live: the service crash-looped with «Reached heap limit Allocation failed»
+    // (heap 1281MB) while a census ran. The session is mirrored to Postgres after
+    // every parsed chunk, and it carried the census's `emails` (thousands of
+    // envelopes) plus the window's downloaded PDF Buffers — `JSON.stringify`
+    // expands a Buffer to one array entry PER BYTE, so a single heartbeat could
+    // write tens of megabytes. The persisted session must hold DERIVED values
+    // only.
+    const pool = [1, 2].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC PO ${uid}`,
+    }));
+    // A realistic match set: the session must not keep all of it.
+    const manyEmails = Array.from({ length: 500 }, (_, i) => ({
+      uid: 1000 + i,
+      mailbox: "info@cortoba-supplies.com",
+      folder: "inbox",
+      from: "noreply@egyptian-drilling.com",
+      to: "info@cortoba-supplies.com",
+      subject: `EDC PO ${1000 + i}`,
+      date: "2026-09-22T10:00:00Z",
+      numbers: [],
+    }));
+    scanEmails.mockImplementation(async (opts: { attachmentSkip?: number }) =>
+      census(pool.slice(opts.attachmentSkip ?? 0, (opts.attachmentSkip ?? 0) + 2), 2, {
+        emails: manyEmails,
+        returned: manyEmails.length,
+      }),
+    );
+
+    const key = scanCacheKey("items", { mailbox: "*" });
+    await runItemScan(key, { mailbox: "*" }, Date.now() + 10_000);
+    await Promise.resolve();
+
+    const last = insertSpy.mock.calls.at(-1)?.[0] as { session: unknown };
+    const json = JSON.stringify(last.session);
+    // No serialized Buffer anywhere in what reaches the database.
+    expect(json).not.toContain('"type":"Buffer"');
+    // The session's own census keeps a bounded sample, never the whole match set.
+    const session = last.session as { census: { emails: unknown[] } };
+    expect(session.census.emails.length).toBeLessThanOrEqual(100);
   });
 });

@@ -1251,4 +1251,46 @@ describe("a zero-match census must not be blamed on the mailbox connection", () 
     // And it must not let the model claim the mail simply is not there.
     expect(res.data.note).toContain("لا تقل إنه لا توجد رسائل منه");
   });
+
+  it("never carries the downloaded PDF bytes into the parsed rows (the OOM crash)", async () => {
+    // Live: the service crash-looped with «Reached heap limit Allocation failed»
+    // (heap 1281MB) while a census ran. `out.push({ ...message, ... })` copied the
+    // message's `attachments` — the downloaded PDF Buffers — into the parsed
+    // rows, which the scan session accumulates and mirrors to Postgres after
+    // every chunk. `JSON.stringify` expands a Buffer to one array entry PER BYTE,
+    // so a single heartbeat wrote tens of megabytes and the heap never recovered.
+    // The parser has read the bytes by then, so only the small metadata may
+    // travel onward.
+    scanEmails.mockResolvedValue(
+      censusWithAttachments([
+        {
+          uid: 10,
+          mailbox: "info@cortoba-supplies.com",
+          subject: "EDC PO No P26E14630",
+          attachments: pdfAttachments([
+            { filename: "po.pdf", content: Buffer.from(PO_TEXT, "utf8") },
+          ]),
+        },
+      ]),
+    );
+
+    const res = (await executeTool(
+      "scan_email_items",
+      { from: "egyptian-drilling", exportCsv: true },
+      ctx as never,
+    )) as { ok: boolean };
+
+    expect(res.ok).toBe(true);
+    // The session the tool held must contain no serialized Buffer at all.
+    const { getScanCacheEntry } = await import("../../modules/ai-assistant/email");
+    const { scanCacheKey } = await import("../../modules/ai-assistant/email");
+    const session = getScanCacheEntry<{ messages: Array<Record<string, unknown>> }>(
+      scanCacheKey("items", { from: "egyptian-drilling", mailbox: "*" }),
+    );
+    expect(session).toBeTruthy();
+    const json = JSON.stringify(session);
+    expect(json).not.toContain('"type":"Buffer"');
+    expect(session!.messages.length).toBeGreaterThan(0);
+    expect(session!.messages[0].attachments).toBeUndefined();
+  });
 });

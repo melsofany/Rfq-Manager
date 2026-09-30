@@ -257,6 +257,22 @@ function advancedSinceResume(job: JobRecord): boolean {
   return PROGRESS_KEYS.some((k) => now[k] > Number(baseline[k] ?? 0));
 }
 
+/**
+ * Did this job ever do measurable work?
+ *
+ * Judged by the SCAN COUNTERS, not by `attempts`: a resumed-but-failed job has
+ * a non-zero `attempts` while having read nothing at all, and the failure message
+ * used `attempts > 0` as its proxy for progress — so a job that crash-looped
+ * sixteen times without opening a message was told «النتائج الجزئية محفوظة
+ * ويمكن استئناف الحصر من حيث توقف» about results that do not exist. That is the
+ * same class of false claim as a census reporting `complete` over an empty scan.
+ */
+function hasProgressEvidence(job: JobRecord): boolean {
+  if (advancedSinceResume(job)) return true;
+  const m = progressMarkers(job);
+  return PROGRESS_KEYS.some((k) => m[k] > 0);
+}
+
 const jobRunners = new Map<string, JobRunner>();
 
 /** Register a kind's resumable runner (called at module load by the tool layer). */
@@ -432,6 +448,24 @@ function maxJobAttempts(): number {
 }
 
 /**
+ * Absolute ceiling on CONSECUTIVE resumes that made no progress.
+ *
+ * `AI_JOB_MAX_ATTEMPTS=0` means «no limit» so a frequently-redeploying service
+ * does not write off a long census that is genuinely advancing. But an unlimited
+ * budget also removes the only thing that stopped a job which CANNOT advance:
+ * live, job 392 was resumed on every restart (attempts 1 → 16), each run OOMing
+ * the instance before its first batch boundary, so the service crash-looped with
+ * no operator-visible end. A job that proves progress resets its counter to 1, so
+ * this ceiling only ever bites the genuine crash-loop shape. `0` disables it
+ * explicitly; the default is finite on purpose.
+ */
+function resumeHardCap(): number {
+  const raw = process.env.AI_JOB_RESUME_MAX_ATTEMPTS;
+  const n = raw === undefined || raw === "" ? 10 : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 10;
+}
+
+/**
  * Ceiling on the DELIVERY half of a job (producing + sending the report).
  *
  * Found live on job 350: the census finished `complete: true` with 334 messages
@@ -581,8 +615,17 @@ export async function markOrphanedJobs(): Promise<number> {
     // interrupts long censuses by design, and the cursor makes each restart a
     // continuation. A crash-loop is still bounded by the census being unable to
     // advance: `attempts` is only reset to 1 when progress was proven.
+    //
+    // The unlimited budget is ALSO bounded by `resumeHardCap()`, because a job
+    // that cannot even reach its first checkpoint never resets its counter — live,
+    // job 392 was resumed 16 times in a row, each attempt OOMing the instance
+    // before any progress, and the crash loop had no end the operator could see.
+    // The hard cap only ever bites that shape, since real progress resets to 1.
     const attemptLimit = maxJobAttempts();
-    if (opts && (attemptLimit === 0 || attempts <= attemptLimit)) {
+    const hardCap = resumeHardCap();
+    const withinLimit = attemptLimit === 0 ? true : attempts <= attemptLimit;
+    const withinHardCap = hardCap === 0 ? true : attempts <= hardCap;
+    if (opts && withinLimit && withinHardCap) {
       resumable.push({ job, opts, attempts });
     } else {
       dead.push(job.id);
@@ -598,7 +641,7 @@ export async function markOrphanedJobs(): Promise<number> {
     // operator can see the work is resumable rather than gone.
     const PARTIAL = "النتائج الجزئية محفوظة ويمكن استئناف الحصر من حيث توقف";
     for (const job of orphans.filter((o) => dead.includes(o.id))) {
-      const advanced = advancedSinceResume(job) || (job.attempts ?? 0) > 0;
+      const advanced = hasProgressEvidence(job);
       const p = (job.progress ?? {}) as Record<string, unknown>;
       const reached = Number(p.scanned ?? 0);
       const error = advanced

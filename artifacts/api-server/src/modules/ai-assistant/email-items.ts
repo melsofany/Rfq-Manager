@@ -840,7 +840,26 @@ export async function parseItemsFromAttachments(
       if (!items.length) continue;
       sawItem = true;
       coverage.lines += items.length;
-      out.push({ ...message, filename: att.filename, items });
+      // Copy ONLY the message METADATA, never the message object.
+      //
+      // `{ ...message }` also carried `attachments` — the downloaded PDF bytes —
+      // into the returned rows, and those rows are accumulated on the scan
+      // session and mirrored to Postgres after every parsed chunk. A census of a
+      // year's mail therefore held tens of MB of PDF buffers in the heap AND
+      // wrote them to the database as base64 on every heartbeat; the live service
+      // died with «Reached heap limit Allocation failed» (heap 1281MB) while a
+      // census ran, and the crash-looping resume re-read the same mail forever.
+      // The parser has already read the bytes it needs, so only the small fields
+      // travel onward.
+      out.push({
+        uid: message.uid,
+        mailbox: message.mailbox,
+        folder: message.folder,
+        subject: message.subject,
+        date: message.date,
+        filename: att.filename,
+        items,
+      });
       flat.push(...items);
     }
     if (sawReadable) coverage.readable += 1;
