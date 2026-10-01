@@ -25,6 +25,7 @@ export type QueryIntent =
   | "supplier_lookup"
   | "count_aggregate"
   | "email_search"
+  | "job_control"
   | "report"
   | "analytics"
   | "procurement_ops"
@@ -115,6 +116,16 @@ const REPORT_DELIVERY_RE =
 
 /** Email / attachment / WhatsApp surfaces. */
 const EMAIL_RE = /(بريد|ايميل|ايمل|ميل|رسائل|رساله|مرفق|مرفقات|صندوق|inbox|email|mail|attach)/;
+/** Follow-ups about a background census, not a new data question. */
+const JOB_STATUS_RE =
+  /(حاله\s*(?:المهمه|الحصر|الشغل)|حالة\s*(?:المهمة|الحصر|الشغل)|خلص\s*(?:الحصر|المهمه|المهمة)|خلصت\s*(?:المهمه|المهمة)|وصل\s*(?:الحصر|الشغل)|الى\s*اين\s*وصل|where\s+is\s+the\s+job|job\s+status)/i;
+const JOB_CONTINUE_RE =
+  /(كمل\s*(?:الحصر|الفحص|المهمة|المهمه)|اكمل\s*(?:الحصر|الفحص|المهمة|المهمه)|استأنف|resume\s*(?:the\s+)?(?:scan|job)|continue\s*(?:the\s+)?(?:scan|job))/i;
+const JOB_CANCEL_RE =
+  /(الغ[يى]|ألغ[يى]|وقف|اقف|أوقف)\s*(?:المهمه|المهمة|الحصر|الفحص|الشغل)|cancel\s*(?:the\s+)?job/i;
+/** A quotation is a document class, never a purchase order. */
+const QUOTATION_EXCLUSION_RE =
+  /(اوعى|اوعي|متدخلش|لا\s*تحط|بدون|من\s*غير|استبعد|استثناء|مش\s*عايز|not\s+include|exclude|without)\s*.{0,30}(quotation|quote|عرض\s*سعر|عروض\s*الاسعار)/i;
 
 /** Counting questions. The «كام»/«كم» alternatives need a boundary — otherwise
  *  «كامل» (complete) reads as «كام» (how many) and a report request is mistaken
@@ -228,7 +239,9 @@ export function routeQuestion(rawText: string): RoutePlan {
   // branch can forget it: «من الميل مش قاعدة البيانات» must survive whichever
   // intent the question also matches.
   const sourceScope: SourceScope =
-    EMAIL_SCOPE_RE.test(text) || NOT_DB_SCOPE_RE.test(text) ? "email" : "any";
+    EMAIL_SCOPE_RE.test(text) || NOT_DB_SCOPE_RE.test(text) || QUOTATION_EXCLUSION_RE.test(text)
+      ? "email"
+      : "any";
 
   if (!text) {
     return {
@@ -263,6 +276,32 @@ export function routeQuestion(rawText: string): RoutePlan {
       verify: false,
       reason: "greeting only",
       hint: "",
+      sourceScope,
+    };
+  }
+
+  // Job follow-ups are operational commands. Route them before the generic
+  // analytics default so «حالة المهمة» reads the real job row and «كمل
+  // الحصر» resumes/deduplicates the existing census instead of inventing a
+  // progress report or starting a second scan.
+  if (JOB_CANCEL_RE.test(text) || JOB_CONTINUE_RE.test(text) || JOB_STATUS_RE.test(text)) {
+    const action = JOB_CANCEL_RE.test(text)
+      ? "cancel"
+      : JOB_CONTINUE_RE.test(text)
+        ? "continue"
+        : "status";
+    return {
+      intent: "job_control",
+      path: "fast",
+      maxRounds: FAST_MAX_ROUNDS,
+      verify: false,
+      reason: `background job ${action}`,
+      hint:
+        action === "cancel"
+          ? "طلب إيقاف مهمة: استخدم cancel_job للمهمة النشطة فقط."
+          : action === "continue"
+            ? "طلب استكمال حصر قائم: استخدم job_status أولًا لمعرفة أحدث مهمة، ثم استأنف نفس المهمة/نطاقها ولا تبدأ حصرًا جديدًا ولا تخترع نسبة تقدم."
+            : "طلب حالة مهمة: استخدم job_status واعرض الحالة والتقدم الفعليين من النتيجة، ولا تخمّن أو تنشئ مهمة جديدة.",
       sourceScope,
     };
   }
@@ -443,7 +482,7 @@ export function routeHint(plan: RoutePlan): string {
         "إن ذكر المستخدم موضوعًا للرسالة (مثل «EDC PO NO» أو كلمات تظهر في عنوانها) فمرّره كـ subject مع from، " +
         "لأن هذا ما يجعل الحصر يكتمل ويُخرج الأرقام الفعلية. " +
         "وإن لم يذكر موضوعًا وكان النطاق واسعًا جدًّا فاذكر أن الحصر جزئي بدل عرض عيّنة كأنها الإجمالي.\n" +
-        "وحين يُطلب «أكثر بند تكرر»: إن كان الطلب عن أوامر الشراء فاستخدم docKind=po، وإن كان عن طلبات التسعير فـ docKind=rfq."
+        "وحين يُطلب «أكثر بند تكرر»: إن كان الطلب عن أوامر الشراء فاستخدم docKind=po، وإن كان عن طلبات التسعير فـ docKind=rfq. «Quotation/عرض السعر» ليس أمر شراء؛ إذا طلب المستخدم استبعاده فاستعمل docKind=po أو لا تخلطه مع RFQ إلا إذا طلب ذلك صراحة."
       : "";
   if (!plan.hint) return scopeHint;
   return `\n\nتوجيه هذه الجولة (${plan.path === "fast" ? "مسار سريع" : "مسار تحليلي"}): ${plan.hint}${scopeHint}`;

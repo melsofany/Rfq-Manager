@@ -118,6 +118,25 @@ describe("router: deep path (analysis, email, reports)", () => {
     expect(plan.intent).toBe("procurement_ops");
     expect(plan.path).toBe("deep");
   });
+
+  it("routes colloquial job-status follow-ups to the real job row", () => {
+    const plan = routeQuestion("حاله المهمه");
+    expect(plan.intent).toBe("job_control");
+    expect(plan.path).toBe("fast");
+    expect(routeHint(plan)).toContain("job_status");
+  });
+
+  it("routes resume wording without allowing a guessed progress report", () => {
+    const plan = routeQuestion("كمل الحصر");
+    expect(plan.intent).toBe("job_control");
+    expect(routeHint(plan)).toContain("لا تبدأ حصرًا جديدًا");
+  });
+
+  it("treats an explicit quotation exclusion as an email-scope constraint", () => {
+    const plan = routeQuestion("اوعي تكون حطيت في الحصر ملفات Quotation");
+    expect(plan.sourceScope).toBe("email");
+    expect(routeHint(plan)).toContain("Quotation");
+  });
 });
 
 describe("router: safe default and hint", () => {

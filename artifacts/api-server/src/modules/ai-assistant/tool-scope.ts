@@ -173,6 +173,12 @@ export function toolsForIntent(
       // the operator actually asked for.
       return [...EMAIL_TOOLS, ...CORE_TOOLS];
 
+    case "job_control":
+      // Keep operational follow-ups small and factual. In particular, do not
+      // expose the analytical catalogue to «حالة المهمة» or the model may
+      // answer with a fresh census instead of reading the existing job row.
+      return ["job_status", "start_census_job", "resend_job_report", "cancel_job", ...CORE_TOOLS];
+
     case "document_lookup":
       return [
         "lookup_document",

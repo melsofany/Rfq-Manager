@@ -1620,6 +1620,15 @@ export function wantsCompleteCensus(args: Record<string, unknown>): boolean {
  */
 export function asksAboutRfq(question: unknown, contains?: string): boolean {
   const text = `${String(question ?? "")} ${String(contains ?? "")}`;
+  // «Quotation» is not an order. When the operator explicitly excludes it,
+  // force the PO-only branch instead of widening the census to `all`.
+  if (
+    /(اوعى|اوعي|متدخلش|لا\s*تحط|بدون|من\s*غير|استبعد|استثناء|مش\s*عايز|not\s+include|exclude|without)\s*.{0,30}(quotation|quote|عرض\s*سعر|عروض\s*الاسعار)/i.test(
+      text,
+    )
+  ) {
+    return false;
+  }
   if (
     /أوامر\s*الشراء|أمر\s*شراء|اوامر\s*الشراء|امر\s*شراء|\bP\.?O\.?\b|purchase\s+order/i.test(text)
   ) {

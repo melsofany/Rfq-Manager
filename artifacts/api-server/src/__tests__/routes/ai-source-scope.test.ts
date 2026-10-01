@@ -33,6 +33,7 @@ vi.mock("drizzle-orm", () => ({
 
 const { routeQuestion } = await import("../../modules/ai-assistant/router");
 const { documentKind, documentNumber } = await import("../../modules/ai-assistant/email-items");
+const { asksAboutRfq } = await import("../../modules/ai-assistant/tools");
 const { verifyAnswer } = await import("../../modules/ai-assistant/verifier");
 
 beforeEach(() => {
@@ -97,6 +98,10 @@ describe("documentKind — only POs count", () => {
 
   it("returns unknown rather than guessing", () => {
     expect(documentKind("some unrelated document text")).toBe("unknown");
+  });
+
+  it("keeps an explicit quotation exclusion out of the RFQ/all branch", () => {
+    expect(asksAboutRfq("اوعي تكون حطيت في الحصر ملفات Quotation")).toBe(false);
   });
 
   it("still reads the document number it classifies by", () => {
