@@ -406,6 +406,21 @@ describe("unified engine: a truncated answer is not an answer", () => {
 
     expect(out.finalText).toBeNull();
   });
+
+  it("retries an empty stop turn instead of treating it as a completed answer", async () => {
+    // Some provider gateways label an intermittent empty completion as `stop`,
+    // not `length`. It is still not an answer and must receive the same bounded
+    // tool-free retry as a truncated reasoning turn.
+    script = [
+      { tool: "scan_email_items", args: {}, result: "853 items" },
+      { answer: "" },
+      { answer: "النتيجة مبنية على البيانات المقروءة." },
+    ];
+
+    const out = await run(3);
+
+    expect(out.finalText).toBe("النتيجة مبنية على البيانات المقروءة.");
+  });
 });
 
 describe("unified engine: the answer is always funded", () => {

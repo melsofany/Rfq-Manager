@@ -332,20 +332,21 @@ export async function runToolLoop(opts: {
       rounds += 1;
 
       if (result.toolCalls.length === 0) {
-        // An EMPTY turn is not an answer. A reasoning model that spent its whole
-        // `max_tokens` on thinking returns no text and `finish_reason:"length"`;
-        // assigning that empty string let the run be reported as "answered"
-        // while the operator received the generic «نفدت محاولات المعالجة» notice.
-        // Leaving it null makes the caller say what actually happened.
+        // An EMPTY turn is not an answer. Providers have returned both
+        // finish_reason:"length" (reasoning consumed the whole token budget) and
+        // finish_reason:"stop" (an intermittent empty completion). Treating the
+        // latter as a successful final answer made the caller emit the generic
+        // failure notice even though a tool-free retry could answer from the same
+        // evidence. One bounded retry is safe: it is only taken for an empty turn,
+        // and the caller's deadline still limits the attempt.
         finalText = result.content?.trim() || null;
-        if (!finalText && result.finishReason === "length") {
+        if (!finalText) {
           logger.warn(
-            { phone: opts.phone, model: opts.model, round },
-            "AI assistant: answer truncated by the token budget",
+            { phone: opts.phone, model: opts.model, round, finishReason: result.finishReason },
+            "AI assistant: empty answer turn — retrying without tools",
           );
-          // The thinking was cut short, so the evidence is already in the
-          // transcript and the schema-free re-ask genuinely can differ (a smaller
-          // request leaves more of the budget for the reply itself).
+          // Removing the schemas gives the provider a smaller, unambiguous request
+          // and prevents it from returning another tool call instead of text.
           finalText = await answerWithoutTools(messages, {
             ...opts,
             deadlineMs: answerDeadlineMs(),
