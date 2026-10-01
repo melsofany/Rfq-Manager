@@ -900,6 +900,54 @@ describe("oversize census hands off to a background job", () => {
     expect(res.data.note).toContain("job_status");
   });
 
+  it("filters documents by quotation docKind and excludes quotations when docKind is rfq", async () => {
+    extractPdfText.mockImplementation(async (buf: Buffer) => buf.toString("utf8"));
+    const rfqText = `RFQ number: 26R011723\nREQUEST FOR QUOTATION\nQuantity UOM Part No Line Item\n1 4 Each 5720.011.GENRAL.2806 MAICO FAN EZQ 20/4\n`;
+    const quoteText = `QUOTATION number: Q26E1000\nPRICE QUOTE\nQuantity UOM Part No Line Item\n1 10 Each 5720.011.GENRAL.2806 MAICO FAN EZQ 20/4\n`;
+    const pool = [
+      {
+        uid: 1,
+        mailbox: "info@cortoba-supplies.com",
+        subject: "EDC RFQ No 26R011723",
+        attachments: pdfAttachments([{ filename: "rfq.pdf", content: Buffer.from(rfqText) }]),
+      },
+      {
+        uid: 2,
+        mailbox: "info@cortoba-supplies.com",
+        subject: "Quotation Offer",
+        attachments: pdfAttachments([{ filename: "quote.pdf", content: Buffer.from(quoteText) }]),
+      },
+    ];
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 2,
+          returned: 2,
+        }),
+    );
+
+    // Filter by RFQ only
+    const rfqRes = (await executeTool(
+      "scan_email_items",
+      { contains: "MAICO", docKind: "rfq", minOrders: 1 },
+      ctx as never,
+    )) as { data: { topItems: Array<{ qty: number }>; coverage: { rfqDocuments: number; quotationDocuments: number } } };
+
+    expect(rfqRes.data.coverage.rfqDocuments).toBe(1);
+    expect(rfqRes.data.topItems).toHaveLength(1);
+    expect(rfqRes.data.topItems[0].qty).toBe(4);
+
+    // Filter by Quotation only
+    const quoteRes = (await executeTool(
+      "scan_email_items",
+      { contains: "MAICO", docKind: "quotation", minOrders: 1 },
+      ctx as never,
+    )) as { data: { topItems: Array<{ qty: number }> } };
+
+    expect(quoteRes.data.topItems).toHaveLength(1);
+    expect(quoteRes.data.topItems[0].qty).toBe(10);
+  });
+
   it("counts PURCHASE ORDERS only — an RFQ is read but excluded", async () => {
     // The operator's rule: a quotation is not an order. EDC sends both from the
     // same address with nearly identical item tables, so counting RFQs would
@@ -990,9 +1038,8 @@ describe("oversize census hands off to a background job", () => {
     expect(res.data.topItems).toHaveLength(1);
     expect(res.data.topItems[0].description).toContain("MAICO FAN");
     expect(res.data.topItems[0].qty).toBe(4);
-    // The question named «طلبات التسعير» without naming POs, so the search spans
-    // both kinds rather than silently narrowing to PO-only (which returned 0).
-    expect(res.data.note).toContain("أوامر الشراء وطلبات التسعير");
+    // The question named «طلبات التسعير» without naming POs, so the search narrows to RFQ.
+    expect(res.data.note).toContain("طلبات التسعير");
   });
 
   it("does not divert a PO question to RFQs when the wording says «أوامر الشراء»", async () => {

@@ -107,6 +107,7 @@ function emptyItemCoverage(): ItemScanCoverage {
     pages: 0,
     poDocuments: 0,
     rfqDocuments: 0,
+    quotationDocuments: 0,
     unknownDocuments: 0,
   };
 }
@@ -151,6 +152,7 @@ export const ITEM_COVERAGE_KEYS: Array<keyof ItemScanCoverage> = [
   "pages",
   "poDocuments",
   "rfqDocuments",
+  "quotationDocuments",
   "unknownDocuments",
 ];
 
