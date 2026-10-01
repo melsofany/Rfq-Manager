@@ -446,7 +446,8 @@ Total Price 20.00`;
   });
 
   it("classifies quotation files and distinguishes them from RFQs and POs", () => {
-    const quoteText = "QUOTATION\nQuote No: Q-1234\nQuantity UOM Part No Line Item\n1 5 Each 001 FAN";
+    const quoteText =
+      "QUOTATION\nQuote No: Q-1234\nQuantity UOM Part No Line Item\n1 5 Each 001 FAN";
     expect(documentKind(quoteText, "Quotation for MAICO Fan")).toBe("quotation");
     expect(documentKind("Offer details", "PRICE QUOTE 123")).toBe("quotation");
     expect(documentKind("Offer details", "EDC RFQ No 26R011900")).toBe("rfq");

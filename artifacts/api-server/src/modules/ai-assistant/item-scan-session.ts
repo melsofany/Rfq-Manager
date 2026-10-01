@@ -44,8 +44,8 @@ export interface ItemScanArgs {
   beforeDate?: string;
   mailbox: string;
   limit?: number;
-  /** Which document kind the ranking is about (`po` default, `rfq`, `all`). */
-  docKind?: "po" | "rfq" | "all";
+  /** Which document kind the ranking is about (`po` default, `rfq`, `quotation`, `all`). */
+  docKind?: "po" | "rfq" | "quotation" | "all";
 }
 
 /** Accumulated state of one resumable census. */

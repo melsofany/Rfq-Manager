@@ -931,7 +931,12 @@ describe("oversize census hands off to a background job", () => {
       "scan_email_items",
       { contains: "MAICO", docKind: "rfq", minOrders: 1 },
       ctx as never,
-    )) as { data: { topItems: Array<{ qty: number }>; coverage: { rfqDocuments: number; quotationDocuments: number } } };
+    )) as {
+      data: {
+        topItems: Array<{ qty: number }>;
+        coverage: { rfqDocuments: number; quotationDocuments: number };
+      };
+    };
 
     expect(rfqRes.data.coverage.rfqDocuments).toBe(1);
     expect(rfqRes.data.topItems).toHaveLength(1);

@@ -2651,7 +2651,10 @@ async function executeToolInner(
         // own wording, then the PO default. Computed HERE, before the hand-off, so
         // the background job receives the same answer the interactive path would.
         const docKind: "po" | "rfq" | "quotation" | "all" =
-          args.docKind === "rfq" || args.docKind === "all" || args.docKind === "po" || args.docKind === "quotation"
+          args.docKind === "rfq" ||
+          args.docKind === "all" ||
+          args.docKind === "po" ||
+          args.docKind === "quotation"
             ? args.docKind
             : asksAboutRfq(args.question, contains)
               ? "rfq"
@@ -3794,10 +3797,13 @@ async function executeToolInner(
           mailbox: args.mailbox ? String(args.mailbox) : "*",
           contains: args.contains ? String(args.contains).trim() : undefined,
           docKind:
-              args.docKind === "rfq" || args.docKind === "all" || args.docKind === "po" || args.docKind === "quotation"
+            args.docKind === "rfq" ||
+            args.docKind === "all" ||
+            args.docKind === "po" ||
+            args.docKind === "quotation"
               ? args.docKind
               : asksAboutRfq(args.question, args.subject ? String(args.subject) : undefined)
-                  ? "rfq"
+                ? "rfq"
                 : "po",
         };
         return launchCensusJob(ctx, scanArgs, String(args.question ?? "") || "حصر بنود البريد");
