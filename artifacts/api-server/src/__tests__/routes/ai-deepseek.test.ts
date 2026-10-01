@@ -271,6 +271,41 @@ describe("DeepSeek provider (second provider, cross-provider fallback)", () => {
     expect(res.providerUsed).toBe("deepseek");
   });
 
+  it("converts DeepSeek DSML content into structured tool calls", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content:
+                  `<DSML｜｜ calls>\n` +
+                  `<DSML｜｜ invoke name="start_census_job">` +
+                  `<DSML｜｜ parameter name="docKind" string="true">rfq</DSML｜｜ parameter>` +
+                  `<DSML｜｜ parameter name="contains" string="true">EZQ 20/4</DSML｜｜ parameter>` +
+                  `</DSML｜｜ invoke>\n</DSML｜｜tool_calls>`,
+              },
+            },
+          ],
+        }),
+    });
+    const { chatCompletion } = await import("../../modules/ai-assistant/llm");
+    const res = await chatCompletion({
+      model: "deepseek-v4-pro",
+      baseUrl: "https://api.deepseek.com/v1",
+      messages: [{ role: "user", content: "ابحث في RFQ" }],
+    });
+    expect(res.content).toBeNull();
+    expect(res.toolCalls).toHaveLength(1);
+    expect(res.toolCalls[0].function.name).toBe("start_census_job");
+    expect(JSON.parse(res.toolCalls[0].function.arguments)).toEqual({
+      docKind: "rfq",
+      contains: "EZQ 20/4",
+    });
+  });
+
   it("still transcribes a voice note via Gemini when the CHAT provider is DeepSeek", async () => {
     // The chat provider must not decide the media provider: DeepSeek has no
     // transcription endpoint, so a voice note is read by Gemini regardless. This

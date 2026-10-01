@@ -111,6 +111,20 @@ describe("tool-call markup never reaches the operator", () => {
     expect(clean).not.toContain("2026-08-01"); // the argument must not leak either
   });
 
+  it("removes the DSML wrapper emitted by DeepSeek in production", () => {
+    const raw = `<DSML｜｜ calls>
+<DSML｜｜ invoke name="start_census_job">
+<DSML｜｜ parameter name="docKind" string="true">rfq</DSML｜｜ parameter>
+<DSML｜｜ parameter name="contains" string="true">EZQ 20/4</DSML｜｜ parameter>
+</DSML｜｜ invoke>
+</DSML｜｜tool_calls>`;
+    expect(hadToolMarkup(raw)).toBe(true);
+    const clean = sanitizeAssistantReply(raw);
+    expect(clean).not.toContain("DSML");
+    expect(clean).not.toContain("start_census_job");
+    expect(clean).not.toContain("EZQ 20/4");
+  });
+
   it("removes a bare pipe marker without surrounding angle brackets", () => {
     expect(sanitizeAssistantReply("جاري البحث ｜｜parameter｜｜")).not.toMatch(/[｜|]/);
   });

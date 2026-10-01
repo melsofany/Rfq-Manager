@@ -23,6 +23,11 @@ const MARKUP_PATTERNS: RegExp[] = [
   /<\s*(?:[\w.-]+:)?parameter\b[^>]*>[\s\S]*?<\/\s*(?:[\w.-]+:)?parameter\s*>/gi,
   // Any surviving tag (a stray open/close, a self-closing invoke).
   /<\/?\s*(?:[\w.-]+:)?(?:tool_calls?|function_calls?|invoke|parameter|tool_use)\b[^>]*>/gi,
+  // DeepSeek native DSML, observed in production as `<DSML｜｜ invoke ...>`.
+  // The LLM layer normally converts this into structured calls; this fallback
+  // ensures an unexpected provider shape can never reach WhatsApp as markup.
+  /<\s*DSML\s*[｜|]{2}\s*(?:calls?|tool_calls?|invoke|parameter)\b[^>]*>[\s\S]*?<\/\s*DSML\s*[｜|]{2}\s*(?:calls?|tool_calls?|invoke|parameter)\s*>/gi,
+  /<\/?\s*DSML\s*[｜|]{2}\s*(?:calls?|tool_calls?|invoke|parameter)\b[^>]*>/gi,
   // DeepSeek / GLM control markers that surface as literal text on the compat API.
   /<[пҪң|]{1,2}[^>]{0,80}[пҪң|]{1,2}>/g,
   /(?:<|&lt;)\s*[пҪң|][^>]{0,120}(?:[пҪң|]|>)/g,

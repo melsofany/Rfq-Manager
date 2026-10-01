@@ -211,6 +211,47 @@ export function maxTokensFor(model: string): number {
   return /deepseek-(v\d|r\d|reasoner)/i.test(model) ? REASONING_MAX_TOKENS : DEFAULT_MAX_TOKENS;
 }
 
+/**
+ * DeepSeek can occasionally emit its native DSML tool syntax in `message.content`
+ * instead of filling OpenAI's `message.tool_calls` field. If that text reaches the
+ * agent as prose, the operator sees fake `<DSML...invoke>` instructions and the
+ * requested operation never runs. Convert only the strict DSML invoke/parameter
+ * shape here; ordinary prose is left untouched.
+ */
+function parseDsmlToolCalls(content: string): ToolCall[] {
+  const normalized = content
+    .replace(/<\s*DSML\s*[｜|]{2}\s*/gi, "<DSML ")
+    .replace(/<\/\s*DSML\s*[｜|]{2}\s*/gi, "</DSML ");
+  const invokes =
+    /<\s*DSML\s+invoke\b[^>]*\bname\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/\s*DSML\s+invoke\s*>/gi;
+  const parameters =
+    /<\s*DSML\s+parameter\b[^>]*\bname\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/\s*DSML\s+parameter\s*>/gi;
+  const calls: ToolCall[] = [];
+  for (const match of normalized.matchAll(invokes)) {
+    const args: Record<string, unknown> = {};
+    for (const parameter of match[2].matchAll(parameters)) {
+      const raw = parameter[2].trim();
+      let value: unknown = raw;
+      if (/^(true|false)$/i.test(raw)) value = raw.toLowerCase() === "true";
+      else if (/^-?\d+(?:\.\d+)?$/.test(raw)) value = Number(raw);
+      else {
+        try {
+          value = JSON.parse(raw);
+        } catch {
+          // DSML strings are intentionally kept as strings when not JSON.
+        }
+      }
+      args[parameter[1]] = value;
+    }
+    calls.push({
+      id: `dsml_${calls.length + 1}`,
+      type: "function",
+      function: { name: match[1], arguments: JSON.stringify(args) },
+    });
+  }
+  return calls;
+}
+
 /** Single attempt against one model. Throws AiError; 429/503 are retryable. */
 async function requestCompletion(opts: {
   candidate: ModelCandidate;
@@ -252,10 +293,15 @@ async function requestCompletion(opts: {
       }>;
     };
     const choice = json.choices?.[0];
+    const rawContent = choice?.message?.content ?? null;
+    const dsmlCalls = rawContent ? parseDsmlToolCalls(rawContent) : [];
     const reasoning = choice?.message?.reasoning_content;
     return {
-      content: choice?.message?.content ?? null,
-      toolCalls: choice?.message?.tool_calls ?? [],
+      // A DSML turn is an assistant tool-call turn, not prose. Dropping its raw
+      // markup here prevents it from being echoed back to the provider or stored
+      // as a user-visible answer; the engine receives the normalized calls below.
+      content: dsmlCalls.length ? null : rawContent,
+      toolCalls: choice?.message?.tool_calls?.length ? choice.message.tool_calls : dsmlCalls,
       finishReason: choice?.finish_reason ?? null,
       reasoningContent: typeof reasoning === "string" ? reasoning : undefined,
     };
