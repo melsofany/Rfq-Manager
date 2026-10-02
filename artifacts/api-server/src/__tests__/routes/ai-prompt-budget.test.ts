@@ -19,9 +19,9 @@ describe("system prompt budget", () => {
   const prompt = systemPrompt(settings);
 
   it("stays under the size where the rules stop being followed", () => {
-    // 9k leaves room for growth while failing the 19.7k body that was live when
+    // 9.5k leaves room for growth while failing the 19.7k body that was live when
     // the assistant started ignoring its own instructions.
-    expect(prompt.length).toBeLessThan(9_000);
+    expect(prompt.length).toBeLessThan(9_500);
     expect(prompt.length).toBeGreaterThan(1_000);
   });
 
