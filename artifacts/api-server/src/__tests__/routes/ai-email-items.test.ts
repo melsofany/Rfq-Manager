@@ -444,6 +444,15 @@ Total Price 20.00`;
     // The title in the TEXT still wins, so a subject typo cannot misclassify.
     expect(documentKind(PO_TEXT, "EDC RFQ No 26R011900")).toBe("po");
   });
+
+  it("classifies quotation files and distinguishes them from RFQs and POs", () => {
+    const quoteText =
+      "QUOTATION\nQuote No: Q-1234\nQuantity UOM Part No Line Item\n1 5 Each 001 FAN";
+    expect(documentKind(quoteText, "Quotation for MAICO Fan")).toBe("quotation");
+    expect(documentKind("Offer details", "PRICE QUOTE 123")).toBe("quotation");
+    expect(documentKind("Offer details", "EDC RFQ No 26R011900")).toBe("rfq");
+    expect(documentKind("Offer details", "EDC PO No P26E14708")).toBe("po");
+  });
 });
 
 describe("prices come from the PO rows", () => {
@@ -499,6 +508,7 @@ describe("prices come from the PO rows", () => {
       pages: 1,
       poDocuments: 1,
       rfqDocuments: 1,
+      quotationDocuments: 1,
       unknownDocuments: 1,
     } satisfies ItemScanCoverage;
     expect([...ITEM_COVERAGE_KEYS].sort()).toEqual(Object.keys(sample).sort());

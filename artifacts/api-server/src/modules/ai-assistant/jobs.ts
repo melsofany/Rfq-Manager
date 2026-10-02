@@ -717,8 +717,8 @@ export interface CensusJobArgs {
   beforeDate?: string;
   mailbox: string;
   limit?: number;
-  /** Which document kind the ranking is about (`po` default, `rfq`, `all`). */
-  docKind?: "po" | "rfq" | "all";
+  /** Which document kind the ranking is about (`po` default, `rfq`, `quotation`, `all`). */
+  docKind?: "po" | "rfq" | "quotation" | "all";
   /**
    * A part / brand / Line Item filter applied to the PARSED rows.
    *

@@ -798,13 +798,11 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             },
             docKind: {
               type: "string",
-              enum: ["po", "rfq", "all"],
+              enum: ["po", "rfq", "quotation", "all"],
               description:
-                "نوع المستند المطلوب: po = أوامر الشراء فقط، rfq = طلبات التسعير/عروض السعر فقط، " +
-                "all = الاثنان معًا. الافتراضي في قائمة التكرار هو po، لكن أي سؤال عن «طلبات التسعير» " +
-                "أو «الطلبات الواردة» أو «هل ظهر البند في الطلبات؟» يجب أن يستخدم rfq أو all، " +
-                "وإلا فستكون الإجابة صفرًا لأن أوامر الشراء لا تحتوي الطلب الأصلي. " +
-                "في وضع all يُذكر لكل بند من أي نوع جاء العدد.",
+                "نوع المستند المطلوب: po = أوامر الشراء فقط، rfq = طلبات التسعير RFQ فقط (استبعاد Quotation)، " +
+                "quotation = عروض الأسعار Quotation فقط، all = الكل. الافتراضي في قائمة التكرار هو po، " +
+                "ولطلبات التسعير استخدم rfq، واستبعد Quotation إذا طلب المستخدم ذلك صراحةً.",
             },
             exportCsv: { type: "boolean", description: "أرسل كل البنود كملف CSV" },
             exportPdf: { type: "boolean", description: "أرسل ملخص البنود كملف PDF" },
@@ -1185,10 +1183,9 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
             },
             docKind: {
               type: "string",
-              enum: ["po", "rfq", "all"],
+              enum: ["po", "rfq", "quotation", "all"],
               description:
-                "po = أوامر الشراء فقط، rfq = طلبات التسعير فقط، all = الاثنان. " +
-                "أي سؤال عن «طلبات التسعير» يجب أن يستخدم rfq أو all.",
+                "po = أوامر الشراء فقط، rfq = طلبات التسعير فقط (استبعاد Quotation)، quotation = عروض الأسعار فقط، all = الكل.",
             },
           },
         },
@@ -1763,13 +1760,15 @@ async function buildCensusJobOpts(opts: {
       // document-kind filter the interactive path uses. Without this the
       // background report mixed RFQ lines into a PO ranking (or, with the old
       // discard, reported 0 for a part that only ever appeared on an RFQ).
-      const jobDocKind: "po" | "rfq" | "all" = scanArgs.docKind ?? "po";
+      const jobDocKind: "po" | "rfq" | "quotation" | "all" = scanArgs.docKind ?? "po";
       const kindOk = (it: ParsedLineItem) =>
         jobDocKind === "all"
           ? true
           : jobDocKind === "rfq"
             ? it.docKind === "rfq"
-            : it.docKind !== "rfq";
+            : jobDocKind === "quotation"
+              ? it.docKind === "quotation"
+              : it.docKind === "po" || it.docKind === "unknown";
       // The part / brand / Line Item filter, applied to the PARSED rows exactly
       // as the interactive path does — the whole point of the hand-off is that
       // the SAME question is answered, only over every document instead of a
@@ -2651,11 +2650,14 @@ async function executeToolInner(
         // part that was in the mailbox. Explicit arg first, then the question's
         // own wording, then the PO default. Computed HERE, before the hand-off, so
         // the background job receives the same answer the interactive path would.
-        const docKind: "po" | "rfq" | "all" =
-          args.docKind === "rfq" || args.docKind === "all" || args.docKind === "po"
+        const docKind: "po" | "rfq" | "quotation" | "all" =
+          args.docKind === "rfq" ||
+          args.docKind === "all" ||
+          args.docKind === "po" ||
+          args.docKind === "quotation"
             ? args.docKind
             : asksAboutRfq(args.question, contains)
-              ? "all"
+              ? "rfq"
               : "po";
         // Reuse the census to find the matching messages (whole mailbox, exact
         // count) and to DOWNLOAD their attachments once; the item parser then
@@ -2777,10 +2779,9 @@ async function executeToolInner(
             ? true
             : docKind === "rfq"
               ? it.docKind === "rfq"
-              : // A line from a doc whose type is unknown is NOT excluded: it is
-                // an EDC item table with an unrecognised title, and dropping it
-                // would lose real orders to a classification gap.
-                it.docKind !== "rfq";
+              : docKind === "quotation"
+                ? it.docKind === "quotation"
+                : it.docKind === "po" || it.docKind === "unknown";
 
         // A brand/part lookup («فين السخانات الأريستون؟») is a filter over the
         // rows already parsed — it must never look like a fresh census. The
@@ -2929,9 +2930,10 @@ async function executeToolInner(
         // operator can see that a PO-only ranking is a choice rather than a
         // property of the mailbox.
         const kindLabel: Record<string, string> = {
-          po: "أوامر الشراء فقط (استُبعدت طلبات التسعير)",
-          rfq: "طلبات التسعير فقط (استُبعدت أوامر الشراء)",
-          all: "أوامر الشراء وطلبات التسعير معًا",
+          po: "أوامر الشراء فقط (استُبعدت طلبات التسعير وعروض الأسعار)",
+          rfq: "طلبات التسعير RFQ فقط (استُبعدت أوامر الشراء وعروض الأسعار Quotation)",
+          quotation: "عروض الأسعار Quotation فقط",
+          all: "أوامر الشراء وطلبات التسعير وعروض الأسعار معًا",
         };
         const docMix =
           coverage.poDocuments || coverage.rfqDocuments
@@ -3795,10 +3797,13 @@ async function executeToolInner(
           mailbox: args.mailbox ? String(args.mailbox) : "*",
           contains: args.contains ? String(args.contains).trim() : undefined,
           docKind:
-            args.docKind === "rfq" || args.docKind === "all" || args.docKind === "po"
+            args.docKind === "rfq" ||
+            args.docKind === "all" ||
+            args.docKind === "po" ||
+            args.docKind === "quotation"
               ? args.docKind
               : asksAboutRfq(args.question, args.subject ? String(args.subject) : undefined)
-                ? "all"
+                ? "rfq"
                 : "po",
         };
         return launchCensusJob(ctx, scanArgs, String(args.question ?? "") || "حصر بنود البريد");

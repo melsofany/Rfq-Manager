@@ -332,47 +332,50 @@ export function documentNumber(text: string): string | null {
 }
 
 /** The kind of document an attachment is. */
-export type DocumentKind = "po" | "rfq" | "unknown";
+export type DocumentKind = "po" | "rfq" | "quotation" | "unknown";
 
 /**
- * Classify an attachment as a PURCHASE ORDER or a REQUEST FOR QUOTE.
+ * Classify an attachment as a PURCHASE ORDER, REQUEST FOR QUOTE, or QUOTATION.
  *
- * The operator's rule is explicit: count POs, NOT RFQs or quotations. The two
- * arrive from the same sender with nearly identical item tables, so without this
- * the census mixes quotes into an order-frequency ranking ЕҢДҶГ¶ a part в”¬ВҪordered 5
- * timesв”¬в•— could be a part merely quoted 5 times, which is a different fact.
+ * The operator's rule is explicit: count POs or RFQs, NOT quotations unless requested.
  *
- * Two independent signals, because neither alone is reliable:
- *  - the title (`PURCHASE ORDER` / `REQUEST FOR QUOTE|QUOTATION`), which the
- *    generator prints but a scanned copy may lose;
- *  - the document number's prefix ЕҢДҶГ¶ EDC writes `P26E14630` for a PO and
- *    `26R011954` for an RFQ, so the leading letter identifies the type even when
- *    the title is unreadable.
+ * Signals used:
+ *  - title (`PURCHASE ORDER`, `REQUEST FOR QUOTE|QUOTATION`, `QUOTATION`);
+ *  - document number prefix (`P26E…` = PO, `26R…` = RFQ, `QT…`/`QUO…` = Quotation);
+ *  - explicit labels and subject keywords.
  */
 export function documentKind(text: string, subject?: string | null): DocumentKind {
   const t = (text || "").toUpperCase();
   // The title wins when present: it is the generator's own statement of intent.
   const saysPo = /\bPURCHASE\s+ORDER\b/.test(t);
-  const saysRfq = /\bREQUEST\s+FOR\s+(QUOTE|QUOTATION)\b/.test(t) || /\bQUOTATION\b/.test(t);
-  if (saysPo && !saysRfq) return "po";
-  if (saysRfq && !saysPo) return "rfq";
+  const saysRfq = /\bREQUEST\s+FOR\s+(QUOTE|QUOTATION)\b/.test(t);
+  const saysQuotation = /\bQUOTATION\b/.test(t) || /\bQUOTE\b/.test(t);
+
+  if (saysPo) return "po";
+  if (saysRfq) return "rfq";
+  if (saysQuotation) return "quotation";
+
   // Otherwise fall back to the number's prefix.
   const no = documentNumber(text);
   if (no) {
     if (/^P\d/i.test(no)) return "po";
     if (/^\d{2}R/i.test(no) || /^R\d/i.test(no)) return "rfq";
+    if (/^QT/i.test(no) || /^QUO/i.test(no)) return "quotation";
   }
-  // The explicit label EDC prints beside the number (`PO number:` / `RFQ number:`).
+  // The explicit label EDC prints beside the number (`PO number:` / `RFQ number:` / `Quotation number:`).
   if (/\bPO\s*(?:number|no\.?)\s*:/.test(t)) return "po";
   if (/\bRFQ\s*(?:number|no\.?)\s*:/.test(t)) return "rfq";
+  if (/\bQUOTATION\s*(?:number|no\.?|ref\.?)\s*:|\bQUOTE\s*REF\s*:/i.test(t)) return "quotation";
+
   // The SUBJECT is the last resort: EDC titles its mail «EDC PO No P26E14708» /
-  // «EDC RFQ No 26R011900», and a scanned copy whose text layer dropped the
-  // title would otherwise be counted as an unidentified PO — inflating the PO
-  // census the operator is asked to trust.
+  // «EDC RFQ No 26R011900» / «EDC Quotation…».
   const s = (subject || "").toUpperCase();
   if (/\bPO\s*(?:NO|NUMBER|#)/.test(s)) return "po";
   if (/\bRFQ\s*(?:NO|NUMBER|#)/.test(s) || /\bREQUEST\s+FOR\s+(QUOTE|QUOTATION)\b/.test(s)) {
     return "rfq";
+  }
+  if (/\bQUOTATION\b/.test(s) || /\bQUOTE\b/.test(s)) {
+    return "quotation";
   }
   return "unknown";
 }
@@ -766,8 +769,10 @@ export interface ItemScanCoverage {
   pages: number;
   /** Purchase-order documents read (the operator counts POs, not RFQs). */
   poDocuments: number;
-  /** RFQ / quotation documents read ЕҢДҶГ¶ parsed for coverage but excluded. */
+  /** RFQ documents read. */
   rfqDocuments: number;
+  /** Quotation documents read. */
+  quotationDocuments: number;
   /** Documents whose type could not be determined. */
   unknownDocuments: number;
 }
@@ -800,6 +805,7 @@ export async function parseItemsFromAttachments(
     pages: 0,
     poDocuments: 0,
     rfqDocuments: 0,
+    quotationDocuments: 0,
     unknownDocuments: 0,
   };
   const out: MessageItems[] = [];
@@ -834,6 +840,7 @@ export async function parseItemsFromAttachments(
       // ranking and an RFQ census are both possible from one read.
       const kind = documentKind(text, message.subject);
       if (kind === "rfq") coverage.rfqDocuments += 1;
+      else if (kind === "quotation") coverage.quotationDocuments += 1;
       else if (kind === "unknown") coverage.unknownDocuments += 1;
       else coverage.poDocuments += 1;
       const items = parseLineItems(text, docId).map((it) => ({ ...it, docKind: kind }));

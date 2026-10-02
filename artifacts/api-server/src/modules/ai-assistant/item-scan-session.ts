@@ -44,8 +44,8 @@ export interface ItemScanArgs {
   beforeDate?: string;
   mailbox: string;
   limit?: number;
-  /** Which document kind the ranking is about (`po` default, `rfq`, `all`). */
-  docKind?: "po" | "rfq" | "all";
+  /** Which document kind the ranking is about (`po` default, `rfq`, `quotation`, `all`). */
+  docKind?: "po" | "rfq" | "quotation" | "all";
 }
 
 /** Accumulated state of one resumable census. */
@@ -107,6 +107,7 @@ function emptyItemCoverage(): ItemScanCoverage {
     pages: 0,
     poDocuments: 0,
     rfqDocuments: 0,
+    quotationDocuments: 0,
     unknownDocuments: 0,
   };
 }
@@ -151,6 +152,7 @@ export const ITEM_COVERAGE_KEYS: Array<keyof ItemScanCoverage> = [
   "pages",
   "poDocuments",
   "rfqDocuments",
+  "quotationDocuments",
   "unknownDocuments",
 ];
 
