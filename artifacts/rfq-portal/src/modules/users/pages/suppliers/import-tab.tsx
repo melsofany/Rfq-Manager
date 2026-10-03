@@ -33,6 +33,13 @@ interface ParsedSupplier {
   phone?: string; // الرقم الأول (بتنسيق واتساب)
   phone2?: string; // الرقم الثاني إن وُجد (بتنسيق واتساب)
   address?: string;
+  commercialRegister?: string;
+  taxRegistration?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  iban?: string;
+  swiftCode?: string;
+  bankBranch?: string;
   category: string;
   phoneWarning?: string; // تحذير: أرضي مرفوض أو تنسيق غير معروف
 }
@@ -222,6 +229,39 @@ const COL_ALIASES: Record<string, keyof ParsedSupplier> = {
   address: "address",
   العنوان: "address",
 
+  commercial_register: "commercialRegister",
+  commercialregister: "commercialRegister",
+  "رقم السجل التجاري": "commercialRegister",
+  السجل: "commercialRegister",
+
+  tax_registration: "taxRegistration",
+  taxregistration: "taxRegistration",
+  "رقم التسجيل الضريبي": "taxRegistration",
+  "الرقم الضريبي": "taxRegistration",
+
+  bank_name: "bankName",
+  bankname: "bankName",
+  "اسم البنك": "bankName",
+  البنك: "bankName",
+
+  bank_account_number: "bankAccountNumber",
+  bankaccountnumber: "bankAccountNumber",
+  "رقم الحساب": "bankAccountNumber",
+  "رقم الحساب البنكي": "bankAccountNumber",
+
+  iban: "iban",
+  "رقم iban": "iban",
+
+  swift_code: "swiftCode",
+  swiftcode: "swiftCode",
+  swift: "swiftCode",
+  "السويف كود": "swiftCode",
+
+  bank_branch: "bankBranch",
+  bankbranch: "bankBranch",
+  "اسم الفرع": "bankBranch",
+  الفرع: "bankBranch",
+
   category: "category",
   categories: "category",
   التصنيف: "category",
@@ -285,6 +325,13 @@ function mapRow(row: Record<string, unknown>): ParsedSupplier | null {
     phone: finalPhone,
     phone2: finalPhone2,
     address: mapped.address as string | undefined,
+    commercialRegister: mapped.commercialRegister as string | undefined,
+    taxRegistration: mapped.taxRegistration as string | undefined,
+    bankName: mapped.bankName as string | undefined,
+    bankAccountNumber: mapped.bankAccountNumber as string | undefined,
+    iban: mapped.iban as string | undefined,
+    swiftCode: mapped.swiftCode as string | undefined,
+    bankBranch: mapped.bankBranch as string | undefined,
     category: (mapped.category as string) ?? "general",
     phoneWarning,
   };
@@ -335,6 +382,13 @@ function downloadTemplate() {
       email: "ahmed@example.com",
       phone: "01012345678",
       address: "القاهرة، مصر",
+      commercial_register: "123456",
+      tax_registration: "123-456-789",
+      bank_name: "البنك الأهلي المصري",
+      bank_account_number: "1234567890",
+      iban: "EG380019000500000000263180002",
+      swift_code: "NBEGEGCX",
+      bank_branch: "الفرع الرئيسي",
       category: "general",
     },
     {
@@ -493,6 +547,13 @@ export default function ImportSuppliersTab() {
         // إذا كان هناك رقمان محمول: نضمهما بـ "/" ليراهما المستخدم في التفاصيل
         phone: r.phone ? (r.phone2 ? `${r.phone} / ${r.phone2}` : r.phone) : undefined,
         address: r.address || undefined,
+        commercialRegister: r.commercialRegister || undefined,
+        taxRegistration: r.taxRegistration || undefined,
+        bankName: r.bankName || undefined,
+        bankAccountNumber: r.bankAccountNumber || undefined,
+        iban: r.iban || undefined,
+        swiftCode: r.swiftCode || undefined,
+        bankBranch: r.bankBranch || undefined,
         category: r.category || "general",
       }));
 

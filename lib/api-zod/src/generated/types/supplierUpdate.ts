@@ -12,6 +12,13 @@ export interface SupplierUpdate {
   email?: string;
   phone?: string;
   address?: string;
+  commercialRegister?: string;
+  taxRegistration?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  iban?: string;
+  swiftCode?: string;
+  bankBranch?: string;
   category?: string;
   invoiceHasVat?: boolean;
   isActive?: boolean;

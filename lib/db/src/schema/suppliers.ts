@@ -10,6 +10,15 @@ export const suppliersTable = pgTable("suppliers", {
   email: text("email"),
   phone: text("phone"),
   address: text("address"),
+  // بيانات السجل التجاري والتسجيل الضريبي
+  commercialRegister: text("commercial_register"),
+  taxRegistration: text("tax_registration"),
+  // بيانات الحساب البنكي للدفع
+  bankName: text("bank_name"),
+  bankAccountNumber: text("bank_account_number"),
+  iban: text("iban"),
+  swiftCode: text("swift_code"),
+  bankBranch: text("bank_branch"),
   category: text("category").notNull().default("general"),
   isActive: boolean("is_active").notNull().default(true),
   // Whether the supplier issues VAT invoices (ض.ق.م.). Deals from non-VAT

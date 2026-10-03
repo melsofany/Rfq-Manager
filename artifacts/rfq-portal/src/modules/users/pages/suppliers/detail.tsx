@@ -15,6 +15,7 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BankCombobox, BankLogoByName } from "@/components/BankCombobox";
 import {
   ArrowLeft,
   Mail,
@@ -29,6 +30,8 @@ import {
   FileText,
   ShoppingCart,
   ChevronRight,
+  Landmark,
+  Copy,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -88,6 +91,38 @@ function fmtDate(iso: string | null | undefined) {
     month: "short",
     day: "numeric",
   });
+}
+
+// حقل للقراءة فقط مع زر نسخ — الأرقام البنكية والضريبية تُنسخ عادةً للاستخدام
+function CopyField({ label, value, ltr }: { label: string; value: string; ltr?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard غير متاح */
+    }
+  };
+  return (
+    <div className="flex items-start justify-between gap-2 group">
+      <div className="min-w-0">
+        <p className="text-muted-foreground text-xs">{label}</p>
+        <p className="text-foreground text-sm font-medium break-all" dir={ltr ? "ltr" : "rtl"}>
+          {value}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={copy}
+        className="text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5"
+        title="نسخ"
+      >
+        {copied ? <Check size={13} className="text-green-600" /> : <Copy size={13} />}
+      </button>
+    </div>
+  );
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -206,6 +241,13 @@ export default function SupplierDetailPage() {
       address: supplier.address ?? "",
       isActive: supplier.isActive ?? false,
       invoiceHasVat: supplier.invoiceHasVat ?? true,
+      commercialRegister: supplier.commercialRegister ?? "",
+      taxRegistration: supplier.taxRegistration ?? "",
+      bankName: supplier.bankName ?? "",
+      bankAccountNumber: supplier.bankAccountNumber ?? "",
+      iban: supplier.iban ?? "",
+      swiftCode: supplier.swiftCode ?? "",
+      bankBranch: supplier.bankBranch ?? "",
     });
     setSelectedCats(new Set(parseCategories(supplier.category)));
     setServerError(null);
@@ -411,6 +453,61 @@ export default function SupplierDetailPage() {
                     onChange={(e) => upd("address", e.target.value)}
                   />
                 </div>
+                <div className="space-y-1">
+                  <Label>رقم السجل التجاري</Label>
+                  <Input
+                    value={String(form.commercialRegister ?? "")}
+                    onChange={(e) => upd("commercialRegister", e.target.value)}
+                    dir="rtl"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>رقم التسجيل الضريبي</Label>
+                  <Input
+                    value={String(form.taxRegistration ?? "")}
+                    onChange={(e) => upd("taxRegistration", e.target.value)}
+                    dir="rtl"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>اسم البنك</Label>
+                  <BankCombobox
+                    value={String(form.bankName ?? "")}
+                    onChange={(v) => upd("bankName", v)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>رقم الحساب البنكي</Label>
+                  <Input
+                    value={String(form.bankAccountNumber ?? "")}
+                    onChange={(e) => upd("bankAccountNumber", e.target.value)}
+                    dir="ltr"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>رقم IBAN</Label>
+                  <Input
+                    value={String(form.iban ?? "")}
+                    onChange={(e) => upd("iban", e.target.value)}
+                    dir="ltr"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>السويف كود (SWIFT/BIC)</Label>
+                  <Input
+                    value={String(form.swiftCode ?? "")}
+                    onChange={(e) => upd("swiftCode", e.target.value.toUpperCase())}
+                    dir="ltr"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>اسم الفرع</Label>
+                  <Input
+                    value={String(form.bankBranch ?? "")}
+                    onChange={(e) => upd("bankBranch", e.target.value)}
+                    dir="rtl"
+                  />
+                </div>
                 <div className="space-y-1.5">
                   <Label>
                     Categories *{" "}
@@ -534,7 +631,66 @@ export default function SupplierDetailPage() {
                     </span>
                   )}
                 </div>
+
+                {/* بيانات السجل التجاري والتسجيل الضريبي */}
+                {(supplier.commercialRegister || supplier.taxRegistration) && (
+                  <div className="pt-3 border-t border-border space-y-2">
+                    <p className="text-muted-foreground text-xs font-semibold flex items-center gap-1.5">
+                      <FileText size={12} /> السجل التجاري والتسجيل الضريبي
+                    </p>
+                    {supplier.commercialRegister && (
+                      <CopyField label="رقم السجل التجاري" value={supplier.commercialRegister} />
+                    )}
+                    {supplier.taxRegistration && (
+                      <CopyField label="رقم التسجيل الضريبي" value={supplier.taxRegistration} />
+                    )}
+                  </div>
+                )}
               </div>
+            )}
+          </div>
+
+          {/* بيانات الدفع / الحساب البنكي */}
+          <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+            <h2 className="font-semibold text-sm text-foreground flex items-center gap-2">
+              <Landmark size={15} className="text-muted-foreground" />
+              بيانات الدفع / الحساب البنكي
+            </h2>
+            {supplier.bankName ||
+            supplier.bankAccountNumber ||
+            supplier.iban ||
+            supplier.swiftCode ||
+            supplier.bankBranch ? (
+              <div className="space-y-3">
+                {supplier.bankName && (
+                  <div>
+                    <p className="text-muted-foreground text-xs">اسم البنك</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <BankLogoByName name={supplier.bankName} />
+                      <span className="text-foreground text-sm font-medium">
+                        {supplier.bankName}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {supplier.bankAccountNumber && (
+                  <CopyField label="رقم الحساب البنكي" value={supplier.bankAccountNumber} ltr />
+                )}
+                {supplier.iban && <CopyField label="رقم IBAN" value={supplier.iban} ltr />}
+                {supplier.swiftCode && (
+                  <CopyField label="السويف كود (SWIFT/BIC)" value={supplier.swiftCode} ltr />
+                )}
+                {supplier.bankBranch && (
+                  <div>
+                    <p className="text-muted-foreground text-xs">اسم الفرع</p>
+                    <p className="text-foreground text-sm font-medium">{supplier.bankBranch}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                لم تُسجَّل بيانات بنكية لهذا المورد بعد.
+              </p>
             )}
           </div>
 

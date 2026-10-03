@@ -11,7 +11,8 @@ import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, AlertCircle } from "lucide-react";
+import { BankCombobox } from "@/components/BankCombobox";
+import { ArrowLeft, AlertCircle, Landmark, FileText } from "lucide-react";
 
 export default function NewSupplierPage() {
   const [, navigate] = useLocation();
@@ -28,6 +29,13 @@ export default function NewSupplierPage() {
     email: "",
     phone: "",
     address: "",
+    commercialRegister: "",
+    taxRegistration: "",
+    bankName: "",
+    bankAccountNumber: "",
+    iban: "",
+    swiftCode: "",
+    bankBranch: "",
   });
   const [invoiceHasVat, setInvoiceHasVat] = useState(true);
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set());
@@ -167,6 +175,84 @@ export default function NewSupplierPage() {
                 onChange={(e) => update("address", e.target.value)}
                 placeholder="Riyadh, KSA"
               />
+            </div>
+          </div>
+
+          {/* بيانات السجل التجاري والتسجيل الضريبي */}
+          <div className="space-y-3 border-t border-border pt-4">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <FileText size={15} className="text-muted-foreground" />
+              بيانات السجل التجاري والتسجيل الضريبي
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>رقم السجل التجاري</Label>
+                <Input
+                  value={form.commercialRegister}
+                  onChange={(e) => update("commercialRegister", e.target.value)}
+                  placeholder="مثال: 123456"
+                  dir="rtl"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>رقم التسجيل الضريبي</Label>
+                <Input
+                  value={form.taxRegistration}
+                  onChange={(e) => update("taxRegistration", e.target.value)}
+                  placeholder="مثال: 123-456-789"
+                  dir="rtl"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* بيانات الحساب البنكي / الدفع */}
+          <div className="space-y-3 border-t border-border pt-4">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Landmark size={15} className="text-muted-foreground" />
+              بيانات الدفع / الحساب البنكي
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>اسم البنك</Label>
+                <BankCombobox value={form.bankName} onChange={(v) => update("bankName", v)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>رقم الحساب البنكي</Label>
+                <Input
+                  value={form.bankAccountNumber}
+                  onChange={(e) => update("bankAccountNumber", e.target.value)}
+                  placeholder="1234567890"
+                  dir="ltr"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>رقم IBAN</Label>
+                <Input
+                  value={form.iban}
+                  onChange={(e) => update("iban", e.target.value)}
+                  placeholder="EG380019000500000000263180002"
+                  dir="ltr"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>السويف كود (SWIFT/BIC)</Label>
+                <Input
+                  value={form.swiftCode}
+                  onChange={(e) => update("swiftCode", e.target.value.toUpperCase())}
+                  placeholder="NBEGEGCX"
+                  dir="ltr"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>اسم الفرع</Label>
+                <Input
+                  value={form.bankBranch}
+                  onChange={(e) => update("bankBranch", e.target.value)}
+                  placeholder="الفرع الرئيسي"
+                  dir="rtl"
+                />
+              </div>
             </div>
           </div>
 

@@ -1789,6 +1789,27 @@ components:
           type: ["string", "null"]
         address:
           type: ["string", "null"]
+        commercialRegister:
+          type: ["string", "null"]
+          description: رقم السجل التجاري للمورد
+        taxRegistration:
+          type: ["string", "null"]
+          description: رقم التسجيل الضريبي للمورد
+        bankName:
+          type: ["string", "null"]
+          description: اسم البنك
+        bankAccountNumber:
+          type: ["string", "null"]
+          description: رقم الحساب البنكي
+        iban:
+          type: ["string", "null"]
+          description: رقم IBAN
+        swiftCode:
+          type: ["string", "null"]
+          description: السويف كود (SWIFT/BIC)
+        bankBranch:
+          type: ["string", "null"]
+          description: اسم الفرع
         category:
           type: string
         invoiceHasVat:
@@ -1815,6 +1836,20 @@ components:
           type: string
         address:
           type: string
+        commercialRegister:
+          type: string
+        taxRegistration:
+          type: string
+        bankName:
+          type: string
+        bankAccountNumber:
+          type: string
+        iban:
+          type: string
+        swiftCode:
+          type: string
+        bankBranch:
+          type: string
         category:
           type: string
         invoiceHasVat:
@@ -1835,6 +1870,20 @@ components:
         phone:
           type: string
         address:
+          type: string
+        commercialRegister:
+          type: string
+        taxRegistration:
+          type: string
+        bankName:
+          type: string
+        bankAccountNumber:
+          type: string
+        iban:
+          type: string
+        swiftCode:
+          type: string
+        bankBranch:
           type: string
         category:
           type: string

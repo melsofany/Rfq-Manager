@@ -131,6 +131,41 @@ export interface Supplier {
   phone?: string | null;
   /** @nullable */
   address?: string | null;
+  /**
+     * رقم السجل التجاري للمورد
+     * @nullable
+     */
+  commercialRegister?: string | null;
+  /**
+     * رقم التسجيل الضريبي للمورد
+     * @nullable
+     */
+  taxRegistration?: string | null;
+  /**
+     * اسم البنك
+     * @nullable
+     */
+  bankName?: string | null;
+  /**
+     * رقم الحساب البنكي
+     * @nullable
+     */
+  bankAccountNumber?: string | null;
+  /**
+     * رقم IBAN
+     * @nullable
+     */
+  iban?: string | null;
+  /**
+     * السويف كود (SWIFT/BIC)
+     * @nullable
+     */
+  swiftCode?: string | null;
+  /**
+     * اسم الفرع
+     * @nullable
+     */
+  bankBranch?: string | null;
   category: string;
   /** false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات) */
   invoiceHasVat?: boolean;
@@ -145,6 +180,13 @@ export interface SupplierInput {
   email?: string;
   phone?: string;
   address?: string;
+  commercialRegister?: string;
+  taxRegistration?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  iban?: string;
+  swiftCode?: string;
+  bankBranch?: string;
   category: string;
   /** false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات) */
   invoiceHasVat?: boolean;
@@ -156,6 +198,13 @@ export interface SupplierUpdate {
   email?: string;
   phone?: string;
   address?: string;
+  commercialRegister?: string;
+  taxRegistration?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  iban?: string;
+  swiftCode?: string;
+  bankBranch?: string;
   category?: string;
   invoiceHasVat?: boolean;
   isActive?: boolean;

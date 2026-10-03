@@ -42,6 +42,13 @@ export async function initDb(): Promise<void> {
         email TEXT,
         phone TEXT,
         address TEXT,
+        commercial_register TEXT,
+        tax_registration TEXT,
+        bank_name TEXT,
+        bank_account_number TEXT,
+        iban TEXT,
+        swift_code TEXT,
+        bank_branch TEXT,
         category TEXT NOT NULL DEFAULT 'general',
         is_active BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -306,6 +313,17 @@ export async function initDb(): Promise<void> {
     // measure the VAT deficit (عجز ض.ق.م.) caused by those deals.
     await client.query(`
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS invoice_has_vat BOOLEAN NOT NULL DEFAULT true;
+    `);
+
+    // بيانات السجل التجاري والتسجيل الضريبي والبيانات البنكية للمورد
+    await client.query(`
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS commercial_register TEXT;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS tax_registration TEXT;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS bank_name TEXT;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS bank_account_number TEXT;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS iban TEXT;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS swift_code TEXT;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS bank_branch TEXT;
     `);
 
     // Add owning customer to customer_pos (safe migration — skipped if already present)
