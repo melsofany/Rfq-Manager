@@ -1,78 +1,98 @@
-// قائمة البنوك العاملة في مصر — تُستخدم لاختيار اسم البنك مع شعاره.
-// `domain` يُستخدم لجلب الشعار من خدمة favicons (Google s2)، ويُضبط فقط عند
-// التأكد من مطابقته للبنك الصحيح: نطاق خاطئ يعرض شعار بنك آخر — وهذا أسوأ من
-// عدم عرض شعار. البنك بلا `domain` يعرض الأحرف الأولى بدلًا من الشعار.
+// قائمة البنوك العاملة في مصر (وفق سجل البنك المركزي المصري) — تُستخدم لاختيار
+// اسم البنك مع شعاره.
+//
+// الشعارات مُجمّعة محليًا في `public/bank-logos/` (لا اعتماد على خدمة خارجية):
+// الشعار المستضاف خارجيًا يختفي (404) أو يعرض شعار بنك آخر عند تغيّر النطاق —
+// وكلاهما أسوأ من عدم عرض شعار. كل ملف هنا تم التحقق منه (نوع صورة صحيح + ليس
+// صورة عامة/بديلة). البنك بلا شعار يعرض الأحرف الأولى.
 export interface EgyptianBank {
   /** الاسم كما يظهر للمستخدم */
   name: string;
   /** الاسم الإنجليزي (للبحث) */
   nameEn: string;
-  /** نطاق الموقع لجلب الشعار */
-  domain?: string;
+  /** اسم ملف الشعار داخل `public/bank-logos` (بدون امتداد) — غيابه = الأحرف الأولى */
+  logo?: string;
 }
 
+/** امتداد ملف الشعار — يُبنى الرابط كـ `/bank-logos/<logo>.<ext>` */
+const LOGO_EXT: Record<string, string> = {
+  aaib: "svg",
+  bankabc: "svg",
+  qnb: "svg",
+  abk: "ico",
+  albaraka: "ico",
+  banquemisr: "ico",
+  citibank: "ico",
+  idb: "ico",
+  theub: "ico",
+  banqueducaire: "jpg",
+  fab: "jpg",
+  creditagricole: "gif",
+};
+
 export const EGYPTIAN_BANKS: EgyptianBank[] = [
-  { name: "البنك الأهلي المصري", nameEn: "National Bank of Egypt", domain: "nbe.com.eg" },
-  { name: "بنك مصر", nameEn: "Banque Misr", domain: "banquemisr.com" },
-  { name: "بنك القاهرة", nameEn: "Banque du Caire", domain: "bdcegypt.com" },
-  {
-    name: "البنك التجاري الدولي",
-    nameEn: "Commercial International Bank (CIB)",
-    domain: "cibeg.com",
-  },
-  { name: "بنك الإسكندرية", nameEn: "Bank of Alexandria", domain: "alexbank.com" },
-  { name: "البنك العربي الأفريقي الدولي", nameEn: "Arab African International Bank" },
-  { name: "بنك قناة السويس", nameEn: "Suez Canal Bank", domain: "suezcanalbank.com" },
-  { name: "بنك التنمية الصناعية", nameEn: "Industrial Development Bank" },
-  { name: "بنك الإسكان والتعمير", nameEn: "Housing and Development Bank" },
-  {
-    name: "البنك الأهلي الكويتي — مصر",
-    nameEn: "Al Ahli Bank of Kuwait Egypt",
-    domain: "abkegypt.com",
-  },
-  { name: "بنك قطر الوطني الأهلي", nameEn: "QNB Alahli", domain: "qnbalahli.com" },
-  { name: "بنك الكويت الوطني — مصر", nameEn: "National Bank of Kuwait Egypt", domain: "nbk.com" },
-  { name: "بنك عودة", nameEn: "Bank Audi", domain: "bankaudigroup.com" },
-  { name: "بنك بيروت", nameEn: "Bank of Beirut", domain: "bankofbeirut.com" },
+  // بنوك القطاع العام والبنوك المصرية الكبرى
+  { name: "البنك المركزي المصري", nameEn: "Central Bank of Egypt", logo: "cbe" },
+  { name: "البنك الأهلي المصري", nameEn: "National Bank of Egypt", logo: "nbe" },
+  { name: "بنك مصر", nameEn: "Banque Misr", logo: "banquemisr" },
+  { name: "بنك القاهرة", nameEn: "Banque du Caire", logo: "banqueducaire" },
+  { name: "بنك الإسكندرية", nameEn: "Bank of Alexandria (AlexBank)", logo: "alexbank" },
+  { name: "البنك التجاري الدولي", nameEn: "Commercial International Bank (CIB)", logo: "cib" },
+  { name: "بنك قناة السويس", nameEn: "Suez Canal Bank", logo: "scbank" },
+  { name: "بنك التعمير والإسكان", nameEn: "Housing and Development Bank", logo: "hdb" },
+  { name: "بنك التنمية الصناعية", nameEn: "Industrial Development Bank", logo: "idb" },
   {
     name: "البنك المصري لتنمية الصادرات",
     nameEn: "Export Development Bank of Egypt",
-    domain: "ebe.com.eg",
+    logo: "ebe",
   },
-  { name: "بنك الاستثمار العربي", nameEn: "Arab Investment Bank", domain: "aibegypt.com" },
-  { name: "بنك saib", nameEn: "Société Arabe Internationale de Banque", domain: "saib.com.eg" },
-  { name: "بنك مصر إيران للتنمية", nameEn: "Misr Iran Development Bank" },
+  { name: "المصرف المتحد", nameEn: "The United Bank", logo: "theub" },
+  { name: "ميد بنك", nameEn: "MIDBANK", logo: "midbank" },
   { name: "البنك الزراعي المصري", nameEn: "Agricultural Bank of Egypt" },
-  { name: "البنك المركزي المصري", nameEn: "Central Bank of Egypt", domain: "cbe.org.eg" },
-  { name: "بنك فيصل الإسلامي المصري", nameEn: "Faisal Islamic Bank of Egypt" },
-  { name: "بنك البركة مصر", nameEn: "Al Baraka Bank Egypt" },
+  { name: "البنك العقاري المصري العربي", nameEn: "Egyptian Arab Land Bank" },
+  { name: "البنك المصري الخليجي", nameEn: "EGBANK", logo: "egbank" },
+  { name: "بنك الاستثمار العربي", nameEn: "Arab Investment Bank (AIBANK)" },
+  { name: "بنك نكست", nameEn: "Bank NXT" },
+  { name: "بنك واحد", nameEn: "onebank" },
+
+  // البنوك الإسلامية
+  { name: "بنك فيصل الإسلامي المصري", nameEn: "Faisal Islamic Bank of Egypt", logo: "faisal" },
+  { name: "بنك البركة مصر", nameEn: "Al Baraka Bank Egypt", logo: "albaraka" },
+  { name: "مصرف أبوظبي الإسلامي — مصر", nameEn: "Abu Dhabi Islamic Bank (ADIB)", logo: "adib" },
+  { name: "بيت التمويل الكويتي — مصر", nameEn: "Kuwait Finance House (KFH)", logo: "kfh" },
+
+  // البنوك الأجنبية والفروع العاملة في مصر
+  { name: "بنك الإمارات دبي الوطني — مصر", nameEn: "Emirates NBD Egypt", logo: "emiratesnbd" },
+  { name: "بنك أبوظبي الأول — مصر", nameEn: "First Abu Dhabi Bank (FAB)", logo: "fab" },
+  { name: "بنك أبوظبي التجاري — مصر", nameEn: "Abu Dhabi Commercial Bank (ADCB)", logo: "adcb" },
+  { name: "بنك قطر الوطني الأهلي", nameEn: "QNB Egypt", logo: "qnb" },
+  { name: "بنك الكويت الوطني — مصر", nameEn: "National Bank of Kuwait (NBK)", logo: "nbk" },
+  { name: "البنك الأهلي الكويتي — مصر", nameEn: "Al Ahli Bank of Kuwait (ABK)", logo: "abk" },
+  { name: "البنك العربي", nameEn: "Arab Bank", logo: "arabbank" },
+  { name: "بنك المؤسسة العربية المصرفية", nameEn: "Bank ABC", logo: "bankabc" },
+  { name: "بنك saib", nameEn: "Société Arabe Internationale de Banque (SAIB)", logo: "saib" },
   {
-    name: "بنك أبوظبي التجاري — مصر",
-    nameEn: "Abu Dhabi Commercial Bank Egypt",
-    domain: "adcb.com",
+    name: "البنك العربي الأفريقي الدولي",
+    nameEn: "Arab African International Bank (AAIB)",
+    logo: "aaib",
   },
-  { name: "بنك أبوظبي الأول — مصر", nameEn: "First Abu Dhabi Bank Egypt", domain: "bankfab.com" },
   {
-    name: "بنك الإمارات دبي الوطني — مصر",
-    nameEn: "Emirates NBD Egypt",
-    domain: "emiratesnbd.com",
+    name: "البنك التجاري وفا بنك — مصر",
+    nameEn: "Attijariwafa Bank Egypt",
+    logo: "attijariwafa",
   },
-  { name: "بنك المشرق", nameEn: "Mashreq Bank", domain: "mashreq.com" },
-  { name: "بنك HSBC — مصر", nameEn: "HSBC Egypt", domain: "hsbc.com.eg" },
-  { name: "بنك كريدي أجريكول — مصر", nameEn: "Crédit Agricole Egypt", domain: "ca-egypt.com" },
-  { name: "بنك بلوم مصر", nameEn: "Blom Bank Egypt", domain: "blombankegypt.com" },
-  { name: "البنك التجاري وفا بنك — مصر", nameEn: "Attijariwafa Bank Egypt" },
-  { name: "بنك دبي الإسلامي", nameEn: "Dubai Islamic Bank", domain: "dib.ae" },
-  { name: "بنك أبوظبي الإسلامي", nameEn: "Abu Dhabi Islamic Bank", domain: "adib.ae" },
-  { name: "البنك العربي", nameEn: "Arab Bank", domain: "arabbank.com" },
-  { name: "بنك سيتي بنك — مصر", nameEn: "Citibank Egypt", domain: "citibank.com" },
-  { name: "بنك ستاندرد تشارترد", nameEn: "Standard Chartered", domain: "sc.com" },
+  { name: "بنك كريدي أجريكول — مصر", nameEn: "Crédit Agricole Egypt", logo: "creditagricole" },
+  { name: "بنك HSBC — مصر", nameEn: "HSBC Egypt", logo: "hsbc" },
+  { name: "بنك سيتي بنك — مصر", nameEn: "Citibank Egypt", logo: "citibank" },
+  { name: "بنك المشرق", nameEn: "Mashreq Bank", logo: "mashreq" },
+  { name: "بنك ستاندرد تشارترد", nameEn: "Standard Chartered", logo: "standardchartered" },
 ];
 
-/** شعار البنك (رابط صورة) أو null لعرض الأحرف الأولى */
-export function bankLogoUrl(domain?: string): string | null {
-  if (!domain) return null;
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
+/** شعار البنك (مسار محلي) أو null لعرض الأحرف الأولى */
+export function bankLogoUrl(bank: EgyptianBank | null | undefined): string | null {
+  if (!bank?.logo) return null;
+  const ext = LOGO_EXT[bank.logo] ?? "png";
+  return `/bank-logos/${bank.logo}.${ext}`;
 }
 
 /** إيجاد البنك بالاسم (مطابقة تامة أو احتواء أحد الاتجاهين) */

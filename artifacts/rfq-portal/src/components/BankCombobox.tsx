@@ -12,7 +12,7 @@ import {
 // شعار البنك مع بديل نصي (الأحرف الأولى) عند تعذّر تحميل الصورة
 export function BankLogo({ bank, size = 20 }: { bank: EgyptianBank; size?: number }) {
   const [failed, setFailed] = useState(false);
-  const url = bankLogoUrl(bank.domain);
+  const url = bankLogoUrl(bank);
   if (!url || failed) {
     return (
       <span
@@ -132,7 +132,7 @@ export function BankCombobox({
           ) : (
             filtered.map((b) => (
               <li
-                key={`${b.name}-${b.domain ?? ""}`}
+                key={`${b.name}-${b.logo ?? ""}`}
                 className="px-3 py-1.5 cursor-pointer hover:bg-accent hover:text-accent-foreground flex items-center gap-2"
                 onMouseDown={(e) => {
                   e.preventDefault();
