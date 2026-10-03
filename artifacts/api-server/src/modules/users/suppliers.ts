@@ -35,6 +35,35 @@ function toStored(cats: string | string[]): string {
   return String(cats).trim();
 }
 
+// بيانات السجل التجاري والضريبي والبنكية للمورد — تُعاد كاملة في كل استجابة
+const REGISTRATION_FIELDS = [
+  "commercialRegister",
+  "taxRegistration",
+  "bankName",
+  "bankAccountNumber",
+  "iban",
+  "swiftCode",
+  "bankBranch",
+] as const;
+
+function serializeSupplier(s: typeof suppliersTable.$inferSelect) {
+  return {
+    id: s.id,
+    supplierId: s.supplierId,
+    name: s.name,
+    contactPerson: s.contactPerson,
+    email: s.email,
+    phone: s.phone,
+    address: s.address,
+    category: s.category,
+    categories: toArray(s.category),
+    isActive: s.isActive,
+    invoiceHasVat: s.invoiceHasVat,
+    ...Object.fromEntries(REGISTRATION_FIELDS.map((k) => [k, s[k]])),
+    createdAt: s.createdAt.toISOString(),
+  };
+}
+
 // إلغاء تفعيل المورد تلقائيًا عند بلوغ هذا العدد من الإرسالات دون أي رد
 const AUTO_DEACTIVATE_AFTER = 10;
 
@@ -308,6 +337,9 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
     }
 
     try {
+      const registration = Object.fromEntries(
+        REGISTRATION_FIELDS.map((k) => [k, row[k] ? String(row[k]).trim() : undefined]),
+      );
       const [supplier] = await db
         .insert(suppliersTable)
         .values({
@@ -317,6 +349,7 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
           email: email || undefined,
           phone: phone || undefined,
           address: row.address ? String(row.address) : undefined,
+          ...registration,
           category,
           invoiceHasVat:
             typeof req.body.invoiceHasVat === "boolean" ? req.body.invoiceHasVat : undefined,
@@ -329,20 +362,7 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
         name,
         status: "imported",
         reason: null,
-        supplier: {
-          id: supplier.id,
-          supplierId: supplier.supplierId,
-          name: supplier.name,
-          contactPerson: supplier.contactPerson,
-          email: supplier.email,
-          phone: supplier.phone,
-          address: supplier.address,
-          category: supplier.category,
-          categories: toArray(supplier.category),
-          isActive: supplier.isActive,
-          invoiceHasVat: supplier.invoiceHasVat,
-          createdAt: supplier.createdAt.toISOString(),
-        },
+        supplier: serializeSupplier(supplier),
       });
     } catch (err: unknown) {
       errors++;
@@ -414,22 +434,7 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(suppliersTable.name);
 
-  res.json(
-    suppliers.map((s) => ({
-      id: s.id,
-      supplierId: s.supplierId,
-      name: s.name,
-      contactPerson: s.contactPerson,
-      email: s.email,
-      phone: s.phone,
-      address: s.address,
-      category: s.category,
-      categories: toArray(s.category),
-      isActive: s.isActive,
-      invoiceHasVat: s.invoiceHasVat,
-      createdAt: s.createdAt.toISOString(),
-    })),
-  );
+  res.json(suppliers.map(serializeSupplier));
 });
 
 // قائمة تقييمات جميع الموردين دفعة واحدة
@@ -458,6 +463,9 @@ router.post("/suppliers", requireAuth, async (req, res): Promise<void> => {
     string,
     string
   >;
+  const registration = Object.fromEntries(
+    REGISTRATION_FIELDS.map((k) => [k, req.body[k] ? String(req.body[k]).trim() : undefined]),
+  );
   const rawCats = req.body.categories ?? req.body.category;
   const category = toStored(rawCats || "general");
 
@@ -500,22 +508,11 @@ router.post("/suppliers", requireAuth, async (req, res): Promise<void> => {
       email,
       phone,
       address,
+      ...registration,
       category,
     })
     .returning();
-  res.status(201).json({
-    id: supplier.id,
-    supplierId: supplier.supplierId,
-    name: supplier.name,
-    contactPerson: supplier.contactPerson,
-    email: supplier.email,
-    phone: supplier.phone,
-    address: supplier.address,
-    category: supplier.category,
-    categories: toArray(supplier.category),
-    isActive: supplier.isActive,
-    createdAt: supplier.createdAt.toISOString(),
-  });
+  res.status(201).json(serializeSupplier(supplier));
 });
 
 router.get("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
@@ -526,19 +523,7 @@ router.get("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  res.json({
-    id: supplier.id,
-    supplierId: supplier.supplierId,
-    name: supplier.name,
-    contactPerson: supplier.contactPerson,
-    email: supplier.email,
-    phone: supplier.phone,
-    address: supplier.address,
-    category: supplier.category,
-    categories: toArray(supplier.category),
-    isActive: supplier.isActive,
-    createdAt: supplier.createdAt.toISOString(),
-  });
+  res.json(serializeSupplier(supplier));
 });
 
 router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
@@ -553,6 +538,7 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
     "address",
     "isActive",
     "invoiceHasVat",
+    ...REGISTRATION_FIELDS,
   ];
   for (const key of allowed) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -614,19 +600,7 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  res.json({
-    id: supplier.id,
-    supplierId: supplier.supplierId,
-    name: supplier.name,
-    contactPerson: supplier.contactPerson,
-    email: supplier.email,
-    phone: supplier.phone,
-    address: supplier.address,
-    category: supplier.category,
-    categories: toArray(supplier.category),
-    isActive: supplier.isActive,
-    createdAt: supplier.createdAt.toISOString(),
-  });
+  res.json(serializeSupplier(supplier));
 });
 
 // Only admin or manager can delete a supplier
