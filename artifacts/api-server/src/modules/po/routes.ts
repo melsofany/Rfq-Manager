@@ -30,21 +30,16 @@ import {
   sendPoCancelItemWhatsApp,
 } from "../communications/service";
 import { sendPoEmail } from "../../shared/email";
+import { normalizeSinglePhone, pickSendablePhone, splitPhoneCandidates } from "../../shared/phone";
 
 const router = Router();
 
 export function normalizePhone(phone: string): string {
-  // Strip invisible Unicode directional/formatting marks that paste in from WhatsApp/browsers
-  // eslint-disable-next-line no-control-regex
-  let cleaned = phone.replace(
-    /[\u2066\u2067\u2068\u2069\u200e\u200f\u202a\u202b\u202c\u202d\u202e]/g,
-    "",
-  );
-  cleaned = cleaned.replace(/[\s\-()]/g, "").replace(/\+/g, "");
-  if (cleaned.startsWith("00")) cleaned = cleaned.slice(2);
-  if (cleaned.length === 11 && cleaned.startsWith("0")) cleaned = "2" + cleaned;
-  if (cleaned.length === 10 && cleaned.startsWith("1")) cleaned = "20" + cleaned;
-  return cleaned;
+  // Shared with every send path: a field holding several numbers resolves to the
+  // first sendable one. Falls back to the cleaned first candidate so callers that
+  // only persist the value still get a stable string.
+  const { phone: sendable } = pickSendablePhone(phone);
+  return sendable ?? normalizeSinglePhone(splitPhoneCandidates(phone)[0] ?? phone);
 }
 
 // Arbitrary advisory lock key used to serialize PO number generation.

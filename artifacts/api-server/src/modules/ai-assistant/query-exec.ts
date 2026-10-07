@@ -217,6 +217,96 @@ export function guardReadOnly(sql: string): GuardVerdict {
   return { allowed: true };
 }
 
+/** Postgres SQLSTATE codes meaning "the name you used does not exist". */
+const UNKNOWN_NAME_CODES = new Set(["42703", "42P01", "42883"]);
+
+/**
+ * Append a pointer to `describe_schema` when the database rejected a NAME.
+ *
+ * Live (job 396 era): the model wrote `i.customerpoid`, the database said the
+ * column does not exist, and the model had no way to look the real name up — so
+ * it kept guessing. The hint sends it to the one tool that answers the question.
+ */
+export function withSchemaHint(err: unknown): string {
+  const message = String(err).slice(0, 300);
+  const code = (err as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && UNKNOWN_NAME_CODES.has(code)) {
+    return (
+      message +
+      " — تلميح: اسم جدول أو عمود غير موجود. استخدم describe_schema لقراءة الأسماء الفعلية قبل إعادة المحاولة، ولا تخمّن."
+    );
+  }
+  return message;
+}
+
+/** A table or column identifier we will interpolate into a catalog query. */
+const SAFE_IDENT = /^[a-z_][a-z0-9_]{0,62}$/i;
+
+export interface SchemaColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+}
+
+export type DescribeSchemaResult =
+  | { ok: true; tables: string[] }
+  | { ok: true; table: string; columns: SchemaColumn[] }
+  | { ok: false; error: string };
+
+/**
+ * Read the live schema so the model stops guessing names.
+ *
+ * - no `table`: list the public tables.
+ * - `table`: list its columns with types.
+ *
+ * Only reads `information_schema`, so it is read-only by construction, and it
+ * takes a plain identifier — never SQL — so it cannot be steered into a query.
+ */
+export async function describeSchema(table?: string): Promise<DescribeSchemaResult> {
+  const { getPool } = await import("@workspace/db");
+  const pool = getPool();
+  const name = table?.trim().toLowerCase();
+  if (name !== undefined && name !== "" && !SAFE_IDENT.test(name)) {
+    return { ok: false, error: `اسم جدول غير صالح: "${table}"` };
+  }
+  try {
+    if (!name) {
+      const res = await pool.query(
+        `SELECT table_name FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
+          ORDER BY table_name LIMIT 300`,
+      );
+      return { ok: true, tables: res.rows.map((r: { table_name: string }) => r.table_name) };
+    }
+    const res = await pool.query(
+      `SELECT column_name, data_type, is_nullable
+         FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = $1
+        ORDER BY ordinal_position`,
+      [name],
+    );
+    if (res.rows.length === 0) {
+      return {
+        ok: false,
+        error: `لا يوجد جدول باسم "${name}". استدعِ describe_schema بدون اسم لقائمة الجداول.`,
+      };
+    }
+    return {
+      ok: true,
+      table: name,
+      columns: res.rows.map(
+        (r: { column_name: string; data_type: string; is_nullable: string }) => ({
+          name: r.column_name,
+          type: r.data_type,
+          nullable: r.is_nullable === "YES",
+        }),
+      ),
+    };
+  } catch (err) {
+    return { ok: false, error: String(err).slice(0, 300) };
+  }
+}
+
 /**
  * Run a read-only query under all five layers.
  *
@@ -253,7 +343,7 @@ export async function runReadOnlyQuery(sql: string): Promise<ReadOnlyQueryResult
     // A refused write surfaces here as a Postgres error. Report it plainly
     // rather than retrying: the whole point is that it must not succeed.
     logger.warn({ err: String(err).slice(0, 300) }, "AI assistant: read-only query failed");
-    return { ok: false, error: String(err).slice(0, 300) };
+    return { ok: false, error: withSchemaHint(err) };
   } finally {
     // ALWAYS end the transaction before returning the client to the pool. A
     // failed statement aborts the transaction, and a connection handed back in

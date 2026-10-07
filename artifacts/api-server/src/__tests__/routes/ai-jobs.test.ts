@@ -67,13 +67,25 @@ vi.mock("@workspace/db", () => ({
       from: () => ({
         where: (w: any) => ({
           orderBy: () => ({
-            limit: (n: number) =>
-              Promise.resolve(
+            limit: (n: number) => {
+              // The active-or-recently-completed lookup by key (see findActiveJobByKey).
+              if (w?.__and && w.__and.some((x: any) => x.__eq?.[0] === jobsT.jobKey)) {
+                const key = w.__and.find((x: any) => x.__eq?.[0] === jobsT.jobKey)?.__eq?.[1];
+                const cond = w.__and.find((x: any) => x.__or);
+                return Promise.resolve(
+                  rows
+                    .filter((r) => r.jobKey === key && matchesStatusCond(r, cond))
+                    .slice(0, n)
+                    .map((r) => ({ ...r })),
+                );
+              }
+              return Promise.resolve(
                 rows
                   .filter((r) => r.phone === w?.__eq?.[1])
                   .slice(0, n)
                   .map((r) => ({ ...r })),
-              ),
+              );
+            },
           }),
           limit: () => {
             // Either an id lookup (eq) or the active-job-by-key lookup (and).
@@ -115,10 +127,23 @@ vi.mock("@workspace/db", () => ({
   aiAssistantJobsTable: jobsT,
 }));
 
+/** Mirror of the `or(inArray(status), and(eq(status,"completed"), gte(finishedAt, t)))` shape. */
+function matchesStatusCond(r: any, cond: any): boolean {
+  if (!cond) return true;
+  if (cond.__or) return cond.__or.some((c: any) => matchesStatusCond(r, c));
+  if (cond.__and) return cond.__and.every((c: any) => matchesStatusCond(r, c));
+  if (cond.__in) return cond.__in[1].includes(r.status);
+  if (cond.__eq) return r.status === cond.__eq[1];
+  if (cond.__gte) return !!r.finishedAt && new Date(r.finishedAt) >= new Date(cond.__gte[1]);
+  return true;
+}
+
 vi.mock("drizzle-orm", () => ({
   eq: (col: any, val: any) => ({ __eq: [col, val] }),
   and: (...args: any[]) => ({ __and: args }),
   inArray: (col: any, val: any) => ({ __in: [col, val] }),
+  or: (...args: any[]) => ({ __or: args }),
+  gte: (col: any, val: any) => ({ __gte: [col, val] }),
   desc: (col: any) => ({ __desc: col }),
   sql: Object.assign((..._a: unknown[]) => ({ sql: true }), { join: () => ({}) }),
 }));
@@ -312,6 +337,69 @@ describe("async jobs", () => {
     await pendingAiJobs();
     // Only one row was ever created.
     expect(rows.filter((r) => r.jobKey === "census:2026:EDC")).toHaveLength(1);
+  });
+
+  it("REUSES a census that completed moments ago instead of re-scanning the mailbox (jobs 395→396)", async () => {
+    rows.push({
+      id: 395,
+      phone: "2010",
+      kind: "email_census",
+      status: "completed",
+      jobKey: "census:*:::::po:",
+      finishedAt: new Date(Date.now() - 60_000),
+      updatedAt: new Date(),
+      result: { ok: true },
+    } as any);
+    const { job, reused } = await createJob({
+      phone: "2010",
+      kind: "email_census",
+      jobKey: "census:*:::::po:",
+      run: async () => {
+        throw new Error("a recent completed census must not run again");
+      },
+    });
+    expect(reused).toBe(true);
+    expect(job.id).toBe(395);
+  });
+
+  it("does NOT reuse a census that completed long ago — mail may have arrived since", async () => {
+    rows.push({
+      id: 300,
+      phone: "2010",
+      kind: "email_census",
+      status: "completed",
+      jobKey: "census:*:::::stale:",
+      finishedAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
+      updatedAt: new Date(),
+      result: { ok: true },
+    } as any);
+    const { reused } = await createJob({
+      phone: "2010",
+      kind: "email_census",
+      jobKey: "census:*:::::stale:",
+      run: async () => {},
+    });
+    expect(reused).toBe(false);
+  });
+
+  it("does NOT reuse a FAILED census — a failure must be retried, not replayed", async () => {
+    rows.push({
+      id: 301,
+      phone: "2010",
+      kind: "email_census",
+      status: "failed",
+      jobKey: "census:*:::::failed:",
+      finishedAt: new Date(Date.now() - 60_000),
+      updatedAt: new Date(),
+      result: null,
+    } as any);
+    const { reused } = await createJob({
+      phone: "2010",
+      kind: "email_census",
+      jobKey: "census:*:::::failed:",
+      run: async () => {},
+    });
+    expect(reused).toBe(false);
   });
 
   it("lists a phone's jobs newest-first", async () => {

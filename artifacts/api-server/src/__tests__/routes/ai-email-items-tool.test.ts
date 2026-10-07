@@ -39,7 +39,11 @@ vi.mock("../../modules/ai-assistant/email", async (importOriginal) => ({
 vi.mock("@workspace/db", async (importOriginal) => ({
   ...(await importOriginal<object>()),
   db: {
-    select: () => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) }),
+    select: () => ({
+      from: () => ({
+        where: () => ({ orderBy: () => ({ limit: () => Promise.resolve([]) }) }),
+      }),
+    }),
     // The oversize-census hand-off creates a real job row, so `insert`/`update`
     // must exist or the hand-off would fail with a TypeError instead of queueing.
     insert: () => ({

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { pickSendablePhone } from "../../shared/phone";
 import {
   db,
   rfqTable,
@@ -929,12 +930,16 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           "RFQ send: WhatsApp OK",
         );
 
-        let normalizedPhone = supplier.phone.replace(/[\s\-()]/g, "").replace(/^\+/, "");
-        if (normalizedPhone.startsWith("00")) normalizedPhone = normalizedPhone.slice(2);
-        if (normalizedPhone.length === 11 && normalizedPhone.startsWith("0"))
-          normalizedPhone = "2" + normalizedPhone;
-        if (normalizedPhone.length === 10 && normalizedPhone.startsWith("1"))
-          normalizedPhone = "20" + normalizedPhone;
+        // A supplier field may hold several numbers («a / b»); the shared picker
+        // sends to the first sendable one instead of the joined string.
+        const picked = pickSendablePhone(supplier.phone);
+        const normalizedPhone = picked.phone ?? supplier.phone;
+        if (picked.ignored.length) {
+          req.log.warn(
+            { supplierId: supplier.id, ignored: picked.ignored },
+            "RFQ send: supplier has extra phone numbers — only the first was used",
+          );
+        }
 
         try {
           if (pdfSent) {
