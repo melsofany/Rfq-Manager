@@ -22,7 +22,6 @@
 import { google } from "googleapis";
 import { createGzip, type Gzip } from "zlib";
 import { PassThrough } from "stream";
-import { once } from "events";
 import { pool } from "@workspace/db";
 import { logger } from "../../shared/logger";
 
@@ -75,7 +74,23 @@ function getDrive() {
 }
 
 async function writeChunk(gz: Gzip, chunk: string): Promise<void> {
-  if (!gz.write(chunk)) await once(gz, "drain");
+  if (gz.destroyed) throw new Error("backup stream closed before the dump finished");
+  if (!gz.write(chunk)) {
+    // A destroyed stream never emits `drain`, so waiting on it alone hangs the
+    // dump forever once the upload has stopped it. Wake on `close` too.
+    await new Promise<void>((resolve, reject) => {
+      const onDrain = () => done(resolve);
+      const onClose = () =>
+        done(() => reject(new Error("backup stream closed before the dump finished")));
+      const done = (fn: () => void) => {
+        gz.off("drain", onDrain);
+        gz.off("close", onClose);
+        fn();
+      };
+      gz.once("drain", onDrain);
+      gz.once("close", onClose);
+    });
+  }
 }
 
 async function listTables(): Promise<string[]> {
@@ -175,6 +190,16 @@ export async function runDatabaseBackup(): Promise<BackupResult> {
       media: { mimeType: "application/gzip", body },
       fields: "id,name",
     });
+    // Observe the upload NOW, not after the dump. The upload runs while the dump is
+    // still streaming, so a refused token (invalid_grant, 03:00 daily) rejected a
+    // promise nobody was awaiting yet — an unhandled rejection. Stop the dump too:
+    // there is nowhere left to send it.
+    let uploadError: unknown = null;
+    createPromise.catch((err: unknown) => {
+      uploadError = err;
+      gz.destroy();
+      body.destroy();
+    });
 
     let tables: Record<string, number>;
     try {
@@ -182,8 +207,8 @@ export async function runDatabaseBackup(): Promise<BackupResult> {
     } catch (err) {
       gz.destroy();
       body.destroy(err as Error);
-      await createPromise.catch(() => {});
-      throw err;
+      // Report the upload's error when it caused the dump to stop.
+      throw uploadError ?? err;
     }
     const created = await createPromise;
     const fileId = created.data.id;
