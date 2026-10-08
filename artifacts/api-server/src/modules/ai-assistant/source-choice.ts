@@ -77,7 +77,7 @@ const pending = new Map<string, Pending>();
  * live failure that asked «من فين؟» in the middle of a half-finished read.
  */
 const LAST_CENSUS_TTL_MS = 30 * 60 * 1000;
-const lastCensus = new Map<string, Pending>();
+const lastQuestion = new Map<string, Pending>();
 
 /** A short message whose only job is to continue the previous work. */
 const CONTINUE_RE = /^\s*(?:اكمل|أكمل|اكملي|كمل|كمّل|استمر|تابع|واصل|continue|go on)(?=\s|$)/i;
@@ -98,11 +98,11 @@ export function resolveSourceChoice(
   // A continuation resumes the last census with its source; it never opens a new
   // source question. With nothing to resume it runs as the plain message.
   if (isContinuation(text)) {
-    const last = lastCensus.get(key);
+    const last = lastQuestion.get(key);
     if (last && now - last.at <= LAST_CENSUS_TTL_MS) {
       return {
         kind: "run",
-        text: `${last.question}\n(استكمل الحصر السابق من حيث توقف، ولا تبدأ من الصفر)`,
+        text: `${last.question}\n(استكمل المهمة السابقة من حيث توقفت، ولا تبدأ من الصفر)`,
       };
     }
     return { kind: "run", text };
@@ -115,7 +115,7 @@ export function resolveSourceChoice(
     if (choice) {
       const { directive } = LABELS[choice];
       const question = `${held.question}\n(${directive}، المصدر المحدد: ${LABELS[choice].label})`;
-      lastCensus.set(key, { question, at: now });
+      lastQuestion.set(key, { question, at: now });
       return { kind: "run", text: question };
     }
     // Not a source answer: the operator moved on, so the held question is dropped
@@ -126,7 +126,9 @@ export function resolveSourceChoice(
     pending.set(key, { question: text, at: now });
     return { kind: "ask", reply: SOURCE_QUESTION };
   }
-  if (CENSUS_RE.test(text)) lastCensus.set(key, { question: text, at: now });
+  // Any substantive question is resumable by «كمّل», not only a census: the operator's
+  // «كمّل» after a reply that stopped halfway means that question.
+  if (text.trim().split(/\s+/).length >= 4) lastQuestion.set(key, { question: text, at: now });
   return { kind: "run", text };
 }
 
@@ -134,9 +136,9 @@ export function resolveSourceChoice(
 export function clearSourceChoice(key?: string): void {
   if (key === undefined) {
     pending.clear();
-    lastCensus.clear();
+    lastQuestion.clear();
   } else {
     pending.delete(key);
-    lastCensus.delete(key);
+    lastQuestion.delete(key);
   }
 }

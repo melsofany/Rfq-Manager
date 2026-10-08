@@ -816,6 +816,33 @@ describe("oversize census hands off to a background job", () => {
     expect(res.data.note).toContain("job_status");
   });
 
+  it("queues a job for a `contains` lookup that found nothing and has much left", async () => {
+    // Live: «Cable Lug 70x12 من EDC الشهر اللي فات» scanned 67s per call across a
+    // month of mail, found nothing in the batch it could read, and the run ended
+    // with no answer. A lookup that has read a batch and found NOTHING cannot be
+    // answered from that batch, so the rest goes to a job.
+    extractPdfText.mockResolvedValue("Quantity UOM Part No Line Item\n1 5 Each X-1 THING\n");
+    const pool = [1, 2, 3].map((uid) => ({
+      uid,
+      mailbox: "info@cortoba-supplies.com",
+      subject: `EDC PO ${uid}`,
+      attachments: pdfAttachments([{ filename: `a${uid}.pdf`, content: Buffer.from("pdf") }]),
+    }));
+    scanEmails.mockImplementation(
+      async (opts: { attachmentSkip?: number; includeAttachments?: boolean }) =>
+        censusWithAttachments(opts.includeAttachments ? pool.slice(opts.attachmentSkip ?? 0) : [], {
+          matched: 315,
+        }),
+    );
+    const res = (await executeTool(
+      "scan_email_items",
+      { from: "edc", contains: "cable lug 70x12" },
+      ctx as never,
+    )) as { data: { jobId: number; note: string } };
+    expect(res.data.jobId).toBeGreaterThan(0);
+    expect(res.data.note).toContain("الخلفية");
+  });
+
   it("does NOT queue a job for a scan that finished", async () => {
     // A completed census must return its rows, not a job — the threshold only
     // applies to work that would otherwise be left unfinished.

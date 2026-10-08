@@ -212,7 +212,7 @@ describe("scan_email_items contains filter (missing older orders)", () => {
     );
     const r = await executeTool(
       "scan_email_items",
-      { from: "edc", contains: "ariston" },
+      { from: "edc", contains: "ariston", noAutoJob: true },
       ctx as never,
     );
     const note = (r.data as { note: string }).note;
