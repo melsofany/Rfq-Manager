@@ -37,6 +37,7 @@ import { executeTool, asText, toolDefinitions, type ToolContext } from "./tools"
 // registry for a timing constant, or a test that mocks the registry loses it and
 // the guarantee silently becomes `undefined`.
 import { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS } from "./budgets";
+import { forcedAnswerModel } from "./config";
 import { filterToolDefinitions } from "./tool-scope";
 import { wrapUntrustedOutput, unwrapUntrustedOutput } from "./guardrails";
 import {
@@ -142,7 +143,7 @@ async function answerWithoutTools(
 ): Promise<string | null> {
   try {
     const res = await chatCompletion({
-      model: opts.model,
+      model: forcedAnswerModel(opts.model, opts.baseUrl),
       baseUrl: opts.baseUrl,
       messages,
       toolChoice: "none",
