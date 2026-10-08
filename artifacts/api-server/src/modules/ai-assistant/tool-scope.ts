@@ -39,6 +39,7 @@ import type { QueryIntent, SourceScope } from "./router";
  */
 const CORE_TOOLS = [
   "lookup_document", // one thing by its number — the most common single ask
+  "describe_schema", // real table/column names — stops SQL guessing (any question may need SQL)
   "search_database", // generic record search
   "count_database", // generic count
   "learn_organization", // record a document-number pattern / entity alias the operator taught

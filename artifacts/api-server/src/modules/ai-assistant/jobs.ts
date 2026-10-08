@@ -17,7 +17,7 @@
  * worker without touching the callers — they only know `createJob`/`getJob`.
  */
 import { db, aiAssistantJobsTable } from "@workspace/db";
-import { and, eq, inArray, desc, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, desc, or, sql } from "drizzle-orm";
 import { logger } from "../../shared/logger";
 import { isQuotaError } from "./llm";
 import {
@@ -98,19 +98,42 @@ function toRecord(r: any): JobRecord {
 }
 
 /**
- * Find an existing non-terminal job for the same key, so re-issuing an identical
- * request RESUMES it instead of starting a second copy of the same expensive scan.
+ * How long a COMPLETED job still answers for an identical request.
+ *
+ * Live (jobs 395 → 396, 80 seconds apart): the same census was started twice
+ * because the dedupe only looked at jobs still running, and the first had
+ * finished a moment earlier. Re-scanning the same mailbox minutes later costs
+ * the same time and can only disagree with the stored report. Beyond the window
+ * a new run is the honest answer, since mail may have arrived since.
  */
-export async function findActiveJobByKey(jobKey: string): Promise<JobRecord | null> {
+export const REUSE_COMPLETED_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * Find a job for the same key that a new request should join instead of starting
+ * a second copy of an expensive scan: a live one (queued/running) at any age, or
+ * a completed one that finished within {@link REUSE_COMPLETED_WINDOW_MS}.
+ */
+export async function findActiveJobByKey(
+  jobKey: string,
+  now: Date = new Date(),
+): Promise<JobRecord | null> {
+  const recentSince = new Date(now.getTime() - REUSE_COMPLETED_WINDOW_MS);
   const rows = (await (db as any)
     .select()
     .from(aiAssistantJobsTable)
     .where(
       and(
         eq(aiAssistantJobsTable.jobKey, jobKey),
-        inArray(aiAssistantJobsTable.status, ["queued", "running"]),
+        or(
+          inArray(aiAssistantJobsTable.status, ["queued", "running"]),
+          and(
+            eq(aiAssistantJobsTable.status, "completed"),
+            gte(aiAssistantJobsTable.finishedAt, recentSince),
+          ),
+        ),
       ),
     )
+    .orderBy(desc(aiAssistantJobsTable.id))
     .limit(1)) as any[];
   return rows[0] ? toRecord(rows[0]) : null;
 }
