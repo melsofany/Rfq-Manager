@@ -1927,7 +1927,14 @@ async function executeToolInner(
         if (
           !complete &&
           !args.noAutoJob &&
-          (wantsTotal || (!contains && session.remaining >= autoCensusMinRemaining()))
+          (wantsTotal ||
+            (session.remaining >= autoCensusMinRemaining() &&
+              // A `contains` lookup that has READ a batch and found nothing cannot
+              // be answered from that batch, and walking the rest inline costs a
+              // full round per batch (live: 67s per call on a month of mail until
+              // the run ended with no answer). One that already found rows is
+              // answered from them, with its scope stated.
+              (!contains || matchedItems.length === 0)))
         ) {
           const scopeLabel = [
             args.from ? `من ${String(args.from)}` : "",

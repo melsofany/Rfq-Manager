@@ -447,3 +447,27 @@ export function exhaustedAnswer(
     ". جرّب سؤالًا أكثر تحديدًا (مثل رقم أمر التوريد) وسأجيب مباشرة."
   );
 }
+
+/**
+ * A promise of work the reply itself does not do: «سأفتح هذا الأمر للتأكد».
+ *
+ * The run ends when the reply is sent. A sentence that promises a NEXT step is
+ * therefore a commitment nobody will keep: the operator waits for a follow-up
+ * message that never comes (live: «سأفتح هذا الأمر مباشرة…», then silence). The
+ * reply must either have done the step or say plainly that it is still open.
+ *
+ * Returns the offending sentence, or null. Matches first-person future forms in
+ * Modern Standard («سأ…», «سوف أ…») and Egyptian («هـ…» + the verbs below).
+ */
+const PROMISE_STEMS =
+  "فتح|تحقق|بدأ|ابدأ|بحث|ستخرج|راجع|قارن|كمل|كمّل|جرب|عيد|فحص|قوم|غيّر|غير|حاول|جلب|حصر|نفذ|تأكد|شوف|دور|جيب|عمل|طابق|حلل|ستكمل|تابع";
+const PROMISE_RE = new RegExp(`(?:^|[\\s.،:؛!؟()\\-])(?:سأ|سوف\\s+أ|ه)(?:${PROMISE_STEMS})`, "u");
+
+export function findUnkeptPromise(text: string): string | null {
+  for (const raw of String(text ?? "").split(/(?<=[.!؟?\n])\s*/u)) {
+    const sentence = raw.trim();
+    if (!sentence) continue;
+    if (PROMISE_RE.test(sentence)) return sentence.slice(0, 160);
+  }
+  return null;
+}

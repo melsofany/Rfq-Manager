@@ -97,7 +97,7 @@ describe("continuation of a census", () => {
     expect(r.kind).toBe("run");
     if (r.kind !== "run") return;
     expect(r.text).toContain("اعمل حصر لكل بنود EDC");
-    expect(r.text).toContain("استكمل الحصر السابق");
+    expect(r.text).toContain("استكمل المهمة السابقة");
     expect(routeQuestion(r.text).sourceScope).toBe("email");
   });
 

@@ -55,6 +55,7 @@ import {
   exhaustedAnswer,
   findGroundingNumbers,
   findMailAccessFailure,
+  findUnkeptPromise,
   findUngroundedNumbers,
   isRefusalSentence,
   looksLikeDataFound,
@@ -810,6 +811,27 @@ async function verifyNumbers(s: RunState): Promise<void> {
   }
 }
 
+/**
+ * A reply that promises a next step it does not take leaves the operator waiting
+ * for a message that never comes. When the run ends with such a promise — and no
+ * background job was queued to carry it out — the reply says so plainly and tells
+ * the operator how to resume.
+ */
+function applyUnkeptPromise(s: RunState): void {
+  if (!s.finalText) return;
+  const promise = findUnkeptPromise(s.finalText);
+  if (!promise) return;
+  const jobQueued =
+    s.usedTools.some((t) => t.name === "start_census_job") ||
+    s.toolExchanges.some((ex) => JSON.stringify(ex).includes('"jobId"'));
+  if (jobQueued) return;
+  s.finalText =
+    `${s.finalText}\n\n⚠️ الجملة «${promise}» وعد بخطوة لم تُنفَّذ في هذا الرد — ` +
+    `لم أفتح أو أتحقق منها بعد، فلا تعتبرها حدثت. أرسل «كمّل» وأكمل من حيث توقفت.`;
+  s.verificationRan = true;
+  logger.warn({ phone: s.input.phone, promise }, "AI assistant: reply ended on an unkept promise");
+}
+
 /** The mailbox caveat goes on LAST, after every correction, so nothing can drop it. */
 function applyMailCaveat(s: RunState): void {
   if (s.finalText && s.mailFailure) {
@@ -965,6 +987,7 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
     applySourceScope(s);
     await verifyDraft(s);
     await verifyNumbers(s);
+    applyUnkeptPromise(s);
     applyMailCaveat(s);
   } catch (err) {
     recordFailedRun(s, err);
