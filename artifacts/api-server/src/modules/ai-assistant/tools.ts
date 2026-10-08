@@ -581,7 +581,7 @@ function censusCsv(census: EmailCensusResult): string {
  * returning its own honest "partial, continue" payload.
  */
 export function toolTimeoutMs(): number {
-  return Number(process.env.AI_TOOL_TIMEOUT_MS) || 160_000;
+  return Number(process.env.AI_TOOL_TIMEOUT_MS) || 95_000;
 }
 
 /**
@@ -616,7 +616,7 @@ export { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS, SCAN_RETURN_MARGIN_MS } from "
  * "partial, continue" payload instead of a generic timeout.
  */
 export function scanCallBudgetMs(): number {
-  return Number(process.env.AI_SCAN_CALL_BUDGET_MS ?? 120_000);
+  return Number(process.env.AI_SCAN_CALL_BUDGET_MS ?? 70_000);
 }
 
 /**
