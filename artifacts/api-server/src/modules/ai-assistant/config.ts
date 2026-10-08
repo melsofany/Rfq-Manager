@@ -427,15 +427,23 @@ export function configuredProviderCount(): number {
  */
 export function logProviderCapacity(): void {
   const status = providerStatus();
-  const ready = status.filter((p) => p.configured).map((p) => `${p.provider}:${p.model}`);
+  // The PRIMARY provider is the one `DEFAULT_MODEL` belongs to, and it is listed
+  // first. Reading the list in provider-table order made Gemini look like the
+  // primary in production logs even though every answer was served by DeepSeek.
+  const primaryProvider = DEFAULT_MODEL.toLowerCase().startsWith("gemini") ? "gemini" : "deepseek";
+  const ordered = [...status].sort(
+    (a, b) => Number(b.provider === primaryProvider) - Number(a.provider === primaryProvider),
+  );
+  const ready = ordered.filter((p) => p.configured).map((p) => `${p.provider}:${p.model}`);
+  const primary = `${primaryProvider}:${DEFAULT_MODEL}`;
   if (ready.length === 0) {
     logger.error("AI assistant: NO provider configured — the assistant cannot answer");
   } else if (ready.length === 1) {
     logger.warn(
-      { ready, single: true },
+      { ready, primary, single: true },
       "AI assistant: ONE provider configured — no failover when its daily quota is spent",
     );
   } else {
-    logger.info({ ready }, "AI assistant: provider failover configured");
+    logger.info({ ready, primary }, "AI assistant: provider failover configured");
   }
 }

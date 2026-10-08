@@ -141,6 +141,8 @@ async function respondToAuthorizedUser(phone: string, msg: WaInboundMessage): Pr
       // conversation.
       const { clearConversationState } = await import("./conversation");
       await clearConversationState(phone);
+      const { clearSourceChoice } = await import("./source-choice");
+      clearSourceChoice(phone);
       // And drop the CACHED CENSUS. A reset means "start over with no prior
       // result": leaving the scan cache (or its Postgres mirror) in place would
       // let the next question reuse a cursor and a row set produced before the

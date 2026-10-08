@@ -634,7 +634,7 @@ export function scanCallBudgetMs(): number {
  * remainder is.
  */
 function autoCensusMinRemaining(): number {
-  return Number(process.env.AI_AUTO_JOB_MIN_REMAINING ?? 150);
+  return Number(process.env.AI_AUTO_JOB_MIN_REMAINING ?? 40);
 }
 
 /**
