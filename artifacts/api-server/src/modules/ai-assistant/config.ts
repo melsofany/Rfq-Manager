@@ -239,6 +239,27 @@ export const isAiConfigured = Boolean(AI_API_KEY || DEEPSEEK_API_KEY);
  * Gemini. On another provider (DeepSeek) the id does not exist and would 404 on
  * every fast-path question — the primary is used instead.
  */
+/**
+ * The model that writes a FORCED answer: the completion that runs after the tool
+ * loop, with no tools left to call.
+ *
+ * It only has to turn evidence already in the transcript into prose, so it does
+ * not need the reasoning model. The reasoning model spent its whole 83s budget
+ * on that step in production and the answer was lost. On a DeepSeek deployment
+ * this is `deepseek-chat` (override with AI_ANSWER_MODEL, or set it to "" to keep
+ * the primary). Any other primary is returned unchanged.
+ */
+export const ANSWER_MODEL =
+  process.env.AI_ANSWER_MODEL === undefined ? "deepseek-chat" : process.env.AI_ANSWER_MODEL;
+
+export function forcedAnswerModel(primary: string, baseUrl?: string | null): string {
+  if (!ANSWER_MODEL) return primary;
+  const isDeepSeek =
+    /^deepseek/i.test(primary) ||
+    (!isGeminiModelId(primary) && isDeepSeekEndpoint(baseUrl || DEFAULT_BASE_URL));
+  return isDeepSeek ? ANSWER_MODEL : primary;
+}
+
 export function modelForPath(
   primary: string,
   path: "fast" | "deep",
