@@ -11,7 +11,7 @@ import {
   type ChatMessage,
   type ContentPart,
 } from "./llm";
-import { loadSettings, modelForPath, MAX_HISTORY } from "./config";
+import { loadSettings, modelForPath, MAX_HISTORY, type AiSettings } from "./config";
 import { recallMemories, renderMemoryBlock, distillMemories } from "./memory";
 import {
   toolDefinitions,
@@ -175,12 +175,16 @@ export interface AgentOutput {
   attachments: OutboxAttachment[];
 }
 
-export async function runAgent(input: AgentInput): Promise<AgentOutput> {
-  const settings = await loadSettings();
-  if (!settings.enabled) {
-    return { reply: "المساعد الذكي معطّل حاليًا. تواصل مع الإدارة.", attachments: [] };
-  }
-
+/**
+ * Load everything a turn needs before the tool loop: the audio transcript and
+ * the attached document, the run's tool context and route, the parallel loads
+ * (history, memories, vocabulary, state, organisation profiles), the prompt and
+ * the message list, the scoped tool catalogue, and the grounding ledger.
+ *
+ * Returns the state the later phases share. Split out of `runAgent` with its
+ * statements unchanged.
+ */
+async function prepareRun(input: AgentInput, settings: AiSettings) {
   let userText = input.text?.trim() || "";
   if (input.audio) {
     const transcript = await transcribeAudio(
@@ -397,474 +401,489 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   // operator is waiting in a chat window: past this point a late answer is
   // worse than an honest "it timed out", because they have already given up.
   const runBudget = new AbortController();
-  const runTimer = setTimeout(() => runBudget.abort(), AGENT_BUDGET_MS);
 
-  try {
-    if (mastraEngineEnabled()) {
-      // Swap-in tool loop. Everything around it — the router's plan, the run
-      // budget, the evidence ledger, verification, persistence and metrics —
-      // stays exactly as it is, so the engine can be changed back with one env
-      // var and nothing else in the pipeline has to be trusted twice.
-      const loop = await runToolLoop({
-        allowedTools,
-        model: runModel,
-        baseUrl: settings.baseUrl,
-        messages,
-        ctx,
-        maxRounds: plan.maxRounds,
-        signal: runBudget.signal,
-        phone: input.phone,
-        // The engine's budget extension measures the REAL remainder of the run
-        // budget, so it can never grant a round the operator's deadline cannot
-        // afford (nor strand a resumable census it still has time to finish).
-        remainingBudgetMs: AGENT_BUDGET_MS - (Date.now() - startedAt),
-      });
-      rounds = loop.rounds;
-      finalText = loop.finalText;
-      engineTrace = loop.taskTrace;
-      // Rebuild the evidence ledger from the engine's raw exchanges, through the
-      // SAME helpers the legacy loop uses, so the number check and the numeric
-      // reconciliation behave identically on either engine.
-      for (const ex of loop.exchanges) {
-        usedTools.push({ name: ex.name, args: ex.args, ok: ex.ok !== false });
-        toolExchanges.push(ex);
-        if (ex.content.startsWith("ERROR:")) noteMailAccessFailure(mailFailureEvidence, ex.content);
-        for (const n of findGroundingNumbers(ex.content)) groundedNumbers.add(n);
-        for (const t of collectToolTotals(ex.name, ex.content)) {
-          toolAggregates.push({ tool: ex.name, total: t });
-        }
-      }
-    } else
-      for (let round = 0; round < effectiveRounds; round++) {
-        // Last round: forbid tool calls so the model has to answer with what it
-        // already gathered. Without this a model that keeps calling tools drains
-        // the budget and leaves nothing to send.
-        const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === effectiveRounds - 1;
-        const roundStartedAt = Date.now();
-        const result = await chatCompletion({
-          model: runModel,
-          baseUrl: settings.baseUrl,
-          messages,
-          tools,
-          toolChoice: isLastRound ? "none" : "auto",
-          signal: runBudget.signal,
-        });
-        rounds += 1;
-        if (result.modelUsed && result.modelUsed !== runModel) fallbackUsed = true;
-        if (result.modelUsed) answeredModel = result.modelUsed;
-        if (result.providerUsed) answeredProvider = result.providerUsed;
+  return {
+    input,
+    settings,
+    userText,
+    documentNote,
+    ctx,
+    plan,
+    trace,
+    traceData,
+    runModel,
+    effectiveRounds,
+    steered,
+    extended,
+    history,
+    memoryBlock,
+    vocabularyBlock,
+    vocabulary,
+    tools,
+    allowedTools,
+    messages,
+    usedTools,
+    toolExchanges,
+    mailFailureEvidence,
+    finalText: finalText as string | null,
+    toolAggregates,
+    rounds,
+    fallbackUsed,
+    engineTrace,
+    answeredModel,
+    answeredProvider,
+    verificationRan,
+    numericDisagreed,
+    startedAt,
+    toolCache,
+    groundedNumbers,
+    runBudget,
+    mailFailure: null as string | null,
+  };
+}
 
-        if (result.toolCalls.length === 0) {
-          finalText = result.content;
-          break;
-        }
+/** Everything one turn accumulates. Phases read and write it in place. */
+type RunState = Awaited<ReturnType<typeof prepareRun>>;
 
-        // Some providers (observed: Gemini) still return tool calls under
-        // tool_choice "none". Dropping the tool schemas entirely removes the option
-        // and reliably yields text; if even that fails, report what did run rather
-        // than silently swallowing the turn.
-        if (isLastRound) {
-          logger.warn(
-            {
-              providerToolChoiceIgnored: true,
-              model: runModel,
-              calls: result.toolCalls.length,
-            },
-            "AI assistant: model ignored tool_choice=none on the final round",
-          );
-          const noTools = await chatCompletion({
-            model: runModel,
-            baseUrl: settings.baseUrl,
-            messages,
-            toolChoice: "none",
-          });
-          rounds += 1;
-          if (noTools.modelUsed && noTools.modelUsed !== runModel) fallbackUsed = true;
-          if (noTools.modelUsed) answeredModel = noTools.modelUsed;
-          if (noTools.providerUsed) answeredProvider = noTools.providerUsed;
-          finalText = noTools.content ?? result.content ?? exhaustedAnswer(usedTools);
-          break;
-        }
+/** Run the tool loop on the Mastra engine (opt-in; the same evidence is rebuilt). */
+async function runEngineLoop(s: RunState): Promise<void> {
+  // Swap-in tool loop. Everything around it — the router's plan, the run
+  // budget, the evidence ledger, verification, persistence and metrics —
+  // stays exactly as it is, so the engine can be changed back with one env
+  // var and nothing else in the pipeline has to be trusted twice.
+  const loop = await runToolLoop({
+    allowedTools: s.allowedTools,
+    model: s.runModel,
+    baseUrl: s.settings.baseUrl,
+    messages: s.messages,
+    ctx: s.ctx,
+    maxRounds: s.plan.maxRounds,
+    signal: s.runBudget.signal,
+    phone: s.input.phone,
+    // The engine's budget extension measures the REAL remainder of the run
+    // budget, so it can never grant a round the operator's deadline cannot
+    // afford (nor strand a resumable census it still has time to finish).
+    remainingBudgetMs: AGENT_BUDGET_MS - (Date.now() - s.startedAt),
+  });
+  s.rounds = loop.rounds;
+  s.finalText = loop.finalText;
+  s.engineTrace = loop.taskTrace;
+  // Rebuild the evidence ledger from the engine's raw exchanges, through the
+  // SAME helpers the legacy loop uses, so the number check and the numeric
+  // reconciliation behave identically on either engine.
+  for (const ex of loop.exchanges) {
+    s.usedTools.push({ name: ex.name, args: ex.args, ok: ex.ok !== false });
+    s.toolExchanges.push(ex);
+    if (ex.content.startsWith("ERROR:")) noteMailAccessFailure(s.mailFailureEvidence, ex.content);
+    for (const n of findGroundingNumbers(ex.content)) s.groundedNumbers.add(n);
+    for (const t of collectToolTotals(ex.name, ex.content)) {
+      s.toolAggregates.push({ tool: ex.name, total: t });
+    }
+  }
+}
 
-        // Echo the assistant's tool-call turn back into the conversation, then run
-        // every call in THIS round concurrently. The calls in one round are chosen
-        // together by the model and are independent, so awaiting them in sequence
-        // only added latency (a 3-line item scan cost 3 round-trips).
-        //
-        // `reasoning_content` is carried through when the provider returned it
-        // (DeepSeek thinking mode): the next request is rejected without it. A
-        // provider that returns none (Gemini) leaves the field unset, and
-        // `withReasoningEcho` supplies the placeholder DeepSeek accepts.
-        messages.push({
-          role: "assistant",
-          content: result.content ?? null,
-          tool_calls: result.toolCalls,
-          reasoning_content: result.reasoningContent,
-        });
+/** Run the built-in tool loop: one model round per iteration, until an answer or the budget. */
+async function runLegacyRounds(s: RunState): Promise<void> {
+  for (let round = 0; round < s.effectiveRounds; round++) {
+    // Last round: forbid tool calls so the model has to answer with what it
+    // already gathered. Without this a model that keeps calling tools drains
+    // the budget and leaves nothing to send.
+    const isLastRound = FORCE_ANSWER_ON_LAST_ROUND && round === s.effectiveRounds - 1;
+    const roundStartedAt = Date.now();
+    const result = await chatCompletion({
+      model: s.runModel,
+      baseUrl: s.settings.baseUrl,
+      messages: s.messages,
+      tools: s.tools,
+      toolChoice: isLastRound ? "none" : "auto",
+      signal: s.runBudget.signal,
+    });
+    s.rounds += 1;
+    if (result.modelUsed && result.modelUsed !== s.runModel) s.fallbackUsed = true;
+    if (result.modelUsed) s.answeredModel = result.modelUsed;
+    if (result.providerUsed) s.answeredProvider = result.providerUsed;
 
-        const calls = result.toolCalls.map((call) => {
-          const parsed = parseArgs(call);
-          return { call, parsed };
-        });
-        let dedupedCount = 0;
-        const outcomes = await Promise.all(
-          calls.map(async ({ call, parsed }) => {
-            // Identical (tool, args) in the SAME run: reuse the earlier result
-            // instead of re-running the tool. The calls in one round already run
-            // concurrently, so the promise is cached rather than the value.
-            const key = toolCacheKey(call.function.name, parsed);
-            // Resumable census tools intentionally MUST NOT be memoized. A second
-            // identical call is the resume operation: the session cursor has
-            // advanced in shared cache and must be allowed to return the next
-            // batch. Memoizing it made the model receive the first partial 150
-            // messages forever, despite the prompt telling it to continue.
-            const resumable = call.function.name === "scan_email_items";
-            let pending = resumable ? undefined : toolCache.get(key);
-            if (pending) {
-              dedupedCount += 1;
-            } else {
-              pending = (async () => {
-                const res = await executeTool(call.function.name, parsed, ctx);
-                if (!res.ok) noteMailAccessFailure(mailFailureEvidence, res.error);
-                return res.ok ? asText(res.data) : `ERROR: ${res.error}`;
-              })();
-              if (!resumable) toolCache.set(key, pending);
-            }
-            const content = await pending;
-            // `ERROR:` prefix is how a failed call is represented in the
-            // transcript, so `ok` is derived from it rather than carried
-            // separately — a deduped repeat must report the same outcome.
-            const ok = !content.startsWith("ERROR:");
-            toolExchanges.push({ name: call.function.name, args: parsed, content, ok });
-            usedTools.push({ name: call.function.name, args: parsed, ok });
-            for (const n of findGroundingNumbers(content)) groundedNumbers.add(n);
-            // Collect the tool's OWN quantity aggregates (never a figure from the
-            // prose) so the numeric verifier reconciles against what the database
-            // actually returned rather than against the first large number in the
-            // answer.
-            for (const t of collectToolTotals(call.function.name, content))
-              toolAggregates.push({ tool: call.function.name, total: t });
-            return { call, content };
-          }),
-        );
-        for (const { call, content } of outcomes) {
-          messages.push({
-            role: "tool",
-            tool_call_id: call.id,
-            name: call.function.name,
-            // Mail/document text is attacker-controlled, so the model sees where
-            // the untrusted region begins and ends (OWASP ASI01). Wrapping happens
-            // ONLY here: the ledger and `collectToolTotals` above read the raw
-            // content, and a delimiter would break their JSON parsing.
-            content: wrapUntrustedOutput(call.function.name, content),
-          });
-        }
-        logger.info(
-          {
-            phone: input.phone,
-            round,
-            ms: Date.now() - roundStartedAt,
-            toolCalls: calls.map((c) => c.call.function.name),
-            deduped: dedupedCount,
-          },
-          "AI assistant: tool round complete",
-        );
-
-        // Record the think/act cycle so the execution control below can see whether
-        // this run is progressing, looping, or failing the same call repeatedly.
-        trace.record({
-          step: round + 1,
-          thought: result.content ?? "",
-          toolCalls: calls.map((c) => ({ name: c.call.function.name, args: c.parsed })),
-          results: outcomes.map((o) => o.content),
-        });
-
-        // ── Stuck handling (OpenManus `is_stuck` / `handle_stuck_state`) ───────
-        // The recorded "fails at many tasks" behaviour is the model re-issuing the
-        // same failing call until the round budget is gone. Steer it once — change
-        // approach, or answer with what it has — instead of letting it loop.
-        if (!steered && trace.isStuck()) {
-          const reason = trace.stuckReason();
-          trace.noteDetection();
-          trace.noteSteering();
-          steered = true;
-          messages.push({ role: "user", content: steeringMessage(trace) });
-          logTraceEvent(input.phone, "stuck", { round, reason });
-          // A malformed-argument call is answered by correction, and a repeated
-          // FAILING call is worth one more round to retry intelligently. A merely
-          // repeated thought (no progress) gets no extension — that is the stall.
-          if (reason === "repeated_failed_call" && effectiveRounds < HARD_MAX_STEPS) {
-            effectiveRounds += 1;
-            logTraceEvent(input.phone, "extend", { to: effectiveRounds, reason });
-          }
-        }
-
-        // ── Progress-based budget extension (OpenManus `max_steps` is a budget) ─
-        // A run still producing NEW successful tool results may take one extra
-        // round, so a multi-window census is not abandoned mid-read. Guarded by the
-        // remaining budget and the hard cap so this can never loop on a dead run.
-        if (
-          !extended &&
-          !steered &&
-          trace.canExtend(round + 1, AGENT_BUDGET_MS - (Date.now() - startedAt), steered) &&
-          effectiveRounds < HARD_MAX_STEPS
-        ) {
-          effectiveRounds += 1;
-          extended = true;
-          logTraceEvent(input.phone, "extend", { to: effectiveRounds, reason: "progress" });
-        }
-      }
-
-    if (!finalText) {
-      finalText = exhaustedAnswer(usedTools);
+    if (result.toolCalls.length === 0) {
+      s.finalText = result.content;
+      break;
     }
 
-    // ── Mail-access failure must not read as an empty mailbox ───────────────
-    // Live: the service account was not delegation-authorised, every mailbox
-    // read threw, and the assistant relayed it as «لم يتم العثور على أي مرفقات
-    // في الرسائل الواردة من EDC» — a false negative about a mailbox it never
-    // opened. The tool returned the error correctly; only the answer was wrong.
-    // A negative claim is only allowed when the read actually happened.
-    //
-    // This is a CONSTRAINT on the checks below, not just a post-hoc label: a
-    // refusal re-ask would burn a second scan to fail identically, so it is
-    // suppressed. The label itself is appended LAST so no correction can drop it.
-    const mailFailure = findMailAccessFailure(usedTools, mailFailureEvidence);
-
-    // ── Source-scope enforcement ────────────────────────────────────────────
-    // The operator named the mailbox as the required source («بقولك من الميل
-    // مش قاعده البيانات») and the run answered from the database instead — a
-    // complete census of a DIFFERENT dataset, presented as the answer about the
-    // mail. A hint is not a constraint, so this is checked: when the scope was
-    // email and no email tool ran, the reply is labelled rather than passed off
-    // as the requested analysis.
-    if (plan.sourceScope === "email" && finalText) {
-      const ranEmail = usedTools.some((t) => EMAIL_TOOLS.has(t.name));
-      if (!ranEmail) {
-        finalText =
-          `${finalText}\n\n⚠️ تنبيه: طلبت البيانات من البريد الإلكتروني، لكن هذه الإجابة مبنية على النظام الداخلي ` +
-          `ولم يُقرأ البريد في هذه الجولة — فهي ليست حصرًا للميل. أعد السؤال بكلمة «من البريد» وسأفحص المرفقات.`;
-        verificationRan = true;
-        logger.warn(
-          { phone: input.phone, tools: usedTools.map((t) => t.name) },
-          "AI assistant: email-scoped question answered without reading email",
-        );
-      }
-    }
-
-    // ── Post-answer verification ────────────────────────────────────────────
-    // Two independent checks, both deterministic (no model call to decide), so
-    // the extra provider request is spent only when a real problem is found.
-    // The router decides whether verification can pay off at all: a greeting has
-    // no facts to check, so it never spends a round there.
-    let refusals = 0;
-    for (let pass = 0; plan.verify && pass <= MAX_REFUSAL_REASKS; pass++) {
-      if (!finalText) break;
-      const remaining = AGENT_BUDGET_MS - (Date.now() - startedAt);
-      if (runBudget.signal.aborted || remaining < VERIFY_MIN_REMAINING_MS) break;
-
-      // (a) Numbers the answer cites that appear nowhere in the evidence.
-      const ungrounded = findUngroundedNumbers(finalText, groundedNumbers);
-
-      // (b) Entity names the answer cites that are not in the real vocabulary.
-      // This is the «هاي فولت» lesson: invented company names read as plausible
-      // prose, and a challenge from the operator is the only thing that caught
-      // it before. Now the check happens before the reply is sent.
-      const unknownNames = findUnknownEntityNames(finalText, vocabulary);
-
-      // (c) A reply that says it found nothing while it also cites nothing —
-      // the "gave up too early" case. Worth one re-ask with an explicit order to
-      // widen the search, because the operator's question was answerable.
-      const looksLikeRefusal =
-        !ungrounded.length &&
-        !unknownNames.length &&
-        isRefusalSentence(finalText) &&
-        !looksLikeDataFound(finalText);
-      const canReask =
-        !mailFailure &&
-        looksLikeRefusal &&
-        refusals < MAX_REFUSAL_REASKS &&
-        remaining >= RETRY_MIN_REMAINING_MS;
-
-      // (d) The claim check — the NEGATIVE/COMPLETENESS contradiction. This is
-      // the «لا توجد مرفقات» failure: the answer denied data that a census in
-      // its own trace had already matched. `isRefusalSentence` above only fires
-      // on a bare refusal with no figures, so it MISSES exactly the case that
-      // was reported: a confident, well-formed denial. This check compares the
-      // claim against `matched`/`isComplete` instead of against the prose.
-      const claim = checkClaims({
-        answer: finalText,
-        // The RAW exchanges, so the check parses the tool's own JSON rather than
-        // the delimited text the model saw.
-        exchanges: toolExchanges,
-      });
-      // (e) The JOB-STATE claim — an invented job number or progress percent.
-      // `findUngroundedNumbers` cannot see a bare `213` or `82%` (it challenges
-      // only mixed alphanumeric ids), so the live «المهمة 213 … 82%» narrative
-      // passed every existing check. This one reads the job tools' own payloads.
-      const jobClaim = checkJobClaims(finalText, toolExchanges);
-      const correctionText = claim.correction ?? jobClaim.correction;
-      const canCorrectClaim =
-        !mailFailure && !!correctionText && remaining >= RETRY_MIN_REMAINING_MS;
-
-      if (!ungrounded.length && !unknownNames.length && !canReask && !canCorrectClaim) break;
-
-      if (ungrounded.length || unknownNames.length) {
-        logger.warn(
-          {
-            phone: input.phone,
-            ungrounded: ungrounded.slice(0, 8),
-            unknownNames: unknownNames.slice(0, 8),
-          },
-          "AI assistant: answer cites tokens absent from every tool result",
-        );
-      } else if (correctionText) {
-        logger.warn(
-          { phone: input.phone, rule: claim.rule ?? jobClaim.rule },
-          "AI assistant: answer contradicts the tool trace",
-        );
-      } else {
-        refusals += 1;
-        logger.info({ phone: input.phone }, "AI assistant: re-asking after a premature refusal");
-      }
-
-      verificationRan = true;
-      const corrected = await verifyGroundedAnswer({
-        settings,
-        messages,
-        finalText,
-        ungrounded,
-        unknownNames,
-        reask: canReask && !ungrounded.length && !unknownNames.length,
-        // The claim contradiction is passed as an explicit problem so the same
-        // single correction round fixes it — no extra provider request.
-        claimCorrection: correctionText ?? undefined,
-        signal: runBudget.signal,
-      });
-      // A verification that produced nothing leaves the draft in place — an
-      // unavailable verifier must never lose a good reply.
-      if (!corrected) break;
-      // A re-ask that came back with a still-empty answer is the model's final
-      // word; do not loop on it.
-      if (canReask && !ungrounded.length && !unknownNames.length) {
-        if (isRefusalSentence(corrected) && !looksLikeDataFound(corrected)) {
-          finalText = corrected;
-          break;
-        }
-      }
-      finalText = corrected;
-    }
-
-    // ── Deterministic numeric verification (P2 / PR 5) ──────────────────────
-    // The pass above checks NAMES and IDENTIFIERS. This pass checks FIGURES: a
-    // large quantity/money total in the answer is reconciled against a fresh SQL
-    // aggregate. It is free (no model call) and runs even when the router said
-    // the answer had no facts to verify, because a wrong total is exactly the
-    // silent failure the operator cannot detect. On a mismatch the answer is NOT
-    // rewritten — the caveat is appended, so the model's own wording stays visible
-    // beside the correction.
-    if (finalText) {
-      try {
-        const v = await verifyAnswer({
-          answerText: finalText,
-          source: answerSource(usedTools),
-          // The tool's OWN aggregates, not a figure guessed from the prose.
-          toolAggregates,
-        });
-        if (v.outcome === "disagreement" && v.note) {
-          finalText = `${finalText}\n\n⚠️ تحقق آلي: ${v.note} — لذا النتيجة PARTIALLY_VERIFIED.`;
-          verificationRan = true;
-          numericDisagreed = true;
-          logger.warn(
-            { phone: input.phone, note: v.note },
-            "AI assistant: numeric verification disagreed",
-          );
-        }
-      } catch (err) {
-        // A verifier failure must never lose the answer.
-        logger.warn({ err }, "AI assistant: numeric verification skipped");
-      }
-    }
-
-    // The mailbox caveat goes on LAST, after every correction, so nothing can
-    // silently drop it. (The original live bug was exactly that: the answer lost
-    // the caveat because a later step rewrote it.)
-    if (finalText && mailFailure) {
-      finalText =
-        `${finalText}\n\n⚠️ لم أتمكّن من قراءة البريد فعليًا: ${mailFailure}. ` +
-        `هذه ليست إجابة «لا توجد بيانات» — لم يحدث فحص للبريد الإلكتروني في هذه الجولة، ` +
-        `فلا تعتبر النتيجة أعلاه حصرًا.`;
-      verificationRan = true;
+    // Some providers (observed: Gemini) still return tool calls under
+    // tool_choice "none". Dropping the tool schemas entirely removes the option
+    // and reliably yields text; if even that fails, report what did run rather
+    // than silently swallowing the turn.
+    if (isLastRound) {
       logger.warn(
-        { phone: input.phone, reason: mailFailure },
-        "AI assistant: email read failed — answer labelled as unread",
+        {
+          providerToolChoiceIgnored: true,
+          model: s.runModel,
+          calls: result.toolCalls.length,
+        },
+        "AI assistant: model ignored tool_choice=none on the final round",
+      );
+      const noTools = await chatCompletion({
+        model: s.runModel,
+        baseUrl: s.settings.baseUrl,
+        messages: s.messages,
+        toolChoice: "none",
+      });
+      s.rounds += 1;
+      if (noTools.modelUsed && noTools.modelUsed !== s.runModel) s.fallbackUsed = true;
+      if (noTools.modelUsed) s.answeredModel = noTools.modelUsed;
+      if (noTools.providerUsed) s.answeredProvider = noTools.providerUsed;
+      s.finalText = noTools.content ?? result.content ?? exhaustedAnswer(s.usedTools);
+      break;
+    }
+
+    // Echo the assistant's tool-call turn back into the conversation, then run
+    // every call in THIS round concurrently. The calls in one round are chosen
+    // together by the model and are independent, so awaiting them in sequence
+    // only added latency (a 3-line item scan cost 3 round-trips).
+    //
+    // `reasoning_content` is carried through when the provider returned it
+    // (DeepSeek thinking mode): the next request is rejected without it. A
+    // provider that returns none (Gemini) leaves the field unset, and
+    // `withReasoningEcho` supplies the placeholder DeepSeek accepts.
+    s.messages.push({
+      role: "assistant",
+      content: result.content ?? null,
+      tool_calls: result.toolCalls,
+      reasoning_content: result.reasoningContent,
+    });
+
+    const calls = result.toolCalls.map((call) => {
+      const parsed = parseArgs(call);
+      return { call, parsed };
+    });
+    let dedupedCount = 0;
+    const outcomes = await Promise.all(
+      calls.map(async ({ call, parsed }) => {
+        // Identical (tool, args) in the SAME run: reuse the earlier result
+        // instead of re-running the tool. The calls in one round already run
+        // concurrently, so the promise is cached rather than the value.
+        const key = toolCacheKey(call.function.name, parsed);
+        // Resumable census tools intentionally MUST NOT be memoized. A second
+        // identical call is the resume operation: the session cursor has
+        // advanced in shared cache and must be allowed to return the next
+        // batch. Memoizing it made the model receive the first partial 150
+        // messages forever, despite the prompt telling it to continue.
+        const resumable = call.function.name === "scan_email_items";
+        let pending = resumable ? undefined : s.toolCache.get(key);
+        if (pending) {
+          dedupedCount += 1;
+        } else {
+          pending = (async () => {
+            const res = await executeTool(call.function.name, parsed, s.ctx);
+            if (!res.ok) noteMailAccessFailure(s.mailFailureEvidence, res.error);
+            return res.ok ? asText(res.data) : `ERROR: ${res.error}`;
+          })();
+          if (!resumable) s.toolCache.set(key, pending);
+        }
+        const content = await pending;
+        // `ERROR:` prefix is how a failed call is represented in the
+        // transcript, so `ok` is derived from it rather than carried
+        // separately — a deduped repeat must report the same outcome.
+        const ok = !content.startsWith("ERROR:");
+        s.toolExchanges.push({ name: call.function.name, args: parsed, content, ok });
+        s.usedTools.push({ name: call.function.name, args: parsed, ok });
+        for (const n of findGroundingNumbers(content)) s.groundedNumbers.add(n);
+        // Collect the tool's OWN quantity aggregates (never a figure from the
+        // prose) so the numeric verifier reconciles against what the database
+        // actually returned rather than against the first large number in the
+        // answer.
+        for (const t of collectToolTotals(call.function.name, content))
+          s.toolAggregates.push({ tool: call.function.name, total: t });
+        return { call, content };
+      }),
+    );
+    for (const { call, content } of outcomes) {
+      s.messages.push({
+        role: "tool",
+        tool_call_id: call.id,
+        name: call.function.name,
+        // Mail/document text is attacker-controlled, so the model sees where
+        // the untrusted region begins and ends (OWASP ASI01). Wrapping happens
+        // ONLY here: the ledger and `collectToolTotals` above read the raw
+        // content, and a delimiter would break their JSON parsing.
+        content: wrapUntrustedOutput(call.function.name, content),
+      });
+    }
+    logger.info(
+      {
+        phone: s.input.phone,
+        round,
+        ms: Date.now() - roundStartedAt,
+        toolCalls: calls.map((c) => c.call.function.name),
+        deduped: dedupedCount,
+      },
+      "AI assistant: tool round complete",
+    );
+
+    // Record the think/act cycle so the execution control below can see whether
+    // this run is progressing, looping, or failing the same call repeatedly.
+    s.trace.record({
+      step: round + 1,
+      thought: result.content ?? "",
+      toolCalls: calls.map((c) => ({ name: c.call.function.name, args: c.parsed })),
+      results: outcomes.map((o) => o.content),
+    });
+
+    // ── Stuck handling (OpenManus `is_stuck` / `handle_stuck_state`) ───────
+    // The recorded "fails at many tasks" behaviour is the model re-issuing the
+    // same failing call until the round budget is gone. Steer it once — change
+    // approach, or answer with what it has — instead of letting it loop.
+    if (!s.steered && s.trace.isStuck()) {
+      const reason = s.trace.stuckReason();
+      s.trace.noteDetection();
+      s.trace.noteSteering();
+      s.steered = true;
+      s.messages.push({ role: "user", content: steeringMessage(s.trace) });
+      logTraceEvent(s.input.phone, "stuck", { round, reason });
+      // A malformed-argument call is answered by correction, and a repeated
+      // FAILING call is worth one more round to retry intelligently. A merely
+      // repeated thought (no progress) gets no extension — that is the stall.
+      if (reason === "repeated_failed_call" && s.effectiveRounds < HARD_MAX_STEPS) {
+        s.effectiveRounds += 1;
+        logTraceEvent(s.input.phone, "extend", { to: s.effectiveRounds, reason });
+      }
+    }
+
+    // ── Progress-based budget extension (OpenManus `max_steps` is a budget) ─
+    // A run still producing NEW successful tool results may take one extra
+    // round, so a multi-window census is not abandoned mid-read. Guarded by the
+    // remaining budget and the hard cap so this can never loop on a dead run.
+    if (
+      !s.extended &&
+      !s.steered &&
+      s.trace.canExtend(round + 1, AGENT_BUDGET_MS - (Date.now() - s.startedAt), s.steered) &&
+      s.effectiveRounds < HARD_MAX_STEPS
+    ) {
+      s.effectiveRounds += 1;
+      s.extended = true;
+      logTraceEvent(s.input.phone, "extend", { to: s.effectiveRounds, reason: "progress" });
+    }
+  }
+}
+
+/** Source-scope check: an email-scoped question answered without reading mail is labelled. */
+function applySourceScope(s: RunState): void {
+  if (s.plan.sourceScope === "email" && s.finalText) {
+    const ranEmail = s.usedTools.some((t) => EMAIL_TOOLS.has(t.name));
+    if (!ranEmail) {
+      s.finalText =
+        `${s.finalText}\n\n⚠️ تنبيه: طلبت البيانات من البريد الإلكتروني، لكن هذه الإجابة مبنية على النظام الداخلي ` +
+        `ولم يُقرأ البريد في هذه الجولة — فهي ليست حصرًا للميل. أعد السؤال بكلمة «من البريد» وسأفحص المرفقات.`;
+      s.verificationRan = true;
+      logger.warn(
+        { phone: s.input.phone, tools: s.usedTools.map((t) => t.name) },
+        "AI assistant: email-scoped question answered without reading email",
       );
     }
-  } catch (err) {
-    // A timeout or quota error still needs to be measured — those are the two
-    // failure modes the operator actually reports, and without a metric here
-    // they are invisible except in the logs.
-    recordMetrics({
-      phone: input.phone,
-      intent: plan.intent,
-      path: plan.path,
-      routeReason: plan.reason,
-      rounds,
-      toolCalls: usedTools.length,
-      toolNames: [...new Set(usedTools.map((t) => t.name))],
-      verified: verificationRan,
-      fallbackUsed,
-      model: runModel,
-      modelUsed: answeredModel,
-      provider: answeredProvider,
-      latencyMs: Date.now() - startedAt,
-      outcome: isTimeoutError(err) ? "timeout" : isQuotaError(err) ? "quota" : "error",
-    });
-    throw err;
-  } finally {
-    clearTimeout(runTimer);
   }
+}
 
-  logger.info({ phone: input.phone, ms: Date.now() - startedAt, rounds }, "AI assistant: answered");
+/** Post-answer verification passes: ungrounded figures, unknown names, premature refusals and claim contradictions. */
+async function verifyDraft(s: RunState): Promise<void> {
+  let refusals = 0;
+  for (let pass = 0; s.plan.verify && pass <= MAX_REFUSAL_REASKS; pass++) {
+    if (!s.finalText) break;
+    const remaining = AGENT_BUDGET_MS - (Date.now() - s.startedAt);
+    if (s.runBudget.signal.aborted || remaining < VERIFY_MIN_REMAINING_MS) break;
+
+    // (a) Numbers the answer cites that appear nowhere in the evidence.
+    const ungrounded = findUngroundedNumbers(s.finalText, s.groundedNumbers);
+
+    // (b) Entity names the answer cites that are not in the real vocabulary.
+    // This is the «هاي فولت» lesson: invented company names read as plausible
+    // prose, and a challenge from the operator is the only thing that caught
+    // it before. Now the check happens before the reply is sent.
+    const unknownNames = findUnknownEntityNames(s.finalText, s.vocabulary);
+
+    // (c) A reply that says it found nothing while it also cites nothing —
+    // the "gave up too early" case. Worth one re-ask with an explicit order to
+    // widen the search, because the operator's question was answerable.
+    const looksLikeRefusal =
+      !ungrounded.length &&
+      !unknownNames.length &&
+      isRefusalSentence(s.finalText) &&
+      !looksLikeDataFound(s.finalText);
+    const canReask =
+      !s.mailFailure &&
+      looksLikeRefusal &&
+      refusals < MAX_REFUSAL_REASKS &&
+      remaining >= RETRY_MIN_REMAINING_MS;
+
+    // (d) The claim check — the NEGATIVE/COMPLETENESS contradiction. This is
+    // the «لا توجد مرفقات» failure: the answer denied data that a census in
+    // its own trace had already matched. `isRefusalSentence` above only fires
+    // on a bare refusal with no figures, so it MISSES exactly the case that
+    // was reported: a confident, well-formed denial. This check compares the
+    // claim against `matched`/`isComplete` instead of against the prose.
+    const claim = checkClaims({
+      answer: s.finalText,
+      // The RAW exchanges, so the check parses the tool's own JSON rather than
+      // the delimited text the model saw.
+      exchanges: s.toolExchanges,
+    });
+    // (e) The JOB-STATE claim — an invented job number or progress percent.
+    // `findUngroundedNumbers` cannot see a bare `213` or `82%` (it challenges
+    // only mixed alphanumeric ids), so the live «المهمة 213 … 82%» narrative
+    // passed every existing check. This one reads the job tools' own payloads.
+    const jobClaim = checkJobClaims(s.finalText, s.toolExchanges);
+    const correctionText = claim.correction ?? jobClaim.correction;
+    const canCorrectClaim =
+      !s.mailFailure && !!correctionText && remaining >= RETRY_MIN_REMAINING_MS;
+
+    if (!ungrounded.length && !unknownNames.length && !canReask && !canCorrectClaim) break;
+
+    if (ungrounded.length || unknownNames.length) {
+      logger.warn(
+        {
+          phone: s.input.phone,
+          ungrounded: ungrounded.slice(0, 8),
+          unknownNames: unknownNames.slice(0, 8),
+        },
+        "AI assistant: answer cites tokens absent from every tool result",
+      );
+    } else if (correctionText) {
+      logger.warn(
+        { phone: s.input.phone, rule: claim.rule ?? jobClaim.rule },
+        "AI assistant: answer contradicts the tool s.trace",
+      );
+    } else {
+      refusals += 1;
+      logger.info({ phone: s.input.phone }, "AI assistant: re-asking after a premature refusal");
+    }
+
+    s.verificationRan = true;
+    const corrected = await verifyGroundedAnswer({
+      settings: s.settings,
+      messages: s.messages,
+      finalText: s.finalText,
+      ungrounded,
+      unknownNames,
+      reask: canReask && !ungrounded.length && !unknownNames.length,
+      // The claim contradiction is passed as an explicit problem so the same
+      // single correction round fixes it — no extra provider request.
+      claimCorrection: correctionText ?? undefined,
+      signal: s.runBudget.signal,
+    });
+    // A verification that produced nothing leaves the draft in place — an
+    // unavailable verifier must never lose a good reply.
+    if (!corrected) break;
+    // A re-ask that came back with a still-empty answer is the model's final
+    // word; do not loop on it.
+    if (canReask && !ungrounded.length && !unknownNames.length) {
+      if (isRefusalSentence(corrected) && !looksLikeDataFound(corrected)) {
+        s.finalText = corrected;
+        break;
+      }
+    }
+    s.finalText = corrected;
+  }
+}
+
+/** Deterministic numeric check of the figures against the tools' own aggregates. */
+async function verifyNumbers(s: RunState): Promise<void> {
+  if (s.finalText) {
+    try {
+      const v = await verifyAnswer({
+        answerText: s.finalText,
+        source: answerSource(s.usedTools),
+        // The tool's OWN aggregates, not a figure guessed from the prose.
+        toolAggregates: s.toolAggregates,
+      });
+      if (v.outcome === "disagreement" && v.note) {
+        s.finalText = `${s.finalText}\n\n⚠️ تحقق آلي: ${v.note} — لذا النتيجة PARTIALLY_VERIFIED.`;
+        s.verificationRan = true;
+        s.numericDisagreed = true;
+        logger.warn(
+          { phone: s.input.phone, note: v.note },
+          "AI assistant: numeric verification disagreed",
+        );
+      }
+    } catch (err) {
+      // A verifier failure must never lose the answer.
+      logger.warn({ err }, "AI assistant: numeric verification skipped");
+    }
+  }
+}
+
+/** The mailbox caveat goes on LAST, after every correction, so nothing can drop it. */
+function applyMailCaveat(s: RunState): void {
+  if (s.finalText && s.mailFailure) {
+    s.finalText =
+      `${s.finalText}\n\n⚠️ لم أتمكّن من قراءة البريد فعليًا: ${s.mailFailure}. ` +
+      `هذه ليست إجابة «لا توجد بيانات» — لم يحدث فحص للبريد الإلكتروني في هذه الجولة، ` +
+      `فلا تعتبر النتيجة أعلاه حصرًا.`;
+    s.verificationRan = true;
+    logger.warn(
+      { phone: s.input.phone, reason: s.mailFailure },
+      "AI assistant: email read failed — answer labelled as unread",
+    );
+  }
+}
+
+/** Record a run that ended in an error (timeout, quota or other) and let it propagate. */
+function recordFailedRun(s: RunState, err: unknown): void {
+  recordMetrics({
+    phone: s.input.phone,
+    intent: s.plan.intent,
+    path: s.plan.path,
+    routeReason: s.plan.reason,
+    rounds: s.rounds,
+    toolCalls: s.usedTools.length,
+    toolNames: [...new Set(s.usedTools.map((t) => t.name))],
+    verified: s.verificationRan,
+    fallbackUsed: s.fallbackUsed,
+    model: s.runModel,
+    modelUsed: s.answeredModel,
+    provider: s.answeredProvider,
+    latencyMs: Date.now() - s.startedAt,
+    outcome: isTimeoutError(err) ? "timeout" : isQuotaError(err) ? "quota" : "error",
+  });
+}
+
+/** Record the answered run, persist the exchange, and return the reply. */
+async function finishRun(s: RunState, answer: string): Promise<AgentOutput> {
+  let finalText = answer;
+  logger.info(
+    { phone: s.input.phone, ms: Date.now() - s.startedAt, rounds: s.rounds },
+    "AI assistant: answered",
+  );
 
   recordMetrics({
-    phone: input.phone,
-    intent: plan.intent,
-    path: plan.path,
-    routeReason: plan.reason,
-    rounds,
-    toolCalls: usedTools.length,
-    toolNames: [...new Set(usedTools.map((t) => t.name))],
-    verified: verificationRan,
-    fallbackUsed,
-    model: runModel,
-    modelUsed: answeredModel,
-    provider: answeredProvider,
-    latencyMs: Date.now() - startedAt,
+    phone: s.input.phone,
+    intent: s.plan.intent,
+    path: s.plan.path,
+    routeReason: s.plan.reason,
+    rounds: s.rounds,
+    toolCalls: s.usedTools.length,
+    toolNames: [...new Set(s.usedTools.map((t) => t.name))],
+    verified: s.verificationRan,
+    fallbackUsed: s.fallbackUsed,
+    model: s.runModel,
+    modelUsed: s.answeredModel,
+    provider: s.answeredProvider,
+    latencyMs: Date.now() - s.startedAt,
     outcome: "answered",
-    confidence: answerConfidence(usedTools.length, verificationRan, numericDisagreed),
+    confidence: answerConfidence(s.usedTools.length, s.verificationRan, s.numericDisagreed),
     // The data tools' own figures travel with the trace. A summary can claim
     // "كل الأصناف" while the tool returned 15 rows; these numbers make that
     // contradiction visible on the dashboard instead of only in a log line.
     task: {
       // The Mastra engine owns its own `TaskTrace`, so its summary replaces the
       // (empty) legacy one. Without this the dashboard reported `steps: 0` for
-      // every Mastra run while the log line carried the real numbers — the
-      // telemetry described a different run than the one that answered.
-      ...(engineTrace ?? trace.summary()),
-      ...(traceData.length ? { data: traceData } : {}),
+      // every Mastra run while the log line carried the real numbers.
+      ...(s.engineTrace ?? s.trace.summary()),
+      ...(s.traceData.length ? { data: s.traceData } : {}),
     },
   });
 
-  // The mechanism must never reach the operator. The model sometimes writes a
-  // tool call as PROSE (it was asked for a tool-free turn and had none left), and
-  // DeepSeek's control markers leak through the OpenAI-compatible endpoint — both
-  // arrive as literal markup on WhatsApp. Sanitising here means every downstream
-  // consumer (the reply, the stored transcript, the distiller) sees clean text.
   const sanitized = sanitizeAssistantReply(finalText);
   if (hadToolMarkup(finalText)) {
     logger.warn(
-      { phone: input.phone, before: finalText.length, after: sanitized.length },
+      { phone: s.input.phone, before: finalText.length, after: sanitized.length },
       "AI assistant: stripped tool-call markup from the reply",
     );
   }
@@ -880,30 +899,71 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   // The extracted document text is intentionally kept out of the stored
   // history: it is large and only relevant to this one turn. The label keeps
   // the transcript understandable when it is replayed as context.
-  const historyText = input.imageUrl
-    ? `[صورة] ${userText}`.trim()
-    : input.document
-      ? `[ملف: ${input.document.filename || "ملف"}] ${userText}`.trim()
-      : userText;
-  await saveMessage(input.phone, "user", historyText);
-  await saveMessage(input.phone, "assistant", finalText, usedTools.length ? usedTools : null);
+  const historyText = s.input.imageUrl
+    ? `[صورة] ${s.userText}`.trim()
+    : s.input.document
+      ? `[ملف: ${s.input.document.filename || "ملف"}] ${s.userText}`.trim()
+      : s.userText;
+  await saveMessage(s.input.phone, "user", historyText);
+  await saveMessage(s.input.phone, "assistant", finalText, s.usedTools.length ? s.usedTools : null);
 
   // Record what this turn was about, so a follow-up can resolve «له/بتاعه».
   // Only explicitly-named entities are recorded (see inferStatePatch) and it is
   // best-effort — a state-write failure must never surface to the operator.
-  void saveConversationState(input.phone, inferStatePatch({ userText })).catch(() => {});
+  void saveConversationState(s.input.phone, inferStatePatch({ userText: s.userText })).catch(
+    () => {},
+  );
 
   // Learn from the exchange. Fire-and-forget: the reply is already produced, and
   // a memory-write failure must never turn a good answer into an error the
   // operator sees. The distiller uses only the operator's own words (no model
   // call), so this costs none of the scarce daily quota.
   void distillMemories({
-    phone: input.phone,
-    userText,
+    phone: s.input.phone,
+    userText: s.userText,
     assistantText: finalText,
   }).catch((err) => logger.warn({ err }, "AI assistant: background learning failed"));
+  return { reply: finalText, attachments: s.ctx.outbox };
+}
 
-  return { reply: finalText, attachments: ctx.outbox };
+export async function runAgent(input: AgentInput): Promise<AgentOutput> {
+  const settings = await loadSettings();
+  if (!settings.enabled) {
+    return { reply: "المساعد الذكي معطّل حاليًا. تواصل مع الإدارة.", attachments: [] };
+  }
+
+  const s = await prepareRun(input, settings);
+  // Hard ceiling on the WHOLE run (every round, every model, every tool). The
+  // operator is waiting in a chat window: past this point a late answer is
+  // worse than an honest "it timed out", because they have already given up.
+  const runTimer = setTimeout(() => s.runBudget.abort(), AGENT_BUDGET_MS);
+
+  try {
+    if (mastraEngineEnabled()) {
+      await runEngineLoop(s);
+    } else {
+      await runLegacyRounds(s);
+    }
+
+    if (!s.finalText) {
+      s.finalText = exhaustedAnswer(s.usedTools);
+    }
+
+    // Mail-access failure must not read as an empty mailbox: a negative claim is
+    // only allowed when the read actually happened. Checked by the passes below.
+    s.mailFailure = findMailAccessFailure(s.usedTools, s.mailFailureEvidence);
+    applySourceScope(s);
+    await verifyDraft(s);
+    await verifyNumbers(s);
+    applyMailCaveat(s);
+  } catch (err) {
+    recordFailedRun(s, err);
+    throw err;
+  } finally {
+    clearTimeout(runTimer);
+  }
+
+  return finishRun(s, s.finalText ?? "");
 }
 
 /** Clear conversation history for a phone (used by the reset command). */
