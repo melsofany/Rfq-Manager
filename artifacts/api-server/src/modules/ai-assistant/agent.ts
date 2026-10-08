@@ -23,6 +23,7 @@ import {
 import { entityVocabulary, findUnknownEntityNames, type EntityName } from "./db-tools";
 import { loadOrgProfiles, renderOrgProfilesBlock, type OrgProfile } from "./org-profiles";
 import { routeQuestion, routeHint, DEEP_MAX_ROUNDS } from "./router";
+import { resolveSourceChoice } from "./source-choice";
 import { wrapUntrustedOutput } from "./guardrails";
 import {
   TaskTrace,
@@ -109,7 +110,7 @@ export const MAX_TOOL_ROUNDS = DEEP_MAX_ROUNDS;
  * so a single completion can use its full share, but far below the worst case of
  * rounds × models × attempts × timeout.
  */
-export const AGENT_BUDGET_MS = 150_000;
+export const AGENT_BUDGET_MS = Number(process.env.AI_RUN_BUDGET_MS) || 200_000;
 
 /**
  * Rounds with the full toolset before the last one, which forbids tools. A
@@ -930,6 +931,15 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   const settings = await loadSettings();
   if (!settings.enabled) {
     return { reply: "المساعد الذكي معطّل حاليًا. تواصل مع الإدارة.", attachments: [] };
+  }
+
+  // A census with no named source is answered by asking, not by guessing: the
+  // three datasets give different numbers. This runs before any model call, so
+  // the question costs no quota.
+  if (typeof input.text === "string" && !input.imageUrl && !input.document && !input.audio) {
+    const gate = resolveSourceChoice(input.phone, input.text);
+    if (gate.kind === "ask") return { reply: gate.reply, attachments: [] };
+    input = { ...input, text: gate.text };
   }
 
   const s = await prepareRun(input, settings);

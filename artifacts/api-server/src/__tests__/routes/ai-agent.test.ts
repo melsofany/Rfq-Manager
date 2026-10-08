@@ -135,7 +135,7 @@ describe("AI assistant agent loop", () => {
     executeTool.mockResolvedValue({ ok: true, data: { count: 3 } });
 
     const { runAgent } = await import("../../modules/ai-assistant/agent");
-    const out = await runAgent({ phone: "2010", text: "كم عدد أوامر الشراء؟" });
+    const out = await runAgent({ phone: "2010", text: "كم عدد أوامر الشراء في قاعدة البيانات؟" });
 
     expect(out.reply).toBe("يوجد 3 أوامر شراء.");
     expect(executeTool).toHaveBeenCalledTimes(1);
