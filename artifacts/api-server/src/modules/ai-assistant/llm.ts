@@ -349,10 +349,10 @@ export async function chatCompletion(opts: {
   const primaryBase = (opts.baseUrl || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const hasTools = Boolean(opts.tools && opts.tools.length);
   const toolChoice = opts.toolChoice ?? "auto";
-  const buildBody = (model: string) =>
+  const buildBody = (model: string, provider: ModelProvider) =>
     JSON.stringify({
       model,
-      messages: withReasoningEcho(opts.messages),
+      messages: messagesForProvider(withReasoningEcho(opts.messages), provider),
       tools: hasTools ? opts.tools : undefined,
       tool_choice: hasTools ? toolChoice : undefined,
       temperature: opts.temperature ?? 0.2,
@@ -446,7 +446,7 @@ export async function chatCompletion(opts: {
         try {
           const result = await requestCompletion({
             candidate,
-            body: buildBody(model),
+            body: buildBody(model, provider),
             signal: budget.signal,
           });
           rememberWorkingModel(model, provider);
@@ -658,6 +658,52 @@ function modelChain(primary: string, primaryBase: string): ModelCandidate[] {
   // world having ended — try them all again instead of failing instantly, so
   // the caller still surfaces the provider's own quota error.
   return usable.length > 0 ? usable : ordered;
+}
+
+/**
+ * Google's documented placeholder for a tool call whose thought signature was
+ * not captured (for example a turn that another provider produced). Gemini
+ * accepts it in place of the real signature; without any signature it rejects
+ * the request with 400 "missing a thought_signature".
+ */
+export const GEMINI_SIGNATURE_PLACEHOLDER = "skip_thought_signature_validator";
+
+/**
+ * Adapt a conversation's replayed tool-call turns to the provider about to
+ * receive them.
+ *
+ * The fallback chain moves a run from one provider to the other mid-conversation.
+ * A tool-call turn produced by DeepSeek carries no Gemini signature, so replaying
+ * it to Gemini failed with 400 and the forced answer was lost (live,
+ * 2026-10-08: "forced-answer turn failed" after a 85s census). For Gemini every
+ * tool call gets a signature, keeping the real one when present. Other
+ * providers receive the messages untouched.
+ */
+export function messagesForProvider(
+  messages: ChatMessage[],
+  provider: ModelProvider,
+): ChatMessage[] {
+  if (provider !== "gemini") return messages;
+  let changed = false;
+  const out = messages.map((m) => {
+    if (m.role !== "assistant" || !m.tool_calls?.length) return m;
+    let turnChanged = false;
+    const calls = m.tool_calls.map((call) => {
+      if (call.extra_content?.google?.thought_signature) return call;
+      turnChanged = true;
+      return {
+        ...call,
+        extra_content: {
+          ...call.extra_content,
+          google: { thought_signature: GEMINI_SIGNATURE_PLACEHOLDER },
+        },
+      };
+    });
+    if (!turnChanged) return m;
+    changed = true;
+    return { ...m, tool_calls: calls };
+  });
+  return changed ? out : messages;
 }
 
 /**
