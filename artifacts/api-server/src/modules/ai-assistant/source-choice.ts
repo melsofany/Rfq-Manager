@@ -71,6 +71,22 @@ interface Pending {
 const pending = new Map<string, Pending>();
 
 /**
+ * The last census that ran for this operator, with its source stated. A
+ * «اكمل الحصر» that follows it resumes THAT question instead of asking again.
+ * Without this, a continuation was read as a new census with no source — the
+ * live failure that asked «من فين؟» in the middle of a half-finished read.
+ */
+const LAST_CENSUS_TTL_MS = 30 * 60 * 1000;
+const lastCensus = new Map<string, Pending>();
+
+/** A short message whose only job is to continue the previous work. */
+const CONTINUE_RE = /^\s*(?:اكمل|أكمل|اكملي|كمل|كمّل|استمر|تابع|واصل|continue|go on)(?=\s|$)/i;
+
+export function isContinuation(text: string): boolean {
+  return CONTINUE_RE.test(text) && text.trim().split(/\s+/).length <= 4;
+}
+
+/**
  * Decide, before any model call, whether this message is a source question to
  * ask, a source answer that completes a held question, or an ordinary message.
  */
@@ -79,16 +95,28 @@ export function resolveSourceChoice(
   text: string,
   now: number = Date.now(),
 ): { kind: "ask"; reply: string } | { kind: "run"; text: string } {
+  // A continuation resumes the last census with its source; it never opens a new
+  // source question. With nothing to resume it runs as the plain message.
+  if (isContinuation(text)) {
+    const last = lastCensus.get(key);
+    if (last && now - last.at <= LAST_CENSUS_TTL_MS) {
+      return {
+        kind: "run",
+        text: `${last.question}\n(استكمل الحصر السابق من حيث توقف، ولا تبدأ من الصفر)`,
+      };
+    }
+    return { kind: "run", text };
+  }
+
   const held = pending.get(key);
   if (held) {
     pending.delete(key);
     const choice = now - held.at <= PENDING_TTL_MS ? parseSourceChoice(text) : null;
     if (choice) {
       const { directive } = LABELS[choice];
-      return {
-        kind: "run",
-        text: `${held.question}\n(${directive}، المصدر المحدد: ${LABELS[choice].label})`,
-      };
+      const question = `${held.question}\n(${directive}، المصدر المحدد: ${LABELS[choice].label})`;
+      lastCensus.set(key, { question, at: now });
+      return { kind: "run", text: question };
     }
     // Not a source answer: the operator moved on, so the held question is dropped
     // and this message is handled as a fresh one.
@@ -98,11 +126,17 @@ export function resolveSourceChoice(
     pending.set(key, { question: text, at: now });
     return { kind: "ask", reply: SOURCE_QUESTION };
   }
+  if (CENSUS_RE.test(text)) lastCensus.set(key, { question: text, at: now });
   return { kind: "run", text };
 }
 
 /** Test helper and reset hook (e.g. on «تصفير»). */
 export function clearSourceChoice(key?: string): void {
-  if (key === undefined) pending.clear();
-  else pending.delete(key);
+  if (key === undefined) {
+    pending.clear();
+    lastCensus.clear();
+  } else {
+    pending.delete(key);
+    lastCensus.delete(key);
+  }
 }

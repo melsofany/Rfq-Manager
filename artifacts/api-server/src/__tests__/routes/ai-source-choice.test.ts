@@ -81,3 +81,29 @@ describe("runAgent asks for a source before a census", () => {
     expect(out.reply).toContain("البيانات دي هجيبها من فين؟");
   });
 });
+
+describe("continuation of a census", () => {
+  beforeEach(() => clearSourceChoice());
+
+  it("does not ask a source question for «اكمل الحصر»", () => {
+    const r = resolveSourceChoice("c1", "اكمل الحصر");
+    expect(r.kind).toBe("run");
+  });
+
+  it("resumes the last census with its source instead of starting over", () => {
+    resolveSourceChoice("c2", "اعمل حصر لكل بنود EDC");
+    resolveSourceChoice("c2", "2");
+    const r = resolveSourceChoice("c2", "اكمل الحصر");
+    expect(r.kind).toBe("run");
+    if (r.kind !== "run") return;
+    expect(r.text).toContain("اعمل حصر لكل بنود EDC");
+    expect(r.text).toContain("استكمل الحصر السابق");
+    expect(routeQuestion(r.text).sourceScope).toBe("email");
+  });
+
+  it("expires the resumable census after its window", () => {
+    resolveSourceChoice("c3", "حصر كل الأوامر من الميل", 0);
+    const r = resolveSourceChoice("c3", "كمل", 31 * 60 * 1000);
+    expect(r).toEqual({ kind: "run", text: "كمل" });
+  });
+});
