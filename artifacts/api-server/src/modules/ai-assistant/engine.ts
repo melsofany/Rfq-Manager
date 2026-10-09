@@ -38,6 +38,7 @@ import { executeTool, asText, toolDefinitions, type ToolContext } from "./tools"
 // the guarantee silently becomes `undefined`.
 import { ANSWER_RESERVE_MS, MIN_ANSWER_BUDGET_MS } from "./budgets";
 import { forcedAnswerModel } from "./config";
+import { sanitizeAssistantReply } from "./reply-sanitize";
 import { filterToolDefinitions } from "./tool-scope";
 import { wrapUntrustedOutput, unwrapUntrustedOutput } from "./guardrails";
 import {
@@ -130,6 +131,18 @@ export function mastraEngineEnabled(): boolean {
  * caller turns `null` into an honest notice; returning the empty string would
  * let an empty turn be sent as the answer.
  */
+/**
+ * What the model is told when it must answer from the transcript with no tools.
+ *
+ * Without it, a model that was still mid-investigation (live: a wrong column name
+ * burned three rounds, then the last round tried to call a tool as text) answers
+ * with another call or nothing. Asking for the findings, the gap and the next step
+ * turns the evidence it already has into a usable reply.
+ */
+const ANSWER_FROM_EVIDENCE_NUDGE =
+  "اكتب الآن ردًّا نصيًّا نهائيًّا للمدير من نتائج الأدوات أعلاه فقط. لا تستدعِ أي أداة ولا تكتب استدعاءً. " +
+  "اذكر ما وجدته فعلًا، وما لم تستطع إكماله ولماذا، وما الخطوة التالية المقترحة.";
+
 async function answerWithoutTools(
   messages: ChatMessage[],
   opts: {
@@ -139,13 +152,15 @@ async function answerWithoutTools(
     phone: string;
     /** Instant by which the answer must be done (run deadline − reserve). */
     deadlineMs?: number;
+    /** An instruction appended for THIS call only, never stored in the transcript. */
+    nudge?: string;
   },
 ): Promise<string | null> {
   try {
     const res = await chatCompletion({
       model: forcedAnswerModel(opts.model, opts.baseUrl),
       baseUrl: opts.baseUrl,
-      messages,
+      messages: opts.nudge ? [...messages, { role: "user", content: opts.nudge }] : messages,
       toolChoice: "none",
       signal: opts.signal,
       deadlineMs: opts.deadlineMs,
@@ -340,10 +355,20 @@ export async function runToolLoop(opts: {
         // failure notice even though a tool-free retry could answer from the same
         // evidence. One bounded retry is safe: it is only taken for an empty turn,
         // and the caller's deadline still limits the attempt.
-        finalText = result.content?.trim() || null;
+        // A turn that is ONLY tool-call markup typed as text (DeepSeek does this
+        // when it is denied tools on the last round) is empty too: the caller
+        // strips the markup, and nothing readable would be left.
+        const spoken = sanitizeAssistantReply(result.content ?? "").trim();
+        finalText = spoken || null;
         if (!finalText) {
           logger.warn(
-            { phone: opts.phone, model: opts.model, round, finishReason: result.finishReason },
+            {
+              phone: opts.phone,
+              model: opts.model,
+              round,
+              finishReason: result.finishReason,
+              markupOnly: Boolean(result.content?.trim()),
+            },
             "AI assistant: empty answer turn — retrying without tools",
           );
           // Removing the schemas gives the provider a smaller, unambiguous request
@@ -351,6 +376,7 @@ export async function runToolLoop(opts: {
           finalText = await answerWithoutTools(messages, {
             ...opts,
             deadlineMs: answerDeadlineMs(),
+            nudge: ANSWER_FROM_EVIDENCE_NUDGE,
           });
         }
         break;

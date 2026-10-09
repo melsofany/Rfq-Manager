@@ -70,7 +70,7 @@ export const DUPLICATE_THRESHOLD = 2;
  * granted. Each round is a provider request against a 20/day/model free tier, so
  * this is a quota guard as much as a loop guard.
  */
-export const HARD_MAX_STEPS = 6;
+export const HARD_MAX_STEPS = 10;
 
 /**
  * Least time that must remain in the run budget before an extra round is

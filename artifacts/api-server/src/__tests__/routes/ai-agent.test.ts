@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mirrors MAX_TOOL_ROUNDS in agent.ts; imported lazily inside tests to avoid
 // hoisting issues, so assert the two agree in one place.
-const MAX_ROUNDS = 5;
+const MAX_ROUNDS = 8;
 
 // ── Mock the LLM so the loop is deterministic ────────────────────────────────
 const chatCompletion = vi.fn();
@@ -204,6 +204,42 @@ describe("AI assistant agent loop", () => {
   it("keeps the round budget asserted against the source constant", async () => {
     const { MAX_TOOL_ROUNDS } = await import("../../modules/ai-assistant/agent");
     expect(MAX_TOOL_ROUNDS).toBe(MAX_ROUNDS);
+  });
+
+  it("answers from the evidence when the model's last turn is only tool-call markup", async () => {
+    // Live (DeepSeek): after a wrong column name and a schema lookup the model
+    // was denied tools on its last round and typed a tool call as TEXT. The
+    // markup was stripped to nothing and the operator got «لم أستطع إكمال الطلب»
+    // 15 seconds into a 200-second run. A markup-only turn is an empty turn: the
+    // reply must be rebuilt, tool-free, from what the tools already returned.
+    const markup =
+      '<tool_calls><invoke name="run_readonly_query"><parameter name="sql">select 1</parameter></invoke></tool_calls>';
+    chatCompletion
+      .mockResolvedValueOnce({
+        content: null,
+        finishReason: "tool_calls",
+        toolCalls: [
+          { id: "c1", type: "function", function: { name: "search_database", arguments: "{}" } },
+        ],
+      })
+      .mockResolvedValueOnce({ content: markup, finishReason: "stop", toolCalls: [] })
+      .mockResolvedValueOnce({
+        content: "وجدت طلبًا واحدًا من EDC، ولم أتمكن من قراءة تفاصيل البند.",
+        finishReason: "stop",
+        toolCalls: [],
+      });
+    executeTool.mockResolvedValue({ ok: true, data: { rows: [{ id: 1 }] } });
+
+    const { runAgent } = await import("../../modules/ai-assistant/agent");
+    const out = await runAgent({ phone: "2010", text: "اعمل تقرير مختصر" });
+
+    expect(out.reply).toContain("وجدت طلبًا واحدًا");
+    expect(out.reply).not.toContain("لم أستطع إكمال الطلب");
+    // The rebuild call carries no tool schemas, forbids tools, and is nudged.
+    const rebuild = chatCompletion.mock.calls[2][0];
+    expect(rebuild.toolChoice).toBe("none");
+    expect(rebuild.tools).toBeUndefined();
+    expect(JSON.stringify(rebuild.messages.at(-1))).toContain("لا تستدعِ أي أداة");
   });
 
   it("forbids tool calls on the final round so a tool-happy model still answers", async () => {
