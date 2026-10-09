@@ -395,6 +395,55 @@ export function tableListForPrompt(): string {
     .join("\n");
 }
 
+/**
+ * The tables an ad-hoc SQL query most often touches. A short list on purpose: the
+ * catalogue rides in a tool description on every request, so it is a token cost.
+ */
+const SQL_CATALOGUE_TABLES = [
+  "customer_rfqs",
+  "customer_rfq_items",
+  "rfqs",
+  "rfq_items",
+  "offers",
+  "offer_items",
+  "customer_pos",
+  "customer_po_items",
+  "purchase_orders",
+  "purchase_order_items",
+  "suppliers",
+  "customers",
+  "whatsapp_chats",
+] as const;
+
+let _sqlCatalogue: string | undefined;
+
+/**
+ * The REAL SQL column names (snake_case) of the core tables, read from the Drizzle
+ * schema so they cannot drift from the database.
+ *
+ * Why: the other tools return camelCase keys (`internalNo`), so the model wrote
+ * `internalNo` into `run_readonly_query` and Postgres folded it to `internalno`.
+ * Live, that one wrong guess plus the schema lookup it triggered used three of
+ * five rounds. Showing the real names up front removes the guess. Columns listed
+ * as `sensitive` are left out.
+ */
+export function sqlColumnCatalogue(): string {
+  if (_sqlCatalogue !== undefined) return _sqlCatalogue;
+  const tables = getTables();
+  const lines: string[] = [];
+  for (const name of SQL_CATALOGUE_TABLES) {
+    const spec = tables[name];
+    if (!spec) continue;
+    const hidden = new Set(spec.sensitive ?? []);
+    const names = Object.entries(cols(spec.table))
+      .filter(([key]) => !hidden.has(key))
+      .map(([, col]) => (col as { name: string }).name);
+    if (names.length) lines.push(`- ${name}: ${names.join(", ")}`);
+  }
+  _sqlCatalogue = lines.join("\n");
+  return _sqlCatalogue;
+}
+
 function camel(s: string): string {
   return s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 }

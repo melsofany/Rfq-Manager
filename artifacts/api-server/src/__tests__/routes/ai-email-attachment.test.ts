@@ -209,6 +209,7 @@ vi.mock("../../modules/ai-assistant/db-tools", () => ({
   systemSnapshot: vi.fn(async () => ({})),
   findWhere: vi.fn(async () => []),
   tableListForPrompt: () => "",
+  sqlColumnCatalogue: () => "",
 }));
 
 vi.mock("../../modules/ai-assistant/pdf", () => ({
