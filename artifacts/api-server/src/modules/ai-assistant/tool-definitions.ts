@@ -10,7 +10,7 @@
  * still re-exported from `tools.ts`.
  */
 import { isEmailReadConfigured } from "./email";
-import { tableListForPrompt } from "./db-tools";
+import { sqlColumnCatalogue, tableListForPrompt } from "./db-tools";
 import type { ToolDefinition } from "./llm";
 import type { ToolContext } from "./tools";
 
@@ -70,7 +70,10 @@ export function toolDefinitions(ctx: ToolContext): ToolDefinition[] {
           "(مثل تجميع أو ربط لا تدعمه الأدوات، أو إحصاء بشروط مركّبة). " +
           "القراءة فقط إلزاميًا: يُرفض أي INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/COPY وأي كلمة تعديل، " +
           "ويُرفض تعدد الاستعلامات. لا يمكن حذف أو تعديل أي شيء من هذه الأداة — هذا قيد على مستوى قاعدة البيانات نفسها. " +
-          "استخدمها كخيار أخير بعد الأدوات الجاهزة، واكتب SELECT واضحًا مع LIMIT.",
+          "استخدمها كخيار أخير بعد الأدوات الجاهزة، واكتب SELECT واضحًا مع LIMIT. " +
+          "أسماء أعمدة SQL بصيغة snake_case (مثل internal_no) وليست مفاتيح camelCase التي ترجعها الأدوات (internalNo)؛ " +
+          "هذه أعمدة الجداول الأساسية، وللباقي استدعِ describe_schema:\n" +
+          sqlColumnCatalogue(),
         parameters: {
           type: "object",
           properties: {
