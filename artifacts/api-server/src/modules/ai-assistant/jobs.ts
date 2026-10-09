@@ -16,6 +16,7 @@
  * If concurrency ever outgrows one process the runner can be swapped for a real
  * worker without touching the callers — they only know `createJob`/`getJob`.
  */
+import { describeLineExtras, normalizeLineExtras } from "./item-filter";
 import { db, aiAssistantJobsTable } from "@workspace/db";
 import { and, eq, gte, inArray, desc, or, sql } from "drizzle-orm";
 import { logger } from "../../shared/logger";
@@ -753,6 +754,10 @@ export interface CensusJobArgs {
    * path could not carry and the interactive scan could not finish.
    */
   contains?: string;
+  /** Exact quantity the matching line must carry (see `item-filter.ts`). */
+  qty?: number;
+  /** Words that must ALL appear in the matching line. */
+  terms?: string[];
 }
 
 export async function startCensusJob(opts: {
@@ -825,6 +830,12 @@ export function censusJobOpts(opts: Parameters<typeof startCensusJob>[0]): Creat
       opts.args.query ?? ""
     }:${opts.args.sinceDate ?? ""}:${opts.args.beforeDate ?? ""}:${opts.args.docKind ?? ""}:${
       opts.args.contains ?? ""
+    }${
+      // Only when a filter is set, so existing keys (and the dedupe of jobs already
+      // queued) are unchanged. A different quantity IS a different census.
+      opts.args.qty || opts.args.terms?.length
+        ? `:${opts.args.qty ?? ""}:${(opts.args.terms ?? []).join("|")}`
+        : ""
     }`,
     run: (helpers) => runCensusWork(opts, helpers),
   };
@@ -1076,6 +1087,10 @@ export function describeCensusQuery(args: CensusJobArgs | Record<string, any>): 
   // («البند ده اتطلب كام مرة؟»), so the report must name it — otherwise the ten
   // answers describe a search the operator cannot recognise as their own.
   if (a.contains) bits.push(`بند «${String(a.contains)}»`);
+  {
+    const extras = describeLineExtras(normalizeLineExtras(a));
+    if (extras) bits.push(extras);
+  }
   if (a.sinceDate) bits.push(`من تاريخ ${String(a.sinceDate)}`);
   if (a.beforeDate) bits.push(`حتى ${String(a.beforeDate)}`);
   if (a.mailbox) bits.push(`صندوق: ${String(a.mailbox)}`);

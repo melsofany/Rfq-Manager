@@ -62,6 +62,12 @@ import {
 } from "./email";
 import { matchesItemQuery } from "./part-aliases";
 import {
+  describeLineExtras,
+  hasLineExtras,
+  matchesLineExtras,
+  normalizeLineExtras,
+} from "./item-filter";
+import {
   itemsCsv,
   itemsAggregateCsv,
   aggregateItems,
@@ -826,7 +832,10 @@ async function buildCensusJobOpts(opts: {
       // sample. `contains` narrows by description/partNo/lineItem because the
       // subject and sender never carry a part description.
       const contains = (scanArgs.contains ?? "").trim();
-      const containsOk = (it: ParsedLineItem) => !contains || matchesItemQuery(it, contains);
+      const extras = normalizeLineExtras(scanArgs as unknown as Record<string, unknown>);
+      const lookup = Boolean(contains) || hasLineExtras(extras);
+      const containsOk = (it: ParsedLineItem) =>
+        (!contains || matchesItemQuery(it, contains)) && matchesLineExtras(it, extras);
       const allItems = allItemsRaw.filter((it) => kindOk(it) && containsOk(it));
       // Envelopes actually EXAMINED. This is the evidence that separates a
       // mailbox that could not be read from a filter that matched nothing: a
@@ -884,7 +893,7 @@ async function buildCensusJobOpts(opts: {
           : "";
       const filterLabel = `${jobDocKind === "po" ? "أوامر الشراء فقط" : jobDocKind === "rfq" ? "طلبات التسعير فقط" : "الكل"}${
         contains ? ` + البند «${contains}»` : ""
-      }`;
+      }${hasLineExtras(extras) ? ` + ${describeLineExtras(extras)}` : ""}`;
       const emptyAfterRead =
         files > 0 && allItemsRaw.length > 0 && allItems.length === 0
           ? `\n⚠️ قُرئ ${files} ملفًا و${lines} سطرًا، لكن الفلتر المطلوب (${filterLabel}) استبعدها كلها.` +
@@ -906,7 +915,7 @@ async function buildCensusJobOpts(opts: {
       // part that appeared on a SINGLE order — excluding it would answer «0» for
       // exactly the part the operator asked about, and the occurrence count is the
       // figure they want. The singleton exclusion belongs to the ranked list only.
-      const ranked = aggregateItemsByOccurrence(allItems, contains ? 1 : 2).slice(0, 100);
+      const ranked = aggregateItemsByOccurrence(allItems, lookup ? 1 : 2).slice(0, 100);
 
       // Every PO appearance of one item, deduped by document, newest first —
       // the audit trail behind the summed figures.
@@ -1694,6 +1703,9 @@ async function executeToolInner(
         if (!ctx.settings.allowEmail) return { ok: false, error: "الوصول للبريد معطّل" };
         const requested = args.mailbox ? String(args.mailbox) : "*";
         const contains = args.contains ? String(args.contains).trim() : "";
+        // Quantity / extra-word filters (see item-filter.ts): a lookup too.
+        const extras = normalizeLineExtras(args);
+        const lookup = Boolean(contains) || hasLineExtras(extras);
         // Which document kind this question is about. The operator's default for
         // the FREQUENCY ranking is «أوامر الشراء», but their own words for a
         // request («طلبات التسعير»، «الطلبات الواردة»، «هل ظهر في الطلبات؟») mean
@@ -1738,6 +1750,8 @@ async function executeToolInner(
         const jobArgs = {
           ...scanArgs,
           contains: contains || undefined,
+          qty: extras.qty ?? undefined,
+          terms: extras.terms.length ? extras.terms : undefined,
           docKind: docKind,
         };
 
@@ -1783,7 +1797,7 @@ async function executeToolInner(
         // answers it), and is never handed off on a `contains` term.
         const tooBigForOneRun =
           ctx.deadline != null &&
-          (wantsTotal || (!args.noAutoJob && !contains && budgetForScan < scanCallBudgetMs()));
+          (wantsTotal || (!args.noAutoJob && !lookup && budgetForScan < scanCallBudgetMs()));
         if (tooBigForOneRun) {
           const scopeLabel = [
             args.from ? `من ${String(args.from)}` : "",
@@ -1837,8 +1851,13 @@ async function executeToolInner(
         // match is BRAND-AWARE (see matchesItemQuery): «أريستون» must find a
         // part printed `...ARSTON...`, otherwise the lookup reports a false
         // «not found» for data that exists.
-        const matchedItems = contains
-          ? parsed.items.filter((i) => kindFilter(i) && matchesItemQuery(i, contains))
+        const matchedItems = lookup
+          ? parsed.items.filter(
+              (i) =>
+                kindFilter(i) &&
+                (!contains || matchesItemQuery(i, contains)) &&
+                matchesLineExtras(i, extras),
+            )
           : parsed.items.filter(kindFilter);
 
         // Default to FREQUENCY: «أكتر بند اتكرر» is the common ask, and ranking
@@ -1852,7 +1871,7 @@ async function executeToolInner(
         // A `contains` lookup answers "where did THIS part appear?" — a single
         // occurrence is a valid answer there, so the singleton exclusion applies
         // only to the ranked list, never to a targeted lookup.
-        const minOrders = contains ? 1 : Math.max(1, Number(args.minOrders ?? 2) || 2);
+        const minOrders = lookup ? 1 : Math.max(1, Number(args.minOrders ?? 2) || 2);
         const ranked =
           ordering === "qty"
             ? aggregateItems(matchedItems)
@@ -1934,7 +1953,7 @@ async function executeToolInner(
               // full round per batch (live: 67s per call on a month of mail until
               // the run ended with no answer). One that already found rows is
               // answered from them, with its scope stated.
-              (!contains || matchedItems.length === 0)))
+              (!lookup || matchedItems.length === 0)))
         ) {
           const scopeLabel = [
             args.from ? `من ${String(args.from)}` : "",
@@ -2117,7 +2136,7 @@ async function executeToolInner(
         // when the truth is «لم أفحص هذه الفترة». This is exactly how the
         // Ariston follow-up looked wrong: the items were real but older than the
         // 400-message window.
-        if (contains) {
+        if (lookup) {
           // The kind the lookup was restricted to is named here too: a lookup
           // that found nothing because the question was read as PO-only must say
           // so, or the operator reads «0 نتائج» as «غير موجود في البريد».
@@ -2127,7 +2146,9 @@ async function executeToolInner(
             all: " البحث في أوامر الشراء وطلبات التسعير",
           };
           const filterNote =
-            `بحث عن «${contains}» داخل ${coverage.messages} رسالة فُتحت ` +
+            `بحث عن «${[contains, hasLineExtras(extras) ? describeLineExtras(extras) : ""]
+              .filter(Boolean)
+              .join(" · ")}» داخل ${coverage.messages} رسالة فُتحت ` +
             `(${coverage.lines} سطر بند من ${coverage.attachments} ملف).` +
             containsKindNote[docKind] +
             ` النتائج: ${matchedItems.length} سطرًا.` +
@@ -2856,6 +2877,10 @@ async function executeToolInner(
           beforeDate: args.beforeDate ? String(args.beforeDate) : undefined,
           mailbox: args.mailbox ? String(args.mailbox) : "*",
           contains: args.contains ? String(args.contains).trim() : undefined,
+          qty: normalizeLineExtras(args).qty ?? undefined,
+          terms: normalizeLineExtras(args).terms.length
+            ? normalizeLineExtras(args).terms
+            : undefined,
           docKind:
             args.docKind === "rfq" || args.docKind === "all" || args.docKind === "po"
               ? args.docKind

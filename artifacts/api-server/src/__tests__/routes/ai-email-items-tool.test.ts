@@ -1325,3 +1325,51 @@ describe("a zero-match census must not be blamed on the mailbox connection", () 
     expect(session!.messages[0].attachments).toBeUndefined();
   });
 });
+
+describe("scan_email_items quantity and extra-term filters", () => {
+  beforeEach(() => {
+    scanEmails.mockReset();
+    extractPdfText.mockReset();
+    ctx.outbox.length = 0;
+  });
+
+  const mail = [
+    {
+      uid: 31,
+      mailbox: "info@cortoba-supplies.com",
+      subject: "EDC PO No P26E15215",
+      attachments: pdfAttachments([{ filename: "po.pdf", content: Buffer.from("pdf") }]),
+    },
+  ];
+  const TEXT =
+    "Quantity UOM Part No Line Item\n" +
+    "1 230 Each X-1 CABLE LUG 70 12\n" +
+    "2 5 Each X-2 CABLE LUG 70 12\n" +
+    "3 230 Each X-3 WATER HEATER ARISTON\n";
+
+  it("returns only the lines with the exact quantity and every extra word", async () => {
+    // Live: «Cable Lug 70×12 بكمية 230» was searched as `lug` alone and answered
+    // with a generic ranking. The quantity and size words are filters on the LINE.
+    extractPdfText.mockResolvedValue(TEXT);
+    scanEmails.mockResolvedValue(censusWithAttachments(mail));
+    const res = (await executeTool(
+      "scan_email_items",
+      { contains: "cable lug", qty: 230, terms: ["70", "12"], noAutoJob: true },
+      ctx as never,
+    )) as { data: { matchedLines: number; topItems: Array<{ qty: number }>; note: string } };
+    expect(res.data.matchedLines).toBe(1);
+    expect(res.data.topItems[0].qty).toBe(230);
+    expect(res.data.note).toContain("كمية 230");
+  });
+
+  it("does not filter on quantity when none is given", async () => {
+    extractPdfText.mockResolvedValue(TEXT);
+    scanEmails.mockResolvedValue(censusWithAttachments(mail));
+    const res = (await executeTool(
+      "scan_email_items",
+      { contains: "cable lug", terms: ["70", "12"], noAutoJob: true },
+      ctx as never,
+    )) as { data: { matchedLines: number } };
+    expect(res.data.matchedLines).toBe(2);
+  });
+});
