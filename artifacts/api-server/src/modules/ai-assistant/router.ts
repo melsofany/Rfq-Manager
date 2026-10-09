@@ -68,11 +68,13 @@ export const FAST_MAX_ROUNDS = 2;
 
 /**
  * Rounds allowed on the deep path — the full tool budget. Each round costs one
- * provider request, so this is a budget as much as a limit (Gemini free tier:
- * 20 requests/day/model). 5 covers gather → refine → answer, and the last round
- * always produces text (the agent forbids tools there).
+ * provider request, so this is a budget as much as a limit. 8 covers gather →
+ * refine → recover from one bad query → answer, and the last round always
+ * produces text (the agent forbids tools there). Live, 5 was too few: two rounds
+ * of searching, a query with a guessed column name, and a schema lookup used them
+ * all, 15 seconds into a 200-second run, and the operator got no answer.
  */
-export const DEEP_MAX_ROUNDS = 5;
+export const DEEP_MAX_ROUNDS = 8;
 
 /**
  * Arabic text is normalised before matching: diacritics/tatweel removed and the
