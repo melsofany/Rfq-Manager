@@ -30,6 +30,7 @@
  * checks, numeric reconciliation and persistence. Those verify the ANSWER, not
  * the loop, and they run in `agent.ts` for whichever engine produced it.
  */
+import { coerceToolArgs, parseToolArgs, validateToolArgs } from "./tool-args";
 import { logger } from "../../shared/logger";
 import { chatCompletion, type ChatMessage, type ToolCall } from "./llm";
 import { executeTool, asText, toolDefinitions, type ToolContext } from "./tools";
@@ -88,16 +89,6 @@ export interface ToolLoopResult {
  * batch forever, despite the prompt telling it to continue.
  */
 const RESUMABLE_TOOLS = new Set(["scan_email_items"]);
-
-/** Parse a tool call's arguments defensively — a malformed payload must not throw. */
-function parseArgs(call: ToolCall): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(call.function.arguments || "{}");
-    return typeof parsed === "object" && parsed ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-}
 
 /**
  * The engine's name, for the startup log and the metrics row.
@@ -415,10 +406,29 @@ export async function runToolLoop(opts: {
         reasoning_content: result.reasoningContent,
       });
 
-      const calls = result.toolCalls.map((call) => ({ call, parsed: parseArgs(call) }));
+      const schemaOf = (name: string) =>
+        tools.find((t) => t.function.name === name)?.function.parameters;
+      const calls = result.toolCalls.map((call) => {
+        const raw = parseToolArgs(call.function.arguments);
+        const schema = schemaOf(call.function.name);
+        const parsed = coerceToolArgs(schema, raw.args);
+        return {
+          call,
+          parsed,
+          argError: validateToolArgs(schema, parsed, raw.parseError),
+        };
+      });
       let dedupedCount = 0;
       const outcomes = await Promise.all(
-        calls.map(async ({ call, parsed }) => {
+        calls.map(async ({ call, parsed, argError }) => {
+          if (argError) {
+            // Not executed: a call whose arguments do not match its schema would
+            // run on something the model did not mean. The message tells it what
+            // to fix so the next round corrects the call.
+            const content = `ERROR: invalid arguments for ${call.function.name}: ${argError}. Fix the call and retry.`;
+            exchanges.push({ name: call.function.name, args: parsed, content, ok: false });
+            return { call, raw: content, ledgerText: content };
+          }
           const key = toolCacheKey(call.function.name, parsed);
           const resumable = RESUMABLE_TOOLS.has(call.function.name);
           if (!resumable && toolCache.has(key)) dedupedCount += 1;
