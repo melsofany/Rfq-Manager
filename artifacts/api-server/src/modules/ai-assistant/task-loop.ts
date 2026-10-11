@@ -70,7 +70,10 @@ export const DUPLICATE_THRESHOLD = 2;
  * granted. Each round is a provider request against a 20/day/model free tier, so
  * this is a quota guard as much as a loop guard.
  */
-export const HARD_MAX_STEPS = 10;
+export const HARD_MAX_STEPS = 12;
+
+/** Most progress-based extensions one run may earn. */
+export const MAX_PROGRESS_EXTENSIONS = 3;
 
 /**
  * Least time that must remain in the run budget before an extra round is
@@ -382,4 +385,52 @@ export function logTraceEvent(
   detail: Record<string, unknown>,
 ): void {
   logger.info({ phone, event, ...detail }, `AI assistant: task ${event}`);
+}
+
+/**
+ * Did this round learn something new?
+ *
+ * A fixed round count cannot tell a run that is converging (each call reads
+ * something new) from one that is circling. A round is PRODUCTIVE when at least
+ * one of its calls succeeded, was not a repeat of an earlier call, and returned
+ * content. `seen` is updated so the next round is judged against this one.
+ */
+export function isProductiveRound(
+  seen: Set<string>,
+  calls: Array<{ name: string; args: unknown; content: string; ok: boolean }>,
+): boolean {
+  let productive = false;
+  for (const c of calls) {
+    const sig = callSignature(c.name, c.args);
+    const fresh = !seen.has(sig);
+    seen.add(sig);
+    if (fresh && c.ok && c.content.trim().length > 0 && !isErrorObservation(c.content)) {
+      productive = true;
+    }
+  }
+  return productive;
+}
+
+/**
+ * Grant one more round when the run is converging and the cap is about to cut it
+ * off. Bounded three ways — a per-run extension limit, the hard ceiling, and the
+ * time that must remain to still fund the answer — so progress can never become
+ * an unbounded loop.
+ */
+export function shouldExtendForProgress(input: {
+  productive: boolean;
+  consumedRounds: number;
+  effectiveRounds: number;
+  extensions: number;
+  remainingMs: number;
+  steered: boolean;
+}): boolean {
+  return (
+    input.productive &&
+    !input.steered &&
+    input.extensions < MAX_PROGRESS_EXTENSIONS &&
+    input.consumedRounds >= input.effectiveRounds - 1 &&
+    input.effectiveRounds < HARD_MAX_STEPS &&
+    input.remainingMs > EXTEND_MIN_REMAINING_MS
+  );
 }
