@@ -390,12 +390,15 @@ async function prepareRun(input: AgentInput, settings: AiSettings) {
   // Anything the operator, the conversation, the attached document, or the
   // learned memory already stated is fair game for the answer to quote back —
   // the verifier only challenges tokens the run itself introduced.
-  for (const n of findGroundingNumbers(userText + documentNote + memoryBlock + vocabularyBlock)) {
+  for (const n of findGroundingNumbers(
+    userText + documentNote + memoryBlock + vocabularyBlock,
+    "evidence",
+  )) {
     groundedNumbers.add(n);
   }
   for (const m of history) {
     if (typeof m.content === "string") {
-      for (const n of findGroundingNumbers(m.content)) groundedNumbers.add(n);
+      for (const n of findGroundingNumbers(m.content, "evidence")) groundedNumbers.add(n);
     }
   }
 
@@ -477,7 +480,7 @@ async function runEngineLoop(s: RunState): Promise<void> {
     s.usedTools.push({ name: ex.name, args: ex.args, ok: ex.ok !== false });
     s.toolExchanges.push(ex);
     if (ex.content.startsWith("ERROR:")) noteMailAccessFailure(s.mailFailureEvidence, ex.content);
-    for (const n of findGroundingNumbers(ex.content)) s.groundedNumbers.add(n);
+    for (const n of findGroundingNumbers(ex.content, "evidence")) s.groundedNumbers.add(n);
     for (const t of collectToolTotals(ex.name, ex.content)) {
       s.toolAggregates.push({ tool: ex.name, total: t });
     }
@@ -588,7 +591,7 @@ async function runLegacyRounds(s: RunState): Promise<void> {
         const ok = !content.startsWith("ERROR:");
         s.toolExchanges.push({ name: call.function.name, args: parsed, content, ok });
         s.usedTools.push({ name: call.function.name, args: parsed, ok });
-        for (const n of findGroundingNumbers(content)) s.groundedNumbers.add(n);
+        for (const n of findGroundingNumbers(content, "evidence")) s.groundedNumbers.add(n);
         // Collect the tool's OWN quantity aggregates (never a figure from the
         // prose) so the numeric verifier reconciles against what the database
         // actually returned rather than against the first large number in the

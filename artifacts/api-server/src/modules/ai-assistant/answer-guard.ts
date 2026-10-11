@@ -189,7 +189,65 @@ export { toolCacheKey };
  * ids, years — are deliberately excluded, because challenging every `3` in a
  * sentence would reject correct prose.
  */
-export function findGroundingNumbers(text: string): string[] {
+export function findGroundingNumbers(
+  text: string,
+  mode: "ids" | "evidence" | "answer" = "ids",
+): string[] {
+  if (!text) return [];
+  const ids = findDocumentIds(text);
+  if (mode === "ids") return ids;
+  const out0 = findFactTokens(text, mode);
+  return out0.length ? [...new Set([...ids, ...out0])] : ids;
+}
+
+const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
+function westernDigits(text: string): string {
+  return text.replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)));
+}
+
+function isoDate(y: number, m: number, d: number): string | null {
+  if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return `DATE:${y}${String(m).padStart(2, "0")}${String(d).padStart(2, "0")}`;
+}
+
+/**
+ * Calendar dates and labelled quantities, as exact-match tokens.
+ *
+ * Document ids were already checked; a fabricated DATE or QUANTITY was not, and
+ * those are the facts an operator acts on («ميعاد الإغلاق», «الكمية 230»).
+ *  - evidence mode: every date and every plain number the tool returned;
+ *  - answer mode: only dates, and numbers directly after a quantity label —
+ *    challenging every number in prose would reject correct arithmetic.
+ */
+function findFactTokens(raw: string, mode: "evidence" | "answer"): string[] {
+  const text = westernDigits(raw);
+  const out: string[] = [];
+  for (const m of text.matchAll(/(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/g)) {
+    const t = isoDate(+m[1], +m[2], +m[3]);
+    if (t) out.push(t);
+  }
+  for (const m of text.matchAll(/(?<!\d)(\d{1,2})\/(\d{1,2})\/(\d{4})(?!\d)/g)) {
+    const t = isoDate(+m[3], +m[2], +m[1]);
+    if (t) out.push(t);
+  }
+  if (mode === "evidence") {
+    for (const m of text.matchAll(/(?<![\w.])\d[\d,]*(?:\.\d+)?(?![\w])/g)) {
+      const n = Number(m[0].replace(/,/g, ""));
+      if (Number.isFinite(n)) out.push(`QTY:${n}`);
+    }
+  } else {
+    const label = /(الكمية|الكميه|qty|quantity)[\s*_:：=-]*(\d[\d,]*(?:\.\d+)?)/gi;
+    for (const m of text.matchAll(label)) {
+      const before = text.slice(Math.max(0, (m.index ?? 0) - 12), m.index ?? 0);
+      if (/(إجمالي|اجمالي|مجموع|total|sum)\s*$/i.test(before)) continue;
+      const n = Number(m[2].replace(/,/g, ""));
+      if (Number.isFinite(n)) out.push(`QTY:${n}`);
+    }
+  }
+  return out;
+}
+
+function findDocumentIds(text: string): string[] {
   if (!text) return [];
   // Capture whole id-shaped runs first (letters/digits plus `._-` separators),
   // because splitting on the hyphen would turn `INV-2026-000045` into a bare
@@ -218,14 +276,29 @@ export function findGroundingNumbers(text: string): string[] {
  * token CONTAINING a grounded one, e.g. an extra trailing digit) is not
  * accepted, because an extended id is not the id the tool returned.
  */
-export function findUngroundedNumbers(answer: string, grounded: Set<string>): string[] {
+export function findUngroundedNumbers(
+  answer: string,
+  grounded: Set<string>,
+  now: Date = new Date(),
+): string[] {
   if (!answer) return [];
   const norm = (s: string) => s.replace(/[\s-]+/g, "").toUpperCase();
   const pool = new Set([...grounded].map(norm));
+  // The model may legitimately say today / tomorrow / yesterday as a date.
+  for (let d = -2; d <= 2; d++) {
+    const t = new Date(now.getTime() + d * 86_400_000);
+    const iso = isoDate(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
+    if (iso) pool.add(norm(iso));
+  }
   const bad: string[] = [];
-  for (const token of findGroundingNumbers(answer)) {
+  for (const token of findGroundingNumbers(answer, "answer")) {
     const n = norm(token);
     if (pool.has(n)) continue;
+    // Dates and quantities match EXACTLY: «QTY:20» is not covered by «QTY:200».
+    if (token.startsWith("DATE:") || token.startsWith("QTY:")) {
+      bad.push(token.replace("DATE:", "").replace("QTY:", "الكمية "));
+      continue;
+    }
     let covered = false;
     for (const g of pool) {
       if (g.includes(n)) {
