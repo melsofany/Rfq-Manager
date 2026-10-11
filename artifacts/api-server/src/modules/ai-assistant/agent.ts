@@ -40,6 +40,7 @@ import type { TraceSummary } from "./task-loop";
 import { verifyAnswer } from "./verifier";
 import { sanitizeAssistantReply, hadToolMarkup } from "./reply-sanitize";
 import { recordMetrics } from "./metrics";
+import { provenanceFooter } from "./provenance";
 import { detectIncidents, recordIncident, type IncidentKind } from "./incidents";
 import {
   loadConversationState,
@@ -998,7 +999,14 @@ async function finishRun(s: RunState, answer: string): Promise<AgentOutput> {
     rounds: s.rounds,
     ms: Date.now() - s.startedAt,
   });
-  return { reply: finalText, attachments: s.ctx.outbox };
+  // Appended to what is SENT, after the history was stored: the footer is built by
+  // code from the tools that ran, and must not become something the model imitates.
+  const footer = provenanceFooter({
+    intent: s.plan.intent,
+    reply: finalText,
+    usedTools: s.usedTools,
+  });
+  return { reply: finalText + footer, attachments: s.ctx.outbox };
 }
 
 export async function runAgent(input: AgentInput): Promise<AgentOutput> {
