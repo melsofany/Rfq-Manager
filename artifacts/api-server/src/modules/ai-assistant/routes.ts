@@ -30,6 +30,7 @@ import { isEmailReadConfigured } from "./email";
 import { listAllModels } from "./llm";
 import { rememberFact, normalizeCategory } from "./memory";
 import { recentMetrics, metricsSummary } from "./metrics";
+import { incidentToFixture, recentIncidents } from "./incidents";
 import { breakerSnapshot } from "./guardrails";
 import { countJobsByStatus } from "./jobs";
 import {
@@ -254,6 +255,14 @@ router.get("/ai-assistant/metrics", guard, async (_req, res): Promise<void> => {
   // operator can tell "the assistant is slow" from "IMAP is failing" without
   // reading logs. An empty map means every dependency is healthy.
   res.json({ summary: metricsSummary(), recent: recentMetrics(20), breakers: breakerSnapshot() });
+});
+
+// ─── GET /ai-assistant/incidents — failed or corrected replies ─────────────
+// Durable (unlike /metrics): the question, what the assistant answered, and which
+// failure kinds fired. `?format=fixtures` returns them as regression fixtures.
+router.get("/ai-assistant/incidents", guard, async (req, res): Promise<void> => {
+  const rows = await recentIncidents(Number(req.query.limit) || 50);
+  res.json(req.query.format === "fixtures" ? rows.map(incidentToFixture) : rows);
 });
 
 // ─── PUT /ai-assistant/settings ───────────────────────────────────────────

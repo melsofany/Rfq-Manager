@@ -40,6 +40,7 @@ import type { TraceSummary } from "./task-loop";
 import { verifyAnswer } from "./verifier";
 import { sanitizeAssistantReply, hadToolMarkup } from "./reply-sanitize";
 import { recordMetrics } from "./metrics";
+import { detectIncidents, recordIncident, type IncidentKind } from "./incidents";
 import {
   loadConversationState,
   saveConversationState,
@@ -463,6 +464,7 @@ async function prepareRun(input: AgentInput, settings: AiSettings) {
     answeredProvider,
     verificationRan,
     numericDisagreed,
+    incidents: [] as IncidentKind[],
     startedAt,
     toolCache,
     groundedNumbers,
@@ -785,6 +787,10 @@ async function verifyDraft(s: RunState): Promise<void> {
     }
 
     s.verificationRan = true;
+    if (ungrounded.length) s.incidents.push("ungrounded_fact");
+    if (unknownNames.length) s.incidents.push("unknown_entity");
+    if (correctionText) s.incidents.push("claim_contradiction");
+    if (canReask) s.incidents.push("premature_refusal");
     const corrected = await verifyGroundedAnswer({
       settings: s.settings,
       messages: s.messages,
@@ -826,6 +832,7 @@ async function verifyNumbers(s: RunState): Promise<void> {
         s.finalText = `${s.finalText}\n\n⚠️ تحقق آلي: ${v.note} — لذا النتيجة PARTIALLY_VERIFIED.`;
         s.verificationRan = true;
         s.numericDisagreed = true;
+        s.incidents.push("numeric_disagreement");
         logger.warn(
           { phone: s.input.phone, note: v.note },
           "AI assistant: numeric verification disagreed",
@@ -876,6 +883,11 @@ function applyMailCaveat(s: RunState): void {
 
 /** Record a run that ended in an error (timeout, quota or other) and let it propagate. */
 function recordFailedRun(s: RunState, err: unknown): void {
+  void recordIncident(s.input.phone, s.userText, "", ["run_error"], {
+    error: err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300),
+    rounds: s.rounds,
+    ms: Date.now() - s.startedAt,
+  });
   recordMetrics({
     phone: s.input.phone,
     intent: s.plan.intent,
@@ -973,6 +985,19 @@ async function finishRun(s: RunState, answer: string): Promise<AgentOutput> {
     userText: s.userText,
     assistantText: finalText,
   }).catch((err) => logger.warn({ err }, "AI assistant: background learning failed"));
+  const kinds = detectIncidents({
+    reply: finalText,
+    raised: [...new Set(s.incidents)],
+    toolCalls: s.usedTools.length,
+    toolErrors: s.usedTools.filter((t) => !t.ok).length,
+    hadToolMarkup: hadToolMarkup(answer),
+    usedJob: s.usedTools.some((t) => t.name === "start_census_job"),
+  });
+  void recordIncident(s.input.phone, s.userText, finalText, kinds, {
+    tools: [...new Set(s.usedTools.map((t) => t.name))],
+    rounds: s.rounds,
+    ms: Date.now() - s.startedAt,
+  });
   return { reply: finalText, attachments: s.ctx.outbox };
 }
 
