@@ -132,6 +132,50 @@ export function resolveSourceChoice(
   return { kind: "run", text };
 }
 
+export interface LoggedTurn {
+  role: string;
+  content: string;
+  /** Epoch ms the turn was stored. */
+  at: number;
+}
+
+/** True when this process holds no state for the operator (e.g. after a restart). */
+export function hasSourceState(key: string): boolean {
+  return pending.has(key) || lastQuestion.has(key);
+}
+
+/**
+ * Rebuild the gate's state from the stored conversation.
+ *
+ * The two maps above live in process memory, so every deploy or restart used to
+ * erase a half-answered «من فين؟» and the target of a «كمّل». The conversation is
+ * already persisted, so it is the durable source: a question the assistant asked
+ * last is pending again, and the newest substantive operator message within the
+ * resume window is what «كمّل» continues. `turns` is oldest-first.
+ */
+export function recoverSourceState(key: string, turns: LoggedTurn[], now: number): void {
+  if (hasSourceState(key) || turns.length === 0) return;
+  const last = turns[turns.length - 1];
+  const before = turns[turns.length - 2];
+  if (
+    last.role === "assistant" &&
+    last.content.startsWith(SOURCE_QUESTION.slice(0, 40)) &&
+    before?.role === "user" &&
+    now - last.at <= PENDING_TTL_MS
+  ) {
+    pending.set(key, { question: before.content, at: last.at });
+    return;
+  }
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i];
+    if (t.role !== "user") continue;
+    if (now - t.at > LAST_CENSUS_TTL_MS) return;
+    if (isContinuation(t.content) || t.content.trim().split(/\s+/).length < 4) continue;
+    lastQuestion.set(key, { question: t.content, at: t.at });
+    return;
+  }
+}
+
 /** Test helper and reset hook (e.g. on «تصفير»). */
 export function clearSourceChoice(key?: string): void {
   if (key === undefined) {

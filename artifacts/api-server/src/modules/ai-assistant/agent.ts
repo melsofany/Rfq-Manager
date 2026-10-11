@@ -23,7 +23,7 @@ import {
 import { entityVocabulary, findUnknownEntityNames, type EntityName } from "./db-tools";
 import { loadOrgProfiles, renderOrgProfilesBlock, type OrgProfile } from "./org-profiles";
 import { routeQuestion, routeHint, DEEP_MAX_ROUNDS } from "./router";
-import { resolveSourceChoice } from "./source-choice";
+import { hasSourceState, recoverSourceState, resolveSourceChoice } from "./source-choice";
 import { wrapUntrustedOutput } from "./guardrails";
 import {
   TaskTrace,
@@ -148,6 +148,30 @@ async function loadHistory(phone: string): Promise<ChatMessage[]> {
     .reverse()
     .filter((r) => r.role === "user" || r.role === "assistant")
     .map((r) => ({ role: r.role as "user" | "assistant", content: r.content }));
+}
+
+/** Rebuild the source-choice gate from the stored conversation after a restart. */
+async function recoverGateState(phone: string): Promise<void> {
+  if (hasSourceState(phone)) return;
+  try {
+    const rows = await db
+      .select()
+      .from(aiAssistantMessagesTable)
+      .where(eq(aiAssistantMessagesTable.phone, phone))
+      .orderBy(desc(aiAssistantMessagesTable.id))
+      .limit(6);
+    recoverSourceState(
+      phone,
+      rows.reverse().map((r) => ({
+        role: r.role,
+        content: r.content,
+        at: new Date(r.createdAt as unknown as string).getTime(),
+      })),
+      Date.now(),
+    );
+  } catch (err) {
+    logger.warn({ err, phone }, "AI assistant: could not recover the source-choice state");
+  }
 }
 
 async function saveMessage(
@@ -962,8 +986,14 @@ export async function runAgent(input: AgentInput): Promise<AgentOutput> {
   // three datasets give different numbers. This runs before any model call, so
   // the question costs no quota.
   if (typeof input.text === "string" && !input.imageUrl && !input.document && !input.audio) {
+    await recoverGateState(input.phone);
     const gate = resolveSourceChoice(input.phone, input.text);
-    if (gate.kind === "ask") return { reply: gate.reply, attachments: [] };
+    if (gate.kind === "ask") {
+      // Persisted so the question survives a restart (see `recoverSourceState`).
+      await saveMessage(input.phone, "user", input.text);
+      await saveMessage(input.phone, "assistant", gate.reply);
+      return { reply: gate.reply, attachments: [] };
+    }
     input = { ...input, text: gate.text };
   }
 
