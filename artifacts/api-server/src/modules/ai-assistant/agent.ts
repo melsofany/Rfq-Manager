@@ -490,6 +490,7 @@ async function runEngineLoop(s: RunState): Promise<void> {
     messages: s.messages,
     ctx: s.ctx,
     maxRounds: s.plan.maxRounds,
+    convergenceExtension: s.plan.path === "deep",
     signal: s.runBudget.signal,
     phone: s.input.phone,
     // The engine's budget extension measures the REAL remainder of the run

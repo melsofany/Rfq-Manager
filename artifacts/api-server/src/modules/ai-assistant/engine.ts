@@ -49,6 +49,8 @@ import {
   HARD_MAX_STEPS,
   toolCacheKey,
   FORCE_ANSWER_INSTRUCTION,
+  isProductiveRound,
+  shouldExtendForProgress,
   type TraceSummary,
 } from "./task-loop";
 
@@ -198,6 +200,12 @@ export async function runToolLoop(opts: {
    * would either strand a resumable census or overrun the operator's deadline.
    */
   remainingBudgetMs?: number;
+  /**
+   * Let a run that keeps reading something new earn extra rounds at the cap.
+   * Off by default: a simple lookup must stay on its small fixed budget, and only
+   * a deliberate multi-step (deep) task benefits from converging past it.
+   */
+  convergenceExtension?: boolean;
 }): Promise<ToolLoopResult> {
   const { ctx } = opts;
   const runStartedAt = Date.now();
@@ -253,6 +261,8 @@ export async function runToolLoop(opts: {
   let effectiveRounds = Math.max(1, opts.maxRounds);
   let steered = false;
   let extended = false;
+  let progressExtensions = 0;
+  const seenCalls = new Set<string>();
   let forcedAnswer = false;
   let finalText: string | null = null;
   let rounds = 0;
@@ -498,6 +508,39 @@ export async function runToolLoop(opts: {
             engine: engineName(),
           });
         }
+      }
+
+      // ── Convergence-based extension ─────────────────────────────────────────
+      // A fixed round cap ended runs that were still learning something new each
+      // round and gave the operator «لم أستطع إكمال الطلب». A round that read
+      // something new earns one more, up to a small bounded number.
+      const productive = isProductiveRound(
+        seenCalls,
+        outcomes.map((o, i) => ({
+          name: o.call.function.name,
+          args: calls[i].parsed,
+          content: o.ledgerText,
+          ok: !o.raw.startsWith("ERROR:"),
+        })),
+      );
+      if (
+        opts.convergenceExtension &&
+        shouldExtendForProgress({
+          productive,
+          consumedRounds: round + 1,
+          effectiveRounds,
+          extensions: progressExtensions,
+          remainingMs: remainingBudget(),
+          steered,
+        })
+      ) {
+        effectiveRounds += 1;
+        progressExtensions += 1;
+        logTraceEvent(opts.phone, "extend", {
+          to: effectiveRounds,
+          reason: "converging",
+          engine: engineName(),
+        });
       }
 
       // ── Progress-based budget extension (OpenManus `max_steps` is a budget) ─
