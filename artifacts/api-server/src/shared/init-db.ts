@@ -1249,6 +1249,22 @@ export async function initDb(): Promise<void> {
         ON ai_assistant_memories (phone, updated_at DESC);
     `);
 
+    // Incidents: replies that failed or needed correcting. Own statement, like the
+    // tables around it, so one failure cannot roll the others back.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ai_assistant_incidents (
+        id SERIAL PRIMARY KEY,
+        phone TEXT NOT NULL,
+        question TEXT NOT NULL,
+        reply TEXT NOT NULL DEFAULT '',
+        kinds JSONB NOT NULL,
+        detail JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_incidents_created
+        ON ai_assistant_incidents (created_at DESC);
+    `);
+
     // Conversation state (one row per phone). Its own statement — see the note
     // above on implicit transactions.
     await client.query(`

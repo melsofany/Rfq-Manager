@@ -209,3 +209,18 @@ export const aiAssistantOrgProfilesTable = pgTable("ai_assistant_org_profiles", 
 });
 
 export type AiAssistantOrgProfile = typeof aiAssistantOrgProfilesTable.$inferSelect;
+
+// ─── Incidents ─────────────────────────────────────────────────────────────
+// A durable record of every reply that failed or needed correcting (gave up,
+// ungrounded fact, contradicted claim, unkept promise, tool errors, timeout).
+// The in-memory metrics ring is lost on every restart; this is what lets a
+// failure become a regression case instead of a one-off diagnosis.
+export const aiAssistantIncidentsTable = pgTable("ai_assistant_incidents", {
+  id: serial("id").primaryKey(),
+  phone: text("phone").notNull(),
+  question: text("question").notNull(),
+  reply: text("reply").notNull().default(""),
+  kinds: jsonb("kinds").$type<string[]>().notNull(),
+  detail: jsonb("detail").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
