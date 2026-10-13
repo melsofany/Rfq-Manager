@@ -40,6 +40,8 @@ const customerPoItemDeliveriesTable = {
   _: "customerPoItemDeliveries",
   id: "id",
   customerPoItemId: "customerPoItemId",
+  operationKey: "operationKey",
+  voided: "voided",
 };
 const workOrderAssignmentsTable = {
   _: "workOrderAssignments",
@@ -49,6 +51,7 @@ const workOrderAssignmentsTable = {
   representativePhone: "representativePhone",
 };
 const auditLogTable = { _: "audit" };
+const employeesTable = { _: "employees", id: "id", name: "name" };
 const tables = {
   customerPosTable,
   customerPoItemsTable,
@@ -56,6 +59,7 @@ const tables = {
   customerPoItemDeliveriesTable,
   workOrderAssignmentsTable,
   auditLogTable,
+  employeesTable,
   WORK_ORDER_KIND: { RECEIPT: "receipt", DELIVERY: "delivery" },
 };
 
@@ -101,6 +105,9 @@ const dbMock: any = {
   })),
   update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => chainable(undefined)) })) })),
   delete: vi.fn(() => ({ where: vi.fn(() => chainable(undefined)) })),
+  // POST now runs in a transaction; the tx is the same mock handle.
+  transaction: vi.fn(async (fn: any) => fn(dbMock)),
+  execute: vi.fn(async () => ({ rows: [{ ts: "2026-01-01T00:00:00.000Z" }] })),
 };
 
 vi.mock("@workspace/db", () => ({ ...tables, db: dbMock }));

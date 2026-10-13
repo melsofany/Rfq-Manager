@@ -53,7 +53,12 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
       { key: "customer-po:edit", labelKey: "perm.customerPo.edit" },
     ],
   },
-  { key: "rfq", href: "/rfq", labelKey: "nav.rfq" },
+  {
+    key: "rfq",
+    href: "/rfq",
+    labelKey: "nav.rfq",
+    children: [{ key: "rfq:assign", labelKey: "perm.rfq.assign" }],
+  },
   {
     key: "suppliers",
     href: "/suppliers",
@@ -71,6 +76,12 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
       { key: "items:search", labelKey: "perm.items.search" },
       { key: "items:sheet", labelKey: "perm.items.sheet" },
     ],
+  },
+  {
+    key: "item-categories",
+    href: "/item-categories",
+    labelKey: "nav.itemCategories",
+    children: [{ key: "item-categories:manage", labelKey: "perm.itemCategories.manage" }],
   },
   {
     key: "purchase-orders",
@@ -139,6 +150,17 @@ export const ALL_PERMISSION_KEYS: string[] = (() => {
 export const PAGE_KEYS: string[] = PERMISSION_CATALOG.map((n) => n.key);
 
 /**
+ * Action-permission key that grants assigning/re-assigning an RFQ item to an
+ * employee (and confirming its category). Grantable to every non-admin role by
+ * default — it is a procurement decision, not a management one.
+ *
+ * Declared before ROLE_DEFAULTS because that map references it at module load.
+ */
+export const ASSIGN_PERM = {
+  itemAssign: "rfq:assign",
+} as const;
+
+/**
  * Role defaults used when an employee has no explicit `permissions` map.
  * `admin` is always granted everything (handled separately, not listed).
  *
@@ -148,13 +170,20 @@ export const PAGE_KEYS: string[] = PERMISSION_CATALOG.map((n) => n.key);
  * employee via the permissions editor.
  */
 export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
-  manager: [...PAGE_KEYS, "customer-rfq:edit", "customer-rfq:price", "customer-po:edit"],
+  manager: [
+    ...PAGE_KEYS,
+    "customer-rfq:edit",
+    "customer-rfq:price",
+    "customer-po:edit",
+    ASSIGN_PERM.itemAssign,
+  ],
   purchasing: [
     ...PAGE_KEYS.filter(
       (k) => k !== "employees" && k !== "audit" && k !== "integrations" && k !== "ai-assistant",
     ),
     "customer-rfq:edit",
     "customer-po:edit",
+    ASSIGN_PERM.itemAssign,
   ],
   data_entry: [
     "dashboard",
@@ -188,7 +217,7 @@ export const PRICE_PERM = {
  * (the margin floor derives from it), so ticking the «customer-rfq» page must
  * never hand it out by accident.
  */
-export const EXPLICIT_ONLY_PERMS: string[] = [PRICE_PERM.customerRfq];
+export const EXPLICIT_ONLY_PERMS: string[] = [PRICE_PERM.customerRfq, ASSIGN_PERM.itemAssign];
 
 export type PermissionMap = Record<string, boolean> | null | undefined;
 
@@ -246,6 +275,17 @@ export function canEditCustomerDoc(
 ): boolean {
   if (role === "admin") return true;
   return resolvePermissions(role, permissions).has(editKey);
+}
+
+/**
+ * Whether the employee may assign / re-assign an RFQ item to an employee (and
+ * confirm its category). Admin is always privileged; anyone else needs the
+ * explicit `rfq:assign` grant. Mirrors the backend gate so the UI never offers
+ * a control the API would reject.
+ */
+export function canAssignItems(role: string | undefined, permissions: PermissionMap): boolean {
+  if (role === "admin") return true;
+  return resolvePermissions(role, permissions).has(ASSIGN_PERM.itemAssign);
 }
 
 /** Is a page (sidebar item) visible/accessible? Accepts a path like "/customer-rfq". */

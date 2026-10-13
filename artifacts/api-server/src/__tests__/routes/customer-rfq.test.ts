@@ -85,6 +85,9 @@ let approvedRows: any[];
 // matches the shape selected in routes.ts: { customerRfqItemId, qty,
 // totalDeliveredQty, deliveryStatus }.
 let poItemRows: any[];
+// DELETE pre-check: customer_po_items joined to the RFQ's items. Empty ⇒ the
+// RFQ may be deleted; non-empty ⇒ 409 (its items are linked to a customer PO).
+let linkedPoItemRows: any[];
 // Sheet-view flat rows returned by GET /customer-rfq/sheet-view.
 let sheetRows: any[];
 // RFQ headers for the sheet view's "requests with no items" rows. Left null by
@@ -109,6 +112,7 @@ const insertedItems: any[] = [];
 // customer-PO / supplier-offer links survive) and ids deleted outright.
 const updatedItemIds: number[] = [];
 const deletedItemIds: number[] = [];
+const cancelledItemIds: number[] = [];
 // Audit-log rows written during a test (e.g. the margin-deviation entry).
 const auditInserts: any[] = [];
 
@@ -236,7 +240,10 @@ const dbMock: any = {
           });
         }
         return chainable(detailItems, {
-          where: vi.fn(() => chainable(detailItems)),
+          where: vi.fn(() =>
+            chainable(detailItems, { orderBy: vi.fn(() => chainable(detailItems)) }),
+          ),
+          orderBy: vi.fn(() => chainable(detailItems)),
         });
       }
       // Sheet-view PO side: select({...}).from(customerPoItems).innerJoin(
@@ -315,8 +322,13 @@ const dbMock: any = {
       // Request-status PO/delivery lookup: select({...}).from(customerPoItems)
       // .where(inArray + isNotNull) — returns the per-test poItemRows.
       if (table === customerPoItemsTbl) {
+        // DELETE pre-check: select({id}).from(customerPoItems)
+        // .innerJoin(customerRfqItems).where(eq(rfqId)).limit(1)
+        const linked = () =>
+          chainable(linkedPoItemRows, { limit: vi.fn(() => chainable(linkedPoItemRows)) });
         return chainable(poItemRows, {
-          where: vi.fn(() => chainable(poItemRows)),
+          where: vi.fn(() => chainable(poItemRows, { limit: vi.fn(() => chainable(poItemRows)) })),
+          innerJoin: vi.fn(() => chainable(linkedPoItemRows, { where: vi.fn(linked) })),
         });
       }
       // Sheet-view rejected-delivery batched lookup:
@@ -348,8 +360,20 @@ const dbMock: any = {
         });
       }
       // customer name resolution (select {id}).from(customers).where().limit()
+      // Also the generic fallback for tables this suite does not model (e.g. the
+      // assignment tables touched by the fire-and-forget auto-assign): return an
+      // empty, fully-chainable builder so no method is ever missing.
       return chainable([], {
-        where: vi.fn(() => chainable([], { limit: vi.fn(() => chainable([])) })),
+        where: vi.fn(() =>
+          chainable([], {
+            limit: vi.fn(() => chainable([])),
+            orderBy: vi.fn(() => chainable([])),
+            groupBy: vi.fn(() => chainable([])),
+          }),
+        ),
+        orderBy: vi.fn(() => chainable([])),
+        groupBy: vi.fn(() => chainable([])),
+        limit: vi.fn(() => chainable([])),
       });
     }),
   })),
@@ -358,7 +382,12 @@ const dbMock: any = {
       if (table === itemsTable) {
         if (Array.isArray(vals)) insertedItems.push(...vals);
         else insertedItems.push(vals);
-        return chainable(undefined);
+        // New rows are inserted with `.returning({id})` so the create/edit flow
+        // can assign just the added items; older paths await the builder directly.
+        const created = Array.isArray(vals)
+          ? vals.map((v: any, i: number) => ({ id: 9000 + i, ...v }))
+          : [{ id: 9000, ...vals }];
+        return chainable(undefined, { returning: vi.fn(() => chainable(created)) });
       }
       if (table === auditTable) {
         if (Array.isArray(vals)) auditInserts.push(...vals);
@@ -384,6 +413,9 @@ const dbMock: any = {
             // inArray() builds { col, val: [ids] } — a bulk delete of removed items.
             const ids: number[] = Array.isArray(id) ? id : [id];
             updatedItemIds.push(...ids.filter((v: any) => typeof v === "number"));
+            if (vals && (vals as any).isCancelled === true) {
+              cancelledItemIds.push(...ids.filter((v: any) => typeof v === "number"));
+            }
             detailItems = detailItems.map((it) => (ids.includes(it.id) ? { ...it, ...vals } : it));
           } else if (detailRow) {
             detailRow = { ...detailRow, ...vals };
@@ -481,6 +513,8 @@ beforeEach(() => {
   insertedItems.length = 0;
   updatedItemIds.length = 0;
   deletedItemIds.length = 0;
+  cancelledItemIds.length = 0;
+  linkedPoItemRows = [];
   auditInserts.length = 0;
 });
 
@@ -2164,7 +2198,7 @@ describe("PATCH /api/customer-rfq/:id — saving preserves item ids", () => {
     expect(insertedItems).toHaveLength(0);
   });
 
-  it("deletes only the items the operator removed", async () => {
+  it("soft-cancels (never deletes) the items the operator removed", async () => {
     sessionState.role = "admin";
     detailRow = { ...insertedRfq };
     detailItems = [storedItem, { ...storedItem, id: 2, partNo: "P2", lineItem: "EFGH" }];
@@ -2174,7 +2208,9 @@ describe("PATCH /api/customer-rfq/:id — saving preserves item ids", () => {
       .send({ items: [{ partNo: "P1", lineItem: "ABCD", uom: "pc", qty: 4, unitPrice: 12 }] });
     expect(res.status).toBe(200);
     expect(updatedItemIds).toContain(1);
-    expect(deletedItemIds).toEqual([2]);
+    // Removed item 2 is CANCELLED, not deleted — its history must survive.
+    expect(deletedItemIds).toHaveLength(0);
+    expect(cancelledItemIds).toContain(2);
     expect(insertedItems).toHaveLength(0);
   });
 

@@ -295,13 +295,20 @@ router.delete("/employees/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: "لا يمكنك حذف حسابك أثناء تسجيل الدخول" });
     return;
   }
-  const [deleted] = await db.delete(employeesTable).where(eq(employeesTable.id, id)).returning();
-  if (!deleted) {
+  // SOFT-DISABLE instead of hard delete: assignment history and attribution
+  // reference this employee (FK RESTRICT), and a historical KPI must never lose
+  // its owner. Disabling is the only supported path.
+  const [disabled] = await db
+    .update(employeesTable)
+    .set({ isActive: false })
+    .where(eq(employeesTable.id, id))
+    .returning();
+  if (!disabled) {
     res.status(404).json({ error: "الموظف غير موجود" });
     return;
   }
-  logger.info({ employeeId: id }, "Employee deleted");
-  res.json({ ok: true });
+  logger.info({ employeeId: id }, "Employee disabled (soft)");
+  res.json({ ok: true, disabled: true });
 });
 
 export default router;

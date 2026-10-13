@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { purchaseOrdersTable, purchaseOrderItemsTable } from "./purchase_orders";
@@ -59,6 +59,25 @@ export const customerPoItemDeliveriesTable = pgTable("customer_po_item_deliverie
   deliveryStatus: text("delivery_status").notNull().default("delivered"),
   deliveredBy: text("delivered_by"),
   deliveredAt: timestamp("delivered_at", { withTimezone: true }).notNull().defaultNow(),
+  // ── Idempotency ──────────────────────────────────────────────────────────
+  // `idempotencyKey` is the per-question token from WhatsApp (or a client UUID
+  // for the deliveries page). `operationKey` identifies the WHOLE multi-item
+  // submission so a re-send can be compared against the original item set —
+  // never by the item keys present in the retried request alone. `payloadHash`
+  // is a fingerprint of the complete original payload.
+  idempotencyKey: text("idempotency_key"),
+  operationKey: text("operation_key"),
+  payloadHash: text("payload_hash"),
+  // WhatsApp message id — a second layer that stops reprocessing the SAME
+  // webhook when Meta redelivers it.
+  waMessageId: text("wa_message_id"),
+  // Soft-void (never hard-delete a delivery row): a voided row is excluded from
+  // aggregation but keeps its history, its original deliveredAt and its actor.
+  voided: boolean("voided").notNull().default(false),
+  voidedAt: timestamp("voided_at", { withTimezone: true }),
+  voidedBy: integer("voided_by"),
+  voidedByName: text("voided_by_name"),
+  voidReason: text("void_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
