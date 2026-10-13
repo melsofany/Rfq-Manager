@@ -3354,8 +3354,12 @@ Reached heap limit Allocation failed — JavaScript heap out of memory` (heap
   دائمًا، manager/purchasing افتراضيًا، وخريطة صريحة تحكم). `modules/reports/item-kpis.ts`
   — `GET /analytics/procurement/by-item` و`GET /analytics/categories/coverage`
   (تجميع مجمّع بلا N+1)، **مبنية على بنود العميل** + تقرير صحة (ترحيل/تعارض/أيتام).
-- **الواجهة**: صفحة `/item-categories` (إدارة + المسؤولون + **الكلمات المفتاحية**)،
-  عمود «المسؤول» + نافذة التجاوز اليدوي في صفحة تفاصيل طلب العميل
+- **الواجهة**: **تبويب «تصنيفات البنود» داخل صفحة `/items`** (إدارة + المسؤولون +
+  **الكلمات المفتاحية**) — نُقل من صفحة `/item-categories` المستقلة (المسار القديم
+  يُحوَّل إلى `/items`)؛ الصلاحية الآن مفتاح تبويب `items:categories` (وليس صفحة
+  `item-categories`)، ممنوح افتراضيًا لـ`manager`/`purchasing` مع باقي تبويبات
+  الصفحة (`ITEMS_TABS`) عبر `filterTabs`. عمود «المسؤول» + نافذة التجاوز اليدوي في
+  صفحة تفاصيل طلب العميل
   (`customer-rfq/pages/detail.tsx`)، لوحة «مسؤولية البنود» داخل تبويب بنود الـRFQ
   (`ItemAssignmentsPanel.tsx`)، محرّر تصنيفات الموظف في صفحة الموظفين (زر `Tags`)،
   وقسم KPI على مستوى البند في `/analytics`. `permissions.ts`: `rfq:assign` في

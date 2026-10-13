@@ -75,13 +75,8 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     children: [
       { key: "items:search", labelKey: "perm.items.search" },
       { key: "items:sheet", labelKey: "perm.items.sheet" },
+      { key: "items:categories", labelKey: "perm.items.categories" },
     ],
-  },
-  {
-    key: "item-categories",
-    href: "/item-categories",
-    labelKey: "nav.itemCategories",
-    children: [{ key: "item-categories:manage", labelKey: "perm.itemCategories.manage" }],
   },
   {
     key: "purchase-orders",
@@ -161,6 +156,14 @@ export const ASSIGN_PERM = {
 } as const;
 
 /**
+ * Tab keys of the Items page, declared before ROLE_DEFAULTS because that map
+ * references it at module load. The roles that own the page get all three tabs
+ * so switching between search / sheet / categories is never a dead end — a
+ * granted `items:categories` with un-granted siblings would render no tab bar.
+ */
+const ITEMS_TABS = ["items:search", "items:sheet", "items:categories"] as const;
+
+/**
  * Role defaults used when an employee has no explicit `permissions` map.
  * `admin` is always granted everything (handled separately, not listed).
  *
@@ -175,6 +178,7 @@ export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
     "customer-rfq:edit",
     "customer-rfq:price",
     "customer-po:edit",
+    ...ITEMS_TABS,
     ASSIGN_PERM.itemAssign,
   ],
   purchasing: [
@@ -183,6 +187,7 @@ export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
     ),
     "customer-rfq:edit",
     "customer-po:edit",
+    ...ITEMS_TABS,
     ASSIGN_PERM.itemAssign,
   ],
   data_entry: [

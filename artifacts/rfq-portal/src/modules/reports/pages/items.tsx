@@ -27,8 +27,10 @@ import {
   ListFilter,
   Filter,
   X,
+  Tags,
   Search as SearchIcon,
 } from "lucide-react";
+import { ItemCategoriesTab } from "./item-categories";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -914,11 +916,12 @@ export default function ItemsPage() {
   const allowedTabs = filterTabs(employee?.role, employee?.permissions, "items", [
     "search",
     "sheet",
+    "categories",
   ] as const);
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const [tab, setTab] = useState<"search" | "sheet">(allowedTabs[0] ?? "search");
+  const [tab, setTab] = useState<"search" | "sheet" | "categories">(allowedTabs[0] ?? "search");
 
   const {
     data: results,
@@ -949,7 +952,7 @@ export default function ItemsPage() {
       <div
         className={cn(
           "p-4 sm:p-6 space-y-5 mx-auto",
-          tab === "sheet" ? "max-w-[1400px]" : "max-w-5xl",
+          tab === "search" ? "max-w-5xl" : "max-w-[1400px]",
         )}
       >
         {/* Page header */}
@@ -961,7 +964,9 @@ export default function ItemsPage() {
           <p className="text-muted-foreground text-sm mt-0.5">
             {tab === "search"
               ? "Search for any item by description, part number, or line item — see the full RFQ history and all supplier responses."
-              : "سجل مسطّح يعرض كل بند طلب تسعير في صف واحد مع أعمدة أمر الشراء المقابل إن وُجد. أي بيانات مستقبليه تُضاف تظهر هنا تلقائيًا."}
+              : tab === "sheet"
+                ? "سجل مسطّح يعرض كل بند طلب تسعير في صف واحد مع أعمدة أمر الشراء المقابل إن وُجد. أي بيانات مستقبليه تُضاف تظهر هنا تلقائيًا."
+                : "تصنيفات البنود التي تُبنى عليها مسؤولية كل موظف مشتريات."}
           </p>
         </div>
 
@@ -995,9 +1000,25 @@ export default function ItemsPage() {
               سجل البنود والطلبات
             </button>
           )}
+          {allowedTabs.includes("categories") && (
+            <button
+              onClick={() => setTab("categories")}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                tab === "categories"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Tags size={15} />
+              تصنيفات البنود
+            </button>
+          )}
         </div>
 
-        {tab === "sheet" ? (
+        {tab === "categories" ? (
+          <ItemCategoriesTab />
+        ) : tab === "sheet" ? (
           <SheetViewTab />
         ) : (
           <>

@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,7 +47,7 @@ interface Employee {
   isActive: boolean;
 }
 
-export default function ItemCategoriesPage() {
+export function ItemCategoriesTab() {
   const { employee } = useAuth();
   const [rows, setRows] = useState<ItemCategory[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -73,7 +72,7 @@ export default function ItemCategoriesPage() {
   const [newKeyword, setNewKeyword] = useState("");
   const [newKeywordWeight, setNewKeywordWeight] = useState("");
 
-  const canManage = hasPermission(employee?.role, employee?.permissions, "item-categories");
+  const canManage = hasPermission(employee?.role, employee?.permissions, "items:categories");
   const isAdmin = employee?.role === "admin";
 
   const load = useCallback(async () => {
@@ -102,13 +101,9 @@ export default function ItemCategoriesPage() {
     void load();
   }, [load]);
 
-  if (!canAccessPath(employee?.role, employee?.permissions, "/item-categories")) {
+  if (!canAccessPath(employee?.role, employee?.permissions, "/items")) {
     return (
-      <Layout>
-        <div className="p-8 text-center text-muted-foreground">
-          ليس لديك صلاحية لعرض هذه الصفحة.
-        </div>
-      </Layout>
+      <div className="p-8 text-center text-muted-foreground">ليس لديك صلاحية لعرض هذه الصفحة.</div>
     );
   }
 
@@ -298,136 +293,132 @@ export default function ItemCategoriesPage() {
   }
 
   return (
-    <Layout>
-      <div className="p-4 sm:p-6 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">تصنيفات البنود</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            التصنيفات التي تُبنى عليها مسؤولية كل موظف مشتريات. عيّن لكل تصنيف مَن يتولاه (واحد
-            «أساسي» والباقي بدلاء).
-          </p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-foreground">تصنيفات البنود</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          التصنيفات التي تُبنى عليها مسؤولية كل موظف مشتريات. عيّن لكل تصنيف مَن يتولاه (واحد
+          «أساسي» والباقي بدلاء).
+        </p>
+      </div>
 
-        {error && (
-          <div className="bg-destructive/10 text-destructive text-sm rounded-lg p-3">{error}</div>
-        )}
+      {error && (
+        <div className="bg-destructive/10 text-destructive text-sm rounded-lg p-3">{error}</div>
+      )}
 
-        {canManage && (
-          <form
-            onSubmit={handleCreate}
-            className="bg-card border border-border rounded-lg p-4 flex flex-wrap items-end gap-3"
-          >
-            <div className="flex-1 min-w-[200px]">
-              <label className="text-xs text-muted-foreground">اسم التصنيف</label>
-              <Input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="مثال: قواطع"
-              />
-            </div>
-            <div className="w-40">
-              <label className="text-xs text-muted-foreground">الكود (اختياري)</label>
-              <Input
-                value={newCode}
-                onChange={(e) => setNewCode(e.target.value)}
-                placeholder="breakers"
-              />
-            </div>
-            <Button type="submit" disabled={!newName.trim()}>
-              <Plus size={16} className="me-1" /> إضافة
-            </Button>
-          </form>
-        )}
+      {canManage && (
+        <form
+          onSubmit={handleCreate}
+          className="bg-card border border-border rounded-lg p-4 flex flex-wrap items-end gap-3"
+        >
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-xs text-muted-foreground">اسم التصنيف</label>
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="مثال: قواطع"
+            />
+          </div>
+          <div className="w-40">
+            <label className="text-xs text-muted-foreground">الكود (اختياري)</label>
+            <Input
+              value={newCode}
+              onChange={(e) => setNewCode(e.target.value)}
+              placeholder="breakers"
+            />
+          </div>
+          <Button type="submit" disabled={!newName.trim()}>
+            <Plus size={16} className="me-1" /> إضافة
+          </Button>
+        </form>
+      )}
 
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل…</div>
-          ) : rows.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">
-              لا توجد تصنيفات بعد.
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/30 border-b border-border text-right">
-                  <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">التصنيف</th>
-                  <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">الكود</th>
-                  <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">الحالة</th>
-                  <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((c) => (
-                  <tr key={c.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-3">
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        {loading ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل…</div>
+        ) : rows.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">لا توجد تصنيفات بعد.</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-muted/30 border-b border-border text-right">
+                <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">التصنيف</th>
+                <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">الكود</th>
+                <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">الحالة</th>
+                <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((c) => (
+                <tr key={c.id} className="border-b border-border last:border-0">
+                  <td className="px-4 py-3">
+                    {editing === c.id ? (
+                      <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                    ) : (
+                      <span className="text-foreground">{c.name}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {editing === c.id ? (
+                      <Input value={editCode} onChange={(e) => setEditCode(e.target.value)} />
+                    ) : (
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {c.code ?? "-"}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => canManage && handleToggle(c.id, !c.isActive)}
+                      className={`text-xs px-2 py-1 rounded ${c.isActive ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}`}
+                    >
+                      {c.isActive ? "مُفعَّل" : "موقوف"}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
                       {editing === c.id ? (
-                        <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-                      ) : (
-                        <span className="text-foreground">{c.name}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {editing === c.id ? (
-                        <Input value={editCode} onChange={(e) => setEditCode(e.target.value)} />
-                      ) : (
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {c.code ?? "-"}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => canManage && handleToggle(c.id, !c.isActive)}
-                        className={`text-xs px-2 py-1 rounded ${c.isActive ? "bg-emerald-100 text-emerald-700" : "bg-muted text-muted-foreground"}`}
-                      >
-                        {c.isActive ? "مُفعَّل" : "موقوف"}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {editing === c.id ? (
-                          <>
-                            <Button size="sm" onClick={() => handleSaveEdit(c.id)}>
-                              <Check size={14} />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
-                              <X size={14} />
-                            </Button>
-                          </>
-                        ) : (
-                          canManage && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setEditing(c.id);
-                                setEditName(c.name);
-                                setEditCode(c.code ?? "");
-                              }}
-                            >
-                              <Pencil size={14} />
-                            </Button>
-                          )
-                        )}
-                        <Button size="sm" variant="ghost" onClick={() => openOwners(c)}>
-                          <Users size={14} className="me-1" /> المسؤولون
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => openKeywords(c)}>
-                          <Tags size={14} className="me-1" /> الكلمات المفتاحية
-                        </Button>
-                        {isAdmin && (
-                          <Button size="sm" variant="ghost" onClick={() => handleDelete(c.id)}>
-                            <Trash2 size={14} className="text-destructive" />
+                        <>
+                          <Button size="sm" onClick={() => handleSaveEdit(c.id)}>
+                            <Check size={14} />
                           </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                          <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+                            <X size={14} />
+                          </Button>
+                        </>
+                      ) : (
+                        canManage && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditing(c.id);
+                              setEditName(c.name);
+                              setEditCode(c.code ?? "");
+                            }}
+                          >
+                            <Pencil size={14} />
+                          </Button>
+                        )
+                      )}
+                      <Button size="sm" variant="ghost" onClick={() => openOwners(c)}>
+                        <Users size={14} className="me-1" /> المسؤولون
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => openKeywords(c)}>
+                        <Tags size={14} className="me-1" /> الكلمات المفتاحية
+                      </Button>
+                      {isAdmin && (
+                        <Button size="sm" variant="ghost" onClick={() => handleDelete(c.id)}>
+                          <Trash2 size={14} className="text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {ownersFor && (
@@ -560,6 +551,6 @@ export default function ItemCategoriesPage() {
           </div>
         </div>
       )}
-    </Layout>
+    </div>
   );
 }

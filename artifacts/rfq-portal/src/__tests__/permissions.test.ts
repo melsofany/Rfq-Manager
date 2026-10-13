@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   PERMISSION_CATALOG,
   ALL_PERMISSION_KEYS,
+  PAGE_KEYS,
   ROLE_DEFAULTS,
   EDIT_PERM,
   PRICE_PERM,
@@ -45,6 +46,33 @@ describe("customer edit permissions catalog", () => {
     expect(ROLE_DEFAULTS.manager).toContain(PRICE_PERM.customerRfq);
     expect(ROLE_DEFAULTS.purchasing).not.toContain(PRICE_PERM.customerRfq);
     expect(ROLE_DEFAULTS.data_entry).not.toContain(PRICE_PERM.customerRfq);
+  });
+});
+
+describe("item categories live under the items page", () => {
+  it("registers items:categories as a tab of the items group", () => {
+    const node = PERMISSION_CATALOG.find((n) => n.key === "items");
+    expect(node?.children?.map((c) => c.key)).toContain("items:categories");
+    expect(ALL_PERMISSION_KEYS).toContain("items:categories");
+  });
+
+  it("no longer exposes item-categories as a standalone page", () => {
+    expect(PAGE_KEYS).not.toContain("item-categories");
+    expect(PERMISSION_CATALOG.some((n) => n.href === "/item-categories")).toBe(false);
+  });
+
+  it("grants the categories tab to manager + purchasing by default, not data_entry", () => {
+    expect(ROLE_DEFAULTS.manager).toContain("items:categories");
+    expect(ROLE_DEFAULTS.purchasing).toContain("items:categories");
+    expect(ROLE_DEFAULTS.data_entry).not.toContain("items:categories");
+  });
+
+  it("grants the whole items tab bar together so navigation is never a dead end", () => {
+    for (const role of ["manager", "purchasing"] as const) {
+      for (const tab of ["items:search", "items:sheet", "items:categories"]) {
+        expect(ROLE_DEFAULTS[role]).toContain(tab);
+      }
+    }
   });
 });
 
