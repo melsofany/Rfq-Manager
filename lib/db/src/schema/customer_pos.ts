@@ -44,8 +44,12 @@ export const customerPoItemsTable = pgTable("customer_po_items", {
   // The specific customer RFQ line item this PO line was sourced from. Nullable
   // for free/manual lines, and intentionally NOT unique: the same item may be
   // ordered again on a later PO (partial shipments).
+  //
+  // RESTRICT (not SET NULL): a PO line's link to its originating RFQ item is
+  // historical evidence and must never be silently erased by deleting the RFQ
+  // item. RFQ items are soft-cancelled (`is_cancelled`) instead.
   customerRfqItemId: integer("customer_rfq_item_id").references(() => customerRfqItemsTable.id, {
-    onDelete: "set null",
+    onDelete: "restrict",
   }),
   partNo: text("part_no"),
   lineItem: text("line_item"),

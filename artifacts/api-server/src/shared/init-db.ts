@@ -1,6 +1,7 @@
 import { pool } from "@workspace/db";
 import bcrypt from "bcryptjs";
 import { logger } from "./logger";
+import { seedKeywords } from "../modules/rfq/classification";
 
 export async function initDb(): Promise<void> {
   logger.info("initDb: connecting to database...");
@@ -98,6 +99,12 @@ export async function initDb(): Promise<void> {
         uom TEXT,
         qty NUMERIC(15,4),
         unit_price NUMERIC(15,4),
+        category_id INTEGER,
+        is_cancelled BOOLEAN NOT NULL DEFAULT false,
+        attribution_first_po_at TIMESTAMPTZ,
+        attribution_employee_id INTEGER,
+        attribution_employee_name TEXT,
+        attribution_event TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS rfq (
@@ -511,8 +518,25 @@ export async function initDb(): Promise<void> {
         delivery_status TEXT NOT NULL DEFAULT 'delivered',
         delivered_by TEXT,
         delivered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        idempotency_key TEXT,
+        operation_key TEXT,
+        payload_hash TEXT,
+        wa_message_id TEXT,
+        voided BOOLEAN NOT NULL DEFAULT false,
+        voided_at TIMESTAMPTZ,
+        voided_by INTEGER,
+        voided_by_name TEXT,
+        void_reason TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE UNIQUE INDEX IF NOT EXISTS customer_po_item_deliveries_operation_uq
+        ON customer_po_item_deliveries (operation_key, customer_po_item_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS customer_po_item_deliveries_idem_uq
+        ON customer_po_item_deliveries (customer_po_item_id, idempotency_key)
+        WHERE idempotency_key IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS customer_po_item_deliveries_wa_uq
+        ON customer_po_item_deliveries (wa_message_id)
+        WHERE wa_message_id IS NOT NULL;
     `);
     logger.info("initDb: all tables created");
 
@@ -1396,6 +1420,406 @@ export async function initDb(): Promise<void> {
         logger.warn({ err, stmt }, "initDb: optional index/extension skipped");
       }
     }
+
+    // ── Item categories + employee ownership + per-item assignment ───────────
+    // DDL lives here (NOT drizzle-kit push). Each statement is its own
+    // client.query: statements share an implicit transaction, so a sibling
+    // failure would otherwise roll a CREATE back silently.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS item_categories (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        code TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS employee_categories (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        category_id INTEGER NOT NULL REFERENCES item_categories(id) ON DELETE CASCADE,
+        is_primary BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS employee_categories_employee_category_uq
+        ON employee_categories (employee_id, category_id);
+    `);
+
+    // At most ONE primary owner per category, enforced by the database. The
+    // API guard on /item-categories/:id/owners only covered one write path, so
+    // /employees/:id/categories could still insert a second primary — which made
+    // the responsible employee non-deterministic. The index below would reject
+    // existing violations, so demote every extra primary FIRST (keeping the
+    // lowest id, the same tie-break `pickOwner` uses) in its own statement.
+    await client.query(`
+      UPDATE employee_categories ec
+      SET is_primary = false
+      WHERE ec.is_primary
+        AND ec.id <> (
+          SELECT min(ec2.id)
+          FROM employee_categories ec2
+          WHERE ec2.category_id = ec.category_id AND ec2.is_primary
+        );
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS employee_categories_one_primary_uq
+        ON employee_categories (category_id)
+        WHERE is_primary;
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS rfq_item_assignments (
+        id SERIAL PRIMARY KEY,
+        rfq_item_id INTEGER NOT NULL REFERENCES rfq_items(id) ON DELETE CASCADE,
+        customer_rfq_item_id INTEGER REFERENCES customer_rfq_items(id) ON DELETE SET NULL,
+        category_id INTEGER REFERENCES item_categories(id) ON DELETE SET NULL,
+        employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        source TEXT NOT NULL DEFAULT 'auto',
+        confidence NUMERIC(5,2),
+        assigned_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS rfq_item_assignments_item_uq
+        ON rfq_item_assignments (rfq_item_id);
+      CREATE INDEX IF NOT EXISTS idx_rfq_item_assignments_employee
+        ON rfq_item_assignments (employee_id);
+      CREATE INDEX IF NOT EXISTS idx_rfq_item_assignments_category
+        ON rfq_item_assignments (category_id);
+    `);
+
+    // ── Responsibility source of truth (customer items) ─────────────────────
+    // New assignment table keyed on the CUSTOMER item. DDL in its own statement.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS customer_rfq_item_assignments (
+        id SERIAL PRIMARY KEY,
+        customer_rfq_item_id INTEGER NOT NULL REFERENCES customer_rfq_items(id) ON DELETE RESTRICT,
+        category_id INTEGER REFERENCES item_categories(id) ON DELETE SET NULL,
+        employee_id INTEGER REFERENCES employees(id) ON DELETE RESTRICT,
+        source TEXT NOT NULL DEFAULT 'auto',
+        confidence NUMERIC(5,2),
+        assigned_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        valid_from TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+        valid_to TIMESTAMPTZ
+      );
+      -- At most ONE open period per item. Closed-period overlap is prevented by
+      -- the gist EXCLUDE constraint added in the migration block below.
+      CREATE UNIQUE INDEX IF NOT EXISTS customer_rfq_item_assignments_open_uq
+        ON customer_rfq_item_assignments (customer_rfq_item_id) WHERE valid_to IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_customer_rfq_item_assignments_employee
+        ON customer_rfq_item_assignments (employee_id);
+      CREATE INDEX IF NOT EXISTS idx_customer_rfq_item_assignments_category
+        ON customer_rfq_item_assignments (category_id);
+    `);
+
+    // Per-change audit of responsibility / category (old→new, actor, reason).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS item_assignment_audit (
+        id SERIAL PRIMARY KEY,
+        scope TEXT NOT NULL,
+        customer_rfq_item_id INTEGER,
+        rfq_item_id INTEGER,
+        category_id_old INTEGER,
+        category_id_new INTEGER,
+        employee_id_old INTEGER,
+        employee_id_new INTEGER,
+        changed_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        reason TEXT,
+        changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_item_assignment_audit_customer_item
+        ON item_assignment_audit (customer_rfq_item_id);
+      CREATE INDEX IF NOT EXISTS idx_item_assignment_audit_rfq_item
+        ON item_assignment_audit (rfq_item_id);
+    `);
+
+    // ── Idempotent migration: legacy rfq_item_assignments → customer items ──
+    // Only rows whose rfq_item carries a customer_rfq_item_id are migrated. When
+    // several supplier lines point at the SAME customer item (one item sent to N
+    // suppliers), the deterministic winner is: manual over auto, then the
+    // smallest id — so a re-run always produces the same single row. ON CONFLICT
+    // DO NOTHING makes the whole statement re-runnable without duplication.
+    await client.query(`
+      INSERT INTO customer_rfq_item_assignments
+        (customer_rfq_item_id, category_id, employee_id, source, confidence, assigned_by)
+      SELECT DISTINCT ON (ri.customer_rfq_item_id)
+        ri.customer_rfq_item_id,
+        a.category_id,
+        a.employee_id,
+        'inherited',
+        a.confidence,
+        a.assigned_by
+      FROM rfq_item_assignments a
+      JOIN rfq_items ri ON ri.id = a.rfq_item_id
+      WHERE ri.customer_rfq_item_id IS NOT NULL
+      ORDER BY ri.customer_rfq_item_id,
+        CASE a.source WHEN 'manual' THEN 0 ELSE 1 END,
+        a.id
+      ON CONFLICT (customer_rfq_item_id) WHERE valid_to IS NULL DO NOTHING;
+    `);
+
+    // ── category_id columns on the existing item tables ─────────────────────
+    // A critical migration in its OWN statement: an ALTER in a shared literal
+    // can be rolled back by a sibling failure and never applied.
+    await client.query(`
+      ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS category_id INTEGER;
+    `);
+    await client.query(`
+      ALTER TABLE rfq_items ADD COLUMN IF NOT EXISTS category_id INTEGER;
+    `);
+    await client.query(`
+      ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS category_id INTEGER;
+    `);
+
+    // ── Seed the official item categories (idempotent) ──────────────────────
+    const itemCategories = [
+      { name: "أجهزة", code: "equipment", sort: 10 },
+      { name: "قطع غيار", code: "spare_parts", sort: 20 },
+      { name: "كهرباء", code: "electrical", sort: 30 },
+      { name: "قواطع", code: "breakers", sort: 40 },
+      { name: "مقاومة حريق", code: "fire_resistance", sort: 50 },
+    ];
+    for (const c of itemCategories) {
+      await client.query(
+        `INSERT INTO item_categories (name, code, sort_order) VALUES ($1, $2, $3)
+         ON CONFLICT (name) DO NOTHING`,
+        [c.name, c.code, c.sort],
+      );
+    }
+
+    // ── Item classification keywords (admin-managed) ────────────────────────
+    // The classifier terms move out of code into this table. DDL in its own
+    // statement (a sibling failure must not roll the CREATE back).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS item_category_keywords (
+        id SERIAL PRIMARY KEY,
+        category_id INTEGER NOT NULL REFERENCES item_categories(id) ON DELETE CASCADE,
+        keyword TEXT NOT NULL,
+        weight INTEGER NOT NULL DEFAULT 0,
+        language TEXT,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS item_category_keywords_category_keyword_uq
+        ON item_category_keywords (category_id, keyword);
+      CREATE INDEX IF NOT EXISTS idx_item_category_keywords_category
+        ON item_category_keywords (category_id);
+    `);
+
+    // Seed the vocabulary from the classifier's own constant, so moving the
+    // terms into the DB cannot silently drop one. Idempotent: an existing
+    // (category, keyword) row is left untouched — an admin edit is never
+    // overwritten by a re-seed.
+    const seed = seedKeywords();
+    if (seed.length > 0) {
+      const codes = [...new Set(seed.map((s) => s.code))];
+      const catRows = await client.query(
+        `SELECT id, code FROM item_categories WHERE code = ANY($1::text[])`,
+        [codes],
+      );
+      const idByCode = new Map<string, number>(
+        catRows.rows.map((r: { id: number; code: string }) => [r.code, r.id]),
+      );
+      for (const s of seed) {
+        const categoryId = idByCode.get(s.code);
+        if (categoryId == null) continue;
+        await client.query(
+          `INSERT INTO item_category_keywords (category_id, keyword, weight)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (category_id, keyword) DO NOTHING`,
+          [categoryId, s.keyword, s.weight],
+        );
+      }
+    }
+
+    // ── Procurement responsibility migration (idempotent, re-runnable) ───────
+    // Periods + attribution + RESTRICT FKs + delivery idempotency. Every step
+    // is guarded by a catalog check and compares the ACTUAL definition (not
+    // just the name), so a partially-applied run resumes and a constraint that
+    // exists with the wrong definition is corrected. No operational data is
+    // ever deleted — only specific old indexes/constraints are replaced.
+    await client.query(
+      `ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN NOT NULL DEFAULT false`,
+    );
+    await client.query(
+      `ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS attribution_first_po_at TIMESTAMPTZ`,
+    );
+    await client.query(
+      `ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS attribution_employee_id INTEGER`,
+    );
+    await client.query(
+      `ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS attribution_employee_name TEXT`,
+    );
+    await client.query(
+      `ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS attribution_event TEXT`,
+    );
+    await client.query(
+      `ALTER TABLE customer_rfq_item_assignments ADD COLUMN IF NOT EXISTS valid_from TIMESTAMPTZ`,
+    );
+    await client.query(
+      `ALTER TABLE customer_rfq_item_assignments ADD COLUMN IF NOT EXISTS valid_to TIMESTAMPTZ`,
+    );
+    // Backfill only untouched rows — a re-run never rewrites migrated dates.
+    await client.query(
+      `UPDATE customer_rfq_item_assignments SET valid_from = COALESCE(assigned_at, clock_timestamp()) WHERE valid_from IS NULL`,
+    );
+    await client.query(
+      `ALTER TABLE customer_rfq_item_assignments ALTER COLUMN valid_from SET DEFAULT clock_timestamp()`,
+    );
+    await client.query(
+      `ALTER TABLE customer_rfq_item_assignments ALTER COLUMN valid_from SET NOT NULL`,
+    );
+    // Replace the absolute unique index with a partial one (open period only).
+    await client.query(`DROP INDEX IF EXISTS customer_rfq_item_assignments_item_uq`);
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS customer_rfq_item_assignments_open_uq
+         ON customer_rfq_item_assignments (customer_rfq_item_id) WHERE valid_to IS NULL`,
+    );
+    // btree_gist is needed for `=` inside gist. Best-effort: if unavailable, the
+    // application-level row lock is the fallback and the constraint is skipped.
+    let hasBtreeGist = false;
+    try {
+      const avail = await client.query(
+        `SELECT 1 FROM pg_available_extensions WHERE name = 'btree_gist'`,
+      );
+      if (avail.rows.length > 0) {
+        await client.query(`CREATE EXTENSION IF NOT EXISTS btree_gist`);
+        hasBtreeGist = true;
+      }
+    } catch (err) {
+      logger.warn({ err }, "initDb: btree_gist unavailable — overlap guard is app-level only");
+    }
+    if (hasBtreeGist) {
+      const expectedExclude =
+        "EXCLUDE USING gist (customer_rfq_item_id WITH =, tstzrange(valid_from, COALESCE(valid_to, 'infinity'::timestamp with time zone), '[)'::text) WITH &&)";
+      const excl = await client.query(
+        `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+          WHERE conname = 'customer_rfq_item_assignments_no_overlap'
+            AND conrelid = 'customer_rfq_item_assignments'::regclass`,
+      );
+      if (excl.rows.length === 0) {
+        await client.query(
+          `ALTER TABLE customer_rfq_item_assignments ADD CONSTRAINT customer_rfq_item_assignments_no_overlap
+             EXCLUDE USING gist (customer_rfq_item_id WITH =,
+               tstzrange(valid_from, COALESCE(valid_to,'infinity'),'[)') WITH &&)`,
+        );
+      } else if (excl.rows[0].def !== expectedExclude) {
+        await client.query(
+          `ALTER TABLE customer_rfq_item_assignments DROP CONSTRAINT customer_rfq_item_assignments_no_overlap`,
+        );
+        await client.query(
+          `ALTER TABLE customer_rfq_item_assignments ADD CONSTRAINT customer_rfq_item_assignments_no_overlap
+             EXCLUDE USING gist (customer_rfq_item_id WITH =,
+               tstzrange(valid_from, COALESCE(valid_to,'infinity'),'[)') WITH &&)`,
+        );
+      }
+    }
+    // FK employee_id → RESTRICT (compare referenced table + delete action).
+    const empFk = await client.query(
+      `SELECT c.confrelid::regclass::text AS ref, c.confdeltype AS del
+         FROM pg_constraint c
+         JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+        WHERE c.conrelid = 'customer_rfq_item_assignments'::regclass
+          AND c.contype = 'f' AND a.attname = 'employee_id'`,
+    );
+    const empFkOk = empFk.rows.some(
+      (r: { ref: string; del: string }) => r.ref === "employees" && r.del === "r",
+    );
+    if (!empFkOk) {
+      await client.query(
+        `ALTER TABLE customer_rfq_item_assignments DROP CONSTRAINT IF EXISTS customer_rfq_item_assignments_employee_id_fkey`,
+      );
+      await client.query(
+        `ALTER TABLE customer_rfq_item_assignments ADD CONSTRAINT customer_rfq_item_assignments_employee_id_fkey
+           FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE RESTRICT`,
+      );
+    }
+    // FK customer_rfq_item_id → RESTRICT (was CASCADE: deletion would erase history).
+    const itemFk = await client.query(
+      `SELECT c.confrelid::regclass::text AS ref, c.confdeltype AS del
+         FROM pg_constraint c
+         JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+        WHERE c.conrelid = 'customer_rfq_item_assignments'::regclass
+          AND c.contype = 'f' AND a.attname = 'customer_rfq_item_id'`,
+    );
+    const itemFkOk = itemFk.rows.some(
+      (r: { ref: string; del: string }) => r.ref === "customer_rfq_items" && r.del === "r",
+    );
+    if (!itemFkOk) {
+      await client.query(
+        `ALTER TABLE customer_rfq_item_assignments DROP CONSTRAINT IF EXISTS customer_rfq_item_assignments_customer_rfq_item_id_fkey`,
+      );
+      await client.query(
+        `ALTER TABLE customer_rfq_item_assignments ADD CONSTRAINT customer_rfq_item_assignments_customer_rfq_item_id_fkey
+           FOREIGN KEY (customer_rfq_item_id) REFERENCES customer_rfq_items(id) ON DELETE RESTRICT`,
+      );
+    }
+    // FK customer_po_items.customer_rfq_item_id → RESTRICT (was SET NULL).
+    const poItemFk = await client.query(
+      `SELECT c.confrelid::regclass::text AS ref, c.confdeltype AS del
+         FROM pg_constraint c
+         JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY(c.conkey)
+        WHERE c.conrelid = 'customer_po_items'::regclass
+          AND c.contype = 'f' AND a.attname = 'customer_rfq_item_id'`,
+    );
+    const poItemFkOk = poItemFk.rows.some(
+      (r: { ref: string; del: string }) => r.ref === "customer_rfq_items" && r.del === "r",
+    );
+    if (!poItemFkOk) {
+      await client.query(
+        `ALTER TABLE customer_po_items DROP CONSTRAINT IF EXISTS customer_po_items_customer_rfq_item_id_fkey`,
+      );
+      await client.query(
+        `ALTER TABLE customer_po_items ADD CONSTRAINT customer_po_items_customer_rfq_item_id_fkey
+           FOREIGN KEY (customer_rfq_item_id) REFERENCES customer_rfq_items(id) ON DELETE RESTRICT`,
+      );
+    }
+    // Delivery idempotency columns + indexes.
+    await client.query(
+      `ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS idempotency_key TEXT`,
+    );
+    await client.query(
+      `ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS operation_key TEXT`,
+    );
+    await client.query(
+      `ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS payload_hash TEXT`,
+    );
+    await client.query(
+      `ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS wa_message_id TEXT`,
+    );
+    await client.query(
+      `ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS voided BOOLEAN NOT NULL DEFAULT false`,
+    );
+    await client.query(
+      `ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS voided_at TIMESTAMPTZ`,
+    );
+    await client.query(
+      `ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS voided_by INTEGER`,
+    );
+    await client.query(
+      `ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS voided_by_name TEXT`,
+    );
+    await client.query(
+      `ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS void_reason TEXT`,
+    );
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS customer_po_item_deliveries_operation_uq
+         ON customer_po_item_deliveries (operation_key, customer_po_item_id)`,
+    );
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS customer_po_item_deliveries_idem_uq
+         ON customer_po_item_deliveries (customer_po_item_id, idempotency_key)
+         WHERE idempotency_key IS NOT NULL`,
+    );
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS customer_po_item_deliveries_wa_uq
+         ON customer_po_item_deliveries (wa_message_id) WHERE wa_message_id IS NOT NULL`,
+    );
+    logger.info("initDb: responsibility migration applied");
 
     logger.info("initDb: seed complete");
   } catch (err) {

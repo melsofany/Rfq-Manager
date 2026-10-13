@@ -23,15 +23,26 @@ import {
   purchaseOrderItemsTable,
   workOrderAssignmentsTable,
   auditLogTable,
+  employeesTable,
   WORK_ORDER_KIND,
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
+import crypto from "node:crypto";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { sendRepMainMenu } from "../communications/service";
 import { applyDeliverySideEffects } from "../communications/routes";
 
 const router = Router();
+
+/** Carries an HTTP status out of the delivery transaction to the response. */
+class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
 
 function toNum(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -40,14 +51,38 @@ function toNum(v: unknown): number | null {
 }
 
 /**
+ * Fingerprint of a WHOLE multi-item delivery submission. The items are sorted by
+ * customerPoItemId so key order never changes the hash, and every effective
+ * field (qty, customer-rejected qty, rejection reason) participates — so dropping
+ * an item or changing a quantity produces a different hash and yields 409.
+ */
+function computePayloadHash(items: DeliveryInput[]): string {
+  const canonical = [...items]
+    .map((it) => ({
+      id: Number(it.customerPoItemId),
+      d: toNum(it.deliveredQty) ?? 0,
+      r: toNum(it.rejectedByCustomerQty) ?? 0,
+      reason: it.rejectionReason ?? null,
+    }))
+    .sort((a, b) => a.id - b.id);
+  return crypto.createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+/**
  * Re-aggregate the delivery totals onto a customer_po_item and recompute its
  * deliveryStatus. Called after every insert/update/delete of a delivery row.
  */
 async function recomputeItemTotals(customerPoItemId: number): Promise<void> {
+  // Voided rows keep their history but never count toward the totals.
   const rows = await db
     .select()
     .from(customerPoItemDeliveriesTable)
-    .where(eq(customerPoItemDeliveriesTable.customerPoItemId, customerPoItemId));
+    .where(
+      and(
+        eq(customerPoItemDeliveriesTable.customerPoItemId, customerPoItemId),
+        eq(customerPoItemDeliveriesTable.voided, false),
+      ),
+    );
 
   const sum = (sel: (r: (typeof rows)[number]) => number | null) =>
     rows.reduce((acc, r) => acc + (sel(r) ?? 0), 0);
@@ -179,62 +214,152 @@ router.post("/customer-po/:id/deliveries", requireAuth, async (req, res): Promis
   }
 
   const deliveredBy = (body.deliveredBy as string) || req.session.employeeName || null;
-  const createdIds: number[] = [];
+  const payloadHash = computePayloadHash(items);
 
+  // The operation key identifies the WHOLE submission. Re-sending it must be
+  // compared against the ORIGINAL item set — never against the item keys present
+  // in the retried request (a dropped item would otherwise go unnoticed).
+  const operationKey =
+    (body.operationKey as string) ||
+    (body.idempotencyKey as string) ||
+    (req.get("x-operation-key") as string) ||
+    crypto.randomUUID();
+  const waMessageId = (body.waMessageId as string) || null;
+
+  const submitted = new Map(
+    items.map((it) => [
+      Number(it.customerPoItemId),
+      {
+        delivered: toNum(it.deliveredQty) ?? 0,
+        rejected: toNum(it.rejectedByCustomerQty) ?? 0,
+        reason: it.rejectionReason ?? null,
+      },
+    ]),
+  );
+
+  // ── Idempotency: has this operation already been recorded? ────────────────
+  const existing = await db
+    .select()
+    .from(customerPoItemDeliveriesTable)
+    .where(eq(customerPoItemDeliveriesTable.operationKey, operationKey));
+  if (existing.length > 0) {
+    const sameSet =
+      existing.length === submitted.size &&
+      existing.every((r) => submitted.has(r.customerPoItemId));
+    const sameContent = existing.every((r) => {
+      const s = submitted.get(r.customerPoItemId);
+      if (!s) return false;
+      return (
+        (toNum(r.deliveredQty) ?? 0) === s.delivered &&
+        (toNum(r.rejectedByCustomerQty) ?? 0) === s.rejected &&
+        (r.rejectionReason ?? null) === s.reason
+      );
+    });
+    if (sameSet && sameContent) {
+      // Exact re-send ⇒ return the ORIGINAL rows, create nothing.
+      res.status(200).json({ ok: true, createdIds: existing.map((r) => r.id), idempotent: true });
+      return;
+    }
+    res.status(409).json({
+      error:
+        "عملية تسليم بنفس المفتاح سبق تسجيلها بمحتوى مختلف (بنود/كميات/رفض) — استخدم عملية جديدة",
+    });
+    return;
+  }
+
+  // ── Atomic insert: every line succeeds or none is recorded ────────────────
+  let createdIds: number[] = [];
+  try {
+    createdIds = await db.transaction(async (tx) => {
+      const ids: number[] = [];
+      for (const it of items) {
+        const customerPoItemId = Number(it.customerPoItemId);
+        if (!isFinite(customerPoItemId)) throw new HttpError(400, "معرّف البند غير صالح");
+        const [line] = await tx
+          .select({ id: customerPoItemsTable.id })
+          .from(customerPoItemsTable)
+          .where(eq(customerPoItemsTable.id, customerPoItemId));
+        if (!line) throw new HttpError(404, "البند غير موجود");
+
+        const delivered = toNum(it.deliveredQty);
+        const rejected = toNum(it.rejectedByCustomerQty);
+
+        const accepted = await acceptedQtyFromSupplier(customerPoItemId);
+        if (accepted != null && accepted <= 0) {
+          throw new HttpError(400, "لا يمكن التسليم قبل الاستلام من المورد — البند لم يُستلم بعد");
+        }
+        if (accepted != null && delivered != null && delivered > accepted + 1e-9) {
+          throw new HttpError(
+            400,
+            `الكمية المسلّمة (${delivered}) تتجاوز الكمية المقبولة من المورد (${accepted})`,
+          );
+        }
+
+        let status = "delivered";
+        if ((delivered ?? 0) === 0 && (rejected ?? 0) > 0) status = "rejected";
+
+        const [row] = await tx
+          .insert(customerPoItemDeliveriesTable)
+          .values({
+            customerPoItemId,
+            customerPoId,
+            deliveredQty: delivered != null ? String(delivered) : null,
+            rejectedByCustomerQty: rejected != null ? String(rejected) : null,
+            rejectionReason: it.rejectionReason ?? null,
+            deliveryStatus: status,
+            deliveredBy,
+            idempotencyKey:
+              (body.idempotencyKey as string) || `${operationKey}:${customerPoItemId}`,
+            operationKey,
+            payloadHash,
+            waMessageId,
+          })
+          .returning({ id: customerPoItemDeliveriesTable.id });
+        ids.push(row.id);
+
+        await recomputeItemTotals(customerPoItemId);
+      }
+
+      await tx.insert(auditLogTable).values({
+        action: "customer_po.delivery",
+        entityType: "customer_po",
+        entityId: customerPoId,
+        employeeId: req.session.employeeId,
+        description: `Recorded ${ids.length} delivery(ies) for customer PO ${po.internalPoNo}`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+      return ids;
+    });
+  } catch (err) {
+    if (err instanceof HttpError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    // A concurrent identical submission may have won the unique index race.
+    const raced = await db
+      .select()
+      .from(customerPoItemDeliveriesTable)
+      .where(eq(customerPoItemDeliveriesTable.operationKey, operationKey));
+    if (raced.length > 0) {
+      const sameSet =
+        raced.length === submitted.size && raced.every((r) => submitted.has(r.customerPoItemId));
+      if (sameSet) {
+        res.status(200).json({ ok: true, createdIds: raced.map((r) => r.id), idempotent: true });
+        return;
+      }
+      res.status(409).json({ error: "تعارض في عملية تسليم متزامنة بنفس المفتاح" });
+      return;
+    }
+    logger.error({ err }, "customer delivery failed");
+    res.status(500).json({ error: "تعذّر تسجيل التسليم" });
+    return;
+  }
+
+  // Side effects run AFTER the commit — a notification failure must never roll
+  // back a recorded delivery.
   for (const it of items) {
     const customerPoItemId = Number(it.customerPoItemId);
-    if (!isFinite(customerPoItemId)) {
-      res.status(400).json({ error: "معرّف البند غير صالح" });
-      return;
-    }
-    const [line] = await db
-      .select({ id: customerPoItemsTable.id })
-      .from(customerPoItemsTable)
-      .where(eq(customerPoItemsTable.id, customerPoItemId));
-    if (!line) {
-      res.status(404).json({ error: "البند غير موجود" });
-      return;
-    }
-
-    const delivered = toNum(it.deliveredQty);
-    const rejected = toNum(it.rejectedByCustomerQty);
-
-    // Guard: cannot deliver to the customer before receiving from the supplier.
-    // If a supplier link exists, accepted must be > 0 and delivered ≤ accepted.
-    const accepted = await acceptedQtyFromSupplier(customerPoItemId);
-    if (accepted != null && accepted <= 0) {
-      res.status(400).json({
-        error: "لا يمكن التسليم قبل الاستلام من المورد — البند لم يُستلم بعد",
-      });
-      return;
-    }
-    if (accepted != null && delivered != null && delivered > accepted + 1e-9) {
-      res.status(400).json({
-        error: `الكمية المسلّمة (${delivered}) تتجاوز الكمية المقبولة من المورد (${accepted})`,
-      });
-      return;
-    }
-
-    let status = "delivered";
-    if ((delivered ?? 0) === 0 && (rejected ?? 0) > 0) status = "rejected";
-
-    const [row] = await db
-      .insert(customerPoItemDeliveriesTable)
-      .values({
-        customerPoItemId,
-        customerPoId,
-        deliveredQty: delivered != null ? String(delivered) : null,
-        rejectedByCustomerQty: rejected != null ? String(rejected) : null,
-        rejectionReason: it.rejectionReason ?? null,
-        deliveryStatus: status,
-        deliveredBy,
-      })
-      .returning({ id: customerPoItemDeliveriesTable.id });
-    createdIds.push(row.id);
-
-    await recomputeItemTotals(customerPoItemId);
-
-    // Mirror the rep bot: mark the delivery assignment done and broadcast.
     const [updated] = await db
       .select({ deliveryStatus: customerPoItemsTable.deliveryStatus })
       .from(customerPoItemsTable)
@@ -249,16 +374,6 @@ router.post("/customer-po/:id/deliveries", requireAuth, async (req, res): Promis
       // best-effort — never block the delivery if the side-effects fail
     }
   }
-
-  await db.insert(auditLogTable).values({
-    action: "customer_po.delivery",
-    entityType: "customer_po",
-    entityId: customerPoId,
-    employeeId: req.session.employeeId,
-    description: `Recorded ${createdIds.length} delivery(ies) for customer PO ${po.internalPoNo}`,
-    ipAddress: req.ip,
-    userAgent: req.get("user-agent"),
-  });
 
   res.status(201).json({ ok: true, createdIds });
 });
@@ -406,9 +521,11 @@ router.patch(
   },
 );
 
-// DELETE /customer-po/deliveries/:deliveryId — delete a delivery row.
-router.delete(
-  "/customer-po/deliveries/:deliveryId",
+// PATCH /customer-po/deliveries/:deliveryId/void — SOFT-void a delivery row.
+// The row is never deleted: it keeps its original deliveredAt, its actor and a
+// snapshot of the voiding employee's name, but stops counting toward totals.
+router.patch(
+  "/customer-po/deliveries/:deliveryId/void",
   requireAuth,
   async (req, res): Promise<void> => {
     const deliveryId = parseInt(String(req.params.deliveryId), 10);
@@ -424,18 +541,38 @@ router.delete(
       res.status(404).json({ error: "سجل التسليم غير موجود" });
       return;
     }
+    if (existing.voided) {
+      res.status(409).json({ error: "سجل التسليم ملغى بالفعل" });
+      return;
+    }
+
+    let voidedByName: string | null = null;
+    if (req.session.employeeId) {
+      const [emp] = await db
+        .select({ name: employeesTable.name })
+        .from(employeesTable)
+        .where(eq(employeesTable.id, req.session.employeeId));
+      voidedByName = emp?.name ?? null;
+    }
 
     await db
-      .delete(customerPoItemDeliveriesTable)
+      .update(customerPoItemDeliveriesTable)
+      .set({
+        voided: true,
+        voidedAt: new Date(),
+        voidedBy: req.session.employeeId ?? null,
+        voidedByName,
+        voidReason: (req.body?.reason as string) || null,
+      })
       .where(eq(customerPoItemDeliveriesTable.id, deliveryId));
     await recomputeItemTotals(existing.customerPoItemId);
 
     await db.insert(auditLogTable).values({
-      action: "customer_po.delivery.deleted",
+      action: "customer_po.delivery.voided",
       entityType: "customer_po",
       entityId: existing.customerPoId,
       employeeId: req.session.employeeId,
-      description: `Deleted delivery ${deliveryId} for customer PO item ${existing.customerPoItemId}`,
+      description: `Voided delivery ${deliveryId} for customer PO item ${existing.customerPoItemId}`,
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });

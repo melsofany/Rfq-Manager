@@ -40,6 +40,7 @@ vi.mock("drizzle-orm", () => ({
   asc: (col: any) => ({ __op: "asc", col }),
   ne: (left: any, right: any) => ({ __op: "ne", left, right }),
   isNotNull: (col: any) => ({ __op: "isNotNull", col }),
+  isNull: (col: any) => ({ __op: "isNull", col }),
   count: () => ({ __op: "count" }),
   sql: Object.assign((strings: any, ...values: any[]) => ({ __op: "sql", strings, values }), {
     raw: (s: string) => ({ __op: "sql.raw", s }),
@@ -70,6 +71,26 @@ const purchaseOrderItemsTbl = {
   customerPoItemId: "customerPoItemId",
   customerPoId: "customerPoId",
 };
+// Attribution tables (freeze at first customer PO).
+const customerRfqItemsTbl = {
+  _: "customerRfqItems",
+  id: "id",
+  attributionFirstPoAt: "attributionFirstPoAt",
+  attributionEmployeeId: "attributionEmployeeId",
+  attributionEmployeeName: "attributionEmployeeName",
+  attributionEvent: "attributionEvent",
+  isCancelled: "isCancelled",
+  customerRfqId: "customerRfqId",
+  customerRfqItemId: "customerRfqItemId",
+};
+const customerRfqItemAssignmentsTbl = {
+  _: "customerRfqItemAssignments",
+  customerRfqItemId: "customerRfqItemId",
+  employeeId: "employeeId",
+  categoryId: "categoryId",
+  validFrom: "validFrom",
+  validTo: "validTo",
+};
 const tables = {
   customerPosTable: poTable,
   customerPoItemsTable: poItemsTable,
@@ -78,6 +99,8 @@ const tables = {
   auditLogTable: auditTable,
   purchaseOrdersTable: purchaseOrdersTbl,
   purchaseOrderItemsTable: purchaseOrderItemsTbl,
+  customerRfqItemsTable: customerRfqItemsTbl,
+  customerRfqItemAssignmentsTable: customerRfqItemAssignmentsTbl,
 };
 
 // Per-test state.
@@ -98,6 +121,11 @@ let linkedPoItemRows: any[]; // [{ customerPoId }]
 let receivedItemRows: any[]; // [{ customerPoItemId, lineStatus, acceptedQty, customerPoId }]
 let supplierItemRows: any[]; // [{ poId, lineItem, lineStatus, acceptedQty }]
 let duplicatePoRows: any[]; // uniqueness probe: select({id}).from(poTable).where().limit(1)
+// Attribution freeze: the item row read for `attribution_first_po_at`, and the
+// open period active at freeze time.
+let freezeItemRows: any[]; // [{ firstPoAt }]
+let activePeriodRows: any[]; // [{ employeeId, employeeName }]
+const attributionUpdates: any[] = []; // customer_rfq_items attribution UPDATE values
 // Tracks exact values written to customer_po_items so tests can assert
 // links (insert) or updates (update).
 const insertedItems: any[] = [];
@@ -191,6 +219,22 @@ const dbMock: any = {
           limit: vi.fn(() => chainable(rows)),
         });
       }
+      // Attribution freeze: select({firstPoAt}).from(customerRfqItems).where()
+      if (table === customerRfqItemsTbl) {
+        return chainable(freezeItemRows, {
+          where: vi.fn(() => chainable(freezeItemRows)),
+        });
+      }
+      // Attribution freeze: active period select({employeeId, employeeName})
+      // .from(customerRfqItemAssignments).leftJoin(employees).where()
+      if (table === customerRfqItemAssignmentsTbl) {
+        return chainable(activePeriodRows, {
+          leftJoin: vi.fn(() =>
+            chainable(activePeriodRows, { where: vi.fn(() => chainable(activePeriodRows)) }),
+          ),
+          where: vi.fn(() => chainable(activePeriodRows)),
+        });
+      }
       // customer-rfqs picker list: select({...}).from(rfqs).orderBy()
       // (also serves resolveRfqNos: select({id,no}).from(rfqs).where(inArray))
       if (table === rfqsTable) {
@@ -230,6 +274,9 @@ const dbMock: any = {
       if (table === poTable && vals && typeof vals === "object" && detailRow) {
         detailRow = { ...detailRow, ...vals };
       }
+      if (table === customerRfqItemsTbl && vals && typeof vals === "object") {
+        attributionUpdates.push(vals);
+      }
       return {
         where: vi.fn((cond: any) => {
           // Record which row ids an item update targeted so tests can assert a
@@ -253,6 +300,9 @@ const dbMock: any = {
       return chainable(undefined);
     }),
   })),
+  // POST now runs in a transaction; the tx is the same mock handle.
+  transaction: vi.fn(async (fn: any) => fn(dbMock)),
+  execute: vi.fn(async () => ({ rows: [{ ts: "2026-01-01T00:00:00.000Z" }] })),
 };
 
 vi.mock("@workspace/db", () => ({ ...tables, db: dbMock }));
@@ -307,6 +357,9 @@ beforeEach(() => {
   updateItemCalls.length = 0;
   deleteItemIds.length = 0;
   eqCalls.length = 0;
+  freezeItemRows = [];
+  activePeriodRows = [];
+  attributionUpdates.length = 0;
 });
 
 describe("POST /api/customer-po (create)", () => {
@@ -411,6 +464,40 @@ describe("POST /api/customer-po (create)", () => {
     expect(res.status).toBe(201);
     // The same item id (11) was persisted — the schema does not enforce uniqueness.
     expect(insertedItems[0].customerRfqItemId).toBe(11);
+  });
+
+  it("FREEZES attribution at the first customer PO (owner snapshot from the open period)", async () => {
+    freezeItemRows = [{ firstPoAt: null }]; // not yet frozen
+    activePeriodRows = [{ employeeId: 7, employeeName: "Sara" }];
+    const res = await request(testApp)
+      .post("/api/customer-po")
+      .send({
+        customerPoNo: "PO-103",
+        customerName: "Acme",
+        items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 1 }],
+      });
+    expect(res.status).toBe(201);
+    // The item's attribution_* columns are stamped in the SAME transaction.
+    const frozen = attributionUpdates.find((u) => u.attributionFirstPoAt != null);
+    expect(frozen).toBeTruthy();
+    expect(frozen.attributionEmployeeId).toBe(7);
+    expect(frozen.attributionEmployeeName).toBe("Sara");
+    expect(frozen.attributionEvent).toBe("first_customer_po");
+  });
+
+  it("keeps an ALREADY-frozen item unattributed (a later PO never re-attributes)", async () => {
+    freezeItemRows = [{ firstPoAt: "2025-01-01T00:00:00.000Z" }];
+    activePeriodRows = [{ employeeId: 99, employeeName: "Late Owner" }];
+    const res = await request(testApp)
+      .post("/api/customer-po")
+      .send({
+        customerPoNo: "PO-104",
+        customerName: "Acme",
+        items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 1 }],
+      });
+    expect(res.status).toBe(201);
+    // No new attribution UPDATE — the original freeze (possibly null) stands.
+    expect(attributionUpdates.some((u) => u.attributionFirstPoAt != null)).toBe(false);
   });
 });
 

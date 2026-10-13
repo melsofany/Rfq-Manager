@@ -92,4 +92,115 @@ describe("init-db migrations", () => {
     // would not satisfy.
     expect(source).not.toMatch(/model IN \(\s*'gemini-3\.6-flash'/);
   });
+
+  it("repairs existing duplicate primaries BEFORE creating the one-primary index", () => {
+    // The partial unique index cannot be created while a category has two
+    // primary owners, so the repair UPDATE must run first — in its own
+    // statement (a shared literal could be rolled back by a sibling failure).
+    const repairIdx = source.indexOf("UPDATE employee_categories ec");
+    const indexIdx = source.indexOf("employee_categories_one_primary_uq");
+    expect(repairIdx).toBeGreaterThan(-1);
+    expect(indexIdx).toBeGreaterThan(-1);
+    expect(repairIdx).toBeLessThan(indexIdx);
+
+    const repair = sqlLiterals(source).find((b) => b.includes("UPDATE employee_categories ec"));
+    expect(repair).toBeDefined();
+    expect(
+      repair!
+        .split(";")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ).toHaveLength(1);
+
+    const indexLiteral = sqlLiterals(source).find((b) =>
+      b.includes("CREATE UNIQUE INDEX IF NOT EXISTS employee_categories_one_primary_uq"),
+    );
+    expect(indexLiteral).toBeDefined();
+    expect(indexLiteral!).toContain("WHERE is_primary");
+  });
+
+  it("creates the customer-item assignment tables + the one-OPEN-period index", () => {
+    // Responsibility lives on the CUSTOMER item now, and the database — not the
+    // API — is what guarantees one OPEN period per customer item (a partial
+    // index: a closed period may coexist with a new one).
+    expect(source).toContain("CREATE TABLE IF NOT EXISTS customer_rfq_item_assignments");
+    expect(source).toContain("CREATE TABLE IF NOT EXISTS item_assignment_audit");
+    expect(source).toContain(
+      "CREATE UNIQUE INDEX IF NOT EXISTS customer_rfq_item_assignments_open_uq",
+    );
+    expect(source).toMatch(/customer_rfq_item_assignments_open_uq[\s\S]*?WHERE valid_to IS NULL/);
+    // The absolute (one row per item forever) index must be gone/replaced.
+    expect(source).toContain("DROP INDEX IF EXISTS customer_rfq_item_assignments_item_uq");
+  });
+
+  it("uses RESTRICT on every FK that protects responsibility history", () => {
+    // Deleting an employee or an item must never silently erase the assignment
+    // history — an employee is DISABLED, an item is soft-cancelled.
+    expect(source).toContain(
+      "customer_rfq_item_id INTEGER NOT NULL REFERENCES customer_rfq_items(id) ON DELETE RESTRICT",
+    );
+    expect(source).toContain("employee_id INTEGER REFERENCES employees(id) ON DELETE RESTRICT");
+    expect(source).toContain("ON DELETE RESTRICT");
+    expect(source).toContain(
+      "FOREIGN KEY (customer_rfq_item_id) REFERENCES customer_rfq_items(id) ON DELETE RESTRICT",
+    );
+  });
+
+  it("compares constraint DEFINITIONS (not just names) before deciding to replace", () => {
+    // A constraint that exists with the wrong definition is the partial-resume
+    // trap; the migration must read pg_get_constraintdef / confdeltype.
+    expect(source).toContain("pg_get_constraintdef");
+    expect(source).toContain("confdeltype");
+    expect(source).toContain("pg_available_extensions");
+  });
+
+  it("adds the delivery idempotency indexes with the mandatory UNIQUE shape", () => {
+    expect(source).toContain("customer_po_item_deliveries_operation_uq");
+    expect(source).toContain("(operation_key, customer_po_item_id)");
+    expect(source).toContain("customer_po_item_deliveries_idem_uq");
+    expect(source).toContain("customer_po_item_deliveries_wa_uq");
+  });
+
+  it("adds the customer-item attribution columns and the delivery void columns", () => {
+    for (const col of [
+      "attribution_first_po_at",
+      "attribution_employee_id",
+      "attribution_employee_name",
+      "attribution_event",
+      "is_cancelled",
+    ]) {
+      expect(source).toContain(col);
+    }
+    for (const col of ["voided", "voided_at", "voided_by_name", "void_reason"]) {
+      expect(source).toContain(col);
+    }
+  });
+
+  it("migrates the legacy rfq_item_assignments deterministically and idempotently", () => {
+    // The migration must (a) collapse N supplier lines of one customer item to a
+    // single row (DISTINCT ON), (b) prefer a manual responsibility over an auto
+    // one, (c) only migrate rows that actually carry a customer origin, and
+    // (d) be re-runnable (ON CONFLICT DO NOTHING).
+    const literal = sqlLiterals(source).find((b) =>
+      b.includes("INSERT INTO customer_rfq_item_assignments"),
+    );
+    expect(literal, "the migration INSERT must exist").toBeDefined();
+    expect(literal!).toContain("SELECT DISTINCT ON (ri.customer_rfq_item_id)");
+    expect(literal!).toContain("WHERE ri.customer_rfq_item_id IS NOT NULL");
+    expect(literal!).toMatch(/CASE a\.source WHEN 'manual' THEN 0 ELSE 1 END/);
+    // The absolute unique index this once targeted was replaced by the PARTIAL
+    // open-period index, so a bare `ON CONFLICT (customer_rfq_item_id)` no longer
+    // resolves ("no unique or exclusion constraint matching the ON CONFLICT
+    // specification"). The predicate MUST match the partial index.
+    expect(literal!).toContain(
+      "ON CONFLICT (customer_rfq_item_id) WHERE valid_to IS NULL DO NOTHING",
+    );
+    // …and it is a single statement so no sibling can roll it back.
+    expect(
+      literal!
+        .split(";")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ).toHaveLength(1);
+  });
 });

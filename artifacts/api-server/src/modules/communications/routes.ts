@@ -1290,15 +1290,17 @@ export async function recordItemDelivery(
   // delivered to the customer.
   if (cpi.customerPoId == null) return false;
   // Mirror the receipt flow: a WhatsApp delivery action is a single full-qty
-  // event, so remove prior bot deliveries for this line before inserting the
-  // new one — the latest action is authoritative and conflicting rows don't
-  // both sum in.
+  // event, so VOID (never delete) the prior bot deliveries for this line before
+  // inserting the new one — the latest action is authoritative, conflicting rows
+  // don't both sum in, and the superseded rows keep their history.
   await db
-    .delete(customerPoItemDeliveriesTable)
+    .update(customerPoItemDeliveriesTable)
+    .set({ voided: true, voidedAt: new Date(), voidedByName: "واتساب" })
     .where(
       and(
         eq(customerPoItemDeliveriesTable.customerPoItemId, cpi.id),
         eq(customerPoItemDeliveriesTable.deliveredBy, "واتساب"),
+        eq(customerPoItemDeliveriesTable.voided, false),
       ),
     );
   await db.insert(customerPoItemDeliveriesTable).values({
@@ -1311,11 +1313,16 @@ export async function recordItemDelivery(
     deliveredBy: "واتساب",
   });
 
-  // Re-aggregate (mirrors the deliveries endpoint logic).
+  // Re-aggregate (mirrors the deliveries endpoint logic) — voided rows never count.
   const rows = await db
     .select()
     .from(customerPoItemDeliveriesTable)
-    .where(eq(customerPoItemDeliveriesTable.customerPoItemId, cpi.id));
+    .where(
+      and(
+        eq(customerPoItemDeliveriesTable.customerPoItemId, cpi.id),
+        eq(customerPoItemDeliveriesTable.voided, false),
+      ),
+    );
   const sum = (sel: (r: (typeof rows)[number]) => string | null) =>
     rows.reduce((acc, r) => acc + (sel(r) ? Number(sel(r)) : 0), 0);
   const delivered = sum((r) => r.deliveredQty);

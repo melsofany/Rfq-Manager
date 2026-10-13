@@ -24,6 +24,7 @@ import { sendRfqWhatsApp } from "../communications/service";
 import { resolvePublicBaseUrl } from "../../shared/base-url";
 import { whatsappChatsTable } from "@workspace/db";
 import { lookupRfqFromSheet, listSheetRfqNumbers, listSheetTabs } from "../../shared/google-sheets";
+import { ensureAssignmentsForRfqSafe } from "./assignment";
 
 const router = Router();
 
@@ -217,6 +218,10 @@ router.post("/rfq", requireAuth, async (req, res): Promise<void> => {
       itemCount = validItems.length;
     }
   }
+
+  // Classify + assign each item to the responsible employee (best-effort: a
+  // classification failure must never fail the RFQ creation itself).
+  await ensureAssignmentsForRfqSafe(rfq.id);
 
   await db.insert(auditLogTable).values({
     action: "rfq.created",

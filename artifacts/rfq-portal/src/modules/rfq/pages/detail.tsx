@@ -15,6 +15,7 @@ import {
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { AttachmentsPanel } from "../components/Attachments";
+import { ItemAssignmentsPanel } from "../components/ItemAssignmentsPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
@@ -986,65 +987,68 @@ export default function RfqDetailPage() {
 
         {/* Items Tab */}
         {tab === "items" && (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
-            {!items?.length ? (
-              <div className="p-8 text-center text-muted-foreground text-sm">
-                No items on this RFQ yet.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/30 border-b border-border text-left">
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-10">
-                        #
-                      </th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                        Part No
-                      </th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                        Description
-                      </th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                        QTY
-                      </th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
-                        UOM
-                      </th>
-                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
-                        Ref. Price
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item, i) => (
-                      <tr key={item.id} className="border-b border-border last:border-0">
-                        <td className="px-4 py-3 text-muted-foreground text-xs text-center">
-                          {i + 1}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                          {item.partNo ?? "-"}
-                        </td>
-                        <td className="px-4 py-3 text-foreground text-sm">{item.description}</td>
-                        <td className="px-4 py-3 text-center text-foreground text-sm">
-                          {item.qty ?? "-"}
-                        </td>
-                        <td className="px-4 py-3 text-center text-foreground text-xs">
-                          {item.uom ?? "-"}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
-                          {item.referencePrice != null
-                            ? item.referencePrice.toLocaleString("en-EG", {
-                                minimumFractionDigits: 2,
-                              })
-                            : "-"}
-                        </td>
+          <div className="space-y-4">
+            <div className="bg-card border border-border rounded-lg overflow-hidden">
+              {!items?.length ? (
+                <div className="p-8 text-center text-muted-foreground text-sm">
+                  No items on this RFQ yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/30 border-b border-border text-left">
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium w-10">
+                          #
+                        </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                          Part No
+                        </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                          Description
+                        </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                          QTY
+                        </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                          UOM
+                        </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-right">
+                          Ref. Price
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    </thead>
+                    <tbody>
+                      {items.map((item, i) => (
+                        <tr key={item.id} className="border-b border-border last:border-0">
+                          <td className="px-4 py-3 text-muted-foreground text-xs text-center">
+                            {i + 1}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                            {item.partNo ?? "-"}
+                          </td>
+                          <td className="px-4 py-3 text-foreground text-sm">{item.description}</td>
+                          <td className="px-4 py-3 text-center text-foreground text-sm">
+                            {item.qty ?? "-"}
+                          </td>
+                          <td className="px-4 py-3 text-center text-foreground text-xs">
+                            {item.uom ?? "-"}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-xs text-muted-foreground">
+                            {item.referencePrice != null
+                              ? item.referencePrice.toLocaleString("en-EG", {
+                                  minimumFractionDigits: 2,
+                                })
+                              : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <ItemAssignmentsPanel rfqId={rfqId} />
           </div>
         )}
 

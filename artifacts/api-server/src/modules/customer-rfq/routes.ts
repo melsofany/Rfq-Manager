@@ -16,6 +16,7 @@ import {
 } from "@workspace/db";
 import { eq, ilike, count, inArray, desc, and, isNull, or, isNotNull, sql, ne } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { ensureCustomerAssignmentsSafe } from "../rfq/customer-assignment";
 
 const router = Router();
 
@@ -1485,6 +1486,12 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  // Classify + assign each customer item to the responsible employee. This is
+  // where responsibility BEGINS (the workflow starts at the customer request),
+  // so a supplier RFQ created later simply inherits it. Best-effort: a
+  // classification failure must never fail the customer RFQ creation.
+  await ensureCustomerAssignmentsSafe(rfq.id);
+
   await db.insert(auditLogTable).values({
     action: "customer_rfq.created",
     entityType: "customer_rfq",
@@ -1811,14 +1818,29 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
         toInsert.push({ customerRfqId: id, ...fields });
       }
     }
-    // Items the operator removed are deleted LAST, so the PO-link cleanup runs
-    // once the surviving rows are already updated.
+    // Items the operator removed are SOFT-CANCELLED LAST (never deleted): the
+    // assignment history, the PO link and the attribution must survive. The
+    // RESTRICT FK would block a hard delete anyway.
     const removedIds = existingRows.map((d) => d.id).filter((rid) => !keptIds.has(rid));
     if (removedIds.length > 0) {
-      await db.delete(customerRfqItemsTable).where(inArray(customerRfqItemsTable.id, removedIds));
+      await db
+        .update(customerRfqItemsTable)
+        .set({ isCancelled: true })
+        .where(inArray(customerRfqItemsTable.id, removedIds));
     }
+    // Assign ONLY the newly-added items. Existing rows keep their responsibility
+    // and category, so editing a description or part number can never silently
+    // move an item to a different employee (القرار 3 و4).
+    let newItemIds: number[] = [];
     if (toInsert.length > 0) {
-      await db.insert(customerRfqItemsTable).values(toInsert);
+      const inserted = await db
+        .insert(customerRfqItemsTable)
+        .values(toInsert)
+        .returning({ id: customerRfqItemsTable.id });
+      newItemIds = inserted.map((r) => r.id);
+    }
+    if (newItemIds.length > 0) {
+      await ensureCustomerAssignmentsSafe(id, { newItemIds });
     }
   }
 
@@ -1867,12 +1889,36 @@ router.patch("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> =
 router.delete("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
-  const [deleted] = await db
-    .delete(customerRfqsTable)
-    .where(eq(customerRfqsTable.id, id))
-    .returning();
-  if (!deleted) {
-    res.status(404).json({ error: "Not found" });
+  // An RFQ whose items are linked to a customer PO (or carry assignment history)
+  // must not be destroyed — cancel its items instead so the history survives.
+  const linked = await db
+    .select({ id: customerPoItemsTable.id })
+    .from(customerPoItemsTable)
+    .innerJoin(
+      customerRfqItemsTable,
+      eq(customerPoItemsTable.customerRfqItemId, customerRfqItemsTable.id),
+    )
+    .where(eq(customerRfqItemsTable.customerRfqId, id))
+    .limit(1);
+  if (linked.length > 0) {
+    res.status(409).json({
+      error: "لا يمكن حذف طلب تسعير مرتبط بأمر شراء عميل — ألغِ بنوده بدلًا من الحذف",
+    });
+    return;
+  }
+  try {
+    const [deleted] = await db
+      .delete(customerRfqsTable)
+      .where(eq(customerRfqsTable.id, id))
+      .returning();
+    if (!deleted) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+  } catch {
+    res.status(409).json({
+      error: "لا يمكن حذف الطلب لوجود تاريخ إسناد/إنجاز — ألغِ البنود بدلًا من الحذف",
+    });
     return;
   }
   res.status(204).end();

@@ -17,6 +17,8 @@ import offersRouter from "./offers";
 import pricingRouter from "./pricing";
 import itemsRouter from "./items";
 import attachmentsRouter from "./attachments";
+import itemCategoriesRouter from "./item-categories";
+import assignmentsRouter from "./assignments";
 
 const router: IRouter = Router();
 
@@ -25,5 +27,7 @@ router.use(offersRouter);
 router.use(pricingRouter);
 router.use(itemsRouter);
 router.use(attachmentsRouter);
+router.use(itemCategoriesRouter);
+router.use(assignmentsRouter);
 
 export default router;

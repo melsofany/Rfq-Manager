@@ -33,6 +33,10 @@ export const rfqItemsTable = pgTable("rfq_items", {
   uom: text("uom"),
   qty: numeric("qty", { precision: 15, scale: 4 }),
   referencePrice: numeric("reference_price", { precision: 15, scale: 4 }),
+  // Item category (تصنيف البند). Plain integer on purpose: a drizzle-level FK
+  // would create an import cycle (item_categories → rfq → item_categories).
+  // The DB constraint is added in init-db.ts via ALTER TABLE.
+  categoryId: integer("category_id"),
   // Links this supplier RFQ item back to the originating customer RFQ item,
   // enabling exact margin checks on the customer-rfq side. Nullable for
   // legacy/sheet-only supplier RFQs that have no DB customer RFQ origin.

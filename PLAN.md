@@ -1,0 +1,640 @@
+# خطة تنفيذ نظام مسؤوليات المشتريات — Customer Procurement Responsibility System
+
+> **الحالة:** التصميم مُعتمد ومُوثَّق. **نُفِّذ على فرع العمل** (working tree فقط — لا commit/push/deploy). راجع §14 «حالة التنفيذ».
+> **النطاق:** قياس «من حقّق البيع» و«إلى أين وصل التوريد» دون فتح القرارات التجارية.
+> **خارج النطاق نهائيًا:** توقيع العميل، تأكيد العميل، مستند الاستلام، أي Portal للعميل.
+> **المرجع السابق:** `docs/PROCUREMENT_RESPONSIBILITY_SYSTEM.md`.
+
+---
+
+## 0. القرارات المعتمدة (لا تُفتح للنقاش)
+
+### تجارية
+
+1. الإنجاز عند **أول Customer PO** مرتبط بالبند. لا شرط `status='sent'`، لا مرحلة اعتماد.
+2. **بند واحد = إنجاز واحد** مهما تعددت الأوامر (`DISTINCT customer_rfq_item_id`).
+3. صاحب الإنجاز = **المسؤول عن البند وقت تسجيل أول PO**، لا مُدخِل PO.
+4. الإنجاز غير المحسوم **يُقفل ولا يُنسب لاحقًا**.
+5. التسليم الجزئي **لا يُسقط** الإنجاز.
+6. فصل: صاحب الإنجاز / المسؤول الحالي / مندوب التوريد / من سجّل العملية.
+7. تعطيل الموظف والبند بدل الحذف؛ حماية Customer PO من الحذف الذي يفقد الارتباط.
+
+### فنية
+
+| #   | القرار                                                                                                                                                         |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | `attribution_employee_id` بمرجع `ON DELETE RESTRICT` + `attribution_employee_name` كلقطة؛ تعطيل الموظف هو المسار. التقارير تجمع بالـID وتعرض الاسم من اللقطة.  |
+| F2  | تاريخ كامل لفترات الإسناد في `customer_rfq_item_assignments` نفسه؛ قفل صف `customer_rfq_items`؛ `clock_timestamp()` بعد القفل؛ منع التداخل بقيد DB.            |
+| F3  | Backup قبل Migration؛ Migration قابلة لإعادة التشغيل؛ **لا حذف بيانات تشغيلية**؛ التراجع بالتعطيل أو Roll-forward.                                             |
+| F4  | **الإنجاز يُقفل من أول Customer PO حتى لو ظل `attribution_employee_id = NULL`** (غير محسوم)؛ يُسجَّل `attribution_first_po_at` دائمًا، ولا يُعاد نسبته لاحقًا. |
+| F5  | **فصل مفاهيمي:** اكتمال التوريد (`delivery_status='delivered'`) ≠ تأكيد العميل؛ تأكيد/توقيع العميل **خارج النطاق** (لا حقول، لا خطوة، لا Portal).              |
+
+---
+
+## 1. الوضع الحالي (أدلة من الكود)
+
+| المكوّن                | الملف/السطر                                                                                                  | الحقيقة                                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| إنشاء Customer PO      | `modules/customer-po/routes.ts:549` (POST)، الرأس `:603`، البنود `:618`                                      | **بلا `db.transaction`**                                                                                                                                |
+| ربط بند PO ببند العميل | `lib/db/src/schema/customer_pos.ts:47`                                                                       | `customer_rfq_item_id` → `ON DELETE SET NULL`                                                                                                           |
+| حذف بنود طلب العميل    | `modules/customer-rfq/routes.ts:1825`                                                                        | **حذف فعلي**                                                                                                                                            |
+| حذف طلب العميل         | `modules/customer-rfq/routes.ts:1885`                                                                        | حذف فعلي                                                                                                                                                |
+| جدول الإسناد           | `shared/init-db.ts` (~1457)                                                                                  | **فهرس فريد مطلق** `customer_rfq_item_assignments_item_uq ON (customer_rfq_item_id)` ⇒ صف واحد/بند، بلا فترات                                           |
+| حذف الموظف             | `modules/users/auth.ts:288-303`                                                                              | حذف فعلي (admin فقط)                                                                                                                                    |
+| مراجع `employees.id`   | `grep` في `lib/db/src/schema/*.ts`                                                                           | معظمها بلا `onDelete` (NO ACTION)؛ `cascade` في `data_entry_sessions`/`employee_categories`؛ `set null` في `ai_assistant`/بعض أعمدة item_categories     |
+| **FK إسناد الموظف**    | `item_categories.ts:163` + `init-db.ts` (~1462)                                                              | `customer_rfq_item_assignments.employee_id` → `employees(id) ON DELETE **SET NULL**`؛ `assigned_by` كذلك `SET NULL` ⇒ **حذف الموظف يُفرّغ مرجع الفترة** |
+| سجل التسليم            | `shared/init-db.ts:505-517`                                                                                  | لا قيد فريد، لا idempotency                                                                                                                             |
+| كتابة `cancelled`      | `modules/customer-po/routes.ts:839`                                                                          | عند إزالة بند من PO: `customerPoId=null, qty/unitPrice/deliveryDate=null, deliveryStatus='cancelled'`                                                   |
+| حذف تسليم              | `communications/routes.ts:1297` (حذف صفوف البوت قبل الإدراج) و`customer-po/deliveries.ts:429` (DELETE route) | **حذف فعلي** لسجلات تسليم                                                                                                                               |
+| صيغة زر واتساب         | `communications/service.ts:1222-1253`؛ `interactive.d.ts:395`                                                | الحِمْل يُعاد حرفيًا في `button_reply.id`؛ **حد 256**                                                                                                   |
+| `context.id`           | `communications/routes.ts:369,1598`                                                                          | مُعرَّف/مقروء، **غير مُثبَت لضغط الأزرار**                                                                                                              |
+| امتدادات DB            | `init-db.ts:1351`                                                                                            | `pg_trgm` مستخدم ⇒ الامتدادات ممكنة                                                                                                                     |
+| قرّاء الإسناد          | `reports/item-kpis.ts`, `rfq/assignment.ts`, `rfq/assignments.ts`, `rfq/customer-assignment.ts`              | يجب مواءمتهم                                                                                                                                            |
+
+---
+
+## 2. قيد UNIQUE القديم — الاستبدال (النقطة 1)
+
+### 2.1 الاسم والتعريف الفعلي (مُثبَت)
+
+- **الاسم:** `customer_rfq_item_assignments_item_uq` — **فهرس فريد (UNIQUE INDEX)** وليس قيد جدول.
+- **التعريف:** `CREATE UNIQUE INDEX customer_rfq_item_assignments_item_uq ON customer_rfq_item_assignments (customer_rfq_item_id);`
+- **المصدر:** `shared/init-db.ts` (~1467).
+- **الأثر:** يمنع أي صف إسناد ثانٍ لنفس البند ⇒ **يتعارض مباشرة** مع تصميم الفترات.
+
+### 2.2 الاستبدال دون فقد بيانات
+
+```
+DROP INDEX IF EXISTS customer_rfq_item_assignments_item_uq;        -- إزالة المطلق (لا يمسّ الصفوف)
+CREATE UNIQUE INDEX IF NOT EXISTS customer_rfq_item_assignments_open_uq
+  ON customer_rfq_item_assignments (customer_rfq_item_id) WHERE valid_to IS NULL;  -- فترة مفتوحة واحدة
+```
+
+- **`DROP INDEX` لا يحذف الصفوف** ⇒ الإسنادات الحالية تبقى. الاستبدال بفهرس أضيق (جزئي).
+
+### 2.3 قيد منع التداخل (فترات مغلقة ومفتوحة)
+
+```
+ALTER TABLE customer_rfq_item_assignments
+  ADD CONSTRAINT customer_rfq_item_assignments_no_overlap
+  EXCLUDE USING gist (
+    customer_rfq_item_id WITH =,
+    tstzrange(valid_from, COALESCE(valid_to, 'infinity'), '[)') WITH &&
+  );
+```
+
+- نطاق **نصف مفتوح `[valid_from, valid_to)`** ⇒ لا تداخل، ويُحدَّد المسؤول في أي لحظة.
+- `COALESCE(valid_to,'infinity')` ⇒ يمنع تداخل الفترة المفتوحة مع أي فترة تاريخية أيضًا.
+
+### 2.4 إمكانية `btree_gist` (فحص بلا تثبيت)
+
+- `=` على `integer` داخل `gist` يحتاج امتداد **`btree_gist`**.
+- **`pg_trgm` موجود** (`init-db.ts:1351`) ⇒ تثبيت الامتدادات مسموح **مبدئيًا**، لكنه **لا يُثبت** توفر `btree_gist` في الصورة/الصلاحيات.
+- **فحص قراءة فقط قبل الاعتماد (لا يُنفَّذ الآن):**
+  ```sql
+  SELECT name, default_version, installed_version FROM pg_available_extensions WHERE name IN ('btree_gist');
+  SELECT extname FROM pg_extension;
+  ```
+- **بديل إن رُفض `btree_gist` (متزامن — لا اكتشاف فقط):**
+
+  الفرق المطلوب: **منع** التداخل عند التزامن، لا مجرد **اكتشافه** قبل الحفظ. البديل يعتمد على **قفل صف البند نفسه** في **كل** مسارات تعديل الإسناد:
+
+  ```
+  BEGIN TRANSACTION
+    1) SELECT ... FROM customer_rfq_items WHERE id = X FOR UPDATE   -- القفل أولًا (serializes all writers)
+    2) ref_ts := clock_timestamp()
+    3) اغلاق الفترة المفتوحة: UPDATE ... SET valid_to = ref_ts WHERE customer_rfq_item_id=X AND valid_to IS NULL
+    4) فحص التداخل للفترة الجديدة [ref_ts, NULL):
+       SELECT 1 FROM customer_rfq_item_assignments
+        WHERE customer_rfq_item_id = X
+          AND tstzrange(valid_from, COALESCE(valid_to,'infinity'), '[)')
+           && tstzrange(ref_ts, 'infinity', '[)')
+       -- إن وُجد تداخل ⇒ رفض/إعادة المحاولة (لا تُدرج)
+    5) INSERT الفترة الجديدة (valid_from=ref_ts, valid_to=NULL)
+  COMMIT
+  ```
+  - **القفل على صف البند** يُسلسِل كل الكتّاب ⇒ لا يمكن لعمليتين متزامنتين اجتياز الفحص معًا.
+  - **يجب تطبيقه في كل مسارات الإسناد:** `assignCustomerItemManually` (يدوي)، `ensureCustomerAssignments` (تلقائي)، وأي مسار مستقبلي — وليس مسارًا واحدًا.
+  - **جرد كل مسارات الكتابة:** يجب التأكد أنه **لا يوجد مسار مباشر أو Job أو كود قديم** يكتب/يعدّل `customer_rfq_item_assignments` دون هذا القفل. الجرد يشمل: `rfq/customer-assignment.ts`، `rfq/assignment.ts`، `rfq/assignments.ts`، `shared/init-db.ts` (الترحيل)، وأي سكربت. أي مسار يخالف ⇒ يُعدَّل ليأخذ القفل.
+  - **بند غير موجود:** إن كان `customer_rfq_item_id` محذوفًا/غير موجود ⇒ **يجب أن يفشل المسار** (لا يستمر دون صف مقفول). `FOR UPDATE` على صف غير موجود يعيد صفر صفوف ⇒ يُعامل كخطأ (404/رفض)، لا متابعة.
+  - **الفهرس الجزئي (`WHERE valid_to IS NULL`) ليس بديلًا كاملًا** — يمنع فترتين مفتوحتين فقط، ولا يمنع تداخل الفترات المغلقة؛ منع التداخل الكامل يحتاج `EXCLUDE` **أو** القفل + الفحص أعلاه.
+  - **وضوح الضمانة (مهم):** إن تعذّر `btree_gist`، فالحماية **تطبيقية فقط** — تعتمد على التزام **كل** مسارات الكتابة بالقفل. **لا توازي قيد `EXCLUDE`** في مواجهة أي كتابة مباشرة إلى الجدول (SQL يدوي/Job خارج المسارات). القيد وحده هو الضمانة على مستوى قاعدة البيانات.
+  - **قرارك إن تعذّر الامتداد.**
+
+### 2.5 حماية تاريخ الإسناد عند حذف الموظف (مُثبَت — تعارض قائم)
+
+- **الوضع الحالي:** `customer_rfq_item_assignments.employee_id` → `employees(id) ON DELETE **SET NULL**` (و`assigned_by` كذلك) — `item_categories.ts:163`، `init-db.ts` (~1462).
+- **الخطر:** حذف موظف **ليس له إنجاز مثبت** لكن له فترات إسناد ⇒ **يُفرّغ `employee_id`** ⇒ يُفقد مرجع تاريخ الإسناد (حتى لو كان `attribution_employee_id` محميًّا).
+- **الحل (تعديل الـFK):**
+  ```
+  ALTER TABLE customer_rfq_item_assignments
+    DROP CONSTRAINT IF EXISTS customer_rfq_item_assignments_employee_id_fkey;
+  ALTER TABLE customer_rfq_item_assignments
+    ADD CONSTRAINT customer_rfq_item_assignments_employee_id_fkey
+    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE RESTRICT;
+  ```
+- **التوافق:** `employees` بلا حذف ناعم مستخدم اليوم، ومسار `DELETE /employees/:id` سيُحوَّل إلى **تعطيل** ⇒ `RESTRICT` لا يعيق العمل الطبيعي.
+- **قيد `assigned_by`:** يبقى `SET NULL` (ليس هوية المسؤول التاريخي؛ مجرد مُسجِّل الإجراء).
+- **`customer_rfq_item_id` → RESTRICT (تصحيح — كان CASCADE):** `ON DELETE CASCADE` يعني أن **أي** حذف فعلي لبند RFQ (من أي مسار) يمحو فترات الإسناد التاريخية ⇒ تعارض مع قرار حماية التاريخ. الحل:
+  ```
+  ALTER TABLE customer_rfq_item_assignments
+    DROP CONSTRAINT IF EXISTS customer_rfq_item_assignments_customer_rfq_item_id_fkey;
+  ALTER TABLE customer_rfq_item_assignments
+    ADD CONSTRAINT customer_rfq_item_assignments_customer_rfq_item_id_fkey
+    FOREIGN KEY (customer_rfq_item_id) REFERENCES customer_rfq_items(id) ON DELETE RESTRICT;
+  ```
+  - مسارات حذف بنود Customer RFQ تُحوَّل إلى **تعطيل** (`is_cancelled`)؛ `RESTRICT` يمنع أي تجاوز على مستوى قاعدة البيانات.
+  - **مراجعة المسارات:** `customer-rfq/routes.ts:1825` (حذف بنود) و`:1885` (حذف الطلب) + أي حذف مباشر آخر.
+
+### 2.6 نطاق حماية `assigned_by` (النقطة 1 — مُغلقة)
+
+- **الدور المُتحقَّق منه:** `assigned_by` هو **فاعل الإجراء** فقط، ويُنسخ إلى `item_assignment_audit.changedBy` عند التغيير (`customer-assignment.ts:239,257`، `assignment.ts:324`) — ليس هوية المسؤول التاريخي.
+- **ليس مفتاح تقارير:** `item-kpis.ts` يجمّع بـ`employeeId` (السطور 88/311/317/477/482/539) — **لا يستخدم `assignedBy` إطلاقًا**.
+- **القرار:** `assigned_by` يبقى `SET NULL` — لا يشارك في ملكية المسؤولية، وفقدُه عند حذف الموظف لا يؤثر على KPI أو الملكية.
+- **تعطيل الموظف هو المسار الوحيد:** يوجد **مسار حذف واحد فقط** — `DELETE /employees/:id` في `users/auth.ts:288-298` (admin فقط). لا واجهة/عملية أخرى تحذف الموظف. يُحوَّل هذا المسار إلى **تعطيل** (`isActive=false`) ⇒ لا يمكن تجاوز حماية `RESTRICT`.
+
+---
+
+## 3. تحويل الإسنادات الحالية إلى فترات (النقطة 2)
+
+| البند                          | القرار                                                                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| حفظ الإسناد الحالي             | يبقى صفًّا، ويُغلق/يُفتح بفترة.                                                                                                  |
+| `valid_from` للإسنادات الحالية | `assigned_at` **إن وُجد** (الحقل موجود: `assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`)، وإلا `clock_timestamp()` عند الترحيل. |
+| **التمييز الصريح**             | يُوصف كـ**«تاريخ بداية موثق داخل النظام»**، وليس تاريخ بداية المسؤولية الحقيقي.                                                  |
+| استخدامها للإنجازات القديمة    | **ممنوع** — لا تُستخدم لنسب إنجاز Customer PO قديم.                                                                              |
+| الإنجازات القديمة              | تبقى **غير محسومة** (`attribution_first_po_at IS NULL` + وجود PO).                                                               |
+
+- **Backfill (لا يترك `valid_from` فارغًا أبدًا):** يجب أن تطابق خطوة الـMigration القرار — أي تعيين `valid_from` لكل صف:
+
+  ```sql
+  -- 1) املأ من assigned_at المسجَّل فعلًا
+  UPDATE customer_rfq_item_assignments
+     SET valid_from = COALESCE(assigned_at, clock_timestamp())
+   WHERE valid_from IS NULL;
+  -- 2) ضمان عدم وجود NULL متبقٍّ
+  ALTER TABLE customer_rfq_item_assignments ALTER COLUMN valid_from SET NOT NULL;
+  -- 3) الافتراضي للصفوف الجديدة
+  ALTER TABLE customer_rfq_item_assignments ALTER COLUMN valid_from SET DEFAULT clock_timestamp();
+  ```
+  - `COALESCE(assigned_at, clock_timestamp())` يمنع بقاء `valid_from` فارغًا (يطابق القرار). لا يخترع تاريخ مسؤولية حقيقي؛ يستخدم المسجَّل أو وقت الترحيل.
+
+- **FK لـ`voided_by` (هوية من ألغى التسليم — النقطة 5.3):** تُحدَّد السياسة لتتفق مع سجلات التاريخ: `voided_by INTEGER` **بمرجع `ON DELETE RESTRICT`** + لقطة `voided_by_name TEXT` (الاسم وقت الإلغاء). حذف حساب الموظف لا يمحو هوية منفذ الإلغاء.
+
+---
+
+## 4. Idempotency — دورة الحياة الكاملة (النقطة 3)
+
+### 4.1 WhatsApp (رمز لكل سؤال)
+
+- `sendRepConfirm` (service.ts:1222) يولّد `crypto.randomUUID()` لكل سؤال.
+- الحِمْل في `Button(..., id)`: `work_order_confirm_delivery:<no>:<itemId>:delivered:<token>` (≈90 حرفًا < 256).
+- عند الضغط يعود الرمز ⇒ **هو نفسه قيمة `idempotency_key`** (مع `customer_po_item_id`)، ويدخل مباشرةً في **القيد الفريد في قاعدة البيانات** `(customer_po_item_id, idempotency_key)` — **ليس فحصًا في الكود فقط**.
+- **النتائج الثلاث المطلوبة:**
+  - **إعادة إرسال نفس الـWebhook** ⇒ `msg.id` (طبقة ثانية) + القيد ⇒ **لا عملية ثانية**.
+  - **الضغط مرتين على نفس السؤال** ⇒ **نفس الرمز** ⇒ نفس `idempotency_key` ⇒ **القيد يمنع** تسليمًا ثانيًا.
+  - **سؤال جديد لتسليم جزئي جديد** ⇒ **رمز جديد** ⇒ `idempotency_key` جديد ⇒ **يُقبل كعملية مستقلة**.
+- **ضغطتان متزامنتان** ⇒ **القيد الفريد في DB** هو الحماية النهائية (لا فحص برمجي وحده).
+- **`msg.id` طبقة ثانية في عمود مستقل (لا في `idempotency_key`):** يُخزَّن معرّف الرسالة (`messages[].id`) في عمود `wa_message_id` منفصل، ويُلتقط **صراحةً** من الـWebhook — لا يُفترض ضمنيًّا. الغرض منه منع إعادة معالجة **نفس** الـWebhook عند إعادة إرسال Meta. ملاحظة: `context.id` **غير مُثبَت** لضغط الأزرار (المقطع 1)، فيُعتمد `msg.id` من الرسالة الواردة نفسها.
+- **الطبقتان معًا:** الرمز الثابت لكل سؤال (قيمة `idempotency_key` ⇒ يمنع تكرار نفس السؤال عند الضغط مرتين) + `wa_message_id` (يمنع إعادة معالجة الـWebhook نفسه).
+
+### 4.2 صفحة التسليمات (UUID لكل عملية إرسال)
+
+| السؤال                                  | القرار                                                                                                                                                                                                               |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| المفتاح لكل بند أم لكل عملية؟           | **لكل عملية إرسال** (وليس ثابتًا لكل بند). لطلبات متعددة البنود: مفتاح لكل بند داخل الطلب.                                                                                                                           |
+| التخزين                                 | `localStorage['delivery-draft:<customerPoId>:<customerPoItemId>']`                                                                                                                                                   |
+| Refresh/فشل/نتيجة غير محسومة            | المفتاح يبقى.                                                                                                                                                                                                        |
+| **نجاح الخادم + توقف الصفحة قبل المسح** | إعادة الإرسال بنفس المفتاح ⇒ الخادم **يعيد نتيجة العملية السابقة** (`ON CONFLICT ... DO NOTHING` ثم إرجاع الصف الموجود) ⇒ **لا تسليم ثانٍ**. الواجهة ترى النجاح ⇒ تنشئ **مفتاحًا جديدًا** لأي تسليم جزئي مستقل لاحق. |
+| إعادة استخدام المفتاح ببيانات مختلفة    | **يُرفض** (`409`) — لا تُسجَّل عملية جديدة بصمت؛ يُقارَن محتوى الطلب (الكمية/الرفض) بالصف المحفوظ.                                                                                                                   |
+| حماية التزامن                           | **قيد فريد في DB** (وليس فحصًا برمجيًا).                                                                                                                                                                             |
+
+- **الفرق الجوهري:** وجود UUID في المتصفح **لا** يمنع تسليمًا جديدًا؛ **نتيجة الخادم هي المرجع**.
+
+### 4.3 الطلبات متعددة البنود — الذرية والمقارنة (النقطة 3 — مُغلقة)
+
+**حسم الذرية (سؤال صريح):** المطلوب **ذرية الطلب بالكامل** — معاملة واحدة لكل الطلب (كل البنود تنجح أو لا شيء). هذا يلغي حالة «نجح بند وفشل آخر» داخل الطلب الواحد.
+
+- **العلاقة:** الطلب يحمل `operationKey` واحدًا؛ لكل بند مفتاحه `idempotency_key = "<operationKey>:<customerPoItemId>"`. القيد الفريد على `(customer_po_item_id, idempotency_key)`.
+- **الوضع الحالي (مُثبَت):** `POST /customer-po/:id/deliveries` يعالج البنود **حلقيًّا بلا Transaction** (`deliveries.ts:185-248`) ⇒ نجاح جزئي ممكن. **يُستبدل** بمعاملة واحدة.
+
+**آلية إعادة الإرسال (لا تعتمد على `ON CONFLICT` وحده) — التخزين المطلوب (تصحيح يُغلق ثغرة اكتشاف مجموعة البنود):**
+
+- **يُضاف `operation_key TEXT` كحقل مستقل** على `customer_po_item_deliveries` (بالإضافة إلى `idempotency_key`)، مع **فهرس** `(operation_key)`، و**`payload_hash TEXT`** لبصمة محتوى الطلب الكامل. هذا الحقل موجود صراحةً في المخطط النهائي (المقطع 8) وخطوات Migration (7.1/11).
+- **قيد UNIQUE لمنع التكرار المتزامن (إلزامي):** يجب أن يكون هناك **قيد فريد على مستوى قاعدة البيانات** يعمل كحماية نهائية:
+  - **الخيار (أ) — صفوف مسطّحة:** `CREATE UNIQUE INDEX ... ON customer_po_item_deliveries (operation_key, customer_po_item_id);` ⇒ يمنع تكرار بند داخل العملية، ويجعل الطلبين المتزامنين بنفس المفتاح يتصادمان على القيد (الثاني ينتظر ثم يقرأ/يقارن).
+  - **الخيار (ب) — جدول عمليات:** `operation_key TEXT UNIQUE` في جدول العمليات (يرتبط به كل بند). الأبسط والأدقّ لضمان عملية واحدة لكل مفتاح.
+  - **ملاحظة مهمة:** **لا يجوز** `UNIQUE (operation_key)` وحده على جدول البنود المسطّح — العملية تحتوي **عدة** بنود، فيجب أن يكون القيد `(operation_key, customer_po_item_id)`.
+- **ثابت التصميم (لا يُخترق):** `operation_key` محفوظ **في كل صف** من صفوف العملية (أو في **جدول عمليات مستقل** يرتبط به كل بند). الاسترجاع يكون **بـ`operation_key`** ⇒ **مجموعة البنود الأصلية كاملة**، **لا** بالبحث عن البنود الموجودة في الطلب المعاد إرساله فقط. هذا هو الفرق الذي يمنع **اختفاء بند محذوف** دون اكتشافه.
+- **حقول المقارنة إلزامية:** عدد البنود + **هويات البنود** (`customerPoItemId`) + **الكميات** (`delivered_qty`) + **بيانات الرفض** (`rejected_by_customer_qty`, `rejection_reason`) — كلها تُقارن، ويُدعم ذلك بـ`payload_hash`.
+- **تعريف `payload_hash` (إلزامي):** يُحسب من **مجموعة البنود كاملة مرتبة تصاعديًا بـ`customerPoItemId`**، بحيث يدخل فيه لكل بند: `customerPoItemId` + `delivered_qty` + `rejected_by_customer_qty` + `rejection_reason`. أي حذف/إضافة بند أو تغيير كمية/رفض ⇒ يتغيّر الهاش ⇒ **409**.
+
+```
+1) SELECT * FROM customer_po_item_deliveries WHERE operation_key = :opKey
+2) إن لم توجد صفوف ⇒ أدرج كل بنود الطلب (داخل المعاملة) مع operation_key + idempotency_key
+3) إن وُجدت ⇒ قارن على مستوى الطلب الكامل:
+   - مجموعة هويات البنود المحفوظة (customerPoItemId) == مجموعة هويات الطلب الجديد
+   - لكل بند: طابق المحتوى (delivered_qty, rejected_by_customer_qty, rejection_reason)
+   - تطابق كامل ⇒ أعد النتائج الأصلية لكل بند — لا إدراج
+   - أي اختلاف (بند محذوف/مضاف/محتوى مختلف) ⇒ 409 (لا تسجيل بصمت)
+```
+
+- **المثال الحاسم:** الطلب الأصلي (OP-123) = A,B,C محفوظة. طلب جديد بنفس المفتاح = A,B فقط ⇒ البحث بـ`operation_key` يسترجع **A,B,C** ⇒ المجموعات مختلفة ⇒ **409**. (البحث بالمفاتيح المشتقة فقط كان سيجد A,B ويعتبرهما متطابقين — **الثغرة المُغلقة**.)
+- **بديل مكافئ (مذكور للاكتمال):** جدول عملية يحمل `operationKey` + `payload_hash` لبصمة الطلب الكامل؛ يُختار أيهما أنسب عند التنفيذ — كلاهما يضمن استرجاع العملية الأصلية كاملة.
+- **النتيجة المعادة للبند الناجح** = نتيجة عمليته الأصلية (من الصفوف المحفوظة)، لا تجاهل تكرار.
+
+**التعارض المتزامن (طلبَان بنفس المفتاح في آنٍ واحد):**
+
+- الطلب الأول يُدرج؛ الثاني ينتظر على **القيد الفريد** حتى ينتهي الأول (لا يُعاد إدخال أي بند).
+- بعد انتهاء الأول، الثاني **يقرأ الصفوف المحفوظة، يقارن الطلب الكامل، ثم يعيد النتيجة الأصلية أو 409** — لا:
+  - رد نجاح فارغ،
+  - إعادة إدخال بعض البنود،
+  - إرجاع نتيجة لا تمثل العملية الأصلية،
+  - اعتبار طلب مطابق طلبًا جديدًا.
+
+- **الحماية النهائية:** القيد الفريد في DB يمنع سجلين متزامنين (سباق)؛ والمقارنة تُعاد قراءتها من الصفوف بعد انتهاء المتعارض.
+- **سيناريو «نجح بندَان»:** مع الذرية الكاملة لا يحدث نجاح جزئي داخل الطلب؛ ولو وُجد صف من طلب سابق (نفس المفتاح) فهو يُقارَن ويُعاد، لا يُكرَّر.
+
+> **ملاحظة تصميمية:** الذرية الكاملة تعني أن فشل بند واحد يُلغي الطلب كله (لا حفظ جزئي) — هذا هو القرار الصريح، وليس نجاحًا مستقلًا لكل بند.
+
+---
+
+## 5. الإلغاء — فصل الحالات (النقطة 4)
+
+> **حارس نطاق (لا يُفتح):** **لا** تُضاف حقول تأكيد العميل (`customer_confirmed*`) ولا خطوة تأكيد في البوت/الصفحة ولا مستند استلام ولا Portal. اكتمال التوريد مفهوم منفصل عن تأكيد العميل — يُعرض الفرق في التقارير فقط، دون تنفيذ أي وظيفة تأكيد.
+
+| الحالة                 | المصدر/الحقل                                                                                     | السلوك                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------- |
+| إلغاء بند Customer RFQ | `customer_rfq_items.is_cancelled` (جديد)                                                         | تعطيل؛ لا يمحو الإنجاز/الفترات.                   |
+| إلغاء بند Customer PO  | `customer-po/routes.ts:839` — يُفصَل البند `customerPoId=null` + `deliveryStatus='cancelled'`    | يبقى كما هو؛ **لا يُساء استخدامه لحالة التوريد**. |
+| رفض التوريد            | `customer_po_item_deliveries.deliveryStatus='rejected'`                                          | طرفي، ليس إنجازًا.                                |
+| إلغاء سجل تسليم مسجَّل | `DELETE /customer-po/deliveries/:deliveryId` (`deliveries.ts:429`) — **حاليًا يحذف الصف فعليًا** | يُستبدل بإلغاء ناعم (أدناه).                      |
+
+**التصميم المتوافق:**
+
+- `customer_po_items.delivery_status` قيمه المعلنة `pending|partial|delivered|rejected`. القيمة `cancelled` تُكتب **لإشارة إلغاء بند PO** (مصدر منفصل).
+- **التقارير تفصل المصادر:** لا تعتبر `delivery_status='cancelled'` حالة توريد عادية، ولا تستخدمها لنسب الإنجاز.
+- **إلغاء سجل تسليم سابق (النقطة 4 — مُغلقة):**
+  - **لا حذف للصف الأصلي** — يُضاف عمود `voided BOOLEAN NOT NULL DEFAULT false` (+ `voided_at`, `voided_by`, `void_reason`) على `customer_po_item_deliveries`.
+  - **إلغاء حدث مستقل:** `PATCH /customer-po/deliveries/:deliveryId/void` يضبط `voided=true` (بدل `DELETE`).
+  - **تأثير الكميات:** `recomputeItemTotals` + `recordItemDelivery` **يستبعدان الصفوف `voided=true`** ⇒ الكمية الملغاة **لا تُحتسب** في المجاميع أو `delivery_status`.
+  - **تاريخ العملية الأصلي لا يتغيّر:** `delivered_at` يبقى كما هو؛ الإلغاء يُسجَّل في `voided_at` (حقل منفصل).
+  - **الإلغاء المزدوج:** إلغاء صف `voided=true` مرة ثانية ⇒ **لا-op واضح** (`200` مع الحالة الحالية) أو `409` — لا يتغيّر `voided_at/voided_by/void_reason` الأول، ولا يُنشَأ حدث مكرر في التدقيق.
+  - **التقارير:** الإلغاء يظهر كحالة مستقلة؛ التقارير التاريخية **تميّز** بين التسليم الأصلي والسجل الملغى (`voided`)، ولا يُحتسب الملغى تسليمًا صحيحًا، ولا يُمحى السجل.
+  - **التدقيق:** `audit_log` `customer_po.delivery.voided` (مع السبب والفاعل والوقت) — مرة واحدة فقط.
+  - **لا خلط:** إلغاء سجل تسليم ≠ إلغاء بند PO ≠ إلغاء بند RFQ ≠ رفض التوريد.
+- **لا حذف لسجلات التسليم التاريخية** — إزالة الحذف المسبق في البوت (routes.ts:1297)، واستبدال DELETE route (deliveries.ts:429) بالإلغاء الناعم.
+- **الملفات المتأثرة:** `customer-po/routes.ts`, `customer-po/deliveries.ts`, `communications/routes.ts`, `reports/item-kpis.ts`, `customer-rfq/routes.ts`, `lib/db/src/schema/receipts_deliveries.ts`.
+
+---
+
+## 6. ذرية Transaction والأقفال (النقطة 5)
+
+```
+BEGIN TRANSACTION
+  1) INSERT customer_pos RETURNING id                         -- رأس PO
+  2) INSERT customer_po_items ...                             -- البنود
+  3) INSERT audit_log (customer_po.created)                   -- التدقيق (داخل المعاملة)
+  4) customerRfqItemIds = distinct بنود لها customer_rfq_item_id
+     رتّب تصاعديًا: sort(customerRfqItemIds)                  -- منع Deadlock
+     لكل id بالترتيب:
+        SELECT ... FROM customer_rfq_items WHERE id = X FOR UPDATE
+        IF attribution_first_po_at IS NOT NULL THEN CONTINUE
+        ref_ts := clock_timestamp()
+        owner  := صاحب الفترة التي تغطّي ref_ts
+        UPDATE customer_rfq_items SET attribution_first_po_at=ref_ts,
+               attribution_employee_id=owner.id, attribution_employee_name=owner.name,
+               attribution_event='customer_po_registered'
+         WHERE id = X AND attribution_first_po_at IS NULL
+COMMIT
+-- بعد الـCOMMIT فقط: إرسال WhatsApp/البريد (خارج المعاملة)
+```
+
+- **ذرّي:** رأس PO + البنود + تثبيت الإنجاز + التدقيق. لا PO بلا إنجاز، ولا إنجاز بلا PO.
+- **الأقفال تصاعدية** (`customer_rfq_item_id ASC`) ⇒ تقليل Deadlock.
+- **الإشعارات الخارجية بعد نجاح المعاملة** — لا تُرسَل داخل Transaction.
+- **تغيير المسؤول:** نفس القفل على نفس الصف، `clock_timestamp()` بعد القفل، إغلاق الفترة القديمة + فتح جديدة + Audit في نفس المعاملة.
+
+### 6.1 لحظة التثبيت الواحدة `freezeAt` (النقطة 3.أ — مُثبَّت)
+
+- لكل بند، **بعد الحصول على القفل**، تُحدَّد لحظة واحدة `freezeAt = clock_timestamp()`، وتُستخدم في **كل** ما يلي:
+  - `attribution_first_po_at = freezeAt`
+  - تحديد فترة الإسناد السارية: `valid_from <= freezeAt AND (valid_to IS NULL OR freezeAt < valid_to)`
+  - `attribution_employee_id` + لقطة `attribution_employee_name` من تلك الفترة
+- يمنع اختلاف وقت تحديد الموظف عن وقت تسجيل الإنجاز (نفس اللحظة للجميع).
+
+### 6.2 حماية ارتباط Customer PO (النقطة 3.ب)
+
+- **الوضع الحالي:** `customer_po_items.customer_rfq_item_id` → `ON DELETE SET NULL` (`customer_pos.ts:47`) ⇒ حذف بند RFQ (مباشر/إداري) يمحو ربط أمر الشراء بالبند الأصلي.
+- **القرار:** تحويله إلى **`ON DELETE RESTRICT`** لحماية الارتباط التاريخي على مستوى قاعدة البيانات:
+  ```
+  ALTER TABLE customer_po_items DROP CONSTRAINT IF EXISTS customer_po_items_customer_rfq_item_id_fkey;
+  ALTER TABLE customer_po_items ADD CONSTRAINT customer_po_items_customer_rfq_item_id_fkey
+    FOREIGN KEY (customer_rfq_item_id) REFERENCES customer_rfq_items(id) ON DELETE RESTRICT;
+  ```
+- **التوافق:** مسارات حذف بنود RFQ تُحوَّل إلى تعطيل؛ البنود بلا ربط (`NULL`) غير متأثرة.
+- **ملاحظة:** يجب فحص الإنتاج لوجود بنود RFQ مرتبطة بأوامر شراء **قبل** تطبيق القيد (preflight SELECT).
+
+### 6.3 لقطة `voided_by_name` (النقطة 3.ج)
+
+- تُحفظ **وقت الإلغاء** من اسم الموظف الحالي، و**لا تتغيّر** إذا تغيّر الاسم لاحقًا (عمود نصي مستقل، لا مرجع حيّ).
+
+---
+
+## 7. Migration وinit-db.ts (النقطة 6)
+
+### 7.1 Migration (جمل مستقلة، idempotent)
+
+1. فحص قراءة فقط: `pg_available_extensions` لـ`btree_gist` + فحص التداخل (المقطع 9).
+2. `CREATE EXTENSION IF NOT EXISTS btree_gist;` (إن سُمح).
+3. `ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS attribution_first_po_at/attribution_employee_id/attribution_employee_name/attribution_event/is_cancelled`.
+4. `ALTER TABLE customer_rfq_item_assignments ADD COLUMN IF NOT EXISTS valid_from TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS valid_to TIMESTAMPTZ` — **بلا `DEFAULT NOW()`**؛ القيمة تُملأ صراحةً بـ`clock_timestamp()` (خطوة 5) والافتراضي النهائي `clock_timestamp()` (المقطع 3). لا يُستخدم `NOW()` في أي لحظة إسناد.
+5. Backfill: `UPDATE ... SET valid_from = COALESCE(assigned_at, clock_timestamp()) WHERE valid_from IS NULL;` ثم `SET NOT NULL` + `SET DEFAULT clock_timestamp()` (المقطع 3).
+6. `DROP INDEX IF EXISTS customer_rfq_item_assignments_item_uq;` ثم `CREATE UNIQUE INDEX ... WHERE valid_to IS NULL;`
+7. `ALTER TABLE ... ADD CONSTRAINT ... EXCLUDE USING gist (...)` (بعد فحص التداخل).
+8. `ALTER TABLE customer_rfq_items ADD CONSTRAINT attribution_employee_fk ... ON DELETE RESTRICT`.
+9. **FK الإسناد (موظف):** `DROP CONSTRAINT IF EXISTS ..._employee_id_fkey;` ثم `ADD CONSTRAINT ... FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE RESTRICT`.
+10. **FK الإسناد (بند RFQ):** `DROP CONSTRAINT IF EXISTS ..._customer_rfq_item_id_fkey;` ثم `ADD CONSTRAINT ... FOREIGN KEY (customer_rfq_item_id) REFERENCES customer_rfq_items(id) ON DELETE RESTRICT`.
+11. `ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS idempotency_key` + **`operation_key`** + `payload_hash` + **`wa_message_id`** + `voided` + `voided_at/void_reason` + `voided_by` (FK RESTRICT) + `voided_by_name` + **الفهرس الفريد `(operation_key, customer_po_item_id)`** + الفهرس الفريد الجزئي `(customer_po_item_id, idempotency_key)` + الفهرس الفريد الجزئي `(wa_message_id)` (يمنع إعادة معالجة نفس الـWebhook).
+12. **FK ارتباط PO:** `DROP CONSTRAINT IF EXISTS customer_po_items_customer_rfq_item_id_fkey;` ثم `ADD CONSTRAINT ... FOREIGN KEY (customer_rfq_item_id) REFERENCES customer_rfq_items(id) ON DELETE RESTRICT` (بعد preflight).
+13. **Backfill الإنجاز: لا اختراع** (الأعمدة تبقى NULL).
+
+### 7.2 سلامة `init-db.ts` عند إعادة التشغيل
+
+- كل الجمل `IF NOT EXISTS`/`IF EXISTS` ⇒ **إعادة التشغيل لا تعيد إنشاء ولا تصفّر** بيانات الإسناد/الإنجاز/مفاتيح التسليم.
+- لا `TRUNCATE`/`DROP TABLE`/`DELETE` لأي جدول تشغيلي في التهيئة.
+- **اختبار:** تشغيل `initDb()` مرتين متتاليتين ⇒ عدد الصفوف في `customer_rfq_item_assignments`/`customer_rfq_items`/`customer_po_item_deliveries` **لا يتغيّر**.
+
+### 7.2.1 قابلية إعادة التنفيذ بعد توقف جزئي (النقطة 2 — مُغلقة)
+
+`IF NOT EXISTS` **لا يكفي** للقيود (`ADD CONSTRAINT ... EXCLUDE` / FK) — إعادة التشغيل بعد نجاحها تفشل بـ«already exists». المطلوب **فحص الكتالوج قبل كل إضافة**، مع التحقق من **التعريف** لا الاسم فقط:
+
+```sql
+-- قيد EXCLUDE: قارن التعريف الفعلي (pg_get_constraintdef) لا الاسم فقط.
+-- إن وُجد باسم صحيح لكن بتعريف خاطئ ⇒ DROP ثم إعادة الإنشاء.
+DO $$
+DECLARE
+  actual text;
+  expected text :=
+    'EXCLUDE USING gist (customer_rfq_item_id WITH =, tstzrange(valid_from, COALESCE(valid_to, ''infinity''::timestamp with time zone), ''[)''::text) WITH &&)';
+BEGIN
+  SELECT pg_get_constraintdef(oid) INTO actual
+    FROM pg_constraint
+   WHERE conname = 'customer_rfq_item_assignments_no_overlap'
+     AND conrelid = 'customer_rfq_item_assignments'::regclass;
+  IF actual IS NULL THEN
+    ALTER TABLE customer_rfq_item_assignments
+      ADD CONSTRAINT customer_rfq_item_assignments_no_overlap
+      EXCLUDE USING gist (customer_rfq_item_id WITH =,
+        tstzrange(valid_from, COALESCE(valid_to,'infinity'),'[)') WITH &&);
+  ELSIF actual <> expected THEN
+    ALTER TABLE customer_rfq_item_assignments
+      DROP CONSTRAINT customer_rfq_item_assignments_no_overlap;
+    ALTER TABLE customer_rfq_item_assignments
+      ADD CONSTRAINT customer_rfq_item_assignments_no_overlap
+      EXCLUDE USING gist (customer_rfq_item_id WITH =,
+        tstzrange(valid_from, COALESCE(valid_to,'infinity'),'[)') WITH &&);
+  END IF;
+END $$;
+
+-- FK: قارن المرجع + الإجراء (confrelid + confdeltype='r' = RESTRICT)، لا الاسم فقط.
+DO $$
+DECLARE
+  has_wrong boolean;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=ANY(c.conkey)
+    WHERE c.conrelid='customer_rfq_item_assignments'::regclass
+      AND c.contype='f' AND a.attname='employee_id'
+      AND (c.confrelid <> 'employees'::regclass OR c.confdeltype <> 'r')
+  ) INTO has_wrong;
+  IF has_wrong THEN
+    ALTER TABLE customer_rfq_item_assignments
+      DROP CONSTRAINT customer_rfq_item_assignments_employee_id_fkey;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=ANY(c.conkey)
+    WHERE c.conrelid='customer_rfq_item_assignments'::regclass
+      AND c.contype='f' AND a.attname='employee_id'
+      AND c.confrelid='employees'::regclass AND c.confdeltype='r'
+  ) THEN
+    ALTER TABLE customer_rfq_item_assignments
+      ADD CONSTRAINT customer_rfq_item_assignments_employee_id_fkey
+      FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE RESTRICT;
+  END IF;
+END $$;
+
+-- فهرس: قارن التعريف الفعلي (pg_indexes.indexdef) لا الاسم فقط.
+SELECT indexdef FROM pg_indexes
+ WHERE tablename='customer_rfq_item_assignments'
+   AND indexname='customer_rfq_item_assignments_open_uq';
+-- إن كان التعريف مختلفًا عمّا هو مطلوب (عمود/شرط WHERE) ⇒ DROP INDEX ثم CREATE من جديد.
+```
+
+- **كل خطوة مستقلة وقابلة للاستكمال:** إعادة التشغيل بعد توقف جزئي تكمل من حيث توقفت (الفحص يتخطى ما نُفّذ).
+- **التحقق من التعريف (لا الاسم فقط):** يُقارَن تعريف القيد الفعلي (`pg_get_constraintdef`) والمرجع/الإجراء (`pg_constraint.confrelid/confdeltype`) وتعريف الفهرس (`pg_indexes.indexdef`) بالمطلوب. **القيد الموجود باسم صحيح لكن بتعريف خاطئ يُكتشف ويُصحَّح** (DROP + إعادة إنشاء). اختبار 41 يغطي هذه الحالة.
+- **Backfill لا يُعاد على بيانات معتمدة:** خطوة `UPDATE ... SET valid_from = COALESCE(...)` مشروطة بـ`WHERE valid_from IS NULL` ⇒ إعادة التشغيل لا تعيد كتابة تواريخ صفوف سبق ترحيلها. ونفس المبدأ لبقية خطوات Backfill (لا إعادة تنفيذ على بيانات مكتملة).
+- **`DROP` المسموح vs الممنوع:** **مسموح** إسقاط **فهرس/قيد قديم محدَّد** لاستبداله (`DROP INDEX ..._item_uq`، `DROP CONSTRAINT ..._fkey`)؛ **ممنوع** `DROP TABLE`/`DROP COLUMN`/`DELETE`/`TRUNCATE` لأي بيانات تشغيلية.
+- **اختبار التوقف/الاستكمال بعد كل مرحلة:** يُوقف Migration عند نهاية **كل** خطوة، ثم يُعاد تشغيله ⇒ يكتمل دون أخطاء «already exists»، ودون فقد/تغيير بيانات (اختبار 40/41)، ودون إعادة Backfill على صفوف سبق اعتمادها.
+
+### 7.3 Rollback
+
+- **لا حذف لأي عمود يحمل بيانات تشغيلية** (`attribution_*`, `idempotency_key`).
+- الأعمدة additive ⇒ **التراجع الآمن = تعطيل الميزة أو Roll-forward**.
+- إسقاط **قيد** فقط (FK/EXCLUDE) مسموح (لا يفقد بيانات).
+- **Backup إلزامي** قبل الخطوات 4-9.
+
+---
+
+## 8. المخطط النهائي المختصر
+
+**`customer_rfq_items`:** `attribution_first_po_at`, `attribution_employee_id` (FK RESTRICT), `attribution_employee_name`, `attribution_event`, `is_cancelled`.
+
+**`customer_rfq_item_assignments`:** `valid_from` (NOT NULL، افتراضي `clock_timestamp()`), `valid_to`؛ استبدال الفهرس المطلق بجزئي؛ قيد `EXCLUDE gist` للتداخل؛ **FK `employee_id` → `RESTRICT`**؛ **FK `customer_rfq_item_id` → `RESTRICT`** (حماية تاريخ الإسناد).
+
+**`customer_po_item_deliveries`:** `idempotency_key` + **`operation_key`** + **`payload_hash`** (بصمة الطلب الكامل) + **`wa_message_id`** + **فهرس فريد `(operation_key, customer_po_item_id)`** + فهرس فريد جزئي `(customer_po_item_id, idempotency_key)` + فهرس فريد جزئي `(wa_message_id)`؛ `voided/voided_at/void_reason` + `voided_by` (FK `RESTRICT`) + `voided_by_name` (لقطة) للإلغاء الناعم.
+
+**`customer_po_items`:** `customer_rfq_item_id` FK → **`RESTRICT`** (حماية ارتباط PO بالبند الأصلي).
+
+**فئات الإنجاز:** محسوم / جديد غير محسوم (مقفول) / تاريخي غير محسوم (له PO) / سجل بلا ربط RFQ.
+
+---
+
+## 9. Preflight (SELECT فقط — لم يُنفَّذ هنا)
+
+```sql
+-- 1) توفر btree_gist
+SELECT name, default_version, installed_version FROM pg_available_extensions WHERE name='btree_gist';
+-- 2) فترات مفتوحة مكررة
+SELECT customer_rfq_item_id, count(*) FROM customer_rfq_item_assignments GROUP BY 1 HAVING count(*)>1;
+-- 3) تداخل تاريخي (بعد إضافة الفترات)
+SELECT a.id,b.id FROM customer_rfq_item_assignments a JOIN customer_rfq_item_assignments b
+  ON a.customer_rfq_item_id=b.customer_rfq_item_id AND a.id<b.id
+WHERE tstzrange(a.valid_from,COALESCE(a.valid_to,'infinity'),'[)')
+   && tstzrange(b.valid_from,COALESCE(b.valid_to,'infinity'),'[)');
+-- 4) وجود بنود RFQ مرتبطة بأوامر شراء (قبل FK RESTRICT لارتباط PO)
+SELECT count(*) FROM customer_po_items WHERE customer_rfq_item_id IS NOT NULL;
+```
+
+> **الوصول للإنتاج غير متاح من هذه البيئة** (`DATABASE_URL` غير مضبوط) ⇒ لم يُشغَّل أي فحص.
+
+---
+
+## 10. الملفات المتأثرة
+
+`lib/db/src/schema/{customer_rfqs,item_categories,receipts_deliveries}.ts`، `shared/init-db.ts`، `modules/users/auth.ts`، `modules/customer-rfq/routes.ts`، `modules/customer-po/routes.ts`، `modules/customer-po/deliveries.ts`، `modules/rfq/customer-assignment.ts`، `modules/rfq/assignment.ts`، `modules/communications/{service,routes}.ts`، `artifacts/rfq-portal/src/modules/customer-po/pages/deliveries.tsx`، `modules/reports/item-kpis.ts`.
+
+---
+
+## 11. اختبارات القبول (51)
+
+| #   | السيناريو                                      | المتوقع                                       | الطبقة       |
+| --- | ---------------------------------------------- | --------------------------------------------- | ------------ |
+| 1   | PO مرتبط ببند له مسؤول                         | إنجاز فوري                                    | PGlite       |
+| 2   | فشل إدراج البنود                               | لا رأس PO ولا إنجاز                           | PGlite       |
+| 3   | فشل التثبيت بعد البنود                         | لا PO                                         | PGlite       |
+| 4   | تعدد بنود/PO لنفس البند                        | إنجاز=1                                       | PGlite       |
+| 5   | نقل المسؤول بعد التثبيت                        | الإنجاز ثابت                                  | PGlite       |
+| 6   | أول PO بلا مسؤول ثم إسناد ثم PO                | يبقى غير محسوم                                | PGlite       |
+| 7   | بند قديم له PO بلا حقول                        | «تاريخي غير محسوم»                            | PGlite       |
+| 8   | PO بلا `customer_rfq_item_id`                  | «يتعذّر تحديد بندها»                          | PGlite       |
+| 9   | تعطيل موظف له إنجاز                            | الإنجاز + اللقطة يبقيان                       | PGlite       |
+| 10  | حذف موظف له إنجاز                              | يمنعه FK RESTRICT                             | **Postgres** |
+| 11  | تزامن: PO + تغيير مسؤول                        | نتيجة حتمية                                   | **Postgres** |
+| 12  | فترتان متداخلتان                               | يمنعه EXCLUDE                                 | **Postgres** |
+| 13  | ضغط زر مرتين متزامنتين                         | صف واحد (قيد DB)                              | **Postgres** |
+| 14  | سؤال جديد لتسليم جزئي                          | رمز جديد ⇒ مستقل                              | PGlite       |
+| 15  | Refresh قبل النتيجة ثم إعادة إرسال             | صف واحد (يعيد النتيجة)                        | PGlite       |
+| 16  | نفس المفتاح بكمية مختلفة                       | رفض 409                                       | PGlite       |
+| 17  | نجاح الخادم + توقف الصفحة ثم تسليم جديد        | مفتاح جديد ⇒ مستقل                            | PGlite       |
+| 18  | إعادة تشغيل initDb مرتين                       | لا تغيير في عدد الصفوف                        | PGlite       |
+| 19  | إلغاء بند له إنجاز                             | الإنجاز + سجلات التسليم تبقى                  | PGlite       |
+| 20  | طول حِمْل الزر                                 | ≤ 256                                         | PGlite       |
+| 21  | حذف موظف **له فترات إسناد** (بلا إنجاز)        | يمنعه FK RESTRICT على الإسناد                 | **Postgres** |
+| 22  | إلغاء سجل تسليم (void)                         | الصف يبقى، الكمية تُستبعد                     | PGlite       |
+| 23  | طلب متعدد البنود بنفس `operationKey`           | لا تكرار لأي بند نجح                          | PGlite       |
+| 24  | إعادة إرسال نفس المفتاح بمحتوى مختلف           | 409، ولا إدراج                                | PGlite       |
+| 25  | إعادة إرسال نفس المفتاح بمحتوى مطابق           | يُعاد الصف الأصلي (لا إدراج)                  | PGlite       |
+| 26  | طلبان متزامنان بنفس المفتاح                    | سجل واحد (قيد DB)                             | **Postgres** |
+| 27  | فشل بند واحد داخل الطلب                        | rollback كامل (لا حفظ جزئي)                   | PGlite       |
+| 28  | إلغاء سجل ثم إلغاؤه ثانية                      | لا-op/409، لا تغيير الحقول                    | PGlite       |
+| 29  | إلغاء سجل تسليم                                | `delivered_at` الأصلي ثابت                    | PGlite       |
+| 30  | إلغاء سجل تسليم                                | سطر تدقيق واحد فقط                            | PGlite       |
+| 31  | عمليتا إسناد متزامنتان (بلا btree_gist)        | القفل يمنع التداخل — **في كل مسارات الكتابة** | **Postgres** |
+| 32  | تقرير تاريخي على سجل ملغى                      | يميّز الملغى عن الصحيح                        | PGlite       |
+| 33  | حذف بند Customer RFQ له فترات إسناد            | يمنعه FK RESTRICT                             | **Postgres** |
+| 34  | تعطيل بند Customer RFQ له فترات إسناد          | ينجح دون حذف التاريخ                          | PGlite       |
+| 35  | إعادة `operationKey` بمجموعة بنود مختلفة       | 409 (اختلاف مجموعة البنود)                    | PGlite       |
+| 36  | `assigned_at` فارغ عند Backfill                | `valid_from` يُعبّأ، لا NULL                  | PGlite       |
+| 37  | حذف موظف له سجل إلغاء تسليم                    | لا تضيع هوية منفذ الإلغاء                     | **Postgres** |
+| 38  | إعادة تشغيل `initDb()` بعد بيانات فعلية        | لا فقد/تغيير غير مقصود                        | PGlite       |
+| 39  | `operationKey` بمجموعة بنود **أصلية أكبر**     | البحث بـ`operation_key` يجد الكل ⇒ 409        | PGlite       |
+| 40  | إعادة Migration بعد توقف جزئي                  | تكتمل دون «already exists»                    | **Postgres** |
+| 41  | قيد/فهرس موجود بتعريف مختلف                    | يُكتشف ويُصحَّح (تعريف لا اسم)                | **Postgres** |
+| 42  | حذف بند RFQ مرتبط بـCustomer PO                | يمنعه FK RESTRICT                             | **Postgres** |
+| 43  | تغيير اسم الموظف بعد الإلغاء                   | `voided_by_name` اللقطة ثابتة                 | PGlite       |
+| 44  | `freezeAt` واحد لكل بند                        | الموظف والفترة بنفس اللحظة                    | PGlite       |
+| 45  | إعادة الإرسال بمفتاحه بعد **حذف بند** من الأصل | `operation_key` يجد البند المحذوف ⇒ 409       | PGlite       |
+| 46  | توقف Migration بعد بعض القيود ثم استكماله      | تكتمل، ولا Backfill مكرر                      | **Postgres** |
+| 47  | تغيير مسؤول **متزامن** مع تسجيل أول PO         | صاحب الإنجاز ثابت (نفس `freezeAt`)            | **Postgres** |
+| 48  | طلبان متزامنان بنفس `operation_key`            | يصطدمان على الفهرس الفريد (عملية واحدة)       | **Postgres** |
+| 49  | قيد/فهرس موجود باسم صحيح وتعريف خاطئ           | يُكتشف ويُصحَّح (تعريف لا اسم)                | **Postgres** |
+| 50  | أول PO **بلا مسؤول** ثم إسناد ثم PO ثانٍ       | يبقى غير محسوم (لا يُنسب)                     | PGlite       |
+| 51  | اكتمال التوريد دون تأكيد عميل                  | لا تُضاف حقول/خطوة تأكيد                      | PGlite       |
+
+---
+
+## 12. المخاطر والاعتماديات
+
+| الخطر                                   | التخفيف                                                   |
+| --------------------------------------- | --------------------------------------------------------- |
+| `btree_gist` غير متاح/غير مسموح         | فحص `pg_available_extensions`؛ بديل تطبيقي + اختبار تزامن |
+| تداخل تاريخي في الإنتاج                 | preflight SELECT قبل القيد                                |
+| الإسنادات الحالية بلا تاريخ حقيقي       | `assigned_at` كتاريخ موثق؛ لا تُستخدم لإنجازات قديمة      |
+| Deadlock عند PO متعدد البنود            | ترتيب الأقفال تصاعديًا                                    |
+| تكرار متزامن                            | قيد فريد في DB (الحماية النهائية)                         |
+| `cancelled` خارج نطاق `delivery_status` | فصل مصادر الإلغاء                                         |
+| حذف سجلات تسليم                         | إزالة الحذف المسبق؛ استبدال DELETE بإلغاء ناعم (void)     |
+| حذف موظف يمحو تاريخ الإسناد             | FK `employee_id` → RESTRICT + تعطيل الموظف                |
+| حذف بند RFQ يمحو فترات الإسناد          | FK `customer_rfq_item_id` → RESTRICT + تعطيل البند        |
+| بديل btree_gist حماية تطبيقية فقط       | جرد كل مسارات الكتابة + القفل؛ ليست ضمانة DB              |
+| إعادة تشغيل initDb على بيانات فعلية     | اختبار صريح (لا فقد/تصفير)                                |
+| إعادة Migration بعد توقف جزئي           | فحص الكتالوج (pg_constraint/pg_indexes) قبل كل قيد/فهرس   |
+| اكتشاف تغيير مجموعة البنود              | `operation_key` + `payload_hash` والبحث بـ`operation_key` |
+| حذف بند RFQ يمحو ارتباط PO              | FK `customer_po_items.customer_rfq_item_id` → RESTRICT    |
+
+**ما لم يُثبَت:**
+
+- توفر `btree_gist` وصلاحيات الإنتاج (يحتاج فحصًا).
+- وجود تداخل تاريخي فعلي (يحتاج SELECT على الإنتاج).
+- `context.id` لضغط الأزرار (يحتاج التقاط Webhook حقيقي).
+
+---
+
+## 13. ترتيب التنفيذ
+
+| المرحلة | العمل                                                               |
+| ------- | ------------------------------------------------------------------- |
+| P0-1    | Preflight (btree_gist + التداخل)                                    |
+| P0-2    | فترات الإسناد + استبدال الفهرس + EXCLUDE + Backfill                 |
+| P0-3    | أعمدة `attribution_*` + FK RESTRICT + `is_cancelled` + FK ارتباط PO |
+| P0-4    | Transaction + `freezeAttribution` (freezeAt + ترتيب الأقفال)        |
+| P0-5    | قفل تغيير المسؤول + إغلاق/فتح الفترات                               |
+| P1-1    | تعطيل الموظف + بنود RFQ + حماية الحذف                               |
+| P1-2    | idempotency (`operation_key` + البوت + الصفحة)                      |
+| P1-3    | التقارير (الفئات + فصل الإلغاء)                                     |
+| P2      | اختبارات Postgres + migration جزئي/كامل على نسخة معزولة             |
+
+---
+
+> **لا تعتبر هذه الخطة موافقة على التنفيذ.** لا يُنفَّذ أي تعديل على الكود أو قاعدة البيانات قبل موافقة مستقلة صريحة.
+
+---
+
+## 14. حالة التنفيذ (مُحدَّثة)
+
+نُفِّذت الخطة على فرع العمل (بدون commit/push/deploy). الحالة الفعلية:
+
+| المرحلة                                                                  | الحالة | الدليل                                                                                                                                                          |
+| ------------------------------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0-2 فترات الإسناد + استبدال الفهرس + EXCLUDE + Backfill                 | ✅     | `init-db.ts` — `DROP INDEX …item_uq` + `…open_uq (… WHERE valid_to IS NULL)` + `EXCLUDE USING gist` بفحص `pg_get_constraintdef` + فحص `pg_available_extensions` |
+| P0-3 أعمدة `attribution_*` + FK RESTRICT + `is_cancelled` + FK ارتباط PO | ✅     | `init-db.ts` + `customer_rfqs.ts` + مقارنة `confdeltype` قبل كل FK                                                                                              |
+| P0-4 Transaction + `freezeAttribution` (freezeAt + ترتيب الأقفال)        | ✅     | `customer-po/routes.ts` (`db.transaction` + `lockItemRows`) + `rfq/attribution.ts`                                                                              |
+| P0-5 قفل تغيير المسؤول + إغلاق/فتح الفترات                               | ✅     | `rfq/customer-assignment.ts` (`closeAndOpenPeriod` داخل transaction + Audit)                                                                                    |
+| P1-1 تعطيل الموظف + بنود RFQ + حماية الحذف                               | ✅     | `users/auth.ts` (soft-disable) + `customer-rfq/routes.ts` (soft-cancel) + `is_cancelled`                                                                        |
+| P1-2 idempotency (`operation_key` + البوت + الصفحة)                      | ✅     | `customer-po/deliveries.ts` (operationKey/payloadHash + إلغاء ناعم) + `communications/routes.ts`                                                                |
+| P1-3 التقارير (الفئات + فصل الإلغاء)                                     | ✅     | `reports/item-kpis.ts` (فلترة الفترة المفتوحة + استبعاد الملغى)                                                                                                 |
+| P2 اختبارات + migration جزئي/كامل                                        | ✅     | اختبارات الوحدة تمر (1330 api-server / 62 portal) + **12 اختبار Postgres حيّ** يمرّون مقابل قاعدة بيانات حقيقية                                                 |
+
+**حرّاس TDD (فشلوا قبل الإصلاح، تم التحقق بمحاكاة الرجوع):**
+
+- `customer-rfq.test.ts` → soft-cancel (كان يحذف فعليًا).
+- `deliveries-idempotency.test.ts` (7) → operationKey + إلغاء ناعم (6 تفشل قبل الإصلاح).
+- `customer-po.test.ts` → تجميد الإنجاز (يفشل قبل الإصلاح).
+- `auth.test.ts` → تعطيل الموظف بدل الحذف (يفشل قبل الإصلاح).
+- `init-db.test.ts` → الفهرس المفتوح + RESTRICT + تعريف القيود + أعمدة الإلغاء (تفشل قبل الإصلاح).
+
+**ملاحظات تنفيذية:**
+
+- كل الـ DDL في `init-db.ts` فقط (لا `drizzle-kit push`)؛ الجمل مستقلة وقابلة لإعادة التنفيذ.
+- `tsc --build` + api-server + portal نظيفة؛ prettier على كل المستودع نظيف.
+- لم يُنفَّذ أي commit/push/deploy التزامًا بالقيود.
+
+**اختبارات Postgres الحيّة (P2 — مُنجزة):** ملفّان يعملان فقط عند ضبط `TEST_DATABASE_URL`
+(وإلا يُتخطّيان، فتبقى CI بلا قاعدة بيانات خضراء):
+
+- `init-db.live.test.ts` (9) — الفهرس الجزئي، قيد `EXCLUDE USING gist`، FK RESTRICT، الأعمدة
+  الجديدة، فرض «فترة مفتوحة واحدة»، رفض التداخل، **إعادة التشغيل الآمنة (idempotent)**،
+  **الاستئناف بعد migration جزئي**، و**استبدال قيد تعريفه خطأ**.
+- `attribution.live.test.ts` (3) — `closeAndOpenPeriod` (إغلاق/فتح)، `freezeAttributionForItem`
+  (تجميد مرّة واحدة لا يُعاد)، وقفل `FOR UPDATE` حقيقي يُلزم كاتبًا متزامنًا بالانتظار.
+
+كل ملف في **schema منفصل** (`live_mig` / `live_attr`) ليعملا بالتوازي دون تدمير جداول بعضهما.
+
+> **عيب حقيقي كشفه الاختبار الحيّ:** كان `initDb()` يفشل على قاعدة جديدة/إعادة تشغيل —
+> `INSERT … ON CONFLICT (customer_rfq_item_id)` كان يستهدف الفهرس المطلق القديم الذي
+> استُبدل بالفهرس الجزئي، فيرمي `no unique or exclusion constraint matching the ON CONFLICT
+specification`. الإصلاح: `ON CONFLICT (customer_rfq_item_id) WHERE valid_to IS NULL DO NOTHING`
+> (المُسند يطابق الفهرس الجزئي)، مع حارس وحدة في `init-db.test.ts` يفشل على الصيغة القديمة.

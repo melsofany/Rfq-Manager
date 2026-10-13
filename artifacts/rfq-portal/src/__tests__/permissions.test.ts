@@ -9,6 +9,9 @@ import {
   hasPermission,
   canEditCustomerDoc,
   canPriceCustomerRfq,
+  canAssignItems,
+  ASSIGN_PERM,
+  EXPLICIT_ONLY_PERMS,
   hasCustomPermissions,
 } from "@/lib/permissions";
 
@@ -42,6 +45,33 @@ describe("customer edit permissions catalog", () => {
     expect(ROLE_DEFAULTS.manager).toContain(PRICE_PERM.customerRfq);
     expect(ROLE_DEFAULTS.purchasing).not.toContain(PRICE_PERM.customerRfq);
     expect(ROLE_DEFAULTS.data_entry).not.toContain(PRICE_PERM.customerRfq);
+  });
+});
+
+describe("item-assignment permission (rfq:assign)", () => {
+  it("registers rfq:assign under the rfq group and is explicit-only", () => {
+    const node = PERMISSION_CATALOG.find((n) => n.key === "rfq");
+    expect(node?.children?.map((c) => c.key)).toContain(ASSIGN_PERM.itemAssign);
+    expect(ALL_PERMISSION_KEYS).toContain(ASSIGN_PERM.itemAssign);
+    // Ticking the «rfq» page must not hand out the assign action by accident.
+    expect(EXPLICIT_ONLY_PERMS).toContain(ASSIGN_PERM.itemAssign);
+  });
+
+  it("grants assignment to manager + purchasing by default, not data_entry", () => {
+    expect(ROLE_DEFAULTS.manager).toContain(ASSIGN_PERM.itemAssign);
+    expect(ROLE_DEFAULTS.purchasing).toContain(ASSIGN_PERM.itemAssign);
+    expect(ROLE_DEFAULTS.data_entry).not.toContain(ASSIGN_PERM.itemAssign);
+  });
+
+  it("canAssignItems: admin always, role default, explicit grant/revoke", () => {
+    expect(canAssignItems("admin", null)).toBe(true);
+    expect(canAssignItems("purchasing", null)).toBe(true);
+    expect(canAssignItems("manager", null)).toBe(true);
+    expect(canAssignItems("data_entry", null)).toBe(false);
+    // Explicit grant.
+    expect(canAssignItems("data_entry", { rfq: true, "rfq:assign": true })).toBe(true);
+    // Explicit map omitting the key revokes even for a role that defaults on.
+    expect(canAssignItems("purchasing", { rfq: true })).toBe(false);
   });
 });
 

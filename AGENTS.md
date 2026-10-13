@@ -3293,3 +3293,111 @@ Reached heap limit Allocation failed — JavaScript heap out of memory` (heap
   الصفوف، عدم تخزين البافر/القائمة الكاملة في الجلسة المرآة، حدّ المرور الواحد
   مهما كبر سقف الاكتمال، وحدّ الاستئناف للانهيار المتكرّر. tsc + prettier على كل
   المستودع + بناء الخادم والواجهة نظيفة.
+
+## تصنيف البنود + اختصاص الموظفين + الإسناد الآلي (item-level assignment)
+
+الطلب: طلب التسعير الواحد قد يحوي تصنيفات متعددة (أجهزة/قطع غيار/كهرباء/قواطع/
+مقاومة حريق)، ولكل تصنيف مورد وموظف مشتريات مختلف؛ وتحديد «النود» المسؤول عن كل
+بند يدويًا مرهق. الحل: تصنيف كل بند + إسناده آليًا لصاحب تصنيفه، ثم حساب الـKPI
+على مستوى البند.
+
+- **DB** (`lib/db/src/schema/item_categories.ts`، DDL في `init-db.ts` فقط — لا
+  drizzle-kit push): `item_categories` (name UNIQUE, code, is_active, sort_order)،
+  `item_category_keywords` (category_id CASCADE, keyword، وزن، لغة، enabled، فهرس
+  فريد على (category_id, lower(keyword)))، `employee_categories` (employee_id→employees
+  CASCADE, category_id→item_categories CASCADE, is_primary، فهرس فريد على الزوج)،
+  و**جداول جديدة**: `customer_rfq_item_assignments` (customer_rfq_item_id→
+  customer_rfq_items CASCADE **UNIQUE**، category_id SET NULL، employee_id SET NULL،
+  source auto|manual|inherited|migrated، confidence، assigned_by، reason) و
+  `item_assignment_audit` (سجل تدقيق الإسناد). وأعمدة `category_id` على
+  `customer_rfq_items`/`rfq_items`/`purchase_order_items` (كل `ALTER` في
+  `client.query` مستقلة — العبارات تتشارك معاملة ضمنية، ففشل شقيق يتراجع عن الـCREATE
+  بصمت). بذرة التصنيفات الخمسة + كلماتها idempotent. **الترحيل** من
+  `rfq_item_assignments` القديم إلى الجداول الجديدة: `INSERT … SELECT DISTINCT ON
+  (ri.customer_rfq_item_id)` يطوي بنود الموردين المتعددة لبند عميل واحد في صف واحد،
+  ويرجّح `manual` على `auto`، و`ON CONFLICT DO NOTHING` — عبارة واحدة مستقلة،
+  وقابلة لإعادة التشغيل.
+- **⚠️ تحوّل معماري (approved)**: وحدة **المسؤولية/التصنيف/الإسناد هي بند طلب
+  العميل** (`customer_rfq_items`)، وليس بند أمر التسعير للمورّد. بند المورّد الذي
+  أصله بند عميل **يرث** مسؤوليته (reason `inherited`) — لا إسناد مستقل له. هذا
+  يجعل KPI لكل موظف بلا تضخيم (بند عميل واحد إلى 3 موردين = بند واحد لمسؤول واحد).
+  `rfq_item_assignments` القديم يبقى كجدول تراثي لكنه لم يعد مصدر الحقيقة.
+- **المصنّف** (`modules/rfq/classification.ts`): وحدة نقية بلا نموذج ولا قاعدة
+  بيانات. `normalizeText` تطوي فروق العربية (همزة/ألف/تاء مربوطة/ياء/حركات/تطويل).
+  **الكلمات تُقرأ من قاعدة البيانات** (CRUD للمدير) لا من قائمة مثبّتة. أوزان: عبارة
+  60، كلمة 45، عائلة رقم قطعة 30 — وعتبة `MIN_CONFIDENCE = 40`، لذا عائلة
+  الـpart-number **وحدها لا تصنّف** (تُعزّز فقط). تعادل تصنيفين ⇒ `ambiguous` ⇒
+  `needs_review`. **لا تخمين أبدًا**: غياب الثقة يعني `null`، وهو نفس صنف قاعدة
+  «العينة لا تُقرأ كإجمالي» في هذا المستودع. حارس الدقة (`item-classification.test.ts`)
+  يفشل إذا أُسقطت كلمة «pump» من البذرة.
+- **محرّك إسناد بنود العميل** (`modules/rfq/customer-assignment.ts`):
+  `ensureCustomerAssignments` idempotent — **يتخطى المُسند سلفًا** فلا يدهس تعديلًا
+  يدويًا أبدًا (reason `kept`). يختار المسؤول: الأساسي أولًا، وإلا الأقل تحميلًا مع
+  كسر التعادل بالمعرّف؛ ويحدّث `ctx.load` داخل الحلقة حتى تتوزع بنود نفس الطلب على
+  الموظفين المؤهلين. الأسباب المميّزة: `assigned | kept | unclassified |
+  classified_unassigned | no_owner | no_employees`. الحالات المعروضة:
+  `unclassified | classified_unassigned | assigned | needs_review`.
+- **محرّك إسناد بنود المورّد** (`modules/rfq/assignment.ts`): `buildContext` مُصدَّر
+  (مشترك)، و`ensureAssignmentsForRfq` **يتخطى بنود المورّد المرتبطة ببند عميل**
+  (مسؤوليتها مُورَّثة) ويكتب السطر المورّث inline (تفاديًا لدورة استيراد مع
+  `customer-assignment.ts`).
+- **API**: `modules/rfq/item-categories.ts` — `GET/POST /item-categories`،
+  `PATCH/DELETE /item-categories/:id`، `GET/PUT /item-categories/:id/owners` (رفض
+  >1 أساسي)، `GET/POST /item-categories/:id/keywords`، `PATCH/DELETE
+  /item-categories/:id/keywords/:kwId`، `GET/PUT /employees/:id/categories`.
+  `modules/rfq/assignments.ts` — `GET /customer-rfq/:id/assignments` (يحمل
+  `unclassified`/`classified_unassigned` صراحةً فلا تظهر خلية فارغة)، `POST
+  /customer-rfq/:id/assignments/ensure`، `PATCH /customer-rfq/items/:itemId/assignment`
+  (تجاوز يدوي مُدقّق في `audit_log`)، مع alias `ensureForRfq`. `customer-rfq/routes.ts`
+  يستدعي الإسناد الآلي best-effort بعد POST (إنشاء) وPATCH (تعديل). **الإسناد صلاحية**
+  `rfq:assign` لا دور: `hasAssignAccess` يقرأ الخريطة الطازجة من صف الموظف (admin
+  دائمًا، manager/purchasing افتراضيًا، وخريطة صريحة تحكم). `modules/reports/item-kpis.ts`
+  — `GET /analytics/procurement/by-item` و`GET /analytics/categories/coverage`
+  (تجميع مجمّع بلا N+1)، **مبنية على بنود العميل** + تقرير صحة (ترحيل/تعارض/أيتام).
+- **الواجهة**: صفحة `/item-categories` (إدارة + المسؤولون + **الكلمات المفتاحية**)،
+  عمود «المسؤول» + نافذة التجاوز اليدوي في صفحة تفاصيل طلب العميل
+  (`customer-rfq/pages/detail.tsx`)، لوحة «مسؤولية البنود» داخل تبويب بنود الـRFQ
+  (`ItemAssignmentsPanel.tsx`)، محرّر تصنيفات الموظف في صفحة الموظفين (زر `Tags`)،
+  وقسم KPI على مستوى البند في `/analytics`. `permissions.ts`: `rfq:assign` في
+  `EXPLICIT_ONLY_PERMS` (تأشير صفحة `rfq` لا يمنحه)، و`canAssignItems`. **تنبيه**:
+  `ASSIGN_PERM` معرّف فوق `ROLE_DEFAULTS` (خطأ منطقة زمنية للموت لو نُقل تحته).
+- **الاختبارات**: `item-classification.test.ts` (15)، `customer-assignment.test.ts`
+  (7)، `item-categories.test.ts` (18)، `item-kpis.test.ts` (14)،
+  `item-assign-access.test.ts` (5)، `permissions.test.ts` (+3)، وحارسان جديدان في
+  `init-db.test.ts` (جداول الإسناد + ترحيل DISTINCT ON). **الحرّاس تفشل ضد الكود قبل
+  الإصلاح** (تحقق بالإطفاء الفعلي): عدّ بنود المورّد بدل بنود العميل في KPI يُفشل
+  «بند واحد إلى 3 موردين = بند واحد»؛ إلغاء تخطّي المُسند سلفًا يُفشل «تعديل لا ينقل
+  المسؤولية»؛ خفض العتبة إلى 0 يُفشل المصنّف. **1315 اختبار api-server** + 62 اختبار
+  واجهة يمر؛ tsc + prettier على كل المستودع + بناء الخادم والواجهة نظيفة.
+- **ملاحظات اختبار الموك**: `customer-rfq.test.ts` يحتاج الآن `select().from(items)
+  .where().orderBy()` (استعلام تحميل بنود الإسناد) و`insert(items).values().returning()`
+  (الإسناد بعد إضافة بند)، و**موك fallback كامل السلسلة** لأي جدول غير مُنمذَج
+  (جداول الإسناد) وإلا صار الإسناد غير القاتل (`catch` + `warn`) يرمي «not a
+  function». الإسناد best-effort: فشله لا يُسقط الطلب أبدًا.
+- النشر: معلّق — لا دفع/PR إلا بطلب صريح.
+
+## اختبار Postgres الحيّ كشف عيبًا حقيقيًا في init-db (فهرس جزئي + ON CONFLICT)
+
+- **العَرَض**: `initDb()` يفشل على قاعدة **جديدة** أو عند **إعادة التشغيل** بـ
+  `error: there is no unique or exclusion constraint matching the ON CONFLICT specification`.
+- **السبب**: كتلة الـmigration استبدلت الفهرس المطلق
+  `customer_rfq_item_assignments_item_uq` بفهرس **جزئي** `…open_uq (… WHERE valid_to IS NULL)`،
+  لكن `INSERT … ON CONFLICT (customer_rfq_item_id) DO NOTHING` ظلّ يستهدف المطلق.
+  Postgres يشترط أن **يطابق مُسند ON CONFLICT** فهرسًا فريدًا/قيد استبعاد قائمًا — والفهرس
+  الجزئي لا يُطابق إلا إذا تكرّر شرطه. النتيجة: فشل الجملة → الملف يرمي → جداول لاحقة لا تُنشأ.
+- **الإصلاح**: `ON CONFLICT (customer_rfq_item_id) WHERE valid_to IS NULL DO NOTHING`
+  (نفس شرط الفهرس الجزئي). حارس وحدة في `init-db.test.ts` يفشل على الصيغة المجرّدة.
+- **الدرس العام**: **كل `ON CONFLICT` يجب أن يطابق شكل الفهرس الفعلي**؛ عند استبدال فهرس مطلق
+  بجزئي، راجع كل `ON CONFLICT` كان يستهدفه. والاختبار المزيّف (mock) لا يستطيع رؤية هذا —
+  شغّل الاختبار **الحيّ** على Postgres حقيقي (Docker `postgres:16-alpine`) قبل اعتبار الـmigration سليمة.
+
+### تشغيل اختبارات Postgres الحيّة
+
+- الملفّان `init-db.live.test.ts` و`attribution.live.test.ts` يعملان فقط عند ضبط
+  `TEST_DATABASE_URL` (وإلا `describe.skip` — CI بلا قاعدة بيانات يبقى أخضر).
+- شغّلهما بـ`env -i PATH="$PATH" HOME="$HOME" TEST_DATABASE_URL="postgres://…"`.
+- **كل ملف في schema منفصل** (`options=-csearch_path=…,public` على الرابط) لأن vitest يشغّل
+  الملفات بالتوازي، و`DROP TABLE` في أحدهما يدمّر جداول الآخر.
+- استعلامات `pg_constraint`/`pg_indexes` في اختبار الـmigration **يجب تقييدها بـ`conrelid`**
+  (أو اسم الجدول)، وإلا صارت ترى قيود الجداول الأخرى/الـschemas الأخرى فتنكسر العدّادات.
+- Docker daemon قد لا يعمل: `sudo dockerd` (وإن رفض الاتصال على socket، استخدم `sudo docker`).

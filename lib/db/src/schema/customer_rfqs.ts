@@ -38,6 +38,19 @@ export const customerRfqItemsTable = pgTable("customer_rfq_items", {
   uom: text("uom"),
   qty: numeric("qty", { precision: 15, scale: 4 }),
   unitPrice: numeric("unit_price", { precision: 15, scale: 4 }),
+  // Item category (تصنيف البند). Plain integer; DB FK added in init-db.ts.
+  categoryId: integer("category_id"),
+  // Soft-cancel: an item is disabled, never hard-deleted (its assignment
+  // history must survive). Plain boolean; DDL lives in init-db.ts.
+  isCancelled: boolean("is_cancelled").notNull().default(false),
+  // ── Attribution (تثبيت الإنجاز) ──────────────────────────────────────────
+  // Set at the FIRST customer PO linked to this item, even when no employee is
+  // responsible (employee_id stays null → "غير محسوم" and is never re-attributed
+  // later). The name is a SNAPSHOT so historical reports survive a rename.
+  attributionFirstPoAt: timestamp("attribution_first_po_at", { withTimezone: true }),
+  attributionEmployeeId: integer("attribution_employee_id"),
+  attributionEmployeeName: text("attribution_employee_name"),
+  attributionEvent: text("attribution_event"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

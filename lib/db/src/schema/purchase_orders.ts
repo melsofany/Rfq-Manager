@@ -37,6 +37,9 @@ export const purchaseOrderItemsTable = pgTable("purchase_order_items", {
   qty: numeric("qty", { precision: 15, scale: 4 }),
   referencePrice: numeric("reference_price", { precision: 15, scale: 4 }),
   taxIncluded: boolean("tax_included").notNull().default(false),
+  // Item category (تصنيف البند), inherited from the originating item.
+  // Plain integer; DB FK added in init-db.ts.
+  categoryId: integer("category_id"),
   // Links this supplier PO line to the customer PO line it fulfils, enabling
   // realized-margin computation (selling price − actual cost). Nullable for
   // legacy/sheet-only POs with no customer PO origin.

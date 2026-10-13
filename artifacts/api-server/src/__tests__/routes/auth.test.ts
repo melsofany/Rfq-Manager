@@ -317,3 +317,20 @@ describe("POST /api/auth/login — security", () => {
     expect(other.status).toBe(401);
   });
 });
+
+describe("DELETE /api/employees/:id — soft-disable (never hard delete)", () => {
+  it("DISABLES the employee instead of deleting the row", async () => {
+    // A hard delete would erase assignment history / attribution that reference
+    // this employee (FK RESTRICT) and lose a historical KPI's owner.
+    updatedRow = { id: 5, isActive: false };
+    const res = await request(testApp).delete("/api/employees/5");
+    expect(res.status).toBe(200);
+    expect(res.body.disabled).toBe(true);
+  });
+
+  it("404s when the employee does not exist", async () => {
+    updatedRow = null;
+    const res = await request(testApp).delete("/api/employees/999");
+    expect(res.status).toBe(404);
+  });
+});

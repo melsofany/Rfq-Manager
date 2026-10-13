@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Tags } from "lucide-react";
 import {
   useListEmployees,
   useCreateEmployee,
@@ -69,6 +70,62 @@ export default function EmployeesPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Item-category responsibility editor (employee → categories).
+  const [catsFor, setCatsFor] = useState<{ id: number; name: string } | null>(null);
+  const [allCats, setAllCats] = useState<Array<{ id: number; name: string; isActive: boolean }>>(
+    [],
+  );
+  const [empCats, setEmpCats] = useState<Array<{ categoryId: number; isPrimary: boolean }>>([]);
+  const [catsLoading, setCatsLoading] = useState(false);
+  const [catsSaving, setCatsSaving] = useState(false);
+
+  async function openCats(emp: { id: number; name: string }) {
+    setCatsFor(emp);
+    setCatsLoading(true);
+    try {
+      const [catRes, ownRes] = await Promise.all([
+        fetch("/api/item-categories", { credentials: "include" }),
+        fetch(`/api/employees/${emp.id}/categories`, { credentials: "include" }),
+      ]);
+      if (catRes.ok) setAllCats((await catRes.json()) as typeof allCats);
+      if (ownRes.ok) {
+        const rows = (await ownRes.json()) as Array<{
+          categoryId: number;
+          isPrimary: boolean;
+        }>;
+        setEmpCats(rows.map((r) => ({ categoryId: r.categoryId, isPrimary: !!r.isPrimary })));
+      } else {
+        setEmpCats([]);
+      }
+    } finally {
+      setCatsLoading(false);
+    }
+  }
+
+  async function saveCats() {
+    if (!catsFor) return;
+    setCatsSaving(true);
+    try {
+      const res = await fetch(`/api/employees/${catsFor.id}/categories`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          categories: empCats.map((c) => ({ categoryId: c.categoryId, isPrimary: c.isPrimary })),
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      setCatsFor(null);
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCatsSaving(false);
+    }
+  }
 
   const { data: employees, isLoading } = useListEmployees({
     query: { queryKey: getListEmployeesQueryKey() },
@@ -595,6 +652,15 @@ export default function EmployeesPage() {
                                     <Pencil size={14} />
                                   </button>
                                 )}
+                                {canManageEmps && emp.role !== "admin" && (
+                                  <button
+                                    onClick={() => void openCats(emp)}
+                                    title="تصنيفات البند المسؤول عنها"
+                                    className="p-1.5 rounded hover:bg-teal-50 text-muted-foreground hover:text-teal-600 transition-colors"
+                                  >
+                                    <Tags size={14} />
+                                  </button>
+                                )}
                                 {canManageEmps && (
                                   <button
                                     onClick={() => handleToggleActive(emp)}
@@ -642,6 +708,95 @@ export default function EmployeesPage() {
           </>
         )}
       </div>
+
+      {catsFor && (
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/40 p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md my-4 sm:my-0 p-4 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Tags size={16} className="text-teal-600" />
+                تصنيفات «{catsFor.name}»
+              </h3>
+              <button onClick={() => setCatsFor(null)} className="text-muted-foreground">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              التصنيفات التي يتولاها هذا الموظف. عند وصول طلب تسعير، يُسند كل بند آليًا لصاحب
+              تصنيفه. عيّن تصنيفًا واحدًا على الأكثر كـ«أساسي» ليحصل على الإسناد أولًا.
+            </p>
+            {catsLoading ? (
+              <div className="text-sm text-muted-foreground">جارٍ التحميل…</div>
+            ) : allCats.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                لا توجد تصنيفات بعد. أنشئها من صفحة «تصنيفات البنود».
+              </div>
+            ) : (
+              <div className="max-h-72 overflow-y-auto space-y-1">
+                {allCats.map((c) => {
+                  const own = empCats.find((e) => e.categoryId === c.id);
+                  return (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/40"
+                    >
+                      <label className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!own}
+                          onChange={() =>
+                            setEmpCats((prev) =>
+                              own
+                                ? prev.filter((e) => e.categoryId !== c.id)
+                                : [...prev, { categoryId: c.id, isPrimary: false }],
+                            )
+                          }
+                        />
+                        <span className="text-foreground">{c.name}</span>
+                        {!c.isActive && (
+                          <span className="text-[10px] text-muted-foreground">(موقوف)</span>
+                        )}
+                      </label>
+                      {own && (
+                        <button
+                          onClick={() =>
+                            setEmpCats((prev) =>
+                              prev.map((e) => ({
+                                ...e,
+                                isPrimary: e.categoryId === c.id,
+                              })),
+                            )
+                          }
+                          className={`text-xs px-2 py-0.5 rounded ${
+                            own.isPrimary
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {own.isPrimary ? "أساسي" : "تعيين أساسي"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {deleteError && (
+              <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                ⚠ {deleteError}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setCatsFor(null)}>
+                {t("employees.cancel")}
+              </Button>
+              <Button size="sm" onClick={saveCats} disabled={catsSaving}>
+                {catsSaving ? t("employees.saving") : t("employees.saveChanges")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

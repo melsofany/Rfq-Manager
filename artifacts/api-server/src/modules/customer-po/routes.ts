@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import { eq, count, inArray, desc, sql, and, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
+import { freezeAttributionForItem, lockItemRows } from "../rfq/attribution";
 
 const router = Router();
 
@@ -599,45 +600,67 @@ router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
     employeeName = emp?.name ?? null;
   }
 
-  const [po] = await db
-    .insert(customerPosTable)
-    .values({
-      internalPoNo,
-      customerPoNo: customerPoNo.trim(),
-      customerId: customerId ?? null,
-      customerName: customerName?.trim() || null,
-      poDate: poDate || null,
-      buyerName: buyerName?.trim() || null,
+  // The PO header, its lines, the attribution freeze and the audit row are ONE
+  // transaction: a PO can never exist without its attribution and vice versa.
+  const itemIdsToFreeze = [
+    ...new Set(
+      validItems
+        .map((it) => it.customerRfqItemId)
+        .filter((v): v is number => typeof v === "number"),
+    ),
+  ];
+  const po = await db.transaction(async (tx) => {
+    // Lock the originating items in ascending id order before freezing.
+    if (itemIdsToFreeze.length > 0) await lockItemRows(tx, itemIdsToFreeze);
+
+    const [created] = await tx
+      .insert(customerPosTable)
+      .values({
+        internalPoNo,
+        customerPoNo: customerPoNo.trim(),
+        customerId: customerId ?? null,
+        customerName: customerName?.trim() || null,
+        poDate: poDate || null,
+        buyerName: buyerName?.trim() || null,
+        employeeId: req.session.employeeId,
+        employeeName,
+        notes: notes?.trim() || null,
+        status: "draft",
+      })
+      .returning();
+
+    await tx.insert(customerPoItemsTable).values(
+      validItems.map((it) => ({
+        customerPoId: created.id,
+        customerRfqId: it.customerRfqId ?? null,
+        customerRfqItemId: it.customerRfqItemId ?? null,
+        partNo: it.partNo?.trim() || null,
+        lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : null,
+        description: it.description?.trim() || null,
+        uom: it.uom?.trim() || null,
+        qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
+        unitPrice: it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null,
+        deliveryDate: it.deliveryDate || null,
+      })),
+    );
+
+    // Freeze attribution at this FIRST customer PO. An item with no responsible
+    // employee is frozen with a null owner ("غير محسوم") and never re-attributed.
+    for (const itemId of itemIdsToFreeze) {
+      await freezeAttributionForItem(tx, itemId);
+    }
+
+    await tx.insert(auditLogTable).values({
+      action: "customer_po.created",
+      entityType: "customer_po",
+      entityId: created.id,
       employeeId: req.session.employeeId,
-      employeeName,
-      notes: notes?.trim() || null,
-      status: "draft",
-    })
-    .returning();
+      description: `Created customer PO ${internalPoNo} (customer PO ${customerPoNo}) for ${customerName?.trim() || "—"} with ${validItems.length} item(s)`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
 
-  await db.insert(customerPoItemsTable).values(
-    validItems.map((it) => ({
-      customerPoId: po.id,
-      customerRfqId: it.customerRfqId ?? null,
-      customerRfqItemId: it.customerRfqItemId ?? null,
-      partNo: it.partNo?.trim() || null,
-      lineItem: it.lineItem ? it.lineItem.replace(/\s+/g, "") : null,
-      description: it.description?.trim() || null,
-      uom: it.uom?.trim() || null,
-      qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
-      unitPrice: it.unitPrice != null && it.unitPrice !== "" ? String(it.unitPrice) : null,
-      deliveryDate: it.deliveryDate || null,
-    })),
-  );
-
-  await db.insert(auditLogTable).values({
-    action: "customer_po.created",
-    entityType: "customer_po",
-    entityId: po.id,
-    employeeId: req.session.employeeId,
-    description: `Created customer PO ${internalPoNo} (customer PO ${customerPoNo}) for ${customerName?.trim() || "—"} with ${validItems.length} item(s)`,
-    ipAddress: req.ip,
-    userAgent: req.get("user-agent"),
+    return created;
   });
 
   const fulfillment = buildFulfillmentStatus({

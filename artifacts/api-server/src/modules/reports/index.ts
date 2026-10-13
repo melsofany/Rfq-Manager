@@ -16,12 +16,14 @@ import auditRouter from "./audit";
 import syncRouter from "./sync";
 import dataEntryRouter from "./data-entry";
 import procurementKpisRouter from "./procurement-kpis";
+import itemKpisRouter from "./item-kpis";
 
 const router: IRouter = Router();
 
 router.use(analyticsRouter);
 router.use(dataEntryRouter);
 router.use(procurementKpisRouter);
+router.use(itemKpisRouter);
 router.use(auditRouter);
 router.use(syncRouter);
 
