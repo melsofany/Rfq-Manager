@@ -35,7 +35,6 @@ import SupplierDetailPage from "@/modules/users/pages/suppliers/detail";
 import AnalyticsPage from "@/modules/reports/pages/analytics";
 import AuditPage from "@/modules/reports/pages/audit";
 import ItemsPage from "@/modules/reports/pages/items";
-import ItemCategoriesPage from "@/modules/reports/pages/item-categories";
 
 // ── Module: Communications — التواصل ──────────────────────────────────────
 import WhatsAppPage from "@/modules/communications/pages/index";
@@ -176,8 +175,9 @@ function Router() {
       <Route path="/items">
         <ProtectedRoute component={ItemsPage} />
       </Route>
+      {/* Legacy path — item categories now live as a tab inside /items. */}
       <Route path="/item-categories">
-        <ProtectedRoute component={ItemCategoriesPage} />
+        <Redirect to="/items" />
       </Route>
 
       {/* ── Module: Communications ─────────────────────────────────────── */}

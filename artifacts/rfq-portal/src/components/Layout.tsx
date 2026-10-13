@@ -19,7 +19,6 @@ import {
   UserRound,
   Calculator,
   Bot,
-  Tags,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -44,7 +43,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/rfq", label: t("nav.rfq"), icon: FileText },
     { href: "/suppliers", label: t("nav.suppliers"), icon: Users },
     { href: "/items", label: t("nav.items"), icon: Package },
-    { href: "/item-categories", label: t("nav.itemCategories"), icon: Tags },
     { href: "/purchase-orders", label: t("nav.purchaseOrders"), icon: ShoppingCart },
     { href: "/accounts", label: t("nav.accounts"), icon: Calculator },
     { href: "/analytics", label: t("nav.analytics"), icon: BarChart3 },
