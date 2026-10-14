@@ -52,6 +52,9 @@ export default function EmployeesPage() {
   const queryClient = useQueryClient();
 
   const canManageEmps = me?.role === "admin";
+  // Category ownership is set by an admin OR a manager — a manager assigns a
+  // category to themselves or to any team member from here.
+  const canSetCatOwners = me?.role === "admin" || me?.role === "manager";
   const allowedTabs = filterTabs(me?.role, me?.permissions, "employees", [
     "employees",
     "representatives",
@@ -678,7 +681,7 @@ export default function EmployeesPage() {
                                         </span>
                                       ))
                                     )}
-                                    {canManageEmps && (
+                                    {canSetCatOwners && (
                                       <button
                                         onClick={() => void openCats(emp)}
                                         className="text-[11px] text-teal-700 dark:text-teal-400 hover:underline ms-1"
@@ -712,7 +715,7 @@ export default function EmployeesPage() {
                                     <Pencil size={14} />
                                   </button>
                                 )}
-                                {canManageEmps && emp.role !== "admin" && (
+                                {canSetCatOwners && emp.role !== "admin" && (
                                   <button
                                     onClick={() => void openCats(emp)}
                                     title="تصنيفات البند المسؤول عنها"

@@ -31,7 +31,7 @@ import {
   Tags,
   Search as SearchIcon,
 } from "lucide-react";
-import { ItemCategoriesTab } from "./item-categories";
+import { ItemCategoriesTab, ItemCategoriesEditor } from "./item-categories";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -970,134 +970,8 @@ function SheetViewTab() {
 // Manager-only modal: attach/remove extra categories on ONE item. The primary
 // category is shown locked (it is the classifier's pick and drives ownership);
 // extra categories are chosen freely and each inherits its category's owner.
-function ItemCategoriesEditor({
-  item,
-  onClose,
-}: {
-  item: { itemId: number; label: string };
-  onClose: () => void;
-}) {
-  const [allCats, setAllCats] = useState<Array<{ id: number; name: string }>>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [primaryId, setPrimaryId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const [catsRes, itemRes] = await Promise.all([
-          fetch("/api/item-categories", { credentials: "include" }),
-          fetch(`/api/customer-rfq/items/${item.itemId}/categories`, { credentials: "include" }),
-        ]);
-        if (cancelled) return;
-        const cats = catsRes.ok
-          ? ((await catsRes.json()) as Array<{ id: number; name: string }>)
-          : [];
-        setAllCats(cats.map((c) => ({ id: c.id, name: c.name })));
-        if (itemRes.ok) {
-          const json = (await itemRes.json()) as {
-            categories: Array<{ categoryId: number; isPrimary: boolean }>;
-          };
-          setPrimaryId(json.categories.find((c) => c.isPrimary)?.categoryId ?? null);
-          setSelected(new Set(json.categories.map((c) => c.categoryId)));
-        }
-      } catch {
-        // ignore — the modal still opens with an empty list
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [item.itemId]);
-
-  const toggle = (id: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/customer-rfq/items/${item.itemId}/categories`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ categoryIds: [...selected] }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || "فشل حفظ التصنيفات");
-      }
-      toast.success("تم حفظ تصنيفات البند");
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "فشل حفظ التصنيفات");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-lg w-full max-w-md p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-foreground">
-            تصنيفات البند{" "}
-            <span className="font-mono text-xs text-muted-foreground">{item.label}</span>
-          </h2>
-          <button onClick={onClose} className="text-muted-foreground">
-            <X size={18} />
-          </button>
-        </div>
-        {loading ? (
-          <div className="text-sm text-muted-foreground">جارٍ التحميل…</div>
-        ) : (
-          <div className="max-h-72 overflow-y-auto space-y-1">
-            {allCats.map((c) => {
-              const isPrimary = c.id === primaryId;
-              return (
-                <label
-                  key={c.id}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/40 text-sm cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(c.id)}
-                    disabled={isPrimary}
-                    onChange={() => toggle(c.id)}
-                  />
-                  <span className="text-foreground">{c.name}</span>
-                  {isPrimary && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">
-                      أساسي
-                    </span>
-                  )}
-                </label>
-              );
-            })}
-          </div>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            إلغاء
-          </Button>
-          <Button onClick={save} disabled={saving || loading}>
-            {saving ? "جارٍ الحفظ…" : "حفظ"}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// The implementation lives in ./item-categories so the categories tab and the
+// sheet view share ONE editor.
 
 export default function ItemsPage() {
   const { employee } = useAuth();

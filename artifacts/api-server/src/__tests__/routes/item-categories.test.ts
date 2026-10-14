@@ -228,6 +228,32 @@ describe("item categories CRUD", () => {
     expect(res.status).toBe(403);
   });
 
+  it("allows a MANAGER to set category owners (self-assignment)", async () => {
+    sessionState.role = "manager";
+    const res = await request(testApp)
+      .put("/api/item-categories/1/owners")
+      .send({ owners: [{ employeeId: 10, isPrimary: true }] });
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(1);
+  });
+
+  it("forbids a purchasing employee from setting category owners", async () => {
+    sessionState.role = "purchasing";
+    const res = await request(testApp)
+      .put("/api/item-categories/1/owners")
+      .send({ owners: [{ employeeId: 10, isPrimary: true }] });
+    expect(res.status).toBe(403);
+  });
+
+  it("allows a MANAGER to set an employee's categories", async () => {
+    sessionState.role = "manager";
+    const res = await request(testApp)
+      .put("/api/employees/7/categories")
+      .send({ categories: [{ categoryId: 1, isPrimary: true }] });
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(1);
+  });
+
   it("rejects two primary owners for one category with 400", async () => {
     const res = await request(testApp)
       .put("/api/item-categories/1/owners")

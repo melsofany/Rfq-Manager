@@ -7,9 +7,9 @@
  *   PATCH  /item-categories/:id                — rename/toggle/order (admin/manager)
  *   DELETE /item-categories/:id                — delete (admin)
  *   GET    /item-categories/:id/owners         — who owns this category
- *   PUT    /item-categories/:id/owners         — replace owner set (admin)
+ *   PUT    /item-categories/:id/owners         — replace owner set (admin/manager)
  *   GET    /employees/:id/categories           — categories an employee owns
- *   PUT    /employees/:id/categories           — replace (admin)
+ *   PUT    /employees/:id/categories           — replace (admin/manager)
  */
 import { Router } from "express";
 import {
@@ -322,58 +322,62 @@ router.get("/item-categories/:id/owners", requireAuth, async (req, res): Promise
   res.json(rows);
 });
 
-router.put("/item-categories/:id/owners", requireRole("admin"), async (req, res): Promise<void> => {
-  const categoryId = parseInt(req.params.id as string, 10);
-  const { owners } = req.body as {
-    owners?: Array<{ employeeId: number; isPrimary?: boolean }>;
-  };
-  if (!Array.isArray(owners)) {
-    res.status(400).json({ error: "owners must be an array" });
-    return;
-  }
-  // Exactly one primary owner, at most.
-  if (!assertAtMostOnePrimary(owners)) {
-    res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
-    return;
-  }
-
-  try {
-    await db.transaction(async (tx) => {
-      await tx
-        .delete(employeeCategoriesTable)
-        .where(eq(employeeCategoriesTable.categoryId, categoryId));
-      if (owners.length > 0) {
-        await tx.insert(employeeCategoriesTable).values(
-          owners.map((o) => ({
-            categoryId,
-            employeeId: o.employeeId,
-            isPrimary: !!o.isPrimary,
-          })),
-        );
-      }
-    });
-  } catch (err) {
-    // The DB partial unique index is the real guard (the payload check above is
-    // only a convenience). Surface a clean 400 instead of a 500.
-    if (isUniqueViolation(err)) {
+router.put(
+  "/item-categories/:id/owners",
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const categoryId = parseInt(req.params.id as string, 10);
+    const { owners } = req.body as {
+      owners?: Array<{ employeeId: number; isPrimary?: boolean }>;
+    };
+    if (!Array.isArray(owners)) {
+      res.status(400).json({ error: "owners must be an array" });
+      return;
+    }
+    // Exactly one primary owner, at most.
+    if (!assertAtMostOnePrimary(owners)) {
       res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
       return;
     }
-    throw err;
-  }
 
-  await db.insert(auditLogTable).values({
-    action: "item_category.owners_updated",
-    entityType: "item_category",
-    entityId: categoryId,
-    employeeId: req.session.employeeId,
-    description: `Category ${categoryId} owners set to ${owners.map((o) => o.employeeId).join(",") || "(none)"}`,
-    ipAddress: req.ip,
-    userAgent: req.get("user-agent"),
-  });
+    try {
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(employeeCategoriesTable)
+          .where(eq(employeeCategoriesTable.categoryId, categoryId));
+        if (owners.length > 0) {
+          await tx.insert(employeeCategoriesTable).values(
+            owners.map((o) => ({
+              categoryId,
+              employeeId: o.employeeId,
+              isPrimary: !!o.isPrimary,
+            })),
+          );
+        }
+      });
+    } catch (err) {
+      // The DB partial unique index is the real guard (the payload check above is
+      // only a convenience). Surface a clean 400 instead of a 500.
+      if (isUniqueViolation(err)) {
+        res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
+        return;
+      }
+      throw err;
+    }
 
-  res.json({ ok: true, count: owners.length });
-});
+    await db.insert(auditLogTable).values({
+      action: "item_category.owners_updated",
+      entityType: "item_category",
+      entityId: categoryId,
+      employeeId: req.session.employeeId,
+      description: `Category ${categoryId} owners set to ${owners.map((o) => o.employeeId).join(",") || "(none)"}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+
+    res.json({ ok: true, count: owners.length });
+  },
+);
 
 // ── Categories owned by an employee ─────────────────────────────────────────
 router.get("/employees/:id/categories", requireAuth, async (req, res): Promise<void> => {
@@ -421,60 +425,64 @@ router.get("/employees/categories", requireAuth, async (_req, res): Promise<void
   res.json(byEmployee);
 });
 
-router.put("/employees/:id/categories", requireRole("admin"), async (req, res): Promise<void> => {
-  const employeeId = parseInt(req.params.id as string, 10);
-  const { categories } = req.body as {
-    categories?: Array<{ categoryId: number; isPrimary?: boolean }>;
-  };
-  if (!Array.isArray(categories)) {
-    res.status(400).json({ error: "categories must be an array" });
-    return;
-  }
-  // At most one primary for this employee's own list. The cross-employee
-  // "one primary per CATEGORY" rule is enforced by the DB index below — this
-  // payload check only catches the obvious in-request case.
-  if (!assertAtMostOnePrimary(categories)) {
-    res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
-    return;
-  }
-
-  try {
-    await db.transaction(async (tx) => {
-      await tx
-        .delete(employeeCategoriesTable)
-        .where(eq(employeeCategoriesTable.employeeId, employeeId));
-      if (categories.length > 0) {
-        await tx.insert(employeeCategoriesTable).values(
-          categories.map((c) => ({
-            employeeId,
-            categoryId: c.categoryId,
-            isPrimary: !!c.isPrimary,
-          })),
-        );
-      }
-    });
-  } catch (err) {
-    // A second primary for a category already owned by another employee is
-    // rejected by the partial unique index — report it as a clear 400 rather
-    // than an opaque 500.
-    if (isUniqueViolation(err)) {
+router.put(
+  "/employees/:id/categories",
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const employeeId = parseInt(req.params.id as string, 10);
+    const { categories } = req.body as {
+      categories?: Array<{ categoryId: number; isPrimary?: boolean }>;
+    };
+    if (!Array.isArray(categories)) {
+      res.status(400).json({ error: "categories must be an array" });
+      return;
+    }
+    // At most one primary for this employee's own list. The cross-employee
+    // "one primary per CATEGORY" rule is enforced by the DB index below — this
+    // payload check only catches the obvious in-request case.
+    if (!assertAtMostOnePrimary(categories)) {
       res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
       return;
     }
-    throw err;
-  }
 
-  await db.insert(auditLogTable).values({
-    action: "employee.categories_updated",
-    entityType: "employee",
-    entityId: employeeId,
-    employeeId: req.session.employeeId,
-    description: `Employee ${employeeId} categories set to ${categories.map((c) => c.categoryId).join(",") || "(none)"}`,
-    ipAddress: req.ip,
-    userAgent: req.get("user-agent"),
-  });
+    try {
+      await db.transaction(async (tx) => {
+        await tx
+          .delete(employeeCategoriesTable)
+          .where(eq(employeeCategoriesTable.employeeId, employeeId));
+        if (categories.length > 0) {
+          await tx.insert(employeeCategoriesTable).values(
+            categories.map((c) => ({
+              employeeId,
+              categoryId: c.categoryId,
+              isPrimary: !!c.isPrimary,
+            })),
+          );
+        }
+      });
+    } catch (err) {
+      // A second primary for a category already owned by another employee is
+      // rejected by the partial unique index — report it as a clear 400 rather
+      // than an opaque 500.
+      if (isUniqueViolation(err)) {
+        res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
+        return;
+      }
+      throw err;
+    }
 
-  res.json({ ok: true, count: categories.length });
-});
+    await db.insert(auditLogTable).values({
+      action: "employee.categories_updated",
+      entityType: "employee",
+      entityId: employeeId,
+      employeeId: req.session.employeeId,
+      description: `Employee ${employeeId} categories set to ${categories.map((c) => c.categoryId).join(",") || "(none)"}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+
+    res.json({ ok: true, count: categories.length });
+  },
+);
 
 export default router;
