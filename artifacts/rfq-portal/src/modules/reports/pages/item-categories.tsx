@@ -5,7 +5,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { canAccessPath } from "@/lib/permissions";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { toast } from "sonner";
-import { Pencil, X } from "lucide-react";
 
 /** Read the server's JSON `{error}` message (falls back to the HTTP status). */
 async function readError(res: Response): Promise<string> {
@@ -40,169 +39,11 @@ interface ItemCategoryRow {
 }
 
 /**
- * The manager's per-item category editor. The item's PRIMARY category (the
- * classifier's pick, and what drives ownership) is locked; the manager adds or
- * removes the EXTRA categories the item also belongs to.
- */
-export function ItemCategoriesEditor({
-  item,
-  onClose,
-  onSaved,
-}: {
-  item: { itemId: number; label: string };
-  onClose: () => void;
-  onSaved?: () => void;
-}) {
-  const [allCats, setAllCats] = useState<Array<{ id: number; name: string }>>([]);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [primaryId, setPrimaryId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      try {
-        const [catsRes, itemRes] = await Promise.all([
-          fetch("/api/item-categories", { credentials: "include" }),
-          fetch(`/api/customer-rfq/items/${item.itemId}/categories`, { credentials: "include" }),
-        ]);
-        if (cancelled) return;
-        const cats = catsRes.ok
-          ? ((await catsRes.json()) as Array<{ id: number; name: string }>)
-          : [];
-        setAllCats(cats.map((c) => ({ id: c.id, name: c.name })));
-        if (itemRes.ok) {
-          const json = (await itemRes.json()) as {
-            primaryCategoryId?: number | null;
-            categories: Array<{ categoryId: number; isPrimary: boolean }>;
-          };
-          setPrimaryId(json.primaryCategoryId ?? null);
-          setSelected(new Set(json.categories.map((c) => c.categoryId)));
-        }
-      } catch {
-        // ignore — the modal still opens with an empty list
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [item.itemId]);
-
-  const toggle = (id: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        // The primary category cannot be un-selected — promote another one.
-        if (id === primaryId) {
-          const fallback = [...next][0] ?? null;
-          setPrimaryId(fallback);
-        }
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/customer-rfq/items/${item.itemId}/categories`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ categoryIds: [...selected], primaryCategoryId: primaryId }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || "فشل حفظ التصنيفات");
-      }
-      toast.success("تم حفظ تصنيفات البند");
-      onSaved?.();
-      onClose();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "فشل حفظ التصنيفات");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-lg w-full max-w-md p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-foreground">
-            تصنيفات البند{" "}
-            <span className="font-mono text-xs text-muted-foreground">{item.label}</span>
-          </h2>
-          <button onClick={onClose} className="text-muted-foreground">
-            <X size={18} />
-          </button>
-        </div>
-        {loading ? (
-          <div className="text-sm text-muted-foreground">جارٍ التحميل…</div>
-        ) : (
-          <div className="max-h-72 overflow-y-auto space-y-1">
-            {allCats.map((c) => {
-              const isPrimary = c.id === primaryId;
-              return (
-                <label
-                  key={c.id}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/40 text-sm cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected.has(c.id)}
-                    onChange={() => toggle(c.id)}
-                  />
-                  <span className="text-foreground">{c.name}</span>
-                  {isPrimary ? (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">
-                      أساسي
-                    </span>
-                  ) : (
-                    selected.has(c.id) && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setPrimaryId(c.id);
-                        }}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
-                      >
-                        تعيين أساسي
-                      </button>
-                    )
-                  )}
-                </label>
-              );
-            })}
-          </div>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            إلغاء
-          </Button>
-          <Button onClick={save} disabled={saving || loading}>
-            {saving ? "جارٍ الحفظ…" : "حفظ"}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
  * The «بنود التصنيفات» list — EVERY item with its identity (line item / part
  * number / description) and its category. Visible to the whole team (read-only);
  * the category is edited per item by an admin/manager only.
  */
-function ItemsCategoryList({ canEdit }: { canEdit: boolean }) {
+function ItemsCategoryList() {
   const [rows, setRows] = useState<ItemCategoryRow[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -211,7 +52,6 @@ function ItemsCategoryList({ canEdit }: { canEdit: boolean }) {
   const [catFilter, setCatFilter] = useState("all");
   const [allCats, setAllCats] = useState<Array<{ id: number; name: string }>>([]);
   const [loading, setLoading] = useState(true);
-  const [editor, setEditor] = useState<{ itemId: number; label: string } | null>(null);
 
   const PAGE = 100;
 
@@ -330,27 +170,18 @@ function ItemsCategoryList({ canEdit }: { canEdit: boolean }) {
                 </th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">التصنيف</th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">طلب التسعير</th>
-                {canEdit && (
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">إجراء</th>
-                )}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td
-                    colSpan={canEdit ? 6 : 5}
-                    className="px-4 py-10 text-center text-muted-foreground"
-                  >
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     جارٍ التحميل…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={canEdit ? 6 : 5}
-                    className="px-4 py-10 text-center text-muted-foreground"
-                  >
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     لا توجد بنود مطابقة.
                   </td>
                 </tr>
@@ -408,22 +239,6 @@ function ItemsCategoryList({ canEdit }: { canEdit: boolean }) {
                         <div className="text-xs text-muted-foreground">{r.customerName}</div>
                       )}
                     </td>
-                    {canEdit && (
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            setEditor({
-                              itemId: r.customerRfqItemId,
-                              label: r.partNo || r.lineItem || `بند #${r.customerRfqItemId}`,
-                            })
-                          }
-                        >
-                          <Pencil size={14} className="me-1" /> تعديل التصنيف
-                        </Button>
-                      </td>
-                    )}
                   </tr>
                 ))
               )}
@@ -457,18 +272,12 @@ function ItemsCategoryList({ canEdit }: { canEdit: boolean }) {
           </div>
         </div>
       )}
-
-      {editor && (
-        <ItemCategoriesEditor item={editor} onClose={() => setEditor(null)} onSaved={load} />
-      )}
     </div>
   );
 }
 
 export function ItemCategoriesTab() {
   const { employee } = useAuth();
-  // Editing an item's category is for an admin or a manager.
-  const canEdit = employee?.role === "admin" || employee?.role === "manager";
 
   if (!canAccessPath(employee?.role, employee?.permissions, "/items")) {
     return (
@@ -476,9 +285,12 @@ export function ItemCategoriesTab() {
     );
   }
 
+  // READ-ONLY for everyone — no role may edit a category from this page. The
+  // per-item editor lives on the customer-RFQ page and /employees owns
+  // category assignment; this tab is the shared review view.
   return (
     <div className="space-y-6">
-      <ItemsCategoryList canEdit={canEdit} />
+      <ItemsCategoryList />
     </div>
   );
 }

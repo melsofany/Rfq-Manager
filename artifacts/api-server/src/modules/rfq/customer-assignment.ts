@@ -23,7 +23,12 @@ import {
 import { eq, and, inArray, asc, isNull } from "drizzle-orm";
 import { classifyItem, MIN_CONFIDENCE } from "./classification";
 import { classifyItemsWithAi, type AiClassifyResult } from "./ai-classifier";
-import { buildContext, loadCustomerWorkloads, type AssignContext } from "./assignment";
+import {
+  buildContext,
+  loadCategories,
+  loadCustomerWorkloads,
+  type AssignContext,
+} from "./assignment";
 import { closeAndOpenPeriod, dbClockTimestamp, lockItemRows } from "./attribution";
 
 export interface CustomerAssignOutcome {
@@ -219,6 +224,68 @@ export async function ensureCustomerAssignmentsSafe(
     // eslint-disable-next-line no-console
     console.warn("customer assignment failed (non-fatal)", err);
   }
+}
+
+/**
+ * Backfill: classify every still-unclassified customer item with the LLM, in
+ * batches, then assign each affected RFQ's items. Used by the «تصنيف آلي»
+ * action so items created before the classifier could reach the whole catalogue
+ * (or before AI was configured) get a category without re-saving each request.
+ *
+ * One batched provider request per `BATCH` items — never one per item. Items the
+ * model declines stay unclassified on purpose (never invent a responsibility).
+ * The run is bounded by `limit` so a single call cannot walk a huge backlog.
+ */
+export async function classifyUnclassifiedItems(
+  opts: { limit?: number } = {},
+): Promise<{ scanned: number; classified: number; batches: number }> {
+  const limit = Math.min(Math.max(opts.limit ?? 200, 1), 500);
+  const items = await db
+    .select({
+      id: customerRfqItemsTable.id,
+      customerRfqId: customerRfqItemsTable.customerRfqId,
+      description: customerRfqItemsTable.description,
+      partNo: customerRfqItemsTable.partNo,
+      lineItem: customerRfqItemsTable.lineItem,
+    })
+    .from(customerRfqItemsTable)
+    .where(
+      and(isNull(customerRfqItemsTable.categoryId), eq(customerRfqItemsTable.isCancelled, false)),
+    )
+    .orderBy(asc(customerRfqItemsTable.id))
+    .limit(limit);
+
+  if (items.length === 0) return { scanned: 0, classified: 0, batches: 0 };
+
+  const categories = await loadCategories();
+  const BATCH = 40;
+  const affectedRfqs = new Set<number>();
+  let classified = 0;
+  let batches = 0;
+
+  for (let start = 0; start < items.length; start += BATCH) {
+    const chunk = items.slice(start, start + BATCH);
+    const results = await classifyItemsWithAi(chunk, categories);
+    batches += 1;
+    if (!results) break; // provider unavailable — stop rather than spin
+    for (let i = 0; i < chunk.length; i += 1) {
+      const r = results[i];
+      if (!r || r.categoryId == null || (r.confidence ?? 0) < MIN_CONFIDENCE) continue;
+      await db
+        .update(customerRfqItemsTable)
+        .set({ categoryId: r.categoryId })
+        .where(eq(customerRfqItemsTable.id, chunk[i].id));
+      affectedRfqs.add(chunk[i].customerRfqId);
+      classified += 1;
+    }
+  }
+
+  // Assign owners for the RFQs we touched (idempotent — only unassigned items).
+  for (const rfqId of affectedRfqs) {
+    await ensureCustomerAssignmentsSafe(rfqId);
+  }
+
+  return { scanned: items.length, classified, batches };
 }
 
 /**

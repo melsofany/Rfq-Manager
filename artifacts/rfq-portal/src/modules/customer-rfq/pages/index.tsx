@@ -4,16 +4,44 @@ import { useListCustomerRfqs, getListCustomerRfqsQueryKey } from "@workspace/api
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, FileText } from "lucide-react";
+import { Plus, Search, FileText, Sparkles } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 export default function CustomerRfqPage() {
   const [, navigate] = useLocation();
+  const { employee } = useAuth();
   const [search, setSearch] = useState("");
+  const [classifying, setClassifying] = useState(false);
+  const canClassify = employee?.role === "admin" || employee?.role === "manager";
 
   const { data: rfqs, isLoading } = useListCustomerRfqs(
     { search: search || undefined },
     { query: { queryKey: getListCustomerRfqsQueryKey({ search: search || undefined }) } },
   );
+
+  const runBulkClassify = async () => {
+    setClassifying(true);
+    try {
+      const res = await fetch("/api/customer-rfq/items/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ limit: 300 }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        scanned?: number;
+        classified?: number;
+      };
+      if (!res.ok) throw new Error(body.error || "فشل التصنيف الآلي");
+      toast.success(`تم التصنيف الآلي: ${body.classified ?? 0} من ${body.scanned ?? 0} بند`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "فشل التصنيف الآلي");
+    } finally {
+      setClassifying(false);
+    }
+  };
 
   return (
     <Layout>
@@ -23,9 +51,23 @@ export default function CustomerRfqPage() {
             <h1 className="text-xl font-bold text-foreground">طلبات تسعير العملاء</h1>
             <p className="text-muted-foreground text-sm">إدارة طلبات التسعير الواردة من العملاء</p>
           </div>
-          <Button onClick={() => navigate("/customer-rfq/new")} size="sm" className="gap-1.5">
-            <Plus size={15} /> طلب تسعير جديد
-          </Button>
+          <div className="flex items-center gap-2">
+            {canClassify && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={runBulkClassify}
+                disabled={classifying}
+                title="تصنيف البنود غير المصنّفة تلقائيًا بالذكاء الاصطناعي"
+              >
+                <Sparkles size={15} /> {classifying ? "جارٍ التصنيف…" : "تصنيف آلي"}
+              </Button>
+            )}
+            <Button onClick={() => navigate("/customer-rfq/new")} size="sm" className="gap-1.5">
+              <Plus size={15} /> طلب تسعير جديد
+            </Button>
+          </div>
         </div>
 
         <div className="relative max-w-xs">

@@ -54,7 +54,12 @@ export async function classifyItemsWithAi(
   categories: CategorySeed[],
 ): Promise<Array<AiClassifyResult | null> | null> {
   if (items.length === 0) return [];
-  const usable = categories.filter((c) => c.code);
+  // EVERY active category is offered to the model, keyed by NAME. Filtering on
+  // `code` (the old rule) silently dropped every operator-added category — most
+  // of the catalogue has no code, so the model could only ever pick from the 5
+  // seeded ones and everything else came back «غير معروف». The name is the
+  // stable, human-facing key the operator manages; the code is optional.
+  const usable = categories.filter((c) => c.name && c.name.trim().length > 0);
   if (usable.length === 0) return null;
   // No provider configured ⇒ return before any network attempt so the caller's
   // deterministic fallback is taken immediately (and tests never hit the wire).
@@ -65,7 +70,7 @@ export async function classifyItemsWithAi(
   const model = settings.model || DEFAULT_MODEL;
   const baseUrl = settings.baseUrl;
 
-  const catalog = usable.map((c) => `- ${c.code}: ${c.name}`).join("\n");
+  const catalog = usable.map((c) => `- ${c.name}`).join("\n");
   const listing = items
     .map((it, i) => {
       const parts = [
@@ -84,8 +89,8 @@ export async function classifyItemsWithAi(
     "البنود:",
     listing,
     "",
-    'أعِد JSON فقط بالشكل: {"results":[{"i":1,"code":"<code أو غير معروف>","confidence":0-100}]}',
-    'لا تخترع تصنيفًا غير موجود في القائمة. إن لم تكن متأكدًا اكتب code = "غير معروف" وconfidence = 0.',
+    'أعِد JSON فقط بالشكل: {"results":[{"i":1,"name":"<اسم التصنيف أو غير معروف>","confidence":0-100}]}',
+    'لا تخترع تصنيفًا غير موجود في القائمة. إن لم تكن متأكدًا اكتب name = "غير معروف" وconfidence = 0.',
   ].join("\n");
 
   const messages: ChatMessage[] = [
@@ -113,16 +118,16 @@ export async function classifyItemsWithAi(
       );
       return null;
     }
-    const byCode = new Map(usable.map((c) => [c.code as string, c]));
+    const byName = new Map(usable.map((c) => [normalizeCatName(c.name), c]));
     return parsed.map((r) => {
-      if (!r || !r.code || r.code === "غير معروف") return null;
-      const cat = byCode.get(r.code);
-      if (!cat) return null; // the model invented a code — refuse it
+      if (!r || !r.name || r.name === "غير معروف") return null;
+      const cat = byName.get(normalizeCatName(r.name));
+      if (!cat) return null; // the model invented a category — refuse it
       if (!(r.confidence > 0)) return null;
       return {
         categoryId: cat.id,
         confidence: Math.max(1, Math.min(100, Math.round(r.confidence))),
-        matchedTerm: cat.code,
+        matchedTerm: cat.name,
       };
     });
   } catch (err) {
@@ -132,15 +137,28 @@ export async function classifyItemsWithAi(
 }
 
 interface RawRow {
-  code?: unknown;
+  name?: unknown;
   confidence?: unknown;
+}
+
+/** Fold the cosmetic differences that make one category name look like two. */
+export function normalizeCatName(s: string): string {
+  return s
+    .trim()
+    .replace(/[\u064B-\u0652\u0670\u0640]/g, "") // harakat + tatweel
+    .replace(/[إأآا]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/[()\-–—_/.,]/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 /** Parse the model's JSON, tolerating a fenced code block or surrounding prose. */
 export function parseClassifyReply(
   content: string | null,
   expected: number,
-): Array<{ code: string; confidence: number } | null> | null {
+): Array<{ name: string; confidence: number } | null> | null {
   if (!content) return null;
   const json = extractJson(content);
   if (!json) return null;
@@ -153,13 +171,13 @@ export function parseClassifyReply(
   const rows = (data as { results?: unknown }).results ?? (Array.isArray(data) ? data : null);
   if (!Array.isArray(rows)) return null;
 
-  const out: Array<{ code: string; confidence: number } | null> = new Array(expected).fill(null);
+  const out: Array<{ name: string; confidence: number } | null> = new Array(expected).fill(null);
   for (const raw of rows as RawRow[]) {
     const i = Number((raw as { i?: unknown }).i);
     if (!Number.isInteger(i) || i < 1 || i > expected) continue;
-    const code = typeof raw.code === "string" ? raw.code.trim() : "";
+    const name = typeof raw.name === "string" ? raw.name.trim() : "";
     const confidence = Number(raw.confidence);
-    out[i - 1] = { code, confidence: Number.isFinite(confidence) ? confidence : 0 };
+    out[i - 1] = { name, confidence: Number.isFinite(confidence) ? confidence : 0 };
   }
   return out;
 }

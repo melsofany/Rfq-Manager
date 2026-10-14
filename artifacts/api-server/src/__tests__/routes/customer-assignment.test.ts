@@ -65,6 +65,7 @@ const customerRfqItemsTable = {
   description: "description",
   partNo: "partNo",
   lineItem: "lineItem",
+  isCancelled: "isCancelled",
 };
 const customerRfqItemAssignmentsTable = {
   _: "customerAssignments",
@@ -175,11 +176,13 @@ vi.mock("../../modules/rfq/ai-classifier", () => ({
 
 let ensureCustomerAssignments: typeof import("../../modules/rfq/customer-assignment").ensureCustomerAssignments;
 let assignCustomerItemManually: typeof import("../../modules/rfq/customer-assignment").assignCustomerItemManually;
+let classifyUnclassifiedItems: typeof import("../../modules/rfq/customer-assignment").classifyUnclassifiedItems;
 
 beforeAll(async () => {
   const mod = await import("../../modules/rfq/customer-assignment");
   ensureCustomerAssignments = mod.ensureCustomerAssignments;
   assignCustomerItemManually = mod.assignCustomerItemManually;
+  classifyUnclassifiedItems = mod.classifyUnclassifiedItems;
 });
 
 beforeEach(() => {
@@ -420,5 +423,55 @@ describe("customer-item assignment engine", () => {
       assignedBy: 1,
     });
     expect(insertedAudits).toHaveLength(0);
+  });
+
+  it("bulk classify: categorises unclassified items and assigns their owners", async () => {
+    categoryRows = [
+      { id: 3, code: "electrical", name: "كهرباء", isActive: true },
+      { id: 2, code: "spare_parts", name: "قطع غيار", isActive: true },
+    ];
+    ownerRows = [{ categoryId: 3, employeeId: 5, isPrimary: true, active: true }];
+    customerItemRows = [
+      {
+        id: 700,
+        customerRfqId: 42,
+        description: "منظم جهد",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+      },
+    ];
+    aiClassify.mockResolvedValue([{ categoryId: 3, confidence: 90, matchedTerm: "كهرباء" }]);
+    const result = await classifyUnclassifiedItems({ limit: 50 });
+    expect(result.scanned).toBe(1);
+    expect(result.classified).toBe(1);
+    expect(updatedCustomerItemCalls[0]).toEqual({ id: 700, vals: { categoryId: 3 } });
+    expect(insertedCustomerAssignments).toHaveLength(1);
+    expect(insertedCustomerAssignments[0].employeeId).toBe(5);
+  });
+
+  it("bulk classify: does nothing when there are no unclassified items", async () => {
+    customerItemRows = [];
+    const result = await classifyUnclassifiedItems({});
+    expect(result).toEqual({ scanned: 0, classified: 0, batches: 0 });
+    expect(aiClassify).not.toHaveBeenCalled();
+  });
+
+  it("bulk classify: leaves items the model declines unclassified (never invents)", async () => {
+    categoryRows = [{ id: 3, code: "electrical", name: "كهرباء", isActive: true }];
+    customerItemRows = [
+      {
+        id: 701,
+        customerRfqId: 42,
+        description: "ZZZ ???",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+      },
+    ];
+    aiClassify.mockResolvedValue([null]);
+    const result = await classifyUnclassifiedItems({});
+    expect(result.classified).toBe(0);
+    expect(updatedCustomerItemCalls).toHaveLength(0);
   });
 });
