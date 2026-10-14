@@ -34,6 +34,11 @@ export interface Supplier {
      */
   bankName?: string | null;
   /**
+     * اسم صاحب الحساب كما هو مسجَّل لدى البنك
+     * @nullable
+     */
+  bankAccountHolder?: string | null;
+  /**
      * رقم الحساب البنكي
      * @nullable
      */

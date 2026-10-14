@@ -36,6 +36,7 @@ interface ParsedSupplier {
   commercialRegister?: string;
   taxRegistration?: string;
   bankName?: string;
+  bankAccountHolder?: string;
   bankAccountNumber?: string;
   iban?: string;
   swiftCode?: string;
@@ -244,6 +245,11 @@ const COL_ALIASES: Record<string, keyof ParsedSupplier> = {
   "اسم البنك": "bankName",
   البنك: "bankName",
 
+  bank_account_holder: "bankAccountHolder",
+  bankaccountholder: "bankAccountHolder",
+  "اسم صاحب الحساب": "bankAccountHolder",
+  "صاحب الحساب": "bankAccountHolder",
+
   bank_account_number: "bankAccountNumber",
   bankaccountnumber: "bankAccountNumber",
   "رقم الحساب": "bankAccountNumber",
@@ -328,6 +334,7 @@ function mapRow(row: Record<string, unknown>): ParsedSupplier | null {
     commercialRegister: mapped.commercialRegister as string | undefined,
     taxRegistration: mapped.taxRegistration as string | undefined,
     bankName: mapped.bankName as string | undefined,
+    bankAccountHolder: mapped.bankAccountHolder as string | undefined,
     bankAccountNumber: mapped.bankAccountNumber as string | undefined,
     iban: mapped.iban as string | undefined,
     swiftCode: mapped.swiftCode as string | undefined,
@@ -385,6 +392,7 @@ function downloadTemplate() {
       commercial_register: "123456",
       tax_registration: "123-456-789",
       bank_name: "البنك الأهلي المصري",
+      bank_account_holder: "شركة النماذج التجارية",
       bank_account_number: "1234567890",
       iban: "EG380019000500000000263180002",
       swift_code: "NBEGEGCX",
@@ -550,6 +558,7 @@ export default function ImportSuppliersTab() {
         commercialRegister: r.commercialRegister || undefined,
         taxRegistration: r.taxRegistration || undefined,
         bankName: r.bankName || undefined,
+        bankAccountHolder: r.bankAccountHolder || undefined,
         bankAccountNumber: r.bankAccountNumber || undefined,
         iban: r.iban || undefined,
         swiftCode: r.swiftCode || undefined,

@@ -147,6 +147,11 @@ export interface Supplier {
      */
   bankName?: string | null;
   /**
+     * اسم صاحب الحساب كما هو مسجَّل لدى البنك
+     * @nullable
+     */
+  bankAccountHolder?: string | null;
+  /**
      * رقم الحساب البنكي
      * @nullable
      */
@@ -183,6 +188,7 @@ export interface SupplierInput {
   commercialRegister?: string;
   taxRegistration?: string;
   bankName?: string;
+  bankAccountHolder?: string;
   bankAccountNumber?: string;
   iban?: string;
   swiftCode?: string;
@@ -201,6 +207,7 @@ export interface SupplierUpdate {
   commercialRegister?: string;
   taxRegistration?: string;
   bankName?: string;
+  bankAccountHolder?: string;
   bankAccountNumber?: string;
   iban?: string;
   swiftCode?: string;

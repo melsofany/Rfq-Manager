@@ -46,6 +46,7 @@ export async function initDb(): Promise<void> {
         commercial_register TEXT,
         tax_registration TEXT,
         bank_name TEXT,
+        bank_account_holder TEXT,
         bank_account_number TEXT,
         iban TEXT,
         swift_code TEXT,
@@ -450,6 +451,7 @@ export async function initDb(): Promise<void> {
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS commercial_register TEXT;
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS tax_registration TEXT;
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS bank_name TEXT;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS bank_account_holder TEXT;
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS bank_account_number TEXT;
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS iban TEXT;
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS swift_code TEXT;
