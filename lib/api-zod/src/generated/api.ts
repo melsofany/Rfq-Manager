@@ -728,7 +728,15 @@ export const ListCustomerRfqSheetViewResponse = zod.object({
   "poUnitPrice": zod.string().nullish(),
   "flagged": zod.boolean().optional().describe('True when the row has an issue (rejected customer delivery OR actual supplier cost exceeded the PO price OR a manual highlight note is set).'),
   "flagReason": zod.string().nullish().describe('Arabic reason for the flag — computed flags merged with the manual highlight note, e.g. \'رفض التسليم: تالف — مراجعة خاصة\'.'),
-  "highlightColor": zod.union([zod.literal('yellow'),zod.literal('green'),zod.literal('blue'),zod.literal('red'),zod.literal('orange'),zod.literal('purple'),zod.literal(null)]).nullish().describe('Manual row tint color set on the customer PO line (renders the whole row in that color).')
+  "highlightColor": zod.union([zod.literal('yellow'),zod.literal('green'),zod.literal('blue'),zod.literal('red'),zod.literal('orange'),zod.literal('purple'),zod.literal(null)]).nullish().describe('Manual row tint color set on the customer PO line (renders the whole row in that color).'),
+  "categoryName": zod.string().nullish().describe('Item category name (التصنيف) resolved from the customer RFQ item\'s category; null when the item is unclassified.'),
+  "categories": zod.array(zod.object({
+  "categoryId": zod.number(),
+  "categoryName": zod.string().nullish(),
+  "employeeId": zod.number().nullish(),
+  "employeeName": zod.string().nullish(),
+  "isPrimary": zod.boolean().describe('True for the item\'s primary (classifier) category — the one that drives ownership.')
+}).describe('One category attached to a sheet row\'s item, with the employee responsible for it.')).optional().describe('Every category attached to the item — the primary classifier pick plus any extra categories a manager attached (multi-category). Each carries its responsible employee.')
 }).describe('One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued). Rows for customer-PO lines that cannot be matched to a customer RFQ item (free\/manual lines) carry null RFQ columns.'))
 }).describe('Paginated flat sheet-style view (one row per customer RFQ item, with joined PO columns).')
 

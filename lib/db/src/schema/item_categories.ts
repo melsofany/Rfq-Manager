@@ -217,3 +217,34 @@ export const itemAssignmentAuditTable = pgTable("item_assignment_audit", {
 });
 
 export type ItemAssignmentAudit = typeof itemAssignmentAuditTable.$inferSelect;
+
+// تصنيفات البند المتعددة — a single item may belong to MORE THAN ONE category
+// (e.g. a device that is also an electrical component). `customer_rfq_items.category_id`
+// stays as the PRIMARY category (the one the classifier picked, used for
+// ownership), while this junction records every additional category the manager
+// has attached for review. One row per (item, category); a manager may add or
+// remove them. The classifier itself stays single-category — multi-category is a
+// deliberate human decision, never inferred.
+export const customerRfqItemCategoriesTable = pgTable(
+  "customer_rfq_item_categories",
+  {
+    id: serial("id").primaryKey(),
+    customerRfqItemId: integer("customer_rfq_item_id")
+      .notNull()
+      .references(() => customerRfqItemsTable.id, { onDelete: "cascade" }),
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => itemCategoriesTable.id, { onDelete: "cascade" }),
+    // The employee responsible for THIS category on THIS item (coverage). Set
+    // from the category's owner at attach time; nullable so an uncovered
+    // category can still be recorded.
+    employeeId: integer("employee_id").references(() => employeesTable.id, {
+      onDelete: "set null",
+    }),
+    addedBy: integer("added_by").references(() => employeesTable.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("customer_rfq_item_categories_uq").on(t.customerRfqItemId, t.categoryId)],
+);
+
+export type CustomerRfqItemCategory = typeof customerRfqItemCategoriesTable.$inferSelect;

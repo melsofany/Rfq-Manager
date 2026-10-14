@@ -15,7 +15,6 @@ import {
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { AttachmentsPanel } from "../components/Attachments";
-import { ItemAssignmentsPanel } from "../components/ItemAssignmentsPanel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
@@ -1048,7 +1047,6 @@ export default function RfqDetailPage() {
                 </div>
               )}
             </div>
-            <ItemAssignmentsPanel rfqId={rfqId} />
           </div>
         )}
 

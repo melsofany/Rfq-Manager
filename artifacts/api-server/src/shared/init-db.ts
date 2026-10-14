@@ -430,6 +430,25 @@ export async function initDb(): Promise<void> {
         ON item_assignment_audit (rfq_item_id);
     `);
 
+    // تصنيفات البند المتعددة — one item may belong to several categories. The
+    // primary category stays on customer_rfq_items.category_id; this junction
+    // records the extra ones a manager attaches. Kept in its OWN statement so a
+    // sibling failure can never roll the CREATE back silently.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS customer_rfq_item_categories (
+        id SERIAL PRIMARY KEY,
+        customer_rfq_item_id INTEGER NOT NULL REFERENCES customer_rfq_items(id) ON DELETE CASCADE,
+        category_id INTEGER NOT NULL REFERENCES item_categories(id) ON DELETE CASCADE,
+        employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        added_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS customer_rfq_item_categories_uq
+        ON customer_rfq_item_categories (customer_rfq_item_id, category_id);
+      CREATE INDEX IF NOT EXISTS idx_customer_rfq_item_categories_item
+        ON customer_rfq_item_categories (customer_rfq_item_id);
+    `);
+
     // Add reactivated_at to suppliers — used by the auto-deactivate sweep so a
     // manual reactivation resets the no-reply counter (needs 10 MORE unanswered
     // sends to auto-deactivate again).

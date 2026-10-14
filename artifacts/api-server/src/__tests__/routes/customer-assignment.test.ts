@@ -165,6 +165,14 @@ vi.mock("../../shared/logger", () => ({
   logger: { warn: () => {}, error: () => {}, info: () => {}, debug: () => {} },
 }));
 
+// The AI classifier is the provider seam for the assignment engine. Default to
+// `null` (unavailable) so the deterministic keyword path is exercised; a test
+// that wants the AI path sets a resolved value.
+const aiClassify = vi.fn();
+vi.mock("../../modules/rfq/ai-classifier", () => ({
+  classifyItemsWithAi: (...args: any[]) => aiClassify(...args),
+}));
+
 let ensureCustomerAssignments: typeof import("../../modules/rfq/customer-assignment").ensureCustomerAssignments;
 let assignCustomerItemManually: typeof import("../../modules/rfq/customer-assignment").assignCustomerItemManually;
 
@@ -192,6 +200,8 @@ beforeEach(() => {
   insertedCustomerAssignments.length = 0;
   insertedAudits.length = 0;
   updatedCustomerItemCalls.length = 0;
+  aiClassify.mockReset();
+  aiClassify.mockResolvedValue(null); // AI unavailable by default → keyword path
 });
 
 describe("customer-item assignment engine", () => {
@@ -230,6 +240,82 @@ describe("customer-item assignment engine", () => {
     expect(outcomes[0].reason).toBe("unclassified");
     expect(outcomes[0].employeeId).toBeNull();
     expect(insertedCustomerAssignments).toHaveLength(0);
+  });
+
+  it("AI-first: assigns an item the KEYWORD classifier cannot place", async () => {
+    // "منظم جهد" carries no seeded keyword, so the deterministic classifier
+    // leaves it unclassified. The AI pass places it in electrical (id 3) and
+    // the item is assigned — this is the whole point of the AI module.
+    customerItemRows = [
+      {
+        id: 600,
+        customerRfqId: 10,
+        description: "منظم جهد اتوماتيكي",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+      },
+    ];
+    aiClassify.mockResolvedValue([{ categoryId: 3, confidence: 91, matchedTerm: "electrical" }]);
+    const outcomes = await ensureCustomerAssignments(10);
+    expect(outcomes[0].reason).toBe("assigned");
+    expect(outcomes[0].categoryId).toBe(3);
+    expect(outcomes[0].employeeId).toBe(5);
+    expect(insertedCustomerAssignments).toHaveLength(1);
+    // The chosen category is persisted on the item row.
+    expect(updatedCustomerItemCalls.some((c) => c.id === 600 && c.vals.categoryId === 3)).toBe(
+      true,
+    );
+  });
+
+  it("AI-first: keeps «غير معروف» unassigned (AI declines → keyword also fails)", async () => {
+    customerItemRows = [
+      {
+        id: 601,
+        customerRfqId: 10,
+        description: "ZQX UNKNOWN 999",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+      },
+    ];
+    aiClassify.mockResolvedValue([null]); // model declined
+    const outcomes = await ensureCustomerAssignments(10);
+    expect(outcomes[0].reason).toBe("unclassified");
+    expect(outcomes[0].employeeId).toBeNull();
+    expect(insertedCustomerAssignments).toHaveLength(0);
+  });
+
+  it("falls back to the keyword classifier when the AI pass returns null", async () => {
+    customerItemRows = [
+      {
+        id: 602,
+        customerRfqId: 10,
+        description: "CABLE 3X2.5 MM",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+      },
+    ];
+    aiClassify.mockResolvedValue(null); // provider unavailable
+    const outcomes = await ensureCustomerAssignments(10);
+    expect(outcomes[0].categoryId).toBe(3); // electrical, via keywords
+    expect(outcomes[0].employeeId).toBe(5);
+  });
+
+  it("does NOT call the AI pass for an item that is already categorised", async () => {
+    customerItemRows = [
+      {
+        id: 603,
+        customerRfqId: 10,
+        description: "anything",
+        partNo: null,
+        lineItem: null,
+        categoryId: 2, // already categorised
+      },
+    ];
+    await ensureCustomerAssignments(10);
+    expect(aiClassify).not.toHaveBeenCalled();
   });
 
   it("assigns a category with no owner as classified-but-unassigned (no_owner)", async () => {

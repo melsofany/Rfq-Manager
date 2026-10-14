@@ -22,6 +22,7 @@ import {
 } from "@workspace/db";
 import { eq, and, inArray, asc, isNull } from "drizzle-orm";
 import { classifyItem, MIN_CONFIDENCE } from "./classification";
+import { classifyItemsWithAi, type AiClassifyResult } from "./ai-classifier";
 import { buildContext, loadCustomerWorkloads, type AssignContext } from "./assignment";
 import { closeAndOpenPeriod, dbClockTimestamp, lockItemRows } from "./attribution";
 
@@ -99,6 +100,26 @@ export async function ensureCustomerAssignments(
 
   const outcomes: CustomerAssignOutcome[] = [];
 
+  // ── AI classification pass ────────────────────────────────────────────────
+  // Items that still have no category are classified by the LLM in ONE batched
+  // request, using the operator's own category catalogue. The model may answer
+  // «غير معروف» — an unclassified item stays unassigned on purpose (never
+  // invent a responsibility). If the request cannot be made (unconfigured /
+  // provider error / unparsable), `aiResults` is null and every item falls back
+  // to the deterministic keyword classifier below. Best-effort: this must never
+  // fail the customer RFQ it is classifying.
+  const needsAi = targetItems.filter(
+    (i) => !alreadyAssigned.has(i.id) && (i.categoryId ?? null) == null,
+  );
+  const aiResults = needsAi.length > 0 ? await classifyItemsWithAi(needsAi, ctx.categories) : null;
+  const aiByItemId = new Map<number, AiClassifyResult>();
+  if (aiResults) {
+    needsAi.forEach((it, i) => {
+      const r = aiResults[i];
+      if (r && r.categoryId != null) aiByItemId.set(it.id, r);
+    });
+  }
+
   for (const item of targetItems) {
     if (alreadyAssigned.has(item.id)) {
       outcomes.push({
@@ -114,9 +135,18 @@ export async function ensureCustomerAssignments(
     let categoryId = item.categoryId ?? null;
     let confidence = 100;
     if (categoryId == null) {
-      const result = classifyItem(item, ctx.categories, ctx.vocabulary);
-      categoryId = result.categoryId;
-      confidence = result.confidence;
+      const ai = aiByItemId.get(item.id);
+      if (ai && ai.categoryId != null && (ai.confidence ?? 0) >= MIN_CONFIDENCE) {
+        categoryId = ai.categoryId;
+        confidence = ai.confidence ?? 100;
+      } else {
+        // AI declined, was unavailable, or was not confident enough → the
+        // deterministic keyword classifier gets the next say.
+        const result = classifyItem(item, ctx.categories, ctx.vocabulary);
+        categoryId = result.categoryId;
+        confidence = result.confidence;
+      }
+
       if (categoryId != null && confidence >= MIN_CONFIDENCE) {
         await db
           .update(customerRfqItemsTable)

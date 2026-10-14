@@ -390,6 +390,37 @@ router.get("/employees/:id/categories", requireAuth, async (req, res): Promise<v
   res.json(rows);
 });
 
+/**
+ * GET /employees/categories — every employee's owned categories in ONE request.
+ * The employees table renders each row's specializations; calling the per-employee
+ * endpoint for every row would be an N+1 on a page that lists the whole team.
+ * Declared BEFORE `/employees/:id/categories` is irrelevant (different segment
+ * count), but keep it adjacent so the pair is obvious.
+ */
+router.get("/employees/categories", requireAuth, async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      employeeId: employeeCategoriesTable.employeeId,
+      categoryId: employeeCategoriesTable.categoryId,
+      isPrimary: employeeCategoriesTable.isPrimary,
+      name: itemCategoriesTable.name,
+    })
+    .from(employeeCategoriesTable)
+    .innerJoin(itemCategoriesTable, eq(employeeCategoriesTable.categoryId, itemCategoriesTable.id));
+  const byEmployee: Record<
+    number,
+    Array<{ categoryId: number; name: string; isPrimary: boolean }>
+  > = {};
+  for (const r of rows) {
+    (byEmployee[r.employeeId] ??= []).push({
+      categoryId: r.categoryId,
+      name: r.name,
+      isPrimary: !!r.isPrimary,
+    });
+  }
+  res.json(byEmployee);
+});
+
 router.put("/employees/:id/categories", requireRole("admin"), async (req, res): Promise<void> => {
   const employeeId = parseInt(req.params.id as string, 10);
   const { categories } = req.body as {

@@ -36,6 +36,7 @@ export * from './customerRfqRequestStatusStage';
 export * from './customerRfqSheetFacets';
 export * from './customerRfqSheetFacetValue';
 export * from './customerRfqSheetRow';
+export * from './customerRfqSheetRowCategory';
 export * from './customerRfqSheetRowHighlightColor';
 export * from './customerRfqSheetView';
 export * from './customerRfqUpdate';

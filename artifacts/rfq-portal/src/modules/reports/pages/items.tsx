@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Layout } from "@/components/Layout";
 import { useSearchItems, getSearchItemsQueryKey } from "@workspace/api-client-react";
 import type {
@@ -637,6 +638,8 @@ function FilterHeader({
 }
 
 function SheetViewTab() {
+  const { employee } = useAuth();
+  const canEditCategories = employee?.role === "admin" || employee?.role === "manager";
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
@@ -697,6 +700,11 @@ function SheetViewTab() {
     setOffset(0);
   };
 
+  // Manager-only category editor: pick any row to attach extra categories to
+  // its item. The item's PRIMARY category is fixed (the classifier's pick);
+  // this only adds coverage for categories the item also belongs to.
+  const [catEditor, setCatEditor] = useState<{ itemId: number; label: string } | null>(null);
+
   return (
     <div className="space-y-4">
       {/* Search + count */}
@@ -745,6 +753,7 @@ function SheetViewTab() {
                     ["lineItem", "Line Item"],
                     ["partNo", "Part No"],
                     ["description", "التوصيف"],
+                    ["categoryName", "التصنيف"],
                     ["uom", "UOM"],
                     ["customerRfqNo", "طلب التسعير"],
                     ["entryDate", "تاريخ الطلب"],
@@ -782,7 +791,7 @@ function SheetViewTab() {
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={16} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={17} className="px-4 py-10 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <div className="h-5 w-5 border-2 border-muted border-t-primary rounded-full animate-spin" />
                       <span>جارٍ التحميل…</span>
@@ -792,14 +801,14 @@ function SheetViewTab() {
               )}
               {isError && (
                 <tr>
-                  <td colSpan={16} className="px-4 py-10 text-center text-destructive">
+                  <td colSpan={17} className="px-4 py-10 text-center text-destructive">
                     فشل تحميل البيانات. حاول مرة أخرى.
                   </td>
                 </tr>
               )}
               {!isLoading && !isError && rows.length === 0 && (
                 <tr>
-                  <td colSpan={16} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={17} className="px-4 py-10 text-center text-muted-foreground">
                     {search ? `لا توجد نتائج لـ «${search}»` : "لا توجد بيانات بعد"}
                   </td>
                 </tr>
@@ -823,6 +832,53 @@ function SheetViewTab() {
                       {cell(r.partNo)}
                     </td>
                     <td className="px-2 py-1.5">{cell(r.description)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {r.categories && r.categories.length > 0 ? (
+                        <span className="inline-flex flex-wrap items-center gap-1">
+                          {r.categories.map((c) => (
+                            <span
+                              key={c.categoryId}
+                              title={
+                                c.isPrimary
+                                  ? `التصنيف الأساسي${
+                                      c.employeeName ? ` — المسؤول: ${c.employeeName}` : ""
+                                    }`
+                                  : `تصنيف إضافي${
+                                      c.employeeName ? ` — المسؤول: ${c.employeeName}` : ""
+                                    }`
+                              }
+                              className={
+                                c.isPrimary
+                                  ? "inline-flex items-center px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
+                                  : "inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300"
+                              }
+                            >
+                              {c.categoryName ?? "غير مصنّف"}
+                            </span>
+                          ))}
+                        </span>
+                      ) : r.categoryName ? (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300">
+                          {r.categoryName}
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400">غير مصنّف</span>
+                      )}
+                      {canEditCategories && r.rfqItemId != null && (
+                        <button
+                          onClick={() =>
+                            setCatEditor({
+                              itemId: r.rfqItemId as number,
+                              label: r.partNo || r.lineItem || `بند #${r.rfqItemId}`,
+                            })
+                          }
+                          className="ms-1 text-muted-foreground hover:text-primary"
+                          title="تعديل تصنيفات البند"
+                        >
+                          <Tags size={12} />
+                        </button>
+                      )}
+                    </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-center">{cell(r.uom)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
                       {r.customerRfqId != null && r.customerRfqNo ? (
@@ -905,11 +961,143 @@ function SheetViewTab() {
           </div>
         </div>
       )}
+
+      {catEditor && <ItemCategoriesEditor item={catEditor} onClose={() => setCatEditor(null)} />}
     </div>
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// Manager-only modal: attach/remove extra categories on ONE item. The primary
+// category is shown locked (it is the classifier's pick and drives ownership);
+// extra categories are chosen freely and each inherits its category's owner.
+function ItemCategoriesEditor({
+  item,
+  onClose,
+}: {
+  item: { itemId: number; label: string };
+  onClose: () => void;
+}) {
+  const [allCats, setAllCats] = useState<Array<{ id: number; name: string }>>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [primaryId, setPrimaryId] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [catsRes, itemRes] = await Promise.all([
+          fetch("/api/item-categories", { credentials: "include" }),
+          fetch(`/api/customer-rfq/items/${item.itemId}/categories`, { credentials: "include" }),
+        ]);
+        if (cancelled) return;
+        const cats = catsRes.ok
+          ? ((await catsRes.json()) as Array<{ id: number; name: string }>)
+          : [];
+        setAllCats(cats.map((c) => ({ id: c.id, name: c.name })));
+        if (itemRes.ok) {
+          const json = (await itemRes.json()) as {
+            categories: Array<{ categoryId: number; isPrimary: boolean }>;
+          };
+          setPrimaryId(json.categories.find((c) => c.isPrimary)?.categoryId ?? null);
+          setSelected(new Set(json.categories.map((c) => c.categoryId)));
+        }
+      } catch {
+        // ignore — the modal still opens with an empty list
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [item.itemId]);
+
+  const toggle = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/customer-rfq/items/${item.itemId}/categories`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ categoryIds: [...selected] }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || "فشل حفظ التصنيفات");
+      }
+      toast.success("تم حفظ تصنيفات البند");
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "فشل حفظ التصنيفات");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-lg w-full max-w-md p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-foreground">
+            تصنيفات البند{" "}
+            <span className="font-mono text-xs text-muted-foreground">{item.label}</span>
+          </h2>
+          <button onClick={onClose} className="text-muted-foreground">
+            <X size={18} />
+          </button>
+        </div>
+        {loading ? (
+          <div className="text-sm text-muted-foreground">جارٍ التحميل…</div>
+        ) : (
+          <div className="max-h-72 overflow-y-auto space-y-1">
+            {allCats.map((c) => {
+              const isPrimary = c.id === primaryId;
+              return (
+                <label
+                  key={c.id}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/40 text-sm cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(c.id)}
+                    disabled={isPrimary}
+                    onChange={() => toggle(c.id)}
+                  />
+                  <span className="text-foreground">{c.name}</span>
+                  {isPrimary && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">
+                      أساسي
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            إلغاء
+          </Button>
+          <Button onClick={save} disabled={saving || loading}>
+            {saving ? "جارٍ الحفظ…" : "حفظ"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ItemsPage() {
   const { employee } = useAuth();
