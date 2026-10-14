@@ -40,6 +40,7 @@ const REGISTRATION_FIELDS = [
   "commercialRegister",
   "taxRegistration",
   "bankName",
+  "bankAccountHolder",
   "bankAccountNumber",
   "iban",
   "swiftCode",

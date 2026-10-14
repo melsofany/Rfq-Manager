@@ -15,6 +15,8 @@ export const suppliersTable = pgTable("suppliers", {
   taxRegistration: text("tax_registration"),
   // بيانات الحساب البنكي للدفع
   bankName: text("bank_name"),
+  // اسم صاحب الحساب كما هو مسجَّل لدى البنك
+  bankAccountHolder: text("bank_account_holder"),
   bankAccountNumber: text("bank_account_number"),
   iban: text("iban"),
   swiftCode: text("swift_code"),

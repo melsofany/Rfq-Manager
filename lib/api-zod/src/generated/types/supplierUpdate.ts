@@ -15,6 +15,7 @@ export interface SupplierUpdate {
   commercialRegister?: string;
   taxRegistration?: string;
   bankName?: string;
+  bankAccountHolder?: string;
   bankAccountNumber?: string;
   iban?: string;
   swiftCode?: string;

@@ -244,6 +244,7 @@ export default function SupplierDetailPage() {
       commercialRegister: supplier.commercialRegister ?? "",
       taxRegistration: supplier.taxRegistration ?? "",
       bankName: supplier.bankName ?? "",
+      bankAccountHolder: supplier.bankAccountHolder ?? "",
       bankAccountNumber: supplier.bankAccountNumber ?? "",
       iban: supplier.iban ?? "",
       swiftCode: supplier.swiftCode ?? "",
@@ -477,6 +478,15 @@ export default function SupplierDetailPage() {
                   />
                 </div>
                 <div className="space-y-1">
+                  <Label>اسم صاحب الحساب</Label>
+                  <Input
+                    value={String(form.bankAccountHolder ?? "")}
+                    onChange={(e) => upd("bankAccountHolder", e.target.value)}
+                    placeholder="كما هو مسجَّل لدى البنك"
+                    dir="rtl"
+                  />
+                </div>
+                <div className="space-y-1">
                   <Label>رقم الحساب البنكي</Label>
                   <Input
                     value={String(form.bankAccountNumber ?? "")}
@@ -657,6 +667,7 @@ export default function SupplierDetailPage() {
               بيانات الدفع / الحساب البنكي
             </h2>
             {supplier.bankName ||
+            supplier.bankAccountHolder ||
             supplier.bankAccountNumber ||
             supplier.iban ||
             supplier.swiftCode ||
@@ -671,6 +682,14 @@ export default function SupplierDetailPage() {
                         {supplier.bankName}
                       </span>
                     </div>
+                  </div>
+                )}
+                {supplier.bankAccountHolder && (
+                  <div>
+                    <p className="text-muted-foreground text-xs">اسم صاحب الحساب</p>
+                    <p className="text-foreground text-sm font-medium">
+                      {supplier.bankAccountHolder}
+                    </p>
                   </div>
                 )}
                 {supplier.bankAccountNumber && (

@@ -16,6 +16,7 @@ export interface SupplierInput {
   commercialRegister?: string;
   taxRegistration?: string;
   bankName?: string;
+  bankAccountHolder?: string;
   bankAccountNumber?: string;
   iban?: string;
   swiftCode?: string;

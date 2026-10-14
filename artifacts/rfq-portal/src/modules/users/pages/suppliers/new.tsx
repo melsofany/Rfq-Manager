@@ -32,6 +32,7 @@ export default function NewSupplierPage() {
     commercialRegister: "",
     taxRegistration: "",
     bankName: "",
+    bankAccountHolder: "",
     bankAccountNumber: "",
     iban: "",
     swiftCode: "",
@@ -216,6 +217,15 @@ export default function NewSupplierPage() {
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>اسم البنك</Label>
                 <BankCombobox value={form.bankName} onChange={(v) => update("bankName", v)} />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>اسم صاحب الحساب</Label>
+                <Input
+                  value={form.bankAccountHolder}
+                  onChange={(e) => update("bankAccountHolder", e.target.value)}
+                  placeholder="كما هو مسجَّل لدى البنك"
+                  dir="rtl"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>رقم الحساب البنكي</Label>

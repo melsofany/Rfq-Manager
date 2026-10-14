@@ -1814,6 +1814,9 @@ components:
         bankName:
           type: ["string", "null"]
           description: اسم البنك
+        bankAccountHolder:
+          type: ["string", "null"]
+          description: اسم صاحب الحساب كما هو مسجَّل لدى البنك
         bankAccountNumber:
           type: ["string", "null"]
           description: رقم الحساب البنكي
@@ -1858,6 +1861,8 @@ components:
           type: string
         bankName:
           type: string
+        bankAccountHolder:
+          type: string
         bankAccountNumber:
           type: string
         iban:
@@ -1890,6 +1895,8 @@ components:
         taxRegistration:
           type: string
         bankName:
+          type: string
+        bankAccountHolder:
           type: string
         bankAccountNumber:
           type: string
