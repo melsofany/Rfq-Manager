@@ -307,6 +307,129 @@ export async function initDb(): Promise<void> {
       ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS unit_price NUMERIC(15,4);
     `);
 
+    // ── Responsibility tables (EARLY — must precede any data-dependent DDL) ──
+    // These CREATEs are ordered BEFORE the migrations that rewrite existing rows
+    // (phone canonicalization, RFQ/PO backfills). Those rewrites touch real data
+    // and can fail on a conflict; because initDb() aborts at the first failing
+    // statement, a later failure would skip every statement after it — which is
+    // exactly how the item_categories table ended up missing in production while
+    // the server kept serving. Creating these tables early makes their existence
+    // independent of any data-dependent migration below.
+    // ── Item categories + employee ownership + per-item assignment ───────────
+    // DDL lives here (NOT drizzle-kit push). Each statement is its own
+    // client.query: statements share an implicit transaction, so a sibling
+    // failure would otherwise roll a CREATE back silently.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS item_categories (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        code TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS employee_categories (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        category_id INTEGER NOT NULL REFERENCES item_categories(id) ON DELETE CASCADE,
+        is_primary BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS employee_categories_employee_category_uq
+        ON employee_categories (employee_id, category_id);
+    `);
+
+    // At most ONE primary owner per category, enforced by the database. The
+    // API guard on /item-categories/:id/owners only covered one write path, so
+    // /employees/:id/categories could still insert a second primary — which made
+    // the responsible employee non-deterministic. The index below would reject
+    // existing violations, so demote every extra primary FIRST (keeping the
+    // lowest id, the same tie-break `pickOwner` uses) in its own statement.
+    await client.query(`
+      UPDATE employee_categories ec
+      SET is_primary = false
+      WHERE ec.is_primary
+        AND ec.id <> (
+          SELECT min(ec2.id)
+          FROM employee_categories ec2
+          WHERE ec2.category_id = ec.category_id AND ec2.is_primary
+        );
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS employee_categories_one_primary_uq
+        ON employee_categories (category_id)
+        WHERE is_primary;
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS rfq_item_assignments (
+        id SERIAL PRIMARY KEY,
+        rfq_item_id INTEGER NOT NULL REFERENCES rfq_items(id) ON DELETE CASCADE,
+        customer_rfq_item_id INTEGER REFERENCES customer_rfq_items(id) ON DELETE SET NULL,
+        category_id INTEGER REFERENCES item_categories(id) ON DELETE SET NULL,
+        employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        source TEXT NOT NULL DEFAULT 'auto',
+        confidence NUMERIC(5,2),
+        assigned_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS rfq_item_assignments_item_uq
+        ON rfq_item_assignments (rfq_item_id);
+      CREATE INDEX IF NOT EXISTS idx_rfq_item_assignments_employee
+        ON rfq_item_assignments (employee_id);
+      CREATE INDEX IF NOT EXISTS idx_rfq_item_assignments_category
+        ON rfq_item_assignments (category_id);
+    `);
+
+    // ── Responsibility source of truth (customer items) ─────────────────────
+    // New assignment table keyed on the CUSTOMER item. DDL in its own statement.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS customer_rfq_item_assignments (
+        id SERIAL PRIMARY KEY,
+        customer_rfq_item_id INTEGER NOT NULL REFERENCES customer_rfq_items(id) ON DELETE RESTRICT,
+        category_id INTEGER REFERENCES item_categories(id) ON DELETE SET NULL,
+        employee_id INTEGER REFERENCES employees(id) ON DELETE RESTRICT,
+        source TEXT NOT NULL DEFAULT 'auto',
+        confidence NUMERIC(5,2),
+        assigned_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        valid_from TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+        valid_to TIMESTAMPTZ
+      );
+      -- At most ONE open period per item. Closed-period overlap is prevented by
+      -- the gist EXCLUDE constraint added in the migration block below.
+      CREATE UNIQUE INDEX IF NOT EXISTS customer_rfq_item_assignments_open_uq
+        ON customer_rfq_item_assignments (customer_rfq_item_id) WHERE valid_to IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_customer_rfq_item_assignments_employee
+        ON customer_rfq_item_assignments (employee_id);
+      CREATE INDEX IF NOT EXISTS idx_customer_rfq_item_assignments_category
+        ON customer_rfq_item_assignments (category_id);
+    `);
+
+    // Per-change audit of responsibility / category (old→new, actor, reason).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS item_assignment_audit (
+        id SERIAL PRIMARY KEY,
+        scope TEXT NOT NULL,
+        customer_rfq_item_id INTEGER,
+        rfq_item_id INTEGER,
+        category_id_old INTEGER,
+        category_id_new INTEGER,
+        employee_id_old INTEGER,
+        employee_id_new INTEGER,
+        changed_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        reason TEXT,
+        changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_item_assignment_audit_customer_item
+        ON item_assignment_audit (customer_rfq_item_id);
+      CREATE INDEX IF NOT EXISTS idx_item_assignment_audit_rfq_item
+        ON item_assignment_audit (rfq_item_id);
+    `);
+
     // Add reactivated_at to suppliers — used by the auto-deactivate sweep so a
     // manual reactivation resets the no-reply counter (needs 10 MORE unanswered
     // sends to auto-deactivate again).
@@ -456,20 +579,48 @@ export async function initDb(): Promise<void> {
     // canonical forms, so rows stored historically with a leading "+" would
     // otherwise never match an incoming Meta wa_id ("20…") and the rep bot
     // would not engage. Idempotent — rows already canonical are unchanged.
+    //
+    // COLLISION-SAFE. representatives.phone is UNIQUE, and two rows that
+    // canonicalize to the same value (e.g. "+2010…" and "2010…") used to abort
+    // this statement with a duplicate-key violation on representatives_phone_key.
+    // Because initDb() stops at the first failing statement, that single
+    // duplicate skipped every later migration — which is how item_categories
+    // ended up missing in production while the server kept serving. The UPDATE
+    // now canonicalizes ONLY rows whose canonical value is unique across the
+    // table; colliding rows are left untouched (no data loss, no deactivation)
+    // instead of crashing the whole boot.
     await client.query(`
-      UPDATE representatives
-        SET phone = regexp_replace(phone, '[^0-9]', '', 'g')
-        WHERE phone ~ '[^0-9]';
-      UPDATE representatives
-        SET phone = substr(phone, 3)
-        WHERE phone LIKE '00%';
-      UPDATE representatives
-        SET phone = '2' || substr(phone, 2)
-        WHERE length(phone) = 11 AND phone LIKE '0%';
-      UPDATE representatives
-        SET phone = '20' || phone
-        WHERE length(phone) = 10 AND phone LIKE '1%';
+      WITH canon AS (
+        SELECT id,
+               CASE WHEN phone ~ '[^0-9]'
+                    THEN regexp_replace(phone, '[^0-9]', '', 'g')
+                    ELSE phone END AS digits
+        FROM representatives
+      ),
+      norm AS (
+        SELECT id,
+               CASE
+                 WHEN digits LIKE '00%' THEN substr(digits, 3)
+                 WHEN length(digits) = 11 AND digits LIKE '0%' THEN '2' || substr(digits, 2)
+                 WHEN length(digits) = 10 AND digits LIKE '1%' THEN '20' || digits
+                 ELSE digits
+               END AS canonical
+        FROM canon
+      ),
+      uniq AS (
+        SELECT canonical FROM norm GROUP BY canonical HAVING count(*) = 1
+      )
+      UPDATE representatives r
+         SET phone = n.canonical
+        FROM norm n
+        JOIN uniq u ON u.canonical = n.canonical
+       WHERE r.id = n.id
+         AND r.phone IS DISTINCT FROM n.canonical;
+    `);
 
+    // Work-order assignments have no UNIQUE constraint on the phone, so the
+    // simple form is safe and keeps every row canonical.
+    await client.query(`
       UPDATE work_order_assignments
         SET representative_phone = regexp_replace(representative_phone, '[^0-9]', '', 'g')
         WHERE representative_phone ~ '[^0-9]';
@@ -1420,121 +1571,6 @@ export async function initDb(): Promise<void> {
         logger.warn({ err, stmt }, "initDb: optional index/extension skipped");
       }
     }
-
-    // ── Item categories + employee ownership + per-item assignment ───────────
-    // DDL lives here (NOT drizzle-kit push). Each statement is its own
-    // client.query: statements share an implicit transaction, so a sibling
-    // failure would otherwise roll a CREATE back silently.
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS item_categories (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        code TEXT,
-        is_active BOOLEAN NOT NULL DEFAULT true,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS employee_categories (
-        id SERIAL PRIMARY KEY,
-        employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
-        category_id INTEGER NOT NULL REFERENCES item_categories(id) ON DELETE CASCADE,
-        is_primary BOOLEAN NOT NULL DEFAULT false,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS employee_categories_employee_category_uq
-        ON employee_categories (employee_id, category_id);
-    `);
-
-    // At most ONE primary owner per category, enforced by the database. The
-    // API guard on /item-categories/:id/owners only covered one write path, so
-    // /employees/:id/categories could still insert a second primary — which made
-    // the responsible employee non-deterministic. The index below would reject
-    // existing violations, so demote every extra primary FIRST (keeping the
-    // lowest id, the same tie-break `pickOwner` uses) in its own statement.
-    await client.query(`
-      UPDATE employee_categories ec
-      SET is_primary = false
-      WHERE ec.is_primary
-        AND ec.id <> (
-          SELECT min(ec2.id)
-          FROM employee_categories ec2
-          WHERE ec2.category_id = ec.category_id AND ec2.is_primary
-        );
-    `);
-    await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS employee_categories_one_primary_uq
-        ON employee_categories (category_id)
-        WHERE is_primary;
-    `);
-
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS rfq_item_assignments (
-        id SERIAL PRIMARY KEY,
-        rfq_item_id INTEGER NOT NULL REFERENCES rfq_items(id) ON DELETE CASCADE,
-        customer_rfq_item_id INTEGER REFERENCES customer_rfq_items(id) ON DELETE SET NULL,
-        category_id INTEGER REFERENCES item_categories(id) ON DELETE SET NULL,
-        employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
-        source TEXT NOT NULL DEFAULT 'auto',
-        confidence NUMERIC(5,2),
-        assigned_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
-        assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS rfq_item_assignments_item_uq
-        ON rfq_item_assignments (rfq_item_id);
-      CREATE INDEX IF NOT EXISTS idx_rfq_item_assignments_employee
-        ON rfq_item_assignments (employee_id);
-      CREATE INDEX IF NOT EXISTS idx_rfq_item_assignments_category
-        ON rfq_item_assignments (category_id);
-    `);
-
-    // ── Responsibility source of truth (customer items) ─────────────────────
-    // New assignment table keyed on the CUSTOMER item. DDL in its own statement.
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS customer_rfq_item_assignments (
-        id SERIAL PRIMARY KEY,
-        customer_rfq_item_id INTEGER NOT NULL REFERENCES customer_rfq_items(id) ON DELETE RESTRICT,
-        category_id INTEGER REFERENCES item_categories(id) ON DELETE SET NULL,
-        employee_id INTEGER REFERENCES employees(id) ON DELETE RESTRICT,
-        source TEXT NOT NULL DEFAULT 'auto',
-        confidence NUMERIC(5,2),
-        assigned_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
-        assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        valid_from TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-        valid_to TIMESTAMPTZ
-      );
-      -- At most ONE open period per item. Closed-period overlap is prevented by
-      -- the gist EXCLUDE constraint added in the migration block below.
-      CREATE UNIQUE INDEX IF NOT EXISTS customer_rfq_item_assignments_open_uq
-        ON customer_rfq_item_assignments (customer_rfq_item_id) WHERE valid_to IS NULL;
-      CREATE INDEX IF NOT EXISTS idx_customer_rfq_item_assignments_employee
-        ON customer_rfq_item_assignments (employee_id);
-      CREATE INDEX IF NOT EXISTS idx_customer_rfq_item_assignments_category
-        ON customer_rfq_item_assignments (category_id);
-    `);
-
-    // Per-change audit of responsibility / category (old→new, actor, reason).
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS item_assignment_audit (
-        id SERIAL PRIMARY KEY,
-        scope TEXT NOT NULL,
-        customer_rfq_item_id INTEGER,
-        rfq_item_id INTEGER,
-        category_id_old INTEGER,
-        category_id_new INTEGER,
-        employee_id_old INTEGER,
-        employee_id_new INTEGER,
-        changed_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
-        reason TEXT,
-        changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE INDEX IF NOT EXISTS idx_item_assignment_audit_customer_item
-        ON item_assignment_audit (customer_rfq_item_id);
-      CREATE INDEX IF NOT EXISTS idx_item_assignment_audit_rfq_item
-        ON item_assignment_audit (rfq_item_id);
-    `);
 
     // ── Idempotent migration: legacy rfq_item_assignments → customer items ──
     // Only rows whose rfq_item carries a customer_rfq_item_id are migrated. When
