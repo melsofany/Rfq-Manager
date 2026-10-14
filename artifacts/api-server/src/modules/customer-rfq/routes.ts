@@ -19,7 +19,10 @@ import {
 } from "@workspace/db";
 import { eq, ilike, count, inArray, desc, and, isNull, or, isNotNull, sql, ne } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
-import { ensureCustomerAssignmentsSafe } from "../rfq/customer-assignment";
+import {
+  ensureCustomerAssignmentsSafe,
+  classifyUnclassifiedItems,
+} from "../rfq/customer-assignment";
 
 const router = Router();
 
@@ -1692,6 +1695,31 @@ router.put(
     });
 
     res.json({ customerRfqItemId: itemId, categoryIds: chosen, primaryCategoryId: primaryId });
+  },
+);
+
+// POST /customer-rfq/items/classify — backfill: run the DeepSeek classifier over
+// every still-unclassified customer item (batched), then assign owners. Manager+
+// only, because it writes categories across the whole catalogue.
+router.post(
+  "/customer-rfq/items/classify",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const body = req.body as { limit?: unknown };
+    const limit = body.limit != null ? Number(body.limit) : undefined;
+    const result = await classifyUnclassifiedItems({
+      limit: Number.isFinite(limit) ? (limit as number) : undefined,
+    });
+    await db.insert(auditLogTable).values({
+      action: "customer_rfq.items_bulk_classified",
+      entityType: "customer_rfq_item",
+      employeeId: req.session.employeeId ?? null,
+      description: `Bulk AI classification: scanned ${result.scanned}, classified ${result.classified}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json(result);
   },
 );
 

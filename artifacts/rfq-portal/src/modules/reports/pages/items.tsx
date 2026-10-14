@@ -31,7 +31,7 @@ import {
   Tags,
   Search as SearchIcon,
 } from "lucide-react";
-import { ItemCategoriesTab, ItemCategoriesEditor } from "./item-categories";
+import { ItemCategoriesTab } from "./item-categories";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -639,7 +639,6 @@ function FilterHeader({
 
 function SheetViewTab() {
   const { employee } = useAuth();
-  const canEditCategories = employee?.role === "admin" || employee?.role === "manager";
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
@@ -699,11 +698,6 @@ function SheetViewTab() {
     setFilters({});
     setOffset(0);
   };
-
-  // Manager-only category editor: pick any row to attach extra categories to
-  // its item. The item's PRIMARY category is fixed (the classifier's pick);
-  // this only adds coverage for categories the item also belongs to.
-  const [catEditor, setCatEditor] = useState<{ itemId: number; label: string } | null>(null);
 
   return (
     <div className="space-y-4">
@@ -864,20 +858,6 @@ function SheetViewTab() {
                       ) : (
                         <span className="text-amber-600 dark:text-amber-400">غير مصنّف</span>
                       )}
-                      {canEditCategories && r.rfqItemId != null && (
-                        <button
-                          onClick={() =>
-                            setCatEditor({
-                              itemId: r.rfqItemId as number,
-                              label: r.partNo || r.lineItem || `بند #${r.rfqItemId}`,
-                            })
-                          }
-                          className="ms-1 text-muted-foreground hover:text-primary"
-                          title="تعديل تصنيفات البند"
-                        >
-                          <Tags size={12} />
-                        </button>
-                      )}
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-center">{cell(r.uom)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
@@ -961,17 +941,9 @@ function SheetViewTab() {
           </div>
         </div>
       )}
-
-      {catEditor && <ItemCategoriesEditor item={catEditor} onClose={() => setCatEditor(null)} />}
     </div>
   );
 }
-
-// Manager-only modal: attach/remove extra categories on ONE item. The primary
-// category is shown locked (it is the classifier's pick and drives ownership);
-// extra categories are chosen freely and each inherits its category's owner.
-// The implementation lives in ./item-categories so the categories tab and the
-// sheet view share ONE editor.
 
 export default function ItemsPage() {
   const { employee } = useAuth();

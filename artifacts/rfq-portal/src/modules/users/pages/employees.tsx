@@ -657,8 +657,6 @@ export default function EmployeesPage() {
                             <td className="px-4 py-3">
                               {(() => {
                                 const mine = empCatsByEmployee[emp.id] ?? [];
-                                if (emp.role === "admin")
-                                  return <span className="text-xs text-muted-foreground">—</span>;
                                 return (
                                   <div className="flex flex-wrap items-center gap-1">
                                     {mine.length === 0 ? (
@@ -715,7 +713,7 @@ export default function EmployeesPage() {
                                     <Pencil size={14} />
                                   </button>
                                 )}
-                                {canSetCatOwners && emp.role !== "admin" && (
+                                {canSetCatOwners && (
                                   <button
                                     onClick={() => void openCats(emp)}
                                     title="تصنيفات البند المسؤول عنها"

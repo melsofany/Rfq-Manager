@@ -47,20 +47,37 @@ beforeEach(() => {
 });
 
 describe("AI item classifier", () => {
-  it("maps the model's category CODE to the category id", async () => {
+  it("maps the model's category NAME to the category id", async () => {
     chatCompletion.mockResolvedValue(
-      reply({ results: [{ i: 1, code: "electrical", confidence: 88 }] }),
+      reply({ results: [{ i: 1, name: "كهرباء", confidence: 88 }] }),
     );
     const out = await classifyItemsWithAi([{ description: "قاطع كهرباء 63A" }], CATEGORIES);
-    expect(out).toEqual([{ categoryId: 3, confidence: 88, matchedTerm: "electrical" }]);
+    expect(out).toEqual([{ categoryId: 3, confidence: 88, matchedTerm: "كهرباء" }]);
+  });
+
+  it("offers categories that have NO code — the operator-added ones", async () => {
+    // Most of the catalogue has no `code`; the old code-filter silently dropped
+    // them so the model could only ever pick from the 5 seeded categories.
+    chatCompletion.mockResolvedValue(
+      reply({ results: [{ i: 1, name: "مواسير ولوازم صحية", confidence: 90 }] }),
+    );
+    const cats = [
+      { id: 1, code: "equipment", name: "أجهزة" },
+      { id: 7, code: null, name: "مواسير ولوازم صحية" },
+    ];
+    const out = await classifyItemsWithAi([{ description: "كوع مواسير" }], cats);
+    expect(out?.[0]?.categoryId).toBe(7);
+    // The whole catalogue must be in the prompt, not just the coded subset.
+    const sent = chatCompletion.mock.calls[0][0] as { messages: Array<{ content: string }> };
+    expect(JSON.stringify(sent.messages)).toContain("مواسير ولوازم صحية");
   });
 
   it("classifies a BATCH in one request, indexed by position", async () => {
     chatCompletion.mockResolvedValue(
       reply({
         results: [
-          { i: 1, code: "equipment", confidence: 90 },
-          { i: 2, code: "spare_parts", confidence: 70 },
+          { i: 1, name: "أجهزة", confidence: 90 },
+          { i: 2, name: "قطع غيار", confidence: 70 },
         ],
       }),
     );
@@ -75,29 +92,32 @@ describe("AI item classifier", () => {
 
   it("returns null for «غير معروف» — never invents a category", async () => {
     chatCompletion.mockResolvedValue(
-      reply({ results: [{ i: 1, code: "غير معروف", confidence: 0 }] }),
+      reply({ results: [{ i: 1, name: "غير معروف", confidence: 0 }] }),
     );
     const out = await classifyItemsWithAi([{ description: "ZZZ ???" }], CATEGORIES);
     expect(out).toEqual([null]);
   });
 
-  it("REFUSES a code the model invented (not in the catalogue)", async () => {
-    chatCompletion.mockResolvedValue(
-      reply({ results: [{ i: 1, code: "plumbing", confidence: 95 }] }),
-    );
+  it("REFUSES a category the model invented (not in the catalogue)", async () => {
+    chatCompletion.mockResolvedValue(reply({ results: [{ i: 1, name: "سباكة", confidence: 95 }] }));
     const out = await classifyItemsWithAi([{ description: "مواسير" }], CATEGORIES);
     expect(out).toEqual([null]);
   });
 
   it("tolerates a fenced code block around the JSON", async () => {
     chatCompletion.mockResolvedValue({
-      content:
-        'إليك النتيجة:\n```json\n{"results":[{"i":1,"code":"electrical","confidence":80}]}\n```',
+      content: 'إليك النتيجة:\n```json\n{"results":[{"i":1,"name":"كهرباء","confidence":80}]}\n```',
       toolCalls: [],
       finishReason: "stop",
     });
     const out = await classifyItemsWithAi([{ description: "كابل" }], CATEGORIES);
     expect(out?.[0]?.categoryId).toBe(3);
+  });
+
+  it("matches a name despite spelling variants (hamza / taa marbuta)", async () => {
+    chatCompletion.mockResolvedValue(reply({ results: [{ i: 1, name: "اجهزه", confidence: 80 }] }));
+    const out = await classifyItemsWithAi([{ description: "لوحة تحكم" }], CATEGORIES);
+    expect(out?.[0]?.categoryId).toBe(1);
   });
 
   it("returns null (fallback) when the reply is unparsable", async () => {
@@ -131,14 +151,14 @@ describe("parseClassifyReply", () => {
     const out = parseClassifyReply(
       JSON.stringify({
         results: [
-          { i: 0, code: "electrical", confidence: 90 },
-          { i: 3, code: "equipment", confidence: 90 },
-          { i: 1, code: "equipment" },
+          { i: 0, name: "كهرباء", confidence: 90 },
+          { i: 3, name: "أجهزة", confidence: 90 },
+          { i: 1, name: "أجهزة" },
         ],
       }),
       2,
     );
-    expect(out?.[0]).toEqual({ code: "equipment", confidence: 0 });
+    expect(out?.[0]).toEqual({ name: "أجهزة", confidence: 0 });
     expect(out?.[1]).toBeNull();
   });
 
