@@ -105,9 +105,10 @@ export function ItemCategoriesEditor({
         setAllCats(cats.map((c) => ({ id: c.id, name: c.name })));
         if (itemRes.ok) {
           const json = (await itemRes.json()) as {
+            primaryCategoryId?: number | null;
             categories: Array<{ categoryId: number; isPrimary: boolean }>;
           };
-          setPrimaryId(json.categories.find((c) => c.isPrimary)?.categoryId ?? null);
+          setPrimaryId(json.primaryCategoryId ?? null);
           setSelected(new Set(json.categories.map((c) => c.categoryId)));
         }
       } catch {
@@ -124,8 +125,16 @@ export function ItemCategoriesEditor({
   const toggle = (id: number) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+        // The primary category cannot be un-selected — promote another one.
+        if (id === primaryId) {
+          const fallback = [...next][0] ?? null;
+          setPrimaryId(fallback);
+        }
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -137,7 +146,7 @@ export function ItemCategoriesEditor({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ categoryIds: [...selected] }),
+        body: JSON.stringify({ categoryIds: [...selected], primaryCategoryId: primaryId }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -179,14 +188,26 @@ export function ItemCategoriesEditor({
                   <input
                     type="checkbox"
                     checked={selected.has(c.id)}
-                    disabled={isPrimary}
                     onChange={() => toggle(c.id)}
                   />
                   <span className="text-foreground">{c.name}</span>
-                  {isPrimary && (
+                  {isPrimary ? (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">
                       أساسي
                     </span>
+                  ) : (
+                    selected.has(c.id) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setPrimaryId(c.id);
+                        }}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
+                      >
+                        تعيين أساسي
+                      </button>
+                    )
                   )}
                 </label>
               );

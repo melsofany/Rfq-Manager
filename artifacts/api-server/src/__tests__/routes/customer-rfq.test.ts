@@ -2346,6 +2346,7 @@ describe("customer-RFQ item multi-category (manager editor)", () => {
     const res = await request(testApp).get("/api/customer-rfq/items/7/categories");
     expect(res.status).toBe(200);
     expect(res.body.customerRfqItemId).toBe(7);
+    expect(res.body.primaryCategoryId).toBe(3);
     const cats = res.body.categories;
     expect(cats).toHaveLength(3);
     expect(cats[0]).toMatchObject({ categoryId: 3, categoryName: "أجهزة", isPrimary: true });
@@ -2387,6 +2388,52 @@ describe("customer-RFQ item multi-category (manager editor)", () => {
     expect(auditInserts.some((a) => a.action === "customer_rfq.item_categories_updated")).toBe(
       true,
     );
+  });
+
+  it("lets the manager move the PRIMARY category and stores it on the item", async () => {
+    sessionState.role = "manager";
+    catItemRow = { id: 7, categoryId: 3 };
+    detailItems = [{ id: 7, categoryId: 3 }];
+    itemCategoryRows = [
+      { id: 3, name: "أجهزة" },
+      { id: 5, name: "قواطع" },
+      { id: 9, name: "مقاومة حريق" },
+    ];
+    ownerRows = [];
+
+    const res = await request(testApp)
+      .put("/api/customer-rfq/items/7/categories")
+      .send({ categoryIds: [3, 5, 9], primaryCategoryId: 9 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.primaryCategoryId).toBe(9);
+    // The item row itself now carries the corrected primary category.
+    expect(detailItems.find((it: any) => it.id === 7)?.categoryId).toBe(9);
+    // The new primary (9) is not duplicated in the junction; the old one (3) is.
+    const cats = junctionInserts.map((j) => j.categoryId).sort((a, b) => a - b);
+    expect(cats).toEqual([3, 5]);
+  });
+
+  it("falls back to a chosen category when the requested primary is not in the list", async () => {
+    sessionState.role = "manager";
+    catItemRow = { id: 7, categoryId: 3 };
+    detailItems = [{ id: 7, categoryId: 3 }];
+    itemCategoryRows = [
+      { id: 3, name: "أجهزة" },
+      { id: 5, name: "قواطع" },
+      { id: 9, name: "مقاومة حريق" },
+    ];
+    ownerRows = [];
+
+    const res = await request(testApp)
+      .put("/api/customer-rfq/items/7/categories")
+      .send({ categoryIds: [5, 9], primaryCategoryId: 3 });
+
+    expect(res.status).toBe(200);
+    // 3 was not chosen — the stored primary is not among them, so the first
+    // chosen category wins rather than leaving the item pointing elsewhere.
+    expect(res.body.primaryCategoryId).toBe(5);
+    expect(detailItems.find((it: any) => it.id === 7)?.categoryId).toBe(5);
   });
 
   it("rejects an empty category list", async () => {
