@@ -153,6 +153,8 @@ let itemCategoryRows: Array<{ id: number; name: string }> = [];
 let ownerRows: Array<{ categoryId: number; employeeId: number; isPrimary: boolean }> = [];
 // Junction rows written by the PUT (replaced set).
 const junctionInserts: any[] = [];
+// Rows returned by GET /customer-rfq/item-categories (the «تصنيفات البنود» tab).
+let itemCategoryListRows: any[] = [];
 
 // Build an object that is BOTH thenable (awaitable directly) and exposes chain
 // methods. Each chain method returns a thenable of `value`.
@@ -251,6 +253,16 @@ const dbMock: any = {
       }
       // items list for detail (bare select).from(items).where()
       if (table === itemsTable) {
+        // «تصنيفات البنود» tab list: select({...isCancelled}).from(items)
+        // .leftJoin(rfqs). Checked FIRST because the select also carries
+        // categoryId, which would otherwise match the by-id branch below.
+        if (arg && typeof arg === "object" && "isCancelled" in arg) {
+          const list = itemCategoryListRows;
+          return chainable(list, {
+            leftJoin: vi.fn(() => chainable(list, { where: vi.fn(() => chainable(list)) })),
+            where: vi.fn(() => chainable(list)),
+          });
+        }
         // Category-management by-id lookup: select({id, categoryId}).from(items)
         // .where(eq(id)).limit(1) — returns the per-test catItemRow. The
         // sheet-view select ALSO carries categoryId, so exclude it by its
@@ -418,6 +430,7 @@ const dbMock: any = {
       if (table === (tables as any).itemCategoriesTable) {
         return chainable(itemCategoryRows, {
           where: vi.fn(() => chainable(itemCategoryRows)),
+          orderBy: vi.fn(() => chainable(itemCategoryRows)),
         });
       }
       // Category-management: employee_categories owner resolution.
@@ -595,6 +608,7 @@ beforeEach(() => {
   itemCategoryRows = [];
   ownerRows = [];
   junctionInserts.length = 0;
+  itemCategoryListRows = [];
 });
 
 describe("POST /api/customer-rfq (create)", () => {
@@ -2400,5 +2414,108 @@ describe("customer-RFQ item multi-category (manager editor)", () => {
       .put("/api/customer-rfq/items/7/categories")
       .send({ categoryIds: [5] });
     expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /api/customer-rfq/item-categories (تصنيفات البنود tab)", () => {
+  it("lists items with line item / part no / description / category for everyone", async () => {
+    itemCategoryListRows = [
+      {
+        id: 1,
+        partNo: "A9R41440",
+        lineItem: "5720.011",
+        description: "قاطع كهربائي",
+        uom: "قطعة",
+        qty: "4.0000",
+        categoryId: 3,
+        isCancelled: false,
+        customerRfqId: 10,
+        customerRfqNo: "CRFQ-2026-000001",
+        customerName: "EDC",
+      },
+      {
+        id: 2,
+        partNo: null,
+        lineItem: null,
+        description: "بند غير مصنّف",
+        uom: null,
+        qty: null,
+        categoryId: null,
+        isCancelled: false,
+        customerRfqId: 10,
+        customerRfqNo: "CRFQ-2026-000001",
+        customerName: "EDC",
+      },
+    ];
+    itemCategoryRows = [{ id: 3, name: "قواطع" }];
+    ownerRows = [{ categoryId: 3, employeeId: 20, isPrimary: true }];
+
+    const res = await request(testApp).get("/api/customer-rfq/item-categories");
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(2);
+    const rows = res.body.rows;
+    expect(rows[0]).toMatchObject({
+      customerRfqItemId: 1,
+      partNo: "A9R41440",
+      lineItem: "5720.011",
+      description: "قاطع كهربائي",
+      qty: "4",
+      categoryName: "قواطع",
+    });
+    expect(rows[0].categories).toHaveLength(1);
+    expect(rows[0].categories[0]).toMatchObject({
+      categoryId: 3,
+      categoryName: "قواطع",
+      isPrimary: true,
+    });
+    // The primary category's responsible employee is resolved from
+    // employee_categories (the junction row does not carry it).
+    expect(rows[0].categories[0].employeeId).toBe(20);
+    // The unclassified item is still listed.
+    expect(rows[1]).toMatchObject({ customerRfqItemId: 2, categoryId: null });
+    expect(rows[1].categories).toHaveLength(0);
+  });
+
+  it("filters to unclassified items", async () => {
+    itemCategoryListRows = [
+      { id: 1, categoryId: 3, isCancelled: false, customerRfqId: 10, customerRfqNo: "A" },
+      { id: 2, categoryId: null, isCancelled: false, customerRfqId: 10, customerRfqNo: "A" },
+    ];
+    itemCategoryRows = [{ id: 3, name: "قواطع" }];
+    const res = await request(testApp).get(
+      "/api/customer-rfq/item-categories?categoryId=unclassified",
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.rows[0].customerRfqItemId).toBe(2);
+  });
+
+  it("filters by a specific category", async () => {
+    itemCategoryListRows = [
+      { id: 1, categoryId: 3, isCancelled: false, customerRfqId: 10, customerRfqNo: "A" },
+      { id: 2, categoryId: null, isCancelled: false, customerRfqId: 10, customerRfqNo: "A" },
+    ];
+    itemCategoryRows = [{ id: 3, name: "قواطع" }];
+    const res = await request(testApp).get("/api/customer-rfq/item-categories?categoryId=3");
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.rows[0].customerRfqItemId).toBe(1);
+  });
+
+  it("is readable by a data-entry employee (view only)", async () => {
+    sessionState.role = "data_entry";
+    itemCategoryListRows = [];
+    const res = await request(testApp).get("/api/customer-rfq/item-categories");
+    expect(res.status).toBe(200);
+  });
+
+  it("lists the category options for the editor", async () => {
+    itemCategoryRows = [
+      { id: 3, name: "قواطع" },
+      { id: 5, name: "كهرباء" },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/item-category-options");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
   });
 });

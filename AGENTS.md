@@ -3659,3 +3659,25 @@ form + detail edit + read-only card + Excel import mapping/template).
   `?sslmode=require`) that `information_schema.columns` holds it. healthz 200
   says the process booted, not that the migration applied.
 
+
+## تصنيفات البنود = تصنيفات الموردين، وإسنادها للمدير (feat/item-categories-supplier-mirror)
+
+طلب المشغّل: (1) المدير — لا الأدمن فقط — يحدّد مسؤول كل تصنيف لنفسه أو لفريقه؛
+(2) تصنيفات البنود يجب أن **تطابق** تصنيفات الموردين في `/suppliers`؛ (3) تبويب
+«تصنيفات البنود» في `/items` يعرض لكل بند اسمه وورقة القطعة والـLine Item وتصنيفه —
+مرئي للجميع وتحريره للمدير فقط.
+
+- **مصدر واحد للحقيقة في موضعين**: `item_categories` تُبذَر من `supplier_categories` عند
+  البدء (`init-db.ts`، `ON CONFLICT (name) DO NOTHING`) وتُزامَن عند إنشاء/تسمية تصنيف
+  مورد (`modules/users/categories.ts`). لا تُحذف تصنيفات البنود عندما يُحذف تصنيف المورد —
+  الحذف يجب أن يكون صريحًا لا أثرًا جانبيًا.
+- **صلاحية الإسناد**: `PUT /item-categories/:id/owners` و`PUT /employees/:id/categories`
+  صارتا `requireRole("admin","manager")`؛ بوّابة الواجهة `canSetCatOwners` = admin||manager.
+- **مالك التصنيف الأساسي** لا يحمله صف الوصلة (`customer_rfq_item_categories` يحمل الإضافات
+  فقط)، فيُقرأ من `employee_categories` في `GET /customer-rfq/item-categories` — وإلا ظهر
+  التصنيف الأساسي بلا مسؤول في القائمة.
+- **محرّر تصنيفات البند مكوّن واحد** (`reports/pages/item-categories.tsx`) يستعمله سجل البنود
+  والتبويب؛ نسختان تتفرّقان بصمت (نفس صنف عيب `EMAIL_TOOLS`).
+- الاختبارات: `item-categories.test.ts` +3 (manager 200 / purchasing 403)، `customer-rfq.test.ts`
+  +5 (قائمة + فلترة + قراءة data_entry + حلّ مالك الأساسي). **1448 api-server / 66 portal** تمر؛
+  tsc + prettier + البناءان نظيفة؛ `/api/customer-rfq/item-categories` = 401 (مركّب خلف المصادقة).

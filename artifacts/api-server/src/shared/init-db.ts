@@ -1670,6 +1670,18 @@ export async function initDb(): Promise<void> {
       );
     }
 
+    // ── Mirror supplier categories into item categories ─────────────────────
+    // The operator's rule: the item categories must be the SAME list as the
+    // supplier categories. A supplier category is copied in by NAME (idempotent,
+    // ON CONFLICT DO NOTHING), so any category added on /suppliers also appears
+    // as an item category — and the reverse is never deleted. Kept as its OWN
+    // statement: a sibling failure must not roll the seed back.
+    await client.query(`
+      INSERT INTO item_categories (name, sort_order)
+      SELECT name, 100 FROM supplier_categories
+      ON CONFLICT (name) DO NOTHING;
+    `);
+
     // ── Item classification keywords (admin-managed) ────────────────────────
     // The classifier terms move out of code into this table. DDL in its own
     // statement (a sibling failure must not roll the CREATE back).

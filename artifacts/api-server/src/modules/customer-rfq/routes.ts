@@ -1658,6 +1658,193 @@ router.put(
   },
 );
 
+// GET /customer-rfq/item-categories — the «تصنيفات البنود» tab: EVERY item with
+// its identity (line item / part number / description) and its category, so the
+// whole team can review which item belongs to which category. Read-only for any
+// authenticated employee; the category itself is edited (per item) only by a
+// manager through PUT /customer-rfq/items/:id/categories.
+//
+// Searchable + paginated + filterable by category («unclassified» = no primary
+// category and no junction rows). One batched query for the junction and one for
+// the categories — never per row.
+router.get("/customer-rfq/item-categories", requireAuth, async (req, res): Promise<void> => {
+  const {
+    search,
+    categoryId: categoryIdQ,
+    limit: limitQ,
+    offset: offsetQ,
+  } = req.query as Record<string, string>;
+  const limit = Math.min(Math.max(parseInt(limitQ || "100", 10) || 100, 1), 500);
+  const offset = Math.max(parseInt(offsetQ || "0", 10) || 0, 0);
+  const searchTerm = (search || "").trim();
+  const filterCategoryId =
+    categoryIdQ && categoryIdQ !== "all" && categoryIdQ !== "unclassified"
+      ? parseInt(categoryIdQ, 10) || null
+      : null;
+  const onlyUnclassified = categoryIdQ === "unclassified";
+
+  // Items + their owning RFQ header. LEFT join so an item whose RFQ was removed
+  // still shows (defensive; the FK cascades in practice).
+  const base = db
+    .select({
+      id: customerRfqItemsTable.id,
+      partNo: customerRfqItemsTable.partNo,
+      lineItem: customerRfqItemsTable.lineItem,
+      description: customerRfqItemsTable.description,
+      uom: customerRfqItemsTable.uom,
+      qty: customerRfqItemsTable.qty,
+      categoryId: customerRfqItemsTable.categoryId,
+      isCancelled: customerRfqItemsTable.isCancelled,
+      customerRfqId: customerRfqsTable.id,
+      customerRfqNo: customerRfqsTable.customerRfqNo,
+      customerName: customerRfqsTable.customerName,
+    })
+    .from(customerRfqItemsTable)
+    .leftJoin(customerRfqsTable, eq(customerRfqItemsTable.customerRfqId, customerRfqsTable.id));
+
+  const rows = searchTerm
+    ? await base.where(
+        or(
+          ilike(customerRfqItemsTable.partNo, `%${searchTerm}%`),
+          ilike(customerRfqItemsTable.lineItem, `%${searchTerm}%`),
+          ilike(customerRfqItemsTable.description, `%${searchTerm}%`),
+          ilike(customerRfqsTable.customerRfqNo, `%${searchTerm}%`),
+          ilike(customerRfqsTable.customerName, `%${searchTerm}%`),
+        ),
+      )
+    : await base;
+
+  // Every category attached (primary + junction) for the returned items.
+  const itemIds = rows.map((r) => r.id);
+  const extras = itemIds.length
+    ? await db
+        .select({
+          customerRfqItemId: customerRfqItemCategoriesTable.customerRfqItemId,
+          categoryId: customerRfqItemCategoriesTable.categoryId,
+          employeeId: customerRfqItemCategoriesTable.employeeId,
+        })
+        .from(customerRfqItemCategoriesTable)
+        .where(inArray(customerRfqItemCategoriesTable.customerRfqItemId, itemIds))
+    : [];
+
+  const extraByItem = new Map<number, typeof extras>();
+  for (const e of extras) {
+    const list = extraByItem.get(e.customerRfqItemId) ?? [];
+    list.push(e);
+    extraByItem.set(e.customerRfqItemId, list);
+  }
+
+  const categoryIds = [
+    ...new Set(
+      [...rows.map((r) => r.categoryId), ...extras.map((e) => e.categoryId)].filter(
+        (c): c is number => c != null,
+      ),
+    ),
+  ];
+  const cats = categoryIds.length
+    ? await db
+        .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+        .from(itemCategoriesTable)
+        .where(inArray(itemCategoriesTable.id, categoryIds))
+    : [];
+  const catName = new Map(cats.map((c) => [c.id, c.name]));
+
+  // Resolve each category's responsible employee so the list can show who owns
+  // the category even for the PRIMARY category (which carries no junction row).
+  const catOwners = categoryIds.length
+    ? await db
+        .select({
+          categoryId: employeeCategoriesTable.categoryId,
+          employeeId: employeeCategoriesTable.employeeId,
+          isPrimary: employeeCategoriesTable.isPrimary,
+        })
+        .from(employeeCategoriesTable)
+        .where(inArray(employeeCategoriesTable.categoryId, categoryIds))
+    : [];
+  const ownerByCat = new Map<number, number>();
+  for (const o of catOwners) {
+    const current = ownerByCat.get(o.categoryId);
+    if (current == null || o.isPrimary) ownerByCat.set(o.categoryId, o.employeeId);
+  }
+
+  const ownerIds = [
+    ...new Set(
+      [...extras.map((e) => e.employeeId), ...catOwners.map((o) => o.employeeId)].filter(
+        (e): e is number => e != null,
+      ),
+    ),
+  ];
+  const owners = ownerIds.length
+    ? await db
+        .select({ id: employeesTable.id, name: employeesTable.name })
+        .from(employeesTable)
+        .where(inArray(employeesTable.id, ownerIds))
+    : [];
+  const ownerName = new Map(owners.map((o) => [o.id, o.name]));
+
+  let enriched = rows.map((r) => {
+    const rowExtras = extraByItem.get(r.id) ?? [];
+    const categories: SheetCategory[] = [];
+    if (r.categoryId != null) {
+      const ownerId = ownerByCat.get(r.categoryId) ?? null;
+      categories.push({
+        categoryId: r.categoryId,
+        categoryName: catName.get(r.categoryId) ?? null,
+        employeeId: ownerId,
+        employeeName: ownerId != null ? (ownerName.get(ownerId) ?? null) : null,
+        isPrimary: true,
+      });
+    }
+    for (const e of rowExtras) {
+      const ownerId = e.employeeId ?? ownerByCat.get(e.categoryId) ?? null;
+      categories.push({
+        categoryId: e.categoryId,
+        categoryName: catName.get(e.categoryId) ?? null,
+        employeeId: ownerId,
+        employeeName: ownerId != null ? (ownerName.get(ownerId) ?? null) : null,
+        isPrimary: false,
+      });
+    }
+    return {
+      customerRfqItemId: r.id,
+      partNo: r.partNo,
+      lineItem: r.lineItem,
+      description: r.description,
+      uom: r.uom,
+      qty: formatQty(r.qty),
+      isCancelled: r.isCancelled,
+      customerRfqId: r.customerRfqId,
+      customerRfqNo: r.customerRfqNo,
+      customerName: r.customerName,
+      categoryId: r.categoryId,
+      categoryName: r.categoryId != null ? (catName.get(r.categoryId) ?? null) : null,
+      categories,
+    };
+  });
+
+  // Category filter (primary OR any junction category).
+  if (filterCategoryId != null) {
+    enriched = enriched.filter((r) => r.categories.some((c) => c.categoryId === filterCategoryId));
+  } else if (onlyUnclassified) {
+    enriched = enriched.filter((r) => r.categories.length === 0);
+  }
+
+  const total = enriched.length;
+  const page = enriched.slice(offset, offset + limit);
+  res.json({ total, limit, offset, rows: page });
+});
+
+// GET /customer-rfq/item-category-options — the distinct categories an item may
+// be attached to, for the manager's editor. Sourced from item_categories (the
+// list mirrored from the supplier categories).
+router.get("/customer-rfq/item-category-options", requireAuth, async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+    .from(itemCategoriesTable)
+    .orderBy(itemCategoriesTable.name);
+  res.json(rows);
+});
+
 // POST /customer-rfq — create a customer RFQ
 router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
   const {

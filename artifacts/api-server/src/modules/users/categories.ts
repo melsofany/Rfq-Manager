@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { supplierCategoriesTable, suppliersTable } from "@workspace/db";
+import { supplierCategoriesTable, suppliersTable, itemCategoriesTable } from "@workspace/db";
 import { eq, asc, count, or, ilike } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 
@@ -31,6 +31,17 @@ router.post("/categories", requireRole("admin"), async (req, res): Promise<void>
   }
 
   const [row] = await db.insert(supplierCategoriesTable).values({ name: name.trim() }).returning();
+  // Mirror into the item categories so /items → «تصنيفات البنود» shows the SAME
+  // list as /suppliers. Idempotent (a category may already exist as an item
+  // category); a mirror failure must never fail the supplier-category create.
+  try {
+    await db
+      .insert(itemCategoriesTable)
+      .values({ name: row.name, sortOrder: 100 })
+      .onConflictDoNothing();
+  } catch {
+    // best-effort — the startup mirror in init-db.ts re-syncs on the next boot.
+  }
   res.status(201).json({ id: row.id, name: row.name });
 });
 
@@ -39,6 +50,15 @@ router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<
   const { name } = req.body as { name?: string };
   if (!name?.trim()) {
     res.status(400).json({ error: "Name required" });
+    return;
+  }
+
+  const [current] = await db
+    .select()
+    .from(supplierCategoriesTable)
+    .where(eq(supplierCategoriesTable.id, id));
+  if (!current) {
+    res.status(404).json({ error: "Not found" });
     return;
   }
 
@@ -59,6 +79,16 @@ router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<
   if (!row) {
     res.status(404).json({ error: "Not found" });
     return;
+  }
+  // Keep the item categories in step with the supplier categories (the SAME
+  // list). The OLD name is the key — a rename moves the item category too.
+  try {
+    await db
+      .update(itemCategoriesTable)
+      .set({ name: row.name })
+      .where(eq(itemCategoriesTable.name, current.name));
+  } catch {
+    // best-effort — the startup mirror in init-db.ts re-syncs on the next boot.
   }
   res.json({ id: row.id, name: row.name });
 });
