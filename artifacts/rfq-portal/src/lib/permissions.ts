@@ -118,6 +118,7 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
       { key: "employees:representatives", labelKey: "perm.employees.representatives" },
     ],
   },
+  { key: "hr", href: "/hr", labelKey: "nav.hr" },
   { key: "audit", href: "/audit", labelKey: "nav.auditLog" },
   { key: "integrations", href: "/integrations", labelKey: "nav.integrations" },
   {
@@ -183,7 +184,7 @@ export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
   ],
   purchasing: [
     ...PAGE_KEYS.filter(
-      (k) => k !== "employees" && k !== "audit" && k !== "integrations" && k !== "ai-assistant",
+      (k) => k !== "employees" && k !== "hr" && k !== "audit" && k !== "integrations" && k !== "ai-assistant",
     ),
     "customer-rfq:edit",
     "customer-po:edit",
