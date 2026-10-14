@@ -19,6 +19,7 @@ import {
   UserRound,
   Calculator,
   Bot,
+  IdCard,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/items", label: t("nav.items"), icon: Package },
     { href: "/purchase-orders", label: t("nav.purchaseOrders"), icon: ShoppingCart },
     { href: "/accounts", label: t("nav.accounts"), icon: Calculator },
+    { href: "/hr", label: t("nav.hr"), icon: IdCard },
     { href: "/analytics", label: t("nav.analytics"), icon: BarChart3 },
     { href: "/whatsapp", label: t("nav.whatsapp"), icon: MessageSquare },
   ];
