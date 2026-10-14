@@ -56,6 +56,9 @@ import NewCustomerPoPage from "@/modules/customer-po/pages/new";
 import CustomerPoDetailPage from "@/modules/customer-po/pages/detail";
 import AccountsPage from "@/modules/accounts/pages/index";
 
+// ── Module: HR — الموارد البشرية ────────────────────────────────────────
+import HrPage from "@/modules/hr/pages/index";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -228,6 +231,11 @@ function Router() {
       </Route>
       <Route path="/accounts">
         <ProtectedRoute component={AccountsPage} />
+      </Route>
+
+      {/* ── Module: HR ─────────────────────────────────────────────────── */}
+      <Route path="/hr">
+        <ProtectedRoute component={HrPage} />
       </Route>
 
       <Route component={NotFound} />
