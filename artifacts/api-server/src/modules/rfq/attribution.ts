@@ -19,6 +19,9 @@ import {
   customerRfqItemsTable,
   customerRfqItemAssignmentsTable,
   employeesTable,
+  rfqItemsTable,
+  offerItemsTable,
+  offersTable,
 } from "@workspace/db";
 import { eq, and, isNull, sql } from "drizzle-orm";
 
@@ -117,23 +120,69 @@ export async function freezeAttributionForItem(
 
   const freezeAt = await dbClockTimestamp(tx);
 
-  // The period active at freezeAt — the ONLY owner that may be attributed.
-  const active = await tx
+  // ── Attribution source: «مَن أحضر السعر الفائز» ──────────────────────────
+  // Credit the employee who obtained the price the customer PO was raised on,
+  // resolved in a strict order of certainty:
+  //   1. The APPROVED offer's employee (`offer_items.is_approved = true` →
+  //      `offers.employee_id`) — the same price the margin check (1.06×) uses.
+  //   2. When NO approved price is recorded, the employee who SENT a priced
+  //      offer to the supplier (the newest `offers.employee_id` for the item).
+  //   3. When no offer carries an employee either, the open responsibility
+  //      period owner — a deterministic fallback, never a fabricated claim.
+  // The `attributionEvent` records which rung matched, so the KPI can report
+  // «بدون سعر» honestly instead of crediting a category owner.
+  const offersForItem = await tx
     .select({
-      employeeId: customerRfqItemAssignmentsTable.employeeId,
-      employeeName: employeesTable.name,
+      employeeId: offersTable.employeeId,
+      isApproved: offerItemsTable.isApproved,
+      createdAt: offersTable.createdAt,
     })
-    .from(customerRfqItemAssignmentsTable)
-    .leftJoin(employeesTable, eq(customerRfqItemAssignmentsTable.employeeId, employeesTable.id))
-    .where(
-      and(
-        eq(customerRfqItemAssignmentsTable.customerRfqItemId, customerRfqItemId),
-        sql`${customerRfqItemAssignmentsTable.validFrom} <= ${freezeAt}::timestamptz`,
-        sql`(${customerRfqItemAssignmentsTable.validTo} IS NULL OR ${freezeAt}::timestamptz < ${customerRfqItemAssignmentsTable.validTo})`,
-      ),
-    );
-  const employeeId = active[0]?.employeeId ?? null;
-  const employeeName = employeeId != null ? (active[0]?.employeeName ?? null) : null;
+    .from(offerItemsTable)
+    .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+    .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+    .where(eq(rfqItemsTable.customerRfqItemId, customerRfqItemId));
+
+  const approvedEmployeeId =
+    offersForItem.find((o) => o.isApproved && o.employeeId != null)?.employeeId ?? null;
+  // Newest priced offer that recorded a sender.
+  const sentEmployeeId =
+    offersForItem
+      .filter((o) => o.employeeId != null)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]?.employeeId ?? null;
+
+  let employeeId: number | null;
+  let employeeName: string | null;
+  let event: string;
+
+  const chosenEmployeeId = approvedEmployeeId ?? sentEmployeeId;
+  if (chosenEmployeeId != null) {
+    const [emp] = await tx
+      .select({ name: employeesTable.name })
+      .from(employeesTable)
+      .where(eq(employeesTable.id, chosenEmployeeId));
+    employeeId = chosenEmployeeId;
+    employeeName = emp?.name ?? null;
+    event = approvedEmployeeId != null ? "first_customer_po" : "first_customer_po_sent_price";
+  } else {
+    // The period active at freezeAt — the fallback owner.
+    const active = await tx
+      .select({
+        employeeId: customerRfqItemAssignmentsTable.employeeId,
+        employeeName: employeesTable.name,
+      })
+      .from(customerRfqItemAssignmentsTable)
+      .leftJoin(employeesTable, eq(customerRfqItemAssignmentsTable.employeeId, employeesTable.id))
+      .where(
+        and(
+          eq(customerRfqItemAssignmentsTable.customerRfqItemId, customerRfqItemId),
+          sql`${customerRfqItemAssignmentsTable.validFrom} <= ${freezeAt}::timestamptz`,
+          sql`(${customerRfqItemAssignmentsTable.validTo} IS NULL OR ${freezeAt}::timestamptz < ${customerRfqItemAssignmentsTable.validTo})`,
+        ),
+      );
+    employeeId = active[0]?.employeeId ?? null;
+    employeeName = employeeId != null ? (active[0]?.employeeName ?? null) : null;
+    event = "first_customer_po_no_approved_price";
+  }
 
   await tx
     .update(customerRfqItemsTable)
@@ -141,7 +190,7 @@ export async function freezeAttributionForItem(
       attributionFirstPoAt: sql`${freezeAt}::timestamptz`,
       attributionEmployeeId: employeeId,
       attributionEmployeeName: employeeName,
-      attributionEvent: "first_customer_po",
+      attributionEvent: event,
     })
     .where(
       and(

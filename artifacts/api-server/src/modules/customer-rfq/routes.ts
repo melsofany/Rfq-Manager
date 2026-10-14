@@ -13,9 +13,12 @@ import {
   customerPosTable,
   customerPoItemDeliveriesTable,
   purchaseOrderItemsTable,
+  itemCategoriesTable,
+  employeeCategoriesTable,
+  customerRfqItemCategoriesTable,
 } from "@workspace/db";
 import { eq, ilike, count, inArray, desc, and, isNull, or, isNotNull, sql, ne } from "drizzle-orm";
-import { requireAuth } from "../../middlewares/auth";
+import { requireAuth, requireRole } from "../../middlewares/auth";
 import { ensureCustomerAssignmentsSafe } from "../rfq/customer-assignment";
 
 const router = Router();
@@ -846,6 +849,7 @@ const SHEET_FILTER_COLUMNS: { param: string; field: keyof EnrichedSheetRow }[] =
   { param: "rfqUnitPrice", field: "rfqUnitPrice" },
   { param: "poQty", field: "poQty" },
   { param: "poUnitPrice", field: "poUnitPrice" },
+  { param: "categoryName", field: "categoryName" },
   // flagReason is a computed column (rejection reason + cost overrun), not a
   // raw DB field — see computeFlagReason. Registered so the facets endpoint
   // lists its distinct values and the per-column filter applies to it.
@@ -881,6 +885,19 @@ interface SheetRow {
   highlightNote: string | null;
   poFinalActualCost: string | null;
   poReferencePrice: string | null;
+  categoryName: string | null;
+  // Every category attached to the item (primary + extras from the junction),
+  // each with the responsible employee. Drives the manager's category editor and
+  // the multi-category coverage. Empty when unclassified.
+  categories: SheetCategory[];
+}
+
+interface SheetCategory {
+  categoryId: number;
+  categoryName: string | null;
+  employeeId: number | null;
+  employeeName: string | null;
+  isPrimary: boolean;
 }
 
 // A SheetRow enriched with the computed flagReason — the shape loadSheetRows
@@ -932,6 +949,7 @@ async function loadSheetRowsRaw(): Promise<SheetRow[]> {
       uom: customerRfqItemsTable.uom,
       rfqQty: customerRfqItemsTable.qty,
       rfqUnitPrice: customerRfqItemsTable.unitPrice,
+      categoryId: customerRfqItemsTable.categoryId,
       customerRfqId: customerRfqsTable.id,
       customerRfqNo: customerRfqsTable.customerRfqNo,
       customerName: customerRfqsTable.customerName,
@@ -989,6 +1007,59 @@ async function loadSheetRowsRaw(): Promise<SheetRow[]> {
   const costByPoItemId = new Map(
     supplierCosts.filter((c) => c.poItemId != null).map((c) => [c.poItemId as number, c]),
   );
+
+  // Category names for the «التصنيف» column. One query for every distinct
+  // category referenced by the sheet (never one per row).
+  const categoryIds = [
+    ...new Set(rfqItems.map((i) => i.categoryId).filter((c): c is number => c != null)),
+  ];
+  const categoryRows = categoryIds.length
+    ? await db
+        .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+        .from(itemCategoriesTable)
+        .where(inArray(itemCategoriesTable.id, categoryIds))
+    : [];
+  const categoryNameById = new Map(categoryRows.map((c) => [c.id, c.name]));
+
+  // Extra categories per item (the multi-category junction) + their owners. Two
+  // batched queries keyed by item id — never one per row.
+  const allItemIds = rfqItems.map((i) => i.rfqItemId);
+  const extraCats = allItemIds.length
+    ? await db
+        .select({
+          customerRfqItemId: customerRfqItemCategoriesTable.customerRfqItemId,
+          categoryId: customerRfqItemCategoriesTable.categoryId,
+          employeeId: customerRfqItemCategoriesTable.employeeId,
+        })
+        .from(customerRfqItemCategoriesTable)
+        .where(inArray(customerRfqItemCategoriesTable.customerRfqItemId, allItemIds))
+    : [];
+  const extraCatIds = [...new Set(extraCats.map((c) => c.categoryId))];
+  const extraCatNameRows = extraCatIds.length
+    ? await db
+        .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+        .from(itemCategoriesTable)
+        .where(inArray(itemCategoriesTable.id, extraCatIds))
+    : [];
+  for (const c of extraCatNameRows) categoryNameById.set(c.id, c.name);
+
+  const ownerEmployeeIds = [
+    ...new Set(extraCats.map((c) => c.employeeId).filter((e): e is number => e != null)),
+  ];
+  const ownerNameRows = ownerEmployeeIds.length
+    ? await db
+        .select({ id: employeesTable.id, name: employeesTable.name })
+        .from(employeesTable)
+        .where(inArray(employeesTable.id, ownerEmployeeIds))
+    : [];
+  const employeeNameById = new Map(ownerNameRows.map((e) => [e.id, e.name]));
+
+  const extraCatsByItem = new Map<number, typeof extraCats>();
+  for (const c of extraCats) {
+    const list = extraCatsByItem.get(c.customerRfqItemId) ?? [];
+    list.push(c);
+    extraCatsByItem.set(c.customerRfqItemId, list);
+  }
 
   // Match each PO line to its RFQ item: by the item FK, falling back (for lines
   // whose FK was severed, or that were typed by hand against a picked RFQ) to
@@ -1095,8 +1166,35 @@ async function loadSheetRowsRaw(): Promise<SheetRow[]> {
       highlightNote: po?.highlightNote ?? null,
       poFinalActualCost: cost?.finalActualCost ?? null,
       poReferencePrice: cost?.referencePrice ?? null,
+      categoryName: i.categoryId != null ? (categoryNameById.get(i.categoryId) ?? null) : null,
+      categories: buildCategories(i),
     };
   };
+
+  // Primary category + every extra category attached through the junction,
+  // each annotated with the responsible employee (from the category's owner).
+  function buildCategories(i: { rfqItemId: number; categoryId: number | null }): SheetCategory[] {
+    const out: SheetCategory[] = [];
+    if (i.categoryId != null) {
+      out.push({
+        categoryId: i.categoryId,
+        categoryName: categoryNameById.get(i.categoryId) ?? null,
+        employeeId: null,
+        employeeName: null,
+        isPrimary: true,
+      });
+    }
+    for (const c of extraCatsByItem.get(i.rfqItemId) ?? []) {
+      out.push({
+        categoryId: c.categoryId,
+        categoryName: categoryNameById.get(c.categoryId) ?? null,
+        employeeId: c.employeeId,
+        employeeName: c.employeeId != null ? (employeeNameById.get(c.employeeId) ?? null) : null,
+        isPrimary: false,
+      });
+    }
+    return out;
+  }
 
   for (const i of rfqOrder) {
     const linked = poItemsByRfqItemId.get(i.rfqItemId);
@@ -1145,6 +1243,8 @@ async function loadSheetRowsRaw(): Promise<SheetRow[]> {
       highlightNote: null,
       poFinalActualCost: null,
       poReferencePrice: null,
+      categoryName: null,
+      categories: [],
     });
   }
 
@@ -1176,6 +1276,8 @@ async function loadSheetRowsRaw(): Promise<SheetRow[]> {
       highlightNote: p.highlightNote,
       poFinalActualCost: cost?.finalActualCost ?? null,
       poReferencePrice: cost?.referencePrice ?? null,
+      categoryName: null,
+      categories: [],
     });
   }
 
@@ -1267,26 +1369,29 @@ async function loadSheetRows(
 
   for (const { param, field } of SHEET_FILTER_COLUMNS) {
     if (param === exceptColumn) continue;
+    // The category column matches ANY of the row's categories (an item may have
+    // several), not just the primary one — otherwise a multi-category item would
+    // be filtered out of its own secondary category.
+    const cellValues = (r: EnrichedSheetRow): string[] => {
+      if (param === "categoryName") {
+        const names = r.categories.map((c) => c.categoryName).filter((n): n is string => n != null);
+        return names.length > 0 ? names : r.categoryName != null ? [r.categoryName] : [""];
+      }
+      const v = r[field];
+      return [v == null ? "" : String(v)];
+    };
     const includeRaw = query[`${param}Include`];
     if (includeRaw !== undefined) {
       // Include mode: show only these values. An empty list shows nothing.
       const includeSet = new Set(parseValueList(includeRaw));
-      filtered = filtered.filter((r) => {
-        const v = r[field];
-        const cell = v == null ? "" : String(v);
-        return includeSet.has(cell);
-      });
+      filtered = filtered.filter((r) => cellValues(r).some((cell) => includeSet.has(cell)));
       continue;
     }
     const excludeRaw = query[`${param}Exclude`];
     if (!excludeRaw) continue;
     const excludeSet = new Set(parseValueList(excludeRaw));
     if (excludeSet.size === 0) continue;
-    filtered = filtered.filter((r) => {
-      const v = r[field];
-      const cell = v == null ? "" : String(v);
-      return !excludeSet.has(cell);
-    });
+    filtered = filtered.filter((r) => cellValues(r).every((cell) => !excludeSet.has(cell)));
   }
 
   return filtered;
@@ -1354,12 +1459,18 @@ router.get("/customer-rfq/sheet-view/facets", requireAuth, async (req, res): Pro
   for (const r of filtered) {
     // For «السبب», facet values must match the rendered cell: computed flag +
     // highlight note merged, exactly like the sheet-view response.
-    const v =
-      field === "flagReason"
-        ? [r.flagReason, r.highlightNote].filter((s) => s != null).join(" — ") || null
-        : r[field];
-    const key = v == null ? "" : String(v);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    let keys: string[];
+    if (field === "flagReason") {
+      keys = [[r.flagReason, r.highlightNote].filter((s) => s != null).join(" — ") || ""];
+    } else if (column === "categoryName") {
+      // Every category the item belongs to is a distinct facet value.
+      const names = r.categories.map((c) => c.categoryName).filter((n): n is string => n != null);
+      keys = names.length > 0 ? names : r.categoryName != null ? [r.categoryName] : [""];
+    } else {
+      const v = r[field];
+      keys = [v == null ? "" : String(v)];
+    }
+    for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   const values = [...counts.entries()]
     .map(([value, count]) => ({ value, count }))
@@ -1367,6 +1478,185 @@ router.get("/customer-rfq/sheet-view/facets", requireAuth, async (req, res): Pro
 
   res.json({ column, values });
 });
+
+// GET /customer-rfq/items/:itemId/categories — every category attached to one
+// item (primary + extras), with the responsible employee. Read-only; any
+// authenticated employee may view so the sheet review works for everyone.
+router.get(
+  "/customer-rfq/items/:itemId/categories",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const itemId = parseInt(String(req.params.itemId), 10);
+    if (!Number.isFinite(itemId)) {
+      res.status(400).json({ error: "معرّف بند غير صالح" });
+      return;
+    }
+    const [item] = await db
+      .select({
+        id: customerRfqItemsTable.id,
+        categoryId: customerRfqItemsTable.categoryId,
+      })
+      .from(customerRfqItemsTable)
+      .where(eq(customerRfqItemsTable.id, itemId))
+      .limit(1);
+    if (!item) {
+      res.status(404).json({ error: "البند غير موجود" });
+      return;
+    }
+    const extras = await db
+      .select({
+        categoryId: customerRfqItemCategoriesTable.categoryId,
+        employeeId: customerRfqItemCategoriesTable.employeeId,
+      })
+      .from(customerRfqItemCategoriesTable)
+      .where(eq(customerRfqItemCategoriesTable.customerRfqItemId, itemId));
+
+    const catIds = [
+      ...new Set(
+        [item.categoryId, ...extras.map((e) => e.categoryId)].filter((c): c is number => c != null),
+      ),
+    ];
+    const cats = catIds.length
+      ? await db
+          .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+          .from(itemCategoriesTable)
+          .where(inArray(itemCategoriesTable.id, catIds))
+      : [];
+    const catName = new Map(cats.map((c) => [c.id, c.name]));
+
+    const empIds = [
+      ...new Set(extras.map((e) => e.employeeId).filter((e): e is number => e != null)),
+    ];
+    const emps = empIds.length
+      ? await db
+          .select({ id: employeesTable.id, name: employeesTable.name })
+          .from(employeesTable)
+          .where(inArray(employeesTable.id, empIds))
+      : [];
+    const empName = new Map(emps.map((e) => [e.id, e.name]));
+
+    const categories: SheetCategory[] = [];
+    if (item.categoryId != null) {
+      categories.push({
+        categoryId: item.categoryId,
+        categoryName: catName.get(item.categoryId) ?? null,
+        employeeId: null,
+        employeeName: null,
+        isPrimary: true,
+      });
+    }
+    for (const e of extras) {
+      categories.push({
+        categoryId: e.categoryId,
+        categoryName: catName.get(e.categoryId) ?? null,
+        employeeId: e.employeeId,
+        employeeName: e.employeeId != null ? (empName.get(e.employeeId) ?? null) : null,
+        isPrimary: false,
+      });
+    }
+    res.json({ customerRfqItemId: itemId, categories });
+  },
+);
+
+// PUT /customer-rfq/items/:itemId/categories — the manager's category editor.
+// Body { categoryIds: number[] } REPLACES the extra categories. The primary
+// category (customer_rfq_items.category_id) is never touched here — it is what
+// the classifier picked and what drives ownership; this endpoint adds coverage.
+// Manager-only by product decision (a review/edit tool, not a data-entry one).
+router.put(
+  "/customer-rfq/items/:itemId/categories",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const itemId = parseInt(String(req.params.itemId), 10);
+    if (!Number.isFinite(itemId)) {
+      res.status(400).json({ error: "معرّف بند غير صالح" });
+      return;
+    }
+    const body = req.body as { categoryIds?: unknown };
+    const rawIds = Array.isArray(body.categoryIds) ? body.categoryIds : [];
+    const categoryIds = [
+      ...new Set(
+        rawIds.map((v) => Number(v)).filter((v): v is number => Number.isInteger(v) && v > 0),
+      ),
+    ];
+    if (categoryIds.length === 0) {
+      res.status(400).json({ error: "اختر تصنيفًا واحدًا على الأقل" });
+      return;
+    }
+    const [item] = await db
+      .select({ id: customerRfqItemsTable.id, categoryId: customerRfqItemsTable.categoryId })
+      .from(customerRfqItemsTable)
+      .where(eq(customerRfqItemsTable.id, itemId))
+      .limit(1);
+    if (!item) {
+      res.status(404).json({ error: "البند غير موجود" });
+      return;
+    }
+
+    // Validate the categories exist.
+    const validCats = await db
+      .select({ id: itemCategoriesTable.id })
+      .from(itemCategoriesTable)
+      .where(inArray(itemCategoriesTable.id, categoryIds));
+    const validIds = new Set(validCats.map((c) => c.id));
+    const chosen = categoryIds.filter((id) => validIds.has(id));
+    if (chosen.length === 0) {
+      res.status(400).json({ error: "التصنيفات المحددة غير موجودة" });
+      return;
+    }
+
+    // Resolve each category's owner (primary owner first, else the first owner).
+    const owners = await db
+      .select({
+        categoryId: employeeCategoriesTable.categoryId,
+        employeeId: employeeCategoriesTable.employeeId,
+        isPrimary: employeeCategoriesTable.isPrimary,
+      })
+      .from(employeeCategoriesTable)
+      .where(inArray(employeeCategoriesTable.categoryId, chosen));
+    const ownerByCat = new Map<number, number>();
+    for (const o of owners) {
+      const current = ownerByCat.get(o.categoryId);
+      if (current == null || o.isPrimary) ownerByCat.set(o.categoryId, o.employeeId);
+    }
+
+    const actor = req.session.employeeId ?? null;
+    // The primary category is stored separately — never duplicate it in the
+    // junction, so the sheet shows it exactly once.
+    const extras = chosen.filter((id) => id !== item.categoryId);
+
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(customerRfqItemCategoriesTable)
+        .where(eq(customerRfqItemCategoriesTable.customerRfqItemId, itemId));
+      if (extras.length > 0) {
+        await tx.insert(customerRfqItemCategoriesTable).values(
+          extras.map((categoryId) => ({
+            customerRfqItemId: itemId,
+            categoryId,
+            employeeId: ownerByCat.get(categoryId) ?? null,
+            addedBy: actor,
+          })),
+        );
+      }
+    });
+
+    await db.insert(auditLogTable).values({
+      action: "customer_rfq.item_categories_updated",
+      entityType: "customer_rfq_item",
+      entityId: itemId,
+      employeeId: actor,
+      description: `Set categories on item ${itemId}: [${chosen.join(", ")}] (primary ${
+        item.categoryId ?? "none"
+      })`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+
+    res.json({ customerRfqItemId: itemId, categoryIds: chosen });
+  },
+);
 
 // POST /customer-rfq — create a customer RFQ
 router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {

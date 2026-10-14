@@ -91,6 +91,15 @@ const customerRfqItemAssignmentsTbl = {
   validFrom: "validFrom",
   validTo: "validTo",
 };
+// Approved-offer lookup (attribution): offer_items ⋈ offers ⋈ rfq_items.
+const offerItemsTbl = {
+  _: "offerItems",
+  offerId: "offerId",
+  rfqItemId: "rfqItemId",
+  isApproved: "isApproved",
+};
+const offersTbl = { _: "offers", id: "id", employeeId: "employeeId" };
+const rfqItemsTbl = { _: "rfqItems", id: "id", customerRfqItemId: "customerRfqItemId" };
 const tables = {
   customerPosTable: poTable,
   customerPoItemsTable: poItemsTable,
@@ -101,6 +110,9 @@ const tables = {
   purchaseOrderItemsTable: purchaseOrderItemsTbl,
   customerRfqItemsTable: customerRfqItemsTbl,
   customerRfqItemAssignmentsTable: customerRfqItemAssignmentsTbl,
+  offerItemsTable: offerItemsTbl,
+  offersTable: offersTbl,
+  rfqItemsTable: rfqItemsTbl,
 };
 
 // Per-test state.
@@ -125,6 +137,8 @@ let duplicatePoRows: any[]; // uniqueness probe: select({id}).from(poTable).wher
 // open period active at freeze time.
 let freezeItemRows: any[]; // [{ firstPoAt }]
 let activePeriodRows: any[]; // [{ employeeId, employeeName }]
+// Approved-offer attribution: select({employeeId}).from(offer_items).innerJoin(...)
+let approvedOfferRows: any[]; // [{ employeeId }]
 const attributionUpdates: any[] = []; // customer_rfq_items attribution UPDATE values
 // Tracks exact values written to customer_po_items so tests can assert
 // links (insert) or updates (update).
@@ -233,6 +247,25 @@ const dbMock: any = {
             chainable(activePeriodRows, { where: vi.fn(() => chainable(activePeriodRows)) }),
           ),
           where: vi.fn(() => chainable(activePeriodRows)),
+        });
+      }
+      // Approved-offer attribution: select({employeeId}).from(offer_items)
+      // .innerJoin(offers).innerJoin(rfq_items).where().limit(1)
+      if (table === offerItemsTbl) {
+        return chainable(approvedOfferRows, {
+          innerJoin: vi.fn(() =>
+            chainable(approvedOfferRows, {
+              innerJoin: vi.fn(() =>
+                chainable(approvedOfferRows, {
+                  where: vi.fn(() =>
+                    chainable(approvedOfferRows, {
+                      limit: vi.fn(() => chainable(approvedOfferRows)),
+                    }),
+                  ),
+                }),
+              ),
+            }),
+          ),
         });
       }
       // customer-rfqs picker list: select({...}).from(rfqs).orderBy()
@@ -359,6 +392,7 @@ beforeEach(() => {
   eqCalls.length = 0;
   freezeItemRows = [];
   activePeriodRows = [];
+  approvedOfferRows = [];
   attributionUpdates.length = 0;
 });
 
@@ -482,7 +516,48 @@ describe("POST /api/customer-po (create)", () => {
     expect(frozen).toBeTruthy();
     expect(frozen.attributionEmployeeId).toBe(7);
     expect(frozen.attributionEmployeeName).toBe("Sara");
+    // No approved offer → the fallback owner (open period) is attributed.
+    expect(frozen.attributionEvent).toBe("first_customer_po_no_approved_price");
+  });
+
+  it("attributes the APPROVED offer's employee — «من أحضر السعر الفائز»", async () => {
+    freezeItemRows = [{ firstPoAt: null }];
+    approvedOfferRows = [{ employeeId: 42, isApproved: true, createdAt: new Date("2025-01-01") }];
+    // The open-period owner is deliberately DIFFERENT: the approved-price owner
+    // must win, not the item's category owner.
+    activePeriodRows = [{ employeeId: 7, employeeName: "Sara" }];
+    const res = await request(testApp)
+      .post("/api/customer-po")
+      .send({
+        customerPoNo: "PO-105",
+        customerName: "Acme",
+        items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 1 }],
+      });
+    expect(res.status).toBe(201);
+    const frozen = attributionUpdates.find((u) => u.attributionFirstPoAt != null);
+    expect(frozen).toBeTruthy();
+    expect(frozen.attributionEmployeeId).toBe(42);
+    expect(frozen.attributionEmployeeName).toBe("Tester"); // employeesTbl lookup
     expect(frozen.attributionEvent).toBe("first_customer_po");
+  });
+
+  it("falls back to the SENT offer's employee when NO price is approved", async () => {
+    freezeItemRows = [{ firstPoAt: null }];
+    // An offer exists and carries a sender, but nothing is approved.
+    approvedOfferRows = [{ employeeId: 55, isApproved: false, createdAt: new Date("2025-01-02") }];
+    activePeriodRows = [{ employeeId: 7, employeeName: "Sara" }];
+    const res = await request(testApp)
+      .post("/api/customer-po")
+      .send({
+        customerPoNo: "PO-106",
+        customerName: "Acme",
+        items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 1 }],
+      });
+    expect(res.status).toBe(201);
+    const frozen = attributionUpdates.find((u) => u.attributionFirstPoAt != null);
+    expect(frozen).toBeTruthy();
+    expect(frozen.attributionEmployeeId).toBe(55);
+    expect(frozen.attributionEvent).toBe("first_customer_po_sent_price");
   });
 
   it("keeps an ALREADY-frozen item unattributed (a later PO never re-attributes)", async () => {

@@ -275,6 +275,21 @@ export const CustomerRfqSheetRowHighlightColor = {
 } as const;
 
 /**
+ * One category attached to a sheet row's item, with the employee responsible for it.
+ */
+export interface CustomerRfqSheetRowCategory {
+  categoryId: number;
+  /** @nullable */
+  categoryName?: string | null;
+  /** @nullable */
+  employeeId?: number | null;
+  /** @nullable */
+  employeeName?: string | null;
+  /** True for the item's primary (classifier) category — the one that drives ownership. */
+  isPrimary: boolean;
+}
+
+/**
  * One flat row reproducing the legacy single-sheet layout — a customer RFQ line item with its joined customer PO columns (when a PO was issued). Rows for customer-PO lines that cannot be matched to a customer RFQ item (free/manual lines) carry null RFQ columns.
  */
 export interface CustomerRfqSheetRow {
@@ -347,6 +362,13 @@ export interface CustomerRfqSheetRow {
      * @nullable
      */
   highlightColor?: CustomerRfqSheetRowHighlightColor;
+  /**
+     * Item category name (التصنيف) resolved from the customer RFQ item's category; null when the item is unclassified.
+     * @nullable
+     */
+  categoryName?: string | null;
+  /** Every category attached to the item — the primary classifier pick plus any extra categories a manager attached (multi-category). Each carries its responsible employee. */
+  categories?: CustomerRfqSheetRowCategory[];
 }
 
 /**

@@ -212,10 +212,16 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
   const isUpdate = !!existingOffer;
 
   if (existingOffer) {
-    // UPDATE existing offer (supplier is revising their submission)
+    // UPDATE existing offer (supplier is revising their submission). The
+    // attributing employee is the one who SENT the RFQ to this supplier
+    // (`sent_log.employee_id`), so a revision keeps the same owner.
     await db
       .update(offersTable)
-      .set({ totalPrice: String(totalPrice), generalNotes })
+      .set({
+        totalPrice: String(totalPrice),
+        generalNotes,
+        employeeId: log.log.employeeId ?? existingOffer.employeeId ?? null,
+      })
       .where(eq(offersTable.id, existingOffer.id));
 
     // Replace all offer items
@@ -229,6 +235,9 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
         rfqId: log.rfq.id,
         supplierId: log.log.supplierId,
         sentLogId: log.log.id,
+        // «من أحضر السعر» — the employee who sent the RFQ to this supplier.
+        // Read from the sent-log row, never from a client-supplied value.
+        employeeId: log.log.employeeId ?? null,
         totalPrice: String(totalPrice),
         generalNotes,
       })
@@ -273,7 +282,7 @@ router.post("/pricing/:token/submit", async (req, res): Promise<void> => {
     supplierId: log.log.supplierId,
     supplierName: null,
     sentLogId: log.log.id,
-    employeeId: null,
+    employeeId: log.log.employeeId ?? null,
     totalPrice,
     generalNotes: generalNotes ?? null,
     createdAt: new Date().toISOString(),

@@ -5,6 +5,7 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
+import type { CustomerRfqSheetRowCategory } from './customerRfqSheetRowCategory';
 import type { CustomerRfqSheetRowHighlightColor } from './customerRfqSheetRowHighlightColor';
 
 /**
@@ -80,4 +81,11 @@ export interface CustomerRfqSheetRow {
      * @nullable
      */
   highlightColor?: CustomerRfqSheetRowHighlightColor;
+  /**
+     * Item category name (التصنيف) resolved from the customer RFQ item's category; null when the item is unclassified.
+     * @nullable
+     */
+  categoryName?: string | null;
+  /** Every category attached to the item — the primary classifier pick plus any extra categories a manager attached (multi-category). Each carries its responsible employee. */
+  categories?: CustomerRfqSheetRowCategory[];
 }

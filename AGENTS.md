@@ -3528,3 +3528,105 @@ in ONE request. It is a plain JSON completion (`toolChoice:"none"`,
   clean.
 - Deploy: pending — push/PR only on explicit request.
 
+
+## KPI «من أحضر السعر الفائز» — event-based item attribution (branch feat/ai-item-classifier)
+
+The operator's team each covers 2+ categories, and one request spans several
+categories (أجهزة/قواطع/كهرباء), so KPI needs each item credited to a person —
+without manual tagging. Five decisions were fixed with the operator: (1) credit
+the employee who brought the **winning price** (the one the customer PO was
+issued on); (2) an item with several categories is covered by both owners but
+**counted for one**; (3) NO supplier↔category link; (4) **NO formula** —
+event-based counting; (5) the KPI is displayed on the **employees page**.
+
+- **P1 — `offers.employee_id` is now stamped on offer create AND revision**
+  (`rfq/pricing.ts`). It is read from the **sent-log row** (`sent_log.employee_id`
+  — the employee who sent the RFQ to that supplier), never from a client-supplied
+  value. On a revision it keeps `existingOffer.employeeId` as a fallback.
+- **P2 — `freezeAttributionForItem` (`rfq/attribution.ts`) now attributes the
+  APPROVED offer's employee** (`offer_items.is_approved = true` →
+  `offers.employee_id`), resolved through `offer_items → offers → rfq_items`
+  where `rfq_items.customer_rfq_item_id = <item>`. That approved price is the
+  SAME reference the 1.06× margin check uses, so the attribution and the margin
+  math agree. Fallback when no approved offer carries an employee: the open
+  `customer_rfq_item_assignments` period owner, with `attributionEvent =
+  "first_customer_po_no_approved_price"` (the normal path writes
+  `"first_customer_po"`). The `event` distinction is what lets the KPI report
+  «بدون سعر فائز» honestly instead of crediting a category owner.
+- **P3 — the freeze is already triggered on customer-PO create**
+  (`customer-po/routes.ts` ~line 650, `for (const itemId of itemIdsToFreeze)
+  await freezeAttributionForItem(tx, itemId)`). No change needed there; the P2
+  source swap is what changed the outcome. The freeze is one-shot: an item whose
+  `attributionFirstPoAt` is set is never re-attributed.
+- **P5 — `GET /analytics/procurement/attributed`** (`reports/item-kpis.ts`):
+  a `COUNT` of frozen items per employee, broken down by category, with a `from`/
+  `to` window applied to `attribution_first_po_at` (the event timestamp — NOT the
+  request date). Returns `totals.{frozenItems, attributedItems,
+  unattributedItems, employeesCount}`. No formula, no percentage. Live employee
+  names override the stored snapshot.
+- **P5 UI — `/employees`** (`users/pages/employees.tsx`): a KPI card (4 totals +
+  per-employee chips, from/to date filters) plus a «بنود مُنسوبة» column with a
+  per-employee tooltip breaking the count down by category. One request for the
+  whole team (never an N+1).
+- **P6 — category visibility in `/items`** («سجل البنود والطلبات»): the sheet
+  view (`customer-rfq/routes.ts`) now selects `customer_rfq_items.category_id`,
+  resolves names in ONE `inArray` query, and returns `categoryName` (null →
+  «غير مصنّف» in the UI). Registered as a filter/facet column; `SheetRow` and the
+  OpenAPI `CustomerRfqSheetRow` schema gained the field. `items.tsx` gained the
+  «التصنيف» column (colSpan 16→17).
+- **P4 (multi-owner coverage) was DELIBERATELY deferred.** The reported problem is
+  at the REQUEST level (one request has several categories), and the category is
+  already PER ITEM — so multi-category coverage already works across an order's
+  rows. A single item with TWO categories would need a new many-to-many junction
+  table + classifier/AI changes + an assignment UI: a large schema change for a
+  case nobody has reported. Documented in `PLAN.md` §20.3.
+- **TDD proof**: `offer-attribution.test.ts` (3) and 2 attribution tests in
+  `customer-po.test.ts` were verified to FAIL with `pricing.ts`/`attribution.ts`
+  reverted to HEAD (5 failures total, then restored from saved patches).
+  `attributed-kpis.test.ts` (4) covers the new endpoint. **1434 api-server tests**
+  pass; tsc (libs + api-server + portal) clean; repo-wide prettier clean; portal
+  build clean.
+- **orval regen gotchas**: the `approveOfferItem{Body,200}.ts` dup type files
+  reappear every regen (delete them + their `export *` lines in
+  `generated/types/index.ts` to clear TS2308), and this run ALSO appended
+  duplicate `export *` lines to `lib/api-zod/src/index.ts` /
+  `lib/api-client-react/src/index.ts` — revert those two files, the members are
+  already re-exported.
+- **Prettier CI gate covers `*.md`**: `PLAN.md` (and `AGENTS.md`) must be
+  `prettier --write`-clean or the repo-wide `format:check` fails and every
+  `Deploy to Render` run is skipped. Format both after editing.
+- Deploy: pending — push/PR only on explicit request.
+
+## Multi-category items — coverage for both owners, KPI for one (branch feat/ai-item-classifier)
+
+The operator's follow-up: a single request spans several categories, so ONE item
+may genuinely belong to more than one (e.g. a panel that is both «أجهزة» and
+«قواطع»). Decision fixed: the item is **covered** by every category's owner but
+**counted in the KPI once** (the winning-price employee — §19.1-2).
+
+- **`customer_rfq_item_categories`** (schema `item_categories.ts`, DDL in
+  `init-db.ts` as its OWN statement — statements share an implicit transaction,
+  so a sibling failure would roll the CREATE back silently). `UNIQUE(item,
+  category)`. The item's PRIMARY category stays on `customer_rfq_items.category_id`
+  (the classifier's pick, and what drives ownership); the junction holds the
+  **extras only**, so a category never appears twice.
+- **A `categoryId in arg` select in a test mock is a trap**: the sheet-view select
+  ALSO carries `categoryId`, so a naive branch hijacked it and every sheet-view
+  test 500'd. Distinguish by another marker the sheet select has (`rfqItemId`).
+- **Filtering a multi-valued column**: the «التصنيف» column filter and its facets
+  match **ANY** of the row's categories (`.some`), not just the primary — an
+  `exclude` uses `.every` (drop the row only when NO category is excluded).
+- **`PUT /customer-rfq/items/:id/categories`** replaces the extras inside a
+  transaction, resolves each category's owner from `employee_categories`
+  (`isPrimary` wins), and is `requireRole("admin","manager")`. `GET` on the same
+  path is read-only for any authenticated employee.
+- **`customer-rfq.test.ts` auth mock must expose `requireRole`** (it only stubbed
+  `requireAuth`); read the role from `req.session.role` so `sessionState.role`
+  drives the 403 case. The mock also needs `transaction`, a
+  `customerRfqItemCategoriesTable` branch, and `customerPoItemsTable` (the
+  attributed-KPI route imports it) — a missing table export in a partial
+  `@workspace/db` mock makes the route 500, not fail to compile.
+- Tests: `customer-rfq.test.ts` +5 (read, replace+owner resolution+audit, empty
+  400, unknown 404, data-entry 403). 1440 api-server + 66 portal pass; tsc +
+  repo-wide prettier + portal/api-server builds clean.
+- Deploy: pending — push/PR only on explicit request.

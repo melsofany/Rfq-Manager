@@ -32,8 +32,9 @@ import {
   employeesTable,
   itemCategoriesTable,
   employeeCategoriesTable,
+  customerPoItemsTable,
 } from "@workspace/db";
-import { and, eq, inArray, sql, isNull } from "drizzle-orm";
+import { and, eq, inArray, sql, isNull, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 
 const router = Router();
@@ -559,6 +560,149 @@ router.get("/analytics/assignment-migration", requireAuth, async (_req, res): Pr
     orphans,
     needsReview: Number(needsReview) || 0,
     totalCustomerAssignments: Number(totalCustomerAssignments) || 0,
+  });
+});
+
+// Event-based KPI — «من أحضر السعر الفائز» (event attribution).
+//
+// No formula: an item counts for exactly ONE employee — the one credited at the
+// freeze event (`customer_rfq_items.attribution_employee_id`), i.e. the employee
+// who obtained the APPROVED supplier price the customer PO was raised against.
+// The `attribution_first_po_at` timestamp is the period boundary, so a date
+// filter is exact. Unclassified / unpriced items never froze a winner and are
+// reported separately (`attributionEvent = first_customer_po_no_approved_price`).
+router.get("/analytics/procurement/attributed", requireAuth, async (req, res): Promise<void> => {
+  const fromStr = req.query.from as string | undefined;
+  const toStr = req.query.to as string | undefined;
+  const fromDate = fromStr ? new Date(fromStr + "T00:00:00Z") : null;
+  const toDate = toStr ? new Date(toStr + "T23:59:59Z") : null;
+
+  // Only items that actually froze a winner.
+  const rows = await db
+    .select({
+      customerRfqItemId: customerRfqItemsTable.id,
+      employeeId: customerRfqItemsTable.attributionEmployeeId,
+      employeeName: customerRfqItemsTable.attributionEmployeeName,
+      event: customerRfqItemsTable.attributionEvent,
+      frozenAt: customerRfqItemsTable.attributionFirstPoAt,
+      categoryId: customerRfqItemsTable.categoryId,
+    })
+    .from(customerRfqItemsTable)
+    .where(isNotNull(customerRfqItemsTable.attributionFirstPoAt));
+
+  // Items that actually reached a LIVE customer-PO line (a credited item whose
+  // customer PO line still exists). Used for the achievement ratio: of the items
+  // credited to an employee, how many materialised as a customer purchase order.
+  const convertedItemIds = new Set<number>();
+  if (rows.length) {
+    const converted = await db
+      .select({ customerRfqItemId: customerPoItemsTable.customerRfqItemId })
+      .from(customerPoItemsTable)
+      .where(
+        inArray(
+          customerPoItemsTable.customerRfqItemId,
+          rows.map((r) => r.customerRfqItemId),
+        ),
+      );
+    for (const c of converted) {
+      if (c.customerRfqItemId != null) convertedItemIds.add(c.customerRfqItemId);
+    }
+  }
+
+  const catIds = [...new Set(rows.map((r) => r.categoryId).filter((c): c is number => c != null))];
+  const cats = catIds.length
+    ? await db
+        .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+        .from(itemCategoriesTable)
+        .where(inArray(itemCategoriesTable.id, catIds))
+    : [];
+  const catName = new Map(cats.map((c) => [c.id, c.name]));
+
+  // Live employee names (the snapshot may be stale).
+  const empIds = [...new Set(rows.map((r) => r.employeeId).filter((e): e is number => e != null))];
+  const emps = empIds.length
+    ? await db
+        .select({ id: employeesTable.id, name: employeesTable.name, role: employeesTable.role })
+        .from(employeesTable)
+        .where(inArray(employeesTable.id, empIds))
+    : [];
+  const empById = new Map(emps.map((e) => [e.id, e]));
+
+  const inRange = (d: Date | string | null | undefined): boolean => {
+    if (!fromDate && !toDate) return true;
+    if (!d) return false; // a frozen item always has a timestamp
+    const t = new Date(d).getTime();
+    if (fromDate && t < fromDate.getTime()) return false;
+    if (toDate && t > toDate.getTime()) return false;
+    return true;
+  };
+
+  type Row = {
+    employeeId: number;
+    employeeName: string;
+    attributedItems: number;
+    convertedItems: number;
+    byCategory: Map<number | null, number>;
+  };
+  const byEmployee = new Map<number, Row>();
+  let unattributedItems = 0;
+  let frozenItems = 0;
+
+  for (const r of rows) {
+    if (!inRange(r.frozenAt)) continue;
+    frozenItems++;
+    if (r.employeeId == null) {
+      // Frozen but no approved price / no owner → not credited to anyone.
+      unattributedItems++;
+      continue;
+    }
+    let row = byEmployee.get(r.employeeId);
+    if (!row) {
+      const e = empById.get(r.employeeId);
+      row = {
+        employeeId: r.employeeId,
+        employeeName: e?.name ?? r.employeeName ?? `#${r.employeeId}`,
+        attributedItems: 0,
+        convertedItems: 0,
+        byCategory: new Map(),
+      };
+      byEmployee.set(r.employeeId, row);
+    }
+    row.attributedItems++;
+    if (convertedItemIds.has(r.customerRfqItemId)) row.convertedItems++;
+    row.byCategory.set(r.categoryId, (row.byCategory.get(r.categoryId) ?? 0) + 1);
+  }
+
+  const employees = [...byEmployee.values()]
+    .map((r) => ({
+      employeeId: r.employeeId,
+      employeeName: r.employeeName,
+      attributedItems: r.attributedItems,
+      convertedItems: r.convertedItems,
+      // نسبة الإنجاز من المطلوب — share of the credited items that materialised
+      // as a customer purchase order. 0 when nothing was credited (never NaN).
+      achievementRate: r.attributedItems
+        ? Math.round((r.convertedItems / r.attributedItems) * 1000) / 10
+        : 0,
+      categories: [...r.byCategory.entries()]
+        .map(([categoryId, items]) => ({
+          categoryId,
+          categoryName: categoryId != null ? (catName.get(categoryId) ?? null) : "غير مصنّف",
+          items,
+        }))
+        .sort((a, b) => b.items - a.items),
+    }))
+    .sort((a, b) => b.attributedItems - a.attributedItems);
+
+  res.json({
+    employees,
+    totals: {
+      frozenItems,
+      attributedItems: employees.reduce((s, e) => s + e.attributedItems, 0),
+      convertedItems: employees.reduce((s, e) => s + e.convertedItems, 0),
+      unattributedItems,
+      employeesCount: employees.length,
+    },
   });
 });
 
