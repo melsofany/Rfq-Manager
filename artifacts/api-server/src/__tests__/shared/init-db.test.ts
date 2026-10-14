@@ -203,4 +203,41 @@ describe("init-db migrations", () => {
         .filter(Boolean),
     ).toHaveLength(1);
   });
+
+  it("creates the responsibility tables BEFORE any data-dependent migration", () => {
+    // initDb() aborts at the FIRST failing statement, so a data-dependent
+    // migration that fails on real data (the phone canonicalization crashed on a
+    // duplicate `representatives_phone_key`) silently skipped every later
+    // CREATE. That is how `item_categories` ended up missing in production while
+    // the server kept serving. The responsibility tables must therefore be
+    // created EARLY — before the phone canonicalization and the backfills.
+    const itemCategories = source.indexOf("CREATE TABLE IF NOT EXISTS item_categories");
+    const assignments = source.indexOf("CREATE TABLE IF NOT EXISTS customer_rfq_item_assignments");
+    const phoneMigration = source.indexOf("UPDATE representatives");
+    expect(itemCategories).toBeGreaterThan(-1);
+    expect(assignments).toBeGreaterThan(-1);
+    expect(phoneMigration).toBeGreaterThan(-1);
+    expect(itemCategories).toBeLessThan(phoneMigration);
+    expect(assignments).toBeLessThan(phoneMigration);
+    // …and still after the tables they reference.
+    expect(itemCategories).toBeGreaterThan(source.indexOf("CREATE TABLE IF NOT EXISTS employees"));
+  });
+
+  it("canonicalizes representative phones without crashing on a duplicate", () => {
+    // `representatives.phone` is UNIQUE. The old naive UPDATE aborted with
+    // `duplicate key value violates unique constraint "representatives_phone_key"`
+    // whenever two rows canonicalized to the same value, which stopped the whole
+    // boot sequence. The migration must only rewrite rows whose canonical value
+    // is unique across the table, leaving genuine collisions untouched.
+    const literal = sqlLiterals(source).find(
+      (b) => b.includes("UPDATE representatives") && b.includes("regexp_replace"),
+    );
+    expect(literal, "the phone canonicalization must exist").toBeDefined();
+    expect(literal!).toContain("HAVING count(*) = 1");
+    // The naive form — a bare UPDATE ... SET phone = regexp_replace(...) — must be
+    // gone; it is what crashed production.
+    expect(literal!).not.toMatch(
+      /UPDATE representatives\s+SET phone = regexp_replace\(phone, '\[0-9\]'/,
+    );
+  });
 });

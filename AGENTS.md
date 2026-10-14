@@ -3405,3 +3405,39 @@ Reached heap limit Allocation failed — JavaScript heap out of memory` (heap
 - استعلامات `pg_constraint`/`pg_indexes` في اختبار الـmigration **يجب تقييدها بـ`conrelid`**
   (أو اسم الجدول)، وإلا صارت ترى قيود الجداول الأخرى/الـschemas الأخرى فتنكسر العدّادات.
 - Docker daemon قد لا يعمل: `sudo dockerd` (وإن رفض الاتصال على socket، استخدم `sudo docker`).
+
+## «تصنيفات البنود» مكسورة في الإنتاج: `initDb` كان يتوقف قبل إنشاء الجدول
+
+**العَرَض الحيّ:** صفحة `/items` → تبويب «تصنيفات البنود» ترمي
+`relation "item_categories" does not exist` (SQLSTATE 42P01)، و«مسؤولية البنود» ترمي
+`Failed query: select … from "rfq_items" …` (جدول `customer_rfq_item_assignments` غير موجود).
+
+**السبب الجذري (أُعيد إنتاجه فعليًا):** كل الـDDL موجود في `init-db.ts` كـ`CREATE TABLE
+IF NOT EXISTS`، لكن `initDb()` ينفّذ الجمل **بالتتابع ويتوقف عند أول فشل**. فإذا فشلت أي
+جملة **قبل** سطر 1429 (`CREATE TABLE IF NOT EXISTS item_categories`)، تُتخطّى الجمل اللاحقة
+كلها — فيبقى الجدول غير موجود. والسيرفر يكمل العمل (`index.ts` يلتقط الخطأ ويسجّله فقط).
+
+**مرشّح مؤكَّد (أُعيد إنتاجه على Postgres):** migration توحيد أرقام المندوبين (سطر 460)
+`UPDATE representatives SET phone = regexp_replace(phone,'[^0-9]','','g')` — و`phone` عليه
+`UNIQUE`. لو صفّان اتوحّدوا لنفس القيمة (`+2010…` و`2010…`) ⇒
+`duplicate key value violates unique constraint "representatives_phone_key"` ⇒ توقف `initDb`.
+(نفس الخطر على `work_order_assignments.representative_phone` لو أُضيف له UNIQUE لاحقًا.)
+
+**قواعد الإصلاح (لم تُنفَّذ بعد):**
+
+1. **migration توحيد الأرقام يجب أن يكون محصّنًا ضد التصادم** — إما دمج المكرر قبل التوحيد،
+   أو `ON CONFLICT`، أو تعطيل/إعادة تسمية المكرر (البيانات التاريخية لا تُحذف صامتًا).
+2. **كل `UPDATE`/`INSERT` معرّض للفشل يجب أن يكون جملة مستقلة** (لا يُدمج مع `CREATE`)،
+   ليقتصر الضرر على جملته.
+3. **`CREATE TABLE item_categories` (وما يعتمد عليه) يجب أن يُنقل قبل الـmigrations
+   المعتمدة على البيانات**، أو تُرتَّب بحيث لا يحجب فشلُ بياناتٍ إنشاءَ جدول.
+4. **الحارس:** اختبار يشغّل الـSQL الحقيقي على PGlite ببيانات تصادم ويتأكد أن
+   `item_categories` يُنشأ رغم ذلك — **يفشل ضد الكود قبل الإصلاح**.
+
+**اكتشاف مكمّل:** `initDb` يبتلع الفشل (`index.ts` → `logger.error` فقط) والسيرفر يعمل،
+فالعيب **صامت**: الواجهة تعمل عدا الجداول المفقودة. يجب أن يفشل الـboot أو يُصلح الترتيب.
+
+**تشخيص كهذا مستقبلًا:** ثبّت `@electric-sql/pglite` في مجلد مؤقت، وشغّل `initDb()` الحقيقي
+ضده عبر `vi.mock("@workspace/db")` (شيم `pool.connect().query` — استخدم `db.query` للجمل
+المُعاملة و`db.exec` للمتعددة). يوقف عند أول جملة فاشلة ويُظهر نصّها؛ **لا تثق بالقراءة
+الساكنة** — الخطأ لا يظهر إلا على بيانات حقيقية.

@@ -242,4 +242,28 @@ suite("init-db migration — live Postgres", () => {
     expect(c.rows[0].def).toContain("tstzrange");
     expect(c.rows[0].def).toContain("&&");
   });
+
+  it("survives a duplicate-phone collision and still creates item_categories", async () => {
+    // The production outage: two representatives whose phones canonicalize to the
+    // same value made the UNIQUE-constrained phone migration abort, which stopped
+    // initDb() before `item_categories` was ever created. The migration must now
+    // skip the colliding rows instead of crashing, so every later CREATE applies.
+    await pool.query(`DELETE FROM representatives`);
+    await pool.query(
+      `INSERT INTO representatives (name, phone) VALUES
+         ('rep A', '+201001234567'),
+         ('rep B', '201001234567')`,
+    );
+    const { initDb } = await import("../../shared/init-db");
+    await expect(initDb()).resolves.toBeUndefined();
+
+    const t = await pool.query(
+      `SELECT to_regclass('item_categories') AS t, to_regclass('customer_rfq_item_assignments') AS a`,
+    );
+    expect(t.rows[0].t).toBe("item_categories");
+    expect(t.rows[0].a).toBe("customer_rfq_item_assignments");
+    // No data loss: both rows survive (the colliding pair is left as-is).
+    const n = await pool.query(`SELECT count(*)::int AS n FROM representatives`);
+    expect(n.rows[0].n).toBe(2);
+  });
 });
