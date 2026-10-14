@@ -18,9 +18,53 @@
  * classification failure must never fail the customer RFQ it is classifying.
  */
 import { chatCompletion, type ChatMessage } from "../ai-assistant/llm";
-import { DEFAULT_MODEL, isAiConfigured, loadSettings } from "../ai-assistant/config";
+import {
+  DEFAULT_BASE_URL,
+  DEFAULT_MODEL,
+  DEEPSEEK_FALLBACK_MODELS,
+  isAiConfigured,
+  isDeepSeekEndpoint,
+  isGeminiModelId,
+  loadSettings,
+} from "../ai-assistant/config";
 import { logger } from "../../shared/logger";
 import type { CategorySeed } from "./classification";
+
+/**
+ * Reasoning-model detection. A reasoning model (deepseek-v4-pro / -r* /
+ * -reasoner) charges its THINKING against the same `max_tokens` budget as the
+ * reply, so a ceiling sized for the reply alone is spent before any text is
+ * emitted (see PR #217). Classification is a closed-list choice that needs no
+ * reasoning, so the batch is sent to the light model instead.
+ */
+const REASONING_RE = /deepseek-(v\d|r\d|reasoner)/i;
+const CLASSIFY_MAX_TOKENS = 4000;
+const REASONING_CLASSIFY_MAX_TOKENS = 8000;
+/** One re-ask after a truncated reply — a smaller batch leaves room for it. */
+const CLASSIFY_MAX_ATTEMPTS = 2;
+/** Below this, a retry cannot get smaller — accept the batch as-is. */
+const MIN_BATCH = 5;
+
+/**
+ * The model that classifies a batch. A DeepSeek reasoning primary is downgraded
+ * to the light model (`deepseek-chat`): thinking is wasted on a closed-list
+ * choice, and it is exactly what made the reply come back empty. Any other
+ * operator choice (a Gemini primary, or a non-reasoning DeepSeek id) is kept.
+ */
+export function classifyModelFor(model: string, baseUrl?: string | null): string {
+  const isDeepSeek =
+    /^deepseek/i.test(model) ||
+    (!isGeminiModelId(model) && isDeepSeekEndpoint(baseUrl || DEFAULT_BASE_URL));
+  if (isDeepSeek && REASONING_RE.test(model)) {
+    return DEEPSEEK_FALLBACK_MODELS[0] || model;
+  }
+  return model;
+}
+
+/** The output ceiling for the model actually used — thinking must not eat the reply. */
+export function classifyMaxTokensFor(model: string): number {
+  return REASONING_RE.test(model) ? REASONING_CLASSIFY_MAX_TOKENS : CLASSIFY_MAX_TOKENS;
+}
 
 export interface AiClassifyInput {
   description?: string | null;
@@ -67,11 +111,55 @@ export async function classifyItemsWithAi(
 
   const settings = await loadSettings();
   if (!settings.enabled) return null;
-  const model = settings.model || DEFAULT_MODEL;
+  const primary = settings.model || DEFAULT_MODEL;
   const baseUrl = settings.baseUrl;
+  // A reasoning primary is downgraded — thinking is wasted on a closed-list
+  // choice and is exactly what emptied the reply. The ceiling then follows the
+  // model actually used.
+  const model = classifyModelFor(primary, baseUrl);
+  const maxTokens = classifyMaxTokensFor(model);
 
   const catalog = usable.map((c) => `- ${c.name}`).join("\n");
-  const listing = items
+  const byName = new Map(usable.map((c) => [normalizeCatName(c.name), c]));
+
+  // A truncation retry sends a SMALLER batch: less input leaves more of the
+  // budget for the reply, so the retry is a genuinely different request rather
+  // than a blind repeat.
+  let batch = items;
+  for (let attempt = 1; attempt <= CLASSIFY_MAX_ATTEMPTS; attempt += 1) {
+    const result = await callClassifier(model, baseUrl, batch, catalog, maxTokens);
+    if (result === null) return null; // provider error — the caller falls back
+    const parsed = parseClassifyReply(result.content, batch.length);
+    if (parsed) return mapResults(parsed, items.length, byName);
+
+    const truncated = result.finishReason === "length";
+    const half = Math.max(MIN_BATCH, Math.ceil(batch.length / 2));
+    if (truncated && half < batch.length) {
+      logger.warn(
+        { model, finish: result.finishReason, from: batch.length, to: half },
+        "ai-classifier: reply truncated — re-asking with a smaller batch",
+      );
+      batch = batch.slice(0, half);
+      continue;
+    }
+    logger.warn(
+      { model: result.modelUsed ?? model, finish: result.finishReason, attempt },
+      "ai-classifier: unparsable reply — falling back",
+    );
+    return null;
+  }
+  return null;
+}
+
+/** One provider request for a batch. Returns null when the request itself failed. */
+async function callClassifier(
+  model: string,
+  baseUrl: string | null | undefined,
+  batch: AiClassifyInput[],
+  catalog: string,
+  maxTokens: number,
+): Promise<{ content: string | null; finishReason: string | null; modelUsed?: string } | null> {
+  const listing = batch
     .map((it, i) => {
       const parts = [
         it.partNo ? `PartNo=${it.partNo}` : null,
@@ -102,38 +190,39 @@ export async function classifyItemsWithAi(
   ];
 
   try {
-    const result = await chatCompletion({
+    return await chatCompletion({
       model,
       baseUrl,
       messages,
       temperature: 0,
-      maxTokens: 4000,
+      maxTokens,
       toolChoice: "none",
-    });
-    const parsed = parseClassifyReply(result.content, items.length);
-    if (!parsed) {
-      logger.warn(
-        { model: result.modelUsed, finish: result.finishReason },
-        "ai-classifier: unparsable reply — falling back",
-      );
-      return null;
-    }
-    const byName = new Map(usable.map((c) => [normalizeCatName(c.name), c]));
-    return parsed.map((r) => {
-      if (!r || !r.name || r.name === "غير معروف") return null;
-      const cat = byName.get(normalizeCatName(r.name));
-      if (!cat) return null; // the model invented a category — refuse it
-      if (!(r.confidence > 0)) return null;
-      return {
-        categoryId: cat.id,
-        confidence: Math.max(1, Math.min(100, Math.round(r.confidence))),
-        matchedTerm: cat.name,
-      };
     });
   } catch (err) {
     logger.warn({ err }, "ai-classifier: request failed — falling back");
     return null;
   }
+}
+
+/** Map parsed rows back to the caller's item order, refusing invented categories. */
+function mapResults(
+  parsed: Array<{ name: string; confidence: number } | null>,
+  total: number,
+  byName: Map<string, CategorySeed>,
+): Array<AiClassifyResult | null> {
+  const out: Array<AiClassifyResult | null> = new Array(total).fill(null);
+  parsed.forEach((r, i) => {
+    if (!r || !r.name || r.name === "غير معروف") return;
+    const cat = byName.get(normalizeCatName(r.name));
+    if (!cat) return; // the model invented a category — refuse it
+    if (!(r.confidence > 0)) return;
+    out[i] = {
+      categoryId: cat.id,
+      confidence: Math.max(1, Math.min(100, Math.round(r.confidence))),
+      matchedTerm: cat.name,
+    };
+  });
+  return out;
 }
 
 interface RawRow {

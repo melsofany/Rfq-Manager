@@ -267,7 +267,10 @@ export async function classifyUnclassifiedItems(
     const chunk = items.slice(start, start + BATCH);
     const results = await classifyItemsWithAi(chunk, categories);
     batches += 1;
-    if (!results) break; // provider unavailable — stop rather than spin
+    // A `null` means NO request could be made at all (provider down / not
+    // configured). Stop — retrying every remaining chunk against a dead provider
+    // only burns latency; the keyword fallback already covers what we have.
+    if (!results) break;
     for (let i = 0; i < chunk.length; i += 1) {
       const r = results[i];
       if (!r || r.categoryId == null || (r.confidence ?? 0) < MIN_CONFIDENCE) continue;

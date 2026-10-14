@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // Mock the provider seam (the classifier's only I/O) and the config gate.
-const hoisted = vi.hoisted(() => ({ aiConfigured: true }));
+const hoisted = vi.hoisted(() => ({
+  aiConfigured: true,
+  model: "deepseek-v4-pro",
+  baseUrl: null as string | null,
+}));
 const chatCompletion = vi.fn();
 vi.mock("../../modules/ai-assistant/llm", () => ({
   chatCompletion: (...args: any[]) => chatCompletion(...args),
@@ -9,13 +13,17 @@ vi.mock("../../modules/ai-assistant/llm", () => ({
 
 vi.mock("../../modules/ai-assistant/config", () => ({
   DEFAULT_MODEL: "deepseek-v4-pro",
+  DEFAULT_BASE_URL: "https://api.deepseek.com/v1",
+  DEEPSEEK_FALLBACK_MODELS: ["deepseek-chat"],
+  isGeminiModelId: (m?: string | null) => /gemini/i.test(m ?? ""),
+  isDeepSeekEndpoint: (b?: string | null) => /deepseek/i.test(b ?? ""),
   get isAiConfigured() {
     return hoisted.aiConfigured;
   },
   loadSettings: async () => ({
     enabled: true,
-    model: "deepseek-v4-pro",
-    baseUrl: null,
+    model: hoisted.model,
+    baseUrl: hoisted.baseUrl,
     systemPrompt: null,
     language: "ar",
     allowEmail: true,
@@ -29,7 +37,11 @@ vi.mock("../../shared/logger", () => ({
   logger: { warn: () => {}, error: () => {}, info: () => {}, debug: () => {} },
 }));
 
-import { classifyItemsWithAi, parseClassifyReply } from "../../modules/rfq/ai-classifier";
+import {
+  classifyItemsWithAi,
+  parseClassifyReply,
+  classifyMaxTokensFor,
+} from "../../modules/rfq/ai-classifier";
 
 const CATEGORIES = [
   { id: 1, code: "equipment", name: "أجهزة" },
@@ -44,6 +56,8 @@ function reply(json: unknown) {
 beforeEach(() => {
   chatCompletion.mockReset();
   hoisted.aiConfigured = true;
+  hoisted.model = "deepseek-v4-pro";
+  hoisted.baseUrl = null;
 });
 
 describe("AI item classifier", () => {
@@ -143,6 +157,68 @@ describe("AI item classifier", () => {
     const out = await classifyItemsWithAi([{ description: "بند" }], []);
     expect(out).toBeNull();
     expect(chatCompletion).not.toHaveBeenCalled();
+  });
+
+  // ── Reasoning-model budget ────────────────────────────────────────────────
+  // A reasoning model (deepseek-v4-pro) charges its thinking against
+  // `max_tokens`. At 4000 the reply came back `finish_reason:"length"` with
+  // `content:""` — every token spent on reasoning — so the whole batch was
+  // silently left unclassified. Reproduced against the live provider (PR #217).
+  it("downgrades a DeepSeek reasoning primary to the light model for classification", async () => {
+    chatCompletion.mockResolvedValue(reply({ results: [{ i: 1, name: "أجهزة", confidence: 90 }] }));
+    await classifyItemsWithAi([{ description: "مضخة" }], CATEGORIES);
+    const sent = chatCompletion.mock.calls[0][0] as { model: string; maxTokens?: number };
+    // deepseek-chat is the light model; the reasoning primary would spend the
+    // whole budget thinking about a closed-list choice.
+    expect(sent.model).toBe("deepseek-chat");
+    // …and the ceiling still covers the reply for the model actually used.
+    expect(sent.maxTokens).toBe(classifyMaxTokensFor(sent.model));
+  });
+
+  it("keeps the operator's model when it is NOT a DeepSeek reasoning id", async () => {
+    hoisted.model = "gemini-3.6-flash";
+    hoisted.baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
+    chatCompletion.mockResolvedValue(reply({ results: [{ i: 1, name: "أجهزة", confidence: 90 }] }));
+    await classifyItemsWithAi([{ description: "مضخة" }], CATEGORIES);
+    const sent = chatCompletion.mock.calls[0][0] as { model: string; maxTokens?: number };
+    expect(sent.model).toBe("gemini-3.6-flash");
+    expect(sent.maxTokens).toBe(4000);
+  });
+
+  it("funds the reply of a reasoning model when it must be used at all", () => {
+    // Defence in depth: if a deployment has no light model, the reasoning id is
+    // still used — and then its thinking must not consume the whole ceiling.
+    expect(classifyMaxTokensFor("deepseek-v4-pro")).toBeGreaterThanOrEqual(8000);
+    expect(classifyMaxTokensFor("deepseek-r1")).toBeGreaterThanOrEqual(8000);
+    expect(classifyMaxTokensFor("deepseek-chat")).toBe(4000);
+    expect(classifyMaxTokensFor("gemini-3.6-flash")).toBe(4000);
+  });
+
+  it("does NOT treat a truncated reply as «the provider is down» — retries smaller", async () => {
+    // First attempt is cut by the token ceiling (empty content, finish=length);
+    // the classifier must re-ask with FEWER items, not give up.
+    chatCompletion
+      .mockResolvedValueOnce({ content: "", toolCalls: [], finishReason: "length" })
+      .mockImplementationOnce((opts: { messages: Array<{ content: string }> }) => {
+        // The re-ask must be genuinely smaller — count the listed items.
+        const listed = opts.messages[1].content.match(/^\d+\. /gm) ?? [];
+        expect(listed.length).toBeLessThan(8);
+        return Promise.resolve(
+          reply({ results: listed.map((_, i) => ({ i: i + 1, name: "كهرباء", confidence: 85 })) }),
+        );
+      });
+    const batch = Array.from({ length: 8 }, () => ({ description: "قاطع" }));
+    const out = await classifyItemsWithAi(batch, CATEGORIES);
+    expect(chatCompletion).toHaveBeenCalledTimes(2);
+    expect(out?.[0]?.categoryId).toBe(3);
+  });
+
+  it("returns null when every attempt is truncated", async () => {
+    chatCompletion.mockResolvedValue({ content: "", toolCalls: [], finishReason: "length" });
+    const batch = Array.from({ length: 8 }, () => ({ description: "قاطع" }));
+    const out = await classifyItemsWithAi(batch, CATEGORIES);
+    expect(out).toBeNull();
+    expect(chatCompletion).toHaveBeenCalledTimes(2);
   });
 });
 
