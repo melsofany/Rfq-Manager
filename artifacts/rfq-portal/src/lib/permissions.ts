@@ -184,7 +184,12 @@ export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
   ],
   purchasing: [
     ...PAGE_KEYS.filter(
-      (k) => k !== "employees" && k !== "hr" && k !== "audit" && k !== "integrations" && k !== "ai-assistant",
+      (k) =>
+        k !== "employees" &&
+        k !== "hr" &&
+        k !== "audit" &&
+        k !== "integrations" &&
+        k !== "ai-assistant",
     ),
     "customer-rfq:edit",
     "customer-po:edit",

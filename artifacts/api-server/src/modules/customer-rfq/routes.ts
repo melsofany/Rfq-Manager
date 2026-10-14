@@ -1524,37 +1524,57 @@ router.get(
       : [];
     const catName = new Map(cats.map((c) => [c.id, c.name]));
 
-    const empIds = [
-      ...new Set(extras.map((e) => e.employeeId).filter((e): e is number => e != null)),
+    // The PRIMARY category carries no junction row, so its owner is read from
+    // employee_categories — otherwise the editor would show the item's own
+    // category with no responsible employee.
+    const catOwnerRows = catIds.length
+      ? await db
+          .select({
+            categoryId: employeeCategoriesTable.categoryId,
+            employeeId: employeeCategoriesTable.employeeId,
+            isPrimary: employeeCategoriesTable.isPrimary,
+          })
+          .from(employeeCategoriesTable)
+          .where(inArray(employeeCategoriesTable.categoryId, catIds))
+      : [];
+    const ownerByCat = new Map<number, number>();
+    for (const o of catOwnerRows) {
+      const current = ownerByCat.get(o.categoryId);
+      if (current == null || o.isPrimary) ownerByCat.set(o.categoryId, o.employeeId);
+    }
+    const ownerIds = [
+      ...new Set(catOwnerRows.map((o) => o.employeeId).filter((e): e is number => e != null)),
     ];
-    const emps = empIds.length
+    const ownerRows = ownerIds.length
       ? await db
           .select({ id: employeesTable.id, name: employeesTable.name })
           .from(employeesTable)
-          .where(inArray(employeesTable.id, empIds))
+          .where(inArray(employeesTable.id, ownerIds))
       : [];
-    const empName = new Map(emps.map((e) => [e.id, e.name]));
+    const ownerName = new Map(ownerRows.map((o) => [o.id, o.name]));
 
     const categories: SheetCategory[] = [];
     if (item.categoryId != null) {
+      const ownerId = ownerByCat.get(item.categoryId) ?? null;
       categories.push({
         categoryId: item.categoryId,
         categoryName: catName.get(item.categoryId) ?? null,
-        employeeId: null,
-        employeeName: null,
+        employeeId: ownerId,
+        employeeName: ownerId != null ? (ownerName.get(ownerId) ?? null) : null,
         isPrimary: true,
       });
     }
     for (const e of extras) {
+      const ownerId = e.employeeId ?? ownerByCat.get(e.categoryId) ?? null;
       categories.push({
         categoryId: e.categoryId,
         categoryName: catName.get(e.categoryId) ?? null,
-        employeeId: e.employeeId,
-        employeeName: e.employeeId != null ? (empName.get(e.employeeId) ?? null) : null,
+        employeeId: ownerId,
+        employeeName: ownerId != null ? (ownerName.get(ownerId) ?? null) : null,
         isPrimary: false,
       });
     }
-    res.json({ customerRfqItemId: itemId, categories });
+    res.json({ customerRfqItemId: itemId, primaryCategoryId: item.categoryId, categories });
   },
 );
 
@@ -1573,7 +1593,7 @@ router.put(
       res.status(400).json({ error: "معرّف بند غير صالح" });
       return;
     }
-    const body = req.body as { categoryIds?: unknown };
+    const body = req.body as { categoryIds?: unknown; primaryCategoryId?: unknown };
     const rawIds = Array.isArray(body.categoryIds) ? body.categoryIds : [];
     const categoryIds = [
       ...new Set(
@@ -1606,6 +1626,18 @@ router.put(
       return;
     }
 
+    // The manager may also correct the PRIMARY category (the classifier's pick).
+    // It is authoritative: it must be one of the chosen categories, so a manager
+    // can re-classify an item and it can never point at a category the item no
+    // longer belongs to.
+    const requestedPrimary = body.primaryCategoryId != null ? Number(body.primaryCategoryId) : null;
+    const primaryId =
+      requestedPrimary != null && chosen.includes(requestedPrimary)
+        ? requestedPrimary
+        : item.categoryId != null && chosen.includes(item.categoryId)
+          ? item.categoryId
+          : chosen[0];
+
     // Resolve each category's owner (primary owner first, else the first owner).
     const owners = await db
       .select({
@@ -1624,9 +1656,16 @@ router.put(
     const actor = req.session.employeeId ?? null;
     // The primary category is stored separately — never duplicate it in the
     // junction, so the sheet shows it exactly once.
-    const extras = chosen.filter((id) => id !== item.categoryId);
+    const extras = chosen.filter((id) => id !== primaryId);
 
     await db.transaction(async (tx) => {
+      // Re-classification: the manager may move the PRIMARY category.
+      if (primaryId !== item.categoryId) {
+        await tx
+          .update(customerRfqItemsTable)
+          .set({ categoryId: primaryId })
+          .where(eq(customerRfqItemsTable.id, itemId));
+      }
       await tx
         .delete(customerRfqItemCategoriesTable)
         .where(eq(customerRfqItemCategoriesTable.customerRfqItemId, itemId));
@@ -1647,14 +1686,12 @@ router.put(
       entityType: "customer_rfq_item",
       entityId: itemId,
       employeeId: actor,
-      description: `Set categories on item ${itemId}: [${chosen.join(", ")}] (primary ${
-        item.categoryId ?? "none"
-      })`,
+      description: `Set categories on item ${itemId}: [${chosen.join(", ")}] (primary ${primaryId})`,
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
 
-    res.json({ customerRfqItemId: itemId, categoryIds: chosen });
+    res.json({ customerRfqItemId: itemId, categoryIds: chosen, primaryCategoryId: primaryId });
   },
 );
 
