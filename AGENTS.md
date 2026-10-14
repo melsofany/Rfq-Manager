@@ -3630,3 +3630,32 @@ may genuinely belong to more than one (e.g. a panel that is both «أجهزة» 
   400, unknown 404, data-entry 403). 1440 api-server + 66 portal pass; tsc +
   repo-wide prettier + portal/api-server builds clean.
 - Deploy: pending — push/PR only on explicit request.
+## Supplier bank fields: the orval regen re-appends export lines (feat/supplier-bank-account-holder)
+
+Adding a field to a supplier schema (bankAccountHolder — «اسم صاحب الحساب كما هو
+مسجَّل لدى البنك») is a 6-file change: Drizzle schema, `init-db.ts` (CREATE +
+`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`), the route allow-list, the OpenAPI
+schema (all THREE of Supplier/SupplierInput/SupplierUpdate), and the portal (new
+form + detail edit + read-only card + Excel import mapping/template).
+
+- **The backend allow-list is the whole wiring.** `REGISTRATION_FIELDS` in
+  `modules/users/suppliers.ts` drives serialize + POST + PATCH + bulk import via
+  `Object.fromEntries`, so a field added there is persisted, echoed and updated
+  with no per-endpoint code. Only the portal needs per-form edits.
+- **orval's regen re-appends duplicate `export *` lines to the two lib index
+  files** (`lib/api-client-react/src/index.ts`, `lib/api-zod/src/index.ts`) using
+  SINGLE quotes, so `prettier --check` fails repo-wide and the CI Format gate
+  (which blocks the whole Deploy) goes red. `git checkout` those two index files
+  — the committed double-quoted lines already export the same modules, so the
+  appended ones are pure duplicates. Check
+  `prettier --check "**/*.{ts,tsx,js,mjs,json,css,md}"` before committing any
+  orval run.
+- **The orval dup-name type files still recur** (`approveOfferItem{Body,200}.ts` +
+  their `export *` in `lib/api-zod/src/generated/types/index.ts`) — delete both
+  files and their export lines after every regen, or `tsc --build` fails TS2308.
+- **Verify the live column, not just healthz.** The startup `ALTER TABLE` is the
+  only thing that adds a new column on Render; confirm with the external
+  connection string (`GET /v1/postgres/<id>/connection-info`, append
+  `?sslmode=require`) that `information_schema.columns` holds it. healthz 200
+  says the process booted, not that the migration applied.
+
