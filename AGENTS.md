@@ -3475,3 +3475,56 @@ IF NOT EXISTS`، لكن `initDb()` ينفّذ الجمل **بالتتابع وي
   case (init-db.live.test.ts) builds the legacy table shape, runs `initDb()`, and
   asserts the columns AND the previously-skipped `category_id` columns exist —
   **it fails against the pre-fix source** (verified by reverting init-db.ts).
+
+## AI-first item classification + automatic responsibility (feat/ai-item-classifier)
+
+The operator's ask: pricing requests arrive mixing many categories (أجهزة، قطع
+غيار، كهرباء، قواطع، مقاومة حريق), each with a different supplier, and each
+purchasing employee owns two or more categories. Assignment had to be automatic
+from `/customer-rfq` on submission — never triggered by hand from `/rfq/:id`.
+
+- **`rfq/ai-classifier.ts` is the AI module.** `classifyItemsWithAi(items,
+categories)` asks the configured LLM (DeepSeek, a PAID API — so the Gemini
+free-tier 20/day/model cap that dominates the assistant's failure history does
+NOT apply) to place a BATCH of items into the operator's OWN category catalogue
+in ONE request. It is a plain JSON completion (`toolChoice:"none"`,
+`temperature:0`), not a tool-calling run.
+- **The catalogue is CLOSED.** The model returns a category `code`; a code not in
+  the catalogue is refused (`null`) rather than trusted — the same "never invent"
+  rule as `classification.ts`. «غير معروف» is a first-class answer: the item stays
+  unclassified and unassigned on purpose.
+- **AI first, keywords as fallback.** `customer-assignment.ts` classifies every
+  item with no category via one AI pass; an item the AI declines, or rates below
+  `MIN_CONFIDENCE` (40), falls through to the deterministic keyword classifier.
+  A failed/unparsable/unconfigured AI pass returns `null` for the whole batch and
+  every item takes the keyword path — **a classification failure must never fail
+  the customer RFQ it is classifying** (`ensureCustomerAssignmentsSafe`).
+- **`isAiConfigured` is checked BEFORE any network call** in the classifier, so
+  the deterministic path is taken immediately with no request attempted (and the
+  route tests never touch the wire).
+- **The trigger already existed and is correct**: `POST /customer-rfq` calls
+  `ensureCustomerAssignmentsSafe(rfq.id)` (`customer-rfq/routes.ts:1493`); PATCH
+  passes `{ newItemIds }`. The AI pass is now what runs inside it.
+- **The manual panel was removed from `/rfq/:id`** (`ItemAssignmentsPanel` deleted
+  — assignment is not a supplier-RFQ concern). Responsibility is surfaced where it
+  BEGINS: `/customer-rfq/:id` shows a summary banner («أُسند N من M بند» + amber
+  alerts for «غير مصنّف» / «بلا مسؤول») with a re-run button for authorised users,
+  and per-item owner/category in the items table (already present).
+- **`/employees` specializations are now visible**: a «تصنيفات البنود المسؤول
+  عنها» column lists each employee's categories (★ = primary) with a text «تعديل»
+  button beside it, not only the hidden Tags icon. Backed by a NEW bulk endpoint
+  `GET /employees/categories` (all employees in ONE query) — an N+1 over the team
+  list would be a page-load regression.
+- **No request cap and no notifications**, per the operator: the paid DeepSeek API
+  removes the quota reason for a cap, and a WhatsApp/internal notification on
+  assignment was explicitly declined (the owner is visible on the request page).
+- Tests: `ai-classifier.test.ts` (11 — code→id mapping, batch indexing, «غير
+  معروف», invented-code refusal, fenced JSON, unparsable/throw/unconfigured →
+  `null` with no network call) + 4 AI-path cases in `customer-assignment.test.ts`
+  (AI assigns what keywords cannot, AI decline → unclassified, provider-null →
+  keyword fallback, no AI call for an already-categorised item) + 1 bulk-endpoint
+  case in `item-categories.test.ts`. **1426 api-server + 66 portal tests** pass;
+  tsc (libs + api-server + portal) clean; repo-wide prettier clean; both builds
+  clean.
+- Deploy: pending — push/PR only on explicit request.
+

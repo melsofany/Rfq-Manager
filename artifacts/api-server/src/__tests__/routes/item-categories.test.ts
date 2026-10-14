@@ -259,6 +259,19 @@ describe("item categories CRUD", () => {
     expect(auditInserts.some((a) => a.action === "employee.categories_updated")).toBe(true);
   });
 
+  it("returns every employee's categories in ONE request (bulk, no N+1)", async () => {
+    ownerRows = [
+      { employeeId: 7, categoryId: 1, isPrimary: true, name: "كهرباء" },
+      { employeeId: 7, categoryId: 3, isPrimary: false, name: "مقاومة حريق" },
+      { employeeId: 8, categoryId: 2, isPrimary: true, name: "قطع غيار" },
+    ];
+    const res = await request(testApp).get("/api/employees/categories");
+    expect(res.status).toBe(200);
+    expect(res.body[7]).toHaveLength(2);
+    expect(res.body[7][0]).toMatchObject({ categoryId: 1, name: "كهرباء", isPrimary: true });
+    expect(res.body[8]).toHaveLength(1);
+  });
+
   // ── one primary per category: both write paths + the DB index ──────────────
   it("rejects two primary owners via the EMPLOYEE path with 400", async () => {
     const res = await request(testApp)

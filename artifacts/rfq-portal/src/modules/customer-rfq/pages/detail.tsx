@@ -24,6 +24,7 @@ import {
   Lock,
   CheckCircle2,
   UserCog,
+  RefreshCw,
 } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
@@ -158,6 +159,24 @@ export default function CustomerRfqDetailPage() {
   useEffect(() => {
     void loadAssignments();
   }, [loadAssignments, rfq?.id]);
+
+  const [reassigning, setReassigning] = useState(false);
+  async function handleReassign() {
+    setReassigning(true);
+    try {
+      const res = await fetch(`/api/customer-rfq/${id}/assignments/ensure`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(getApiErrorMessage(await res.json(), "فشل الإسناد الآلي"));
+      toast.success("تم تشغيل التصنيف والإسناد الآلي");
+      await loadAssignments();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "فشل الإسناد الآلي");
+    } finally {
+      setReassigning(false);
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -631,6 +650,61 @@ export default function CustomerRfqDetailPage() {
                 )}
               </div>
             </div>
+
+            {/* Responsibility summary — the AI classifies every item and assigns
+                it to the owner of its category the moment the request is saved.
+                This banner is where the operator sees the outcome and, if
+                authorised, re-runs it. */}
+            {(() => {
+              const items = rfq.items ?? [];
+              const total = items.length;
+              if (total === 0) return null;
+              const rows = items.map((it) => (it.id != null ? assignments[it.id] : undefined));
+              const unclassified = rows.filter((r) => r?.status === "unclassified").length;
+              const unassigned = rows.filter((r) => r?.status === "classified_unassigned").length;
+              const assigned = total - unclassified - unassigned;
+              const allDone = unclassified === 0 && unassigned === 0;
+              return (
+                <div
+                  className={`rounded-lg border p-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm ${
+                    allDone
+                      ? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30"
+                      : "border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30"
+                  }`}
+                >
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    {allDone ? <UserCog size={15} /> : <AlertTriangle size={15} />} مسؤولية البنود
+                  </span>
+                  <span className="text-foreground">
+                    أُسند <strong>{assigned}</strong> من <strong>{total}</strong> بند
+                  </span>
+                  {unclassified > 0 && (
+                    <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                      <AlertTriangle size={13} />
+                      {unclassified} غير مصنّف
+                    </span>
+                  )}
+                  {unassigned > 0 && (
+                    <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                      <AlertTriangle size={13} />
+                      {unassigned} بلا مسؤول
+                    </span>
+                  )}
+                  {canAssign && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="ms-auto"
+                      disabled={reassigning}
+                      onClick={handleReassign}
+                    >
+                      <RefreshCw size={14} className={reassigning ? "animate-spin" : ""} />
+                      إعادة الإسناد الآلي
+                    </Button>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="bg-card border border-border rounded-lg overflow-hidden">
               <div className="px-5 py-3 border-b border-border">

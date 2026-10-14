@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Tags } from "lucide-react";
 import {
@@ -79,6 +79,23 @@ export default function EmployeesPage() {
   const [empCats, setEmpCats] = useState<Array<{ categoryId: number; isPrimary: boolean }>>([]);
   const [catsLoading, setCatsLoading] = useState(false);
   const [catsSaving, setCatsSaving] = useState(false);
+  // Employee → owned categories, for the table column. Loaded in ONE request so
+  // listing the team never becomes an N+1.
+  const [empCatsByEmployee, setEmpCatsByEmployee] = useState<
+    Record<number, Array<{ categoryId: number; name: string; isPrimary: boolean }>>
+  >({});
+  const loadAllEmpCats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/employees/categories", { credentials: "include" });
+      if (res.ok) setEmpCatsByEmployee((await res.json()) as typeof empCatsByEmployee);
+    } catch {
+      /* the column is informational — a failure must not blank the page */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAllEmpCats();
+  }, [loadAllEmpCats]);
 
   async function openCats(emp: { id: number; name: string }) {
     setCatsFor(emp);
@@ -120,6 +137,7 @@ export default function EmployeesPage() {
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
       setCatsFor(null);
+      void loadAllEmpCats();
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -580,6 +598,9 @@ export default function EmployeesPage() {
                         <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
                           {t("employees.roleCol")}
                         </th>
+                        <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                          تصنيفات البنود المسؤول عنها
+                        </th>
                         <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
                           {t("employees.statusCol")}
                         </th>
@@ -629,6 +650,45 @@ export default function EmployeesPage() {
                               >
                                 {t(`employees.role.${emp.role}`) || emp.role}
                               </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {(() => {
+                                const mine = empCatsByEmployee[emp.id] ?? [];
+                                if (emp.role === "admin")
+                                  return <span className="text-xs text-muted-foreground">—</span>;
+                                return (
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    {mine.length === 0 ? (
+                                      <span className="text-xs text-amber-600 dark:text-amber-400">
+                                        بلا تصنيفات
+                                      </span>
+                                    ) : (
+                                      mine.map((c) => (
+                                        <span
+                                          key={c.categoryId}
+                                          title={c.isPrimary ? "أساسي" : undefined}
+                                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] ${
+                                            c.isPrimary
+                                              ? "bg-teal-100 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300"
+                                              : "bg-muted text-muted-foreground"
+                                          }`}
+                                        >
+                                          {c.name}
+                                          {c.isPrimary && " ★"}
+                                        </span>
+                                      ))
+                                    )}
+                                    {canManageEmps && (
+                                      <button
+                                        onClick={() => void openCats(emp)}
+                                        className="text-[11px] text-teal-700 dark:text-teal-400 hover:underline ms-1"
+                                      >
+                                        تعديل
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="px-4 py-3 text-center">
                               <span
