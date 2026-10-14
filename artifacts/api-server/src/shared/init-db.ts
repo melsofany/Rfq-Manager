@@ -658,6 +658,14 @@ export async function initDb(): Promise<void> {
 
     // Per-line customer delivery log. Delivered qty is guarded in the API
     // against the accepted qty received from the supplier (via customerPoItemId).
+    //
+    // The CREATE is kept separate from the idempotency INDEXES on purpose: this
+    // table predates the idempotency columns, so on an existing database the
+    // `CREATE TABLE IF NOT EXISTS` is a no-op and the columns are still absent —
+    // creating `..._operation_uq ON (operation_key, ...)` in the same block then
+    // failed with `column "operation_key" does not exist`, which stopped initDb
+    // and silently skipped every later migration (the missing `category_id`
+    // columns on `rfq_items`). The columns are added below, BEFORE the indexes.
     await client.query(`
       CREATE TABLE IF NOT EXISTS customer_po_item_deliveries (
         id SERIAL PRIMARY KEY,
@@ -680,6 +688,21 @@ export async function initDb(): Promise<void> {
         void_reason TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+    `);
+    // Idempotency columns on a table that may predate them. Own statement: the
+    // indexes below reference these columns, so they must exist first.
+    await client.query(`
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS operation_key TEXT;
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS payload_hash TEXT;
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS wa_message_id TEXT;
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS voided BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS voided_at TIMESTAMPTZ;
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS voided_by INTEGER;
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS voided_by_name TEXT;
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS void_reason TEXT;
+    `);
+    await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS customer_po_item_deliveries_operation_uq
         ON customer_po_item_deliveries (operation_key, customer_po_item_id);
       CREATE UNIQUE INDEX IF NOT EXISTS customer_po_item_deliveries_idem_uq
