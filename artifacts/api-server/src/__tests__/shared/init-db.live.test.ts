@@ -266,4 +266,58 @@ suite("init-db migration — live Postgres", () => {
     const n = await pool.query(`SELECT count(*)::int AS n FROM representatives`);
     expect(n.rows[0].n).toBe(2);
   });
+
+  it("adds the delivery idempotency columns to a PRE-EXISTING table", async () => {
+    // The second production outage: `customer_po_item_deliveries` existed before
+    // the idempotency work, so `CREATE TABLE IF NOT EXISTS` was a no-op and the
+    // columns were absent. Creating `..._operation_uq ON (operation_key, ...)` in
+    // the same block then failed with `column "operation_key" does not exist`,
+    // which stopped initDb() and skipped everything after it — including the
+    // `category_id` columns, so /rfq/:id died on
+    // `select ... category_id from rfq_items`. Reproduce the legacy shape and
+    // prove initDb() now adds the columns and runs to completion.
+    await pool.query(`DROP TABLE IF EXISTS customer_po_item_deliveries CASCADE`);
+    await pool.query(`
+      CREATE TABLE customer_po_item_deliveries (
+        id SERIAL PRIMARY KEY,
+        customer_po_item_id INTEGER NOT NULL REFERENCES customer_po_items(id) ON DELETE CASCADE,
+        customer_po_id INTEGER NOT NULL REFERENCES customer_pos(id) ON DELETE CASCADE,
+        delivered_qty NUMERIC(15,4),
+        delivery_status TEXT NOT NULL DEFAULT 'delivered',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`);
+
+    const { initDb } = await import("../../shared/init-db");
+    await expect(initDb()).resolves.toBeUndefined();
+
+    const cols = (
+      await pool.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'customer_po_item_deliveries'`,
+      )
+    ).rows.map((r: any) => r.column_name);
+    expect(cols).toEqual(
+      expect.arrayContaining([
+        "idempotency_key",
+        "operation_key",
+        "payload_hash",
+        "wa_message_id",
+        "voided",
+        "voided_at",
+        "voided_by",
+        "voided_by_name",
+        "void_reason",
+      ]),
+    );
+    // The statements that used to be skipped by this failure now applied.
+    const catCols = (
+      await pool.query(
+        `SELECT table_name FROM information_schema.columns
+          WHERE column_name = 'category_id'
+            AND table_name IN ('rfq_items','customer_rfq_items','purchase_order_items')`,
+      )
+    ).rows.map((r: any) => r.table_name);
+    expect(catCols).toEqual(
+      expect.arrayContaining(["rfq_items", "customer_rfq_items", "purchase_order_items"]),
+    );
+  });
 });

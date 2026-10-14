@@ -3441,3 +3441,37 @@ IF NOT EXISTS`، لكن `initDb()` ينفّذ الجمل **بالتتابع وي
 ضده عبر `vi.mock("@workspace/db")` (شيم `pool.connect().query` — استخدم `db.query` للجمل
 المُعاملة و`db.exec` للمتعددة). يوقف عند أول جملة فاشلة ويُظهر نصّها؛ **لا تثق بالقراءة
 الساكنة** — الخطأ لا يظهر إلا على بيانات حقيقية.
+
+## A CREATE TABLE IF NOT EXISTS is a NO-OP on an existing table — its new columns are still missing
+
+- **Symptom**: `/rfq/321` died with `Failed query: select "id", "line_item",
+  "part_no", "description", "category_id" from "rfq_items" … params: 321` and the
+  «مسؤولية البنود» panel showed «تصنيف وإسناد آلي — Failed query». PR #255's
+  reorder was correct but **not sufficient**: a SECOND statement still failed
+  before the `category_id` ALTERs.
+- **Root cause (reproduced on a production-like DB)**: `customer_po_item_deliveries`
+  already existed (created before the idempotency work) **without** the
+  idempotency columns. `CREATE TABLE IF NOT EXISTS …` was a no-op, and the SAME
+  `client.query` literal then ran
+  `CREATE UNIQUE INDEX …_operation_uq ON (operation_key, …)` →
+  `column "operation_key" does not exist` → `initDb()` threw → every later
+  migration (including `ALTER TABLE rfq_items ADD COLUMN category_id`) was skipped.
+- **Rule**: a `CREATE TABLE IF NOT EXISTS` must never be followed, in the SAME
+  literal, by an index/statement referencing a column that an OLDER version of
+  that table lacks. Split it: CREATE (own statement) → `ALTER TABLE … ADD COLUMN
+  IF NOT EXISTS …` for every column the indexes need (own statement) → indexes.
+  The `ADD COLUMN IF NOT EXISTS` is the migration; the CREATE only covers fresh DBs.
+- **Why it hid**: `index.ts` logs the boot failure but the server keeps serving, so
+  only the routes touching the missing column fail (the same class as the #255
+  phone-collision outage). `logger.error` on the boot catch is what surfaced it.
+- **Diagnose by reproducing, not by reading**: build the PRE-change schema, seed
+  realistic data, then run the CURRENT `initDb` and print the first thrown message
+  — that named `operation_key` in one run. PGlite proves DDL ORDER; `pg_ctl`-less
+  live Postgres via `@electric-sql/pglite-socket` lets the `init-db.live.test.ts`
+  behavioural guards actually execute (btree_gist is absent in PGlite, so the
+  EXCLUDE-constraint cases still skip/fail there — that is an env limitation, not
+  a regression).
+- Guard: the new `adds the delivery idempotency columns to a PRE-EXISTING table`
+  case (init-db.live.test.ts) builds the legacy table shape, runs `initDb()`, and
+  asserts the columns AND the previously-skipped `category_id` columns exist —
+  **it fails against the pre-fix source** (verified by reverting init-db.ts).
