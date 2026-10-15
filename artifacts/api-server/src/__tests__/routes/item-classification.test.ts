@@ -10,11 +10,11 @@ import {
 } from "../../modules/rfq/classification";
 
 const CATS: CategorySeed[] = [
-  { id: 1, code: "equipment", name: "أجهزة" },
-  { id: 2, code: "spare_parts", name: "قطع غيار" },
-  { id: 3, code: "electrical", name: "كهرباء" },
-  { id: 4, code: "breakers", name: "قواطع" },
-  { id: 5, code: "fire_resistance", name: "مقاومة حريق" },
+  { id: 1, code: "equipment", name: "أجهزة", kind: "functional" },
+  { id: 2, code: "spare_parts", name: "قطع غيار", kind: "functional" },
+  { id: 3, code: "electrical", name: "كهرباء", kind: "functional" },
+  { id: 4, code: "breakers", name: "قواطع", kind: "subcategory", parentId: 3 },
+  { id: 5, code: "fire_resistance", name: "مقاومة حريق", kind: "functional" },
 ];
 
 describe("item classification", () => {
@@ -30,9 +30,12 @@ describe("item classification", () => {
     expect(r.confidence).toBeGreaterThanOrEqual(MIN_CONFIDENCE);
   });
 
-  it("classifies an English circuit breaker", () => {
+  it("classifies an English circuit breaker as its DOMAIN (كهرباء), with قواطع suggested", () => {
+    // قواطع is a subcategory of كهرباء, so responsibility lands on the domain
+    // (كهرباء) and قواطع is returned only as a suggestion.
     const r = classifyItem({ description: "CIRCUIT BREAKER 3P 30A" }, CATS);
-    expect(r.categoryId).toBe(4);
+    expect(r.categoryId).toBe(3);
+    expect(r.subcategoryIds).toContain(4);
   });
 
   it("classifies a water heater as equipment, not spare parts", () => {

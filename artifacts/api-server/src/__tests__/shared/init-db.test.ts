@@ -240,4 +240,52 @@ describe("init-db migrations", () => {
       /UPDATE representatives\s+SET phone = regexp_replace\(phone, '\[0-9\]'/,
     );
   });
+
+  it("the ELEC→كهرباء merge rewrites EVERY category-linked table (no lost links)", () => {
+    // A duplicate «ELEC» category must never survive as a live relation. Every
+    // table that carries a category_id has to be repointed to the canonical
+    // «كهرباء» row, or an item/assignment/ownership keeps a category that the
+    // alias table now maps elsewhere — i.e. a lost link.
+    const required = [
+      "UPDATE customer_rfq_items SET category_id",
+      "UPDATE rfq_items SET category_id",
+      "UPDATE purchase_order_items SET category_id",
+      "UPDATE customer_rfq_item_assignments SET category_id",
+      "UPDATE rfq_item_assignments SET category_id",
+      "INSERT INTO customer_rfq_item_categories",
+      "INSERT INTO employee_categories",
+      "INSERT INTO item_category_keywords",
+      "INSERT INTO item_category_aliases",
+    ];
+    for (const stmt of required) {
+      expect(source, `merge must cover: ${stmt}`).toContain(stmt);
+    }
+    // The junction/ownership/keyword merges must add-then-drop (never a bare
+    // delete) so a relation is never lost between the two steps.
+    expect(source).toContain("DELETE FROM customer_rfq_item_categories");
+    expect(source).toContain("DELETE FROM employee_categories");
+    expect(source).toContain("DELETE FROM item_category_keywords");
+  });
+
+  it("the ELEC→كهرباء merge never NULLs a category (COALESCE fallback)", () => {
+    // `(SELECT id ... WHERE name='كهرباء')` is NULL when the canonical row is
+    // missing (e.g. an operator renamed it). A bare assignment would then WIPE
+    // every ELEC item's category. The merge must fall back to the existing value.
+    const updates = [
+      "customer_rfq_items",
+      "rfq_items",
+      "purchase_order_items",
+      "customer_rfq_item_assignments",
+      "rfq_item_assignments",
+    ];
+    for (const tbl of updates) {
+      const literal = sqlLiterals(source).find(
+        (b) => b.includes(`UPDATE ${tbl} SET category_id`) && b.includes("كهرباء"),
+      );
+      expect(literal, `${tbl} merge statement must exist`).toBeDefined();
+      expect(literal!, `${tbl} merge must COALESCE`).toContain(
+        "COALESCE((SELECT id FROM item_categories WHERE name = 'كهرباء'), category_id)",
+      );
+    }
+  });
 });

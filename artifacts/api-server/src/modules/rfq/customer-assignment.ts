@@ -19,9 +19,18 @@ import {
   itemAssignmentAuditTable,
   employeesTable,
   itemCategoriesTable,
+  itemCategoryKeywordsTable,
 } from "@workspace/db";
 import { eq, and, inArray, asc, isNull } from "drizzle-orm";
-import { classifyItem, MIN_CONFIDENCE } from "./classification";
+import {
+  classifyItem,
+  isFunctionalCategory,
+  isOwnableAssignment,
+  MIN_CONFIDENCE,
+  normalizeText,
+  pickLearnableKeywords,
+  resolveDomainId,
+} from "./classification";
 import { classifyItemsWithAi, type AiClassifyResult } from "./ai-classifier";
 import {
   buildContext,
@@ -31,6 +40,12 @@ import {
 } from "./assignment";
 import { closeAndOpenPeriod, dbClockTimestamp, lockItemRows } from "./attribution";
 
+/** At most this many learned keywords are added per confirmed correction. */
+const LEARN_KEYWORD_LIMIT = 5;
+
+/** The slice of the drizzle handle the learning helper needs (db or a tx). */
+type DbLike = Pick<typeof db, "select" | "insert">;
+
 export interface CustomerAssignOutcome {
   customerRfqItemId: number;
   categoryId: number | null;
@@ -39,11 +54,23 @@ export interface CustomerAssignOutcome {
   reason: "assigned" | "unclassified" | "no_owner" | "no_employees" | "kept";
 }
 
-/** Pick the owner for a resolved category (primary first, then least loaded). */
+/**
+ * Pick the owner for a resolved category (primary first, then least loaded).
+ *
+ * The category is first resolved to its FUNCTIONAL DOMAIN: a subcategory
+ * (قواطع/PLC/…) owns no responsibility of its own, so an item filed under one is
+ * still owned by the domain's employee. A brand resolves to no domain and can
+ * never own an item.
+ */
 function pickOwner(categoryId: number, ctx: AssignContext): number | null {
-  const eligible = ctx.owners.get(categoryId) ?? [];
+  const resolved = resolveDomainId(categoryId, ctx.categories);
+  // A brand resolves to NO domain and can never own an item; only an unknown
+  // category id falls back to itself.
+  if (resolved == null) return null;
+  const domainId = resolved;
+  const eligible = ctx.owners.get(domainId) ?? [];
   if (eligible.length === 0) return null;
-  const primary = ctx.primary.get(categoryId);
+  const primary = ctx.primary.get(domainId);
   if (primary != null && eligible.includes(primary)) return primary;
   return [...eligible].sort((a, b) => {
     const la = ctx.load.get(a) ?? 0;
@@ -139,23 +166,60 @@ export async function ensureCustomerAssignments(
 
     let categoryId = item.categoryId ?? null;
     let confidence = 100;
+    let analysis: {
+      brandId: number | null;
+      subcategoryIds: number[];
+      attributes: Record<string, string> | null;
+      reason: string | null;
+    } | null = null;
     if (categoryId == null) {
       const ai = aiByItemId.get(item.id);
       if (ai && ai.categoryId != null && (ai.confidence ?? 0) >= MIN_CONFIDENCE) {
         categoryId = ai.categoryId;
         confidence = ai.confidence ?? 100;
+        analysis = {
+          brandId: ai.brandId,
+          subcategoryIds: ai.subcategoryIds,
+          attributes: ai.attributes,
+          reason: ai.reason,
+        };
       } else {
         // AI declined, was unavailable, or was not confident enough → the
         // deterministic keyword classifier gets the next say.
         const result = classifyItem(item, ctx.categories, ctx.vocabulary);
         categoryId = result.categoryId;
         confidence = result.confidence;
+        if (categoryId != null) {
+          analysis = {
+            brandId: null,
+            subcategoryIds: result.subcategoryIds ?? [],
+            attributes: null,
+            reason: result.matchedTerm ? `keyword: ${result.matchedTerm}` : null,
+          };
+        }
       }
 
       if (categoryId != null && confidence >= MIN_CONFIDENCE) {
+        // Store the PRIMARY (functional) category AND the classifier's analysis,
+        // so the manager can review the suggestion beside the decision. Only the
+        // category owns responsibility; the rest is evidence.
+        const subIds = analysis?.subcategoryIds ?? [];
         await db
           .update(customerRfqItemsTable)
-          .set({ categoryId })
+          .set({
+            categoryId,
+            ...(analysis
+              ? {
+                  brandId: analysis.brandId,
+                  subcategoryIds: subIds.length ? JSON.stringify(subIds) : null,
+                  technicalAttributes: analysis.attributes
+                    ? JSON.stringify(analysis.attributes)
+                    : null,
+                  classifyConfidence: String(confidence),
+                  classifyReason: analysis.reason,
+                }
+              : {}),
+          })
           .where(eq(customerRfqItemsTable.id, item.id));
       } else {
         categoryId = null;
@@ -276,7 +340,14 @@ export async function classifyUnclassifiedItems(
       if (!r || r.categoryId == null || (r.confidence ?? 0) < MIN_CONFIDENCE) continue;
       await db
         .update(customerRfqItemsTable)
-        .set({ categoryId: r.categoryId })
+        .set({
+          categoryId: r.categoryId,
+          brandId: r.brandId,
+          subcategoryIds: (r.subcategoryIds ?? []).length ? JSON.stringify(r.subcategoryIds) : null,
+          technicalAttributes: r.attributes ? JSON.stringify(r.attributes) : null,
+          classifyConfidence: String(r.confidence),
+          classifyReason: r.reason,
+        })
         .where(eq(customerRfqItemsTable.id, chunk[i].id));
       affectedRfqs.add(chunk[i].customerRfqId);
       classified += 1;
@@ -313,6 +384,9 @@ export async function assignCustomerItemManually(params: {
       .select({
         id: customerRfqItemsTable.id,
         categoryId: customerRfqItemsTable.categoryId,
+        description: customerRfqItemsTable.description,
+        partNo: customerRfqItemsTable.partNo,
+        lineItem: customerRfqItemsTable.lineItem,
       })
       .from(customerRfqItemsTable)
       .where(eq(customerRfqItemsTable.id, customerRfqItemId));
@@ -332,7 +406,20 @@ export async function assignCustomerItemManually(params: {
       );
 
     const categoryChanged = (prev?.categoryId ?? null) !== (categoryId ?? null);
-    const employeeChanged = (prev?.employeeId ?? null) !== (employeeId ?? null);
+    let employeeChanged = (prev?.employeeId ?? null) !== (employeeId ?? null);
+
+    // «الماركة لا تكون مسؤولًا» — enforced HERE too, not only in the API routes.
+    // Recording a category (even a subcategory/brand) for review is fine, but an
+    // OWNER may only be recorded for a FUNCTIONAL domain: a non-functional
+    // category leaves the owner unchanged rather than set to an invalid employee.
+    let effectiveEmployeeId = employeeId;
+    if (categoryId != null && employeeId != null) {
+      const cats = await loadCategories();
+      if (!isOwnableAssignment(categoryId, employeeId, cats)) {
+        effectiveEmployeeId = prev?.employeeId ?? null;
+      }
+    }
+    employeeChanged = (prev?.employeeId ?? null) !== (effectiveEmployeeId ?? null);
 
     if (categoryId != null) {
       await tx
@@ -350,7 +437,7 @@ export async function assignCustomerItemManually(params: {
         {
           customerRfqItemId,
           categoryId,
-          employeeId,
+          employeeId: effectiveEmployeeId,
           source: "manual",
           confidence: null,
           assignedBy,
@@ -363,12 +450,65 @@ export async function assignCustomerItemManually(params: {
         categoryIdOld: prev?.categoryId ?? item.categoryId ?? null,
         categoryIdNew: categoryId ?? null,
         employeeIdOld: prev?.employeeId ?? null,
-        employeeIdNew: employeeId ?? null,
+        employeeIdNew: effectiveEmployeeId ?? null,
         changedBy: assignedBy,
         reason: reason ?? null,
       });
     }
+
+    // The manager CONFIRMED this item's category: learn its decisive terms so a
+    // similar item is classified next time without a model call. Best-effort —
+    // a learning failure must never fail the correction itself.
+    if (categoryId != null && categoryChanged) {
+      await learnFromCorrection(tx, categoryId, {
+        description: item.description,
+        partNo: item.partNo,
+        lineItem: item.lineItem,
+      }).catch(() => {});
+    }
   });
+}
+
+/**
+ * Learn from a manager's confirmed classification. Extracts the decisive terms
+ * from the item text and adds the ones the category does not already know to its
+ * vocabulary — free (no model call), reversible (each is a normal keyword row a
+ * manager can disable or delete) and conservative (brands, generic words and
+ * pure numbers are refused, so a wrong rule is not created by a correction).
+ *
+ * Returns the terms actually added, for the audit/telemetry.
+ */
+export async function learnFromCorrection(
+  tx: DbLike,
+  categoryId: number,
+  item: { description?: string | null; partNo?: string | null; lineItem?: string | null },
+): Promise<string[]> {
+  // Brand names must never become keywords: a brand is a maker, not a domain.
+  const brandRows = await tx
+    .select({ name: itemCategoriesTable.name })
+    .from(itemCategoriesTable)
+    .where(eq(itemCategoriesTable.kind, "brand"));
+  const terms = pickLearnableKeywords(
+    item,
+    brandRows.map((b) => b.name),
+    LEARN_KEYWORD_LIMIT,
+  );
+  if (terms.length === 0) return [];
+
+  // Which of these does the category already know? Only NEW terms are added.
+  const existing = await tx
+    .select({ keyword: itemCategoryKeywordsTable.keyword })
+    .from(itemCategoryKeywordsTable)
+    .where(eq(itemCategoryKeywordsTable.categoryId, categoryId));
+  const known = new Set(existing.map((e) => normalizeText(e.keyword)));
+  const toAdd = terms.filter((t) => !known.has(t));
+  if (toAdd.length === 0) return [];
+
+  await tx
+    .insert(itemCategoryKeywordsTable)
+    .values(toAdd.map((keyword) => ({ categoryId, keyword, weight: 0, language: null })))
+    .onConflictDoNothing();
+  return toAdd;
 }
 
 /**

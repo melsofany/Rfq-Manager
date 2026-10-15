@@ -1654,19 +1654,115 @@ export async function initDb(): Promise<void> {
       ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS category_id INTEGER;
     `);
 
+    // ── Classification model: kind / parent on item_categories ──────────────
+    // A category is one of: functional (a MAIN domain that owns responsibility),
+    // subcategory (a specialisation inside a domain) or brand (a manufacturer,
+    // metadata only). Each ALTER is its OWN statement: statements in one
+    // client.query share an implicit transaction, so a sibling failure would
+    // otherwise roll a critical migration back silently.
+    await client.query(`
+      ALTER TABLE item_categories ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'functional';
+    `);
+    await client.query(`
+      ALTER TABLE item_categories ADD COLUMN IF NOT EXISTS parent_id INTEGER;
+    `);
+    // Backfill safety: a row created before this column existed keeps
+    // 'functional', which is exactly the previous behaviour.
+    await client.query(`
+      UPDATE item_categories SET kind = 'functional' WHERE kind IS NULL OR kind = '';
+    `);
+
+    // ── AI classification analysis on customer_rfq_items ────────────────────
+    // The classifier's multi-dimensional suggestion, stored so the manager can
+    // review it beside the decision. `category_id` stays the authoritative
+    // PRIMARY functional domain; the rest never affect responsibility.
+    await client.query(`
+      ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS brand_id INTEGER;
+    `);
+    await client.query(`
+      ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS subcategory_ids TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS technical_attributes TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS classify_confidence NUMERIC(5,2);
+    `);
+    await client.query(`
+      ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS classify_reason TEXT;
+    `);
+
+    // ── Category aliases (ELEC / Electrical / كهرباء → one category) ─────────
+    // DDL in its OWN statement so a sibling failure cannot roll the CREATE back.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS item_category_aliases (
+        id SERIAL PRIMARY KEY,
+        category_id INTEGER NOT NULL REFERENCES item_categories(id) ON DELETE CASCADE,
+        alias TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS item_category_aliases_alias_uq
+        ON item_category_aliases (alias);
+      CREATE INDEX IF NOT EXISTS idx_item_category_aliases_category
+        ON item_category_aliases (category_id);
+    `);
+
     // ── Seed the official item categories (idempotent) ──────────────────────
+    // `kind` distinguishes a MAIN functional domain (owns responsibility) from a
+    // subcategory (a specialisation that inherits its domain's owner) and a
+    // brand (metadata only). Seeding is INSERT-only (ON CONFLICT DO NOTHING) so
+    // it never rewrites a category the operator has edited or re-typed.
     const itemCategories = [
-      { name: "أجهزة", code: "equipment", sort: 10 },
-      { name: "قطع غيار", code: "spare_parts", sort: 20 },
-      { name: "كهرباء", code: "electrical", sort: 30 },
-      { name: "قواطع", code: "breakers", sort: 40 },
-      { name: "مقاومة حريق", code: "fire_resistance", sort: 50 },
+      { name: "أجهزة", code: "equipment", sort: 10, kind: "functional", parent: null },
+      { name: "قطع غيار", code: "spare_parts", sort: 20, kind: "functional", parent: null },
+      { name: "كهرباء", code: "electrical", sort: 30, kind: "functional", parent: null },
+      // قواطع is a SPECIALISATION inside كهرباء, not a domain of its own: it must
+      // never create an independent responsibility, so it points at كهرباء.
+      { name: "قواطع", code: "breakers", sort: 40, kind: "subcategory", parent: "كهرباء" },
+      { name: "مقاومة حريق", code: "fire_resistance", sort: 50, kind: "functional", parent: null },
     ];
     for (const c of itemCategories) {
       await client.query(
-        `INSERT INTO item_categories (name, code, sort_order) VALUES ($1, $2, $3)
+        `INSERT INTO item_categories (name, code, sort_order, kind) VALUES ($1, $2, $3, $4)
          ON CONFLICT (name) DO NOTHING`,
-        [c.name, c.code, c.sort],
+        [c.name, c.code, c.sort, c.kind],
+      );
+    }
+    // Resolve subcategory parents (idempotent, only when unset so an operator's
+    // own re-parenting is never overwritten). Kept as its OWN statement.
+    await client.query(`
+      UPDATE item_categories child
+      SET parent_id = parent.id
+      FROM item_categories parent
+      WHERE child.parent_id IS NULL
+        AND child.kind = 'subcategory'
+        AND child.name = 'قواطع'
+        AND parent.name = 'كهرباء';
+    `);
+    // The classifier's own subcategory vocabulary (PLC / Encoders / contactors…)
+    // is seeded with its domain so the AI has a real list to choose from.
+    const itemSubcategories = [
+      { name: "كونتاكتورات", code: "contactors", parent: "كهرباء", sort: 41 },
+      { name: "كابلات", code: "cables", parent: "كهرباء", sort: 42 },
+      { name: "لوحات كهربائية", code: "panels", parent: "كهرباء", sort: 43 },
+      { name: "PLC", code: "plc", parent: "كهرباء", sort: 44 },
+      { name: "Automation", code: "automation", parent: "كهرباء", sort: 45 },
+      { name: "Encoders", code: "encoders", parent: "كهرباء", sort: 46 },
+      { name: "Control Systems", code: "control_systems", parent: "كهرباء", sort: 47 },
+      { name: "Electrical Instruments", code: "instruments", parent: "كهرباء", sort: 48 },
+    ];
+    for (const s of itemSubcategories) {
+      await client.query(
+        `INSERT INTO item_categories (name, code, sort_order, kind) VALUES ($1, $2, $3, 'subcategory')
+         ON CONFLICT (name) DO NOTHING`,
+        [s.name, s.code, s.sort],
+      );
+      await client.query(
+        `UPDATE item_categories child
+         SET parent_id = parent.id
+         FROM item_categories parent
+         WHERE child.name = $1 AND child.parent_id IS NULL AND parent.name = $2`,
+        [s.name, s.parent],
       );
     }
 
@@ -1727,6 +1823,131 @@ export async function initDb(): Promise<void> {
         );
       }
     }
+
+    // ── Unify ELEC / Electrical into the one «كهرباء» domain (idempotent) ────
+    // A supplier category named ELEC was mirrored in as its OWN item category,
+    // so the SAME real domain existed twice (كهرباء + ELEC) and an item could be
+    // filed under either. The operator's rule: ELEC is an ALIAS, not a separate
+    // category. We never DELETE the duplicate (its historical audit rows must
+    // survive) — every RELATION is moved to the canonical category and the
+    // duplicate is left dormant, reachable only through the alias table.
+    // Every statement is its OWN client.query: a sibling failure must not roll
+    // one of these data migrations back silently.
+    await client.query(`
+      UPDATE customer_rfq_items SET category_id = COALESCE((SELECT id FROM item_categories WHERE name = 'كهرباء'), category_id)
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      );
+    `);
+    await client.query(`
+      UPDATE rfq_items SET category_id = COALESCE((SELECT id FROM item_categories WHERE name = 'كهرباء'), category_id)
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      );
+    `);
+    await client.query(`
+      UPDATE purchase_order_items SET category_id = COALESCE((SELECT id FROM item_categories WHERE name = 'كهرباء'), category_id)
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      );
+    `);
+    await client.query(`
+      UPDATE customer_rfq_item_assignments SET category_id = COALESCE((SELECT id FROM item_categories WHERE name = 'كهرباء'), category_id)
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      );
+    `);
+    await client.query(`
+      UPDATE rfq_item_assignments SET category_id = COALESCE((SELECT id FROM item_categories WHERE name = 'كهرباء'), category_id)
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      );
+    `);
+    // Junction rows: add the canonical row first, then drop the duplicate.
+    await client.query(`
+      INSERT INTO customer_rfq_item_categories (customer_rfq_item_id, category_id, employee_id, added_by, created_at)
+      SELECT customer_rfq_item_id, (SELECT id FROM item_categories WHERE name = 'كهرباء'), employee_id, added_by, created_at
+      FROM customer_rfq_item_categories
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      )
+      ON CONFLICT (customer_rfq_item_id, category_id) DO NOTHING;
+    `);
+    await client.query(`
+      DELETE FROM customer_rfq_item_categories
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      );
+    `);
+    // Employee ownership: copy the owners onto the canonical category, then drop
+    // the duplicate rows. Inserted as NON-primary first (the partial unique index
+    // allows one primary per category); a later statement promotes one if the
+    // canonical category has no primary yet — so coverage is never lost and the
+    // constraint is never violated.
+    await client.query(`
+      INSERT INTO employee_categories (employee_id, category_id, is_primary)
+      SELECT employee_id, (SELECT id FROM item_categories WHERE name = 'كهرباء'), false
+      FROM employee_categories
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      )
+      ON CONFLICT (employee_id, category_id) DO NOTHING;
+    `);
+    await client.query(`
+      UPDATE employee_categories SET is_primary = true
+      WHERE category_id = (SELECT id FROM item_categories WHERE name = 'كهرباء')
+        AND is_primary = false
+        AND NOT EXISTS (
+          SELECT 1 FROM employee_categories ec2
+          WHERE ec2.category_id = (SELECT id FROM item_categories WHERE name = 'كهرباء') AND ec2.is_primary
+        )
+        AND employee_id = (
+          SELECT min(employee_id) FROM employee_categories
+          WHERE category_id = (SELECT id FROM item_categories WHERE name = 'كهرباء')
+        );
+    `);
+    await client.query(`
+      DELETE FROM employee_categories
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      );
+    `);
+    // Classifier keywords: merge them onto the canonical category.
+    await client.query(`
+      INSERT INTO item_category_keywords (category_id, keyword, weight, language, enabled)
+      SELECT (SELECT id FROM item_categories WHERE name = 'كهرباء'), keyword, weight, language, enabled
+      FROM item_category_keywords
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      )
+      ON CONFLICT (category_id, keyword) DO NOTHING;
+    `);
+    await client.query(`
+      DELETE FROM item_category_keywords
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'كهرباء' AND lower(trim(name)) IN ('elec','electrical','electric')
+      );
+    `);
+    // Finally, register the aliases so the SAME domain is never re-created under
+    // another spelling. Stored normalised (lowercase for Latin) and idempotent.
+    await client.query(`
+      INSERT INTO item_category_aliases (category_id, alias)
+      SELECT (SELECT id FROM item_categories WHERE name = 'كهرباء'), a.alias
+      FROM (VALUES ('elec'), ('electrical'), ('electric'), ('كهرباء')) AS a(alias)
+      WHERE EXISTS (SELECT 1 FROM item_categories WHERE name = 'كهرباء')
+      ON CONFLICT (alias) DO NOTHING;
+    `);
 
     // ── Procurement responsibility migration (idempotent, re-runnable) ───────
     // Periods + attribution + RESTRICT FKs + delivery idempotency. Every step

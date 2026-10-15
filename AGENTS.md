@@ -3681,3 +3681,21 @@ form + detail edit + read-only card + Excel import mapping/template).
 - الاختبارات: `item-categories.test.ts` +3 (manager 200 / purchasing 403)، `customer-rfq.test.ts`
   +5 (قائمة + فلترة + قراءة data_entry + حلّ مالك الأساسي). **1448 api-server / 66 portal** تمر؛
   tsc + prettier + البناءان نظيفة؛ `/api/customer-rfq/item-categories` = 401 (مركّب خلف المصادقة).
+
+## «الخيار أ» — تصنيف متعدد الأبعاد + إسناد بالمجال الوظيفي (2026-10-05)
+
+- **المسؤولية تُحلّ دائمًا إلى المجال الوظيفي.** `item_categories.kind` = `functional`
+  (يملك) | `subcategory` (تخصيص داخل مجال، `parent_id`، لا يملك) | `brand` (ميتاداتا فقط،
+  لا يملك). `resolveDomainId()` يحلّ التصنيف إلى مجاله؛ `pickOwner()` يرفض الماركة (تُحلّ
+  إلى `null` فلا مالك). **العيب الذي كشفه الاختبار**: `resolveDomainId(id) ?? id` كان يجعل
+  الماركة تملك بنفسها — لا fallback إلى `categoryId` إلا لتصنيف **غير معروف**.
+- **بند بتخصيص فرعي يُنسب لمالك المجال، لا لمالك التخصيص** — ولو وُجد مالك للتخصيص.
+- **المصنّف AI متعدد الأبعاد**: `main` (مجال واحد إلزامي) + `sub` + `brand`؛ يرفض أن يكون
+  `main` تخصيصًا فرعيًا أو ماركة. البذور: `قواطع` انتقلت من `CATEGORY_KEYWORDS` إلى
+  `SUBCATEGORY_KEYWORDS` (تخصيص داخل كهرباء).
+- **ترتيب `init-db.ts`**: كتلة دمج `ELEC→كهرباء` تُحدّث `item_category_keywords`، لذا يجب
+  أن تكون **بعد** إنشائه — `client.query` المتعدد بيان يشترك في معاملة ضمنية، ففشل شقيق
+  يُسقط الكتلة كاملةً بصمت. تحقق من ترتيب أي كتلة تلمس جدولًا أُنشئ لاحقًا.
+- اختبارات الحراسة: `item-assignment.test.ts` (+2: التخصيص→المجال، الماركة→بلا مسؤول)،
+  `item-classification.test.ts` (القاطع→كهرباء+اقتراح قواطع). **1467 api-server + 68 portal**؛
+  tsc + prettier + البناءان نظيفة. لم يُدفع/يُفتح PR (بانتظار إقرار المشغّل).

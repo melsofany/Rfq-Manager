@@ -148,7 +148,8 @@ let catItemRow: { id: number; categoryId: number | null } | null = null;
 // Extra categories attached to the item (junction rows).
 let extraCatRows: Array<{ categoryId: number; employeeId: number | null }> = [];
 // item_categories rows returned for name resolution.
-let itemCategoryRows: Array<{ id: number; name: string }> = [];
+let itemCategoryRows: Array<{ id: number; name: string; kind?: string; parentId?: number | null }> =
+  [];
 // employee_categories rows (category → owner) for coverage resolution.
 let ownerRows: Array<{ categoryId: number; employeeId: number; isPrimary: boolean }> = [];
 // Junction rows written by the PUT (replaced set).
@@ -2410,6 +2411,31 @@ describe("customer-RFQ item multi-category (manager editor)", () => {
     expect(auditInserts.some((a) => a.action === "customer_rfq.item_categories_updated")).toBe(
       true,
     );
+  });
+
+  it("coverage: a BRAND extra gets NO owner; a SUBCATEGORY extra inherits its DOMAIN's owner", async () => {
+    sessionState.role = "manager";
+    catItemRow = { id: 7, categoryId: 3 };
+    itemCategoryRows = [
+      { id: 3, name: "كهرباء", kind: "functional", parentId: null },
+      { id: 5, name: "قواطع", kind: "subcategory", parentId: 3 },
+      { id: 9, name: "Siemens", kind: "brand", parentId: null },
+    ];
+    ownerRows = [
+      { categoryId: 3, employeeId: 5, isPrimary: true }, // domain owner
+      { categoryId: 5, employeeId: 99, isPrimary: true }, // a subcategory "owner" that must NOT be used
+    ];
+
+    const res = await request(testApp)
+      .put("/api/customer-rfq/items/7/categories")
+      .send({ categoryIds: [3, 5, 9] });
+
+    expect(res.status).toBe(200);
+    const byCat = Object.fromEntries(junctionInserts.map((j) => [j.categoryId, j]));
+    // Subcategory 5 carries the DOMAIN (3) owner (5), never its own (99).
+    expect(byCat[5]).toMatchObject({ categoryId: 5, employeeId: 5 });
+    // Brand 9 never carries an owner.
+    expect(byCat[9]).toMatchObject({ categoryId: 9, employeeId: null });
   });
 
   it("lets the manager move the PRIMARY category and stores it on the item", async () => {

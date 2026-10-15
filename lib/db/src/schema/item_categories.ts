@@ -18,15 +18,56 @@ import { customerRfqItemsTable } from "./customer_rfqs";
 // تصنيف البنود — Item categories (أجهزة، قطع غيار، كهرباء، قواطع، مقاومة حريق…)
 // Separate from supplier_categories: a supplier's trade category is not the
 // category of the item it supplies (one supplier may cover several categories).
+//
+// `kind` splits the catalogue into the three roles the classification design
+// requires, so ONE table serves all of them without duplicating the vocabulary:
+//   • functional  — a MAIN domain (كهرباء/ميكانيكا/أجهزة…). ONLY a functional
+//                   category may carry procurement responsibility (an owner),
+//                   and only a functional category may be an item's PRIMARY
+//                   category. This is what keeps a brand from ever becoming a
+//                   responsibility.
+//   • subcategory — a specialisation inside a domain (قواطع/PLC/Encoders…).
+//                   It refines an item but NEVER changes who owns it; its
+//                   responsibility is inherited from `parent_id` (the domain).
+//   • brand       — a manufacturer (Siemens/Schneider/ABB…). Metadata only: a
+//                   brand alone may never decide the domain, because one maker
+//                   ships products across several domains.
+// A brand's `parent_id` is null; a subcategory's `parent_id` is its functional
+// domain. Legacy rows created before this column default to `functional`, which
+// preserves the previous behaviour exactly.
 export const itemCategoriesTable = pgTable("item_categories", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
   // Short stable code used for the deterministic classifier seeds.
   code: text("code"),
+  // functional | subcategory | brand (see the note above). Plain text; the
+  // CHECK constraint lives in init-db.ts (DDL is not drizzle-kit push here).
+  kind: text("kind").notNull().default("functional"),
+  // The functional domain a subcategory belongs to. Null for functional
+  // categories and brands.
+  parentId: integer("parent_id"),
   isActive: boolean("is_active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// أسماء بديلة للتصنيفات — Aliases so the SAME real category is not created
+// twice under a different spelling. «ELEC» / «Electrical» / «كهرباء» all resolve
+// to one category. Resolution is by normalised text (hamza/taa-marbuta/yaa
+// folded), and an alias is UNIQUE so two categories can never claim one name.
+// Used by the classifier (before matching) and the manager's editor (validation).
+export const itemCategoryAliasesTable = pgTable(
+  "item_category_aliases",
+  {
+    id: serial("id").primaryKey(),
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => itemCategoriesTable.id, { onDelete: "cascade" }),
+    alias: text("alias").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("item_category_aliases_alias_uq").on(t.alias)],
+);
 
 // اختصاص الموظفين — which categories each procurement employee is responsible
 // for. One employee may own several categories; a category may have one

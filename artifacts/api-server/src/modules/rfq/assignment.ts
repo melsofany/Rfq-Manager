@@ -14,6 +14,7 @@
 import {
   db,
   itemCategoriesTable,
+  itemCategoryAliasesTable,
   employeeCategoriesTable,
   employeesTable,
   rfqItemsTable,
@@ -24,7 +25,9 @@ import {
 import { eq, inArray, sql, ne, and, isNull } from "drizzle-orm";
 import {
   classifyItem,
+  isOwnableAssignment,
   MIN_CONFIDENCE,
+  resolveDomainId,
   type CategorySeed,
   type ClassifierVocabulary,
 } from "./classification";
@@ -59,10 +62,28 @@ export async function loadCategories(): Promise<CategorySeed[]> {
       id: itemCategoriesTable.id,
       code: itemCategoriesTable.code,
       name: itemCategoriesTable.name,
+      kind: itemCategoriesTable.kind,
+      parentId: itemCategoriesTable.parentId,
     })
     .from(itemCategoriesTable)
     .where(eq(itemCategoriesTable.isActive, true));
-  return rows;
+
+  // Attach each category's aliases so «ELEC» / «Electrical» resolve to the one
+  // canonical category both in the classifier and in the manager's editor.
+  const aliases = await db
+    .select({
+      categoryId: itemCategoryAliasesTable.categoryId,
+      alias: itemCategoryAliasesTable.alias,
+    })
+    .from(itemCategoryAliasesTable);
+  if (aliases.length === 0) return rows;
+  const byCat = new Map<number, string[]>();
+  for (const a of aliases) {
+    const list = byCat.get(a.categoryId) ?? [];
+    list.push(a.alias);
+    byCat.set(a.categoryId, list);
+  }
+  return rows.map((r) => ({ ...r, aliases: byCat.get(r.id) ?? [] }));
 }
 
 async function loadOwners(): Promise<{
@@ -151,11 +172,22 @@ export async function loadCustomerWorkloads(): Promise<Map<number, number>> {
   return load;
 }
 
-/** Pick the owner for a resolved category (primary first, then least loaded). */
+/**
+ * Pick the owner for a resolved category (primary first, then least loaded).
+ *
+ * The category is first resolved to its FUNCTIONAL DOMAIN, so a subcategory
+ * (قواطع/PLC/…) never owns an item independently of its domain — and a brand,
+ * which resolves to no domain, can never own one.
+ */
 function pickOwner(categoryId: number, ctx: AssignContext): number | null {
-  const eligible = ctx.owners.get(categoryId) ?? [];
+  const resolved = resolveDomainId(categoryId, ctx.categories);
+  // A brand resolves to NO domain (null) and must never own an item; only an
+  // unknown category id falls back to itself.
+  if (resolved == null) return null;
+  const domainId = resolved;
+  const eligible = ctx.owners.get(domainId) ?? [];
   if (eligible.length === 0) return null;
-  const primary = ctx.primary.get(categoryId);
+  const primary = ctx.primary.get(domainId);
   if (primary != null && eligible.includes(primary)) return primary;
   // Least-loaded, deterministic tie-break by id.
   return [...eligible].sort((a, b) => {
@@ -315,6 +347,15 @@ export async function assignItemManually(params: {
     throw new Error("rfq item not found");
   }
 
+  // «الماركة لا تكون مسؤولًا» — an OWNER may only be recorded for a functional
+  // domain. A subcategory/brand category may still be recorded for review, but
+  // then no employee is written (the assignment carries a null owner).
+  let effectiveEmployeeId = employeeId;
+  if (categoryId != null && employeeId != null) {
+    const cats = await loadCategories();
+    if (!isOwnableAssignment(categoryId, employeeId, cats)) effectiveEmployeeId = null;
+  }
+
   if (categoryId != null) {
     await db.update(rfqItemsTable).set({ categoryId }).where(eq(rfqItemsTable.id, rfqItemId));
   }
@@ -325,14 +366,20 @@ export async function assignItemManually(params: {
       rfqItemId,
       customerRfqItemId: item.customerRfqItemId,
       categoryId,
-      employeeId,
+      employeeId: effectiveEmployeeId,
       source: "manual",
       confidence: null,
       assignedBy,
     })
     .onConflictDoUpdate({
       target: rfqItemAssignmentsTable.rfqItemId,
-      set: { categoryId, employeeId, source: "manual", confidence: null, assignedBy },
+      set: {
+        categoryId,
+        employeeId: effectiveEmployeeId,
+        source: "manual",
+        confidence: null,
+        assignedBy,
+      },
     });
 }
 

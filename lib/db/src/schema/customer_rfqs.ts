@@ -40,6 +40,17 @@ export const customerRfqItemsTable = pgTable("customer_rfq_items", {
   unitPrice: numeric("unit_price", { precision: 15, scale: 4 }),
   // Item category (تصنيف البند). Plain integer; DB FK added in init-db.ts.
   categoryId: integer("category_id"),
+  // ── AI classification analysis (تحليل التصنيف) ────────────────────────────
+  // The classifier's multi-dimensional read of the item, stored so the manager
+  // can review the SUGGESTION beside the decision (the operator's requirement:
+  // «مراجعة اقتراحات الذكاء الاصطناعي وتعديلها»). `categoryId` stays the
+  // authoritative PRIMARY functional domain; `brandId`/`subcategoryIds` never
+  // affect responsibility. Plain columns; DDL lives in init-db.ts.
+  brandId: integer("brand_id"),
+  subcategoryIds: text("subcategory_ids"),
+  technicalAttributes: text("technical_attributes"),
+  classifyConfidence: numeric("classify_confidence", { precision: 5, scale: 2 }),
+  classifyReason: text("classify_reason"),
   // Soft-cancel: an item is disabled, never hard-deleted (its assignment
   // history must survive). Plain boolean; DDL lives in init-db.ts.
   isCancelled: boolean("is_cancelled").notNull().default(false),
