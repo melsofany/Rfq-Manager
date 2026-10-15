@@ -2387,6 +2387,55 @@ export async function initDb(): Promise<void> {
     `);
     logger.info("initDb: HR attendance tables ensured");
     await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_employee_profiles (
+        employee_id INTEGER PRIMARY KEY,
+        national_id_enc TEXT,
+        national_id_last4 TEXT,
+        date_of_birth DATE,
+        gender TEXT,
+        address TEXT,
+        emergency_contact_name TEXT,
+        emergency_contact_phone TEXT,
+        social_insurance_no TEXT,
+        health_insurance_no TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_contracts (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL,
+        contract_type TEXT NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE,
+        probation_end_date DATE,
+        basic_salary NUMERIC(12,2) NOT NULL,
+        allowances NUMERIC(12,2) NOT NULL DEFAULT 0,
+        is_current BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS hr_contracts_emp_idx ON hr_contracts (employee_id)`,
+    );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_bank_accounts (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL,
+        bank_name TEXT NOT NULL,
+        account_holder TEXT NOT NULL,
+        account_no_enc TEXT NOT NULL,
+        account_last4 TEXT NOT NULL,
+        iban_enc TEXT,
+        iban_last4 TEXT,
+        is_primary BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS hr_bank_emp_idx ON hr_bank_accounts (employee_id)`,
+    );
+    await client.query(`
       CREATE TABLE IF NOT EXISTS hr_disciplinary_cases (
         id SERIAL PRIMARY KEY,
         employee_id INTEGER NOT NULL,

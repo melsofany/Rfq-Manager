@@ -26,3 +26,4 @@ export * from "./ai_assistant";
 export * from "./hr";
 export * from "./hr_leave";
 export * from "./hr_discipline";
+export * from "./hr_onboarding";
