@@ -7,7 +7,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { BankCombobox } from "@/components/BankCombobox";
 import { findBankByName } from "@/lib/egyptian-banks";
 
-type Tab = "attendance" | "onboard" | "leave" | "discipline" | "employees" | "devices";
+type Tab = "attendance" | "onboard" | "leave" | "discipline" | "employees" | "devices" | "settings";
 
 interface AttendanceRow {
   employeeId: number;
@@ -176,6 +176,7 @@ export default function HrPage() {
     { id: "discipline", label: t("hr.tab.discipline") },
     { id: "employees", label: t("hr.tab.employees") },
     { id: "devices", label: t("hr.tab.devices") },
+    { id: "settings", label: t("hr.tab.settings") },
   ];
 
   return (
@@ -211,6 +212,7 @@ export default function HrPage() {
         {tab === "discipline" && <DisciplineTab />}
         {tab === "employees" && <EmployeesTab />}
         {tab === "devices" && <DevicesTab />}
+        {tab === "settings" && <SettingsTab />}
       </div>
     </Layout>
   );
@@ -1272,5 +1274,420 @@ function OnboardTab() {
       )}
       <Button type="submit">{t("hr.onb.submit")}</Button>
     </form>
+  );
+}
+
+// ---------- الإعدادات: التأمينات والضرايب والغياب والجزاءات والبدلات والبنك ----------
+// كل قيمة تتعدل في أي وقت. "غير مضبوط" معناه إن الرقم لسه ما اتدخلش، ومفيش قيمة افتراضية.
+
+type SettingsData = Record<string, unknown>;
+
+const numText = (v: unknown) => (v === null || v === undefined ? "" : String(v));
+const toNum = (s: string): number | null => (s.trim() === "" ? null : Number(s));
+
+function SettingsTab() {
+  const { t } = useLanguage();
+  const [data, setData] = useState<SettingsData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api<{ settings: SettingsData }>("/hr/settings");
+      setData(r.settings);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (!data) return <p className="text-sm text-muted-foreground">{t("hr.set.loading")}</p>;
+
+  const ins = (k: string) =>
+    data[k] as {
+      employeeRatePct: number | null;
+      employerRatePct: number | null;
+      capAmount: number | null;
+    } | null;
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">{t("hr.set.help")}</p>
+      <InsuranceCard
+        settingKey="social_insurance"
+        title={t("hr.set.social")}
+        value={ins("social_insurance")}
+        onSaved={load}
+      />
+      <InsuranceCard
+        settingKey="health_insurance"
+        title={t("hr.set.health")}
+        value={ins("health_insurance")}
+        onSaved={load}
+      />
+      <TaxCard
+        value={data.income_tax as { brackets: { upTo: number | null; ratePct: number }[] } | null}
+        onSaved={load}
+      />
+      <AbsenceCard value={data.absence as { dailyDivisor: number } | null} onSaved={load} />
+      <FinesCard value={data.fines as { monthlyCapDays: number | null } | null} onSaved={load} />
+      <AllowancesCard value={data.allowance_types as { items: string[] } | null} onSaved={load} />
+      <BankCard
+        value={data.bank_export as { format: string | null; notes: string | null } | null}
+        onSaved={load}
+      />
+    </div>
+  );
+}
+
+/** Shell shared by every setting: title, configured badge, save button and result. */
+function SettingCard({
+  title,
+  configured,
+  onSave,
+  onSaved,
+  children,
+}: {
+  title: string;
+  configured: boolean;
+  onSave: () => Promise<void>;
+  onSaved: () => void;
+  children: React.ReactNode;
+}) {
+  const { t } = useLanguage();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
+  async function run() {
+    setBusy(true);
+    setErr(null);
+    setOk(false);
+    try {
+      await onSave();
+      setOk(true);
+      onSaved();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-semibold">{title}</h2>
+          <span
+            className={`text-xs px-2 py-0.5 rounded ${
+              configured ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"
+            }`}
+          >
+            {configured ? t("hr.set.configured") : t("hr.set.notConfigured")}
+          </span>
+        </div>
+        {children}
+        <div className="flex items-center gap-3">
+          <Button size="sm" onClick={run} disabled={busy}>
+            {t("hr.set.save")}
+          </Button>
+          {ok && <span className="text-xs text-green-700">{t("hr.set.saved")}</span>}
+          {err && <span className="text-xs text-red-600">{err}</span>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+async function saveSetting(key: string, value: unknown) {
+  await api(`/hr/settings/${key}`, { method: "PUT", body: JSON.stringify({ value }) });
+}
+
+const setInput = "border rounded px-2 py-1.5 bg-background text-sm w-full";
+const setLabel = "text-xs text-muted-foreground block mb-1";
+
+function InsuranceCard({
+  settingKey,
+  title,
+  value,
+  onSaved,
+}: {
+  settingKey: "social_insurance" | "health_insurance";
+  title: string;
+  value: {
+    employeeRatePct: number | null;
+    employerRatePct: number | null;
+    capAmount: number | null;
+  } | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [emp, setEmp] = useState(numText(value?.employeeRatePct));
+  const [er, setEr] = useState(numText(value?.employerRatePct));
+  const [cap, setCap] = useState(numText(value?.capAmount));
+  return (
+    <SettingCard
+      title={title}
+      configured={!!value}
+      onSaved={onSaved}
+      onSave={() =>
+        saveSetting(
+          settingKey,
+          toNum(emp) === null && toNum(er) === null && toNum(cap) === null
+            ? null
+            : { employeeRatePct: toNum(emp), employerRatePct: toNum(er), capAmount: toNum(cap) },
+        )
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.employeeRate")}</span>
+          <input
+            className={setInput}
+            type="number"
+            step="0.01"
+            value={emp}
+            onChange={(e) => setEmp(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.employerRate")}</span>
+          <input
+            className={setInput}
+            type="number"
+            step="0.01"
+            value={er}
+            onChange={(e) => setEr(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.cap")}</span>
+          <input
+            className={setInput}
+            type="number"
+            step="0.01"
+            value={cap}
+            onChange={(e) => setCap(e.target.value)}
+          />
+        </label>
+      </div>
+    </SettingCard>
+  );
+}
+
+type Bracket = { upTo: string; ratePct: string };
+
+function TaxCard({
+  value,
+  onSaved,
+}: {
+  value: { brackets: { upTo: number | null; ratePct: number }[] } | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [rows, setRows] = useState<Bracket[]>(
+    value?.brackets?.length
+      ? value.brackets.map((b) => ({ upTo: numText(b.upTo), ratePct: numText(b.ratePct) }))
+      : [{ upTo: "", ratePct: "" }],
+  );
+  const update = (i: number, k: keyof Bracket, v: string) =>
+    setRows(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  return (
+    <SettingCard
+      title={t("hr.set.tax")}
+      configured={!!value}
+      onSaved={onSaved}
+      onSave={() => {
+        const filled = rows.filter((r) => r.upTo !== "" || r.ratePct !== "");
+        if (filled.length === 0) return saveSetting("income_tax", null);
+        return saveSetting("income_tax", {
+          brackets: rows.map((r) => ({ upTo: toNum(r.upTo), ratePct: toNum(r.ratePct) })),
+        });
+      }}
+    >
+      <p className="text-xs text-muted-foreground">{t("hr.set.taxHint")}</p>
+      <div className="space-y-2">
+        {rows.map((r, i) => (
+          <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
+            <label className="block">
+              <span className={setLabel}>{t("hr.set.upTo")}</span>
+              <input
+                className={setInput}
+                type="number"
+                step="0.01"
+                value={r.upTo}
+                onChange={(e) => update(i, "upTo", e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className={setLabel}>{t("hr.set.rate")}</span>
+              <input
+                className={setInput}
+                type="number"
+                step="0.01"
+                value={r.ratePct}
+                onChange={(e) => update(i, "ratePct", e.target.value)}
+              />
+            </label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRows(rows.filter((_, j) => j !== i))}
+              disabled={rows.length === 1}
+            >
+              {t("hr.set.remove")}
+            </Button>
+          </div>
+        ))}
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setRows([...rows, { upTo: "", ratePct: "" }])}
+      >
+        {t("hr.set.addBracket")}
+      </Button>
+    </SettingCard>
+  );
+}
+
+function AbsenceCard({
+  value,
+  onSaved,
+}: {
+  value: { dailyDivisor: number } | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [div, setDiv] = useState(numText(value?.dailyDivisor));
+  return (
+    <SettingCard
+      title={t("hr.set.absence")}
+      configured={!!value}
+      onSaved={onSaved}
+      onSave={() =>
+        saveSetting("absence", toNum(div) === null ? null : { dailyDivisor: toNum(div) })
+      }
+    >
+      <label className="block max-w-xs">
+        <span className={setLabel}>{t("hr.set.divisor")}</span>
+        <input
+          className={setInput}
+          type="number"
+          min="1"
+          max="31"
+          value={div}
+          onChange={(e) => setDiv(e.target.value)}
+        />
+      </label>
+      <p className="text-xs text-muted-foreground">{t("hr.set.divisorHint")}</p>
+    </SettingCard>
+  );
+}
+
+function FinesCard({
+  value,
+  onSaved,
+}: {
+  value: { monthlyCapDays: number | null } | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [cap, setCap] = useState(numText(value?.monthlyCapDays));
+  return (
+    <SettingCard
+      title={t("hr.set.fines")}
+      configured={!!value}
+      onSaved={onSaved}
+      onSave={() =>
+        saveSetting("fines", toNum(cap) === null ? null : { monthlyCapDays: toNum(cap) })
+      }
+    >
+      <label className="block max-w-xs">
+        <span className={setLabel}>{t("hr.set.finesCap")}</span>
+        <input
+          className={setInput}
+          type="number"
+          min="0"
+          max="60"
+          value={cap}
+          onChange={(e) => setCap(e.target.value)}
+        />
+      </label>
+    </SettingCard>
+  );
+}
+
+function AllowancesCard({
+  value,
+  onSaved,
+}: {
+  value: { items: string[] } | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [text, setText] = useState((value?.items ?? []).join("، "));
+  return (
+    <SettingCard
+      title={t("hr.set.allowances")}
+      configured={!!value}
+      onSaved={onSaved}
+      onSave={() =>
+        saveSetting(
+          "allowance_types",
+          text.trim() === ""
+            ? null
+            : {
+                items: text
+                  .split(/[,،]/)
+                  .map((x) => x.trim())
+                  .filter(Boolean),
+              },
+        )
+      }
+    >
+      <label className="block">
+        <span className={setLabel}>{t("hr.set.allowList")}</span>
+        <input className={setInput} value={text} onChange={(e) => setText(e.target.value)} />
+      </label>
+      <p className="text-xs text-muted-foreground">{t("hr.set.allowHint")}</p>
+    </SettingCard>
+  );
+}
+
+function BankCard({
+  value,
+  onSaved,
+}: {
+  value: { format: string | null; notes: string | null } | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [format, setFormat] = useState(value?.format ?? "");
+  const [notes, setNotes] = useState(value?.notes ?? "");
+  return (
+    <SettingCard
+      title={t("hr.set.bank")}
+      configured={!!value}
+      onSaved={onSaved}
+      onSave={() =>
+        saveSetting(
+          "bank_export",
+          format.trim() === "" && notes.trim() === "" ? null : { format, notes },
+        )
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.bankFormat")}</span>
+          <input className={setInput} value={format} onChange={(e) => setFormat(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.bankNotes")}</span>
+          <input className={setInput} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </label>
+      </div>
+    </SettingCard>
   );
 }
