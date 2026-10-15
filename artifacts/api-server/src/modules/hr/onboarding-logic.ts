@@ -48,3 +48,23 @@ export function contractDatesError(
 export function isValidSalary(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v) && v >= 0 && Math.round(v * 100) === v * 100;
 }
+
+/** Employee photo: JPEG, PNG or WebP as a base64 data URL, at most 300 KB. */
+export const PHOTO_MAX_BYTES = 300 * 1024;
+const PHOTO_RE = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/]+={0,2})$/;
+
+export type ParsedPhoto = { mime: string; data: string };
+
+/** Returns null when no photo was sent, an Arabic error, or the parsed photo. */
+export function parsePhoto(v: unknown): { error: string } | { photo: ParsedPhoto } | null {
+  if (v === undefined || v === null || v === "") return null;
+  if (typeof v !== "string") return { error: "صيغة الصورة غير صالحة" };
+  const m = PHOTO_RE.exec(v);
+  if (!m) return { error: "الصورة لازم تكون JPEG أو PNG أو WebP" };
+  const data = m[2];
+  if (data.length % 4 !== 0) return { error: "الصورة غير صالحة" };
+  const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
+  const bytes = (data.length / 4) * 3 - padding;
+  if (bytes > PHOTO_MAX_BYTES) return { error: "حجم الصورة يتجاوز 300 KB" };
+  return { photo: { mime: m[1], data } };
+}

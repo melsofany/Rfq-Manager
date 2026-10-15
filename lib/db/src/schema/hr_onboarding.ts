@@ -58,3 +58,11 @@ export const hrBankAccountsTable = pgTable(
   },
   (t) => [index("hr_bank_emp_idx").on(t.employeeId)],
 );
+
+/** Employee photo (data stored base64; photos are not encrypted, they are shown in the UI). One per employee. */
+export const hrEmployeePhotosTable = pgTable("hr_employee_photos", {
+  employeeId: integer("employee_id").primaryKey(),
+  mimeType: text("mime_type").notNull(),
+  dataB64: text("data_b64").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
