@@ -38,6 +38,12 @@ function chainable(value: any, methods: Record<string, any> = {}): any {
 const supplierCategoriesTable = { _: "supplierCategories", id: "id", name: "name" };
 const suppliersTable = { _: "suppliers", category: "category" };
 const itemCategoriesTable = { _: "itemCategories", id: "id", name: "name" };
+// The link table the delete guard counts from.
+const supplierCategoryLinksTable = {
+  _: "links",
+  supplierId: "supplier_id",
+  categoryId: "category_id",
+};
 
 let categoryRows: any[];
 let updatedCategoryRow: any;
@@ -56,6 +62,12 @@ const dbMock: any = {
       }
       if (table === suppliersTable) {
         // The delete guard: count() of suppliers in the category.
+        return chainable([{ supplierCount: 0 }], {
+          where: vi.fn(() => chainable([{ supplierCount: 0 }])),
+        });
+      }
+      if (table === supplierCategoryLinksTable) {
+        // The delete guard now counts from the LINK table.
         return chainable([{ supplierCount: 0 }], {
           where: vi.fn(() => chainable([{ supplierCount: 0 }])),
         });
@@ -92,6 +104,7 @@ vi.mock("@workspace/db", () => ({
   supplierCategoriesTable,
   suppliersTable,
   itemCategoriesTable,
+  supplierCategoryLinksTable,
 }));
 
 let testApp: express.Express;

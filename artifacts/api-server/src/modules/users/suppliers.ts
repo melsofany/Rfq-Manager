@@ -11,10 +11,17 @@ import {
   customerPoItemsTable,
   customerPosTable,
   rfqTable,
+  supplierCategoryLinksTable,
+  supplierCategoriesTable,
 } from "@workspace/db";
 import { eq, ilike, or, and, ne, count, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { isForeignKeyViolation } from "../../shared/pg-errors";
+import {
+  categoriesToStored,
+  loadSupplierCategoryMap,
+  saveSupplierCategoryLinks,
+} from "../../shared/supplier-category-links";
 
 const router = Router();
 
@@ -357,6 +364,14 @@ router.post("/suppliers/bulk", requireAuth, async (req, res): Promise<void> => {
         })
         .returning();
 
+      // Keep the LINK table in step (source of truth). A failure here must not
+      // lose the imported supplier, so it is logged, not thrown.
+      try {
+        await saveSupplierCategoryLinks(supplier.id, toArray(category));
+      } catch (linkErr) {
+        console.warn("supplier category link save failed (bulk import)", supplier.id, linkErr);
+      }
+
       imported++;
       details.push({
         row: i + 1,
@@ -412,14 +427,18 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
 
   const conditions = [];
   if (category) {
-    conditions.push(
-      or(
-        eq(suppliersTable.category, category),
-        ilike(suppliersTable.category, `${category},%`),
-        ilike(suppliersTable.category, `%,${category},%`),
-        ilike(suppliersTable.category, `%,${category}`),
-      ),
-    );
+    // Filter through the LINK table — the authoritative relationship. A supplier
+    // matches when it is linked to a category with this exact name, so a rename
+    // moves every supplier automatically (no textual match on the legacy column).
+    const linkedSupplierIds = db
+      .select({ supplierId: supplierCategoryLinksTable.supplierId })
+      .from(supplierCategoryLinksTable)
+      .innerJoin(
+        supplierCategoriesTable,
+        eq(supplierCategoryLinksTable.categoryId, supplierCategoriesTable.id),
+      )
+      .where(eq(supplierCategoriesTable.name, category));
+    conditions.push(inArray(suppliersTable.id, linkedSupplierIds));
   }
   if (search)
     conditions.push(
@@ -435,7 +454,18 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(suppliersTable.name);
 
-  res.json(suppliers.map(serializeSupplier));
+  // Prefer the LINK table for the category list; fall back to the legacy text
+  // for any supplier that has no links (pre-migration rows).
+  const linkMap = await loadSupplierCategoryMap(suppliers.map((s) => s.id));
+  res.json(
+    suppliers.map((s) => {
+      const base = serializeSupplier(s);
+      const links = linkMap.get(s.id);
+      if (!links || links.length === 0) return base;
+      const names = links.map((l) => l.name);
+      return { ...base, category: categoriesToStored(names), categories: names };
+    }),
+  );
 });
 
 // قائمة تقييمات جميع الموردين دفعة واحدة
@@ -513,6 +543,13 @@ router.post("/suppliers", requireAuth, async (req, res): Promise<void> => {
       category,
     })
     .returning();
+
+  // Seed the LINK table from the categories just stored.
+  try {
+    await saveSupplierCategoryLinks(supplier.id, toArray(category));
+  } catch (linkErr) {
+    console.warn("supplier category link save failed (create)", supplier.id, linkErr);
+  }
   res.status(201).json(serializeSupplier(supplier));
 });
 
@@ -600,6 +637,14 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
   if (!supplier) {
     res.status(404).json({ error: "Not found" });
     return;
+  }
+  // Reconcile the LINK table (source of truth) when categories were submitted.
+  if (updates.category !== undefined) {
+    try {
+      await saveSupplierCategoryLinks(id, toArray(String(updates.category)));
+    } catch (linkErr) {
+      console.warn("supplier category link save failed (patch)", id, linkErr);
+    }
   }
   res.json(serializeSupplier(supplier));
 });

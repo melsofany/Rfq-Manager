@@ -16,6 +16,12 @@ vi.mock("../../middlewares/auth", () => ({
 vi.mock("@workspace/db", () => {
   const tables = {
     suppliersTable: { _: "suppliers" },
+    supplierCategoriesTable: { _: "supplierCategories", id: "id", name: "name" },
+    supplierCategoryLinksTable: {
+      _: "supplierCategoryLinks",
+      supplierId: "supplier_id",
+      categoryId: "category_id",
+    },
     sentLogTable: { _: "sentLog" },
     offersTable: { _: "offers" },
     offerItemsTable: { _: "offerItems" },
