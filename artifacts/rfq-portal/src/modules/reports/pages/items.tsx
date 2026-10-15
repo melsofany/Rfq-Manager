@@ -955,7 +955,14 @@ export default function ItemsPage() {
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const [tab, setTab] = useState<"search" | "sheet" | "categories">(allowedTabs[0] ?? "search");
+  const [tab, setTab] = useState<"search" | "sheet" | "categories">(() => {
+    // Deep link from the customer-RFQ responsibility banner (`/items?tab=categories`).
+    const q = new URLSearchParams(window.location.search).get("tab");
+    const wanted = q === "categories" || q === "sheet" ? q : "search";
+    return (allowedTabs as readonly string[]).includes(wanted)
+      ? (wanted as "search" | "sheet" | "categories")
+      : (allowedTabs[0] ?? "search");
+  });
 
   const {
     data: results,

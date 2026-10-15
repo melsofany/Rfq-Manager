@@ -24,16 +24,10 @@ import {
   Lock,
   CheckCircle2,
   UserCog,
-  RefreshCw,
 } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  canEditCustomerDoc,
-  canPriceCustomerRfq,
-  hasPermission,
-  EDIT_PERM,
-} from "@/lib/permissions";
+import { canEditCustomerDoc, canPriceCustomerRfq, EDIT_PERM } from "@/lib/permissions";
 import { toast } from "sonner";
 import { useCustomerRfqNoAvailability } from "../hooks/use-customer-rfq-no-availability";
 
@@ -44,16 +38,6 @@ interface ItemRow {
   description: string;
   uom: string;
   qty: string;
-}
-
-/** Read the server's JSON `{error}` message (falls back to the HTTP status). */
-async function readError(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: string };
-    return body.error ?? `HTTP ${res.status}`;
-  } catch {
-    return `HTTP ${res.status}`;
-  }
 }
 
 // Strip trailing zeros from a NUMERIC qty: "3.0000" → "3", "3.5000" → "3.5".
@@ -133,14 +117,6 @@ export default function CustomerRfqDetailPage() {
     status: "unclassified" | "classified_unassigned" | "assigned" | "needs_review";
   }
   const [assignments, setAssignments] = useState<Record<number, ItemAssignment>>({});
-  const [overrideFor, setOverrideFor] = useState<ItemAssignment | null>(null);
-  const [overrideEmployee, setOverrideEmployee] = useState<number | "">("");
-  const [overrideCategory, setOverrideCategory] = useState<number | "">("");
-  const [overrideReason, setOverrideReason] = useState("");
-  const [employees, setEmployees] = useState<{ id: number; name: string }[]>([]);
-  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
-
-  const canAssign = hasPermission(employee?.role, employee?.permissions, "rfq:assign");
 
   const loadAssignments = useCallback(async () => {
     if (!Number.isFinite(id)) return;
@@ -160,63 +136,10 @@ export default function CustomerRfqDetailPage() {
     void loadAssignments();
   }, [loadAssignments, rfq?.id]);
 
-  const [reassigning, setReassigning] = useState(false);
-  async function handleReassign() {
-    setReassigning(true);
-    try {
-      const res = await fetch(`/api/customer-rfq/${id}/assignments/ensure`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(getApiErrorMessage(await res.json(), "فشل الإسناد الآلي"));
-      toast.success("تم تشغيل التصنيف والإسناد الآلي");
-      await loadAssignments();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "فشل الإسناد الآلي");
-    } finally {
-      setReassigning(false);
-    }
-  }
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const [eRes, cRes] = await Promise.all([
-          fetch("/api/employees", { credentials: "include" }),
-          fetch("/api/item-categories", { credentials: "include" }),
-        ]);
-        if (eRes.ok) setEmployees(((await eRes.json()) as any[]).filter((e) => e.isActive));
-        if (cRes.ok) setCategories((await cRes.json()) as any[]);
-      } catch {
-        /* dropdowns are optional */
-      }
-    })();
-  }, []);
-
-  async function saveOverride() {
-    if (!overrideFor) return;
-    try {
-      const res = await fetch(
-        `/api/customer-rfq/items/${overrideFor.customerRfqItemId}/assignment`,
-        {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            categoryId: overrideCategory === "" ? null : Number(overrideCategory),
-            employeeId: overrideEmployee === "" ? null : Number(overrideEmployee),
-            reason: overrideReason.trim() || null,
-          }),
-        },
-      );
-      if (!res.ok) throw new Error(await readError(res));
-      toast.success("تم تحديث المسؤول");
-      setOverrideFor(null);
-      await loadAssignments();
-    } catch (err) {
-      toast.error(getApiErrorMessage(err));
-    }
-  }
+  // The assignment/re-assignment controls live on `/items` → «تصنيفات البنود»
+  // (admin/manager only). This page is READ-ONLY for responsibility: it loads the
+  // assignments so it can show the category and the responsible employee, and it
+  // links to the editing surface — it never offers the change itself.
 
   // The auto-number warning shows only while the server says the customer RFQ
   // number is still auto-generated. Once the user edits and provides a real
@@ -690,17 +613,13 @@ export default function CustomerRfqDetailPage() {
                       {unassigned} بلا مسؤول
                     </span>
                   )}
-                  {canAssign && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="ms-auto"
-                      disabled={reassigning}
-                      onClick={handleReassign}
+                  {(unclassified > 0 || unassigned > 0) && (
+                    <Link
+                      href="/items?tab=categories"
+                      className="ms-auto text-xs font-medium text-primary hover:underline"
                     >
-                      <RefreshCw size={14} className={reassigning ? "animate-spin" : ""} />
-                      إعادة الإسناد الآلي
-                    </Button>
+                      إدارة التصنيف والمسؤول من «تصنيفات البنود» ←
+                    </Link>
                   )}
                 </div>
               );
@@ -745,7 +664,10 @@ export default function CustomerRfqDetailPage() {
                         أمر شراء
                       </th>
                       <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
-                        المسؤول
+                        التصنيف
+                      </th>
+                      <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                        الموظف المسند إليه
                       </th>
                     </tr>
                   </thead>
@@ -753,7 +675,7 @@ export default function CustomerRfqDetailPage() {
                     {(rfq.items ?? []).length === 0 ? (
                       <tr>
                         <td
-                          colSpan={10}
+                          colSpan={11}
                           className="px-4 py-6 text-center text-muted-foreground text-sm"
                         >
                           لا توجد بنود
@@ -824,25 +746,27 @@ export default function CustomerRfqDetailPage() {
                             <td className="px-4 py-2.5 text-xs">
                               {(() => {
                                 const a = it.id != null ? assignments[it.id] : undefined;
-                                if (!a) return <span className="text-muted-foreground">—</span>;
-                                if (a.status === "unclassified")
+                                if (!a || !a.categoryName)
                                   return (
                                     <span className="text-amber-600 dark:text-amber-400">
                                       غير مصنّف
                                     </span>
                                   );
-                                if (a.status === "classified_unassigned")
+                                return <span className="text-foreground">{a.categoryName}</span>;
+                              })()}
+                            </td>
+                            <td className="px-4 py-2.5 text-xs">
+                              {(() => {
+                                const a = it.id != null ? assignments[it.id] : undefined;
+                                if (!a || !a.employeeName)
                                   return (
                                     <span className="text-amber-600 dark:text-amber-400">
-                                      {a.categoryName ?? "مصنّف"} — بلا مسؤول
+                                      بلا مسؤول
                                     </span>
                                   );
                                 return (
                                   <span className="inline-flex items-center gap-1.5">
-                                    <span className="text-foreground">{a.employeeName ?? "—"}</span>
-                                    <span className="text-[10px] text-muted-foreground">
-                                      {a.categoryName ?? ""}
-                                    </span>
+                                    <span className="text-foreground">{a.employeeName}</span>
                                     {a.status === "needs_review" && (
                                       <span
                                         title="تصنيف آلي بثقة منخفضة — يُستحسن المراجعة"
@@ -850,20 +774,6 @@ export default function CustomerRfqDetailPage() {
                                       >
                                         مراجعة
                                       </span>
-                                    )}
-                                    {canAssign && (
-                                      <button
-                                        title="تغيير المسؤول"
-                                        onClick={() => {
-                                          setOverrideFor(a);
-                                          setOverrideEmployee(a.employeeId ?? "");
-                                          setOverrideCategory(a.categoryId ?? "");
-                                          setOverrideReason("");
-                                        }}
-                                        className="text-muted-foreground hover:text-foreground"
-                                      >
-                                        <UserCog size={13} />
-                                      </button>
                                     )}
                                   </span>
                                 );
@@ -998,62 +908,6 @@ export default function CustomerRfqDetailPage() {
           </>
         )}
       </div>
-
-      {overrideFor && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-lg w-full max-w-md p-5 space-y-4">
-            <h2 className="font-semibold text-foreground">تغيير مسؤول البند</h2>
-            <p className="text-xs text-muted-foreground">
-              المسؤول يُحدَّد على مستوى بند طلب العميل (المصدر الوحيد للمسؤولية)، فيسري على كل أوامر
-              التسعير المُرسَلة منه لنفس البند. كل تغيير يُسجَّل في سجل التدقيق.
-            </p>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">التصنيف</Label>
-              <select
-                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
-                value={overrideCategory}
-                onChange={(e) =>
-                  setOverrideCategory(e.target.value === "" ? "" : Number(e.target.value))
-                }
-              >
-                <option value="">— بلا تصنيف —</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">الموظف المسؤول</Label>
-              <select
-                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
-                value={overrideEmployee}
-                onChange={(e) =>
-                  setOverrideEmployee(e.target.value === "" ? "" : Number(e.target.value))
-                }
-              >
-                <option value="">— بلا مسؤول —</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">السبب (اختياري)</Label>
-              <Input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setOverrideFor(null)}>
-                إلغاء
-              </Button>
-              <Button onClick={saveOverride}>حفظ</Button>
-            </div>
-          </div>
-        </div>
-      )}
     </Layout>
   );
 }

@@ -155,6 +155,8 @@ let ownerRows: Array<{ categoryId: number; employeeId: number; isPrimary: boolea
 const junctionInserts: any[] = [];
 // Rows returned by GET /customer-rfq/item-categories (the «تصنيفات البنود» tab).
 let itemCategoryListRows: any[] = [];
+// Rows returned by GET /customer-rfq/unowned-categories (categories with no owner).
+let unownedCategoryRows: any[] = [];
 
 // Build an object that is BOTH thenable (awaitable directly) and exposes chain
 // methods. Each chain method returns a thenable of `value`.
@@ -428,6 +430,25 @@ const dbMock: any = {
       }
       // Category-management: item_categories name resolution.
       if (table === (tables as any).itemCategoriesTable) {
+        // The unowned-categories report selects {id,name,itemCount} and joins
+        // employee_categories via a NOT EXISTS subquery + groupBy.
+        if (arg && typeof arg === "object" && "itemCount" in arg) {
+          return chainable(unownedCategoryRows, {
+            leftJoin: vi.fn(() =>
+              chainable(unownedCategoryRows, {
+                where: vi.fn(() =>
+                  chainable(unownedCategoryRows, {
+                    groupBy: vi.fn(() =>
+                      chainable(unownedCategoryRows, {
+                        orderBy: vi.fn(() => chainable(unownedCategoryRows)),
+                      }),
+                    ),
+                  }),
+                ),
+              }),
+            ),
+          });
+        }
         return chainable(itemCategoryRows, {
           where: vi.fn(() => chainable(itemCategoryRows)),
           orderBy: vi.fn(() => chainable(itemCategoryRows)),
@@ -609,6 +630,7 @@ beforeEach(() => {
   ownerRows = [];
   junctionInserts.length = 0;
   itemCategoryListRows = [];
+  unownedCategoryRows = [];
 });
 
 describe("POST /api/customer-rfq (create)", () => {
@@ -2496,6 +2518,7 @@ describe("GET /api/customer-rfq/item-categories (تصنيفات البنود tab
     ];
     itemCategoryRows = [{ id: 3, name: "قواطع" }];
     ownerRows = [{ categoryId: 3, employeeId: 20, isPrimary: true }];
+    employeeRow = { id: 20, name: "أحمد" };
 
     const res = await request(testApp).get("/api/customer-rfq/item-categories");
     expect(res.status).toBe(200);
@@ -2508,6 +2531,8 @@ describe("GET /api/customer-rfq/item-categories (تصنيفات البنود tab
       description: "قاطع كهربائي",
       qty: "4",
       categoryName: "قواطع",
+      employeeId: 20,
+      employeeName: "أحمد",
     });
     expect(rows[0].categories).toHaveLength(1);
     expect(rows[0].categories[0]).toMatchObject({
@@ -2564,5 +2589,23 @@ describe("GET /api/customer-rfq/item-categories (تصنيفات البنود tab
     const res = await request(testApp).get("/api/customer-rfq/item-category-options");
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(2);
+  });
+
+  it("lists categories with NO responsible employee (the «بلا مسؤول» root cause)", async () => {
+    unownedCategoryRows = [
+      { id: 4, name: "أجهزة", itemCount: 12 },
+      { id: 6, name: "مقاومة حريق", itemCount: 3 },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/unowned-categories");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(2);
+    expect(res.body[0]).toMatchObject({ id: 4, name: "أجهزة", itemCount: 12 });
+  });
+
+  it("returns an empty unowned list when every category has an owner", async () => {
+    unownedCategoryRows = [];
+    const res = await request(testApp).get("/api/customer-rfq/unowned-categories");
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
   });
 });

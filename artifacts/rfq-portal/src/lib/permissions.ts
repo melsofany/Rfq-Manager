@@ -299,6 +299,23 @@ export function canAssignItems(role: string | undefined, permissions: Permission
   return resolvePermissions(role, permissions).has(ASSIGN_PERM.itemAssign);
 }
 
+/**
+ * Whether the employee may MANAGE item categorization/ownership — change which
+ * category an item belongs to and who is responsible for it.
+ *
+ * Admin/manager only, by ROLE. The `rfq:assign` grant deliberately does not
+ * open this: assigning an item moves KPI responsibility between employees, and
+ * the operator's rule is that only a manager or an admin does that. The editing
+ * surface is `/items` → «تصنيفات البنود». Mirrors `hasAssignmentManageAccess`
+ * on the backend so the UI never offers a control the API would reject.
+ */
+export function canManageItemAssignment(
+  role: string | undefined,
+  _permissions: PermissionMap,
+): boolean {
+  return role === "admin" || role === "manager";
+}
+
 /** Is a page (sidebar item) visible/accessible? Accepts a path like "/customer-rfq". */
 export function canAccessPath(
   role: string | undefined,
