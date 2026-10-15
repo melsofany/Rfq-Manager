@@ -49,8 +49,11 @@ import {
   employeesTable,
   sentLogTable,
   itemCategoriesTable,
+  purchaseOrdersTable,
+  purchaseOrderItemsTable,
+  customerPoItemsTable,
 } from "@workspace/db";
-import { eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, ilike, inArray, ne, or, sql, type SQL } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { canonicalDescription } from "../ai-assistant/sql-registry";
 import { canonicalPartNo, buildItemIdentity, itemsEquivalent } from "../ai-assistant/item-identity";
@@ -138,6 +141,20 @@ export interface PricePoint {
   employeeId: number | null;
   employeeName: string | null;
   isApproved: boolean;
+  /** The ERP article code of the quoted line — a key for the issued-PO match. */
+  lineItem: string | null;
+  /** The quoted line's part number — a key for the issued-PO match. */
+  partNo: string | null;
+  /** The customer-request line this quote's RFQ line was raised from. */
+  customerRfqItemId: number | null;
+  /**
+   * The supplier purchase order(s) issued for THIS quote, e.g. `PO-2026-000041`.
+   *
+   * Empty when no order was issued to that supplier for this article — and
+   * also when the only order issued was later CANCELLED, because a cancelled
+   * order is not an issued order and must never read as one.
+   */
+  poNos: string[];
 }
 
 export interface TrendSeriesPoint {
@@ -524,6 +541,10 @@ async function loadPricePoints(
       rfqId: rfqTable.id,
       internalRfqNo: rfqTable.internalRfqNo,
       customerRfqNo: rfqTable.customerRfqNo,
+      // Identity keys for the issued-PO match, taken from the quote's own line.
+      lineItem: rfqItemsTable.lineItem,
+      partNo: rfqItemsTable.partNo,
+      customerRfqItemId: rfqItemsTable.customerRfqItemId,
     })
     .from(offerItemsTable)
     .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
@@ -565,6 +586,10 @@ async function loadPricePoints(
       employeeId: empId,
       employeeName: empId != null ? (employeeName.get(empId) ?? null) : null,
       isApproved: r.isApproved ?? false,
+      lineItem: r.lineItem ?? null,
+      partNo: r.partNo ?? null,
+      customerRfqItemId: r.customerRfqItemId ?? null,
+      poNos: [],
     };
   });
 }
@@ -575,6 +600,136 @@ function pointsForCluster(cluster: ItemCluster, all: PricePoint[]): PricePoint[]
     cluster.members.filter((m) => m.rfqItemId != null).map((m) => m.rfqItemId as number),
   );
   return all.filter((p) => p.rfqItemId != null && ids.has(p.rfqItemId));
+}
+
+// ── Issued supplier POs ──────────────────────────────────────────────────────
+
+/** One live (non-cancelled) supplier-PO line, with the keys that link it. */
+export interface IssuedPoLine {
+  poNo: string;
+  supplierId: number | null;
+  rfqId: number | null;
+  lineItem: string | null;
+  partNo: string | null;
+  /** The customer-RFQ line this PO line was sourced from, when known. */
+  customerRfqItemId: number | null;
+}
+
+/** Case/whitespace-insensitive key for comparing a line item code. */
+function normLineItem(v: string | null | undefined): string {
+  return (v ?? "").trim().toLowerCase();
+}
+
+/**
+ * Resolve the supplier PO issued for a quote.
+ *
+ * A quote is one supplier's answer on one RFQ (`offers`), so the order that
+ * "covers" it is the PO raised FOR THAT RFQ TO THAT SUPPLIER — the same
+ * RFQ-level convention `resolvePoIssuedIds` (customer-po) uses. Which rung
+ * establishes that the order really covers THIS article, strongest first:
+ *
+ *   1. `customer_rfq_item_id` — both the quote's `rfq_item` and the PO line's
+ *      `customer_po_item` point at the same customer-request line. This is the
+ *      only rung that survives a PO raised from a customer request, where the
+ *      supplier PO may carry no `rfq_id` at all. Measured on live data it
+ *      resolves 23 of the 24 real quote→order links.
+ *   2. the line item code (`line_item`) — the ERP article code, stable across
+ *      the request and the order.
+ *   3. the part number, compared with `canonicalPartNo` so `LC1D 32 M7` and
+ *      `LC1D32M7` are one article.
+ *   4. the PO header's `rfq_id` — weakest, so it is tried last: it proves the
+ *      order belongs to the request but not that it covers this particular
+ *      line.
+ *
+ * Cancelled orders are excluded TWICE over: `po.status = 'cancelled'` (whole PO
+ * cancelled) and `line_status = 'cancelled'` (that one line cancelled). The
+ * second matters because cancelling a single supplier leaves the PO `sent` —
+ * live data has exactly that shape (`PO-2026-000036`).
+ */
+export function matchIssuedPos(quote: PricePoint, lines: IssuedPoLine[]): string[] {
+  if (quote.supplierId == null) return [];
+  const sameSupplier = lines.filter((l) => l.supplierId === quote.supplierId);
+  if (!sameSupplier.length) return [];
+
+  const collect = (rows: IssuedPoLine[]) => [...new Set(rows.map((r) => r.poNo))];
+
+  // Rung 1 — the customer-request line both sides were raised from.
+  if (quote.customerRfqItemId != null) {
+    const hit = sameSupplier.filter((l) => l.customerRfqItemId === quote.customerRfqItemId);
+    if (hit.length) return collect(hit);
+  }
+
+  // Rung 2 — the ERP article code.
+  const quoteLine = normLineItem(quote.lineItem);
+  if (quoteLine) {
+    const hit = sameSupplier.filter((l) => normLineItem(l.lineItem) === quoteLine);
+    if (hit.length) return collect(hit);
+  }
+
+  // Rung 3 — the part number.
+  const quotePart = canonicalPartNo(quote.partNo);
+  if (quotePart) {
+    const hit = sameSupplier.filter((l) => canonicalPartNo(l.partNo) === quotePart);
+    if (hit.length) return collect(hit);
+  }
+
+  // Rung 4 — the request itself (an order on this RFQ to this supplier).
+  if (quote.rfqId != null) {
+    const hit = sameSupplier.filter((l) => l.rfqId === quote.rfqId);
+    if (hit.length) return collect(hit);
+  }
+
+  return [];
+}
+
+/**
+ * Load every LIVE supplier-PO line with the keys a quote is matched on.
+ *
+ * Both cancellation shapes are filtered in SQL so a cancelled order can never
+ * reach the matcher and be displayed as an issued one.
+ */
+async function loadIssuedPoLines(): Promise<IssuedPoLine[]> {
+  const rows = await db
+    .select({
+      poNo: purchaseOrdersTable.internalPoNo,
+      supplierId: purchaseOrderItemsTable.supplierId,
+      rfqId: purchaseOrdersTable.rfqId,
+      lineItem: purchaseOrderItemsTable.lineItem,
+      partNo: purchaseOrderItemsTable.partNo,
+      customerRfqItemId: customerPoItemsTable.customerRfqItemId,
+    })
+    .from(purchaseOrderItemsTable)
+    .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
+    .leftJoin(
+      customerPoItemsTable,
+      eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
+    )
+    .where(
+      and(
+        ne(purchaseOrdersTable.status, "cancelled"),
+        ne(purchaseOrderItemsTable.lineStatus, "cancelled"),
+      ),
+    );
+
+  return rows.map((r) => ({
+    poNo: r.poNo,
+    supplierId: r.supplierId ?? null,
+    rfqId: r.rfqId ?? null,
+    lineItem: r.lineItem ?? null,
+    partNo: r.partNo ?? null,
+    customerRfqItemId: r.customerRfqItemId ?? null,
+  }));
+}
+
+/**
+ * Attach the issued PO number(s) to every price point.
+ *
+ * Each quote already carries the identity keys (`rfqItemId`, `supplierId`,
+ * `lineItem`, `partNo`, `customerRfqItemId`) straight from the join that loaded
+ * it, so this is a pure mapping — no extra query, and no key to keep in sync.
+ */
+export function attachIssuedPos(points: PricePoint[], lines: IssuedPoLine[]): PricePoint[] {
+  return points.map((p) => ({ ...p, poNos: matchIssuedPos(p, lines) }));
 }
 
 /**
@@ -719,18 +874,22 @@ router.get("/items/analysis/search", requireAuth, async (req, res): Promise<void
     200,
   );
 
-  const [supplierRows, customerRows, { vatRate }] = await Promise.all([
+  const [supplierRows, customerRows, { vatRate }, issuedPoLines] = await Promise.all([
     loadSupplierRows(itemMatch(q)),
     loadCustomerRows(customerItemMatch(q)),
     loadTaxSettings(),
+    loadIssuedPoLines(),
   ]);
 
   const clusters = clusterMembers([...supplierRows, ...customerRows]);
-  const prices = dedupePriceObservations(
-    await loadPricePoints(
-      clusters.flatMap((c) => c.members.map((m) => m.rfqItemId)),
-      vatRate,
+  const prices = attachIssuedPos(
+    dedupePriceObservations(
+      await loadPricePoints(
+        clusters.flatMap((c) => c.members.map((m) => m.rfqItemId)),
+        vatRate,
+      ),
     ),
+    issuedPoLines,
   );
   const categories = await categoryNames(
     clusters.map((c) => c.categoryId).filter((id): id is number => id != null),
@@ -761,6 +920,7 @@ router.get("/items/analysis/search", requireAuth, async (req, res): Promise<void
       totalQty: c.totalQty,
       lastRequestedAt: c.lastRequestedAt,
       supplierCount: suppliersByKey.get(c.key) ?? 0,
+      poIssuedCount: new Set(pointsForCluster(c, prices).flatMap((p) => p.poNos)).size,
       ...(statsByKey.get(c.key) ?? computePriceStats([])),
     }));
 
@@ -818,13 +978,16 @@ router.get("/items/analysis/item", requireAuth, async (req, res): Promise<void> 
     return;
   }
 
-  const points = sortByDate(
-    dedupePriceObservations(
-      await loadPricePoints(
-        cluster.members.map((m) => m.rfqItemId),
-        vatRate,
+  const points = attachIssuedPos(
+    sortByDate(
+      dedupePriceObservations(
+        await loadPricePoints(
+          cluster.members.map((m) => m.rfqItemId),
+          vatRate,
+        ),
       ),
     ),
+    await loadIssuedPoLines(),
   );
   const stats = computePriceStats(points);
   const categories = await categoryNames(cluster.categoryId != null ? [cluster.categoryId] : []);
@@ -861,6 +1024,15 @@ router.get("/items/analysis/item", requireAuth, async (req, res): Promise<void> 
     suppliers: summariseBySupplier(points),
     priceHistory: points,
     requests,
+    /**
+     * How many of the quotes shown actually had an order issued for them, and
+     * the distinct order numbers. Reported as a pair so the header can say
+     * «N من M تسعيرة صدر لها أمر» without the caller re-deriving it.
+     */
+    poSummary: {
+      quotedWithPo: points.filter((p) => p.poNos.length > 0).length,
+      poNumbers: [...new Set(points.flatMap((p) => p.poNos))].sort(),
+    },
     truncated: supplierRows.length >= SEARCH_ROW_CAP || customerRows.length >= SEARCH_ROW_CAP,
   });
 });

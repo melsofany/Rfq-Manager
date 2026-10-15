@@ -26,6 +26,7 @@ import {
   RefreshCw,
   History,
   BadgePercent,
+  FileCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,7 @@ interface AnalysisListItem extends PriceStats {
   totalQty: number;
   lastRequestedAt: string | null;
   supplierCount: number;
+  poIssuedCount: number;
 }
 
 interface PricePoint {
@@ -79,6 +81,8 @@ interface PricePoint {
   employeeId: number | null;
   employeeName: string | null;
   isApproved: boolean;
+  /** The supplier order(s) issued for this quote — empty when none, or when cancelled. */
+  poNos: string[];
 }
 
 interface SupplierSummary {
@@ -120,6 +124,7 @@ interface AnalysisDetail {
   suppliers: SupplierSummary[];
   priceHistory: PricePoint[];
   requests: RequestRow[];
+  poSummary: { quotedWithPo: number; poNumbers: string[] };
   truncated: boolean;
 }
 
@@ -272,6 +277,11 @@ function ItemRow({
         <span className="inline-flex items-center gap-1">
           <BadgePercent size={11} /> {item.pricedCount} سعر
         </span>
+        {item.poIssuedCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-emerald-700">
+            <FileCheck size={11} /> {item.poIssuedCount} أمر توريد
+          </span>
+        )}
         {item.lastRequestedAt && (
           <span className="inline-flex items-center gap-1">
             <CalendarClock size={11} /> {fmtDate(item.lastRequestedAt)}
@@ -414,7 +424,7 @@ function DetailPanel({ detail, loading }: { detail: AnalysisDetail | null; loadi
       </div>
 
       {/* Price statistics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2">
         <StatCard
           label="آخر سعر (صافي)"
           value={fmtMoney(s.lastPriceNet)}
@@ -429,6 +439,16 @@ function DetailPanel({ detail, loading }: { detail: AnalysisDetail | null; loadi
           label="عدد الأسعار"
           value={String(s.pricedCount)}
           hint={s.zeroPriceCount > 0 ? `+ ${s.zeroPriceCount} عرض بدون سعر` : "بدون عروض فارغة"}
+        />
+        <StatCard
+          label="أسعار صدر لها أمر توريد"
+          value={String(detail.poSummary?.quotedWithPo ?? 0)}
+          tone="green"
+          hint={
+            detail.poSummary?.poNumbers?.length
+              ? `${detail.poSummary.poNumbers.length} أمر توريد`
+              : "لا يوجد أمر توريد صادر"
+          }
         />
       </div>
       <p className="text-[11px] text-muted-foreground -mt-2">
@@ -553,6 +573,7 @@ function DetailPanel({ detail, loading }: { detail: AnalysisDetail | null; loadi
                   <th className="text-center font-medium px-3 py-2">السعر (كما ورد)</th>
                   <th className="text-center font-medium px-3 py-2">صافي بدون ض.ق.م</th>
                   <th className="text-center font-medium px-3 py-2">الضريبة</th>
+                  <th className="text-center font-medium px-3 py-2">أمر التوريد للمورد</th>
                   <th className="text-right font-medium px-3 py-2">الموظف المسؤول</th>
                   <th className="text-right font-medium px-3 py-2">طلب التسعير</th>
                 </tr>
@@ -590,6 +611,22 @@ function DetailPanel({ detail, loading }: { detail: AnalysisDetail | null; loadi
                     </td>
                     <td className="px-3 py-2 text-center text-muted-foreground">
                       {p.taxIncluded ? "شامل" : "غير شامل"}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {p.poNos.length === 0 ? (
+                        <span className="text-muted-foreground">لم يصدر</span>
+                      ) : (
+                        <span className="inline-flex flex-wrap justify-center gap-1">
+                          {p.poNos.map((po) => (
+                            <Link key={po} href={`/purchase-orders?q=${encodeURIComponent(po)}`}>
+                              <a className="inline-flex items-center gap-1 font-mono font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 hover:bg-emerald-100">
+                                {po}
+                                <ExternalLink size={9} />
+                              </a>
+                            </Link>
+                          ))}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-foreground">{p.employeeName ?? "—"}</td>
                     <td className="px-3 py-2">

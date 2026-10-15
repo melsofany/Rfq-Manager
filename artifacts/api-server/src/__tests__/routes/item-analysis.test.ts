@@ -24,6 +24,7 @@ vi.mock("../../middlewares/auth", () => ({
 
 vi.mock("drizzle-orm", () => ({
   eq: (left: any, right: any) => ({ __op: "eq", left, right }),
+  ne: (left: any, right: any) => ({ __op: "ne", left, right }),
   and: (...args: any[]) => ({ __op: "and", args }),
   or: (...args: any[]) => ({ __op: "or", args }),
   inArray: (left: any, right: any) => ({ __op: "inArray", left, right }),
@@ -94,6 +95,28 @@ const employeesTable = { _: "employees", id: "id", name: "name" };
 const sentLogTable = { _: "sentLog", id: "id", employeeId: "employeeId" };
 const itemCategoriesTable = { _: "itemCategories", id: "id", name: "name" };
 const taxSettingsTable = { _: "taxSettings" };
+const purchaseOrdersTable = {
+  _: "purchaseOrders",
+  id: "id",
+  internalPoNo: "internalPoNo",
+  status: "status",
+  rfqId: "rfqId",
+};
+const purchaseOrderItemsTable = {
+  _: "purchaseOrderItems",
+  id: "id",
+  poId: "poId",
+  supplierId: "supplierId",
+  lineItem: "lineItem",
+  partNo: "partNo",
+  lineStatus: "lineStatus",
+  customerPoItemId: "customerPoItemId",
+};
+const customerPoItemsTable = {
+  _: "customerPoItems",
+  id: "id",
+  customerRfqItemId: "customerRfqItemId",
+};
 
 // ── Per-test fixtures ────────────────────────────────────────────────────────
 let supplierItemRows: any[];
@@ -102,6 +125,9 @@ let priceRows: any[];
 let employeeRows: any[];
 let categoryRows: any[];
 let taxRows: any[];
+let poLineRows: any[];
+/** The `where(...)` argument the issued-PO query was built with. */
+let poWhereArg: any;
 let selectCount: number;
 let offerSeq: number;
 
@@ -120,6 +146,28 @@ function chainable(value: any): any {
   return obj;
 }
 
+/**
+ * The issued-PO query's builder. Records the `where(...)` argument so a test can
+ * assert the cancellation filter is really applied — the returned rows bypass
+ * SQL, so without this the filter could be deleted and every test still pass.
+ */
+function poChainable(value: any): any {
+  const obj = chainable(value);
+  obj.where = vi.fn((arg: any) => {
+    poWhereArg = arg;
+    return obj;
+  });
+  return obj;
+}
+
+/** Every `ne(...)` comparison inside a (possibly nested) `and(...)` clause. */
+function neComparisons(node: any): Array<{ left: unknown; right: unknown }> {
+  if (!node || typeof node !== "object") return [];
+  if (node.__op === "ne") return [{ left: node.left, right: node.right }];
+  if (node.__op === "and") return (node.args ?? []).flatMap(neComparisons);
+  return [];
+}
+
 const dbMock: any = {
   select: vi.fn((_arg?: any) => {
     selectCount += 1;
@@ -131,6 +179,7 @@ const dbMock: any = {
         if (table === employeesTable) return chainable(employeeRows);
         if (table === itemCategoriesTable) return chainable(categoryRows);
         if (table === taxSettingsTable) return chainable(taxRows);
+        if (table === purchaseOrderItemsTable) return poChainable(poLineRows);
         return chainable([]);
       }),
     };
@@ -151,6 +200,9 @@ vi.mock("@workspace/db", () => ({
   sentLogTable,
   itemCategoriesTable,
   taxSettingsTable,
+  purchaseOrdersTable,
+  purchaseOrderItemsTable,
+  customerPoItemsTable,
 }));
 
 let testApp: express.Express;
@@ -179,6 +231,8 @@ beforeEach(() => {
   employeeRows = [];
   categoryRows = [];
   taxRows = [{ id: 1, vatRate: "14", withholdingRate: "3" }];
+  poLineRows = [];
+  poWhereArg = undefined;
   selectCount = 0;
   offerSeq = 1000;
 });
@@ -236,6 +290,10 @@ function pt(price: number, date: string | null, opts: Partial<PricePoint> = {}):
     employeeId: null,
     employeeName: null,
     isApproved: false,
+    lineItem: null,
+    partNo: null,
+    customerRfqItemId: null,
+    poNos: [],
     ...opts,
   };
 }
@@ -396,6 +454,10 @@ function priceRow(over: any = {}) {
     rfqId: 1,
     internalRfqNo: "CRQ-2026-000001",
     customerRfqNo: null,
+    // Identity keys the issued-PO match reads off the quote's own line.
+    lineItem: "1531.032.GENRAL.7513",
+    partNo: "LC1D32M7",
+    customerRfqItemId: null,
     ...over,
   };
 }
@@ -634,5 +696,246 @@ describe("GET /items/analysis/item", () => {
     expect(body.suppliers).toHaveLength(2); // the empty quote is not a supplier price
     expect(body.requests).toHaveLength(1);
     expect(body.requests[0].customerRfqNo).toBe("CRFQ-2026-000010");
+  });
+});
+
+// ── Issued supplier PO number on each price ──────────────────────────────────
+//
+// The operator's requirement: the supplier PO number must appear beside a price
+// WHEN an order was issued to that supplier for that article, and must NOT
+// appear when the order was cancelled.
+
+/** A live PO line as `loadIssuedPoLines` returns it (already cancellation-filtered). */
+function poLine(over: any = {}) {
+  return {
+    poNo: "PO-2026-000041",
+    supplierId: 1,
+    rfqId: 1,
+    lineItem: "1531.032.GENRAL.7513",
+    partNo: "LC1D32M7",
+    customerRfqItemId: null,
+    ...over,
+  };
+}
+
+describe("matchIssuedPos", () => {
+  it("links on the customer-request line both the quote and the PO were raised from", () => {
+    // The strongest rung, and the only one that survives a PO with no rfq_id.
+    const quote = pt(100, "2026-01-01", {
+      supplierId: 7,
+      customerRfqItemId: 900,
+      rfqId: null,
+      lineItem: null,
+      partNo: null,
+    });
+    const lines = [
+      poLine({
+        poNo: "PO-1",
+        supplierId: 7,
+        rfqId: null,
+        lineItem: null,
+        partNo: null,
+        customerRfqItemId: 900,
+      }),
+      poLine({
+        poNo: "PO-2",
+        supplierId: 7,
+        rfqId: null,
+        lineItem: null,
+        partNo: null,
+        customerRfqItemId: 901,
+      }),
+    ];
+    expect(mod.matchIssuedPos(quote, lines)).toEqual(["PO-1"]);
+  });
+
+  it("links on the line item code when there is no shared customer-request line", () => {
+    const quote = pt(100, "2026-01-01", {
+      supplierId: 7,
+      lineItem: "1531.032.GENRAL.7513",
+      partNo: null,
+      customerRfqItemId: null,
+    });
+    const lines = [
+      poLine({
+        poNo: "PO-A",
+        supplierId: 7,
+        lineItem: "1531.032.GENRAL.7513",
+        partNo: null,
+        customerRfqItemId: null,
+      }),
+      poLine({
+        poNo: "PO-B",
+        supplierId: 7,
+        lineItem: "1531.032.GENRAL.9999",
+        partNo: null,
+        customerRfqItemId: null,
+      }),
+    ];
+    expect(mod.matchIssuedPos(quote, lines)).toEqual(["PO-A"]);
+  });
+
+  it("links on the part number even when it is written with spaces and dashes", () => {
+    // `LC1D 32 M7` and `LC1D32M7` are one article — the ERP prints both forms.
+    const quote = pt(100, "2026-01-01", {
+      supplierId: 7,
+      lineItem: null,
+      partNo: "LC1D 32 M7",
+      customerRfqItemId: null,
+    });
+    const lines = [
+      poLine({
+        poNo: "PO-C",
+        supplierId: 7,
+        lineItem: null,
+        partNo: "LC1D32M7",
+        customerRfqItemId: null,
+      }),
+    ];
+    expect(mod.matchIssuedPos(quote, lines)).toEqual(["PO-C"]);
+  });
+
+  it("falls back to the request itself only when no stronger rung matched", () => {
+    const quote = pt(100, "2026-01-01", {
+      supplierId: 7,
+      rfqId: 55,
+      lineItem: "X1",
+      partNo: null,
+      customerRfqItemId: null,
+    });
+    const lines = [
+      poLine({
+        poNo: "PO-D",
+        supplierId: 7,
+        rfqId: 55,
+        lineItem: "Y2",
+        partNo: null,
+        customerRfqItemId: null,
+      }),
+    ];
+    expect(mod.matchIssuedPos(quote, lines)).toEqual(["PO-D"]);
+  });
+
+  it("never links a PO issued to a DIFFERENT supplier", () => {
+    const quote = pt(100, "2026-01-01", { supplierId: 7, lineItem: "L1", partNo: null });
+    const lines = [poLine({ poNo: "PO-E", supplierId: 8, lineItem: "L1", partNo: null })];
+    expect(mod.matchIssuedPos(quote, lines)).toEqual([]);
+  });
+
+  it("returns nothing when the supplier has no order at all", () => {
+    const quote = pt(100, "2026-01-01", { supplierId: 7 });
+    expect(mod.matchIssuedPos(quote, [])).toEqual([]);
+  });
+
+  it("collects every matching order once, de-duplicated", () => {
+    const quote = pt(100, "2026-01-01", {
+      supplierId: 7,
+      lineItem: "L1",
+      partNo: null,
+      customerRfqItemId: null,
+    });
+    const lines = [
+      poLine({ poNo: "PO-F", supplierId: 7, lineItem: "L1", partNo: null }),
+      poLine({ poNo: "PO-F", supplierId: 7, lineItem: "L1", partNo: null }),
+      poLine({ poNo: "PO-G", supplierId: 7, lineItem: "L1", partNo: null }),
+    ];
+    expect(mod.matchIssuedPos(quote, lines)).toEqual(["PO-F", "PO-G"]);
+  });
+});
+
+describe("issued supplier PO on the price history", () => {
+  it("shows the PO number beside the price of the supplier who got the order", async () => {
+    supplierItemRows = [supplierItem()];
+    priceRows = [
+      priceRow({
+        offerId: 1,
+        rfqItemId: 1,
+        supplierId: 1,
+        supplierName: "H-EMAS",
+        price: "3180",
+        offerCreatedAt: new Date("2026-01-15T00:00:00Z"),
+      }),
+      priceRow({
+        offerId: 2,
+        rfqItemId: 1,
+        supplierId: 2,
+        supplierName: "هاي فولت",
+        price: "3460",
+        offerCreatedAt: new Date("2026-03-01T00:00:00Z"),
+      }),
+    ];
+    // Only H-EMAS was given the order.
+    poLineRows = [poLine({ poNo: "PO-2026-000041", supplierId: 1 })];
+
+    const res = await request(testApp).get("/api/items/analysis/item?key=pn%3ALC1D32M7");
+    expect(res.status).toBe(200);
+    const bySupplier = Object.fromEntries(
+      res.body.priceHistory.map((p: any) => [p.supplierName, p.poNos]),
+    );
+    expect(bySupplier["H-EMAS"]).toEqual(["PO-2026-000041"]);
+    // The other supplier quoted but was never ordered from.
+    expect(bySupplier["هاي فولت"]).toEqual([]);
+
+    expect(res.body.poSummary).toEqual({
+      quotedWithPo: 1,
+      poNumbers: ["PO-2026-000041"],
+    });
+  });
+
+  it("does NOT show an order that was cancelled", async () => {
+    // The loadIssuedPoLines query filters cancelled rows in SQL, so a cancelled
+    // order is simply absent from `poLineRows` here — which is exactly what the
+    // operator asked for: an cancelled order must not read as an issued one.
+    supplierItemRows = [supplierItem()];
+    priceRows = [
+      priceRow({
+        offerId: 1,
+        rfqItemId: 1,
+        supplierId: 1,
+        supplierName: "H-EMAS",
+        price: "3180",
+        offerCreatedAt: new Date("2026-01-15T00:00:00Z"),
+      }),
+    ];
+    poLineRows = [];
+
+    const res = await request(testApp).get("/api/items/analysis/item?key=pn%3ALC1D32M7");
+    expect(res.status).toBe(200);
+    expect(res.body.priceHistory[0].poNos).toEqual([]);
+    expect(res.body.poSummary.quotedWithPo).toBe(0);
+    expect(res.body.poSummary.poNumbers).toEqual([]);
+  });
+
+  it("filters cancelled orders in SQL, on BOTH the header and the line", async () => {
+    // The test above passes even with the filter deleted, because the mock's
+    // rows never go through SQL. This asserts the filter itself: both
+    // cancellation shapes must be excluded, and `'cancelled'` must be the value
+    // compared — an inverted or missing comparison would let a cancelled order
+    // be displayed as an issued one.
+    supplierItemRows = [supplierItem()];
+    priceRows = [priceRow({ rfqItemId: 1 })];
+    poLineRows = [poLine()];
+
+    await request(testApp).get("/api/items/analysis/item?key=pn%3ALC1D32M7");
+
+    const comparisons = neComparisons(poWhereArg);
+    const compared = comparisons.map((c) => [c.left, c.right]);
+    expect(compared).toContainEqual([purchaseOrderItemsTable.lineStatus, "cancelled"]);
+    expect(compared).toContainEqual([purchaseOrdersTable.status, "cancelled"]);
+    // Both filters must be present, i.e. joined by `and`, not `or`.
+    expect(comparisons).toHaveLength(2);
+  });
+
+  it("reports the issued-order count per item on the search list", async () => {
+    supplierItemRows = [supplierItem()];
+    priceRows = [
+      priceRow({ offerId: 1, rfqItemId: 1, supplierId: 1, price: "3180" }),
+      priceRow({ offerId: 2, rfqItemId: 1, supplierId: 2, price: "3460" }),
+    ];
+    poLineRows = [poLine({ poNo: "PO-2026-000041", supplierId: 1 })];
+
+    const res = await request(testApp).get("/api/items/analysis/search?q=LC1D32M7");
+    expect(res.status).toBe(200);
+    expect(res.body.items[0].poIssuedCount).toBe(1);
   });
 });
