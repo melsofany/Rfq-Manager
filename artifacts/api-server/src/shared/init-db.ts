@@ -2386,6 +2386,46 @@ export async function initDb(): Promise<void> {
       )
     `);
     logger.info("initDb: HR attendance tables ensured");
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_leave_types (
+        id SERIAL PRIMARY KEY,
+        code TEXT NOT NULL UNIQUE,
+        name_ar TEXT NOT NULL,
+        name_en TEXT NOT NULL,
+        annual_days INTEGER NOT NULL DEFAULT 0,
+        paid BOOLEAN NOT NULL DEFAULT true,
+        requires_certificate BOOLEAN NOT NULL DEFAULT false,
+        is_active BOOLEAN NOT NULL DEFAULT true
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_leave_requests (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL,
+        leave_type_id INTEGER NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        days NUMERIC(6,1) NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reason TEXT,
+        certificate_note TEXT,
+        decided_by INTEGER,
+        decided_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS hr_leave_requests_emp_idx ON hr_leave_requests (employee_id, start_date)`,
+    );
+    // Seed default leave types once (ON CONFLICT keeps any values the HR team edited).
+    await client.query(`
+      INSERT INTO hr_leave_types (code, name_ar, name_en, annual_days, paid, requires_certificate) VALUES
+        ('annual',  'إجازة سنوية',  'Annual leave',  21, true,  false),
+        ('casual',  'إجازة عارضة',  'Casual leave',   6, true,  false),
+        ('sick',    'إجازة مرضية',  'Sick leave',     0, true,  true),
+        ('unpaid',  'إجازة بدون أجر', 'Unpaid leave', 0, false, false)
+      ON CONFLICT (code) DO NOTHING
+    `);
 
     logger.info("initDb: seed complete");
   } catch (err) {

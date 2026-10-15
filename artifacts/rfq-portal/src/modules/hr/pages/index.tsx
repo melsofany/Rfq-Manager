@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { IdCard } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-type Tab = "attendance" | "employees" | "devices";
+type Tab = "attendance" | "leave" | "employees" | "devices";
 
 interface AttendanceRow {
   employeeId: number;
@@ -63,6 +63,7 @@ export default function HrPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "attendance", label: t("hr.tab.attendance") },
+    { id: "leave", label: t("hr.tab.leave") },
     { id: "employees", label: t("hr.tab.employees") },
     { id: "devices", label: t("hr.tab.devices") },
   ];
@@ -95,6 +96,7 @@ export default function HrPage() {
         </div>
 
         {tab === "attendance" && <AttendanceTab />}
+        {tab === "leave" && <LeaveTab />}
         {tab === "employees" && <EmployeesTab />}
         {tab === "devices" && <DevicesTab />}
       </div>
@@ -435,6 +437,286 @@ function DevicesTab() {
           </table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+interface LeaveType {
+  id: number;
+  nameAr: string;
+  nameEn: string;
+  annualDays: number;
+  paid: boolean;
+  requiresCertificate: boolean;
+  isActive: boolean;
+}
+interface LeaveRequest {
+  id: number;
+  employeeId: number;
+  employeeName: string;
+  leaveTypeId: number;
+  leaveNameAr: string;
+  startDate: string;
+  endDate: string;
+  days: string;
+  status: string;
+  reason: string | null;
+}
+interface BalanceRow {
+  employeeId: number;
+  employeeNo: string;
+  fullName: string;
+  balances: {
+    leaveTypeId: number;
+    nameAr: string;
+    allocated: number;
+    used: number;
+    pending: number;
+    remaining: number;
+  }[];
+}
+
+function LeaveTab() {
+  const { t } = useLanguage();
+  const [types, setTypes] = useState<LeaveType[]>([]);
+  const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [employees, setEmployees] = useState<HrEmployee[]>([]);
+  const [balances, setBalances] = useState<BalanceRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    employeeId: "",
+    leaveTypeId: "",
+    startDate: todayStr(),
+    endDate: todayStr(),
+    reason: "",
+    certificateNote: "",
+  });
+  const selectedType = types.find((x) => String(x.id) === form.leaveTypeId);
+
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      const [ty, rq, emp, bal] = await Promise.all([
+        api<LeaveType[]>("/hr/leave-types"),
+        api<LeaveRequest[]>("/hr/leave-requests"),
+        api<HrEmployee[]>("/hr/employees"),
+        api<{ rows: BalanceRow[] }>(`/hr/leave-balances?year=${new Date().getFullYear()}`),
+      ]);
+      setTypes(ty);
+      setRequests(rq);
+      setEmployees(emp.filter((e) => e.status === "active"));
+      setBalances(bal.rows);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      setError(null);
+      await api("/hr/leave-requests", {
+        method: "POST",
+        body: JSON.stringify({
+          employeeId: Number(form.employeeId),
+          leaveTypeId: Number(form.leaveTypeId),
+          startDate: form.startDate,
+          endDate: form.endDate,
+          reason: form.reason,
+          certificateNote: form.certificateNote,
+        }),
+      });
+      setForm({ ...form, reason: "", certificateNote: "" });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function act(id: number, path: string, body?: object) {
+    try {
+      setError(null);
+      await api(`/hr/leave-requests/${id}/${path}`, {
+        method: "PATCH",
+        body: JSON.stringify(body ?? {}),
+      });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  const input = "border rounded px-2 py-1.5 bg-background text-sm";
+
+  return (
+    <div className="space-y-6">
+      <form onSubmit={submit} className="flex flex-wrap gap-2 items-end">
+        <select
+          className={input}
+          value={form.employeeId}
+          onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+          required
+        >
+          <option value="">{t("hr.leave.pickEmployee")}</option>
+          {employees.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.fullName}
+            </option>
+          ))}
+        </select>
+        <select
+          className={input}
+          value={form.leaveTypeId}
+          onChange={(e) => setForm({ ...form, leaveTypeId: e.target.value })}
+          required
+        >
+          <option value="">{t("hr.leave.pickType")}</option>
+          {types
+            .filter((x) => x.isActive)
+            .map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.nameAr}
+              </option>
+            ))}
+        </select>
+        <input
+          type="date"
+          className={input}
+          value={form.startDate}
+          onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+          required
+        />
+        <input
+          type="date"
+          className={input}
+          value={form.endDate}
+          onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+          required
+        />
+        <input
+          className={input}
+          placeholder={t("hr.leave.reason")}
+          value={form.reason}
+          onChange={(e) => setForm({ ...form, reason: e.target.value })}
+        />
+        {selectedType?.requiresCertificate && (
+          <input
+            className={input}
+            placeholder={t("hr.leave.certificate")}
+            value={form.certificateNote}
+            onChange={(e) => setForm({ ...form, certificateNote: e.target.value })}
+            required
+          />
+        )}
+        <Button type="submit">{t("hr.leave.submit")}</Button>
+      </form>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <Card>
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="p-2 text-start">{t("hr.col.name")}</th>
+                <th className="p-2 text-start">{t("hr.leave.type")}</th>
+                <th className="p-2 text-start">{t("hr.leave.from")}</th>
+                <th className="p-2 text-start">{t("hr.leave.to")}</th>
+                <th className="p-2 text-start">{t("hr.leave.days")}</th>
+                <th className="p-2 text-start">{t("hr.col.status")}</th>
+                <th className="p-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map((r) => (
+                <tr key={r.id} className="border-t">
+                  <td className="p-2">{r.employeeName}</td>
+                  <td className="p-2">{r.leaveNameAr}</td>
+                  <td className="p-2">{r.startDate}</td>
+                  <td className="p-2">{r.endDate}</td>
+                  <td className="p-2">{Number(r.days)}</td>
+                  <td className="p-2">{t(`hr.leave.status.${r.status}`)}</td>
+                  <td className="p-2 text-end space-x-1 rtl:space-x-reverse">
+                    {r.status === "pending" && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => act(r.id, "decision", { decision: "approve" })}
+                        >
+                          {t("hr.leave.approve")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => act(r.id, "decision", { decision: "reject" })}
+                        >
+                          {t("hr.leave.reject")}
+                        </Button>
+                      </>
+                    )}
+                    {(r.status === "pending" || r.status === "approved") && (
+                      <Button size="sm" variant="outline" onClick={() => act(r.id, "cancel")}>
+                        {t("hr.leave.cancel")}
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {requests.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                    {t("hr.leave.empty")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <div>
+        <h2 className="text-lg font-semibold mb-2">
+          {t("hr.leave.balances")} {new Date().getFullYear()}
+        </h2>
+        <Card>
+          <CardContent className="p-0 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-muted-foreground">
+                <tr>
+                  <th className="p-2 text-start">{t("hr.col.name")}</th>
+                  {types[0] &&
+                    balances[0]?.balances.map((b) => (
+                      <th key={b.leaveTypeId} className="p-2 text-start">
+                        {b.nameAr}
+                      </th>
+                    ))}
+                </tr>
+              </thead>
+              <tbody>
+                {balances.map((row) => (
+                  <tr key={row.employeeId} className="border-t">
+                    <td className="p-2">{row.fullName}</td>
+                    {row.balances.map((b) => (
+                      <td key={b.leaveTypeId} className="p-2">
+                        {b.remaining} / {b.allocated}
+                        {b.pending > 0 && (
+                          <span className="text-amber-600 ms-1">
+                            ({b.pending} {t("hr.leave.pendingShort")})
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
