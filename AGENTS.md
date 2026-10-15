@@ -3754,3 +3754,68 @@ form + detail edit + read-only card + Excel import mapping/template).
   الحرّاس تفشل عند تعطيل الإصلاح (TDD مُتحقَّق). **1490 api-server + 68 portal**؛ tsc
   (libs/api-server/portal) + prettier + البناءان نظيفة.
 
+
+## Item price analysis tab — «تحليل البنود والاتجاه السعري» (feat/items-price-analysis)
+
+New tab on `/items`. Search an item by description / part number / line item,
+pick it, then read the full analysis. Built because the existing `/items/search`
+returns one card PER `rfq_item`: the same article quoted on ten RFQs appears ten
+times, so no trend can be read from it.
+
+- **Backend** `modules/rfq/item-analysis.ts` (mounted in `modules/rfq/index.ts`):
+  `GET /items/analysis/search?q=&limit=` (picker list) and
+  `GET /items/analysis/item?key=<clusterKey>` (full analysis). Both behind
+  `requireAuth`. Neither is in the OpenAPI spec — the portal calls them with
+  direct `fetch(..., {credentials:"include"})`, same pattern as
+  receipts/deliveries/accounts.
+- **Identity is the whole point.** `clusterKeyOf` = part no → ERP line-item code
+  → folded description. `looksLikeErpCode` refuses a short bare row number
+  (`10`) so two unrelated rows numbered 10 never merge. `clusterMembers` folds a
+  description-only row into a part-numbered cluster **only when exactly ONE**
+  cluster matches (`itemsEquivalent` from `item-identity.ts`); an ambiguous match
+  stays separate rather than being attributed to the wrong article. Two different
+  part numbers never merge.
+- **Prices are compared net of VAT.** `netOfTax` (accounts/tax) is the single
+  convention; the raw quoted figure is still shown in the history. Comparing a
+  `tax_included` quote against an exclusive one reports a price move that never
+  happened — the live check is 114 incl. == 100 net at 14%.
+- **An empty quote is not a price.** Suppliers routinely submit a 0 quote;
+  counting those drags the average to zero. They are counted separately
+  (`zeroPriceCount`) and shown as «بدون سعر».
+- **Trend across HALVES, not first-vs-last.** `computePriceStats` averages the
+  older half vs the newer half, so one outlier cannot flip the direction
+  (100/1000/100/100 reads `down -81.8%`, where first-vs-last says flat). Fewer
+  than `MIN_TREND_POINTS` (3) priced quotes returns `insufficient` rather than a
+  guessed direction.
+- **One quote = ONE observation (`dedupePriceObservations`).** A supplier's quote
+  is stored once per RFQ line, so an RFQ listing the same article on three lines
+  carries three rows for a SINGLE price — counted three times it triple-weights
+  that quote in every average. Key is `(offerId, price, priceNet)`; two DIFFERENT
+  prices from the same offer stay separate (that genuinely is two observations).
+  Verified live: 27 rows → 20 observations.
+- **Search matches the NORMALISED term.** `normalizeSearchToken` +
+  `buildItemMatch` OR the raw phrase (prose, «circuit breaker») with the
+  normalised form over all three identity columns. The operator types `LC1D32M7`
+  while the ERP stores `LC1D 32 M7` — a raw substring match finds nothing and the
+  item looks absent. **Verified live: the picker list and the detail now agree
+  (42 requests both ways)**, where before the fix the list said 15 and the detail
+  said 42 for the same key.
+- **Frontend** `modules/reports/pages/item-analysis.tsx` (`ItemAnalysisTab`):
+  search box, item picker (codes, description, request/supplier/price counts,
+  min/avg/last price, direction badge), detail panel with 6 stat cards, a recharts
+  monthly trend, a per-supplier table, the full quote history (date, supplier,
+  approved flag, raw price, net price, VAT basis, responsible employee, RFQ link)
+  and the customer requests it appeared on. Deep link `/items?tab=analysis&q=…`.
+- **Permission** `items:analysis` under the `items` page, in `ITEMS_TABS` so
+  `manager`/`purchasing` get it with the rest of the tab bar (a partial grant
+  would render a dead-end tab bar).
+- **Tests**: `__tests__/routes/item-analysis.test.ts` (22). **10 of them fail
+  against the naive implementation they replace** — verified by reverting each
+  guard in turn (VAT normalisation, zero-price handling, clustering, dedupe,
+  normalised search). **1507 api-server + 68 portal tests** pass; tsc
+  (libs + api-server + portal) clean; repo-wide prettier clean; both builds clean;
+  the new routes return 401 (not 404) on the built server.
+- **Deploy**: pending — the user-supplied `ghp_Whp14…` token is **invalid**
+  (`401 Bad credentials`) and the environment `$GITHUB_TOKEN` is read-only
+  (`403 Permission … denied`), so the branch could not be pushed. A fresh `ghp_`
+  token with `repo` scope is needed to push + open the PR.

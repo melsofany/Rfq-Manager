@@ -54,7 +54,9 @@ describe("item categories live under the items page", () => {
   it("registers items:categories as a tab of the items group", () => {
     const node = PERMISSION_CATALOG.find((n) => n.key === "items");
     expect(node?.children?.map((c) => c.key)).toContain("items:categories");
+    expect(node?.children?.map((c) => c.key)).toContain("items:analysis");
     expect(ALL_PERMISSION_KEYS).toContain("items:categories");
+    expect(ALL_PERMISSION_KEYS).toContain("items:analysis");
   });
 
   it("no longer exposes item-categories as a standalone page", () => {
@@ -70,7 +72,7 @@ describe("item categories live under the items page", () => {
 
   it("grants the whole items tab bar together so navigation is never a dead end", () => {
     for (const role of ["manager", "purchasing"] as const) {
-      for (const tab of ["items:search", "items:sheet", "items:categories"]) {
+      for (const tab of ["items:search", "items:analysis", "items:sheet", "items:categories"]) {
         expect(ROLE_DEFAULTS[role]).toContain(tab);
       }
     }
