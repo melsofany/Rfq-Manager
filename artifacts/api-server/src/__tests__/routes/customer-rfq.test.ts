@@ -148,7 +148,8 @@ let catItemRow: { id: number; categoryId: number | null } | null = null;
 // Extra categories attached to the item (junction rows).
 let extraCatRows: Array<{ categoryId: number; employeeId: number | null }> = [];
 // item_categories rows returned for name resolution.
-let itemCategoryRows: Array<{ id: number; name: string }> = [];
+let itemCategoryRows: Array<{ id: number; name: string; kind?: string; parentId?: number | null }> =
+  [];
 // employee_categories rows (category → owner) for coverage resolution.
 let ownerRows: Array<{ categoryId: number; employeeId: number; isPrimary: boolean }> = [];
 // Junction rows written by the PUT (replaced set).
