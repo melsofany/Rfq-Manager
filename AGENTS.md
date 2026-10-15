@@ -3699,3 +3699,28 @@ form + detail edit + read-only card + Excel import mapping/template).
 - اختبارات الحراسة: `item-assignment.test.ts` (+2: التخصيص→المجال، الماركة→بلا مسؤول)،
   `item-classification.test.ts` (القاطع→كهرباء+اقتراح قواطع). **1467 api-server + 68 portal**؛
   tsc + prettier + البناءان نظيفة. لم يُدفع/يُفتح PR (بانتظار إقرار المشغّل).
+
+## إعادة تسمية التصنيف لا تُحدّث نص `suppliers.category` (بلاغ المشغّل — «elec → كهرباء»)
+
+- **العَرَض**: بعد تسمية «elec» → «كهرباء» لم يجد المشغّل أي مورد تحت «كهرباء»، والمورد
+  الذي كان في «elec» ظلّ تحته. ليس فقدان بيانات — بل **عدم مزامنة نصّية**.
+- **السبب**: `suppliers.category` عمود **نصّي حرّ** يحمل **أسماء** تصنيفات مفصولة بفواصل
+  (وليس `FK`)، وقائمة الموردين تُرشّح بالاسم بالضبط (`eq(suppliersTable.category, name)`
+  + أنماط `ilike` للفواصل). إعادة التسمية حرّكت `supplier_categories.name` و
+  `item_categories.name` فقط، فبقي كل صف مورد يكتب الاسم القديم → الفلتر لا يجد شيئًا.
+- **`supplier_categories` قائمة منفصلة** عن `item_categories`، فصف «elec» فيها يعيد
+  إنشاء تصنيف بند «elec» عند كل إقلاع (والمرآة أحادية الاتجاه `ON CONFLICT DO NOTHING`).
+- **الإصلاح**:
+  - `shared/category-rename.ts` — `rewriteSupplierCategoryName(old,new)`: UPDATE خام
+    يعيد كتابة `suppliers.category` في مكانه، مطابقة `lower(trim())` غير حسّاسة لحالة
+    الأحرف، يحافظ على باقي التصنيفات في القيمة المفصولة بفواصل، ولا يفعل شيئًا لو تساوى
+    الاسمان. يُستدعى من **كلا** مساري إعادة التسمية (`users/categories.ts` و
+    `rfq/item-categories.ts` — الثاني يقرأ الاسم السابق أولًا).
+  - `init-db.ts`: (1) توحيد `supplier_categories` (حذف البدائل عند وجود «كهرباء»، وإلا
+    تسمية صف واحد — حذف الباقي أولًا لعدم خرق فهرس الاسم الفريد)؛ (2) إعادة كتابة
+    `suppliers.category` للنص القديم. كلٌّ في `client.query` مستقلة.
+- **قاعدة عامة**: أي حقل يخزّن اسمًا نصيًا (لا `FK`) يجب أن يُعيد كتابته عند إعادة
+  التسمية، وإلا انفصلت الواجهة عن البيانات بصمت. أضف الجدول الجديد إلى قائمة الإصلاح.
+- **TDD**: `supplier-category-rename.test.ts` (2)، حارس `item-categories` (+1)، وحرّاس
+  `init-db` المصدرية (+2) — الأربعة تفشل ضد الكود قبل الإصلاح. **1480 api-server + 68
+  portal**؛ tsc + prettier + البناءان نظيفة.

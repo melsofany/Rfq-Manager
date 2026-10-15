@@ -24,6 +24,7 @@ import {
 import { eq, and, asc, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { isUniqueViolation } from "../../shared/pg-errors";
+import { rewriteSupplierCategoryName } from "../../shared/category-rename";
 
 const router = Router();
 
@@ -355,6 +356,19 @@ router.patch(
       updates.parentId = parentId == null ? null : Number(parentId);
     }
 
+    // The OLD name is needed to rewrite `suppliers.category` (free text, not an
+    // FK) after a rename — otherwise suppliers keep the old spelling and the
+    // supplier-list filter finds none under the new name.
+    let previousName: string | null = null;
+    if (name !== undefined) {
+      const [prev] = await db
+        .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+        .from(itemCategoriesTable)
+        .where(eq(itemCategoriesTable.id, id))
+        .limit(1);
+      previousName = prev?.name ?? null;
+    }
+
     const [row] = await db
       .update(itemCategoriesTable)
       .set(updates)
@@ -369,6 +383,9 @@ router.patch(
     if (row.kind === "subcategory" && row.parentId == null) {
       res.status(400).json({ error: "التخصص الفرعي يجب أن يتبع مجالًا وظيفيًا" });
       return;
+    }
+    if (previousName && previousName !== row.name) {
+      await rewriteSupplierCategoryName(previousName, row.name);
     }
     const added =
       aliases !== undefined

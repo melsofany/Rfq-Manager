@@ -288,4 +288,34 @@ describe("init-db migrations", () => {
       );
     }
   });
+
+  it("rewrites `suppliers.category` free text for the merged spellings", () => {
+    // `suppliers.category` is NOT a FK — it stores category NAMES as free text.
+    // The relation moves above never touch it, so without this the supplier list
+    // (which filters on the NAME) shows no supplier under «كهرباء» while every
+    // supplier still carries the old «elec». The rewrite must be a raw UPDATE on
+    // `suppliers`, match case-insensitively/trimmed, and preserve other
+    // categories in a comma-joined value.
+    const literal = sqlLiterals(source).find(
+      (b) => b.includes("UPDATE suppliers") && b.includes("string_to_array"),
+    );
+    expect(literal, "suppliers.category rewrite must exist").toBeDefined();
+    expect(literal!).toContain("string_to_array(category, ',')");
+    expect(literal!).toContain("lower(trim(elem))");
+    expect(literal!).toContain("'كهرباء'");
+  });
+
+  it("consolidates the alias spelling in `supplier_categories` too", () => {
+    // The supplier-category list is a SEPARATE name list: an «elec» row there
+    // re-mirrors an «elec» item category on every boot and shows a duplicate
+    // option in the supplier dialog. It must be folded into «كهرباء» as well.
+    const deleteLiteral = sqlLiterals(source).find(
+      (b) => b.includes("DELETE FROM supplier_categories") && b.includes("'كهرباء'"),
+    );
+    expect(deleteLiteral, "supplier_categories alias rows must be folded").toBeDefined();
+    const updateLiteral = sqlLiterals(source).find(
+      (b) => b.includes("UPDATE supplier_categories") && b.includes("'كهرباء'"),
+    );
+    expect(updateLiteral, "supplier_categories alias must be renamed").toBeDefined();
+  });
 });

@@ -1949,6 +1949,60 @@ export async function initDb(): Promise<void> {
       ON CONFLICT (alias) DO NOTHING;
     `);
 
+    // ── Consolidate the alias spelling in `supplier_categories` (idempotent) ──
+    // The item-category side is folded above, but `supplier_categories` is a
+    // SEPARATE name list and would keep re-mirroring an «elec» item category on
+    // every boot (and show a duplicate option in the supplier dialog). ELEC is
+    // an ALIAS, so when the canonical «كهرباء» exists the alias-named rows are
+    // removed; otherwise ONE alias row is kept and RENAMED to the canonical (the
+    // rest deleted first, so the UNIQUE name index is never violated). No
+    // supplier is ever left dangling: `suppliers.category` is rewritten next.
+    await client.query(`
+      DELETE FROM supplier_categories sc
+      WHERE lower(trim(sc.name)) IN ('elec','electrical','electric')
+        AND EXISTS (SELECT 1 FROM supplier_categories WHERE name = 'كهرباء');
+    `);
+    await client.query(`
+      DELETE FROM supplier_categories sc
+      WHERE lower(trim(sc.name)) IN ('elec','electrical','electric')
+        AND sc.id <> (
+          SELECT min(id) FROM supplier_categories
+          WHERE lower(trim(name)) IN ('elec','electrical','electric')
+        );
+    `);
+    await client.query(`
+      UPDATE supplier_categories
+      SET name = 'كهرباء'
+      WHERE lower(trim(name)) IN ('elec','electrical','electric');
+    `);
+
+    // ── Rewrite `suppliers.category` for the merged spellings (idempotent) ────
+    // `suppliers.category` is FREE TEXT (comma-separated category NAMES), not a
+    // FK — so the relation moves above never touch it, and a supplier that was
+    // filed under ELEC keeps the old spelling while the category list now says
+    // «كهرباء». The supplier-list filter matches on the NAME, so it then finds
+    // no supplier under «كهرباء» and the ELEC-named one is invisible under the
+    // new name. Rewrite the text in place, preserving any other category in a
+    // comma-joined value and only for suppliers that actually carry a spelling.
+    await client.query(`
+      UPDATE suppliers
+      SET category = (
+        SELECT string_agg(
+          CASE
+            WHEN lower(trim(elem)) IN ('elec','electrical','electric') THEN 'كهرباء'
+            ELSE elem
+          END,
+          ','
+        )
+        FROM unnest(string_to_array(category, ',')) AS elem
+      )
+      WHERE category IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM unnest(string_to_array(category, ',')) AS elem
+          WHERE lower(trim(elem)) IN ('elec','electrical','electric')
+        );
+    `);
+
     // ── Procurement responsibility migration (idempotent, re-runnable) ───────
     // Periods + attribution + RESTRICT FKs + delivery idempotency. Every step
     // is guarded by a catalog check and compares the ACTUAL definition (not
