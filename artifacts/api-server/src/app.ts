@@ -8,6 +8,7 @@ import path from "path";
 import { existsSync } from "fs";
 import { getPool } from "@workspace/db";
 import router from "./routes";
+import admsRouter from "./modules/hr/adms";
 import { logger } from "./shared/logger";
 
 const app: Express = express();
@@ -113,6 +114,17 @@ app.use(
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 app.use("/api", router);
+
+// ZKTeco ADMS push endpoints, mounted at the ROOT.
+//
+// `/iclock/*` is hard-coded in the firmware — a device never sends the `/api`
+// prefix — so mounting the router only under `/api` meant the device's
+// handshake landed on the SPA fallback and received HTML instead of its config.
+// The router is declared AFTER the global parsers because those leave
+// `req.body` undefined for a Content-Type they do not match, and the router
+// reads the raw tab-separated payload itself with its own `express.text`
+// (`type: () => true`), so no ZKTeco body labelling can defeat it.
+app.use(admsRouter);
 
 if (process.env.NODE_ENV === "production") {
   const frontendDist = path.resolve(process.cwd(), "artifacts/rfq-portal/dist/public");

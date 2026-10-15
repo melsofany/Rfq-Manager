@@ -43,4 +43,19 @@ describe("ADMS handshake config", () => {
     expect(cfg).toContain("ATTLOGStamp=None");
     expect(cfg).toContain("Realtime=1");
   });
+
+  it("advertises the push-protocol versions a K14 Pro firmware requires", () => {
+    // Without these the newer firmware does not accept the endpoint as a real
+    // ADMS server and never opens the real-time push channel.
+    const cfg = handshakeConfig("CKT1234");
+    expect(cfg).toContain("ServerVer=3.0.1");
+    expect(cfg).toContain("PushProtVer=2.4.1");
+    expect(cfg).toContain("SupportPing=1");
+  });
+
+  it("separates config lines with CRLF and ends with a blank line", () => {
+    const cfg = handshakeConfig("CKT1234");
+    expect(cfg.endsWith("\r\n")).toBe(true);
+    expect(cfg).not.toMatch(/[^\r]\n/);
+  });
 });
