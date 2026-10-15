@@ -3819,3 +3819,56 @@ times, so no trend can be read from it.
   (`401 Bad credentials`) and the environment `$GITHUB_TOKEN` is read-only
   (`403 Permission … denied`), so the branch could not be pushed. A fresh `ghp_`
   token with `repo` scope is needed to push + open the PR.
+
+## The issued supplier PO number beside each price (feat/item-analysis-issued-po)
+
+Operator requirement: «يحب ان يظهر رقم امر التوريد الصادر للمورد امام سعره ان صدر
+له امر شراء وان تم الغاء امر الشراء لايظهر». The `/items` → «تحليل البنود» tab now
+carries an «أمر التوريد للمورد» column on the price history.
+
+- **A quote is `(rfq, supplier)` — not a PO line.** `offers` has no link to
+  `purchase_order_items` at all, so the match is a LADDER, strongest rung first:
+  1. **`customer_rfq_item_id`** — the quote's `rfq_item` and the PO line's
+     `customer_po_item` both point at the same customer-request line. This is the
+     answer: measured live it resolves **23 of the 24** real quote→order links,
+     and it is the ONLY rung that survives a PO raised from a customer request
+     (`purchase_orders.rfq_id` is NULL there — only 12 of 55 POs carry it).
+  2. the ERP `line_item` code (an article identity on both sides).
+  3. the part number via `canonicalPartNo` (`LC1D 32 M7` == `LC1D32M7`).
+  4. the PO header's `rfq_id` — LAST on purpose: it proves the order belongs to
+     the request, not that it covers this line.
+- **Cancelled must be excluded TWICE**, and the second one is the trap:
+  `po.status = 'cancelled'` covers a whole-PO cancel, but cancelling a SINGLE
+  supplier leaves the PO `sent` and only flips that line's `line_status`. Live
+  data has exactly that shape — `PO-2026-000036` is `sent` with one
+  `line_status='cancelled'` line, and the cancelled line's supplier (`sinamix`)
+  must show NO order while the other supplier on the same PO shows it.
+- **Filter in SQL, not in JS.** `loadIssuedPoLines` applies both `ne(...)` in the
+  `where`, so a cancelled order can never reach the matcher.
+- **`purchase_order_items.item_id` is NOT the link** — verified earlier in this
+  session: it matches `rfq_items.id` on only 10 rows and `customer_po_items.id`
+  on 51, with `line_agrees: 0`. Coincidence, never use it.
+- **The mock cannot see the filter.** The item-analysis test's DB mock returns
+  rows directly, so a test asserting "a cancelled order does not appear" passes
+  even with the `where` deleted. The guard therefore asserts the **built query**
+  (`poChainable` records the `where` arg; `neComparisons` walks the nested
+  `and`): both `ne`s must be present, and exactly two — an `or` instead of an
+  `and` would read as a passing count otherwise. Verified failing against the
+  unfiltered query.
+- **`poSummary`** (`quotedWithPo` + distinct `poNumbers`) and `poIssuedCount` on
+  the search rows let the header say «N من M تسعيرة صدر لها أمر» without the
+  caller re-deriving it.
+- **Live verification (production DB, real route)**: `0L2897` → `PO-2026-000041`
+  beside the EGYTRADE price; `6AV2124-0QC02-0AX1` → `PO-2026-000045` for
+  «هاي تك» and **nothing** for `sinamix` (cancelled line). Match-ladder rung 1
+  also verified failing when disabled.
+- **Tests**: `item-analysis.test.ts` 33 (up from 22) — 7 `matchIssuedPos` rung
+  cases + 3 history/list cases + the SQL-filter guard. **1528 api-server + 68
+  portal tests** pass; tsc (libs + api-server + portal) clean; repo-wide prettier
+  clean; both builds clean.
+- **Deploy**: pending — push blocked. The user-supplied `ghp_Whp14…` token is
+  **expired** (`401 Bad credentials`), and `$GITHUB_TOKEN` is read-only in
+  practice: `POST /git/refs` returns `403 Resource not accessible by integration`
+  even though `GET /repos/...` reports `permissions.push: true`. A fresh `ghp_`
+  token with `repo` scope is needed. Commit `6bdf150` is on
+  `feat/item-analysis-issued-po`, cut from `origin/main` (`8bb6317`).
