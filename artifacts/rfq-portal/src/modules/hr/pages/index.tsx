@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { IdCard } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-type Tab = "attendance" | "leave" | "employees" | "devices";
+type Tab = "attendance" | "leave" | "discipline" | "employees" | "devices";
 
 interface AttendanceRow {
   employeeId: number;
@@ -64,6 +64,7 @@ export default function HrPage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: "attendance", label: t("hr.tab.attendance") },
     { id: "leave", label: t("hr.tab.leave") },
+    { id: "discipline", label: t("hr.tab.discipline") },
     { id: "employees", label: t("hr.tab.employees") },
     { id: "devices", label: t("hr.tab.devices") },
   ];
@@ -97,6 +98,7 @@ export default function HrPage() {
 
         {tab === "attendance" && <AttendanceTab />}
         {tab === "leave" && <LeaveTab />}
+        {tab === "discipline" && <DisciplineTab />}
         {tab === "employees" && <EmployeesTab />}
         {tab === "devices" && <DevicesTab />}
       </div>
@@ -717,6 +719,252 @@ function LeaveTab() {
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+interface CaseRow {
+  id: number;
+  employeeId: number;
+  title: string;
+  incidentDate: string;
+  status: string;
+  penaltyType: string | null;
+  penaltyAmount: string | null;
+  decision: string | null;
+}
+
+function DisciplineTab() {
+  const { t } = useLanguage();
+  const [employees, setEmployees] = useState<HrEmployee[]>([]);
+  const [cases, setCases] = useState<CaseRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    employeeId: "",
+    title: "",
+    incidentDate: todayStr(),
+    description: "",
+  });
+  const [decide, setDecide] = useState<
+    Record<number, { penaltyType: string; penaltyAmount: string; decision: string }>
+  >({});
+
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      const [emp, cs] = await Promise.all([
+        api<HrEmployee[]>("/hr/employees"),
+        api<CaseRow[]>("/hr/cases"),
+      ]);
+      setEmployees(emp);
+      setCases(cs);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function open(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      setError(null);
+      await api("/hr/cases", {
+        method: "POST",
+        body: JSON.stringify({ ...form, employeeId: Number(form.employeeId) }),
+      });
+      setForm({ ...form, title: "", description: "" });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function move(id: number, status: string) {
+    try {
+      setError(null);
+      await api(`/hr/cases/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function finish(id: number) {
+    const d = decide[id];
+    if (!d) return;
+    try {
+      setError(null);
+      await api(`/hr/cases/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: "decided",
+          penaltyType: d.penaltyType || null,
+          penaltyAmount: d.penaltyAmount || null,
+          decision: d.decision,
+        }),
+      });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  const input = "border rounded px-2 py-1.5 bg-background text-sm";
+  const name = (id: number) => employees.find((e) => e.id === id)?.fullName ?? "—";
+
+  return (
+    <div className="space-y-6">
+      <form onSubmit={open} className="flex flex-wrap gap-2 items-end">
+        <select
+          className={input}
+          value={form.employeeId}
+          onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+          required
+        >
+          <option value="">{t("hr.leave.pickEmployee")}</option>
+          {employees
+            .filter((e) => e.status === "active")
+            .map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.fullName}
+              </option>
+            ))}
+        </select>
+        <input
+          className={input}
+          placeholder={t("hr.case.title")}
+          value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          required
+        />
+        <input
+          type="date"
+          className={input}
+          value={form.incidentDate}
+          onChange={(e) => setForm({ ...form, incidentDate: e.target.value })}
+          required
+        />
+        <input
+          className={input}
+          placeholder={t("hr.case.description")}
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+        />
+        <Button type="submit">{t("hr.case.open")}</Button>
+      </form>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <Card>
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="p-2 text-start">{t("hr.col.name")}</th>
+                <th className="p-2 text-start">{t("hr.case.title")}</th>
+                <th className="p-2 text-start">{t("hr.leave.from")}</th>
+                <th className="p-2 text-start">{t("hr.col.status")}</th>
+                <th className="p-2 text-start">{t("hr.case.outcome")}</th>
+                <th className="p-2 text-start">{t("hr.case.actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cases.map((c) => (
+                <tr key={c.id} className="border-t align-top">
+                  <td className="p-2">{name(c.employeeId)}</td>
+                  <td className="p-2">{c.title}</td>
+                  <td className="p-2">{c.incidentDate}</td>
+                  <td className="p-2">{t(`hr.case.status.${c.status}`)}</td>
+                  <td className="p-2">
+                    {c.penaltyType
+                      ? `${t(`hr.case.penalty.${c.penaltyType}`)}${c.penaltyAmount ? ` (${c.penaltyAmount})` : ""}`
+                      : "—"}
+                  </td>
+                  <td className="p-2 space-y-1">
+                    {c.status === "open" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => move(c.id, "investigation")}
+                      >
+                        {t("hr.case.startInvestigation")}
+                      </Button>
+                    )}
+                    {(c.status === "open" || c.status === "investigation") && (
+                      <div className="flex flex-wrap gap-1">
+                        <select
+                          className={input}
+                          value={decide[c.id]?.penaltyType ?? ""}
+                          onChange={(e) =>
+                            setDecide({
+                              ...decide,
+                              [c.id]: {
+                                ...(decide[c.id] ?? { penaltyAmount: "", decision: "" }),
+                                penaltyType: e.target.value,
+                              },
+                            })
+                          }
+                        >
+                          <option value="">{t("hr.case.noPenalty")}</option>
+                          <option value="warning">{t("hr.case.penalty.warning")}</option>
+                          <option value="fine">{t("hr.case.penalty.fine")}</option>
+                          <option value="suspension">{t("hr.case.penalty.suspension")}</option>
+                          <option value="dismissal">{t("hr.case.penalty.dismissal")}</option>
+                        </select>
+                        {decide[c.id]?.penaltyType === "fine" && (
+                          <input
+                            className={`${input} w-24`}
+                            placeholder={t("hr.case.amount")}
+                            value={decide[c.id]?.penaltyAmount ?? ""}
+                            onChange={(e) =>
+                              setDecide({
+                                ...decide,
+                                [c.id]: { ...decide[c.id], penaltyAmount: e.target.value },
+                              })
+                            }
+                          />
+                        )}
+                        <input
+                          className={input}
+                          placeholder={t("hr.case.decision")}
+                          value={decide[c.id]?.decision ?? ""}
+                          onChange={(e) =>
+                            setDecide({
+                              ...decide,
+                              [c.id]: {
+                                ...(decide[c.id] ?? { penaltyType: "", penaltyAmount: "" }),
+                                decision: e.target.value,
+                              },
+                            })
+                          }
+                        />
+                        <Button size="sm" onClick={() => finish(c.id)}>
+                          {t("hr.case.decide")}
+                        </Button>
+                      </div>
+                    )}
+                    {c.status === "decided" && (
+                      <Button size="sm" variant="outline" onClick={() => move(c.id, "closed")}>
+                        {t("hr.case.close")}
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {cases.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                    {t("hr.case.empty")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
     </div>
   );
 }
