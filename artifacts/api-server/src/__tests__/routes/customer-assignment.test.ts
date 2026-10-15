@@ -86,6 +86,11 @@ const itemCategoryKeywordsTable = {
   weight: "weight",
   enabled: "enabled",
 };
+const itemCategoryAliasesTable = {
+  _: "itemCategoryAliases",
+  categoryId: "categoryId",
+  alias: "alias",
+};
 
 let categoryRows: any[];
 let ownerRows: any[];
@@ -103,6 +108,7 @@ const dbMock: any = {
     from: vi.fn((table: any) => {
       if (table === itemCategoriesTable) return chain(categoryRows);
       if (table === itemCategoryKeywordsTable) return chain([]);
+      if (table === itemCategoryAliasesTable) return chain([]);
       if (table === employeeCategoriesTable) return chain(ownerRows);
       if (table === rfqItemAssignmentsTable) return chain(workloadRows);
       if (table === customerRfqItemAssignmentsTable) {
@@ -151,6 +157,7 @@ const dbMock: any = {
 vi.mock("@workspace/db", () => ({
   db: dbMock,
   itemCategoriesTable,
+  itemCategoryAliasesTable,
   employeeCategoriesTable,
   employeesTable,
   rfqItemsTable,
@@ -425,6 +432,47 @@ describe("customer-item assignment engine", () => {
     expect(insertedAudits).toHaveLength(0);
   });
 
+  it("refuses to record an OWNER for a BRAND category (a brand never owns)", async () => {
+    categoryRows = [
+      { id: 3, code: "electrical", name: "كهرباء", kind: "functional", isActive: true },
+      { id: 9, code: "siemens", name: "Siemens", kind: "brand", isActive: true },
+    ];
+    customerItemRows = [{ id: 500, customerRfqId: 10, categoryId: 3 }];
+    customerAssignmentRows = [{ customerRfqItemId: 500, categoryId: 3, employeeId: null }];
+    await assignCustomerItemManually({
+      customerRfqItemId: 500,
+      categoryId: 9, // a brand
+      employeeId: 6,
+      assignedBy: 1,
+    });
+    // The brand category may be recorded for review, but never with an owner.
+    expect(insertedCustomerAssignments).toHaveLength(1);
+    expect(insertedCustomerAssignments[0]).toMatchObject({
+      customerRfqItemId: 500,
+      categoryId: 9,
+      employeeId: null,
+    });
+  });
+
+  it("refuses to record an OWNER for a SUBCATEGORY category (owner resolves to the domain)", async () => {
+    categoryRows = [
+      { id: 3, code: "electrical", name: "كهرباء", kind: "functional", isActive: true },
+      { id: 8, code: "breakers", name: "قواطع", kind: "subcategory", parentId: 3, isActive: true },
+    ];
+    customerItemRows = [{ id: 500, customerRfqId: 10, categoryId: 3 }];
+    customerAssignmentRows = [{ customerRfqItemId: 500, categoryId: 3, employeeId: null }];
+    await assignCustomerItemManually({
+      customerRfqItemId: 500,
+      categoryId: 8, // a subcategory
+      employeeId: 6,
+      assignedBy: 1,
+    });
+    expect(insertedCustomerAssignments[0]).toMatchObject({
+      categoryId: 8,
+      employeeId: null,
+    });
+  });
+
   it("bulk classify: categorises unclassified items and assigns their owners", async () => {
     categoryRows = [
       { id: 3, code: "electrical", name: "كهرباء", isActive: true },
@@ -445,7 +493,17 @@ describe("customer-item assignment engine", () => {
     const result = await classifyUnclassifiedItems({ limit: 50 });
     expect(result.scanned).toBe(1);
     expect(result.classified).toBe(1);
-    expect(updatedCustomerItemCalls[0]).toEqual({ id: 700, vals: { categoryId: 3 } });
+    expect(updatedCustomerItemCalls[0]).toEqual({
+      id: 700,
+      vals: {
+        categoryId: 3,
+        brandId: undefined,
+        subcategoryIds: null,
+        technicalAttributes: null,
+        classifyConfidence: "90",
+        classifyReason: undefined,
+      },
+    });
     expect(insertedCustomerAssignments).toHaveLength(1);
     expect(insertedCustomerAssignments[0].employeeId).toBe(5);
   });

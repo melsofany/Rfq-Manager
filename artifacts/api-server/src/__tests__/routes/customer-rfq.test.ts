@@ -2412,6 +2412,31 @@ describe("customer-RFQ item multi-category (manager editor)", () => {
     );
   });
 
+  it("coverage: a BRAND extra gets NO owner; a SUBCATEGORY extra inherits its DOMAIN's owner", async () => {
+    sessionState.role = "manager";
+    catItemRow = { id: 7, categoryId: 3 };
+    itemCategoryRows = [
+      { id: 3, name: "كهرباء", kind: "functional", parentId: null },
+      { id: 5, name: "قواطع", kind: "subcategory", parentId: 3 },
+      { id: 9, name: "Siemens", kind: "brand", parentId: null },
+    ];
+    ownerRows = [
+      { categoryId: 3, employeeId: 5, isPrimary: true }, // domain owner
+      { categoryId: 5, employeeId: 99, isPrimary: true }, // a subcategory "owner" that must NOT be used
+    ];
+
+    const res = await request(testApp)
+      .put("/api/customer-rfq/items/7/categories")
+      .send({ categoryIds: [3, 5, 9] });
+
+    expect(res.status).toBe(200);
+    const byCat = Object.fromEntries(junctionInserts.map((j) => [j.categoryId, j]));
+    // Subcategory 5 carries the DOMAIN (3) owner (5), never its own (99).
+    expect(byCat[5]).toMatchObject({ categoryId: 5, employeeId: 5 });
+    // Brand 9 never carries an owner.
+    expect(byCat[9]).toMatchObject({ categoryId: 9, employeeId: null });
+  });
+
   it("lets the manager move the PRIMARY category and stores it on the item", async () => {
     sessionState.role = "manager";
     catItemRow = { id: 7, categoryId: 3 };

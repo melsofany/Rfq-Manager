@@ -73,12 +73,20 @@ export interface AiClassifyInput {
 }
 
 export interface AiClassifyResult {
-  /** Chosen category id, or null when the model could not decide. */
+  /** Chosen FUNCTIONAL domain id (the only dimension that owns responsibility). */
   categoryId: number | null;
   /** 0–100. The model's own confidence, clamped. Null when unclassified. */
   confidence: number | null;
-  /** The category code/name the model chose, for the audit trail. */
+  /** The domain name the model chose, for the audit trail. */
   matchedTerm: string | null;
+  /** Subcategories (قواطع/PLC/…) the model recognised — a suggestion only. */
+  subcategoryIds: number[];
+  /** Manufacturer, when recognised. Metadata only — never decides the domain. */
+  brandId: number | null;
+  /** Extracted technical attributes (Voltage/Current/Model/…), free-form. */
+  attributes: Record<string, string> | null;
+  /** Why the domain was chosen — shown to the manager for review. */
+  reason: string | null;
 }
 
 /**
@@ -119,8 +127,28 @@ export async function classifyItemsWithAi(
   const model = classifyModelFor(primary, baseUrl);
   const maxTokens = classifyMaxTokensFor(model);
 
-  const catalog = usable.map((c) => `- ${c.name}`).join("\n");
+  // The catalogue is offered as three SEPARATE closed lists, because the three
+  // dimensions are not interchangeable: only a functional domain owns
+  // responsibility, a subcategory refines it, and a brand is metadata. Handing
+  // the model one mixed list is exactly how «Siemens» became a domain.
+  const kinds = usable.map((c) => ({ c, kind: c.kind ?? "functional" }));
+  const domains = kinds.filter((k) => k.kind !== "brand" && k.kind !== "subcategory");
+  const subs = kinds.filter((k) => k.kind === "subcategory");
+  const brands = kinds.filter((k) => k.kind === "brand");
+  // A domain list is mandatory — without one there is nothing to choose from.
+  if (domains.length === 0) return null;
+
   const byName = new Map(usable.map((c) => [normalizeCatName(c.name), c]));
+  // Aliases are accepted as an answer too («ELEC» → كهرباء), so a deprecated
+  // spelling resolves to the one canonical category instead of «غير معروف».
+  for (const c of usable) {
+    for (const a of c.aliases ?? []) {
+      const key = normalizeCatName(a);
+      if (key && !byName.has(key)) byName.set(key, c);
+    }
+  }
+
+  const catalog = buildCatalog(domains, subs, brands);
 
   // A truncation retry sends a SMALLER batch: less input leaves more of the
   // budget for the reply, so the retry is a genuinely different request rather
@@ -151,6 +179,25 @@ export async function classifyItemsWithAi(
   return null;
 }
 
+/** Render the three closed lists the model must choose from. */
+function buildCatalog(
+  domains: Array<{ c: CategorySeed }>,
+  subs: Array<{ c: CategorySeed }>,
+  brands: Array<{ c: CategorySeed }>,
+): string {
+  const lines: string[] = ["المجالات الوظيفية (main) — اختر واحدًا فقط لكل بند:"];
+  lines.push(...domains.map((d) => `- ${d.c.name}`));
+  if (subs.length > 0) {
+    lines.push("", "التخصصات الفرعية (sub) — صفر أو أكثر، من هذه القائمة فقط:");
+    lines.push(...subs.map((s) => `- ${s.c.name}`));
+  }
+  if (brands.length > 0) {
+    lines.push("", "الماركات (brand) — صفر أو واحد، من هذه القائمة فقط:");
+    lines.push(...brands.map((b) => `- ${b.c.name}`));
+  }
+  return lines.join("\n");
+}
+
 /** One provider request for a batch. Returns null when the request itself failed. */
 async function callClassifier(
   model: string,
@@ -171,20 +218,31 @@ async function callClassifier(
     .join("\n");
 
   const prompt = [
-    "أنت مصنّف بنود لمكتب مشتريات. اختر لكل بند التصنيف الأنسب من القائمة التالية فقط:",
+    "أنت مصنّف بنود لمكتب مشتريات. لكل بند حدّد:",
+    "1) المجال الوظيفي الرئيسي (main): واحد فقط من قائمة المجالات.",
+    "2) التخصصات الفرعية (sub): صفر أو أكثر من قائمة التخصصات (إن وُجدت).",
+    "3) الماركة (brand): صفر أو واحد من قائمة الماركات (إن وُجدت).",
+    "4) المواصفات الفنية (attributes): Voltage/Current/Model/PartNumber إن ذُكرت.",
+    "5) الثقة (confidence): 0-100. وسبب الاختيار (reason) بإيجاز.",
+    "",
     catalog,
     "",
     "البنود:",
     listing,
     "",
-    'أعِد JSON فقط بالشكل: {"results":[{"i":1,"name":"<اسم التصنيف أو غير معروف>","confidence":0-100}]}',
-    'لا تخترع تصنيفًا غير موجود في القائمة. إن لم تكن متأكدًا اكتب name = "غير معروف" وconfidence = 0.',
+    "قواعد إلزامية:",
+    "- لا تخترع أي قيمة غير موجودة في القوائم أعلاه.",
+    "- المجال الوظيفي لا يُستنتج من الماركة وحدها: الشركة الواحدة تنتج منتجات في مجالات مختلفة.",
+    '- إن لم تتأكد من المجال اكتب main = "غير معروف" وconfidence = 0.',
+    "- Encoder / PLC / قاطع ليست مجالات: هي تخصصات فرعية داخل مجالها.",
+    "",
+    'أعِد JSON فقط بالشكل: {"results":[{"i":1,"main":"<مجال أو غير معروف>","sub":["..."],"brand":"<ماركة أو فراغ>","confidence":0-100,"attributes":{"Voltage":"..."},"reason":"..."}]}',
   ].join("\n");
 
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: "أنت مصنّف بنود دقيق. تختار من قائمة مغلقة فقط، وتُعيد JSON صالحًا بلا أي نص إضافي.",
+      content: "أنت مصنّف بنود دقيق. تختار من قوائم مغلقة فقط، وتُعيد JSON صالحًا بلا أي نص إضافي.",
     },
     { role: "user", content: prompt },
   ];
@@ -206,20 +264,39 @@ async function callClassifier(
 
 /** Map parsed rows back to the caller's item order, refusing invented categories. */
 function mapResults(
-  parsed: Array<{ name: string; confidence: number } | null>,
+  parsed: Array<ParsedClassifyRow | null>,
   total: number,
   byName: Map<string, CategorySeed>,
 ): Array<AiClassifyResult | null> {
   const out: Array<AiClassifyResult | null> = new Array(total).fill(null);
   parsed.forEach((r, i) => {
-    if (!r || !r.name || r.name === "غير معروف") return;
-    const cat = byName.get(normalizeCatName(r.name));
-    if (!cat) return; // the model invented a category — refuse it
+    if (!r || !r.main || r.main === "غير معروف") return;
+    const cat = byName.get(normalizeCatName(r.main));
+    if (!cat) return; // the model invented a domain — refuse it
+    // A brand or a subcategory may never be the MAIN answer: responsibility is
+    // owned only by a functional domain. Refuse it rather than mis-own an item.
+    const kind = cat.kind ?? "functional";
+    if (kind === "brand" || kind === "subcategory") return;
     if (!(r.confidence > 0)) return;
+
+    // Subcategories / brand are looked up in the SAME catalogue and only kept
+    // when they are of the right kind — a suggestion, never a responsibility.
+    const subcategoryIds: number[] = [];
+    for (const s of r.sub) {
+      const sub = byName.get(normalizeCatName(s));
+      if (sub && (sub.kind ?? "functional") === "subcategory") subcategoryIds.push(sub.id);
+    }
+    const brand = r.brand ? byName.get(normalizeCatName(r.brand)) : undefined;
+    const brandId = brand && (brand.kind ?? "functional") === "brand" ? brand.id : null;
+
     out[i] = {
       categoryId: cat.id,
       confidence: Math.max(1, Math.min(100, Math.round(r.confidence))),
       matchedTerm: cat.name,
+      subcategoryIds: [...new Set(subcategoryIds)],
+      brandId,
+      attributes: r.attributes,
+      reason: r.reason,
     };
   });
   return out;
@@ -227,7 +304,26 @@ function mapResults(
 
 interface RawRow {
   name?: unknown;
+  main?: unknown;
+  sub?: unknown;
+  brand?: unknown;
   confidence?: unknown;
+  attributes?: unknown;
+  reason?: unknown;
+}
+
+export interface ParsedClassifyRow {
+  /** The functional domain name, or «غير معروف». */
+  main: string;
+  /** Subcategory names the model recognised (may be empty). */
+  sub: string[];
+  /** Brand name, or null. */
+  brand: string | null;
+  confidence: number;
+  /** Extracted technical attributes, or null. */
+  attributes: Record<string, string> | null;
+  /** Why the domain was chosen, or null. */
+  reason: string | null;
 }
 
 /** Fold the cosmetic differences that make one category name look like two. */
@@ -247,7 +343,7 @@ export function normalizeCatName(s: string): string {
 export function parseClassifyReply(
   content: string | null,
   expected: number,
-): Array<{ name: string; confidence: number } | null> | null {
+): Array<ParsedClassifyRow | null> | null {
   if (!content) return null;
   const json = extractJson(content);
   if (!json) return null;
@@ -260,15 +356,47 @@ export function parseClassifyReply(
   const rows = (data as { results?: unknown }).results ?? (Array.isArray(data) ? data : null);
   if (!Array.isArray(rows)) return null;
 
-  const out: Array<{ name: string; confidence: number } | null> = new Array(expected).fill(null);
+  const out: Array<ParsedClassifyRow | null> = new Array(expected).fill(null);
   for (const raw of rows as RawRow[]) {
     const i = Number((raw as { i?: unknown }).i);
     if (!Number.isInteger(i) || i < 1 || i > expected) continue;
-    const name = typeof raw.name === "string" ? raw.name.trim() : "";
+    // Accept the multi-dimensional shape (`main`) and the legacy one (`name`),
+    // so a model that echoes the older contract still classifies.
+    const mainRaw =
+      typeof raw.main === "string"
+        ? raw.main.trim()
+        : typeof raw.name === "string"
+          ? raw.name.trim()
+          : "";
     const confidence = Number(raw.confidence);
-    out[i - 1] = { name, confidence: Number.isFinite(confidence) ? confidence : 0 };
+    out[i - 1] = {
+      main: mainRaw,
+      sub: Array.isArray(raw.sub)
+        ? raw.sub
+            .filter((s): s is string => typeof s === "string" && s.trim() !== "")
+            .map((s) => s.trim())
+        : [],
+      brand: typeof raw.brand === "string" && raw.brand.trim() !== "" ? raw.brand.trim() : null,
+      confidence: Number.isFinite(confidence) ? confidence : 0,
+      attributes: normalizeAttributes(raw.attributes),
+      reason: typeof raw.reason === "string" && raw.reason.trim() !== "" ? raw.reason.trim() : null,
+    };
   }
   return out;
+}
+
+/** Keep only string→string attribute pairs (the model may return numbers). */
+function normalizeAttributes(value: unknown): Record<string, string> | null {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    const key = k.trim();
+    if (!key) continue;
+    if (v == null) continue;
+    const val = typeof v === "string" ? v.trim() : String(v).trim();
+    if (val) out[key] = val;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 function extractJson(content: string): string | null {

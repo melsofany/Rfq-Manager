@@ -50,8 +50,14 @@ const itemCategoryKeywordsTable = {
   language: "language",
   enabled: "enabled",
 };
+const itemCategoryAliasesTable = {
+  _: "itemCategoryAliases",
+  categoryId: "categoryId",
+  alias: "alias",
+};
 
 let existingCategoryRows: any[];
+let validationRows: any[];
 let listRows: any[];
 let ownerRows: any[];
 let createdRow: any;
@@ -70,12 +76,22 @@ const dbMock: any = {
   select: vi.fn((_arg?: any) => ({
     from: vi.fn((table: any) => {
       if (table === itemCategoriesTable) {
-        // duplicate-name probe (select({id}).where().limit(1)) OR list (orderBy)
-        const isIdProbe = _arg && typeof _arg === "object" && "id" in _arg;
-        const rows = isIdProbe ? existingCategoryRows : listRows;
+        // Three call sites share this table:
+        //  • {id}   + limit  → duplicate-name probe / ownable-kind probe
+        //  • {id, kind}      → validation / functional-kind lookup
+        //  • {}     + orderBy→ list
+        const arg = _arg && typeof _arg === "object" ? _arg : null;
+        const hasKind = arg && "kind" in arg;
+        const isIdProbe = arg && "id" in arg;
+        const rows = hasKind ? validationRows : isIdProbe ? existingCategoryRows : listRows;
         return chainable(rows, {
           where: vi.fn(() => chainable(rows, { limit: vi.fn(() => chainable(rows)) })),
           orderBy: vi.fn(() => chainable(rows)),
+        });
+      }
+      if (table === itemCategoryAliasesTable) {
+        return chainable([], {
+          where: vi.fn(() => chainable([], { orderBy: vi.fn(() => chainable([])) })),
         });
       }
       if (table === employeeCategoriesTable) {
@@ -144,6 +160,7 @@ const dbMock: any = {
 vi.mock("@workspace/db", () => ({
   db: dbMock,
   itemCategoriesTable,
+  itemCategoryAliasesTable,
   employeeCategoriesTable,
   employeesTable,
   auditLogTable: auditTable,
@@ -171,6 +188,10 @@ beforeEach(() => {
   ownerReplaces.length = 0;
   employeeCatReplaces.length = 0;
   existingCategoryRows = [];
+  validationRows = [
+    { id: 1, kind: "functional" },
+    { id: 3, kind: "functional" },
+  ];
   listRows = [{ id: 1, name: "كهرباء", code: "electrical", isActive: true, sortOrder: 30 }];
   ownerRows = [];
   employeeCatRows = [];

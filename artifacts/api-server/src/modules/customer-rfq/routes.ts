@@ -901,6 +901,84 @@ interface SheetCategory {
   employeeId: number | null;
   employeeName: string | null;
   isPrimary: boolean;
+  /** functional | subcategory | brand — only functional owns responsibility. */
+  kind?: string | null;
+}
+
+// The classifier's multi-dimensional analysis for one item, as stored. Shown to
+// the manager beside the decision so a suggestion can be reviewed before it is
+// trusted. `categoryId` (the primary functional domain) is NOT part of this —
+// it is the decision, not the suggestion.
+interface ItemAnalysis {
+  brandId: number | null;
+  brandName: string | null;
+  subcategoryIds: number[];
+  subcategoryNames: string[];
+  attributes: Record<string, string> | null;
+  confidence: number | null;
+  reason: string | null;
+}
+
+/** Parse a stored JSON column defensively — a bad value must never 500 a read. */
+function parseJsonColumn<T>(value: string | null | undefined, fallback: T): T {
+  if (value == null || value === "") return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Category metadata (name + kind) for a set of ids — one batched query. */
+async function loadCategoryMeta(
+  ids: number[],
+): Promise<Map<number, { name: string; kind: string; parentId: number | null }>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({
+      id: itemCategoriesTable.id,
+      name: itemCategoriesTable.name,
+      kind: itemCategoriesTable.kind,
+      parentId: itemCategoriesTable.parentId,
+    })
+    .from(itemCategoriesTable)
+    .where(inArray(itemCategoriesTable.id, ids));
+  return new Map(
+    rows.map((r) => [r.id, { name: r.name, kind: r.kind ?? "functional", parentId: r.parentId }]),
+  );
+}
+
+/**
+ * Build the classifier's analysis for one item (subcategories, brand, technical
+ * attributes, confidence, reason) with display names resolved. Returns null when
+ * nothing was recorded — the caller then shows no suggestion rather than an
+ * empty one.
+ */
+async function buildItemAnalysis(item: {
+  brandId?: number | null;
+  subcategoryIds?: string | null;
+  technicalAttributes?: string | null;
+  classifyConfidence?: string | null;
+  classifyReason?: string | null;
+}): Promise<ItemAnalysis | null> {
+  const subcategoryIds = parseJsonColumn<number[]>(item.subcategoryIds, []).filter(
+    (n) => typeof n === "number",
+  );
+  const attributes = parseJsonColumn<Record<string, string> | null>(item.technicalAttributes, null);
+  const brandId = item.brandId ?? null;
+  if (brandId == null && subcategoryIds.length === 0 && !attributes && !item.classifyReason) {
+    return null;
+  }
+  const meta = await loadCategoryMeta([...(brandId != null ? [brandId] : []), ...subcategoryIds]);
+  return {
+    brandId,
+    brandName: brandId != null ? (meta.get(brandId)?.name ?? null) : null,
+    subcategoryIds,
+    subcategoryNames: subcategoryIds.map((id) => meta.get(id)?.name ?? "").filter(Boolean),
+    attributes,
+    confidence: item.classifyConfidence != null ? Number(item.classifyConfidence) : null,
+    reason: item.classifyReason ?? null,
+  };
 }
 
 // A SheetRow enriched with the computed flagReason — the shape loadSheetRows
@@ -1498,6 +1576,11 @@ router.get(
       .select({
         id: customerRfqItemsTable.id,
         categoryId: customerRfqItemsTable.categoryId,
+        brandId: customerRfqItemsTable.brandId,
+        subcategoryIds: customerRfqItemsTable.subcategoryIds,
+        technicalAttributes: customerRfqItemsTable.technicalAttributes,
+        classifyConfidence: customerRfqItemsTable.classifyConfidence,
+        classifyReason: customerRfqItemsTable.classifyReason,
       })
       .from(customerRfqItemsTable)
       .where(eq(customerRfqItemsTable.id, itemId))
@@ -1521,11 +1604,16 @@ router.get(
     ];
     const cats = catIds.length
       ? await db
-          .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
+          .select({
+            id: itemCategoriesTable.id,
+            name: itemCategoriesTable.name,
+            kind: itemCategoriesTable.kind,
+          })
           .from(itemCategoriesTable)
           .where(inArray(itemCategoriesTable.id, catIds))
       : [];
     const catName = new Map(cats.map((c) => [c.id, c.name]));
+    const catKind = new Map(cats.map((c) => [c.id, c.kind ?? "functional"]));
 
     // The PRIMARY category carries no junction row, so its owner is read from
     // employee_categories — otherwise the editor would show the item's own
@@ -1565,6 +1653,7 @@ router.get(
         employeeId: ownerId,
         employeeName: ownerId != null ? (ownerName.get(ownerId) ?? null) : null,
         isPrimary: true,
+        kind: catKind.get(item.categoryId) ?? "functional",
       });
     }
     for (const e of extras) {
@@ -1575,9 +1664,20 @@ router.get(
         employeeId: ownerId,
         employeeName: ownerId != null ? (ownerName.get(ownerId) ?? null) : null,
         isPrimary: false,
+        kind: catKind.get(e.categoryId) ?? "functional",
       });
     }
-    res.json({ customerRfqItemId: itemId, primaryCategoryId: item.categoryId, categories });
+
+    // The classifier's SUGGESTION (subcategories / brand / attributes / reason)
+    // is returned beside the decision so the manager can review it. The brand
+    // and subcategory NAMES are resolved for display.
+    const analysis = await buildItemAnalysis(item);
+    res.json({
+      customerRfqItemId: itemId,
+      primaryCategoryId: item.categoryId,
+      categories,
+      analysis,
+    });
   },
 );
 
@@ -1617,31 +1717,58 @@ router.put(
       return;
     }
 
-    // Validate the categories exist.
+    // Validate the categories exist, and learn each one's KIND — only a
+    // functional domain may become the PRIMARY (the responsible) category.
     const validCats = await db
-      .select({ id: itemCategoriesTable.id })
+      .select({ id: itemCategoriesTable.id, kind: itemCategoriesTable.kind })
       .from(itemCategoriesTable)
       .where(inArray(itemCategoriesTable.id, categoryIds));
     const validIds = new Set(validCats.map((c) => c.id));
+    const kindById = new Map(validCats.map((c) => [c.id, c.kind ?? "functional"]));
     const chosen = categoryIds.filter((id) => validIds.has(id));
     if (chosen.length === 0) {
       res.status(400).json({ error: "التصنيفات المحددة غير موجودة" });
       return;
     }
-
-    // The manager may also correct the PRIMARY category (the classifier's pick).
-    // It is authoritative: it must be one of the chosen categories, so a manager
-    // can re-classify an item and it can never point at a category the item no
-    // longer belongs to.
+    // A subcategory or a brand must never be the PRIMARY category: the primary
+    // is what owns the item, and only a functional domain owns work. An explicit
+    // attempt to do so is a 400; otherwise the primary falls back to a
+    // functional category among the chosen ones.
     const requestedPrimary = body.primaryCategoryId != null ? Number(body.primaryCategoryId) : null;
+    if (
+      requestedPrimary != null &&
+      chosen.includes(requestedPrimary) &&
+      kindById.get(requestedPrimary) !== "functional"
+    ) {
+      res.status(400).json({ error: "التصنيف الرئيسي يجب أن يكون مجالًا وظيفيًا" });
+      return;
+    }
+    const functionalChosen = chosen.filter((id) => kindById.get(id) === "functional");
+    if (functionalChosen.length === 0) {
+      res.status(400).json({ error: "اختر مجالًا وظيفيًا واحدًا على الأقل" });
+      return;
+    }
     const primaryId =
-      requestedPrimary != null && chosen.includes(requestedPrimary)
+      requestedPrimary != null && functionalChosen.includes(requestedPrimary)
         ? requestedPrimary
-        : item.categoryId != null && chosen.includes(item.categoryId)
+        : item.categoryId != null && functionalChosen.includes(item.categoryId)
           ? item.categoryId
-          : chosen[0];
+          : functionalChosen[0];
 
     // Resolve each category's owner (primary owner first, else the first owner).
+    // The owner query covers BOTH the chosen categories and the functional
+    // domains they resolve to, so a subcategory can inherit its domain's owner.
+    const meta = await loadCategoryMeta(chosen);
+    const domainOf = (id: number): number | null => {
+      const c = meta.get(id);
+      if (!c) return id;
+      if (c.kind === "brand") return null;
+      if (c.kind === "subcategory" && c.parentId != null) return c.parentId;
+      return id;
+    };
+    const ownerQueryIds = [
+      ...new Set([...chosen, ...chosen.map(domainOf).filter((v): v is number => v != null)]),
+    ];
     const owners = await db
       .select({
         categoryId: employeeCategoriesTable.categoryId,
@@ -1649,12 +1776,21 @@ router.put(
         isPrimary: employeeCategoriesTable.isPrimary,
       })
       .from(employeeCategoriesTable)
-      .where(inArray(employeeCategoriesTable.categoryId, chosen));
+      .where(inArray(employeeCategoriesTable.categoryId, ownerQueryIds));
     const ownerByCat = new Map<number, number>();
     for (const o of owners) {
       const current = ownerByCat.get(o.categoryId);
       if (current == null || o.isPrimary) ownerByCat.set(o.categoryId, o.employeeId);
     }
+    // «الماركة لا تكون مسؤولًا»: a brand never carries an owner; a subcategory
+    // carries its DOMAIN's owner (never its own).
+    const ownerForCategory = (categoryId: number): number | null => {
+      const c = meta.get(categoryId);
+      if (c?.kind === "brand") return null;
+      if (c?.kind === "subcategory" && c.parentId != null)
+        return ownerByCat.get(c.parentId) ?? null;
+      return ownerByCat.get(categoryId) ?? null;
+    };
 
     const actor = req.session.employeeId ?? null;
     // The primary category is stored separately — never duplicate it in the
@@ -1677,7 +1813,7 @@ router.put(
           extras.map((categoryId) => ({
             customerRfqItemId: itemId,
             categoryId,
-            employeeId: ownerByCat.get(categoryId) ?? null,
+            employeeId: ownerForCategory(categoryId),
             addedBy: actor,
           })),
         );

@@ -66,7 +66,17 @@ describe("AI item classifier", () => {
       reply({ results: [{ i: 1, name: "كهرباء", confidence: 88 }] }),
     );
     const out = await classifyItemsWithAi([{ description: "قاطع كهرباء 63A" }], CATEGORIES);
-    expect(out).toEqual([{ categoryId: 3, confidence: 88, matchedTerm: "كهرباء" }]);
+    expect(out).toEqual([
+      {
+        categoryId: 3,
+        confidence: 88,
+        matchedTerm: "كهرباء",
+        subcategoryIds: [],
+        brandId: null,
+        attributes: null,
+        reason: null,
+      },
+    ]);
   });
 
   it("offers categories that have NO code — the operator-added ones", async () => {
@@ -234,7 +244,14 @@ describe("parseClassifyReply", () => {
       }),
       2,
     );
-    expect(out?.[0]).toEqual({ name: "أجهزة", confidence: 0 });
+    expect(out?.[0]).toEqual({
+      main: "أجهزة",
+      sub: [],
+      brand: null,
+      confidence: 0,
+      attributes: null,
+      reason: null,
+    });
     expect(out?.[1]).toBeNull();
   });
 

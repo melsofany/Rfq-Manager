@@ -45,6 +45,11 @@ const itemCategoryKeywordsTable = {
   weight: "weight",
   enabled: "enabled",
 };
+const itemCategoryAliasesTable = {
+  _: "itemCategoryAliases",
+  categoryId: "categoryId",
+  alias: "alias",
+};
 
 // ── Per-test state ──────────────────────────────────────────────────────────
 let categoryRows: any[];
@@ -68,6 +73,9 @@ const dbMock: any = {
         return chainable([], {
           innerJoin: vi.fn(() => chainable([], { where: vi.fn(() => chainable([])) })),
         });
+      }
+      if (table === itemCategoryAliasesTable) {
+        return chainable([], { where: vi.fn(() => chainable([])) });
       }
       if (table === employeeCategoriesTable) {
         return chainable(ownerRows, {
@@ -125,6 +133,7 @@ const dbMock: any = {
 vi.mock("@workspace/db", () => ({
   db: dbMock,
   itemCategoriesTable,
+  itemCategoryAliasesTable,
   employeeCategoriesTable,
   employeesTable,
   rfqItemsTable,
@@ -140,9 +149,10 @@ vi.mock("../../shared/logger", () => ({
 // Import AFTER the mock factories' state (dbMock) is initialised — a top-level
 // import is hoisted above the const declarations and would throw.
 let ensureAssignmentsForRfq: typeof import("../../modules/rfq/assignment").ensureAssignmentsForRfq;
+let assignItemManually: typeof import("../../modules/rfq/assignment").assignItemManually;
 
 beforeAll(async () => {
-  ({ ensureAssignmentsForRfq } = await import("../../modules/rfq/assignment"));
+  ({ ensureAssignmentsForRfq, assignItemManually } = await import("../../modules/rfq/assignment"));
 });
 
 beforeEach(() => {
@@ -163,6 +173,56 @@ beforeEach(() => {
 });
 
 describe("assignment engine", () => {
+  it("attributes a SUBCATEGORY item to the DOMAIN's owner, never to the subcategory", async () => {
+    // قواطع is a subcategory of كهرباء: responsibility belongs to the domain's
+    // owner. An owner attached to the subcategory itself must NOT receive it.
+    categoryRows = [
+      { id: 3, code: "electrical", name: "كهرباء", kind: "functional", parentId: null },
+      { id: 4, code: "breakers", name: "قواطع", kind: "subcategory", parentId: 3 },
+    ];
+    ownerRows = [
+      { categoryId: 3, employeeId: 10, isPrimary: true, active: true },
+      { categoryId: 4, employeeId: 99, isPrimary: true, active: true },
+    ];
+    itemRows = [
+      {
+        id: 150,
+        rfqId: 7,
+        description: "CIRCUIT BREAKER 3P 30A",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+        customerRfqItemId: null,
+      },
+    ];
+
+    const outcomes = await ensureAssignmentsForRfq(7);
+
+    expect(outcomes[0]).toMatchObject({ rfqItemId: 150, categoryId: 3, employeeId: 10 });
+    expect(insertedAssignments[0]).toMatchObject({ categoryId: 3, employeeId: 10 });
+  });
+
+  it("leaves a BRAND item unassigned — a brand never owns responsibility", async () => {
+    categoryRows = [{ id: 6, code: "siemens", name: "Siemens", kind: "brand", parentId: null }];
+    ownerRows = [{ categoryId: 6, employeeId: 10, isPrimary: true, active: true }];
+    itemRows = [
+      {
+        id: 160,
+        rfqId: 8,
+        description: "SIEMENS CONTACTOR",
+        partNo: null,
+        lineItem: null,
+        categoryId: 6,
+        customerRfqItemId: null,
+      },
+    ];
+
+    const outcomes = await ensureAssignmentsForRfq(8);
+
+    expect(outcomes[0]).toMatchObject({ rfqItemId: 160, employeeId: null });
+    expect(insertedAssignments).toHaveLength(0);
+  });
+
   it("assigns a classified item to the category's primary owner", async () => {
     ownerRows = [
       { categoryId: 3, employeeId: 10, isPrimary: true, active: true },
@@ -373,5 +433,41 @@ describe("assignment engine", () => {
 
     expect(outcomes).toHaveLength(0);
     expect(insertedAssignments).toHaveLength(0);
+  });
+
+  it("manual override refuses an OWNER for a BRAND category (a brand never owns)", async () => {
+    categoryRows = [
+      { id: 3, code: "electrical", name: "كهرباء", kind: "functional", parentId: null },
+      { id: 9, code: "siemens", name: "Siemens", kind: "brand", parentId: null },
+    ];
+    itemRows = [{ id: 500, rfqId: 9, customerRfqItemId: null, categoryId: 3 }];
+
+    await assignItemManually({ rfqItemId: 500, categoryId: 9, employeeId: 7, assignedBy: 1 });
+
+    expect(insertedAssignments).toHaveLength(1);
+    expect(insertedAssignments[0]).toMatchObject({ categoryId: 9, employeeId: null });
+  });
+
+  it("manual override refuses an OWNER for a SUBCATEGORY category (owner resolves to the domain)", async () => {
+    categoryRows = [
+      { id: 3, code: "electrical", name: "كهرباء", kind: "functional", parentId: null },
+      { id: 4, code: "breakers", name: "قواطع", kind: "subcategory", parentId: 3 },
+    ];
+    itemRows = [{ id: 500, rfqId: 9, customerRfqItemId: null, categoryId: 3 }];
+
+    await assignItemManually({ rfqItemId: 500, categoryId: 4, employeeId: 7, assignedBy: 1 });
+
+    expect(insertedAssignments[0]).toMatchObject({ categoryId: 4, employeeId: null });
+  });
+
+  it("manual override still records an OWNER for a FUNCTIONAL category", async () => {
+    categoryRows = [
+      { id: 3, code: "electrical", name: "كهرباء", kind: "functional", parentId: null },
+    ];
+    itemRows = [{ id: 500, rfqId: 9, customerRfqItemId: null, categoryId: 3 }];
+
+    await assignItemManually({ rfqItemId: 500, categoryId: 3, employeeId: 7, assignedBy: 1 });
+
+    expect(insertedAssignments[0]).toMatchObject({ categoryId: 3, employeeId: 7 });
   });
 });
