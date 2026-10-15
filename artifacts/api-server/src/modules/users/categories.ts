@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { supplierCategoriesTable, suppliersTable, itemCategoriesTable } from "@workspace/db";
+import {
+  supplierCategoriesTable,
+  supplierCategoryLinksTable,
+  itemCategoriesTable,
+} from "@workspace/db";
 import { eq, asc, count, or, ilike } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
@@ -111,10 +115,13 @@ router.delete("/categories/:id", requireRole("admin"), async (req, res): Promise
     return;
   }
 
+  // Guard via the LINK table (the authoritative relationship). The legacy text
+  // is kept in step, but the link count is what decides — a supplier linked to
+  // this category blocks the delete regardless of the stored spelling.
   const [{ supplierCount }] = await db
     .select({ supplierCount: count() })
-    .from(suppliersTable)
-    .where(eq(suppliersTable.category, category.name));
+    .from(supplierCategoryLinksTable)
+    .where(eq(supplierCategoryLinksTable.categoryId, id));
 
   if (supplierCount > 0) {
     res

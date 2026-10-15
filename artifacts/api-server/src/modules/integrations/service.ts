@@ -13,6 +13,7 @@ import {
   type ErpIntegration as DbErpIntegration,
 } from "@workspace/db";
 import { logger } from "../../shared/logger";
+import { saveSupplierCategoryLinks } from "../../shared/supplier-category-links";
 import * as OdooConnector from "./connectors/odoo";
 import * as SapConnector from "./connectors/sap";
 import * as OracleConnector from "./connectors/oracle";
@@ -249,15 +250,25 @@ export async function syncSuppliers(
         .where(eq(suppliersTable.id, existing[0].id));
       updated++;
     } else {
-      await db.insert(suppliersTable).values({
-        name: s.name.trim(),
-        contactPerson: s.contactPerson ?? null,
-        email: s.email ?? null,
-        phone: s.phone ?? null,
-        address: s.address ?? null,
-        category: s.category ?? "general",
-        isActive: true,
-      });
+      const [created] = await db
+        .insert(suppliersTable)
+        .values({
+          name: s.name.trim(),
+          contactPerson: s.contactPerson ?? null,
+          email: s.email ?? null,
+          phone: s.phone ?? null,
+          address: s.address ?? null,
+          category: s.category ?? "general",
+          isActive: true,
+        })
+        .returning({ id: suppliersTable.id });
+      if (created) {
+        try {
+          await saveSupplierCategoryLinks(created.id, [s.category ?? "general"]);
+        } catch (linkErr) {
+          logger.warn({ err: linkErr, supplierId: created.id }, "ERP supplier link save failed");
+        }
+      }
       imported++;
     }
   }

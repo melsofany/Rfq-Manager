@@ -61,6 +61,16 @@ export async function initDb(): Promise<void> {
         name TEXT NOT NULL UNIQUE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE IF NOT EXISTS supplier_category_links (
+        id SERIAL PRIMARY KEY,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+        category_id INTEGER NOT NULL REFERENCES supplier_categories(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS supplier_category_links_unique
+        ON supplier_category_links (supplier_id, category_id);
+      CREATE INDEX IF NOT EXISTS idx_supplier_category_links_category
+        ON supplier_category_links (category_id);
       CREATE TABLE IF NOT EXISTS customers (
         id SERIAL PRIMARY KEY,
         customer_id TEXT,
@@ -2001,6 +2011,34 @@ export async function initDb(): Promise<void> {
           SELECT 1 FROM unnest(string_to_array(category, ',')) AS elem
           WHERE lower(trim(elem)) IN ('elec','electrical','electric')
         );
+    `);
+
+    // ── Backfill the supplier↔category LINK table (idempotent) ───────────────
+    // `supplier_category_links` is now the SOURCE OF TRUTH, seeded from the
+    // legacy free-text `suppliers.category`. Two steps, each its own statement:
+    //  1. reconcile — any name in the text with no `supplier_categories` row is
+    //     created, so no category is silently lost on migration.
+    //  2. link — one row per (supplier, category) pair, matched by trimmed name.
+    // A name that no longer resolves to a category is skipped (the old text may
+    // carry a stale spelling) rather than inserting a dangling link.
+    await client.query(`
+      INSERT INTO supplier_categories (name)
+      SELECT DISTINCT trim(elem)
+      FROM suppliers, unnest(string_to_array(category, ',')) AS elem
+      WHERE category IS NOT NULL
+        AND trim(elem) <> ''
+        AND trim(elem) NOT IN (SELECT name FROM supplier_categories)
+      ON CONFLICT (name) DO NOTHING;
+    `);
+    await client.query(`
+      INSERT INTO supplier_category_links (supplier_id, category_id)
+      SELECT DISTINCT s.id, c.id
+      FROM suppliers s
+      CROSS JOIN LATERAL unnest(string_to_array(s.category, ',')) AS elem
+      JOIN supplier_categories c ON c.name = trim(elem)
+      WHERE s.category IS NOT NULL
+        AND trim(elem) <> ''
+      ON CONFLICT (supplier_id, category_id) DO NOTHING;
     `);
 
     // ── Procurement responsibility migration (idempotent, re-runnable) ───────

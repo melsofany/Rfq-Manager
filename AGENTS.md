@@ -3724,3 +3724,33 @@ form + detail edit + read-only card + Excel import mapping/template).
 - **TDD**: `supplier-category-rename.test.ts` (2)، حارس `item-categories` (+1)، وحرّاس
   `init-db` المصدرية (+2) — الأربعة تفشل ضد الكود قبل الإصلاح. **1480 api-server + 68
   portal**؛ tsc + prettier + البناءان نظيفة.
+
+## مورد↔تصنيف صار جدول علاقات لا نصًّا حرًّا (§30 — **نُفِّذ**)
+
+- **الطلب**: «نفذ ده الان مش مستقبلا» — بعد أن وثّق §29 (إعادة كتابة النصّ) الدين
+  التقني، صار المطلوب ترحيل العلاقة إلى جدول علاقات فعليًا.
+- **الجدول** `supplier_category_links` (`lib/db/src/schema/categories.ts`): FK إلى
+  `suppliers` + `supplier_categories` مع `ON DELETE CASCADE`، فهرس فريد
+  `(supplier_id, category_id)`. الـDDL + الترحيل في `init-db.ts` (جملتان مستقلتان:
+  مصالحة التصنيفات الناقصة، ثم ربط `INSERT ... SELECT ... JOIN ... ON CONFLICT DO
+  NOTHING` — اسم نصّي معلّق يُتجاهَل فلا رابط يتيم).
+- **مصدر الحقيقة الوحيد**: `shared/supplier-category-links.ts` —
+  `saveSupplierCategoryLinks` (مصالحة)، `loadSupplierCategoryMap` (دفعي، لا N+1)،
+  `normalizeCategoryNames`. **لا تكرّر منطق الربط في مسار آخر**؛ كل الكتابات
+  (`POST`/`PATCH`/bulk/ERP) تمرّ من هنا.
+- **الكتابة المزدوجة باقية**: `suppliers.category` (النصّ) يُكتب كما هو **مرآة توافق
+  خلفي** فقط. لا تحذف الكتابة النصّية حتى تُثبت خلوّ المستودع من أي قارئ
+  (`grep suppliersTable.category`).
+- **تبديل القراءات**: `GET /suppliers` يرشّح بـ`innerJoin` على الجدول الجديد (الاسم
+  يُمرَّر كما هو من الواجهة)، ويُرجِع الأسماء من الروابط مع الرجوع للنصّ لصفّ بلا روابط
+  (صفوف ما قبل الترحيل). **حارس الحذف** (`users/categories.ts`) يعدّ الروابط لا النصّ.
+- **إعادة التسمية لم تعد تحتاج أي تعديل نصّي**: `supplier_categories.name` يتغيّر
+  والروابط تتبع بالـ`id`. (يُبقى `rewriteSupplierCategoryName` من §29 مؤقتًا للمرآة.)
+- **تحقّق حقيقي (PGlite)**: 3 تشغيلات للترحيل = نفس عدد الروابط (idempotent)، إعادة
+  تسمية التصنيف تنقل كل الموردين تلقائيًا، `ON DELETE CASCADE` يحذف الروابط، والاسم
+  المعلّق لا يُنشئ رابطًا. **لا تعتمد على اختبار وهمي للترحيل** — شغّل الـSQL الحقيقي.
+- **اختبارات**: `supplier-category-links.test.ts` (7) + حالتا كتابة في
+  `suppliers-bank-fields.test.ts` + حارس ترحيل مصدري في `init-db.test.ts`؛ الثلاثة
+  الحرّاس تفشل عند تعطيل الإصلاح (TDD مُتحقَّق). **1490 api-server + 68 portal**؛ tsc
+  (libs/api-server/portal) + prettier + البناءان نظيفة.
+

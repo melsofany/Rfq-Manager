@@ -318,4 +318,23 @@ describe("init-db migrations", () => {
     );
     expect(updateLiteral, "supplier_categories alias must be renamed").toBeDefined();
   });
+
+  it("creates the supplier↔category LINK table and backfills it from the text", () => {
+    // The link table is the source of truth. Its DDL must exist, and the
+    // migration must seed it from the legacy free-text column in TWO steps:
+    // reconcile missing categories, then insert the links.
+    expect(source).toContain("CREATE TABLE IF NOT EXISTS supplier_category_links");
+    const reconcile = sqlLiterals(source).find(
+      (b) => b.includes("INSERT INTO supplier_categories") && b.includes("unnest(string_to_array"),
+    );
+    expect(reconcile, "missing categories must be reconciled").toBeDefined();
+    const link = sqlLiterals(source).find(
+      (b) =>
+        b.includes("INSERT INTO supplier_category_links") &&
+        b.includes("JOIN supplier_categories c ON c.name = trim(elem)"),
+    );
+    expect(link, "links must be backfilled from the text").toBeDefined();
+    // Idempotent: a re-run must not duplicate a link.
+    expect(link!).toContain("ON CONFLICT (supplier_id, category_id) DO NOTHING");
+  });
 });

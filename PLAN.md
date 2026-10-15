@@ -1581,7 +1581,7 @@ many-to-many جديد** (`customer_rfq_item_owners`) + تعديل المصنّف
 **1479 api-server + 68 portal** اختبارًا يمرّ؛ `tsc` (libs + api-server + portal) نظيف؛
 `prettier` على كل المستودع نظيف.
 
-## 30. خطة مستقبلية: علاقة مورد↔تصنيف عبر جدول علاقات (لا نصّ حرّ) — **لم تُنفَّذ**
+## 30. علاقة مورد↔تصنيف عبر جدول علاقات (لا نصّ حرّ) — **نُفِّذت (الخطوات 1–4)**
 
 ### 30.1 الدين التقني
 
@@ -1634,5 +1634,38 @@ supplier_category_links (
 - **لا تنفّذ** هذا التغيير وتغييرات الميزات الأخرى في نفس الدفعة: الترحيل يمسّ بيانات
   إنتاجية، ويحتاج تحقّقًا مستقلًا (backfill صفري الفاقد + عدّاد موردين لكل تصنيف قبل/بعد).
 
-**الحالة: موثّق فقط — لا كود ولا تعديل.** يُنفَّذ عند الحاجة الفعلية (تكرار مشاكل
-إعادة التسمية، أو عند إضافة حذف/دمج تصنيفات للموردين).
+**الحالة: نُفِّذت الخطوات 1–4** (جدول + backfill + كتابة مزدوجة + تبديل القراءات
+والحارس). الخطوة 5 (إسقاط العمود النصّي) **لم تُنفَّذ** عن قصد — النصّ يُبقى مرآة
+توافق خلفي؛ إسقاطه لاحقًا بعد التأكد من خلوّ أي قارئ خارجي.
+
+**ما نُفِّذ فعلًا:**
+
+- `lib/db/src/schema/categories.ts`: جدول `supplier_category_links` (FK إلى
+  `suppliers` + `supplier_categories` مع `ON DELETE CASCADE`، فهرس فريد
+  `(supplier_id, category_id)`).
+- `artifacts/api-server/src/shared/init-db.ts`: `CREATE TABLE IF NOT EXISTS` +
+  فهرس فريد + ترحيل idempotent **من جملتين مستقلتين**: (1) مصالحة أسماء النصّ بلا
+  صفّ في `supplier_categories`، (2) `INSERT ... SELECT ... JOIN ... ON CONFLICT DO
+NOTHING`. الاسم الذي لا يُطابق صفًّا يُتجاهَل (لا رابط معلّق).
+- `artifacts/api-server/src/shared/supplier-category-links.ts` (جديد): مصدر الحقيقة
+  الوحيد — `saveSupplierCategoryLinks` (مصالحة: إنشاء التصنيفات الناقصة ثم حذف/إضافة
+  الروابط)، `loadSupplierCategoryMap` (تحميل دفعي، لا N+1)، و`normalizeCategoryNames`.
+- **القراءة/الكتابة** (`modules/users/suppliers.ts`): `GET /suppliers` يرشّح عبر
+  `innerJoin` على الجدول الجديد ويرجّع الأسماء منه (مع الرجوع للنصّ لصفوف بلا روابط)؛
+  `POST` + `PATCH` + الاستيراد الجماعي يكتبون الروابط؛ `integrations/service.ts`
+  (مزامنة ERP) يربط المورد المُنشأ.
+- **حارس الحذف** (`modules/users/categories.ts`): `DELETE /categories/:id` يعدّ
+  الروابط من الجدول الجديد بدل مطابقة النصّ.
+- **الكتابة المزدوجة باقية**: `suppliers.category` يُكتب كما هو (مرآة توافق خلفي)، فيبقى
+  أي كود/عميل قديم يقرأ النصّ صحيحًا حتى إسقاطه في خطوة لاحقة.
+
+**تحقّق حقيقي:** شُغِّل الـDDL + الترحيل على Postgres حقيقي (PGlite) — idempotent
+(3 تشغيلات = نفس عدد الروابط)، إعادة تسمية التصنيف تنقل كل الموردين تلقائيًا بالـid،
+حارس الحذف يعدّ الروابط، `ON DELETE CASCADE` يعمل، واسم نصّي معلّق **لا** يُنشئ رابطًا.
+الاختبارات: `supplier-category-links.test.ts` (7 وحدات) + حالتا كتابة في
+`suppliers-bank-fields.test.ts` + حارس ترحيل في `init-db.test.ts` — كلها تفشل عند
+تعطيل الإصلاح (تحقّق بـTDD).
+
+**الخطوة 5 (إسقاط `suppliers.category`)**: لا تُنفَّذ حتى يُثبت أن لا قارئ للنصّ
+(بحث `grep` على `suppliersTable.category`) وأن `import-tab`/ERP لا يكتبانه — النصّ
+الآن مرآة فقط.
