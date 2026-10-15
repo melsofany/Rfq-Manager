@@ -6,9 +6,11 @@
 import { Router, type IRouter } from "express";
 import hrRoutes from "./routes";
 import admsRouter from "./adms";
+import leaveRouter from "./leave-routes";
 
 const router: IRouter = Router();
 router.use(admsRouter);
 router.use(hrRoutes);
+router.use(leaveRouter);
 
 export default router;

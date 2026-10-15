@@ -19,8 +19,9 @@ import {
   hrAttendanceDevicesTable,
   hrAttendancePunchesTable,
 } from "@workspace/db";
-import { and, eq, gte, lt, desc, asc } from "drizzle-orm";
+import { and, eq, gte, lt, lte, desc, asc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { hrLeaveRequestsTable, hrLeaveTypesTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -38,7 +39,7 @@ function hasHrPermission(role: string, permissions: Record<string, boolean> | nu
 }
 
 /** Mirrors the portal's resolvePermissions: explicit map wins, else role default. */
-async function requireHr(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function requireHr(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const session = (req as Request & { session?: Session }).session;
     if (!session?.employeeId) {
@@ -236,6 +237,23 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
     )
     .orderBy(asc(hrAttendancePunchesTable.punchedAt));
 
+  // Approved leave covering this date → employee is "on leave", not absent.
+  const onLeaveRows = await db
+    .select({
+      employeeId: hrLeaveRequestsTable.employeeId,
+      nameAr: hrLeaveTypesTable.nameAr,
+    })
+    .from(hrLeaveRequestsTable)
+    .innerJoin(hrLeaveTypesTable, eq(hrLeaveTypesTable.id, hrLeaveRequestsTable.leaveTypeId))
+    .where(
+      and(
+        eq(hrLeaveRequestsTable.status, "approved"),
+        lte(hrLeaveRequestsTable.startDate, date),
+        gte(hrLeaveRequestsTable.endDate, date),
+      ),
+    );
+  const leaveByEmp = new Map(onLeaveRows.map((r) => [r.employeeId, r.nameAr]));
+
   const byPin = new Map<string, string[]>();
   for (const p of punches) {
     const list = byPin.get(p.pin) ?? [];
@@ -259,7 +277,9 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
       lastOut,
       punchCount: times.length,
       lateMinutes: late,
-      absent: times.length === 0,
+      onLeave: leaveByEmp.has(e.id),
+      leaveName: leaveByEmp.get(e.id) ?? null,
+      absent: times.length === 0 && !leaveByEmp.has(e.id),
     };
   });
 
@@ -270,6 +290,7 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
       employees: rows.length,
       present: rows.filter((r) => !r.absent).length,
       absent: rows.filter((r) => r.absent).length,
+      onLeave: rows.filter((r) => r.onLeave).length,
       late: rows.filter((r) => r.lateMinutes > 0).length,
     },
     rows,
