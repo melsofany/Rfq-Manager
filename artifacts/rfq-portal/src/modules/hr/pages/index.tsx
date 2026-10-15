@@ -4,6 +4,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { IdCard } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { BankCombobox } from "@/components/BankCombobox";
+import { findBankByName } from "@/lib/egyptian-banks";
 
 type Tab = "attendance" | "onboard" | "leave" | "discipline" | "employees" | "devices";
 
@@ -1121,6 +1123,10 @@ function OnboardTab() {
     e.preventDefault();
     setError(null);
     setSaved(null);
+    if (!findBankByName(f.bankName)) {
+      setError(t("hr.onb.bankPick"));
+      return;
+    }
     try {
       const body = {
         photo,
@@ -1247,7 +1253,10 @@ function OnboardTab() {
         <CardContent className="p-4 space-y-3">
           <h2 className="font-semibold">{t("hr.onb.sec.bank")}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {field("bankName", t("hr.onb.bankName"), "text", true)}
+            <div className="space-y-1">
+              <span className={label}>{t("hr.onb.bankName")}</span>
+              <BankCombobox value={f.bankName} onChange={(v) => setF({ ...f, bankName: v })} />
+            </div>
             {field("accountHolder", t("hr.onb.accountHolder"), "text", true)}
             {field("accountNo", t("hr.onb.accountNo"), "text", true)}
             {field("iban", t("hr.onb.iban"))}
