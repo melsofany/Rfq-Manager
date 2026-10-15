@@ -57,6 +57,13 @@ interface UnownedCategory {
   itemCount: number;
 }
 
+interface ClassificationConflict {
+  identityKey: string;
+  itemCount: number;
+  categories: Array<{ id: number; name: string; count: number }>;
+  sampleDescription: string | null;
+}
+
 /**
  * The «تصنيفات البنود» tab — the SINGLE place item categorization and
  * responsibility are managed.
@@ -559,6 +566,105 @@ function UnownedCategoriesPanel({
   );
 }
 
+/**
+ * Identities whose items DISAGREE on their classification — «نفس البند: كهرباء في
+ * طلب، إضاءة في طلب، غير مصنّف في الباقي». The operator sees this as the same item
+ * changing owner from one request to the next. The repair unifies each identity
+ * onto ONE domain (a manager's manual decision wins, else the majority) so the
+ * KPI attributes every copy of the item to the same employee.
+ */
+function ClassificationConflictsPanel({ onChanged }: { onChanged: () => void }) {
+  const [rows, setRows] = useState<ClassificationConflict[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [repairing, setRepairing] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/customer-rfq/classification-conflicts", {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { conflicts: ClassificationConflict[] };
+        setRows(body.conflicts ?? []);
+      }
+    } catch {
+      /* advisory */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function runRepair() {
+    setRepairing(true);
+    try {
+      const res = await fetch("/api/customer-rfq/classification-repair", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const out = (await res.json()) as { identities: number; itemsFixed: number };
+      toast.success(
+        `تم توحيد ${out.identities.toLocaleString("en-US")} بندًا متضاربًا — أُصلح ${out.itemsFixed.toLocaleString("en-US")} صفًا`,
+      );
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setRepairing(false);
+    }
+  }
+
+  if (loading || rows.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30 p-4 space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-sm text-foreground">
+            تضارب تصنيف البند ({rows.length.toLocaleString("en-US")})
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            نفس البند مصنَّف بشكل مختلف بين الطلبات (مثال: «كهرباء» في طلب و«إضاءة» في آخر و«غير
+            مصنّف» في الباقي). هذا هو سبب تغيّر الموظف المسؤول عن البند. التوحيد يجعل التصنيف واحدًا
+            في كل الطلبات — قرار المدير اليدوي له الأولوية، وإلا الأغلبية.
+          </p>
+        </div>
+        <Button size="sm" onClick={runRepair} disabled={repairing}>
+          {repairing ? "جارٍ التوحيد…" : "توحيد التصنيف المتضارب"}
+        </Button>
+      </div>
+      <div className="max-h-72 overflow-y-auto space-y-1.5">
+        {rows.slice(0, 100).map((c) => (
+          <div
+            key={c.identityKey}
+            className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs"
+          >
+            <span className="font-medium text-foreground truncate max-w-md">
+              {c.sampleDescription ?? c.identityKey}
+            </span>
+            <span className="text-muted-foreground">{c.itemCount.toLocaleString("en-US")} صف</span>
+            <span className="flex flex-wrap gap-1">
+              {c.categories.map((cat) => (
+                <span key={cat.id} className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                  {cat.name} ×{cat.count.toLocaleString("en-US")}
+                </span>
+              ))}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ItemCategoriesTab() {
   const { employee } = useAuth();
   const canManage = canManageItemAssignment(employee?.role, employee?.permissions);
@@ -618,6 +724,7 @@ export function ItemCategoriesTab() {
   return (
     <div className="space-y-6">
       {canManage && <UnownedCategoriesPanel employees={employees} onChanged={onChanged} />}
+      {canManage && <ClassificationConflictsPanel onChanged={onChanged} />}
       {canManage && (
         <div className="flex justify-end">
           <Button variant="outline" size="sm" onClick={runBulkClassify} disabled={classifying}>

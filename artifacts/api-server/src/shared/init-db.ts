@@ -460,6 +460,34 @@ export async function initDb(): Promise<void> {
         ON customer_rfq_item_categories (customer_rfq_item_id);
     `);
 
+    // ذاكرة تصنيف هوية البند — permanent, admin-authoritative classification
+    // memory. The recorded defect: the SAME item (same Line Item / Part No /
+    // description) got DIFFERENT categories across RFQs. This table is the shared
+    // memory that stops it. Kept in its OWN statement: statements share an
+    // implicit transaction, so a sibling failure would roll this CREATE back
+    // silently (the exact class of bug that left item_categories missing).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS item_classification_identity (
+        id SERIAL PRIMARY KEY,
+        identity_key TEXT NOT NULL,
+        part_no TEXT,
+        description_sig TEXT,
+        category_id INTEGER REFERENCES item_categories(id) ON DELETE SET NULL,
+        subcategory_ids TEXT,
+        brand_id INTEGER,
+        source TEXT NOT NULL DEFAULT 'auto',
+        confidence NUMERIC(5,2),
+        decided_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        times_seen INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS item_classification_identity_key_uq
+        ON item_classification_identity (identity_key);
+      CREATE INDEX IF NOT EXISTS idx_item_classification_identity_category
+        ON item_classification_identity (category_id);
+    `);
+
     // Add reactivated_at to suppliers — used by the auto-deactivate sweep so a
     // manual reactivation resets the no-reply counter (needs 10 MORE unanswered
     // sends to auto-deactivate again).
@@ -1755,11 +1783,17 @@ export async function initDb(): Promise<void> {
       { name: "كونتاكتورات", code: "contactors", parent: "كهرباء", sort: 41 },
       { name: "كابلات", code: "cables", parent: "كهرباء", sort: 42 },
       { name: "لوحات كهربائية", code: "panels", parent: "كهرباء", sort: 43 },
-      { name: "PLC", code: "plc", parent: "كهرباء", sort: 44 },
+      // PLC / Encoders / Control Systems are AUTOMATION instruments, so they sit
+      // under the «Automation» subcategory rather than directly under «كهرباء»
+      // (nested: كهرباء ← Automation ← Encoders). Responsibility still resolves
+      // to the functional domain كهرباء via the full parent chain.
       { name: "Automation", code: "automation", parent: "كهرباء", sort: 45 },
-      { name: "Encoders", code: "encoders", parent: "كهرباء", sort: 46 },
-      { name: "Control Systems", code: "control_systems", parent: "كهرباء", sort: 47 },
+      { name: "PLC", code: "plc", parent: "Automation", sort: 44 },
+      { name: "Encoders", code: "encoders", parent: "Automation", sort: 46 },
+      { name: "Control Systems", code: "control_systems", parent: "Automation", sort: 47 },
       { name: "Electrical Instruments", code: "instruments", parent: "كهرباء", sort: 48 },
+      // الإضاءة تخصص فرعي داخل الكهرباء وليست مجالًا وظيفيًا مستقلًا.
+      { name: "إضاءة", code: "lighting", parent: "كهرباء", sort: 49 },
     ];
     for (const s of itemSubcategories) {
       await client.query(
@@ -1957,6 +1991,91 @@ export async function initDb(): Promise<void> {
       FROM (VALUES ('elec'), ('electrical'), ('electric'), ('كهرباء')) AS a(alias)
       WHERE EXISTS (SELECT 1 FROM item_categories WHERE name = 'كهرباء')
       ON CONFLICT (alias) DO NOTHING;
+    `);
+
+    // ── Reparent automation instruments under «Automation» (idempotent) ──────
+    // PLC / Encoders / Control Systems are AUTOMATION instruments, so they belong
+    // under the Automation subcategory (nested: كهرباء ← Automation ← Encoders),
+    // not directly under كهرباء. The subcategory seed above only sets a parent
+    // when it is NULL, so an existing row parented to كهرباء is reparented HERE.
+    // Every statement is its OWN client.query (a sibling failure must not roll it
+    // back). Responsibility still resolves to the functional domain كهرباء via the
+    // full parent chain, so this changes grouping only — never ownership.
+    await client.query(`
+      UPDATE item_categories child
+      SET parent_id = parent.id
+      FROM item_categories parent
+      WHERE child.kind = 'subcategory'
+        AND child.name IN ('PLC','Encoders','Control Systems')
+        AND parent.name = 'Automation'
+        AND child.parent_id IS DISTINCT FROM parent.id;
+    `);
+
+    // ── Unify «الإضاءة» into ONE subcategory of «كهرباء» (idempotent) ────────
+    // The operator's rule: «الإضاءة تخصص فرعي داخل الكهرباء وليست مجالًا وظيفيًا
+    // مستقلًا». A standalone «اضاءة» category created from the UI (often as a
+    // functional domain) is folded onto the canonical «إضاءة» subcategory: every
+    // RELATION moves, then the duplicate is left dormant (never deleted — its
+    // historical audit rows must survive). Its keywords are NOT carried over,
+    // because the canonical lighting vocabulary is seeded in code and carrying a
+    // stray term (e.g. a generic word) could mis-classify.
+    await client.query(`
+      UPDATE customer_rfq_items SET category_id = COALESCE((SELECT id FROM item_categories WHERE name = 'إضاءة'), category_id)
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'إضاءة' AND lower(trim(name)) IN ('اضاءة','اضاءه','lighting','light')
+      );
+    `);
+    await client.query(`
+      UPDATE rfq_items SET category_id = COALESCE((SELECT id FROM item_categories WHERE name = 'إضاءة'), category_id)
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'إضاءة' AND lower(trim(name)) IN ('اضاءة','اضاءه','lighting','light')
+      );
+    `);
+    await client.query(`
+      UPDATE purchase_order_items SET category_id = COALESCE((SELECT id FROM item_categories WHERE name = 'إضاءة'), category_id)
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'إضاءة' AND lower(trim(name)) IN ('اضاءة','اضاءه','lighting','light')
+      );
+    `);
+    await client.query(`
+      UPDATE customer_rfq_item_assignments SET category_id = COALESCE((SELECT id FROM item_categories WHERE name = 'إضاءة'), category_id)
+      WHERE category_id IN (
+        SELECT id FROM item_categories
+        WHERE name <> 'إضاءة' AND lower(trim(name)) IN ('اضاءة','اضاءه','lighting','light')
+      );
+    `);
+    // Ensure the canonical «إضاءة» row is a subcategory of «كهرباء» even if it was
+    // created earlier as a functional domain from the admin UI.
+    await client.query(`
+      UPDATE item_categories child
+      SET kind = 'subcategory', parent_id = parent.id
+      FROM item_categories parent
+      WHERE child.name = 'إضاءة'
+        AND parent.name = 'كهرباء'
+        AND (child.kind IS DISTINCT FROM 'subcategory' OR child.parent_id IS DISTINCT FROM parent.id);
+    `);
+    // Deactivate (never delete) the folded duplicates so they stop appearing as
+    // independent domains in the admin list while their history survives.
+    await client.query(`
+      UPDATE item_categories
+      SET is_active = false
+      WHERE name <> 'إضاءة' AND lower(trim(name)) IN ('اضاءة','اضاءه','lighting','light');
+    `);
+    // Supplier categories mirror into item categories, so a supplier «اضاءة» would
+    // otherwise re-appear on the next boot. Rename it to the canonical name
+    // (idempotent), matching how the ELEC alias is consolidated above.
+    await client.query(`
+      DELETE FROM supplier_categories sc
+      WHERE lower(trim(sc.name)) IN ('اضاءة','اضاءه','lighting','light')
+        AND EXISTS (SELECT 1 FROM supplier_categories WHERE name = 'إضاءة');
+    `);
+    await client.query(`
+      UPDATE supplier_categories
+      SET name = 'إضاءة'
+      WHERE lower(trim(name)) IN ('اضاءة','اضاءه','lighting','light');
     `);
 
     // ── Consolidate the alias spelling in `supplier_categories` (idempotent) ──

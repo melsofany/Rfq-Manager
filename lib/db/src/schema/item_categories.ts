@@ -289,3 +289,52 @@ export const customerRfqItemCategoriesTable = pgTable(
 );
 
 export type CustomerRfqItemCategory = typeof customerRfqItemCategoriesTable.$inferSelect;
+
+// ذاكرة تصنيف هوية البند — permanent, admin-authoritative classification memory.
+//
+// The recorded defect: the SAME item (same Line Item / Part No / description)
+// received DIFFERENT categories across RFQs — «كهرباء» on one request, «إضاءة» on
+// another, «غير مصنّف» on the rest — because each item was classified
+// independently at insert time, with no shared memory of a prior decision.
+//
+// This table is that memory. It is keyed on a CANONICAL identity
+// (`identity_key`, see `modules/rfq/item-identity.ts`), so an item recognised
+// once is classified the same way on every later request WITHOUT re-asking the
+// model — which is also what keeps classification working when the LLM quota is
+// exhausted.
+//
+// Precedence is enforced in code: a MANAGER decision (`source = 'manual'`) is
+// never overwritten by an automatic one. Auto rows may be upgraded to manual,
+// never the reverse.
+export const itemClassificationIdentityTable = pgTable(
+  "item_classification_identity",
+  {
+    id: serial("id").primaryKey(),
+    // Canonical identity key. UNIQUE — one row per real item identity.
+    identityKey: text("identity_key").notNull(),
+    // Representative part number (canonical form) and description, for display.
+    partNo: text("part_no"),
+    descriptionSig: text("description_sig"),
+    // The authoritative classification: PRIMARY functional domain.
+    categoryId: integer("category_id").references(() => itemCategoriesTable.id, {
+      onDelete: "set null",
+    }),
+    // Analysis evidence (suggestion only; never owns responsibility).
+    subcategoryIds: text("subcategory_ids"),
+    brandId: integer("brand_id"),
+    // manual | auto — 'manual' is authoritative and never auto-overwritten.
+    source: text("source").notNull().default("auto"),
+    confidence: numeric("confidence", { precision: 5, scale: 2 }),
+    decidedBy: integer("decided_by").references(() => employeesTable.id, { onDelete: "set null" }),
+    // How many items have resolved to this identity (telemetry).
+    timesSeen: integer("times_seen").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [uniqueIndex("item_classification_identity_key_uq").on(t.identityKey)],
+);
+
+export type ItemClassificationIdentity = typeof itemClassificationIdentityTable.$inferSelect;

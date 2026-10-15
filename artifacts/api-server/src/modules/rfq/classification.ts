@@ -76,6 +76,11 @@ export const MIN_CONFIDENCE = 40;
 const W_PHRASE = 60;
 const W_TOKEN = 45;
 const W_FAMILY = 30;
+// A subcategory match names a real product family (قواطع/إضاءة/Encoders) and is
+// stronger than a bare domain token, so a specific technical domain beats the
+// generic «قطع غيار» domain. It is a BONUS, not a replacement for the base
+// weight, so an item that only matches a subcategory still clears MIN_CONFIDENCE.
+const W_SUBCATEGORY = 25;
 
 // ── Text normalisation ──────────────────────────────────────────────────────
 // Folds Arabic spelling variants (hamza/alef, taa marbuta, yaa), strips
@@ -155,20 +160,11 @@ export const CATEGORY_KEYWORDS: Record<string, string[]> = {
     "conduit",
     "terminal",
     "lug",
-    "contactor",
-    "relay",
-    "coil",
-    "lamp",
-    "lighting",
     "كابل",
     "سلك",
     "مواسير",
     "طرفيه",
-    "كونتاكتور",
-    "ريلاي",
-    "كويل",
-    "لمبه",
-    "اضاءه",
+    "كهرباء",
   ],
   fire_resistance: [
     "fire resistance",
@@ -215,10 +211,26 @@ const SUBCATEGORY_CODES = new Set([
   "encoders",
   "control_systems",
   "instruments",
+  "lighting",
 ]);
 
 /** Subcategory vocabulary (refines a domain; never owns responsibility). */
 export const SUBCATEGORY_KEYWORDS: Record<string, string[]> = {
+  lighting: [
+    "lamp",
+    "lighting",
+    "light",
+    "flood light",
+    "led",
+    "luminair",
+    "tube lamp",
+    "لمبه",
+    "لمبات",
+    "اضاءه",
+    "إضاءة",
+    "كشاف",
+    "كشافات",
+  ],
   breakers: [
     "circuit breaker",
     "breaker",
@@ -293,15 +305,40 @@ export function classifyItem(
   const byId = new Map(categories.map((c) => [c.id, c]));
   const byCode = new Map(categories.filter((c) => c.code).map((c) => [c.code as string, c]));
   // The domain a category belongs to, resolved from the seed list (parentId) or,
-  // when a caller supplies only codes, from the built-in subcategory map.
+  // when a caller supplies only codes, from the built-in subcategory map. Walks
+  // the FULL parent chain so a nested subcategory (كهرباء ← Automation ← Encoders)
+  // still resolves to its functional domain.
   const domainOf = (cat: CategorySeed): CategorySeed | null => {
-    if (effectiveKind(cat) !== "subcategory") return cat;
-    if (cat.parentId != null) {
-      const p = byId.get(cat.parentId);
-      if (p) return p;
+    let current: CategorySeed | undefined = cat;
+    for (let hop = 0; hop < 3 && current; hop += 1) {
+      if (effectiveKind(current) !== "subcategory") return current;
+      if (current.parentId != null) {
+        const p = byId.get(current.parentId);
+        if (p) {
+          current = p;
+          continue;
+        }
+      }
+      const code = current.code ? SUBCATEGORY_DOMAIN_CODE[current.code] : undefined;
+      return code ? (byCode.get(code) ?? current) : current;
     }
-    const code = cat.code ? SUBCATEGORY_DOMAIN_CODE[cat.code] : undefined;
-    return code ? (byCode.get(code) ?? cat) : cat;
+    return current ?? null;
+  };
+  // Every subcategory on the path from `cat` up to its domain, so a nested chain
+  // records Automation AND Encoders, not only the leaf.
+  const subChainOf = (cat: CategorySeed): number[] => {
+    const out: number[] = [];
+    let current: CategorySeed | undefined = cat;
+    for (let hop = 0; hop < 3 && current; hop += 1) {
+      if (effectiveKind(current) !== "subcategory") break;
+      out.push(current.id);
+      if (current.parentId != null) {
+        current = byId.get(current.parentId);
+      } else {
+        break;
+      }
+    }
+    return out;
   };
   // Evidence is aggregated by FUNCTIONAL DOMAIN, never by the category that
   // happened to match: a subcategory (قواطع/PLC/…) refines an item but its
@@ -320,12 +357,16 @@ export function classifyItem(
   // like keywords, so a text mentioning a deprecated spelling still resolves to
   // the ONE canonical category.
   const vocabFor = (cat: CategorySeed): Array<string | ClassifierKeyword> => {
+    // The vocabulary key is the category's `code`, else `id:<id>` — a category
+    // added from the admin UI without a code must still be reachable, or the
+    // manager's keywords would silently never apply.
+    const key = cat.code ? cat.code : `id:${cat.id}`;
     const base =
       effectiveKind(cat) === "subcategory"
-        ? vocabulary[cat.code ?? ""]?.length
-          ? vocabulary[cat.code ?? ""]
+        ? vocabulary[key]?.length
+          ? vocabulary[key]
           : (SUBCATEGORY_KEYWORDS[cat.code ?? ""] ?? [])
-        : (vocabulary[cat.code ?? ""] ?? []);
+        : (vocabulary[key] ?? []);
     return cat.aliases && cat.aliases.length > 0 ? [...base, ...cat.aliases] : base;
   };
 
@@ -370,22 +411,30 @@ export function classifyItem(
 
     if (score <= 0) continue;
 
+    // A SUBCATEGORY match (قواطع/إضاءة/Encoders…) is stronger evidence than a
+    // bare domain token: it names a real product family, whereas «قطع غيار» can
+    // match almost anything. The bonus is what makes the specific technical
+    // domain win over the generic spare-parts domain, per the operator's rule
+    // «قطع الغيار ليست مجالًا عامًا — حدِّد المجال الفني أولًا».
+    if (kind === "subcategory") score += W_SUBCATEGORY;
+
     // Attribute the evidence to the owning domain (a functional category owns
     // itself; a subcategory owns nothing and hands its evidence to its domain).
     const domain = domainOf(cat);
     if (!domain) continue;
 
+    const subChain = kind === "subcategory" ? subChainOf(cat) : [];
     const existing = byDomain.get(domain.id);
     if (existing) {
       existing.score = Math.min(100, existing.score + score);
       existing.term = existing.term ?? term;
-      if (kind === "subcategory") existing.subIds.add(cat.id);
+      for (const id of subChain) existing.subIds.add(id);
     } else {
       byDomain.set(domain.id, {
         category: domain,
         score: Math.min(100, score),
         term,
-        subIds: new Set(kind === "subcategory" ? [cat.id] : []),
+        subIds: new Set(subChain),
       });
     }
   }
@@ -435,13 +484,16 @@ export function categoryKeywords(): Record<string, string[]> {
  * a brand must never decide who handles an item. `functional` (and a legacy row
  * with no kind) resolves to itself.
  *
- * Follows at most two parent hops so a mis-configured cycle cannot loop.
+ * Follows at most three parent hops so a mis-configured cycle cannot loop.
  */
 export function resolveDomainId(categoryId: number, categories: CategorySeed[]): number | null {
   const byId = new Map(categories.map((c) => [c.id, c]));
   let current = byId.get(categoryId);
   if (!current) return categoryId;
-  for (let hop = 0; hop < 2; hop += 1) {
+  // Walk the FULL parent chain (3 hops covers the deepest nesting here:
+  // كهرباء ← Automation ← Encoders) so a nested subcategory resolves to its
+  // functional domain, not to an intermediate subcategory.
+  for (let hop = 0; hop < 3; hop += 1) {
     const kind = current.kind ?? "functional";
     if (kind === "brand") return null;
     if (kind === "functional" || current.parentId == null) return current.id;
