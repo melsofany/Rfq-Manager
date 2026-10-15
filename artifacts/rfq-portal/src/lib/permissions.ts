@@ -74,6 +74,7 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     labelKey: "nav.items",
     children: [
       { key: "items:search", labelKey: "perm.items.search" },
+      { key: "items:analysis", labelKey: "perm.items.analysis" },
       { key: "items:sheet", labelKey: "perm.items.sheet" },
       { key: "items:categories", labelKey: "perm.items.categories" },
     ],
@@ -162,7 +163,7 @@ export const ASSIGN_PERM = {
  * so switching between search / sheet / categories is never a dead end — a
  * granted `items:categories` with un-granted siblings would render no tab bar.
  */
-const ITEMS_TABS = ["items:search", "items:sheet", "items:categories"] as const;
+const ITEMS_TABS = ["items:search", "items:analysis", "items:sheet", "items:categories"] as const;
 
 /**
  * Role defaults used when an employee has no explicit `permissions` map.

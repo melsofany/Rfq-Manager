@@ -30,8 +30,10 @@ import {
   X,
   Tags,
   Search as SearchIcon,
+  LineChart as LineChartIcon,
 } from "lucide-react";
 import { ItemCategoriesTab } from "./item-categories";
+import { ItemAnalysisTab } from "./item-analysis";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -949,18 +951,19 @@ export default function ItemsPage() {
   const { employee } = useAuth();
   const allowedTabs = filterTabs(employee?.role, employee?.permissions, "items", [
     "search",
+    "analysis",
     "sheet",
     "categories",
   ] as const);
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  const [tab, setTab] = useState<"search" | "sheet" | "categories">(() => {
+  const [tab, setTab] = useState<"search" | "analysis" | "sheet" | "categories">(() => {
     // Deep link from the customer-RFQ responsibility banner (`/items?tab=categories`).
     const q = new URLSearchParams(window.location.search).get("tab");
-    const wanted = q === "categories" || q === "sheet" ? q : "search";
+    const wanted = q === "categories" || q === "sheet" || q === "analysis" ? q : "search";
     return (allowedTabs as readonly string[]).includes(wanted)
-      ? (wanted as "search" | "sheet" | "categories")
+      ? (wanted as "search" | "analysis" | "sheet" | "categories")
       : (allowedTabs[0] ?? "search");
   });
 
@@ -1005,9 +1008,11 @@ export default function ItemsPage() {
           <p className="text-muted-foreground text-sm mt-0.5">
             {tab === "search"
               ? "Search for any item by description, part number, or line item — see the full RFQ history and all supplier responses."
-              : tab === "sheet"
-                ? "سجل مسطّح يعرض كل بند طلب تسعير في صف واحد مع أعمدة أمر الشراء المقابل إن وُجد. أي بيانات مستقبليه تُضاف تظهر هنا تلقائيًا."
-                : "تصنيفات البنود التي تُبنى عليها مسؤولية كل موظف مشتريات."}
+              : tab === "analysis"
+                ? "ابحث عن أي بند بالوصف أو رقم القطعة أو رقم البند، واختر البند لعرض التحليل الكامل: الاتجاه السعري، كل مرة تم تسعيره، ومَن ورّده."
+                : tab === "sheet"
+                  ? "سجل مسطّح يعرض كل بند طلب تسعير في صف واحد مع أعمدة أمر الشراء المقابل إن وُجد. أي بيانات مستقبليه تُضاف تظهر هنا تلقائيًا."
+                  : "تصنيفات البنود التي تُبنى عليها مسؤولية كل موظف مشتريات."}
           </p>
         </div>
 
@@ -1025,6 +1030,20 @@ export default function ItemsPage() {
             >
               <Search size={15} />
               بحث البنود
+            </button>
+          )}
+          {allowedTabs.includes("analysis") && (
+            <button
+              onClick={() => setTab("analysis")}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+                tab === "analysis"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <LineChartIcon size={15} />
+              تحليل البنود والاتجاه السعري
             </button>
           )}
           {allowedTabs.includes("sheet") && (
@@ -1059,6 +1078,8 @@ export default function ItemsPage() {
 
         {tab === "categories" ? (
           <ItemCategoriesTab />
+        ) : tab === "analysis" ? (
+          <ItemAnalysisTab />
         ) : tab === "sheet" ? (
           <SheetViewTab />
         ) : (
