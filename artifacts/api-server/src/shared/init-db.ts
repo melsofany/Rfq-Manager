@@ -2444,6 +2444,13 @@ export async function initDb(): Promise<void> {
       )
     `);
     await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_settings (
+        key TEXT PRIMARY KEY,
+        value JSONB NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS hr_disciplinary_cases (
         id SERIAL PRIMARY KEY,
         employee_id INTEGER NOT NULL,

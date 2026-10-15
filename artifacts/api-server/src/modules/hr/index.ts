@@ -9,6 +9,7 @@ import admsRouter from "./adms";
 import leaveRouter from "./leave-routes";
 import disciplineRouter from "./discipline-routes";
 import onboardingRouter from "./onboarding-routes";
+import settingsRouter from "./settings-routes";
 
 const router: IRouter = Router();
 router.use(admsRouter);
@@ -16,5 +17,6 @@ router.use(hrRoutes);
 router.use(leaveRouter);
 router.use(disciplineRouter);
 router.use(onboardingRouter);
+router.use(settingsRouter);
 
 export default router;
