@@ -12,7 +12,13 @@
  * Access: admin always; others need the `hr` permission (role default: manager).
  */
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, employeesTable, hrEmployeesTable, hrAttendanceDevicesTable, hrAttendancePunchesTable } from "@workspace/db";
+import {
+  db,
+  employeesTable,
+  hrEmployeesTable,
+  hrAttendanceDevicesTable,
+  hrAttendancePunchesTable,
+} from "@workspace/db";
 import { and, eq, gte, lt, desc, asc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 
@@ -40,7 +46,11 @@ async function requireHr(req: Request, res: Response, next: NextFunction): Promi
       return;
     }
     const [emp] = await db
-      .select({ role: employeesTable.role, permissions: employeesTable.permissions, isActive: employeesTable.isActive })
+      .select({
+        role: employeesTable.role,
+        permissions: employeesTable.permissions,
+        isActive: employeesTable.isActive,
+      })
       .from(employeesTable)
       .where(eq(employeesTable.id, session.employeeId))
       .limit(1);
@@ -147,7 +157,11 @@ router.patch("/hr/employees/:id", async (req, res): Promise<void> => {
     patch.biometricPin = pin;
   }
   try {
-    const [row] = await db.update(hrEmployeesTable).set(patch).where(eq(hrEmployeesTable.id, id)).returning();
+    const [row] = await db
+      .update(hrEmployeesTable)
+      .set(patch)
+      .where(eq(hrEmployeesTable.id, id))
+      .returning();
     if (!row) {
       res.status(404).json({ error: "غير موجود" });
       return;
@@ -165,7 +179,10 @@ router.patch("/hr/employees/:id", async (req, res): Promise<void> => {
 
 // ── Devices ─────────────────────────────────────────────────────────────────
 router.get("/hr/devices", async (_req, res): Promise<void> => {
-  const rows = await db.select().from(hrAttendanceDevicesTable).orderBy(desc(hrAttendanceDevicesTable.lastSeenAt));
+  const rows = await db
+    .select()
+    .from(hrAttendanceDevicesTable)
+    .orderBy(desc(hrAttendanceDevicesTable.lastSeenAt));
   res.json(rows);
 });
 

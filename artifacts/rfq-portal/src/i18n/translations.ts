@@ -47,7 +47,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.status.active": "Active",
     "hr.status.resigned": "Resigned",
     "hr.status.terminated": "Terminated",
-    "hr.dev.help": "Devices that connect to the server appear here as pending. Activate a device to accept its punches.",
+    "hr.dev.help":
+      "Devices that connect to the server appear here as pending. Activate a device to accept its punches.",
     "hr.dev.sn": "Serial number",
     "hr.dev.lastSeen": "Last seen",
     "hr.dev.active": "Active",
@@ -469,7 +470,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.status.active": "نشط",
     "hr.status.resigned": "مستقيل",
     "hr.status.terminated": "منتهية خدمته",
-    "hr.dev.help": "الأجهزة اللي تتصل بالسيرفر بتظهر هنا كـ «قيد الانتظار». فعّل الجهاز عشان تُقبل بصماته.",
+    "hr.dev.help":
+      "الأجهزة اللي تتصل بالسيرفر بتظهر هنا كـ «قيد الانتظار». فعّل الجهاز عشان تُقبل بصماته.",
     "hr.dev.sn": "الرقم التسلسلي",
     "hr.dev.lastSeen": "آخر اتصال",
     "hr.dev.active": "مفعّل",

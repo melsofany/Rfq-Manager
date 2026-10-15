@@ -2230,7 +2230,6 @@ export async function initDb(): Promise<void> {
     `);
     logger.info("initDb: HR attendance tables ensured");
 
-
     logger.info("initDb: seed complete");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");

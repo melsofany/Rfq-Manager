@@ -112,7 +112,9 @@ function AttendanceTab() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      setData(await api<AttendanceResponse>(`/hr/attendance?date=${date}&shiftStart=${shiftStart}`));
+      setData(
+        await api<AttendanceResponse>(`/hr/attendance?date=${date}&shiftStart=${shiftStart}`),
+      );
     } catch (e) {
       setError((e as Error).message);
     }
@@ -127,13 +129,25 @@ function AttendanceTab() {
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
           <span className="block text-muted-foreground mb-1">{t("hr.att.date")}</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border rounded px-2 py-1.5 bg-background" />
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="border rounded px-2 py-1.5 bg-background"
+          />
         </label>
         <label className="text-sm">
           <span className="block text-muted-foreground mb-1">{t("hr.att.shiftStart")}</span>
-          <input type="time" value={shiftStart} onChange={(e) => setShiftStart(e.target.value)} className="border rounded px-2 py-1.5 bg-background" />
+          <input
+            type="time"
+            value={shiftStart}
+            onChange={(e) => setShiftStart(e.target.value)}
+            className="border rounded px-2 py-1.5 bg-background"
+          />
         </label>
-        <Button variant="outline" onClick={load}>{t("hr.att.refresh")}</Button>
+        <Button variant="outline" onClick={load}>
+          {t("hr.att.refresh")}
+        </Button>
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -169,7 +183,9 @@ function AttendanceTab() {
                       <td className="p-2">{r.department ?? "—"}</td>
                       <td className="p-2">{r.firstIn?.slice(0, 5) ?? "—"}</td>
                       <td className="p-2">{r.lastOut?.slice(0, 5) ?? "—"}</td>
-                      <td className="p-2">{r.lateMinutes > 0 ? `${r.lateMinutes} ${t("hr.att.minutes")}` : "—"}</td>
+                      <td className="p-2">
+                        {r.lateMinutes > 0 ? `${r.lateMinutes} ${t("hr.att.minutes")}` : "—"}
+                      </td>
                       <td className="p-2">
                         {r.absent ? (
                           <span className="text-red-600">{t("hr.att.absentLabel")}</span>
@@ -181,7 +197,9 @@ function AttendanceTab() {
                   ))}
                   {data.rows.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="p-6 text-center text-muted-foreground">{t("hr.att.noEmployees")}</td>
+                      <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                        {t("hr.att.noEmployees")}
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -195,7 +213,8 @@ function AttendanceTab() {
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "red" | "amber" }) {
-  const color = tone === "red" ? "text-red-600" : tone === "amber" ? "text-amber-600" : "text-foreground";
+  const color =
+    tone === "red" ? "text-red-600" : tone === "amber" ? "text-amber-600" : "text-foreground";
   return (
     <Card>
       <CardContent className="p-4">
@@ -210,7 +229,13 @@ function EmployeesTab() {
   const { t } = useLanguage();
   const [rows, setRows] = useState<HrEmployee[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ employeeNo: "", fullName: "", department: "", jobTitle: "", biometricPin: "" });
+  const [form, setForm] = useState({
+    employeeNo: "",
+    fullName: "",
+    department: "",
+    jobTitle: "",
+    biometricPin: "",
+  });
 
   const load = useCallback(async () => {
     try {
@@ -250,11 +275,38 @@ function EmployeesTab() {
   return (
     <div className="space-y-4">
       <form onSubmit={create} className="flex flex-wrap gap-2 items-end">
-        <input className={input} placeholder={t("hr.col.no")} value={form.employeeNo} onChange={(e) => setForm({ ...form, employeeNo: e.target.value })} required />
-        <input className={input} placeholder={t("hr.col.name")} value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required />
-        <input className={input} placeholder={t("hr.col.dept")} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
-        <input className={input} placeholder={t("hr.col.job")} value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} />
-        <input className={input} placeholder={t("hr.col.pin")} value={form.biometricPin} onChange={(e) => setForm({ ...form, biometricPin: e.target.value })} />
+        <input
+          className={input}
+          placeholder={t("hr.col.no")}
+          value={form.employeeNo}
+          onChange={(e) => setForm({ ...form, employeeNo: e.target.value })}
+          required
+        />
+        <input
+          className={input}
+          placeholder={t("hr.col.name")}
+          value={form.fullName}
+          onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+          required
+        />
+        <input
+          className={input}
+          placeholder={t("hr.col.dept")}
+          value={form.department}
+          onChange={(e) => setForm({ ...form, department: e.target.value })}
+        />
+        <input
+          className={input}
+          placeholder={t("hr.col.job")}
+          value={form.jobTitle}
+          onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
+        />
+        <input
+          className={input}
+          placeholder={t("hr.col.pin")}
+          value={form.biometricPin}
+          onChange={(e) => setForm({ ...form, biometricPin: e.target.value })}
+        />
         <Button type="submit">{t("hr.emp.add")}</Button>
       </form>
 
@@ -281,11 +333,17 @@ function EmployeesTab() {
                   <td className="p-2">{r.fullName}</td>
                   <td className="p-2">{r.department ?? "—"}</td>
                   <td className="p-2">{r.jobTitle ?? "—"}</td>
-                  <td className="p-2">{r.biometricPin ?? <span className="text-amber-600">{t("hr.emp.noPin")}</span>}</td>
+                  <td className="p-2">
+                    {r.biometricPin ?? <span className="text-amber-600">{t("hr.emp.noPin")}</span>}
+                  </td>
                   <td className="p-2">{t(`hr.status.${r.status}`)}</td>
                   <td className="p-2 text-end">
                     {r.status === "active" && (
-                      <Button variant="outline" size="sm" onClick={() => setStatus(r.id, "resigned")}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStatus(r.id, "resigned")}
+                      >
                         {t("hr.emp.offboard")}
                       </Button>
                     )}
@@ -294,7 +352,9 @@ function EmployeesTab() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-muted-foreground">{t("hr.emp.empty")}</td>
+                  <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                    {t("hr.emp.empty")}
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -324,7 +384,10 @@ function DevicesTab() {
 
   async function toggle(d: Device) {
     try {
-      await api(`/hr/devices/${encodeURIComponent(d.sn)}`, { method: "PATCH", body: JSON.stringify({ isActive: !d.isActive }) });
+      await api(`/hr/devices/${encodeURIComponent(d.sn)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive: !d.isActive }),
+      });
       load();
     } catch (err) {
       setError((err as Error).message);
@@ -350,7 +413,9 @@ function DevicesTab() {
               {rows.map((d) => (
                 <tr key={d.sn} className="border-t">
                   <td className="p-2 font-mono">{d.sn}</td>
-                  <td className="p-2">{d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "—"}</td>
+                  <td className="p-2">
+                    {d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString() : "—"}
+                  </td>
                   <td className="p-2">{d.isActive ? t("hr.dev.active") : t("hr.dev.pending")}</td>
                   <td className="p-2 text-end">
                     <Button variant="outline" size="sm" onClick={() => toggle(d)}>
@@ -361,7 +426,9 @@ function DevicesTab() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-6 text-center text-muted-foreground">{t("hr.dev.empty")}</td>
+                  <td colSpan={4} className="p-6 text-center text-muted-foreground">
+                    {t("hr.dev.empty")}
+                  </td>
                 </tr>
               )}
             </tbody>
