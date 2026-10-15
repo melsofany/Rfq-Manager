@@ -2187,6 +2187,48 @@ export async function initDb(): Promise<void> {
          ON customer_po_item_deliveries (wa_message_id) WHERE wa_message_id IS NOT NULL`,
     );
     logger.info("initDb: responsibility migration applied");
+    // ══════════════════════════════════════════════════════════════════════
+    // HR — الموظفون والحضور بالبصمة (ZKTeco ADMS)
+    // ══════════════════════════════════════════════════════════════════════
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_employees (
+        id SERIAL PRIMARY KEY,
+        employee_no TEXT NOT NULL UNIQUE,
+        full_name TEXT NOT NULL,
+        job_title TEXT,
+        department TEXT,
+        hire_date DATE,
+        status TEXT NOT NULL DEFAULT 'active',
+        biometric_pin TEXT UNIQUE,
+        phone TEXT,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_attendance_devices (
+        sn TEXT PRIMARY KEY,
+        name TEXT,
+        location TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT false,
+        last_seen_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_attendance_punches (
+        id SERIAL PRIMARY KEY,
+        device_sn TEXT NOT NULL,
+        pin TEXT NOT NULL,
+        punched_at TIMESTAMP NOT NULL,
+        status TEXT,
+        verify TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (device_sn, pin, punched_at)
+      )
+    `);
+    logger.info("initDb: HR attendance tables ensured");
 
     logger.info("initDb: seed complete");
   } catch (err) {

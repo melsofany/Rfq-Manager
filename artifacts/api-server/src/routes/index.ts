@@ -25,6 +25,7 @@ import aiAssistantModule from "../modules/ai-assistant/index";
 import integrationsModule from "../modules/integrations/index";
 import chatwootModule from "../modules/chatwoot/index";
 import backupModule from "../modules/backup/index";
+import hrModule from "../modules/hr/index";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(aiAssistantModule); // AI assistant (admin/manager WhatsApp agent)
 router.use(chatwootModule); // chatwoot SSO bridge for the /whatsapp inbox
 router.use(integrationsModule); // ERP integrations (Odoo · SAP · Oracle · Google Sheets)
 router.use(backupModule); // daily DB backup → Google Drive
+router.use(hrModule); // HR · employees · fingerprint attendance (ADMS)
 
 export default router;

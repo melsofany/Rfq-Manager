@@ -23,3 +23,4 @@ export * from "./expenses";
 export * from "./accounting";
 export * from "./data_entry_sessions";
 export * from "./ai_assistant";
+export * from "./hr";
