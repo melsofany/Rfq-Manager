@@ -30,6 +30,9 @@ const rfqItemsTable = {
   id: "id",
   rfqId: "rfqId",
   categoryId: "categoryId",
+  description: "description",
+  partNo: "partNo",
+  lineItem: "lineItem",
   createdAt: "createdAt",
 };
 const rfqItemAssignmentsTable = {
@@ -50,6 +53,16 @@ const itemCategoryAliasesTable = {
   categoryId: "categoryId",
   alias: "alias",
 };
+const itemClassificationIdentityTable = {
+  _: "itemClassificationIdentity",
+  identityKey: "identityKey",
+  categoryId: "categoryId",
+  source: "source",
+  subcategoryIds: "subcategoryIds",
+  brandId: "brandId",
+  confidence: "confidence",
+  timesSeen: "timesSeen",
+};
 
 // ── Per-test state ──────────────────────────────────────────────────────────
 let categoryRows: any[];
@@ -57,8 +70,11 @@ let ownerRows: any[];
 let workloadRows: any[];
 let itemRows: any[];
 let existingAssignmentRows: any[];
+/** Rows the classification-memory table returns for an identity lookup. */
+let memoryRows: any[];
 
 const insertedAssignments: any[] = [];
+const insertedMemory: any[] = [];
 const updatedItemCalls: Array<{ id: number; vals: any }> = [];
 
 const dbMock: any = {
@@ -108,6 +124,13 @@ const dbMock: any = {
       if (table === rfqItemsTable) {
         return chainable(itemRows, { where: vi.fn(() => chainable(itemRows)) });
       }
+      if (table === itemClassificationIdentityTable) {
+        const withLimit = chainable(memoryRows, { limit: vi.fn(() => chainable(memoryRows)) });
+        return chainable(memoryRows, {
+          where: vi.fn(() => withLimit),
+          limit: vi.fn(() => chainable(memoryRows)),
+        });
+      }
       return chainable([], { where: vi.fn(() => chainable([])) });
     }),
   })),
@@ -116,6 +139,13 @@ const dbMock: any = {
       if (table === rfqItemAssignmentsTable) {
         insertedAssignments.push(vals);
         return { onConflictDoUpdate: vi.fn(() => chainable(undefined)) };
+      }
+      if (table === itemClassificationIdentityTable) {
+        insertedMemory.push(vals);
+        return {
+          onConflictDoUpdate: vi.fn(() => chainable(undefined)),
+          onConflictDoNothing: vi.fn(() => chainable(undefined)),
+        };
       }
       return chainable(undefined);
     }),
@@ -140,6 +170,7 @@ vi.mock("@workspace/db", () => ({
   rfqItemAssignmentsTable,
   rfqTable,
   itemCategoryKeywordsTable,
+  itemClassificationIdentityTable,
 }));
 
 vi.mock("../../shared/logger", () => ({
@@ -150,14 +181,17 @@ vi.mock("../../shared/logger", () => ({
 // import is hoisted above the const declarations and would throw.
 let ensureAssignmentsForRfq: typeof import("../../modules/rfq/assignment").ensureAssignmentsForRfq;
 let assignItemManually: typeof import("../../modules/rfq/assignment").assignItemManually;
+let classificationIdentityKey: typeof import("../../modules/rfq/item-identity").classificationIdentityKey;
 
 beforeAll(async () => {
   ({ ensureAssignmentsForRfq, assignItemManually } = await import("../../modules/rfq/assignment"));
+  ({ classificationIdentityKey } = await import("../../modules/rfq/item-identity"));
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
   insertedAssignments.length = 0;
+  insertedMemory.length = 0;
   updatedItemCalls.length = 0;
   categoryRows = [
     { id: 1, code: "equipment", name: "أجهزة" },
@@ -170,6 +204,7 @@ beforeEach(() => {
   workloadRows = [];
   itemRows = [];
   existingAssignmentRows = [];
+  memoryRows = [];
 });
 
 describe("assignment engine", () => {
@@ -469,5 +504,76 @@ describe("assignment engine", () => {
     await assignItemManually({ rfqItemId: 500, categoryId: 3, employeeId: 7, assignedBy: 1 });
 
     expect(insertedAssignments[0]).toMatchObject({ categoryId: 3, employeeId: 7 });
+  });
+
+  it("CONSULTS the identity memory before the keyword classifier (cross-path consistency)", async () => {
+    // The defect this guards: a supplier line whose description does NOT contain
+    // the keyword for the category it was assigned on the customer side was
+    // classified FRESH and could land in a DIFFERENT domain. The memory must win.
+    categoryRows = [
+      { id: 3, code: "electrical", name: "كهرباء", kind: "functional", parentId: null },
+      { id: 5, code: "fire_resistance", name: "مقاومة حريق", kind: "functional", parentId: null },
+    ];
+    ownerRows = [
+      { categoryId: 3, employeeId: 10, isPrimary: true, active: true },
+      { categoryId: 5, employeeId: 20, isPrimary: true, active: true },
+    ];
+    // «FIRE RESISTANT» contains no electrical keyword, so the classifier alone
+    // would never pick كهرباء — only the memory can.
+    itemRows = [
+      {
+        id: 700,
+        rfqId: 12,
+        description: "SPECIAL CABLE FIRE RESISTANT 3X2.5",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+        customerRfqItemId: null,
+      },
+    ];
+    memoryRows = [
+      {
+        identityKey: classificationIdentityKey({
+          partNo: null,
+          description: "SPECIAL CABLE FIRE RESISTANT 3X2.5",
+          lineItem: null,
+        })!,
+        categoryId: 3,
+        subcategoryIds: null,
+        brandId: null,
+        source: "auto",
+        confidence: "95",
+      },
+    ];
+
+    const outcomes = await ensureAssignmentsForRfq(12);
+
+    expect(outcomes[0]).toMatchObject({ rfqItemId: 700, categoryId: 3, employeeId: 10 });
+    expect(insertedAssignments[0]).toMatchObject({ categoryId: 3, employeeId: 10 });
+  });
+
+  it("REMEMBERS a fresh classification by identity so the next RFQ agrees", async () => {
+    categoryRows = [
+      { id: 3, code: "electrical", name: "كهرباء", kind: "functional", parentId: null },
+      { id: 4, code: "breakers", name: "قواطع", kind: "subcategory", parentId: 3 },
+    ];
+    ownerRows = [{ categoryId: 3, employeeId: 10, isPrimary: true, active: true }];
+    itemRows = [
+      {
+        id: 701,
+        rfqId: 13,
+        description: "CIRCUIT BREAKER 3P 30A",
+        partNo: "A9R41440",
+        lineItem: null,
+        categoryId: null,
+        customerRfqItemId: null,
+      },
+    ];
+    memoryRows = []; // nothing remembered yet
+
+    await ensureAssignmentsForRfq(13);
+
+    expect(insertedMemory).toHaveLength(1);
+    expect(insertedMemory[0]).toMatchObject({ categoryId: 3 });
   });
 });

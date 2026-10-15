@@ -3971,3 +3971,35 @@ categories, changing owner between requests.
   one item into two identities. Free prose («CABLE 3X2.5 MM COPPER») is still
   keyed by its description. Two guards — the identity precedence test and the
   two-CLASSIFIED-rows repair test — **fail against the description-first source**.
+
+## Every classification path must consult the ONE identity memory (feat `fix/classification-all-paths`)
+
+The recorded defect class — «المشكلة دي تتكرر مع أي بند» — is that a fix applied to
+ONE entry point leaves the others able to disagree. Classification is written from
+**four** places; a memory consulted in only some of them still lets the same item
+land in two categories.
+
+- **`assignment.ts` (`ensureAssignmentsForRfq`, the SUPPLIER RFQ path) bypassed the
+  memory entirely.** It classified a supplier line from keywords with no
+  `lookupClassification`/`rememberClassification`, so a line whose wording lacked
+  the keyword its CUSTOMER-side counterpart was assigned by could land in a
+  DIFFERENT domain — the exact «same item, different category» symptom, on the
+  other side of the same RFQ. It now consults the memory FIRST, then the keyword
+  classifier, and records a fresh decision by identity. Two guards in
+  `item-assignment.test.ts` (memory wins over the classifier; a fresh decision is
+  remembered) **fail against the pre-fix `assignment.ts`**.
+- **The manager's manual re-classification route
+  (`PUT /customer-rfq/items/:itemId/categories`) wrote the category but did NOT
+  record it.** A manager's correction therefore fixed one row while the next RFQ
+  re-classified the same item from scratch — defeating «التصحيح اليدوي المعتمد لا
+  يلغيه التصنيف الآلي». It now writes `source:"manual"` against the item identity.
+  The guard in `customer-rfq.test.ts` **fails against the pre-fix `routes.ts`**.
+- **`classifyUnclassifiedItems` and the customer `ensureCustomerAssignments`
+  already record**, and `assignItemManually` already records `source:"manual"` —
+  they were correct; the two above were the gaps.
+- **Rule**: when adding a classifier call site, or a route that writes
+  `categoryId`, it MUST go through `classification-memory.ts`. A green test on one
+  path proves nothing about the others — the four paths must be enumerated and
+  each guarded.
+- Tests: 1570 api-server pass (up from 1568; the two new guard tests). tsc (libs +
+  api-server) clean; repo-wide prettier clean.

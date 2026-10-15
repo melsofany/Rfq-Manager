@@ -25,6 +25,7 @@ import {
   repairClassificationConsistency,
   listClassificationConflicts,
 } from "../rfq/customer-assignment";
+import { rememberClassification } from "../rfq/classification-memory";
 
 const router = Router();
 
@@ -1710,7 +1711,13 @@ router.put(
       return;
     }
     const [item] = await db
-      .select({ id: customerRfqItemsTable.id, categoryId: customerRfqItemsTable.categoryId })
+      .select({
+        id: customerRfqItemsTable.id,
+        categoryId: customerRfqItemsTable.categoryId,
+        description: customerRfqItemsTable.description,
+        partNo: customerRfqItemsTable.partNo,
+        lineItem: customerRfqItemsTable.lineItem,
+      })
       .from(customerRfqItemsTable)
       .where(eq(customerRfqItemsTable.id, itemId))
       .limit(1);
@@ -1831,6 +1838,21 @@ router.put(
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
+
+    // Record the MANAGER's decision against the item IDENTITY so the SAME item
+    // in any later RFQ keeps this category — the operator's rule that a manual
+    // correction is authoritative. Without this, the manager's edit fixed ONE
+    // row while the next request re-classified the same item from scratch.
+    // Best-effort: a memory failure must never fail the correction itself.
+    await rememberClassification({
+      partNo: item.partNo,
+      description: item.description,
+      lineItem: item.lineItem,
+      categoryId: primaryId,
+      source: "manual",
+      confidence: 100,
+      decidedBy: actor,
+    }).catch(() => {});
 
     res.json({ customerRfqItemId: itemId, categoryIds: chosen, primaryCategoryId: primaryId });
   },
