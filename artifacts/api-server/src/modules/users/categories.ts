@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { supplierCategoriesTable, suppliersTable, itemCategoriesTable } from "@workspace/db";
 import { eq, asc, count, or, ilike } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
+import { rewriteSupplierCategoryName } from "../../shared/category-rename";
 
 const router = Router();
 
@@ -90,6 +91,11 @@ router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<
   } catch {
     // best-effort — the startup mirror in init-db.ts re-syncs on the next boot.
   }
+  // `suppliers.category` stores category NAMES as free text (not an FK), so the
+  // rename must also rewrite it — otherwise the supplier-list filter (which
+  // matches on the NAME) finds no supplier under the new name and every supplier
+  // still shows the OLD one.
+  await rewriteSupplierCategoryName(current.name, row.name);
   res.json({ id: row.id, name: row.name });
 });
 

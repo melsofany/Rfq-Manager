@@ -154,6 +154,7 @@ const dbMock: any = {
       return chainable(undefined);
     }),
   })),
+  execute: vi.fn(async () => ({ rows: [] })),
   transaction: vi.fn(async (fn: any) => fn(dbMock)),
 };
 
@@ -295,6 +296,23 @@ describe("item categories CRUD", () => {
     expect(res.status).toBe(200);
     expect(res.body.count).toBe(2);
     expect(auditInserts.some((a) => a.action === "item_category.owners_updated")).toBe(true);
+  });
+
+  it("renaming a category also rewrites the free-text suppliers.category", async () => {
+    // `suppliers.category` stores category NAMES as free text (not an FK). A
+    // rename here must rewrite it too, or the supplier list (which filters on
+    // the NAME) finds no supplier under the new name while every supplier still
+    // shows the old one — the exact «ELEC → كهرباء» report.
+    existingCategoryRows = [{ id: 1, name: "كهرباء" }];
+    updatedRow = { id: 1, name: "كهرباء محدثة", code: "electrical", isActive: true, sortOrder: 30 };
+    const res = await request(testApp)
+      .patch("/api/item-categories/1")
+      .send({ name: "كهرباء محدثة" });
+    expect(res.status).toBe(200);
+    const supplierRewrite = (dbMock.execute as any).mock.calls.find((c: any[]) =>
+      JSON.stringify(c[0]).includes("UPDATE suppliers"),
+    );
+    expect(supplierRewrite, "suppliers.category rewrite must run on a rename").toBeDefined();
   });
 
   it("replaces an employee's categories", async () => {
