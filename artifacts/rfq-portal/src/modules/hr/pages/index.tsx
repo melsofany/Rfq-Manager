@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { IdCard } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-type Tab = "attendance" | "leave" | "discipline" | "employees" | "devices";
+type Tab = "attendance" | "onboard" | "leave" | "discipline" | "employees" | "devices";
 
 interface AttendanceRow {
   employeeId: number;
@@ -63,6 +63,7 @@ export default function HrPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "attendance", label: t("hr.tab.attendance") },
+    { id: "onboard", label: t("hr.tab.onboard") },
     { id: "leave", label: t("hr.tab.leave") },
     { id: "discipline", label: t("hr.tab.discipline") },
     { id: "employees", label: t("hr.tab.employees") },
@@ -97,6 +98,7 @@ export default function HrPage() {
         </div>
 
         {tab === "attendance" && <AttendanceTab />}
+        {tab === "onboard" && <OnboardTab />}
         {tab === "leave" && <LeaveTab />}
         {tab === "discipline" && <DisciplineTab />}
         {tab === "employees" && <EmployeesTab />}
@@ -966,5 +968,188 @@ function DisciplineTab() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function OnboardTab() {
+  const { t } = useLanguage();
+  const empty = {
+    employeeNo: "",
+    fullName: "",
+    jobTitle: "",
+    department: "",
+    hireDate: todayStr(),
+    phone: "",
+    biometricPin: "",
+    nationalId: "",
+    dateOfBirth: "",
+    gender: "",
+    address: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    socialInsuranceNo: "",
+    healthInsuranceNo: "",
+    contractType: "indefinite",
+    startDate: todayStr(),
+    endDate: "",
+    probationEndDate: "",
+    basicSalary: "",
+    allowances: "0",
+    bankName: "",
+    accountHolder: "",
+    accountNo: "",
+    iban: "",
+  };
+  const [f, setF] = useState(empty);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const set =
+    (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setF({ ...f, [k]: e.target.value });
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSaved(null);
+    try {
+      const body = {
+        employee: {
+          employeeNo: f.employeeNo,
+          fullName: f.fullName,
+          jobTitle: f.jobTitle,
+          department: f.department,
+          hireDate: f.hireDate,
+          phone: f.phone,
+          biometricPin: f.biometricPin,
+        },
+        profile: {
+          nationalId: f.nationalId,
+          dateOfBirth: f.dateOfBirth || null,
+          gender: f.gender || null,
+          address: f.address,
+          emergencyContactName: f.emergencyContactName,
+          emergencyContactPhone: f.emergencyContactPhone,
+          socialInsuranceNo: f.socialInsuranceNo,
+          healthInsuranceNo: f.healthInsuranceNo,
+        },
+        contract: {
+          contractType: f.contractType,
+          startDate: f.startDate,
+          endDate: f.endDate || null,
+          probationEndDate: f.probationEndDate || null,
+          basicSalary: Number(f.basicSalary),
+          allowances: Number(f.allowances || 0),
+        },
+        bank: {
+          bankName: f.bankName,
+          accountHolder: f.accountHolder,
+          accountNo: f.accountNo,
+          iban: f.iban || null,
+        },
+      };
+      const res = await api<{ employeeNo: string }>("/hr/onboard", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      setSaved(res.employeeNo);
+      setF(empty);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  const input = "border rounded px-2 py-1.5 bg-background text-sm w-full";
+  const label = "text-xs text-muted-foreground block mb-1";
+  const field = (k: keyof typeof empty, text: string, type = "text", required = false) => (
+    <label className="block">
+      <span className={label}>{text}</span>
+      <input className={input} type={type} value={f[k]} onChange={set(k)} required={required} />
+    </label>
+  );
+
+  return (
+    <form onSubmit={submit} className="space-y-6">
+      <p className="text-sm text-muted-foreground">{t("hr.onb.help")}</p>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h2 className="font-semibold">{t("hr.onb.sec.job")}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {field("employeeNo", t("hr.col.no"), "text", true)}
+            {field("fullName", t("hr.col.name"), "text", true)}
+            {field("hireDate", t("hr.onb.hireDate"), "date", true)}
+            {field("jobTitle", t("hr.col.job"))}
+            {field("department", t("hr.col.dept"))}
+            {field("phone", t("hr.onb.phone"))}
+            {field("biometricPin", t("hr.col.pin"))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h2 className="font-semibold">{t("hr.onb.sec.personal")}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {field("nationalId", t("hr.onb.nationalId"), "text", true)}
+            {field("dateOfBirth", t("hr.onb.dob"), "date")}
+            <label className="block">
+              <span className={label}>{t("hr.onb.gender")}</span>
+              <select className={input} value={f.gender} onChange={set("gender")}>
+                <option value="">—</option>
+                <option value="male">{t("hr.onb.male")}</option>
+                <option value="female">{t("hr.onb.female")}</option>
+              </select>
+            </label>
+            {field("address", t("hr.onb.address"))}
+            {field("emergencyContactName", t("hr.onb.emergencyName"))}
+            {field("emergencyContactPhone", t("hr.onb.emergencyPhone"))}
+            {field("socialInsuranceNo", t("hr.onb.socialIns"))}
+            {field("healthInsuranceNo", t("hr.onb.healthIns"))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h2 className="font-semibold">{t("hr.onb.sec.contract")}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <label className="block">
+              <span className={label}>{t("hr.onb.contractType")}</span>
+              <select className={input} value={f.contractType} onChange={set("contractType")}>
+                <option value="indefinite">{t("hr.onb.ct.indefinite")}</option>
+                <option value="fixed">{t("hr.onb.ct.fixed")}</option>
+                <option value="probation">{t("hr.onb.ct.probation")}</option>
+                <option value="part_time">{t("hr.onb.ct.partTime")}</option>
+              </select>
+            </label>
+            {field("startDate", t("hr.onb.startDate"), "date", true)}
+            {field("endDate", t("hr.onb.endDate"), "date")}
+            {field("probationEndDate", t("hr.onb.probationEnd"), "date")}
+            {field("basicSalary", t("hr.onb.basic"), "number", true)}
+            {field("allowances", t("hr.onb.allowances"), "number")}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h2 className="font-semibold">{t("hr.onb.sec.bank")}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {field("bankName", t("hr.onb.bankName"), "text", true)}
+            {field("accountHolder", t("hr.onb.accountHolder"), "text", true)}
+            {field("accountNo", t("hr.onb.accountNo"), "text", true)}
+            {field("iban", t("hr.onb.iban"))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {saved && (
+        <p className="text-sm text-green-700">
+          {t("hr.onb.saved")} ({saved})
+        </p>
+      )}
+      <Button type="submit">{t("hr.onb.submit")}</Button>
+    </form>
   );
 }
