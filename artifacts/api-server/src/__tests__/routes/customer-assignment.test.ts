@@ -7,7 +7,9 @@ vi.mock("drizzle-orm", () => ({
   and: (...args: any[]) => ({ __op: "and", args }),
   inArray: (left: any, right: any) => ({ __op: "inArray", left, right }),
   isNull: (col: any) => ({ __op: "isNull", col }),
+  isNotNull: (col: any) => ({ __op: "isNotNull", col }),
   asc: (col: any) => ({ __op: "asc", col }),
+  desc: (col: any) => ({ __op: "desc", col }),
   sql: Object.assign((strings: any, ...values: any[]) => ({ __op: "sql", strings, values }), {
     raw: (s: string) => ({ __op: "sql.raw", s }),
   }),
@@ -65,6 +67,7 @@ const customerRfqItemsTable = {
   description: "description",
   partNo: "partNo",
   lineItem: "lineItem",
+  subcategoryIds: "subcategoryIds",
   isCancelled: "isCancelled",
 };
 const customerRfqItemAssignmentsTable = {
@@ -91,6 +94,16 @@ const itemCategoryAliasesTable = {
   categoryId: "categoryId",
   alias: "alias",
 };
+const itemClassificationIdentityTable = {
+  _: "itemClassificationIdentity",
+  identityKey: "identityKey",
+  categoryId: "categoryId",
+  source: "source",
+  subcategoryIds: "subcategoryIds",
+  brandId: "brandId",
+  confidence: "confidence",
+  timesSeen: "timesSeen",
+};
 
 let categoryRows: any[];
 let ownerRows: any[];
@@ -98,9 +111,12 @@ let workloadRows: any[];
 let customerItemRows: any[];
 let customerAssignmentRows: any[];
 let supplierItemRows: any[];
+/** Rows the classification-memory table returns for a lookup. */
+let memoryRows: any[];
 
 const insertedCustomerAssignments: any[] = [];
 const insertedAudits: any[] = [];
+const insertedMemory: any[] = [];
 const updatedCustomerItemCalls: Array<{ id: number; vals: any }> = [];
 
 const dbMock: any = {
@@ -119,6 +135,7 @@ const dbMock: any = {
       }
       if (table === customerRfqItemsTable) return chain(customerItemRows);
       if (table === rfqItemsTable) return chain(supplierItemRows);
+      if (table === itemClassificationIdentityTable) return chain(memoryRows);
       if (table === employeesTable) return chain([]);
       return chain([]);
     }),
@@ -137,14 +154,26 @@ const dbMock: any = {
         insertedAudits.push(vals);
         return chainable(undefined);
       }
+      if (table === itemClassificationIdentityTable) {
+        insertedMemory.push(vals);
+        return {
+          onConflictDoUpdate: vi.fn(() => chainable(undefined)),
+          onConflictDoNothing: vi.fn(() => chainable(undefined)),
+        };
+      }
       return chainable(undefined);
     }),
   })),
   update: vi.fn((table: any) => ({
     set: vi.fn((vals: any) => ({
       where: vi.fn((cond: any) => {
-        if (table === customerRfqItemsTable)
+        if (table === customerRfqItemsTable) {
           updatedCustomerItemCalls.push({ id: cond?.right, vals });
+          // Reflect onto the in-memory rows so a follow-on pass (e.g. the
+          // assign step after a bulk classify) sees the item as classified.
+          const row = customerItemRows.find((r) => r.id === cond?.right);
+          if (row) Object.assign(row, vals);
+        }
         return chainable(undefined);
       }),
     })),
@@ -167,6 +196,7 @@ vi.mock("@workspace/db", () => ({
   customerRfqItemAssignmentsTable,
   itemAssignmentAuditTable,
   itemCategoryKeywordsTable,
+  itemClassificationIdentityTable,
 }));
 
 vi.mock("../../shared/logger", () => ({
@@ -184,12 +214,16 @@ vi.mock("../../modules/rfq/ai-classifier", () => ({
 let ensureCustomerAssignments: typeof import("../../modules/rfq/customer-assignment").ensureCustomerAssignments;
 let assignCustomerItemManually: typeof import("../../modules/rfq/customer-assignment").assignCustomerItemManually;
 let classifyUnclassifiedItems: typeof import("../../modules/rfq/customer-assignment").classifyUnclassifiedItems;
+let repairClassificationConsistency: typeof import("../../modules/rfq/customer-assignment").repairClassificationConsistency;
+let listClassificationConflicts: typeof import("../../modules/rfq/customer-assignment").listClassificationConflicts;
 
 beforeAll(async () => {
   const mod = await import("../../modules/rfq/customer-assignment");
   ensureCustomerAssignments = mod.ensureCustomerAssignments;
   assignCustomerItemManually = mod.assignCustomerItemManually;
   classifyUnclassifiedItems = mod.classifyUnclassifiedItems;
+  repairClassificationConsistency = mod.repairClassificationConsistency;
+  listClassificationConflicts = mod.listClassificationConflicts;
 });
 
 beforeEach(() => {
@@ -207,8 +241,10 @@ beforeEach(() => {
   customerItemRows = [];
   customerAssignmentRows = [];
   supplierItemRows = [];
+  memoryRows = [];
   insertedCustomerAssignments.length = 0;
   insertedAudits.length = 0;
+  insertedMemory.length = 0;
   updatedCustomerItemCalls.length = 0;
   aiClassify.mockReset();
   aiClassify.mockResolvedValue(null); // AI unavailable by default → keyword path
@@ -497,11 +533,11 @@ describe("customer-item assignment engine", () => {
       id: 700,
       vals: {
         categoryId: 3,
-        brandId: undefined,
+        brandId: null,
         subcategoryIds: null,
         technicalAttributes: null,
         classifyConfidence: "90",
-        classifyReason: undefined,
+        classifyReason: null,
       },
     });
     expect(insertedCustomerAssignments).toHaveLength(1);
@@ -531,5 +567,268 @@ describe("customer-item assignment engine", () => {
     const result = await classifyUnclassifiedItems({});
     expect(result.classified).toBe(0);
     expect(updatedCustomerItemCalls).toHaveLength(0);
+  });
+});
+
+describe("identity memory — the same item keeps ONE category", () => {
+  it("reuses a remembered category and never calls the model", async () => {
+    // The SAME part number was classified as كهرباء (3) on an earlier RFQ. This
+    // RFQ must resolve it from memory — no AI call, no keyword guess.
+    memoryRows = [{ identityKey: "pn:680632", categoryId: 3, source: "auto", confidence: 90 }];
+    customerItemRows = [
+      {
+        id: 800,
+        customerRfqId: 20,
+        description: "CIRCUIT BREAKER 3P",
+        partNo: "680632",
+        lineItem: null,
+        categoryId: null,
+      },
+    ];
+    const outcomes = await ensureCustomerAssignments(20);
+    expect(outcomes[0].categoryId).toBe(3);
+    expect(outcomes[0].reason).toBe("assigned");
+    expect(outcomes[0].employeeId).toBe(5);
+    expect(aiClassify).not.toHaveBeenCalled(); // memory short-circuits the model
+    expect(updatedCustomerItemCalls.some((c) => c.id === 800 && c.vals.categoryId === 3)).toBe(
+      true,
+    );
+  });
+
+  it("classifies an item the keyword classifier cannot, from memory alone", async () => {
+    // «منظم جهد اتوماتيكي» carries no seeded keyword — without memory it is
+    // unclassified. Memory places it, proving memory (not keywords) is what
+    // keeps the same item consistent.
+    memoryRows = [{ identityKey: "ds:اتوماتيكي جهد منظم", categoryId: 3, source: "auto" }];
+    customerItemRows = [
+      {
+        id: 801,
+        customerRfqId: 20,
+        description: "منظم جهد اتوماتيكي",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+      },
+    ];
+    const outcomes = await ensureCustomerAssignments(20);
+    expect(outcomes[0].reason).toBe("assigned");
+    expect(outcomes[0].categoryId).toBe(3);
+    expect(aiClassify).not.toHaveBeenCalled();
+  });
+
+  it("remembers an automatic decision by identity so the next RFQ reuses it", async () => {
+    customerItemRows = [
+      {
+        id: 802,
+        customerRfqId: 20,
+        description: "CABLE 3X2.5 MM COPPER",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+      },
+    ];
+    await ensureCustomerAssignments(20);
+    expect(insertedMemory).toHaveLength(1);
+    expect(insertedMemory[0].source).toBe("auto");
+    expect(insertedMemory[0].categoryId).toBe(3);
+    expect(insertedMemory[0].identityKey.startsWith("ds:")).toBe(true);
+  });
+
+  it("a manager's manual decision is remembered authoritatively", async () => {
+    customerAssignmentRows = [{ categoryId: null, employeeId: null }];
+    customerItemRows = [
+      {
+        id: 803,
+        customerRfqId: 20,
+        description: "CABLE 3X2.5 MM COPPER",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+      },
+    ];
+    await assignCustomerItemManually({
+      customerRfqItemId: 803,
+      categoryId: 2, // manager overrides to قطع غيار
+      employeeId: 6,
+      assignedBy: 9,
+    });
+    const manual = insertedMemory.find((m) => m.source === "manual");
+    expect(manual).toBeTruthy();
+    expect(manual.categoryId).toBe(2);
+  });
+});
+
+describe("startup backfill — the legacy backlog is repaired, model-free", () => {
+  it("classifies unclassified items without calling the model", async () => {
+    const mod = await import("../../modules/rfq/customer-assignment");
+    customerItemRows = [
+      {
+        id: 900,
+        customerRfqId: 30,
+        description: "CABLE 3X2.5 MM COPPER",
+        partNo: null,
+        lineItem: null,
+        categoryId: null,
+      },
+    ];
+    const result = await mod.backfillItemClassification({ limit: 10 });
+    expect(result.classified).toBe(1);
+    expect(aiClassify).not.toHaveBeenCalled();
+    // The decision is remembered by identity (the follow-on assign step may
+    // re-remember the same identity — an idempotent upsert, never a duplicate).
+    expect(insertedMemory.length).toBeGreaterThanOrEqual(1);
+    expect(insertedMemory[0].source).toBe("auto");
+    expect(insertedMemory[0].categoryId).toBe(3);
+  });
+
+  it("seeds memory from items that already carry a category", async () => {
+    const mod = await import("../../modules/rfq/customer-assignment");
+    // A historical item ALREADY has category 3. The seed must remember it by
+    // identity so a later RFQ with the same item resolves without re-classifying.
+    customerItemRows = [
+      {
+        id: 901,
+        customerRfqId: 31,
+        description: "CABLE 3X2.5 MM COPPER",
+        partNo: null,
+        lineItem: null,
+        categoryId: 3,
+      },
+    ];
+    const seeded = await mod.seedClassificationMemoryFromClassified(10);
+    expect(seeded).toBe(1);
+    expect(insertedMemory.some((m) => m.categoryId === 3 && m.source === "auto")).toBe(true);
+  });
+});
+
+describe("repair — the SAME item is unified onto ONE domain", () => {
+  beforeEach(() => {
+    // كهرباء (3) owns the domain; إضاءة (8) is its subcategory — NOT a domain.
+    categoryRows = [
+      { id: 3, code: "electrical", name: "كهرباء", kind: "functional", isActive: true },
+      { id: 8, code: "lighting", name: "إضاءة", kind: "subcategory", parentId: 3, isActive: true },
+      { id: 2, code: "spare_parts", name: "قطع غيار", kind: "functional", isActive: true },
+    ];
+  });
+
+  it("unifies an item that is كهرباء in one RFQ and إضاءة in another", async () => {
+    // The operator's LED-lamp case: same Part No, two categories, plus
+    // unclassified copies.
+    const desc = "LED TUBE LAMP 120CM 18W 1750LM EL SEWEEDY";
+    customerItemRows = [
+      { id: 1, customerRfqId: 10, partNo: "5720.010", description: desc, categoryId: 8 }, // إضاءة
+      { id: 2, customerRfqId: 11, partNo: "5720.010", description: desc, categoryId: 3 }, // كهرباء
+      { id: 3, customerRfqId: 12, partNo: "5720.010", description: desc, categoryId: null },
+      { id: 4, customerRfqId: 13, partNo: "5720.010", description: desc, categoryId: null },
+    ];
+    const result = await repairClassificationConsistency({ limit: 100 });
+    expect(result.identities).toBe(1);
+    // ids 1,3,4 rewritten to 3 (id 2 already 3).
+    expect(result.itemsFixed).toBe(3);
+    const finalCats = customerItemRows.map((r) => r.categoryId);
+    expect(new Set(finalCats)).toEqual(new Set([3]));
+  });
+
+  it("unifies the operator's LED lamp (same Line Item, drifting description)", async () => {
+    // The exact production shape: NO part number, the SAME line item, and a
+    // description that differs by a letter across rows. Only the line-item
+    // identity can unify these — a description key would split them.
+    customerItemRows = [
+      {
+        id: 1,
+        customerRfqId: 10,
+        partNo: null,
+        lineItem: "5720.010.GENRAL.7054",
+        description: "LED TUBE LAMP 120CM, 18W, 1750LM ( EL SEWEEDY )",
+        categoryId: 8,
+      },
+      {
+        id: 2,
+        customerRfqId: 11,
+        partNo: null,
+        lineItem: "5720.010.GENRAL.7054",
+        description: "LED TUBE LAMP 120CM, 18W, 1750LM ( ELSEWEEDY )",
+        categoryId: 3,
+      },
+      {
+        id: 3,
+        customerRfqId: 12,
+        partNo: null,
+        lineItem: "5720.010.GENRAL.7054",
+        description: "LED TUBE LAMP 120CM, 18W, 1750LM ( EL SEWEEDY )",
+        categoryId: null,
+      },
+    ];
+    const result = await repairClassificationConsistency({ limit: 100 });
+    expect(result.identities).toBe(1);
+    expect(new Set(customerItemRows.map((r) => r.categoryId))).toEqual(new Set([3]));
+  });
+
+  it("unifies two CLASSIFIED rows that share a line item but drift in wording", async () => {
+    // Two DIFFERENT functional domains (قطع غيار 2 vs كهرباء 3), no unclassified
+    // copy — only the shared line-item identity can see them as one item. A
+    // description key would leave both as separate, consistent-looking
+    // identities and never fix the operator's complaint.
+    customerItemRows = [
+      {
+        id: 1,
+        customerRfqId: 10,
+        partNo: null,
+        lineItem: "5720.010.GENRAL.7054",
+        description: "LED TUBE LAMP 120CM, 18W, 1750LM ( EL SEWEEDY )",
+        categoryId: 2,
+      },
+      {
+        id: 2,
+        customerRfqId: 11,
+        partNo: null,
+        lineItem: "5720.010.GENRAL.7054",
+        description: "LED TUBE LAMP 120CM, 18W, 1750LM ( ELSEWEEDY )",
+        categoryId: 3,
+      },
+    ];
+    const result = await repairClassificationConsistency({ limit: 100 });
+    expect(result.identities).toBe(1);
+    // Majority tie → the first-seen domain (2) wins; both rows end on ONE value.
+    const cats = new Set(customerItemRows.map((r) => r.categoryId));
+    expect(cats.size).toBe(1);
+  });
+
+  it("does NOT touch an identity whose items already agree", async () => {
+    const desc = "SAME ITEM SAME CATEGORY";
+    customerItemRows = [
+      { id: 1, customerRfqId: 10, partNo: "X1", description: desc, categoryId: 3 },
+      { id: 2, customerRfqId: 11, partNo: "X1", description: desc, categoryId: 3 },
+    ];
+    const result = await repairClassificationConsistency({ limit: 100 });
+    expect(result.identities).toBe(0);
+    expect(result.itemsFixed).toBe(0);
+  });
+
+  it("respects a manager's manual decision when unifying", async () => {
+    const desc = "CABLE 3X2.5 MM COPPER";
+    memoryRows = [{ identityKey: "pn:680632", categoryId: 2, source: "manual", confidence: 100 }];
+    customerItemRows = [
+      { id: 1, customerRfqId: 10, partNo: "680632", description: desc, categoryId: 3 },
+      { id: 2, customerRfqId: 11, partNo: "680632", description: desc, categoryId: 3 },
+      { id: 3, customerRfqId: 12, partNo: "680632", description: desc, categoryId: null },
+    ];
+    const result = await repairClassificationConsistency({ limit: 100 });
+    // The manual memory (2 = قطع غيار) wins over the majority (3).
+    expect(result.itemsFixed).toBe(3);
+    expect(new Set(customerItemRows.map((r) => r.categoryId))).toEqual(new Set([2]));
+  });
+
+  it("reports the conflicts read-only, with category counts", async () => {
+    const desc = "LED TUBE LAMP 120CM 18W 1750LM EL SEWEEDY";
+    customerItemRows = [
+      { id: 1, customerRfqId: 10, partNo: "5720.010", description: desc, categoryId: 8 },
+      { id: 2, customerRfqId: 11, partNo: "5720.010", description: desc, categoryId: 3 },
+      { id: 3, customerRfqId: 12, partNo: "5720.010", description: desc, categoryId: null },
+    ];
+    const conflicts = await listClassificationConflicts(100);
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].itemCount).toBe(3);
+    expect(conflicts[0].sampleDescription).toContain("LED TUBE LAMP");
   });
 });

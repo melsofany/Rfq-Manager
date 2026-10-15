@@ -17,11 +17,13 @@ import {
   employeeCategoriesTable,
   customerRfqItemCategoriesTable,
 } from "@workspace/db";
-import { eq, ilike, count, inArray, desc, and, isNull, or, isNotNull, sql, ne } from "drizzle-orm";
+import { eq, ilike, inArray, desc, and, isNull, or, isNotNull, sql, ne } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import {
   ensureCustomerAssignmentsSafe,
   classifyUnclassifiedItems,
+  repairClassificationConsistency,
+  listClassificationConflicts,
 } from "../rfq/customer-assignment";
 
 const router = Router();
@@ -2055,28 +2057,91 @@ router.get("/customer-rfq/item-category-options", requireAuth, async (_req, res)
   res.json(rows);
 });
 
-// GET /customer-rfq/unowned-categories — categories that have NO responsible
-// employee yet. Such a category classifies an item but can never be assigned
-// (`pickOwner` returns null → «مصنّف — بلا مسؤول»), which is the root cause of
-// items showing without an owner. The «تصنيفات البنود» tab lists these so the
-// gap is visible and fixable in one place, instead of surfacing as a mystery
-// «بلا مسؤول» on the customer-RFQ page.
+// GET /customer-rfq/unowned-categories — FUNCTIONAL domains that have NO
+// responsible employee yet. Such a category classifies an item but can never be
+// assigned (`pickOwner` returns null → «مصنّف — بلا مسؤول»), which is the root
+// cause of items showing without an owner. The «تصنيفات البنود» tab lists these
+// so the gap is visible and fixable in one place, instead of surfacing as a
+// mystery «بلا مسؤول» on the customer-RFQ page.
+//
+// Only FUNCTIONAL domains are listed: a subcategory (قواطع/إضاءة/Encoders…) and a
+// brand inherit their domain's owner and must never be asked for one of their
+// own — responsibility always resolves to the domain. The item count includes the
+// domain's own items AND every subcategory beneath it, because those items are
+// owned by this domain.
 router.get("/customer-rfq/unowned-categories", requireAuth, async (_req, res): Promise<void> => {
   const rows = await db
     .select({
       id: itemCategoriesTable.id,
       name: itemCategoriesTable.name,
-      itemCount: count(customerRfqItemsTable.id),
+      itemCount: sql<number>`count(${customerRfqItemsTable.id})::int`,
     })
     .from(itemCategoriesTable)
-    .leftJoin(customerRfqItemsTable, eq(customerRfqItemsTable.categoryId, itemCategoriesTable.id))
+    .leftJoin(
+      customerRfqItemsTable,
+      sql`${customerRfqItemsTable.categoryId} = ${itemCategoriesTable.id}
+          OR ${customerRfqItemsTable.categoryId} IN (
+            WITH RECURSIVE descendants AS (
+              SELECT id FROM item_categories WHERE parent_id = ${itemCategoriesTable.id}
+              UNION ALL
+              SELECT c.id FROM item_categories c
+              JOIN descendants d ON c.parent_id = d.id
+            )
+            SELECT id FROM descendants
+          )`,
+    )
     .where(
-      sql`not exists (select 1 from ${employeeCategoriesTable} ec where ec.category_id = ${itemCategoriesTable.id})`,
+      and(
+        eq(itemCategoriesTable.isActive, true),
+        sql`coalesce(${itemCategoriesTable.kind}, 'functional') = 'functional'`,
+        sql`not exists (select 1 from ${employeeCategoriesTable} ec where ec.category_id = ${itemCategoriesTable.id})`,
+      ),
     )
     .groupBy(itemCategoriesTable.id, itemCategoriesTable.name)
-    .orderBy(desc(count(customerRfqItemsTable.id)));
+    .orderBy(desc(sql`count(${customerRfqItemsTable.id})`));
   res.json(rows.map((r) => ({ id: r.id, name: r.name, itemCount: Number(r.itemCount) })));
 });
+
+// GET /customer-rfq/classification-conflicts — the «تضارب التصنيف» to-do list:
+// identities whose items DISAGREE on their functional domain (the operator's
+// «نفس البند: كهرباء في طلب، إضاءة في طلب، غير مصنّف في الباقي»). Read-only; the
+// manager runs the repair below to unify them. Shows the categories with counts
+// so the majority decision is visible BEFORE anything is rewritten.
+router.get(
+  "/customer-rfq/classification-conflicts",
+  requireAuth,
+  async (_req, res): Promise<void> => {
+    const conflicts = await listClassificationConflicts();
+    res.json({ count: conflicts.length, conflicts });
+  },
+);
+
+// POST /customer-rfq/classification-repair — unify every conflicting identity
+// onto ONE canonical domain: a manager's manual decision wins, else the majority
+// existing domain, else the deterministic classifier. Manager+ only (it writes
+// categories across the whole catalogue). Idempotent: a consistent item and a
+// merely-unclassified item are never touched.
+router.post(
+  "/customer-rfq/classification-repair",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const body = req.body as { limit?: unknown };
+    const limit = body.limit != null ? Number(body.limit) : undefined;
+    const result = await repairClassificationConsistency({
+      limit: Number.isFinite(limit) ? (limit as number) : undefined,
+    });
+    await db.insert(auditLogTable).values({
+      action: "customer_rfq.classification_repaired",
+      entityType: "customer_rfq_item",
+      employeeId: req.session.employeeId ?? null,
+      description: `Classification consistency repair: ${result.identities} identities unified, ${result.itemsFixed} items fixed`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json(result);
+  },
+);
 
 // POST /customer-rfq — create a customer RFQ
 router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {

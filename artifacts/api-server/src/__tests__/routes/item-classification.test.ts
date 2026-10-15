@@ -72,8 +72,10 @@ describe("item classification", () => {
   });
 
   it("treats an equal match as ambiguous rather than picking one", () => {
-    // «قاطع» (breakers) and «حريق» (fire) both present at token level → tie.
-    const r = classifyItem({ description: "قاطع حريق" }, CATS);
+    // Two FUNCTIONAL domains matching at the same token weight → a genuine tie,
+    // so the classifier refuses to pick one. (A SUBCATEGORY match carries a
+    // specificity bonus and is deliberately NOT a tie — see the lighting test.)
+    const r = classifyItem({ description: "مضخة حريق" }, CATS);
     expect(r.ambiguous).toBe(true);
     expect(r.categoryId).toBeNull();
   });

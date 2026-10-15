@@ -52,6 +52,27 @@ initDb()
     await markOrphanedJobs().catch((err) =>
       logger.warn({ err }, "AI assistant: orphan-job sweep failed (non-fatal)"),
     );
+    // Repair the historical backlog of unclassified customer items with the
+    // SAME deterministic rules as new items, and remember each decision by
+    // identity. Idempotent (only NULL categories) and model-free, so it is safe
+    // on every boot and never spends the LLM quota.
+    const { backfillItemClassification } = await import("./modules/rfq/customer-assignment");
+    await backfillItemClassification()
+      .then((r) => {
+        if (r.repairedItems > 0) {
+          logger.info(
+            { identities: r.repairedIdentities, items: r.repairedItems },
+            "item classification conflicts unified",
+          );
+        }
+        if (r.classified > 0) {
+          logger.info(
+            { scanned: r.scanned, classified: r.classified },
+            "item classification backfill applied",
+          );
+        }
+      })
+      .catch((err) => logger.warn({ err }, "item classification backfill failed (non-fatal)"));
     logProviderCapacity();
     // Which tool-loop engine this process will use.
     //

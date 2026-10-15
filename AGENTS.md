@@ -3872,3 +3872,102 @@ carries an «أمر التوريد للمورد» column on the price history.
   even though `GET /repos/...` reports `permissions.push: true`. A fresh `ghp_`
   token with `repo` scope is needed. Commit `6bdf150` is on
   `feat/item-analysis-issued-po`, cut from `origin/main` (`8bb6317`).
+## Item classification identity + memory (feat/item-classification-identity-memory)
+
+The recorded defect: the SAME item (same Line Item / Part No / description) was
+classified DIFFERENTLY across RFQs — «كهرباء» on one request, «إضاءة» on another,
+«غير مصنّف» on the rest — because each item was classified independently at
+insert time, with no shared memory of a prior decision. That made the
+per-employee KPI unattributable: the item's owner changed with each request.
+
+- **Canonical identity** (`modules/rfq/item-identity.ts`): `classificationIdentityKey`
+  = Part No (canonicalised), else Line Item, else a description signature. The
+  same real item always hashes to ONE key; a bare description that is too short
+  yields no key (never a false identity).
+- **Memory** (`modules/rfq/classification-memory.ts`, table
+  `item_classification_identity`, UNIQUE on `identity_key`): `rememberClassification`
+  upserts with a `setWhere` guard so `manual` wins, `lookupClassification` /
+  `loadClassificationMap` read it. Precedence is manual > auto, enforced in CODE:
+  an auto row may be upgraded to manual, never the reverse. A decision that came
+  FROM memory is not re-written.
+- **Classification consults memory FIRST** (in `customer-assignment.ts`), before
+  the model and before the keyword classifier — so a recognised item needs no
+  model call, which is also what keeps classification working when the LLM quota
+  is exhausted. A manual decision is remembered authoritatively after the manual
+  override.
+- **Startup backfill** (`backfillItemClassification`, wired in `index.ts`) seeds
+  memory from items that already carry a category (`seedClassificationMemoryFromClassified`)
+  then repairs the unclassified backlog — model-free.
+- **Domain resolution walks the FULL parent chain** (3 hops), so a nested
+  subcategory (كهرباء ← Automation ← Encoders) resolves to its functional domain,
+  and `classifyItem` records every subcategory on the path.
+- **«الإضاءة» is ONE subcategory of «كهرباء»** (not a functional domain): folded
+  duplicates are reparented + deactivated, and responsibility is INHERITED from
+  the domain owner — a subcategory never owns work.
+- **KPI chain**: item → identity memory → consistent category → automatic owner
+  assignment → frozen `attribution_employee_id` at first customer PO → per-employee
+  KPI. Coverage of unclassified/unowned items is the to-do list, not a metric.
+- Tests: `item-classification-rules.test.ts` (9), `item-identity-classification.test.ts`
+  (9), `classification-memory.test.ts` (7), plus identity-memory integration cases
+  in `customer-assignment.test.ts`. The memory-read and memory-write guards were
+  verified to FAIL when the memory pass is disabled.
+
+## The identity fix was necessary but NOT sufficient — repair the EXISTING inconsistency
+
+The operator re-tested and reported «المشكلة لم تحل» with a screenshot of the LED
+tube lamp `5720.010.GENRAL.7054` across **46 rows**: 44 `غير مصنّف`, one `كهرباء`
+(Amr Khaled) and one `إضاءة` (Amr Khaled) — the SAME item, three different
+categories, changing owner between requests.
+
+- **Two independent reasons the first cut could not have fixed this.** (1) The
+  branch `feat/item-classification-identity-memory` was **never merged/deployed**
+  — production still runs `f3dc522`, so nothing had changed at all. (2) Even once
+  deployed, `ensureCustomerAssignments` and `classifyUnclassifiedItems` only ever
+  look at items with `categoryId IS NULL`. The LED lamp's two classified copies
+  already carried a category, so memory would never be consulted for them, and the
+  44 unclassified copies would be classified FRESH — the identity memory had no
+  row yet, so each got whatever the keyword/LLM classifier said that day.
+- **The missing half: `repairClassificationConsistency()`** (in
+  `customer-assignment.ts`). It groups EVERY non-cancelled item by
+  `classificationIdentityKey` and, for an identity that resolves to more than one
+  **functional domain** OR is only PARTIALLY classified, rewrites every copy to
+  ONE canonical value: a manager's `source:'manual'` memory wins, else the
+  majority domain, else the deterministic classifier.
+- **Resolve to the DOMAIN, never the raw category.** «إضاءة» is a SUBCATEGORY of
+  «كهرباء», so one copy storing إضاءة and another كهرباء is NOT a real
+  disagreement — both mean the same owner. `domainIdOf()` (via `resolveDomainId`)
+  is applied to every stored category BEFORE comparison, and the canonical value
+  written back is always the domain. The subcategory is preserved by merging it
+  into the item's `subcategoryIds` rather than discarded.
+- **The partial case is the same defect.** `domains.size >= 1 && hasUnclassified`
+  is treated as a conflict too, so the 44 unclassified LED-lamp copies are pulled
+  onto the same domain as the 2 classified ones — which is exactly the operator's
+  complaint. A consistent identity (one domain, no unclassified copies) is never
+  touched.
+- **`listClassificationConflicts()`** is the read-only to-do list (identity, item
+  count, per-category counts, sample description) and uses the SAME rule as the
+  repair, so what the operator sees is what the button will fix.
+- **Wiring**: `backfillItemClassification` runs repair FIRST (so the seed learns
+  from consistent data), then seeds memory, then fills the unclassified backlog.
+  Endpoints `GET /customer-rfq/classification-conflicts` (requireAuth) and
+  `POST /customer-rfq/classification-repair` (admin/manager, audited) drive the
+  new «تضارب تصنيف البند» panel on `/items` → «تصنيفات البنود».
+- **Test**: `customer-assignment.test.ts` +4 — the LED-lamp case (2 categories +
+  2 unclassified → all 4 become the domain), a consistent identity untouched, a
+  manual memory decision beating the majority, and the read-only conflict list.
+  The LED-lamp test **fails against the pre-fix source** (verified by reverting
+  the domain-collapse `continue`).
+- **Lesson**: a memory that only classifies NEW items cannot fix rows that were
+  mis-classified BEFORE it existed. Any "learn once and reuse" feature needs a
+  separate reconciliation pass over the existing corpus.
+- **The Line Item is a CATALOG CODE and outranks the description.** The LED lamp
+  has NO Part No (`—`), so identity fell to the description — but the printed
+  description DRIFTS (`EL SEWEEDY` vs `ELSEWEEDY`) and produced TWO different keys,
+  so memory could never unify the copies. The Line Item (`5720.010.GENRAL.7054`)
+  is identical across all 46 rows and is the code the operator assigns the item
+  by. `classificationIdentityKey` now prefers a STRUCTURED line item
+  (`looksLikeCatalogCode`: a glued alphanumeric code, or 2+ numeric segments with
+  ≤2 words) over the description, so a drifting description can no longer split
+  one item into two identities. Free prose («CABLE 3X2.5 MM COPPER») is still
+  keyed by its description. Two guards — the identity precedence test and the
+  two-CLASSIFIED-rows repair test — **fail against the description-first source**.
