@@ -32,6 +32,8 @@ import {
   type ClassifierVocabulary,
 } from "./classification";
 import { loadClassifierVocabulary } from "./keywords";
+import { classificationIdentityKey } from "./item-identity";
+import { lookupClassification, rememberClassification } from "./classification-memory";
 import { logger } from "../../shared/logger";
 
 export interface AssignOutcome {
@@ -265,12 +267,43 @@ export async function ensureAssignmentsForRfq(rfqId: number): Promise<AssignOutc
 
     let categoryId = item.categoryId ?? null;
     let confidence = 100;
+    let fromMemory = false;
     if (categoryId == null) {
-      const result = classifyItem(item, ctx.categories, ctx.vocabulary);
-      categoryId = result.categoryId;
-      confidence = result.confidence;
+      // CONSULT THE IDENTITY MEMORY FIRST — the SAME fix as the customer path.
+      // Without this, a supplier line whose description is worded differently
+      // from a previous RFQ was classified from scratch and could land in a
+      // DIFFERENT category than the customer line it came from. The memory is
+      // keyed on the item identity, so the two paths can never disagree.
+      const identityKey = classificationIdentityKey(item);
+      if (identityKey) {
+        const remembered = await lookupClassification(identityKey).catch(() => null);
+        if (remembered && remembered.categoryId != null) {
+          categoryId = remembered.categoryId;
+          confidence = remembered.source === "manual" ? 100 : (remembered.confidence ?? 100);
+          fromMemory = true;
+        }
+      }
+      if (categoryId == null) {
+        const result = classifyItem(item, ctx.categories, ctx.vocabulary);
+        categoryId = result.categoryId;
+        confidence = result.confidence;
+      }
       if (categoryId != null && confidence >= MIN_CONFIDENCE) {
         await db.update(rfqItemsTable).set({ categoryId }).where(eq(rfqItemsTable.id, item.id));
+        // Remember the decision by identity so the NEXT RFQ with the same item
+        // resolves instantly and identically. A value that came FROM memory is
+        // not rewritten; a manual decision is never overwritten (enforced in the
+        // memory module). Best-effort — remembering must never fail the RFQ.
+        if (!fromMemory) {
+          await rememberClassification({
+            partNo: item.partNo,
+            description: item.description,
+            lineItem: item.lineItem,
+            categoryId,
+            source: "auto",
+            confidence,
+          }).catch(() => {});
+        }
       } else {
         categoryId = null;
       }
