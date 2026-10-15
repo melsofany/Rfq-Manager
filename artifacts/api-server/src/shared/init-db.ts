@@ -2436,6 +2436,14 @@ export async function initDb(): Promise<void> {
       `CREATE INDEX IF NOT EXISTS hr_bank_emp_idx ON hr_bank_accounts (employee_id)`,
     );
     await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_employee_photos (
+        employee_id INTEGER PRIMARY KEY,
+        mime_type TEXT NOT NULL,
+        data_b64 TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS hr_disciplinary_cases (
         id SERIAL PRIMARY KEY,
         employee_id INTEGER NOT NULL,

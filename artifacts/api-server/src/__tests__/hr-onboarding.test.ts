@@ -33,7 +33,6 @@ beforeAll(() => {
 
 const goodBody = () => ({
   employee: {
-    employeeNo: "E-001",
     fullName: "أحمد يوسف",
     jobTitle: "مندوب",
     department: "المبيعات",
@@ -161,6 +160,29 @@ describe("onboarding payload", () => {
   it("refuses an unknown contract type", () => {
     const b = goodBody();
     (b.contract as any).contractType = "freelance";
+    expect(parseOnboard(b)).toHaveProperty("error");
+  });
+});
+
+describe("onboarding: number, birth date and photo", () => {
+  it("refuses a hire without a date of birth (needed for the employee number)", () => {
+    const b = goodBody();
+    b.profile.dateOfBirth = null as any;
+    expect(parseOnboard(b)).toHaveProperty("error");
+  });
+  it("refuses a birth date too close to the hire date", () => {
+    const b = goodBody();
+    b.profile.dateOfBirth = "2020-01-01";
+    expect(parseOnboard(b)).toHaveProperty("error");
+  });
+  it("carries an accepted photo into the parsed input", () => {
+    const b: any = { ...goodBody(), photo: "data:image/webp;base64,UklGRg==" };
+    const r = parseOnboard(b);
+    expect("input" in r).toBe(true);
+    if ("input" in r) expect(r.input.photo?.mime).toBe("image/webp");
+  });
+  it("refuses a bad photo", () => {
+    const b: any = { ...goodBody(), photo: "data:application/pdf;base64,JVBERi0=" };
     expect(parseOnboard(b)).toHaveProperty("error");
   });
 });

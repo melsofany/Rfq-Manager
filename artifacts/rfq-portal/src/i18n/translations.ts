@@ -96,6 +96,14 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.tab.onboard": "Hire employee",
     "hr.onb.help":
       "Enter the employee's file, contract and bank details. National ID and bank numbers are stored encrypted and shown masked afterwards.",
+    "hr.onb.empNoAuto":
+      "Employee number is generated automatically: hire year + birth year + sequence.",
+    "hr.photo.label": "Photo",
+    "hr.photo.hint": "JPEG, PNG or WebP, up to 300 KB",
+    "hr.photo.badType": "Only JPEG, PNG or WebP images are allowed",
+    "hr.photo.tooBig": "The image is larger than 300 KB",
+    "hr.photo.change": "Change photo",
+    "hr.photo.col": "Photo",
     "hr.onb.sec.job": "Job",
     "hr.onb.sec.personal": "Personal & insurance",
     "hr.onb.sec.contract": "Contract & salary",
@@ -596,6 +604,13 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.tab.onboard": "تعيين موظف",
     "hr.onb.help":
       "أدخل ملف الموظف والعقد وبيانات الحساب البنكي. الرقم القومي وأرقام الحساب بتتخزن مشفرة وبتظهر مقنّعة بعد الحفظ.",
+    "hr.onb.empNoAuto": "يُولَّد رقم الموظف تلقائياً: سنة التعيين + سنة الميلاد + تسلسل.",
+    "hr.photo.label": "صورة الموظف",
+    "hr.photo.hint": "JPEG أو PNG أو WebP، حتى 300 كيلوبايت",
+    "hr.photo.badType": "الصور المسموحة: JPEG أو PNG أو WebP فقط",
+    "hr.photo.tooBig": "حجم الصورة أكبر من 300 كيلوبايت",
+    "hr.photo.change": "تغيير الصورة",
+    "hr.photo.col": "الصورة",
     "hr.onb.sec.job": "الوظيفة",
     "hr.onb.sec.personal": "البيانات الشخصية والتأمينات",
     "hr.onb.sec.contract": "العقد والراتب",

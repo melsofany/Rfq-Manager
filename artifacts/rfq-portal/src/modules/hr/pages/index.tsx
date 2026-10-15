@@ -57,6 +57,112 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const PHOTO_MAX_BYTES = 300 * 1024;
+
+/** Read a picked image as a data URL, checking type and size first. */
+function readPhoto(file: File, t: (key: string) => string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!PHOTO_TYPES.includes(file.type)) return reject(new Error(t("hr.photo.badType")));
+    if (file.size > PHOTO_MAX_BYTES) return reject(new Error(t("hr.photo.tooBig")));
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error(t("hr.photo.badType")));
+    reader.readAsDataURL(file);
+  });
+}
+
+function PhotoPicker({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  const { t } = useLanguage();
+  const [err, setErr] = useState<string | null>(null);
+  async function pick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      setErr(null);
+      onChange(await readPhoto(file, t));
+    } catch (ex) {
+      setErr((ex as Error).message);
+    }
+  }
+  return (
+    <div className="flex items-center gap-3">
+      {value ? (
+        <img src={value} alt="" className="h-16 w-16 rounded-md object-cover border" />
+      ) : (
+        <div className="h-16 w-16 rounded-md border bg-muted" />
+      )}
+      <div className="space-y-1">
+        <span className="text-xs text-muted-foreground block">{t("hr.photo.label")}</span>
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={pick}
+          className="text-sm"
+        />
+        <p className="text-xs text-muted-foreground">{t("hr.photo.hint")}</p>
+        {err && <p className="text-xs text-red-600">{err}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Thumbnail with a change button, used in the employees list. */
+function EmployeePhoto({ id }: { id: number }) {
+  const { t } = useLanguage();
+  const [version, setVersion] = useState(0);
+  const [missing, setMissing] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function upload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      setErr(null);
+      const photo = await readPhoto(file, t);
+      await api(`/hr/employees/${id}/photo`, {
+        method: "PUT",
+        body: JSON.stringify({ photo }),
+      });
+      setMissing(false);
+      setVersion((v) => v + 1);
+    } catch (ex) {
+      setErr((ex as Error).message);
+    }
+  }
+  return (
+    <div className="flex items-center gap-2">
+      {missing ? (
+        <div className="h-8 w-8 rounded-full bg-muted" />
+      ) : (
+        <img
+          src={`/api/hr/employees/${id}/photo?v=${version}`}
+          alt=""
+          className="h-8 w-8 rounded-full object-cover"
+          onError={() => setMissing(true)}
+        />
+      )}
+      <label className="text-xs text-primary underline cursor-pointer">
+        {t("hr.photo.change")}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={upload}
+          className="hidden"
+        />
+      </label>
+      {err && <span className="text-xs text-red-600">{err}</span>}
+    </div>
+  );
+}
+
 export default function HrPage() {
   const { t } = useLanguage();
   const [tab, setTab] = useState<Tab>("attendance");
@@ -323,6 +429,7 @@ function EmployeesTab() {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-muted-foreground">
               <tr>
+                <th className="p-2 text-start">{t("hr.photo.col")}</th>
                 <th className="p-2 text-start">{t("hr.col.no")}</th>
                 <th className="p-2 text-start">{t("hr.col.name")}</th>
                 <th className="p-2 text-start">{t("hr.col.dept")}</th>
@@ -335,6 +442,9 @@ function EmployeesTab() {
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="border-t">
+                  <td className="p-2">
+                    <EmployeePhoto id={r.id} />
+                  </td>
                   <td className="p-2">{r.employeeNo}</td>
                   <td className="p-2">{r.fullName}</td>
                   <td className="p-2">{r.department ?? "—"}</td>
@@ -358,7 +468,7 @@ function EmployeesTab() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
                     {t("hr.emp.empty")}
                   </td>
                 </tr>
@@ -974,7 +1084,6 @@ function DisciplineTab() {
 function OnboardTab() {
   const { t } = useLanguage();
   const empty = {
-    employeeNo: "",
     fullName: "",
     jobTitle: "",
     department: "",
@@ -1001,6 +1110,7 @@ function OnboardTab() {
     iban: "",
   };
   const [f, setF] = useState(empty);
+  const [photo, setPhoto] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const set =
@@ -1013,8 +1123,8 @@ function OnboardTab() {
     setSaved(null);
     try {
       const body = {
+        photo,
         employee: {
-          employeeNo: f.employeeNo,
           fullName: f.fullName,
           jobTitle: f.jobTitle,
           department: f.department,
@@ -1053,6 +1163,7 @@ function OnboardTab() {
       });
       setSaved(res.employeeNo);
       setF(empty);
+      setPhoto(null);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -1074,8 +1185,9 @@ function OnboardTab() {
       <Card>
         <CardContent className="p-4 space-y-3">
           <h2 className="font-semibold">{t("hr.onb.sec.job")}</h2>
+          <p className="text-xs text-muted-foreground">{t("hr.onb.empNoAuto")}</p>
+          <PhotoPicker value={photo} onChange={setPhoto} />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {field("employeeNo", t("hr.col.no"), "text", true)}
             {field("fullName", t("hr.col.name"), "text", true)}
             {field("hireDate", t("hr.onb.hireDate"), "date", true)}
             {field("jobTitle", t("hr.col.job"))}
@@ -1091,7 +1203,7 @@ function OnboardTab() {
           <h2 className="font-semibold">{t("hr.onb.sec.personal")}</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {field("nationalId", t("hr.onb.nationalId"), "text", true)}
-            {field("dateOfBirth", t("hr.onb.dob"), "date")}
+            {field("dateOfBirth", t("hr.onb.dob"), "date", true)}
             <label className="block">
               <span className={label}>{t("hr.onb.gender")}</span>
               <select className={input} value={f.gender} onChange={set("gender")}>

@@ -13,8 +13,9 @@ import {
   hrEmployeeProfilesTable,
   hrContractsTable,
   hrBankAccountsTable,
+  hrEmployeePhotosTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, like, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { requireHr } from "./routes";
 import { encryptField, last4, isHrKeyConfigured } from "../../shared/hr-crypto";
@@ -27,13 +28,15 @@ import {
   normalizeIban,
   contractDatesError,
   isValidSalary,
+  parsePhoto,
+  type ParsedPhoto,
 } from "./onboarding-logic";
+import { generateEmployeeNo } from "./employee-number";
 
 const router: IRouter = Router();
 router.use("/hr", requireAuth, requireHr);
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const EMPNO_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const PIN_RE = /^[A-Za-z0-9_-]{1,32}$/;
 
 function str(v: unknown, max = 200): string | null {
@@ -46,8 +49,8 @@ function optDate(v: unknown): string | null {
 }
 
 interface OnboardInput {
+  photo: ParsedPhoto | null;
   employee: {
-    employeeNo: string;
     fullName: string;
     jobTitle: string | null;
     department: string | null;
@@ -76,21 +79,25 @@ interface OnboardInput {
   bank: { bankName: string; accountHolder: string; accountNo: string; iban: string | null };
 }
 
-/** Validate the whole onboarding payload. Returns an Arabic error or the typed input. */
+/** Validate the whole onboarding payload. The employee number is generated on save, not sent by the client. */
 export function parseOnboard(body: any): { error: string } | { input: OnboardInput } {
-  const employeeNo = str(body?.employee?.employeeNo, 32);
   const fullName = str(body?.employee?.fullName, 200);
   const hireDate = optDate(body?.employee?.hireDate);
-  if (!employeeNo || !EMPNO_RE.test(employeeNo) || !fullName || !hireDate) {
-    return { error: "رقم الموظف والاسم وتاريخ التعيين مطلوبين" };
+  if (!fullName || !hireDate) {
+    return { error: "الاسم وتاريخ التعيين مطلوبين" };
   }
   const biometricPin = str(body?.employee?.biometricPin, 32);
   if (biometricPin && !PIN_RE.test(biometricPin)) return { error: "رقم البصمة غير صالح" };
 
   const nationalId = String(body?.profile?.nationalId ?? "").trim();
   if (!isValidNationalId(nationalId)) return { error: "الرقم القومي يجب أن يكون 14 رقماً" };
-  const dob = body?.profile?.dateOfBirth ? optDate(body.profile.dateOfBirth) : null;
-  if (body?.profile?.dateOfBirth && !dob) return { error: "تاريخ الميلاد غير صالح" };
+  const dob = optDate(body?.profile?.dateOfBirth);
+  if (!dob) return { error: "تاريخ الميلاد مطلوب (يدخل في رقم الموظف)" };
+  if (Number(hireDate.slice(0, 4)) - Number(dob.slice(0, 4)) < 14)
+    return { error: "تاريخ الميلاد لا يناسب تاريخ التعيين" };
+
+  const photoParsed = parsePhoto(body?.photo);
+  if (photoParsed && "error" in photoParsed) return { error: photoParsed.error };
 
   const contractType = body?.contract?.contractType;
   if (!(CONTRACT_TYPES as readonly string[]).includes(contractType))
@@ -118,8 +125,8 @@ export function parseOnboard(body: any): { error: string } | { input: OnboardInp
 
   return {
     input: {
+      photo: photoParsed ? photoParsed.photo : null,
       employee: {
-        employeeNo,
         fullName,
         jobTitle: str(body?.employee?.jobTitle),
         department: str(body?.employee?.department),
@@ -155,6 +162,8 @@ export function parseOnboard(body: any): { error: string } | { input: OnboardInp
   };
 }
 
+class OnboardRejected extends Error {}
+
 router.post("/hr/onboard", async (req, res): Promise<void> => {
   if (!isHrKeyConfigured()) {
     res
@@ -168,12 +177,27 @@ router.post("/hr/onboard", async (req, res): Promise<void> => {
     return;
   }
   const { input } = parsed;
+  const hireYear = Number(input.employee.hireDate.slice(0, 4));
+  const birthYear = Number(input.profile.dateOfBirth!.slice(0, 4));
   try {
     const result = await db.transaction(async (tx) => {
+      // Serialize number generation so two hires at once cannot take the same sequence.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('hr_employee_no'))`);
+      const existing = await tx
+        .select({ no: hrEmployeesTable.employeeNo })
+        .from(hrEmployeesTable)
+        .where(like(hrEmployeesTable.employeeNo, `${String(hireYear % 100).padStart(2, "0")}%`));
+      const gen = generateEmployeeNo(
+        hireYear,
+        birthYear,
+        existing.map((r) => r.no),
+      );
+      if ("error" in gen) throw new OnboardRejected(gen.error);
+
       const [emp] = await tx
         .insert(hrEmployeesTable)
         .values({
-          employeeNo: input.employee.employeeNo,
+          employeeNo: gen.employeeNo,
           fullName: input.employee.fullName,
           jobTitle: input.employee.jobTitle,
           department: input.employee.department,
@@ -215,10 +239,21 @@ router.post("/hr/onboard", async (req, res): Promise<void> => {
         ibanLast4: input.bank.iban ? last4(input.bank.iban) : null,
         isPrimary: true,
       });
+      if (input.photo) {
+        await tx.insert(hrEmployeePhotosTable).values({
+          employeeId: emp.id,
+          mimeType: input.photo.mime,
+          dataB64: input.photo.data,
+        });
+      }
       return emp;
     });
     res.status(201).json({ id: result.id, employeeNo: result.employeeNo });
   } catch (err) {
+    if (err instanceof OnboardRejected) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
     if (String((err as Error)?.message).includes("unique")) {
       res.status(409).json({ error: "رقم الموظف أو البصمة مستخدم بالفعل" });
       return;
@@ -281,6 +316,61 @@ router.get("/hr/employees/:id/file", async (req, res): Promise<void> => {
       isPrimary: b.isPrimary,
     })),
   });
+});
+
+/** Employee photo: GET returns the image bytes; PUT replaces it (JSON body { photo: dataUrl }). */
+router.get("/hr/employees/:id/photo", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "معرف غير صالح" });
+    return;
+  }
+  const [row] = await db
+    .select()
+    .from(hrEmployeePhotosTable)
+    .where(eq(hrEmployeePhotosTable.employeeId, id))
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "لا توجد صورة" });
+    return;
+  }
+  res.setHeader("Content-Type", row.mimeType);
+  res.setHeader("Cache-Control", "private, max-age=300");
+  res.send(Buffer.from(row.dataB64, "base64"));
+});
+
+router.put("/hr/employees/:id/photo", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "معرف غير صالح" });
+    return;
+  }
+  const parsed = parsePhoto(req.body?.photo);
+  if (!parsed || "error" in parsed) {
+    res.status(400).json({ error: parsed?.error ?? "الصورة مطلوبة" });
+    return;
+  }
+  const [emp] = await db
+    .select({ id: hrEmployeesTable.id })
+    .from(hrEmployeesTable)
+    .where(eq(hrEmployeesTable.id, id))
+    .limit(1);
+  if (!emp) {
+    res.status(404).json({ error: "غير موجود" });
+    return;
+  }
+  await db
+    .insert(hrEmployeePhotosTable)
+    .values({ employeeId: id, mimeType: parsed.photo.mime, dataB64: parsed.photo.data })
+    .onConflictDoUpdate({
+      target: hrEmployeePhotosTable.employeeId,
+      set: {
+        mimeType: parsed.photo.mime,
+        dataB64: parsed.photo.data,
+        updatedAt: new Date(),
+      },
+    });
+  res.json({ ok: true });
 });
 
 export default router;
