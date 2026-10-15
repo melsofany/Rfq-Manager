@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -386,6 +386,62 @@ function EmployeesTab() {
     }
   }
 
+  const [editId, setEditId] = useState<number | null>(null);
+  const [draft, setDraft] = useState({
+    fullName: "",
+    jobTitle: "",
+    department: "",
+    phone: "",
+    biometricPin: "",
+  });
+  const [rehireId, setRehireId] = useState<number | null>(null);
+  const [rehireDate, setRehireDate] = useState(todayStr());
+
+  function startEdit(r: HrEmployee) {
+    setEditId(r.id);
+    setDraft({
+      fullName: r.fullName ?? "",
+      jobTitle: r.jobTitle ?? "",
+      department: r.department ?? "",
+      phone: r.phone ?? "",
+      biometricPin: r.biometricPin ?? "",
+    });
+  }
+
+  async function saveEdit(id: number) {
+    try {
+      setError(null);
+      await api(`/hr/employees/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          fullName: draft.fullName,
+          jobTitle: draft.jobTitle,
+          department: draft.department,
+          phone: draft.phone,
+          biometricPin: draft.biometricPin.trim() === "" ? null : draft.biometricPin.trim(),
+        }),
+      });
+      setEditId(null);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function rehire(id: number) {
+    try {
+      setError(null);
+      await api(`/hr/employees/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "active", hireDate: rehireDate }),
+      });
+      setRehireId(null);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   const input = "border rounded px-2 py-1.5 bg-background text-sm";
 
   return (
@@ -445,30 +501,93 @@ function EmployeesTab() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="p-2">
-                    <EmployeePhoto id={r.id} />
-                  </td>
-                  <td className="p-2">{r.employeeNo}</td>
-                  <td className="p-2">{r.fullName}</td>
-                  <td className="p-2">{r.department ?? "—"}</td>
-                  <td className="p-2">{r.jobTitle ?? "—"}</td>
-                  <td className="p-2">
-                    {r.biometricPin ?? <span className="text-amber-600">{t("hr.emp.noPin")}</span>}
-                  </td>
-                  <td className="p-2">{t(`hr.status.${r.status}`)}</td>
-                  <td className="p-2 text-end">
-                    {r.status === "active" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setStatus(r.id, "resigned")}
-                      >
-                        {t("hr.emp.offboard")}
-                      </Button>
-                    )}
-                  </td>
-                </tr>
+                <Fragment key={r.id}>
+                  <tr className="border-t">
+                    <td className="p-2">
+                      <EmployeePhoto id={r.id} />
+                    </td>
+                    <td className="p-2">{r.employeeNo}</td>
+                    <td className="p-2">{r.fullName}</td>
+                    <td className="p-2">{r.department ?? "—"}</td>
+                    <td className="p-2">{r.jobTitle ?? "—"}</td>
+                    <td className="p-2">
+                      {r.biometricPin ?? (
+                        <span className="text-amber-600">{t("hr.emp.noPin")}</span>
+                      )}
+                    </td>
+                    <td className="p-2">{t(`hr.status.${r.status}`)}</td>
+                    <td className="p-2 text-end">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => startEdit(r)}>
+                          {t("hr.emp.edit")}
+                        </Button>
+                        {r.status === "active" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setStatus(r.id, "resigned")}
+                          >
+                            {t("hr.emp.offboard")}
+                          </Button>
+                        )}
+                        {r.status !== "active" && rehireId !== r.id && (
+                          <Button variant="outline" size="sm" onClick={() => setRehireId(r.id)}>
+                            {t("hr.emp.rehire")}
+                          </Button>
+                        )}
+                        {rehireId === r.id && (
+                          <span className="flex items-center gap-2">
+                            <input
+                              type="date"
+                              className={input}
+                              value={rehireDate}
+                              onChange={(e) => setRehireDate(e.target.value)}
+                            />
+                            <Button size="sm" onClick={() => rehire(r.id)}>
+                              {t("hr.emp.rehireConfirm")}
+                            </Button>
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {editId === r.id && (
+                    <tr className="bg-muted/30">
+                      <td colSpan={8} className="p-3">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                          {(
+                            [
+                              ["fullName", t("hr.col.name")],
+                              ["jobTitle", t("hr.col.job")],
+                              ["department", t("hr.col.dept")],
+                              ["phone", t("hr.onb.phone")],
+                              ["biometricPin", t("hr.col.pin")],
+                            ] as const
+                          ).map(([k, label]) => (
+                            <label key={k} className="block">
+                              <span className="text-xs text-muted-foreground block mb-1">
+                                {label}
+                              </span>
+                              <input
+                                className={input + " w-full"}
+                                value={draft[k]}
+                                onChange={(e) => setDraft({ ...draft, [k]: e.target.value })}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          <Button size="sm" onClick={() => saveEdit(r.id)}>
+                            {t("hr.set.save")}
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => setEditId(null)}>
+                            {t("hr.emp.cancel")}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
               {rows.length === 0 && (
                 <tr>

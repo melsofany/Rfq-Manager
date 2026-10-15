@@ -137,7 +137,22 @@ router.patch("/hr/employees/:id", async (req, res): Promise<void> => {
     return;
   }
   const patch: Record<string, unknown> = { updatedAt: new Date() };
-  if (req.body?.fullName !== undefined) patch.fullName = str(req.body.fullName);
+  if (req.body?.fullName !== undefined) {
+    const name = str(req.body.fullName);
+    if (!name) {
+      res.status(400).json({ error: "الاسم مطلوب" });
+      return;
+    }
+    patch.fullName = name;
+  }
+  if (req.body?.hireDate !== undefined) {
+    // تاريخ التعيين الجديد عند إعادة تعيين موظف مستقيل
+    if (!DATE_RE.test(String(req.body.hireDate))) {
+      res.status(400).json({ error: "تاريخ التعيين غير صالح" });
+      return;
+    }
+    patch.hireDate = req.body.hireDate;
+  }
   if (req.body?.jobTitle !== undefined) patch.jobTitle = str(req.body.jobTitle);
   if (req.body?.department !== undefined) patch.department = str(req.body.department);
   if (req.body?.phone !== undefined) patch.phone = str(req.body.phone, 40);
