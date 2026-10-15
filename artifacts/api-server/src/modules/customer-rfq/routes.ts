@@ -1883,6 +1883,15 @@ router.get("/customer-rfq/item-categories", requireAuth, async (req, res): Promi
       customerName: r.customerName,
       categoryId: r.categoryId,
       categoryName: r.categoryId != null ? (catName.get(r.categoryId) ?? null) : null,
+      // The employee responsible for the item = the owner of its PRIMARY
+      // category (the junction `employeeId` is only a snapshot for extra
+      // categories). Surfaced at the top level so the «تصنيفات البنود» tab can
+      // show «الموظف المسند إليه» without walking the categories array.
+      employeeId: r.categoryId != null ? (ownerByCat.get(r.categoryId) ?? null) : null,
+      employeeName:
+        r.categoryId != null && ownerByCat.get(r.categoryId) != null
+          ? (ownerName.get(ownerByCat.get(r.categoryId)!) ?? null)
+          : null,
       categories,
     };
   });
@@ -1908,6 +1917,29 @@ router.get("/customer-rfq/item-category-options", requireAuth, async (_req, res)
     .from(itemCategoriesTable)
     .orderBy(itemCategoriesTable.name);
   res.json(rows);
+});
+
+// GET /customer-rfq/unowned-categories — categories that have NO responsible
+// employee yet. Such a category classifies an item but can never be assigned
+// (`pickOwner` returns null → «مصنّف — بلا مسؤول»), which is the root cause of
+// items showing without an owner. The «تصنيفات البنود» tab lists these so the
+// gap is visible and fixable in one place, instead of surfacing as a mystery
+// «بلا مسؤول» on the customer-RFQ page.
+router.get("/customer-rfq/unowned-categories", requireAuth, async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      id: itemCategoriesTable.id,
+      name: itemCategoriesTable.name,
+      itemCount: count(customerRfqItemsTable.id),
+    })
+    .from(itemCategoriesTable)
+    .leftJoin(customerRfqItemsTable, eq(customerRfqItemsTable.categoryId, itemCategoriesTable.id))
+    .where(
+      sql`not exists (select 1 from ${employeeCategoriesTable} ec where ec.category_id = ${itemCategoriesTable.id})`,
+    )
+    .groupBy(itemCategoriesTable.id, itemCategoriesTable.name)
+    .orderBy(desc(count(customerRfqItemsTable.id)));
+  res.json(rows.map((r) => ({ id: r.id, name: r.name, itemCount: Number(r.itemCount) })));
 });
 
 // POST /customer-rfq — create a customer RFQ

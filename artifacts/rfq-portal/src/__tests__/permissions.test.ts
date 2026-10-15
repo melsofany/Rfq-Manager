@@ -11,6 +11,7 @@ import {
   canEditCustomerDoc,
   canPriceCustomerRfq,
   canAssignItems,
+  canManageItemAssignment,
   ASSIGN_PERM,
   EXPLICIT_ONLY_PERMS,
   hasCustomPermissions,
@@ -155,5 +156,23 @@ describe("canEditCustomerDoc", () => {
     const map = { "customer-rfq": true, "customer-rfq:edit": true };
     expect(hasPermission("manager", map, EDIT_PERM.customerRfq)).toBe(true);
     expect(resolvePermissions("manager", map).has(EDIT_PERM.customerRfq)).toBe(true);
+  });
+});
+
+describe("item assignment management (change category + owner)", () => {
+  it("allows admin and manager only", () => {
+    expect(canManageItemAssignment("admin", null)).toBe(true);
+    expect(canManageItemAssignment("manager", null)).toBe(true);
+    expect(canManageItemAssignment("purchasing", null)).toBe(false);
+    expect(canManageItemAssignment("data_entry", null)).toBe(false);
+  });
+
+  it("the rfq:assign grant does NOT open management", () => {
+    // Assigning an item moves KPI responsibility between employees; the operator
+    // restricted it to a manager/admin. A purchasing employee granted rfq:assign
+    // can still be offered the assign action elsewhere, but not this one.
+    const map = { rfq: true, "rfq:assign": true };
+    expect(canAssignItems("purchasing", map)).toBe(true);
+    expect(canManageItemAssignment("purchasing", map)).toBe(false);
   });
 });

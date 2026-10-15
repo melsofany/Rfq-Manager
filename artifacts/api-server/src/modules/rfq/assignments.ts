@@ -59,6 +59,22 @@ export async function hasAssignAccess(req: any): Promise<boolean> {
   return ASSIGN_ROLE_DEFAULT[req.session?.role ?? ""] === true;
 }
 
+/**
+ * Whether the requester may MANAGE item categorization/ownership — i.e. change
+ * which category an item belongs to and who is responsible for it.
+ *
+ * This is an admin/manager decision (it moves KPI responsibility between
+ * employees), so it is role-gated rather than permission-gated. The `rfq:assign`
+ * grant deliberately does NOT open it: a purchasing employee may see the
+ * classification and its owner, but only an admin/manager changes them. The
+ * editing surface is `/items` → «تصنيفات البنود»; the customer-RFQ page is
+ * read-only for this data.
+ */
+export function hasAssignmentManageAccess(req: any): boolean {
+  const role = req.session?.role;
+  return role === "admin" || role === "manager";
+}
+
 router.get("/rfq/:id/assignments", requireAuth, async (req, res): Promise<void> => {
   const rfqId = parseInt(req.params.id as string, 10);
 
@@ -121,10 +137,8 @@ router.get("/rfq/:id/assignments", requireAuth, async (req, res): Promise<void> 
 });
 
 router.post("/rfq/:id/assignments/ensure", requireAuth, async (req, res): Promise<void> => {
-  if (!(await hasAssignAccess(req))) {
-    res
-      .status(403)
-      .json({ error: "غير مصرح — إسناد البنود متاح للمشتريات أو لمن مُنح صلاحية الإسناد" });
+  if (!hasAssignmentManageAccess(req)) {
+    res.status(403).json({ error: "غير مصرح — تعديل التصنيف والمسؤول متاح للمدير أو الأدمن فقط" });
     return;
   }
   const rfqId = parseInt(req.params.id as string, 10);
@@ -133,10 +147,8 @@ router.post("/rfq/:id/assignments/ensure", requireAuth, async (req, res): Promis
 });
 
 router.patch("/rfq/items/:itemId/assignment", requireAuth, async (req, res): Promise<void> => {
-  if (!(await hasAssignAccess(req))) {
-    res
-      .status(403)
-      .json({ error: "غير مصرح — إسناد البنود متاح للمشتريات أو لمن مُنح صلاحية الإسناد" });
+  if (!hasAssignmentManageAccess(req)) {
+    res.status(403).json({ error: "غير مصرح — تعديل التصنيف والمسؤول متاح للمدير أو الأدمن فقط" });
     return;
   }
   const rfqItemId = parseInt(req.params.itemId as string, 10);
@@ -265,10 +277,10 @@ router.post(
   "/customer-rfq/:id/assignments/ensure",
   requireAuth,
   async (req, res): Promise<void> => {
-    if (!(await hasAssignAccess(req))) {
+    if (!hasAssignmentManageAccess(req)) {
       res
         .status(403)
-        .json({ error: "غير مصرح — إسناد البنود متاح للمشتريات أو لمن مُنح صلاحية الإسناد" });
+        .json({ error: "غير مصرح — تعديل التصنيف والمسؤول متاح للمدير أو الأدمن فقط" });
       return;
     }
     const customerRfqId = parseInt(req.params.id as string, 10);
@@ -282,10 +294,10 @@ router.patch(
   "/customer-rfq/items/:itemId/assignment",
   requireAuth,
   async (req, res): Promise<void> => {
-    if (!(await hasAssignAccess(req))) {
+    if (!hasAssignmentManageAccess(req)) {
       res
         .status(403)
-        .json({ error: "غير مصرح — إسناد البنود متاح للمشتريات أو لمن مُنح صلاحية الإسناد" });
+        .json({ error: "غير مصرح — تعديل التصنيف والمسؤول متاح للمدير أو الأدمن فقط" });
       return;
     }
     const customerRfqItemId = parseInt(req.params.itemId as string, 10);

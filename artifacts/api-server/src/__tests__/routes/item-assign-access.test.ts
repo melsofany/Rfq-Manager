@@ -49,9 +49,10 @@ vi.mock("../../shared/logger", () => ({
 }));
 
 let hasAssignAccess: typeof import("../../modules/rfq/assignments").hasAssignAccess;
+let hasAssignmentManageAccess: typeof import("../../modules/rfq/assignments").hasAssignmentManageAccess;
 
 beforeAll(async () => {
-  ({ hasAssignAccess } = await import("../../modules/rfq/assignments"));
+  ({ hasAssignAccess, hasAssignmentManageAccess } = await import("../../modules/rfq/assignments"));
 });
 
 beforeEach(() => {
@@ -83,5 +84,25 @@ describe("hasAssignAccess", () => {
   it("an explicit map that omits the key revokes even for purchasing", async () => {
     permissionRow = { permissions: { rfq: true } };
     expect(await hasAssignAccess(req("purchasing"))).toBe(false);
+  });
+});
+
+describe("hasAssignmentManageAccess (change category + owner)", () => {
+  it("allows admin and manager", () => {
+    expect(hasAssignmentManageAccess(req("admin"))).toBe(true);
+    expect(hasAssignmentManageAccess(req("manager"))).toBe(true);
+  });
+
+  it("refuses purchasing and data_entry regardless of the rfq:assign grant", () => {
+    // The operator's rule: assigning an item moves KPI responsibility between
+    // employees, so only a manager/admin does it. The `rfq:assign` permission
+    // deliberately does NOT open this gate.
+    permissionRow = { permissions: { rfq: true, "rfq:assign": true } };
+    expect(hasAssignmentManageAccess(req("purchasing"))).toBe(false);
+    expect(hasAssignmentManageAccess(req("data_entry"))).toBe(false);
+  });
+
+  it("refuses an anonymous session", () => {
+    expect(hasAssignmentManageAccess({ session: {} })).toBe(false);
   });
 });

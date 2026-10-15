@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
-import { canAccessPath } from "@/lib/permissions";
+import { canAccessPath, canManageItemAssignment } from "@/lib/permissions";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { toast } from "sonner";
 
@@ -14,6 +14,16 @@ async function readError(res: Response): Promise<string> {
   } catch {
     return `HTTP ${res.status}`;
   }
+}
+
+interface CategoryOption {
+  id: number;
+  name: string;
+}
+
+interface EmployeeOption {
+  id: number;
+  name: string;
 }
 
 interface ItemCategoryRow {
@@ -29,6 +39,9 @@ interface ItemCategoryRow {
   customerName: string | null;
   categoryId: number | null;
   categoryName: string | null;
+  /** The owner of the item's PRIMARY category — who is responsible for it. */
+  employeeId: number | null;
+  employeeName: string | null;
   categories: Array<{
     categoryId: number;
     categoryName: string | null;
@@ -38,27 +51,53 @@ interface ItemCategoryRow {
   }>;
 }
 
+interface UnownedCategory {
+  id: number;
+  name: string;
+  itemCount: number;
+}
+
 /**
- * The «بنود التصنيفات» list — EVERY item with its identity (line item / part
- * number / description) and its category. Visible to the whole team (read-only);
- * the category is edited per item by an admin/manager only.
+ * The «تصنيفات البنود» tab — the SINGLE place item categorization and
+ * responsibility are managed.
+ *
+ * The customer-RFQ page is read-only for this data: it shows the category and
+ * the assigned employee, and links here. Editing is admin/manager only, by role
+ * (assigning an item moves KPI responsibility between employees).
  */
-function ItemsCategoryList() {
+function ItemsCategoryList({
+  canManage,
+  categories,
+  employees,
+  onChanged,
+}: {
+  canManage: boolean;
+  categories: CategoryOption[];
+  employees: EmployeeOption[];
+  onChanged: () => void;
+}) {
   const [rows, setRows] = useState<ItemCategoryRow[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("all");
-  const [allCats, setAllCats] = useState<Array<{ id: number; name: string }>>([]);
+  const [allCats, setAllCats] = useState<CategoryOption[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Per-item editor
+  const [editFor, setEditFor] = useState<ItemCategoryRow | null>(null);
+  const [editCategory, setEditCategory] = useState<number | "">("");
+  const [editEmployee, setEditEmployee] = useState<number | "">("");
+  const [editReason, setEditReason] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const PAGE = 100;
 
   useEffect(() => {
     void (async () => {
       const res = await fetch("/api/item-categories", { credentials: "include" });
-      if (res.ok) setAllCats((await res.json()) as Array<{ id: number; name: string }>);
+      if (res.ok) setAllCats((await res.json()) as CategoryOption[]);
     })();
   }, []);
 
@@ -91,16 +130,51 @@ function ItemsCategoryList() {
     void load();
   }, [load]);
 
+  function openEditor(r: ItemCategoryRow) {
+    setEditFor(r);
+    setEditCategory(r.categoryId ?? "");
+    setEditEmployee(r.employeeId ?? "");
+    setEditReason("");
+  }
+
+  async function saveEdit() {
+    if (!editFor) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/customer-rfq/items/${editFor.customerRfqItemId}/assignment`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          categoryId: editCategory === "" ? null : Number(editCategory),
+          employeeId: editEmployee === "" ? null : Number(editEmployee),
+          reason: editReason.trim() || null,
+        }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      toast.success("تم تحديث التصنيف والمسؤول");
+      setEditFor(null);
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const hasNext = offset + PAGE < total;
   const hasPrev = offset > 0;
+  const colCount = canManage ? 7 : 6;
+  const categoryChoices = categories.length ? categories : allCats;
 
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">بنود التصنيفات</h2>
+        <h2 className="text-lg font-semibold text-foreground">تصنيفات البنود والمسؤولية</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          كل بند باسمه وورقة القطعة والـ Line Item والتصنيف الخاص به. العرض متاح للجميع، وتعديل
-          التصنيف للمدير فقط.
+          كل بند باسمه وورقة القطعة والـ Line Item والتصنيف والموظف المسند إليه. العرض متاح للجميع،
+          وتعديل التصنيف والمسؤول للمدير أو الأدمن فقط.
         </p>
       </div>
 
@@ -169,19 +243,23 @@ function ItemsCategoryList() {
                   اسم البند (التوصيف)
                 </th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">التصنيف</th>
+                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                  الموظف المسند إليه
+                </th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">طلب التسعير</th>
+                {canManage && <th className="px-3 py-2 w-16" />}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={colCount} className="px-4 py-10 text-center text-muted-foreground">
                     جارٍ التحميل…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={colCount} className="px-4 py-10 text-center text-muted-foreground">
                     لا توجد بنود مطابقة.
                   </td>
                 </tr>
@@ -228,6 +306,15 @@ function ItemsCategoryList() {
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
+                      {r.employeeName ? (
+                        <span className="text-foreground">{r.employeeName}</span>
+                      ) : (
+                        <span className="text-amber-600 dark:text-amber-400 text-xs">
+                          بلا مسؤول
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
                       {r.customerRfqNo ? (
                         <span className="font-mono text-xs" dir="ltr">
                           {r.customerRfqNo}
@@ -239,6 +326,13 @@ function ItemsCategoryList() {
                         <div className="text-xs text-muted-foreground">{r.customerName}</div>
                       )}
                     </td>
+                    {canManage && (
+                      <td className="px-3 py-2 text-center">
+                        <Button size="sm" variant="outline" onClick={() => openEditor(r)}>
+                          تعديل
+                        </Button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -272,12 +366,248 @@ function ItemsCategoryList() {
           </div>
         </div>
       )}
+
+      {editFor && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-lg w-full max-w-md p-5 space-y-4">
+            <h2 className="font-semibold text-foreground">تعديل تصنيف البند ومسؤوله</h2>
+            <p className="text-xs text-muted-foreground">
+              {editFor.description ||
+                editFor.partNo ||
+                editFor.lineItem ||
+                `بند #${editFor.customerRfqItemId}`}
+            </p>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">التصنيف</label>
+              <select
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                value={editCategory}
+                onChange={(e) =>
+                  setEditCategory(e.target.value === "" ? "" : Number(e.target.value))
+                }
+              >
+                <option value="">— بلا تصنيف —</option>
+                {categoryChoices.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">الموظف المسؤول</label>
+              <select
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                value={editEmployee}
+                onChange={(e) =>
+                  setEditEmployee(e.target.value === "" ? "" : Number(e.target.value))
+                }
+              >
+                <option value="">— بلا مسؤول —</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">السبب (اختياري)</label>
+              <Input value={editReason} onChange={(e) => setEditReason(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setEditFor(null)} disabled={saving}>
+                إلغاء
+              </Button>
+              <Button onClick={saveEdit} disabled={saving}>
+                حفظ
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Categories with NO responsible employee. Such a category classifies an item
+ * but can never be assigned — the item shows «مصنّف — بلا مسؤول». Assigning an
+ * owner here fixes every item of that category at once.
+ */
+function UnownedCategoriesPanel({
+  employees,
+  onChanged,
+}: {
+  employees: EmployeeOption[];
+  onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<UnownedCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [assignFor, setAssignFor] = useState<UnownedCategory | null>(null);
+  const [ownerId, setOwnerId] = useState<number | "">("");
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/customer-rfq/unowned-categories", { credentials: "include" });
+      if (res.ok) setRows((await res.json()) as UnownedCategory[]);
+    } catch {
+      /* advisory — a failure must not blank the tab */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function saveOwner() {
+    if (!assignFor || ownerId === "") return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/item-categories/${assignFor.id}/owners`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owners: [{ employeeId: Number(ownerId), isPrimary: true }] }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      toast.success("تم تعيين المسؤول — يمكن الآن إعادة الإسناد الآلي");
+      setAssignFor(null);
+      setOwnerId("");
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading || rows.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-4 space-y-3">
+      <div>
+        <h3 className="font-semibold text-sm text-foreground">تصنيفات بلا مسؤول ({rows.length})</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          هذه التصنيفات مُصنَّفة عليها بنود لكن ليس لها موظف مسؤول، لذلك تظهر بنودها «بلا مسؤول».
+          عيّن مسؤولًا لكل تصنيف لإصلاح ذلك.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {rows.map((c) => (
+          <div
+            key={c.id}
+            className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-sm"
+          >
+            <span className="font-medium text-foreground">{c.name}</span>
+            <span className="text-xs text-muted-foreground">
+              {c.itemCount.toLocaleString("en-US")} بند
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setAssignFor(c);
+                setOwnerId("");
+              }}
+            >
+              تعيين مسؤول
+            </Button>
+          </div>
+        ))}
+      </div>
+
+      {assignFor && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-lg w-full max-w-md p-5 space-y-4">
+            <h2 className="font-semibold text-foreground">تعيين مسؤول للتصنيف</h2>
+            <p className="text-xs text-muted-foreground">
+              {assignFor.name} — {assignFor.itemCount.toLocaleString("en-US")} بند
+            </p>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">الموظف المسؤول (أساسي)</label>
+              <select
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                value={ownerId}
+                onChange={(e) => setOwnerId(e.target.value === "" ? "" : Number(e.target.value))}
+              >
+                <option value="">— اختر موظفًا —</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setAssignFor(null)} disabled={saving}>
+                إلغاء
+              </Button>
+              <Button onClick={saveOwner} disabled={saving || ownerId === ""}>
+                حفظ
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export function ItemCategoriesTab() {
   const { employee } = useAuth();
+  const canManage = canManageItemAssignment(employee?.role, employee?.permissions);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [classifying, setClassifying] = useState(false);
+
+  const onChanged = useCallback(() => setReloadKey((k) => k + 1), []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [cRes, eRes] = await Promise.all([
+          fetch("/api/item-categories", { credentials: "include" }),
+          fetch("/api/employees", { credentials: "include" }),
+        ]);
+        if (cRes.ok) setCategories((await cRes.json()) as CategoryOption[]);
+        if (eRes.ok)
+          setEmployees(
+            ((await eRes.json()) as Array<EmployeeOption & { isActive?: boolean }>).filter(
+              (e) => e.isActive !== false,
+            ),
+          );
+      } catch {
+        /* selects degrade to empty; the list still renders */
+      }
+    })();
+  }, []);
+
+  async function runBulkClassify() {
+    setClassifying(true);
+    try {
+      const res = await fetch("/api/customer-rfq/items/classify", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const out = (await res.json()) as { scanned: number; classified: number };
+      toast.success(`التصنيف الآلي: فُحص ${out.scanned}، صُنّف ${out.classified}`);
+      onChanged();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setClassifying(false);
+    }
+  }
 
   if (!canAccessPath(employee?.role, employee?.permissions, "/items")) {
     return (
@@ -285,12 +615,23 @@ export function ItemCategoriesTab() {
     );
   }
 
-  // READ-ONLY for everyone — no role may edit a category from this page. The
-  // per-item editor lives on the customer-RFQ page and /employees owns
-  // category assignment; this tab is the shared review view.
   return (
     <div className="space-y-6">
-      <ItemsCategoryList />
+      {canManage && <UnownedCategoriesPanel employees={employees} onChanged={onChanged} />}
+      {canManage && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={runBulkClassify} disabled={classifying}>
+            {classifying ? "جارٍ التصنيف الآلي…" : "تصنيف آلي للبنود غير المصنّفة"}
+          </Button>
+        </div>
+      )}
+      <ItemsCategoryList
+        key={reloadKey}
+        canManage={canManage}
+        categories={categories}
+        employees={employees}
+        onChanged={onChanged}
+      />
     </div>
   );
 }
