@@ -154,7 +154,7 @@ export interface PricePoint {
    * also when the only order issued was later CANCELLED, because a cancelled
    * order is not an issued order and must never read as one.
    */
-  poNos: string[];
+  poNos: IssuedPoRef[];
 }
 
 export interface TrendSeriesPoint {
@@ -606,6 +606,8 @@ function pointsForCluster(cluster: ItemCluster, all: PricePoint[]): PricePoint[]
 
 /** One live (non-cancelled) supplier-PO line, with the keys that link it. */
 export interface IssuedPoLine {
+  /** The order's own id — what a link to its detail page needs. */
+  poId: number | null;
   poNo: string;
   supplierId: number | null;
   rfqId: number | null;
@@ -613,6 +615,12 @@ export interface IssuedPoLine {
   partNo: string | null;
   /** The customer-RFQ line this PO line was sourced from, when known. */
   customerRfqItemId: number | null;
+}
+
+/** An issued supplier order, as the price history reports it. */
+export interface IssuedPoRef {
+  id: number | null;
+  poNo: string;
 }
 
 /** Case/whitespace-insensitive key for comparing a line item code. */
@@ -646,12 +654,16 @@ function normLineItem(v: string | null | undefined): string {
  * second matters because cancelling a single supplier leaves the PO `sent` —
  * live data has exactly that shape (`PO-2026-000036`).
  */
-export function matchIssuedPos(quote: PricePoint, lines: IssuedPoLine[]): string[] {
+export function matchIssuedPos(quote: PricePoint, lines: IssuedPoLine[]): IssuedPoRef[] {
   if (quote.supplierId == null) return [];
   const sameSupplier = lines.filter((l) => l.supplierId === quote.supplierId);
   if (!sameSupplier.length) return [];
 
-  const collect = (rows: IssuedPoLine[]) => [...new Set(rows.map((r) => r.poNo))];
+  const collect = (rows: IssuedPoLine[]): IssuedPoRef[] => {
+    const byNo = new Map<string, IssuedPoRef>();
+    for (const r of rows) if (!byNo.has(r.poNo)) byNo.set(r.poNo, { id: r.poId, poNo: r.poNo });
+    return [...byNo.values()];
+  };
 
   // Rung 1 — the customer-request line both sides were raised from.
   if (quote.customerRfqItemId != null) {
@@ -691,6 +703,7 @@ export function matchIssuedPos(quote: PricePoint, lines: IssuedPoLine[]): string
 async function loadIssuedPoLines(): Promise<IssuedPoLine[]> {
   const rows = await db
     .select({
+      poId: purchaseOrdersTable.id,
       poNo: purchaseOrdersTable.internalPoNo,
       supplierId: purchaseOrderItemsTable.supplierId,
       rfqId: purchaseOrdersTable.rfqId,
@@ -712,6 +725,7 @@ async function loadIssuedPoLines(): Promise<IssuedPoLine[]> {
     );
 
   return rows.map((r) => ({
+    poId: r.poId ?? null,
     poNo: r.poNo,
     supplierId: r.supplierId ?? null,
     rfqId: r.rfqId ?? null,
@@ -1031,7 +1045,7 @@ router.get("/items/analysis/item", requireAuth, async (req, res): Promise<void> 
      */
     poSummary: {
       quotedWithPo: points.filter((p) => p.poNos.length > 0).length,
-      poNumbers: [...new Set(points.flatMap((p) => p.poNos))].sort(),
+      poNumbers: [...new Set(points.flatMap((p) => p.poNos.map((r) => r.poNo)))].sort(),
     },
     truncated: supplierRows.length >= SEARCH_ROW_CAP || customerRows.length >= SEARCH_ROW_CAP,
   });

@@ -82,7 +82,7 @@ interface PricePoint {
   employeeName: string | null;
   isApproved: boolean;
   /** The supplier order(s) issued for this quote — empty when none, or when cancelled. */
-  poNos: string[];
+  poNos: { id: number | null; poNo: string }[];
 }
 
 interface SupplierSummary {
@@ -618,9 +618,13 @@ function DetailPanel({ detail, loading }: { detail: AnalysisDetail | null; loadi
                       ) : (
                         <span className="inline-flex flex-wrap justify-center gap-1">
                           {p.poNos.map((po) => (
-                            <Link key={po} href={`/purchase-orders?q=${encodeURIComponent(po)}`}>
+                            <Link
+                              key={po.poNo}
+                              href={`/purchase-orders/${po.id ?? ""}`}
+                              title={`فتح أمر الشراء ${po.poNo}`}
+                            >
                               <a className="inline-flex items-center gap-1 font-mono font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 hover:bg-emerald-100">
-                                {po}
+                                {po.poNo}
                                 <ExternalLink size={9} />
                               </a>
                             </Link>

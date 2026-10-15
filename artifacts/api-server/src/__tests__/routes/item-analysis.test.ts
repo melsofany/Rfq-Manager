@@ -708,6 +708,7 @@ describe("GET /items/analysis/item", () => {
 /** A live PO line as `loadIssuedPoLines` returns it (already cancellation-filtered). */
 function poLine(over: any = {}) {
   return {
+    poId: 900,
     poNo: "PO-2026-000041",
     supplierId: 1,
     rfqId: 1,
@@ -716,6 +717,11 @@ function poLine(over: any = {}) {
     customerRfqItemId: null,
     ...over,
   };
+}
+
+/** The order numbers of a match result — the rung assertions only care about these. */
+function poNos(refs: Array<{ poNo: string }>): string[] {
+  return refs.map((r) => r.poNo);
 }
 
 describe("matchIssuedPos", () => {
@@ -746,7 +752,7 @@ describe("matchIssuedPos", () => {
         customerRfqItemId: 901,
       }),
     ];
-    expect(mod.matchIssuedPos(quote, lines)).toEqual(["PO-1"]);
+    expect(poNos(mod.matchIssuedPos(quote, lines))).toEqual(["PO-1"]);
   });
 
   it("links on the line item code when there is no shared customer-request line", () => {
@@ -772,7 +778,7 @@ describe("matchIssuedPos", () => {
         customerRfqItemId: null,
       }),
     ];
-    expect(mod.matchIssuedPos(quote, lines)).toEqual(["PO-A"]);
+    expect(poNos(mod.matchIssuedPos(quote, lines))).toEqual(["PO-A"]);
   });
 
   it("links on the part number even when it is written with spaces and dashes", () => {
@@ -792,7 +798,7 @@ describe("matchIssuedPos", () => {
         customerRfqItemId: null,
       }),
     ];
-    expect(mod.matchIssuedPos(quote, lines)).toEqual(["PO-C"]);
+    expect(poNos(mod.matchIssuedPos(quote, lines))).toEqual(["PO-C"]);
   });
 
   it("falls back to the request itself only when no stronger rung matched", () => {
@@ -813,18 +819,18 @@ describe("matchIssuedPos", () => {
         customerRfqItemId: null,
       }),
     ];
-    expect(mod.matchIssuedPos(quote, lines)).toEqual(["PO-D"]);
+    expect(poNos(mod.matchIssuedPos(quote, lines))).toEqual(["PO-D"]);
   });
 
   it("never links a PO issued to a DIFFERENT supplier", () => {
     const quote = pt(100, "2026-01-01", { supplierId: 7, lineItem: "L1", partNo: null });
     const lines = [poLine({ poNo: "PO-E", supplierId: 8, lineItem: "L1", partNo: null })];
-    expect(mod.matchIssuedPos(quote, lines)).toEqual([]);
+    expect(poNos(mod.matchIssuedPos(quote, lines))).toEqual([]);
   });
 
   it("returns nothing when the supplier has no order at all", () => {
     const quote = pt(100, "2026-01-01", { supplierId: 7 });
-    expect(mod.matchIssuedPos(quote, [])).toEqual([]);
+    expect(poNos(mod.matchIssuedPos(quote, []))).toEqual([]);
   });
 
   it("collects every matching order once, de-duplicated", () => {
@@ -839,7 +845,7 @@ describe("matchIssuedPos", () => {
       poLine({ poNo: "PO-F", supplierId: 7, lineItem: "L1", partNo: null }),
       poLine({ poNo: "PO-G", supplierId: 7, lineItem: "L1", partNo: null }),
     ];
-    expect(mod.matchIssuedPos(quote, lines)).toEqual(["PO-F", "PO-G"]);
+    expect(poNos(mod.matchIssuedPos(quote, lines))).toEqual(["PO-F", "PO-G"]);
   });
 });
 
@@ -870,7 +876,7 @@ describe("issued supplier PO on the price history", () => {
     const res = await request(testApp).get("/api/items/analysis/item?key=pn%3ALC1D32M7");
     expect(res.status).toBe(200);
     const bySupplier = Object.fromEntries(
-      res.body.priceHistory.map((p: any) => [p.supplierName, p.poNos]),
+      res.body.priceHistory.map((p: any) => [p.supplierName, p.poNos.map((r: any) => r.poNo)]),
     );
     expect(bySupplier["H-EMAS"]).toEqual(["PO-2026-000041"]);
     // The other supplier quoted but was never ordered from.
@@ -924,6 +930,28 @@ describe("issued supplier PO on the price history", () => {
     expect(compared).toContainEqual([purchaseOrdersTable.status, "cancelled"]);
     // Both filters must be present, i.e. joined by `and`, not `or`.
     expect(comparisons).toHaveLength(2);
+  });
+
+  it("carries the order's ID, so the number can link to its detail page", async () => {
+    // The live bug this guards: the API returned only the number, so the portal
+    // built `/purchase-orders?q=PO-…` — a search URL that opens the LIST, not
+    // the order. The id is what `/purchase-orders/:id` needs.
+    supplierItemRows = [supplierItem()];
+    priceRows = [
+      priceRow({
+        offerId: 1,
+        rfqItemId: 1,
+        supplierId: 1,
+        supplierName: "H-EMAS",
+        price: "3180",
+        offerCreatedAt: new Date("2026-01-15T00:00:00Z"),
+      }),
+    ];
+    poLineRows = [poLine({ poId: 137, poNo: "PO-2026-000041", supplierId: 1 })];
+
+    const res = await request(testApp).get("/api/items/analysis/item?key=pn%3ALC1D32M7");
+    expect(res.status).toBe(200);
+    expect(res.body.priceHistory[0].poNos).toEqual([{ id: 137, poNo: "PO-2026-000041" }]);
   });
 
   it("reports the issued-order count per item on the search list", async () => {
