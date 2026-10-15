@@ -7,10 +7,12 @@ import { Router, type IRouter } from "express";
 import hrRoutes from "./routes";
 import admsRouter from "./adms";
 import leaveRouter from "./leave-routes";
+import disciplineRouter from "./discipline-routes";
 
 const router: IRouter = Router();
 router.use(admsRouter);
 router.use(hrRoutes);
 router.use(leaveRouter);
+router.use(disciplineRouter);
 
 export default router;

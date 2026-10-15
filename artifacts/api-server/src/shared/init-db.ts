@@ -2387,6 +2387,54 @@ export async function initDb(): Promise<void> {
     `);
     logger.info("initDb: HR attendance tables ensured");
     await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_disciplinary_cases (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        incident_date DATE NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        penalty_type TEXT,
+        penalty_amount NUMERIC(12,2),
+        decision TEXT,
+        created_by INTEGER,
+        decided_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS hr_cases_emp_idx ON hr_disciplinary_cases (employee_id)`,
+    );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_case_notes (
+        id SERIAL PRIMARY KEY,
+        case_id INTEGER NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'note',
+        body TEXT NOT NULL,
+        by_employee INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS hr_case_notes_case_idx ON hr_case_notes (case_id)`,
+    );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_pay_adjustments (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        amount NUMERIC(12,2) NOT NULL,
+        period TEXT NOT NULL,
+        reason TEXT,
+        case_id INTEGER,
+        created_by INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS hr_adj_emp_period_idx ON hr_pay_adjustments (employee_id, period)`,
+    );
+    await client.query(`
       CREATE TABLE IF NOT EXISTS hr_leave_types (
         id SERIAL PRIMARY KEY,
         code TEXT NOT NULL UNIQUE,
