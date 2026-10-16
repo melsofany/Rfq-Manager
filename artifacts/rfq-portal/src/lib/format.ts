@@ -45,3 +45,22 @@ export function periodLabel(period: string): string {
   const [y, m] = period.split("-");
   return `${AR_MONTHS[Number(m) - 1] ?? m} ${y}`;
 }
+
+/**
+ * Format a clock time as 12-hour `hh:mm AM/PM` (Latin digits, en-US).
+ *
+ * Accepts either a full timestamp ("2026-10-16 09:05:00") or a bare "HH:MM".
+ * Uses fixed AM/PM markers rather than `toLocaleTimeString` so the output is
+ * identical regardless of the browser locale — operators compare these times
+ * against the device and the shift table.
+ */
+export function clockTime(v: string | null | undefined): string {
+  if (v == null || v === "") return "—";
+  const m = /(?:^|\s|T)(\d{1,2}):(\d{2})/.exec(v);
+  if (!m) return "—";
+  const h = Number(m[1]);
+  if (h > 23) return "—";
+  const suffix = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${m[2]} ${suffix}`;
+}

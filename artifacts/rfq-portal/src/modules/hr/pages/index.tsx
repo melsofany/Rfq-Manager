@@ -6,6 +6,7 @@ import { IdCard } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { BankCombobox } from "@/components/BankCombobox";
 import { findBankByName } from "@/lib/egyptian-banks";
+import { clockTime } from "@/lib/format";
 
 type Tab =
   | "attendance"
@@ -334,8 +335,8 @@ function AttendanceTab() {
                       <td className="p-2">{r.employeeNo}</td>
                       <td className="p-2">{r.fullName}</td>
                       <td className="p-2">{r.department ?? "—"}</td>
-                      <td className="p-2">{r.firstIn?.slice(0, 5) ?? "—"}</td>
-                      <td className="p-2">{r.lastOut?.slice(0, 5) ?? "—"}</td>
+                      <td className="p-2">{clockTime(r.firstIn)}</td>
+                      <td className="p-2">{clockTime(r.lastOut)}</td>
                       <td className="p-2">
                         {r.lateMinutes > 0 ? `${r.lateMinutes} ${t("hr.att.minutes")}` : "—"}
                       </td>
