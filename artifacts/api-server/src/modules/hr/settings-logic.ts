@@ -12,6 +12,7 @@ export const SETTING_KEYS = [
   "allowance_types",
   "bank_export",
   "end_of_service",
+  "work_shift",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -149,6 +150,25 @@ function validateBankExport(v: unknown): Result {
   return { value: { format, notes } };
 }
 
+const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Work shift — بداية ونهاية وقت العمل وعدد الدقائق المسموح بها للتأخير.
+ * The times are wall-clock "HH:MM"; lateMinutes is the grace period after the
+ * shift start before an arrival counts as late.
+ */
+function validateWorkShift(v: unknown): Result {
+  if (v === null) return { value: null };
+  if (!isObj(v)) return { error: "صيغة غير صالحة" };
+  const start = typeof v.start === "string" ? v.start.trim() : "";
+  const end = typeof v.end === "string" ? v.end.trim() : "";
+  if (!HHMM_RE.test(start)) return { error: "وقت بداية العمل غير صالح (مثال 09:00)" };
+  if (!HHMM_RE.test(end)) return { error: "وقت نهاية العمل غير صالح (مثال 17:00)" };
+  const g = optInt(v.lateGraceMinutes, 0, 240, "الدقائق المسموح بها للتأخير");
+  if ("error" in g) return g;
+  return { value: { start, end, lateGraceMinutes: g.value ?? 0 } };
+}
+
 /** Validate one setting value. Returns the normalized value to store, or an Arabic error. */
 export function validateSetting(key: SettingKey, value: unknown): Result {
   switch (key) {
@@ -172,5 +192,7 @@ export function validateSetting(key: SettingKey, value: unknown): Result {
       return validateBankExport(value);
     case "end_of_service":
       return validateEndOfService(value);
+    case "work_shift":
+      return validateWorkShift(value);
   }
 }

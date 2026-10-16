@@ -122,3 +122,32 @@ describe("absence, fines, allowances, bank", () => {
     });
   });
 });
+
+describe("work shift", () => {
+  it("accepts a start, an end and a grace period", () => {
+    expect(
+      validateSetting("work_shift", { start: "08:30", end: "16:30", lateGraceMinutes: 15 }),
+    ).toEqual({ value: { start: "08:30", end: "16:30", lateGraceMinutes: 15 } });
+  });
+  it("defaults the grace period to 0 when it is omitted", () => {
+    expect(validateSetting("work_shift", { start: "09:00", end: "17:00" })).toEqual({
+      value: { start: "09:00", end: "17:00", lateGraceMinutes: 0 },
+    });
+  });
+  it("rejects a malformed start or end time", () => {
+    expect(validateSetting("work_shift", { start: "9:00", end: "17:00" })).toHaveProperty("error");
+    expect(validateSetting("work_shift", { start: "09:00", end: "25:00" })).toHaveProperty("error");
+    expect(validateSetting("work_shift", { start: "", end: "17:00" })).toHaveProperty("error");
+  });
+  it("rejects a negative or excessive grace period", () => {
+    expect(
+      validateSetting("work_shift", { start: "09:00", end: "17:00", lateGraceMinutes: -1 }),
+    ).toHaveProperty("error");
+    expect(
+      validateSetting("work_shift", { start: "09:00", end: "17:00", lateGraceMinutes: 500 }),
+    ).toHaveProperty("error");
+  });
+  it("null means not configured", () => {
+    expect(validateSetting("work_shift", null)).toEqual({ value: null });
+  });
+});

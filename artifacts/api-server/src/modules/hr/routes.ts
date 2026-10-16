@@ -18,6 +18,7 @@ import {
   hrEmployeesTable,
   hrAttendanceDevicesTable,
   hrAttendancePunchesTable,
+  hrSettingsTable,
 } from "@workspace/db";
 import { and, eq, gte, lt, lte, desc, asc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
@@ -225,9 +226,39 @@ router.patch("/hr/devices/:sn", async (req, res): Promise<void> => {
 });
 
 // ── Attendance ──────────────────────────────────────────────────────────────
+
+export interface WorkShift {
+  start: string;
+  end: string;
+  lateGraceMinutes: number;
+}
+
+/**
+ * Work shift configured under HR settings (`work_shift`).
+ * Returns null when it has not been configured yet, so callers fall back to
+ * the historical 09:00 default.
+ */
+export async function loadWorkShift(): Promise<WorkShift | null> {
+  const rows = await db
+    .select()
+    .from(hrSettingsTable)
+    .where(eq(hrSettingsTable.key, "work_shift"))
+    .limit(1);
+  const value = rows[0]?.value as Partial<WorkShift> | undefined;
+  const start = typeof value?.start === "string" ? value.start : null;
+  if (!start || !TIME_RE.test(start)) return null;
+  const grace = Number(value?.lateGraceMinutes);
+  return {
+    start,
+    end: typeof value?.end === "string" && TIME_RE.test(value.end) ? value.end : "17:00",
+    lateGraceMinutes: Number.isFinite(grace) && grace >= 0 ? grace : 0,
+  };
+}
+
 router.get("/hr/attendance", async (req, res): Promise<void> => {
   const date = String(req.query.date ?? "");
-  const shiftStart = String(req.query.shiftStart ?? "09:00");
+  const configured = await loadWorkShift();
+  const shiftStart = String(req.query.shiftStart ?? configured?.start ?? "09:00");
   if (!DATE_RE.test(date) || !TIME_RE.test(shiftStart)) {
     res.status(400).json({ error: "تاريخ أو وقت الوردية غير صالح" });
     return;
@@ -276,12 +307,13 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
     byPin.set(p.pin, list);
   }
   const shiftMin = minutesOf(`${shiftStart}:00`);
+  const graceMin = configured?.lateGraceMinutes ?? 0;
 
   const rows = employees.map((e) => {
     const times = e.biometricPin ? (byPin.get(e.biometricPin) ?? []) : [];
     const firstIn = times[0] ?? null;
     const lastOut = times.length > 1 ? times[times.length - 1] : null;
-    const late = firstIn ? Math.max(0, minutesOf(firstIn) - shiftMin) : 0;
+    const late = firstIn ? Math.max(0, minutesOf(firstIn) - shiftMin - graceMin) : 0;
     return {
       employeeId: e.id,
       employeeNo: e.employeeNo,
@@ -301,6 +333,8 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
   res.json({
     date,
     shiftStart,
+    shiftEnd: configured?.end ?? null,
+    lateGraceMinutes: graceMin,
     totals: {
       employees: rows.length,
       present: rows.filter((r) => !r.absent).length,
