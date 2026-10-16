@@ -62,6 +62,8 @@ export interface SettlementInput {
   eligibilityPct: number;
   unusedLeaveDays: number;
   deductions: number;
+  /** True when the exit month's payroll already paid this employee's days — final salary is then not added again. */
+  finalSalaryPaid?: boolean;
 }
 
 export interface SettlementResult {
@@ -80,7 +82,7 @@ export function computeSettlement(i: SettlementInput): SettlementResult {
   const monthlyWage = round2(i.basic + i.allowances);
   const dailyRate = round2(i.basic / i.divisor);
   const years = serviceYears(i.hireDate, i.exitDate);
-  const finalSalary = finalSalaryAmount(monthlyWage, i.exitDate, i.divisor);
+  const finalSalary = i.finalSalaryPaid ? 0 : finalSalaryAmount(monthlyWage, i.exitDate, i.divisor);
   const endOfService = endOfServiceAmount(monthlyWage, years, i.rule, i.eligibilityPct);
   const leavePayout = round2(i.unusedLeaveDays * dailyRate);
   const total = round2(finalSalary + endOfService + leavePayout - i.deductions);
