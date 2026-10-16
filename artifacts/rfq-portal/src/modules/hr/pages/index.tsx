@@ -2045,6 +2045,14 @@ function PayrollTab() {
             {run.status === "approved" ? t("hr.pay.approved") : t("hr.pay.draft")}
           </span>
         )}
+        {run?.status === "approved" && (
+          <a
+            className="text-sm underline text-primary"
+            href={`/api/hr/payroll/runs/${run.id}/bank-file`}
+          >
+            {t("hr.pay.bankFile")}
+          </a>
+        )}
       </div>
 
       {run?.status !== "approved" && (
