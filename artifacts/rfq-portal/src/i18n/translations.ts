@@ -54,6 +54,14 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.emp.rehire": "Re-hire",
     "hr.emp.rehireConfirm": "Confirm re-hire",
     "hr.emp.cancel": "Cancel",
+    "hr.emp.bankSection": "Bank account (salary deposit)",
+    "hr.emp.bankCurrent": "Current account",
+    "hr.emp.bankNone": "No bank account on file yet.",
+    "hr.emp.bankHint":
+      "Leave all bank fields empty to keep the current account. To change it, fill bank name, account holder and account number.",
+    "hr.emp.bankIncomplete":
+      "To change the bank account, fill bank name, account holder and account number.",
+    "hr.emp.iban": "IBAN (optional)",
     "hr.tab.devices": "Fingerprint devices",
     "hr.att.date": "Date",
     "hr.att.shiftStart": "Shift start",
@@ -598,6 +606,13 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.emp.rehire": "إعادة تعيين",
     "hr.emp.rehireConfirm": "تأكيد إعادة التعيين",
     "hr.emp.cancel": "إلغاء",
+    "hr.emp.bankSection": "الحساب البنكي (تحويل المرتب)",
+    "hr.emp.bankCurrent": "الحساب الحالي",
+    "hr.emp.bankNone": "مفيش حساب بنكي مسجل لسه.",
+    "hr.emp.bankHint":
+      "سيب كل خانات البنك فاضية عشان الحساب الحالي يفضل زي ما هو. لو عايز تغيّره، املا اسم البنك وصاحب الحساب ورقم الحساب.",
+    "hr.emp.bankIncomplete": "عشان تغيّر الحساب البنكي، املا اسم البنك وصاحب الحساب ورقم الحساب.",
+    "hr.emp.iban": "الآيبان (اختياري)",
     "hr.tab.devices": "أجهزة البصمة",
     "hr.att.date": "التاريخ",
     "hr.att.shiftStart": "بداية الوردية",

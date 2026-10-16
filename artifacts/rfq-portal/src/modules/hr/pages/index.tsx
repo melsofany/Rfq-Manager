@@ -396,9 +396,19 @@ function EmployeesTab() {
   });
   const [rehireId, setRehireId] = useState<number | null>(null);
   const [rehireDate, setRehireDate] = useState(todayStr());
+  const emptyBank = { bankName: "", accountHolder: "", accountNo: "", iban: "" };
+  const [bankDraft, setBankDraft] = useState(emptyBank);
+  const [currentBank, setCurrentBank] = useState<{
+    bankName: string;
+    accountHolder: string;
+    accountMasked: string;
+    ibanMasked: string | null;
+  } | null>(null);
 
-  function startEdit(r: HrEmployee) {
+  async function startEdit(r: HrEmployee) {
     setEditId(r.id);
+    setBankDraft(emptyBank);
+    setCurrentBank(null);
     setDraft({
       fullName: r.fullName ?? "",
       jobTitle: r.jobTitle ?? "",
@@ -406,11 +416,39 @@ function EmployeesTab() {
       phone: r.phone ?? "",
       biometricPin: r.biometricPin ?? "",
     });
+    try {
+      const file = await api<{
+        bankAccounts: {
+          bankName: string;
+          accountHolder: string;
+          accountMasked: string;
+          ibanMasked: string | null;
+          isPrimary: boolean;
+        }[];
+      }>(`/hr/employees/${r.id}/file`);
+      const primary = file.bankAccounts.find((b) => b.isPrimary) ?? file.bankAccounts[0];
+      setCurrentBank(primary ?? null);
+    } catch {
+      setCurrentBank(null);
+    }
   }
 
   async function saveEdit(id: number) {
     try {
       setError(null);
+      const bankTouched = [
+        bankDraft.bankName,
+        bankDraft.accountHolder,
+        bankDraft.accountNo,
+        bankDraft.iban,
+      ].some((x) => x.trim() !== "");
+      if (
+        bankTouched &&
+        (!bankDraft.bankName || !bankDraft.accountHolder || !bankDraft.accountNo)
+      ) {
+        setError(t("hr.emp.bankIncomplete"));
+        return;
+      }
       await api(`/hr/employees/${id}`, {
         method: "PATCH",
         body: JSON.stringify({
@@ -421,6 +459,9 @@ function EmployeesTab() {
           biometricPin: draft.biometricPin.trim() === "" ? null : draft.biometricPin.trim(),
         }),
       });
+      if (bankTouched) {
+        await api(`/hr/employees/${id}/bank`, { method: "PUT", body: JSON.stringify(bankDraft) });
+      }
       setEditId(null);
       load();
     } catch (err) {
@@ -575,6 +616,48 @@ function EmployeesTab() {
                               />
                             </label>
                           ))}
+                        </div>
+                        <div className="mt-4 space-y-2 border-t pt-3">
+                          <h3 className="text-sm font-semibold">{t("hr.emp.bankSection")}</h3>
+                          <p className="text-xs text-muted-foreground">
+                            {currentBank
+                              ? `${t("hr.emp.bankCurrent")}: ${currentBank.bankName} · ${currentBank.accountMasked}${
+                                  currentBank.ibanMasked ? ` · IBAN ${currentBank.ibanMasked}` : ""
+                                }`
+                              : t("hr.emp.bankNone")}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{t("hr.emp.bankHint")}</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <span className="text-xs text-muted-foreground block">
+                                {t("hr.onb.bankName")}
+                              </span>
+                              <BankCombobox
+                                value={bankDraft.bankName}
+                                onChange={(v) => setBankDraft({ ...bankDraft, bankName: v })}
+                              />
+                            </div>
+                            {(
+                              [
+                                ["accountHolder", t("hr.onb.accountHolder")],
+                                ["accountNo", t("hr.onb.accountNo")],
+                                ["iban", t("hr.emp.iban")],
+                              ] as const
+                            ).map(([k, label]) => (
+                              <label key={k} className="block">
+                                <span className="text-xs text-muted-foreground block mb-1">
+                                  {label}
+                                </span>
+                                <input
+                                  className={input + " w-full"}
+                                  value={bankDraft[k]}
+                                  onChange={(e) =>
+                                    setBankDraft({ ...bankDraft, [k]: e.target.value })
+                                  }
+                                />
+                              </label>
+                            ))}
+                          </div>
                         </div>
                         <div className="flex gap-2 mt-3">
                           <Button size="sm" onClick={() => saveEdit(r.id)}>
