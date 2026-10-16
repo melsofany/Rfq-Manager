@@ -1,9 +1,4 @@
-import {
-  useGetDashboardStats,
-  getGetDashboardStatsQueryKey,
-  useListEmployees,
-  getListEmployeesQueryKey,
-} from "@workspace/api-client-react";
+import { useGetDashboardStats, getGetDashboardStatsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import {
   BarChart,
@@ -176,10 +171,8 @@ import {
   RateRing,
   KpiChip,
   STATUS_COLORS,
-  STATUS_LABELS,
   DEEP_COLORS,
   StatusDistCard,
-  printReport,
 } from "./analytics-sections/shared";
 import { ItemKpiSection } from "./analytics-sections/item-kpi-section";
 import { AttributionAchievementSection } from "./analytics-sections/attribution-section";
@@ -189,10 +182,6 @@ import { DataEntryPerformanceSection } from "./analytics-sections/data-entry-sec
 export default function AnalyticsPage() {
   const { data: stats, isLoading } = useGetDashboardStats({
     query: { queryKey: getGetDashboardStatsQueryKey() },
-  });
-
-  const { data: empPerf, isLoading: empLoading } = useListEmployees({
-    query: { queryKey: getListEmployeesQueryKey() },
   });
 
   // ── comprehensive overview (all project numbers in one call) ──
@@ -254,195 +243,7 @@ export default function AnalyticsPage() {
     };
   });
 
-  const employees = Array.isArray(empPerf) ? empPerf : [];
-
   const loading = isLoading;
-
-  // ── generate printable HTML ──
-  const handlePrintReport = () => {
-    const today = new Date().toLocaleDateString("ar-EG", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
-
-    const statusRows = statusData
-      .map(
-        (s) => `
-        <tr>
-          <td>${STATUS_LABELS[s.name] ?? s.name}</td>
-          <td style="text-align:center">${s.count}</td>
-          <td style="text-align:center">${stats?.totalRfqs ? Math.round((s.count / stats.totalRfqs) * 100) : 0}%</td>
-        </tr>`,
-      )
-      .join("");
-
-    const supplierRows = deepSuppliers
-      .map(
-        (s, i) => `
-        <tr>
-          <td style="text-align:center">${i + 1}</td>
-          <td>${s.supplierName ?? ""}</td>
-          <td style="text-align:center">${s.totalRfqsReceived ?? 0}</td>
-          <td style="text-align:center">${s.totalOffersSubmitted ?? 0}</td>
-          <td style="text-align:center">${s.responseRate ?? 0}%</td>
-          <td style="text-align:center">${s.totalPoItems ?? 0}</td>
-          <td style="text-align:center">${s.poWinRate ?? 0}%</td>
-          <td style="text-align:center">${s.avgDeliveryDays != null ? s.avgDeliveryDays + " يوم" : "—"}</td>
-        </tr>`,
-      )
-      .join("");
-
-    const empRows = employees
-      .map(
-        (e, i) => `
-        <tr>
-          <td style="text-align:center">${i + 1}</td>
-          <td>${e.name ?? "—"}</td>
-          <td style="text-align:center">—</td>
-          <td style="text-align:center">—</td>
-          <td style="text-align:center">—</td>
-          <td style="text-align:center">—</td>
-          <td style="text-align:left;direction:ltr">—</td>
-        </tr>`,
-      )
-      .join("");
-
-    const html = `<!DOCTYPE html>
-<html dir="rtl" lang="ar">
-<head>
-<meta charset="UTF-8"/>
-<title>تقرير أداء المشتريات</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Cairo', Arial, sans-serif; font-size: 12px; color: #1e293b; background: #fff; padding: 24px; direction: rtl; }
-  .nop { position: fixed; bottom: 20px; left: 20px; display: flex; gap: 8px; }
-  @media print { .nop { display: none; } }
-  .nop button { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-family: inherit; font-size: 13px; }
-  .nop button.pri { background: #1e3a5f; color: #fff; }
-  .nop button.sec { background: #e2e8f0; color: #334155; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; border-bottom: 2px solid #1e3a5f; padding-bottom: 14px; }
-  .header h1 { font-size: 20px; font-weight: 700; color: #1e3a5f; }
-  .header .meta { font-size: 11px; color: #64748b; text-align: left; }
-  .section { margin-bottom: 28px; }
-  .section h2 { font-size: 13px; font-weight: 700; color: #1e3a5f; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 20px; }
-  .kpi { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; text-align: center; }
-  .kpi .val { font-size: 20px; font-weight: 700; color: #1e3a5f; }
-  .kpi .lbl { font-size: 10px; color: #64748b; margin-top: 2px; }
-  .rates { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
-  .rate { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 10px 12px; text-align: center; }
-  .rate .val { font-size: 22px; font-weight: 700; color: #0369a1; }
-  .rate .lbl { font-size: 10px; color: #0369a1; margin-top: 2px; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  th { background: #1e3a5f; color: #fff; padding: 7px 10px; font-weight: 600; text-align: right; }
-  td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
-  tr:nth-child(even) td { background: #f8fafc; }
-  .footer { margin-top: 30px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8; text-align: center; }
-</style>
-</head>
-<body>
-
-<div class="header">
-  <div>
-    <h1>تقرير أداء المشتريات الشامل</h1>
-    <p style="font-size:11px;color:#64748b;margin-top:4px">قرطبة للتوريدات</p>
-  </div>
-  <div class="meta">
-    <div>تاريخ التقرير: ${today}</div>
-    <div style="margin-top:4px">إجمالي طلبات التسعير: ${stats?.totalRfqs ?? 0}</div>
-  </div>
-</div>
-
-<!-- KPIs -->
-<div class="section">
-  <h2>المؤشرات الرئيسية</h2>
-  <div class="kpi-grid">
-    <div class="kpi"><div class="val">${stats?.totalRfqs ?? 0}</div><div class="lbl">إجمالي طلبات التسعير</div></div>
-    <div class="kpi"><div class="val">${stats?.openRfqs ?? 0}</div><div class="lbl">طلبات مفتوحة</div></div>
-    <div class="kpi"><div class="val">${stats?.totalSuppliers ?? 0}</div><div class="lbl">الموردون</div></div>
-    <div class="kpi"><div class="val">${stats?.totalOffers ?? 0}</div><div class="lbl">العروض المستلمة</div></div>
-    <div class="kpi"><div class="val">${stats?.totalPos ?? 0}</div><div class="lbl">أوامر الشراء</div></div>
-    <div class="kpi"><div class="val">${stats?.totalItems ?? 0}</div><div class="lbl">إجمالي البنود</div></div>
-  </div>
-  <div class="rates">
-    <div class="rate"><div class="val">${stats?.pricingRate ?? 0}%</div><div class="lbl">نسبة التسعير</div></div>
-    <div class="rate"><div class="val">${stats?.rfqToPoRate ?? 0}%</div><div class="lbl">تحويل RFQ → PO</div></div>
-    <div class="rate"><div class="val">${stats?.poRate ?? 0}%</div><div class="lbl">البنود بـ PO</div></div>
-    <div class="rate"><div class="val">${stats?.responseRateThisMonth ?? 0}%</div><div class="lbl">استجابة الموردين</div></div>
-  </div>
-</div>
-
-<!-- RFQ Status -->
-<div class="section">
-  <h2>توزيع طلبات التسعير حسب الحالة</h2>
-  <table>
-    <thead><tr><th>الحالة</th><th style="text-align:center">العدد</th><th style="text-align:center">النسبة</th></tr></thead>
-    <tbody>${statusRows || '<tr><td colspan="3" style="text-align:center;color:#94a3b8">لا توجد بيانات</td></tr>'}</tbody>
-  </table>
-</div>
-
-<!-- Supplier Performance -->
-<div class="section">
-  <h2>تقرير أداء الموردين</h2>
-  <table>
-    <thead>
-      <tr>
-        <th style="text-align:center">#</th>
-        <th>المورد</th>
-        <th style="text-align:center">RFQs استلم</th>
-        <th style="text-align:center">عروض أرسل</th>
-        <th style="text-align:center">نسبة الاستجابة</th>
-        <th style="text-align:center">بنود PO</th>
-        <th style="text-align:center">نسبة الفوز بـ PO</th>
-        <th style="text-align:center">متوسط التسليم</th>
-      </tr>
-    </thead>
-    <tbody>${supplierRows || '<tr><td colspan="8" style="text-align:center;color:#94a3b8">لا توجد بيانات موردين</td></tr>'}</tbody>
-  </table>
-</div>
-
-<!-- Employee Performance -->
-${
-  employees.length > 0
-    ? `<div class="section">
-  <h2>تقرير أداء الموظفين</h2>
-  <table>
-    <thead>
-      <tr>
-        <th style="text-align:center">#</th>
-        <th>الموظف</th>
-        <th style="text-align:center">RFQs أرسل</th>
-        <th style="text-align:center">عروض استلم</th>
-        <th style="text-align:center">معدل الاستجابة</th>
-        <th style="text-align:center">نسبة الإسناد</th>
-        <th>قيمة المشتريات</th>
-      </tr>
-    </thead>
-    <tbody>${empRows}</tbody>
-  </table>
-</div>`
-    : ""
-}
-
-<div class="footer">
-  قرطبة للتوريدات · INFO@CORTOBA-SUPPLIES.COM · تم إنشاء هذا التقرير بتاريخ ${today}
-</div>
-
-<div class="nop">
-  <button class="pri" onclick="window.print()">🖨️ &nbsp;طباعة / PDF</button>
-  <button class="sec" onclick="window.close()">✕ إغلاق</button>
-</div>
-
-<script>
-  document.fonts.ready.then(function(){ setTimeout(function(){ window.print(); }, 700); });
-</script>
-</body>
-</html>`;
-
-    printReport(html);
-  };
 
   return (
     <Layout>
