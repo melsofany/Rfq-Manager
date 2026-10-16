@@ -50,6 +50,26 @@ function round(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+describe("no double pay for the exit month", () => {
+  it("skips final salary when the exit month payroll already paid the employee", () => {
+    const r = computeSettlement({
+      hireDate: "2019-10-16",
+      exitDate: "2026-10-15",
+      reason: "resignation",
+      basic: 2000,
+      allowances: 1000,
+      divisor: 30,
+      rule,
+      eligibilityPct: 100,
+      unusedLeaveDays: 0,
+      deductions: 0,
+      finalSalaryPaid: true,
+    });
+    expect(r.finalSalary).toBe(0);
+    expect(r.endOfService).toBeGreaterThan(0);
+  });
+});
+
 describe("end_of_service setting validator", () => {
   it("accepts a complete rule", () => {
     expect(validateSetting("end_of_service", rule)).toEqual({ value: rule });

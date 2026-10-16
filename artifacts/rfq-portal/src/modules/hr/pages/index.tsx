@@ -16,6 +16,7 @@ type Tab =
   | "devices"
   | "payroll"
   | "settlement"
+  | "reports"
   | "settings";
 
 interface AttendanceRow {
@@ -187,6 +188,7 @@ export default function HrPage() {
     { id: "devices", label: t("hr.tab.devices") },
     { id: "payroll", label: t("hr.tab.payroll") },
     { id: "settlement", label: t("hr.tab.settlement") },
+    { id: "reports", label: t("hr.tab.reports") },
     { id: "settings", label: t("hr.tab.settings") },
   ];
 
@@ -225,6 +227,7 @@ export default function HrPage() {
         {tab === "devices" && <DevicesTab />}
         {tab === "payroll" && <PayrollTab />}
         {tab === "settlement" && <SettlementTab />}
+        {tab === "reports" && <ReportsTab />}
         {tab === "settings" && <SettingsTab />}
       </div>
     </Layout>
@@ -2413,6 +2416,209 @@ function SettlementTab() {
               )}
             </tbody>
           </table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ---------- التقارير الشهرية ----------
+
+function ReportsTab() {
+  const { t } = useLanguage();
+  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [head, setHead] = useState<{
+    total: number;
+    byStatus: Record<string, number>;
+    byDepartment: { department: string; count: number }[];
+  } | null>(null);
+  const [pay, setPay] = useState<{
+    status: string;
+    employees: number;
+    totals: {
+      gross: number;
+      net: number;
+      absence: number;
+      fines: number;
+      finesDeferred: number;
+      insurance: number;
+      incomeTax: number;
+    };
+    byDepartment: { department: string; count: number; gross: number; net: number }[];
+  } | null>(null);
+  const [payMsg, setPayMsg] = useState<string | null>(null);
+  const [leave, setLeave] = useState<{
+    annualDays: number;
+    rows: { employeeId: number; name: string; used: number; remaining: number }[];
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<typeof head>("/hr/reports/headcount")
+      .then(setHead)
+      .catch((e) => setError((e as Error).message));
+  }, []);
+
+  useEffect(() => {
+    setPayMsg(null);
+    api<typeof pay>(`/hr/reports/payroll?period=${period}`)
+      .then(setPay)
+      .catch((e) => {
+        setPay(null);
+        setPayMsg((e as Error).message);
+      });
+  }, [period]);
+
+  useEffect(() => {
+    api<typeof leave>(`/hr/reports/leave?year=${year}`)
+      .then(setLeave)
+      .catch((e) => setError((e as Error).message));
+  }, [year]);
+
+  const money = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const input = "border rounded px-2 py-1.5 bg-background text-sm";
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">{t("hr.rep.help")}</p>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <h2 className="font-semibold">{t("hr.rep.headcount")}</h2>
+          {head && (
+            <>
+              <div className="flex flex-wrap gap-3 text-sm">
+                <span>
+                  {t("hr.rep.total")}: <b>{head.total}</b>
+                </span>
+                <span>
+                  {t("hr.status.active")}: <b>{head.byStatus.active ?? 0}</b>
+                </span>
+                <span>
+                  {t("hr.status.resigned")}: <b>{head.byStatus.resigned ?? 0}</b>
+                </span>
+                <span>
+                  {t("hr.status.terminated")}: <b>{head.byStatus.terminated ?? 0}</b>
+                </span>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {head.byDepartment.map((d) => `${d.department}: ${d.count}`).join(" · ") || "—"}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 className="font-semibold">{t("hr.rep.payroll")}</h2>
+            <div className="flex items-end gap-2">
+              <input
+                className={input}
+                type="month"
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+              />
+              <a
+                className="text-sm underline text-primary"
+                href={`/api/hr/reports/payroll.csv?period=${period}`}
+              >
+                {t("hr.rep.csv")}
+              </a>
+            </div>
+          </div>
+          {pay ? (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                <div>
+                  {t("hr.pay.gross")}: <b>{money(pay.totals.gross)}</b>
+                </div>
+                <div>
+                  {t("hr.pay.net")}: <b>{money(pay.totals.net)}</b>
+                </div>
+                <div>
+                  {t("hr.pay.insurance")}: <b>{money(pay.totals.insurance)}</b>
+                </div>
+                <div>
+                  {t("hr.pay.tax")}: <b>{money(pay.totals.incomeTax)}</b>
+                </div>
+                <div>
+                  {t("hr.pay.absence")}: <b>{money(pay.totals.absence)}</b>
+                </div>
+                <div>
+                  {t("hr.pay.fines")}: <b>{money(pay.totals.fines)}</b>
+                </div>
+                <div>
+                  {t("hr.pay.deferred")}: <b>{money(pay.totals.finesDeferred)}</b>
+                </div>
+                <div>
+                  {t("hr.rep.employees")}: <b>{pay.employees}</b>
+                </div>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="p-2 text-start">{t("hr.col.dept")}</th>
+                    <th className="p-2 text-end">{t("hr.rep.employees")}</th>
+                    <th className="p-2 text-end">{t("hr.pay.gross")}</th>
+                    <th className="p-2 text-end">{t("hr.pay.net")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pay.byDepartment.map((d) => (
+                    <tr key={d.department} className="border-t">
+                      <td className="p-2">{d.department}</td>
+                      <td className="p-2 text-end">{d.count}</td>
+                      <td className="p-2 text-end">{money(d.gross)}</td>
+                      <td className="p-2 text-end">{money(d.net)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">{payMsg ?? t("hr.pay.empty")}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-end justify-between gap-3">
+            <h2 className="font-semibold">{t("hr.rep.leave")}</h2>
+            <input
+              className={input}
+              type="number"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+            />
+          </div>
+          {leave && (
+            <table className="w-full text-sm">
+              <thead className="text-muted-foreground">
+                <tr>
+                  <th className="p-2 text-start">{t("hr.col.name")}</th>
+                  <th className="p-2 text-end">{t("hr.rep.used")}</th>
+                  <th className="p-2 text-end">{t("hr.rep.remaining")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leave.rows.map((r) => (
+                  <tr key={r.employeeId} className="border-t">
+                    <td className="p-2">{r.name}</td>
+                    <td className="p-2 text-end">{r.used}</td>
+                    <td className="p-2 text-end">
+                      {r.remaining} / {leave.annualDays}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </CardContent>
       </Card>
     </div>

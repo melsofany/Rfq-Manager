@@ -14,6 +14,8 @@ import {
   hrLeaveTypesTable,
   hrLeaveRequestsTable,
   hrSettlementsTable,
+  hrPayrollRunsTable,
+  hrPayslipsTable,
 } from "@workspace/db";
 import { and, desc, eq } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
@@ -127,6 +129,23 @@ router.post("/hr/employees/:id/settlements", async (req, res): Promise<void> => 
   );
   const unusedLeaveDays = remainingBalance(annualType?.annualDays ?? 0, usedThisYear);
 
+  // لو مرتب شهر الخروج اتحسب وفيه الموظف، الأيام دي متدفعتش تاني في التسوية
+  const exitMonth = exitDate.slice(0, 7);
+  const [exitRun] = await db
+    .select({ id: hrPayrollRunsTable.id })
+    .from(hrPayrollRunsTable)
+    .where(eq(hrPayrollRunsTable.period, exitMonth))
+    .limit(1);
+  let finalSalaryPaid = false;
+  if (exitRun) {
+    const [slip] = await db
+      .select({ id: hrPayslipsTable.id })
+      .from(hrPayslipsTable)
+      .where(and(eq(hrPayslipsTable.runId, exitRun.id), eq(hrPayslipsTable.employeeId, id)))
+      .limit(1);
+    finalSalaryPaid = !!slip;
+  }
+
   const result = computeSettlement({
     hireDate: emp.hireDate,
     exitDate,
@@ -138,6 +157,7 @@ router.post("/hr/employees/:id/settlements", async (req, res): Promise<void> => 
     eligibilityPct,
     unusedLeaveDays,
     deductions,
+    finalSalaryPaid,
   });
 
   const [locked] = await db
@@ -157,6 +177,7 @@ router.post("/hr/employees/:id/settlements", async (req, res): Promise<void> => 
     deductions,
     annualDaysAllocated: annualType?.annualDays ?? 0,
     usedThisYear,
+    finalSalaryPaidInPayroll: finalSalaryPaid,
   };
   const created = await db.transaction(async (tx) => {
     await tx
