@@ -15,7 +15,7 @@ import {
   hrBankAccountsTable,
   hrEmployeePhotosTable,
 } from "@workspace/db";
-import { eq, like, sql } from "drizzle-orm";
+import { and, eq, like, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { requireHr } from "./routes";
 import { encryptField, last4, isHrKeyConfigured } from "../../shared/hr-crypto";
@@ -316,6 +316,75 @@ router.get("/hr/employees/:id/file", async (req, res): Promise<void> => {
       isPrimary: b.isPrimary,
     })),
   });
+});
+
+/**
+ * PUT /hr/employees/:id/bank — تعديل الحساب البنكي الأساسي (مرتب التحويل).
+ * بيحدّث الحساب الأساسي، ولو مفيش حساب بيضيفه. الأرقام بتتشفر زي التعيين.
+ */
+router.put("/hr/employees/:id/bank", async (req, res): Promise<void> => {
+  if (!isHrKeyConfigured()) {
+    res
+      .status(503)
+      .json({ error: "مفتاح تشفير بيانات الموظفين (HR_DATA_KEY) غير مضبوط على السيرفر" });
+    return;
+  }
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "معرف غير صالح" });
+    return;
+  }
+  const bankName = str(req.body?.bankName, 100);
+  const accountHolder = str(req.body?.accountHolder, 200);
+  const accountNoRaw = String(req.body?.accountNo ?? "");
+  if (!bankName || !accountHolder) {
+    res.status(400).json({ error: "اسم البنك وصاحب الحساب مطلوبين" });
+    return;
+  }
+  if (!isValidAccountNo(accountNoRaw)) {
+    res.status(400).json({ error: "رقم الحساب البنكي غير صالح (6 إلى 30 رقماً)" });
+    return;
+  }
+  const ibanRaw = req.body?.iban ? String(req.body.iban) : "";
+  if (ibanRaw && !isValidEgyptianIban(ibanRaw)) {
+    res.status(400).json({ error: "الآيبان المصري غير صالح (EG + 27 رقماً)" });
+    return;
+  }
+  const accountNo = normalizeAccountNo(accountNoRaw);
+  const iban = ibanRaw ? normalizeIban(ibanRaw) : null;
+  const values = {
+    bankName,
+    accountHolder,
+    accountNoEnc: encryptField(accountNo),
+    accountLast4: last4(accountNo),
+    ibanEnc: iban ? encryptField(iban) : null,
+    ibanLast4: iban ? last4(iban) : null,
+  };
+  const [emp] = await db
+    .select({ id: hrEmployeesTable.id })
+    .from(hrEmployeesTable)
+    .where(eq(hrEmployeesTable.id, id))
+    .limit(1);
+  if (!emp) {
+    res.status(404).json({ error: "غير موجود" });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    const [primary] = await tx
+      .select({ id: hrBankAccountsTable.id })
+      .from(hrBankAccountsTable)
+      .where(and(eq(hrBankAccountsTable.employeeId, id), eq(hrBankAccountsTable.isPrimary, true)))
+      .limit(1);
+    if (primary) {
+      await tx
+        .update(hrBankAccountsTable)
+        .set(values)
+        .where(eq(hrBankAccountsTable.id, primary.id));
+    } else {
+      await tx.insert(hrBankAccountsTable).values({ ...values, employeeId: id, isPrimary: true });
+    }
+  });
+  res.json({ ok: true });
 });
 
 /** Employee photo: GET returns the image bytes; PUT replaces it (JSON body { photo: dataUrl }). */
