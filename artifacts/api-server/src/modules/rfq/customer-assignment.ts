@@ -360,6 +360,13 @@ export async function ensureCustomerAssignmentsSafe(
  * classifies carries a `classify_reason` and an `auto` memory row that a manager
  * can override.
  *
+ * It deliberately does NOT repair already-classified items or re-seed the memory
+ * here. Both `repairClassificationConsistency` and
+ * `seedClassificationMemoryFromClassified` rewrite items that already carry a
+ * category, so calling them on every boot made items (and their owner) change
+ * category across restarts. They are still exported and remain callable on
+ * demand from the manual «تصنيفات البنود» tab.
+ *
  * Bounded by `limit` so a huge backlog cannot delay a boot.
  */
 export async function backfillItemClassification(
@@ -371,19 +378,6 @@ export async function backfillItemClassification(
   repairedIdentities: number;
   repairedItems: number;
 }> {
-  // Repair items that were classified INCONSISTENTLY before the memory existed
-  // (the same item as «كهرباء» on one RFQ and «إضاءة»/«غير مصنّف» on another) —
-  // memory alone cannot fix those, because they already carry a category. This
-  // unifies each identity onto ONE domain FIRST, so the seed below learns from
-  // consistent data and the unclassified pass reuses the unified value.
-  const repaired = await repairClassificationConsistency({ limit: opts.limit ?? 20000 }).catch(
-    () => ({ identities: 0, itemsFixed: 0 }),
-  );
-  // Seed memory from items that ALREADY have a category (from before this
-  // feature), so the identity memory starts populated from the real corpus and
-  // the SAME item is recognised on the very next request — not only after it is
-  // classified once more.
-  await seedClassificationMemoryFromClassified(opts.limit ?? 2000).catch(() => {});
   const filled = await classifyUnclassifiedItems({
     useAi: false,
     limit: opts.limit ?? 2000,
@@ -391,8 +385,9 @@ export async function backfillItemClassification(
   });
   return {
     ...filled,
-    repairedIdentities: repaired.identities,
-    repairedItems: repaired.itemsFixed,
+    // No repair runs on the boot path anymore; kept for the caller's log shape.
+    repairedIdentities: 0,
+    repairedItems: 0,
   };
 }
 
