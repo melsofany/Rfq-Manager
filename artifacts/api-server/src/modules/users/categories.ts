@@ -5,7 +5,7 @@ import {
   supplierCategoryLinksTable,
   itemCategoriesTable,
 } from "@workspace/db";
-import { eq, asc, count, or, ilike } from "drizzle-orm";
+import { eq, asc, count, or, ilike, and, isNotNull } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
 
@@ -36,14 +36,24 @@ router.post("/categories", requireRole("admin"), async (req, res): Promise<void>
   }
 
   const [row] = await db.insert(supplierCategoriesTable).values({ name: name.trim() }).returning();
-  // Mirror into the item categories so /items → «تصنيفات البنود» shows the SAME
-  // list as /suppliers. Idempotent (a category may already exist as an item
-  // category); a mirror failure must never fail the supplier-category create.
+  // Mirror into the item categories ONLY when the name is already a CANONICAL
+  // item category (it carries a code). A free-text supplier-category spelling
+  // must never create a junk functional domain that classifies no item and owns
+  // no responsibility — the class of orphan the operator reported
+  // (`plumbing_sanitary_supplier` …). Best-effort: a mirror failure must never
+  // fail the supplier-category create.
   try {
-    await db
-      .insert(itemCategoriesTable)
-      .values({ name: row.name, sortOrder: 100 })
-      .onConflictDoNothing();
+    const canonical = await db
+      .select({ id: itemCategoriesTable.id })
+      .from(itemCategoriesTable)
+      .where(and(eq(itemCategoriesTable.name, row.name), isNotNull(itemCategoriesTable.code)))
+      .limit(1);
+    if (canonical.length > 0) {
+      await db
+        .insert(itemCategoriesTable)
+        .values({ name: row.name, sortOrder: 100 })
+        .onConflictDoNothing();
+    }
   } catch {
     // best-effort — the startup mirror in init-db.ts re-syncs on the next boot.
   }
