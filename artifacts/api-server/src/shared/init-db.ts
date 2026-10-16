@@ -2638,6 +2638,22 @@ export async function initDb(): Promise<void> {
     await client.query(
       `CREATE INDEX IF NOT EXISTS hr_missions_emp_date_idx ON hr_missions (employee_id, mission_date)`,
     );
+    // Per-employee attendance exceptions (استثناءات الحضور) — a specific
+    // employee may start later than the shift or be exempt from punching.
+    // Own statement: a sibling failure must not roll this CREATE back.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_attendance_exceptions (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL UNIQUE,
+        start_time TEXT,
+        late_grace_minutes INTEGER,
+        exempt_from_punch BOOLEAN NOT NULL DEFAULT false,
+        note TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
     // Seed default leave types once (ON CONFLICT keeps any values the HR team edited).
     await client.query(`
       INSERT INTO hr_leave_types (code, name_ar, name_en, annual_days, paid, requires_certificate) VALUES

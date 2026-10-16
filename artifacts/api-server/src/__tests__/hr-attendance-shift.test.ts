@@ -10,6 +10,8 @@ const H = vi.hoisted(() => {
     punchRows: [] as Record<string, unknown>[],
     /** Approved missions returned for the day. */
     missionRows: [] as Record<string, unknown>[],
+    /** Per-employee attendance exceptions. */
+    exceptionRows: [] as Record<string, unknown>[],
     /** Which table the current select is reading from. */
     table: "",
   };
@@ -32,6 +34,7 @@ vi.mock("@workspace/db", () => {
     hrLeaveRequestsTable: table("leaveRequests"),
     hrLeaveTypesTable: table("leaveTypes"),
     hrMissionsTable: table("missions"),
+    hrAttendanceExceptionsTable: table("attendanceExceptions"),
     db: {
       select: () => ({
         from: (t: { __table: string }) => {
@@ -40,6 +43,7 @@ vi.mock("@workspace/db", () => {
             if (t.__table === "hrSettings") return H.state.settingRows;
             if (t.__table === "punches") return H.state.punchRows;
             if (t.__table === "missions") return H.state.missionRows;
+            if (t.__table === "attendanceExceptions") return H.state.exceptionRows;
             if (t.__table === "employees")
               return [{ role: "admin", permissions: null, isActive: true }];
             if (t.__table === "hrEmployees")
@@ -105,6 +109,7 @@ beforeEach(() => {
   H.state.settingRows = [];
   H.state.punchRows = [];
   H.state.missionRows = [];
+  H.state.exceptionRows = [];
 });
 
 describe("attendance shift start from HR settings", () => {
@@ -259,5 +264,110 @@ describe("attendance with missions (مأموريات)", () => {
     expect(res.body.rows[0].absent).toBe(true);
     expect(res.body.rows[0].onMission).toBe(true);
     expect(res.body.rows[0].missingPunchWarning).toBe(true);
+  });
+});
+
+describe("per-employee attendance exceptions (استثناءات الحضور)", () => {
+  it("counts a punch at 11:00 as NOT late when the employee's start is 11:00", async () => {
+    // The reported request: shift 08:00, but this employee may punch at 11:00
+    // with no lateness.
+    H.state.settingRows = [
+      { key: "work_shift", value: { start: "08:00", end: "16:00", lateGraceMinutes: 0 } },
+    ];
+    H.state.punchRows = [{ pin: "24940001", punchedAt: "2026-10-16 11:00:00" }];
+    H.state.exceptionRows = [
+      {
+        employeeId: 1,
+        startTime: "11:00",
+        lateGraceMinutes: null,
+        exemptFromPunch: false,
+        isActive: true,
+      },
+    ];
+    const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
+    expect(res.status).toBe(200);
+    expect(res.body.rows[0].lateMinutes).toBe(0);
+    expect(res.body.rows[0].shiftStart).toBe("11:00");
+    expect(res.body.rows[0].hasException).toBe(true);
+  });
+
+  it("still counts lateness against the employee's own start", async () => {
+    H.state.settingRows = [
+      { key: "work_shift", value: { start: "08:00", end: "16:00", lateGraceMinutes: 0 } },
+    ];
+    H.state.punchRows = [{ pin: "24940001", punchedAt: "2026-10-16 11:30:00" }];
+    H.state.exceptionRows = [
+      {
+        employeeId: 1,
+        startTime: "11:00",
+        lateGraceMinutes: null,
+        exemptFromPunch: false,
+        isActive: true,
+      },
+    ];
+    const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
+    expect(res.body.rows[0].lateMinutes).toBe(30);
+  });
+
+  it("treats the day as normal when the employee is exempt from punching", async () => {
+    // The second half of the request: allow the employee not to punch at all
+    // and still count a normal day.
+    H.state.settingRows = [
+      { key: "work_shift", value: { start: "08:00", end: "16:00", lateGraceMinutes: 0 } },
+    ];
+    H.state.exceptionRows = [
+      {
+        employeeId: 1,
+        startTime: null,
+        lateGraceMinutes: null,
+        exemptFromPunch: true,
+        isActive: true,
+      },
+    ];
+    const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
+    expect(res.status).toBe(200);
+    expect(res.body.rows[0].absent).toBe(false);
+    expect(res.body.rows[0].exemptFromPunch).toBe(true);
+    expect(res.body.totals.absent).toBe(0);
+  });
+
+  it("does NOT apply an exception belonging to another employee", async () => {
+    H.state.settingRows = [
+      { key: "work_shift", value: { start: "08:00", end: "16:00", lateGraceMinutes: 0 } },
+    ];
+    H.state.punchRows = [{ pin: "24940001", punchedAt: "2026-10-16 11:00:00" }];
+    // Exception is for employee 99, not the punching employee 1.
+    H.state.exceptionRows = [
+      {
+        employeeId: 99,
+        startTime: "11:00",
+        lateGraceMinutes: null,
+        exemptFromPunch: true,
+        isActive: true,
+      },
+    ];
+    const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
+    expect(res.body.rows[0].lateMinutes).toBe(180);
+    expect(res.body.rows[0].exemptFromPunch).toBe(false);
+    expect(res.body.rows[0].hasException).toBe(false);
+  });
+
+  it("ignores a disabled exception", async () => {
+    H.state.settingRows = [
+      { key: "work_shift", value: { start: "08:00", end: "16:00", lateGraceMinutes: 0 } },
+    ];
+    H.state.punchRows = [{ pin: "24940001", punchedAt: "2026-10-16 11:00:00" }];
+    H.state.exceptionRows = [
+      {
+        employeeId: 1,
+        startTime: "11:00",
+        lateGraceMinutes: null,
+        exemptFromPunch: true,
+        isActive: false,
+      },
+    ];
+    const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
+    expect(res.body.rows[0].lateMinutes).toBe(180);
+    expect(res.body.rows[0].absent).toBe(false);
   });
 });
