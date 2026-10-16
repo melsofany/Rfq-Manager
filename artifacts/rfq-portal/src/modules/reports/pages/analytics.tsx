@@ -393,21 +393,9 @@ function printReport(html: string) {
 
 // ────────────────── page ──────────────────
 import ReportsTab from "./reports";
+import { EmployeeKpiBoard, type ItemKpiEmployee } from "./EmployeeKpiBoard";
 
 // ────────────────── per-item responsibility KPIs ──────────────────
-interface ItemKpiEmployee {
-  employeeId: number;
-  employeeName: string;
-  categoryId: number | null;
-  categoryName: string | null;
-  items: number;
-  itemsWithOffers: number;
-  offersReceived: number;
-  convertedItems: number;
-  manualItems: number;
-  conversionRate: number;
-  responseRate: number;
-}
 interface ItemKpiResponse {
   employees: ItemKpiEmployee[];
   categories: Array<{
@@ -417,6 +405,7 @@ interface ItemKpiResponse {
     itemsWithOffers: number;
     offersReceived: number;
     convertedItems: number;
+    deliveredItems: number;
   }>;
   unassigned: Array<{
     categoryId: number | null;
@@ -431,6 +420,7 @@ interface ItemKpiResponse {
     itemsWithOffers: number;
     offersReceived: number;
     convertedItems: number;
+    deliveredItems: number;
     manualItems: number;
     assignedItems: number;
     unassignedItems: number;
@@ -705,6 +695,11 @@ function ItemKpiSection() {
                 value: totals?.convertedItems ?? 0,
                 color: "emerald",
               },
+              {
+                label: "بنود أمر شرائها اتسلّم",
+                value: totals?.deliveredItems ?? 0,
+                color: "emerald",
+              },
               { label: "إسناد يدوي", value: totals?.manualItems ?? 0, color: "slate" },
             ].map((c) => (
               <div key={c.label} className="bg-card border border-border rounded-lg p-3">
@@ -713,6 +708,8 @@ function ItemKpiSection() {
               </div>
             ))}
           </div>
+
+          <EmployeeKpiBoard rows={rows} />
 
           {cov && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -771,6 +768,9 @@ function ItemKpiSection() {
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-center">
                     نسبة التحويل
                   </th>
+                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground text-center">
+                    أمر شراء اتسلّم
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -812,6 +812,9 @@ function ItemKpiSection() {
                         >
                           {r.conversionRate}%
                         </span>
+                      </td>
+                      <td className="px-3 py-2 text-center text-xs text-emerald-600">
+                        {r.deliveredItems}
                       </td>
                     </tr>
                   ))

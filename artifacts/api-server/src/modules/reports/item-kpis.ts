@@ -48,6 +48,8 @@ export interface PoLineRef {
   lineItem: string | null;
   partNo: string | null;
   description: string | null;
+  /** purchase_order_items.line_status — "fulfilled" means accepted qty reached the ordered qty (delivered). */
+  lineStatus?: string | null;
 }
 
 /**
@@ -225,6 +227,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
           lineItem: purchaseOrderItemsTable.lineItem,
           partNo: purchaseOrderItemsTable.partNo,
           description: purchaseOrderItemsTable.description,
+          lineStatus: purchaseOrderItemsTable.lineStatus,
         })
         .from(purchaseOrderItemsTable)
         .where(inArray(purchaseOrderItemsTable.poId, linkedPoIds))
@@ -276,10 +279,21 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
     return true;
   };
 
+  // Delivered = a PO line matching the supplier line is FULFILLED (received and accepted
+  // in full). Counted per customer item, so a multi-supplier item still counts once.
+  const deliveredSupplierItemIds = new Set<number>();
+  for (const si of linkedSupplierItems) {
+    const fulfilled = (linesByRfq.get(si.rfqId) ?? []).filter((l) => l.lineStatus === "fulfilled");
+    if (fulfilled.length > 0 && matchPoLineForRfqItem(si, fulfilled)) {
+      deliveredSupplierItemIds.add(si.id);
+    }
+  }
+
   // Per-CUSTOMER-item derived facts (counted once regardless of supplier count).
   const itemOffers = new Map<number, number>();
   const itemHasOffers = new Set<number>();
   const itemConverted = new Set<number>();
+  const itemDelivered = new Set<number>();
   for (const itemId of itemIds) {
     const linked = supplierItemsByCustomerItem.get(itemId) ?? [];
     let offersSum = 0;
@@ -289,6 +303,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
       offersSum += oi;
       if (oi > 0) itemHasOffers.add(itemId);
       if (convertedSupplierItemIds.has(si.id)) converted = true;
+      if (deliveredSupplierItemIds.has(si.id)) itemDelivered.add(itemId);
     }
     itemOffers.set(itemId, offersSum);
     if (converted) itemConverted.add(itemId);
@@ -303,6 +318,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
     itemsWithOffers: number;
     offersReceived: number;
     convertedItems: number;
+    deliveredItems: number;
     manualItems: number;
   };
 
@@ -329,6 +345,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
         itemsWithOffers: 0,
         offersReceived: 0,
         convertedItems: 0,
+        deliveredItems: 0,
         manualItems: 0,
       };
       map.set(k, agg);
@@ -339,6 +356,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
     agg.offersReceived += itemOffers.get(a.customerRfqItemId) ?? 0;
     if (itemHasOffers.has(a.customerRfqItemId)) agg.itemsWithOffers++;
     if (itemConverted.has(a.customerRfqItemId)) agg.convertedItems++;
+    if (itemDelivered.has(a.customerRfqItemId)) agg.deliveredItems++;
   }
 
   const employees = [...map.values()]
@@ -346,6 +364,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
       ...a,
       conversionRate: a.items ? Math.round((a.convertedItems / a.items) * 1000) / 10 : 0,
       responseRate: a.items ? Math.round((a.itemsWithOffers / a.items) * 1000) / 10 : 0,
+      deliveryRate: a.items ? Math.round((a.deliveredItems / a.items) * 1000) / 10 : 0,
     }))
     .sort((x, y) => y.items - x.items);
 
@@ -364,6 +383,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
         itemsWithOffers: 0,
         offersReceived: 0,
         convertedItems: 0,
+        deliveredItems: 0,
         manualItems: 0,
       };
       catMap.set(k, agg);
@@ -372,6 +392,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
     agg.itemsWithOffers += a.itemsWithOffers;
     agg.offersReceived += a.offersReceived;
     agg.convertedItems += a.convertedItems;
+    agg.deliveredItems += a.deliveredItems;
     agg.manualItems += a.manualItems;
   }
 
@@ -383,6 +404,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
       itemsWithOffers: a.itemsWithOffers,
       offersReceived: a.offersReceived,
       convertedItems: a.convertedItems,
+      deliveredItems: a.deliveredItems,
     }))
     .sort((x, y) => y.items - x.items);
 
@@ -396,6 +418,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
     itemsWithOffers: number;
     offersReceived: number;
     convertedItems: number;
+    deliveredItems: number;
   };
   const unassignedByCategory = new Map<number | null, Bucket>();
   for (const a of assignments) {
@@ -413,6 +436,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
         itemsWithOffers: 0,
         offersReceived: 0,
         convertedItems: 0,
+        deliveredItems: 0,
       };
       unassignedByCategory.set(a.categoryId, b);
     }
@@ -420,6 +444,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
     b.offersReceived += itemOffers.get(a.customerRfqItemId) ?? 0;
     if (itemHasOffers.has(a.customerRfqItemId)) b.itemsWithOffers++;
     if (itemConverted.has(a.customerRfqItemId)) b.convertedItems++;
+    if (itemDelivered.has(a.customerRfqItemId)) b.deliveredItems++;
   }
   const unassigned = [...unassignedByCategory.values()].sort((x, y) => y.items - x.items);
 
@@ -434,6 +459,7 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
     itemsWithOffers: employees.reduce((s, e) => s + e.itemsWithOffers, 0),
     offersReceived: employees.reduce((s, e) => s + e.offersReceived, 0),
     convertedItems: employees.reduce((s, e) => s + e.convertedItems, 0),
+    deliveredItems: employees.reduce((s, e) => s + e.deliveredItems, 0),
     manualItems: employees.reduce((s, e) => s + e.manualItems, 0),
     // Reconciliation: assigned + unassigned + unclassified = totalItems.
     assignedItems,
@@ -712,6 +738,7 @@ function emptyTotals() {
     itemsWithOffers: 0,
     offersReceived: 0,
     convertedItems: 0,
+    deliveredItems: 0,
     manualItems: 0,
     assignedItems: 0,
     unassignedItems: 0,
