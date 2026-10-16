@@ -34,6 +34,8 @@ interface AttendanceRow {
 interface AttendanceResponse {
   date: string;
   shiftStart: string;
+  shiftEnd?: string | null;
+  lateGraceMinutes?: number;
   totals: { employees: number; present: number; absent: number; late: number };
   rows: AttendanceRow[];
 }
@@ -237,11 +239,30 @@ export default function HrPage() {
 function AttendanceTab() {
   const { t } = useLanguage();
   const [date, setDate] = useState(todayStr());
-  const [shiftStart, setShiftStart] = useState("09:00");
+  const [shiftStart, setShiftStart] = useState<string | null>(null);
   const [data, setData] = useState<AttendanceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Seed the shift start from HR settings the first time the tab opens, so the
+  // operator does not have to re-enter it on every visit.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api<{ settings: Record<string, unknown> }>("/hr/settings");
+        const ws = r.settings.work_shift as { start?: string } | null;
+        if (!cancelled) setShiftStart(ws?.start ?? "09:00");
+      } catch {
+        if (!cancelled) setShiftStart("09:00");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const load = useCallback(async () => {
+    if (shiftStart === null) return;
     try {
       setError(null);
       setData(
@@ -272,7 +293,7 @@ function AttendanceTab() {
           <span className="block text-muted-foreground mb-1">{t("hr.att.shiftStart")}</span>
           <input
             type="time"
-            value={shiftStart}
+            value={shiftStart ?? ""}
             onChange={(e) => setShiftStart(e.target.value)}
             className="border rounded px-2 py-1.5 bg-background"
           />
@@ -1550,6 +1571,16 @@ function SettingsTab() {
         onSaved={load}
       />
       <AbsenceCard value={data.absence as { dailyDivisor: number } | null} onSaved={load} />
+      <WorkShiftCard
+        value={
+          data.work_shift as {
+            start: string;
+            end: string;
+            lateGraceMinutes: number;
+          } | null
+        }
+        onSaved={load}
+      />
       <FinesCard value={data.fines as { monthlyCapDays: number | null } | null} onSaved={load} />
       <AllowancesCard value={data.allowance_types as { items: string[] } | null} onSaved={load} />
       <EndOfServiceCard
@@ -1810,6 +1841,66 @@ function AbsenceCard({
         />
       </label>
       <p className="text-xs text-muted-foreground">{t("hr.set.divisorHint")}</p>
+    </SettingCard>
+  );
+}
+
+function WorkShiftCard({
+  value,
+  onSaved,
+}: {
+  value: { start: string; end: string; lateGraceMinutes: number } | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [start, setStart] = useState(value?.start ?? "09:00");
+  const [end, setEnd] = useState(value?.end ?? "17:00");
+  const [grace, setGrace] = useState(numText(value?.lateGraceMinutes ?? 0));
+  return (
+    <SettingCard
+      title={t("hr.set.workShift")}
+      configured={!!value}
+      onSaved={onSaved}
+      onSave={() =>
+        saveSetting("work_shift", {
+          start,
+          end,
+          lateGraceMinutes: toNum(grace) ?? 0,
+        })
+      }
+    >
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.shiftStart")}</span>
+          <input
+            className={setInput}
+            type="time"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.shiftEnd")}</span>
+          <input
+            className={setInput}
+            type="time"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.shiftGrace")}</span>
+          <input
+            className={setInput}
+            type="number"
+            min="0"
+            max="240"
+            value={grace}
+            onChange={(e) => setGrace(e.target.value)}
+          />
+        </label>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("hr.set.shiftHint")}</p>
     </SettingCard>
   );
 }

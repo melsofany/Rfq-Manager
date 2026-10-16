@@ -29,6 +29,12 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.set.taxHint":
       "Enter brackets from lowest to highest. Each bracket’s limit is the top amount it covers. Leave the last bracket’s limit empty (it means “and above”).",
     "hr.set.absence": "Absence",
+    "hr.set.workShift": "Work shift",
+    "hr.set.shiftStart": "Shift start",
+    "hr.set.shiftEnd": "Shift end",
+    "hr.set.shiftGrace": "Late grace (minutes)",
+    "hr.set.shiftHint":
+      "The shift start is the default used by the attendance screen to compute late arrivals. The grace period is added before an arrival counts as late.",
     "hr.set.fines": "Fines",
     "hr.set.allowances": "Allowance types",
     "hr.set.bank": "Bank transfer file",
@@ -644,6 +650,12 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.set.taxHint":
       "ادخل الشرائح من الأقل للأعلى. حد كل شريحة هو أعلى مبلغ فيها. سيب حد آخر شريحة فاضي (معناه «وما فوق»).",
     "hr.set.absence": "الغياب",
+    "hr.set.workShift": "وقت العمل",
+    "hr.set.shiftStart": "بداية العمل",
+    "hr.set.shiftEnd": "نهاية العمل",
+    "hr.set.shiftGrace": "الدقائق المسموح بها للتأخير",
+    "hr.set.shiftHint":
+      "بداية العمل هي القيمة الافتراضية اللي شاشة الحضور بتحسب بيها التأخير. فترة السماح تُضاف قبل ما يعتبر الوصول متأخرًا.",
     "hr.set.fines": "الجزاءات",
     "hr.set.allowances": "أنواع البدلات",
     "hr.set.bank": "ملف التحويل البنكي",
