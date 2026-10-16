@@ -19,10 +19,12 @@ import {
   hrAttendanceDevicesTable,
   hrAttendancePunchesTable,
   hrSettingsTable,
+  hrMissionsTable,
 } from "@workspace/db";
 import { and, eq, gte, lt, lte, desc, asc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { hrLeaveRequestsTable, hrLeaveTypesTable } from "@workspace/db";
+import { missionExcusal, withinMissionWindow } from "./missions-logic";
 
 const router: IRouter = Router();
 
@@ -300,6 +302,21 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
     );
   const leaveByEmp = new Map(onLeaveRows.map((r) => [r.employeeId, r.nameAr]));
 
+  // Approved missions for this date → the employee is out on company business.
+  // A full-day mission excuses the whole day; a timed one excuses only its
+  // window. Pending/rejected missions change nothing (manager approval is what
+  // makes a mission valid).
+  const missionRows = await db
+    .select()
+    .from(hrMissionsTable)
+    .where(and(eq(hrMissionsTable.status, "approved"), eq(hrMissionsTable.missionDate, date)));
+  const missionsByEmp = new Map<number, typeof missionRows>();
+  for (const m of missionRows) {
+    const list = missionsByEmp.get(m.employeeId) ?? [];
+    list.push(m);
+    missionsByEmp.set(m.employeeId, list);
+  }
+
   const byPin = new Map<string, string[]>();
   for (const p of punches) {
     const list = byPin.get(p.pin) ?? [];
@@ -313,7 +330,27 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
     const times = e.biometricPin ? (byPin.get(e.biometricPin) ?? []) : [];
     const firstIn = times[0] ?? null;
     const lastOut = times.length > 1 ? times[times.length - 1] : null;
-    const late = firstIn ? Math.max(0, minutesOf(firstIn) - shiftMin - graceMin) : 0;
+
+    const excusal = missionExcusal(missionsByEmp.get(e.id) ?? []);
+    const onMission = excusal.fullDay || excusal.windows.length > 0;
+
+    // A punch inside an approved mission window is not lateness.
+    const firstInMin = firstIn ? minutesOf(firstIn) : null;
+    const coveredByMission =
+      firstInMin !== null && withinMissionWindow(excusal.windows, firstInMin);
+    const late =
+      firstInMin !== null && !coveredByMission ? Math.max(0, firstInMin - shiftMin - graceMin) : 0;
+
+    // No punches is only absence when nothing excuses the day: a full-day
+    // mission or an approved leave means the employee is accounted for.
+    const excusedFromAbsence = excusal.fullDay || leaveByEmp.has(e.id);
+    const absent = times.length === 0 && !excusedFromAbsence;
+
+    // A timed mission with no punch at all is worth flagging: the window was
+    // excused but there is no evidence the employee was ever on site.
+    const missingPunchWarning =
+      excusal.windows.length > 0 && !excusal.fullDay && times.length === 0;
+
     return {
       employeeId: e.id,
       employeeNo: e.employeeNo,
@@ -326,7 +363,11 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
       lateMinutes: late,
       onLeave: leaveByEmp.has(e.id),
       leaveName: leaveByEmp.get(e.id) ?? null,
-      absent: times.length === 0 && !leaveByEmp.has(e.id),
+      onMission,
+      missionFullDay: excusal.fullDay,
+      missionWindows: excusal.windows.map((w) => `${w.startTime}-${w.endTime}`),
+      missingPunchWarning,
+      absent,
     };
   });
 
@@ -340,6 +381,7 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
       present: rows.filter((r) => !r.absent).length,
       absent: rows.filter((r) => r.absent).length,
       onLeave: rows.filter((r) => r.onLeave).length,
+      onMission: rows.filter((r) => r.onMission).length,
       late: rows.filter((r) => r.lateMinutes > 0).length,
     },
     rows,

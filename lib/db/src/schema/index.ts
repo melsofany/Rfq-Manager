@@ -30,3 +30,4 @@ export * from "./hr_onboarding";
 export * from "./hr_settings";
 export * from "./hr_payroll";
 export * from "./hr_settlement";
+export * from "./hr_missions";

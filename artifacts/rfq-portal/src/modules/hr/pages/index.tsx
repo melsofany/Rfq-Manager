@@ -12,6 +12,7 @@ type Tab =
   | "attendance"
   | "onboard"
   | "leave"
+  | "missions"
   | "discipline"
   | "employees"
   | "devices"
@@ -31,14 +32,39 @@ interface AttendanceRow {
   punchCount: number;
   lateMinutes: number;
   absent: boolean;
+  onMission: boolean;
+  missionFullDay: boolean;
+  missionWindows: string[];
+  missingPunchWarning: boolean;
 }
 interface AttendanceResponse {
   date: string;
   shiftStart: string;
   shiftEnd?: string | null;
   lateGraceMinutes?: number;
-  totals: { employees: number; present: number; absent: number; late: number };
+  totals: {
+    employees: number;
+    present: number;
+    absent: number;
+    late: number;
+    onMission?: number;
+  };
   rows: AttendanceRow[];
+}
+
+interface Mission {
+  id: number;
+  employeeId: number;
+  employeeName?: string;
+  employeeNo?: string;
+  missionDate: string;
+  missionType: string;
+  startTime: string | null;
+  endTime: string | null;
+  destination: string | null;
+  reason: string | null;
+  status: string;
+  decidedAt: string | null;
 }
 interface HrEmployee {
   id: number;
@@ -186,6 +212,7 @@ export default function HrPage() {
     { id: "attendance", label: t("hr.tab.attendance") },
     { id: "onboard", label: t("hr.tab.onboard") },
     { id: "leave", label: t("hr.tab.leave") },
+    { id: "missions", label: t("hr.tab.missions") },
     { id: "discipline", label: t("hr.tab.discipline") },
     { id: "employees", label: t("hr.tab.employees") },
     { id: "devices", label: t("hr.tab.devices") },
@@ -225,6 +252,7 @@ export default function HrPage() {
         {tab === "attendance" && <AttendanceTab />}
         {tab === "onboard" && <OnboardTab />}
         {tab === "leave" && <LeaveTab />}
+        {tab === "missions" && <MissionsTab />}
         {tab === "discipline" && <DisciplineTab />}
         {tab === "employees" && <EmployeesTab />}
         {tab === "devices" && <DevicesTab />}
@@ -308,11 +336,12 @@ function AttendanceTab() {
 
       {data && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Stat label={t("hr.att.total")} value={data.totals.employees} />
             <Stat label={t("hr.att.present")} value={data.totals.present} />
             <Stat label={t("hr.att.absent")} value={data.totals.absent} tone="red" />
             <Stat label={t("hr.att.late")} value={data.totals.late} tone="amber" />
+            <Stat label={t("hr.att.onMission")} value={data.totals.onMission ?? 0} tone="amber" />
           </div>
 
           <Card>
@@ -341,10 +370,25 @@ function AttendanceTab() {
                         {r.lateMinutes > 0 ? `${r.lateMinutes} ${t("hr.att.minutes")}` : "—"}
                       </td>
                       <td className="p-2">
+                        {r.onMission && (
+                          <span className="me-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                            {r.missionFullDay
+                              ? t("hr.att.missionFullDay")
+                              : `${t("hr.att.missionTimed")} ${r.missionWindows.join(" ، ")}`}
+                          </span>
+                        )}
                         {r.absent ? (
                           <span className="text-red-600">{t("hr.att.absentLabel")}</span>
                         ) : (
                           <span className="text-green-700">{t("hr.att.presentLabel")}</span>
+                        )}
+                        {r.missingPunchWarning && (
+                          <span
+                            className="ms-2 text-xs text-amber-700 dark:text-amber-400"
+                            title={t("hr.att.missionNoPunchHint")}
+                          >
+                            ⚠ {t("hr.att.missionNoPunch")}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -366,9 +410,23 @@ function AttendanceTab() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: "red" | "amber" }) {
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "red" | "amber" | "green";
+}) {
   const color =
-    tone === "red" ? "text-red-600" : tone === "amber" ? "text-amber-600" : "text-foreground";
+    tone === "red"
+      ? "text-red-600"
+      : tone === "amber"
+        ? "text-amber-600"
+        : tone === "green"
+          ? "text-green-700"
+          : "text-foreground";
   return (
     <Card>
       <CardContent className="p-4">
@@ -832,6 +890,241 @@ interface BalanceRow {
     pending: number;
     remaining: number;
   }[];
+}
+
+function MissionsTab() {
+  const { t } = useLanguage();
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [employees, setEmployees] = useState<HrEmployee[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    employeeId: "",
+    missionDate: todayStr(),
+    missionType: "full_day",
+    startTime: "08:00",
+    endTime: "12:00",
+    destination: "",
+    reason: "",
+  });
+  const isTimed = form.missionType === "timed";
+
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      const [mi, emp] = await Promise.all([
+        api<Mission[]>("/hr/missions"),
+        api<HrEmployee[]>("/hr/employees"),
+      ]);
+      setMissions(mi);
+      setEmployees(emp.filter((e) => e.status === "active"));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      setError(null);
+      await api("/hr/missions", {
+        method: "POST",
+        body: JSON.stringify({
+          employeeId: Number(form.employeeId),
+          missionDate: form.missionDate,
+          missionType: form.missionType,
+          startTime: isTimed ? form.startTime : null,
+          endTime: isTimed ? form.endTime : null,
+          destination: form.destination,
+          reason: form.reason,
+        }),
+      });
+      setForm({ ...form, destination: "", reason: "" });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function act(id: number, path: string, body?: object) {
+    try {
+      setError(null);
+      await api(`/hr/missions/${id}/${path}`, {
+        method: "PATCH",
+        body: JSON.stringify(body ?? {}),
+      });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  const input = "border rounded px-2 py-1.5 bg-background text-sm";
+  const pending = missions.filter((m) => m.status === "pending");
+
+  return (
+    <div className="space-y-6">
+      <form onSubmit={submit} className="flex flex-wrap gap-2 items-end">
+        <select
+          className={input}
+          value={form.employeeId}
+          onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+          required
+        >
+          <option value="">{t("hr.mission.pickEmployee")}</option>
+          {employees.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.fullName}
+            </option>
+          ))}
+        </select>
+        <input
+          type="date"
+          className={input}
+          value={form.missionDate}
+          onChange={(e) => setForm({ ...form, missionDate: e.target.value })}
+          required
+        />
+        <select
+          className={input}
+          value={form.missionType}
+          onChange={(e) => setForm({ ...form, missionType: e.target.value })}
+        >
+          <option value="full_day">{t("hr.mission.typeFullDay")}</option>
+          <option value="timed">{t("hr.mission.typeTimed")}</option>
+        </select>
+        {isTimed && (
+          <>
+            <input
+              type="time"
+              className={input}
+              value={form.startTime}
+              onChange={(e) => setForm({ ...form, startTime: e.target.value })}
+              required
+            />
+            <input
+              type="time"
+              className={input}
+              value={form.endTime}
+              onChange={(e) => setForm({ ...form, endTime: e.target.value })}
+              required
+            />
+          </>
+        )}
+        <input
+          className={input}
+          placeholder={t("hr.mission.destination")}
+          value={form.destination}
+          onChange={(e) => setForm({ ...form, destination: e.target.value })}
+        />
+        <input
+          className={input}
+          placeholder={t("hr.mission.reason")}
+          value={form.reason}
+          onChange={(e) => setForm({ ...form, reason: e.target.value })}
+        />
+        <Button type="submit">{t("hr.mission.add")}</Button>
+      </form>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <Stat label={t("hr.mission.total")} value={missions.length} />
+        <Stat label={t("hr.mission.pending")} value={pending.length} tone="amber" />
+        <Stat
+          label={t("hr.mission.approved")}
+          value={missions.filter((m) => m.status === "approved").length}
+          tone="green"
+        />
+      </div>
+
+      <Card>
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="p-2 text-start">{t("hr.col.no")}</th>
+                <th className="p-2 text-start">{t("hr.col.name")}</th>
+                <th className="p-2 text-start">{t("hr.mission.date")}</th>
+                <th className="p-2 text-start">{t("hr.mission.type")}</th>
+                <th className="p-2 text-start">{t("hr.mission.window")}</th>
+                <th className="p-2 text-start">{t("hr.mission.destination")}</th>
+                <th className="p-2 text-start">{t("hr.mission.status")}</th>
+                <th className="p-2 text-start">{t("hr.att.status")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {missions.map((m) => (
+                <tr key={m.id} className="border-t">
+                  <td className="p-2">{m.employeeNo ?? "—"}</td>
+                  <td className="p-2">{m.employeeName ?? "—"}</td>
+                  <td className="p-2">{m.missionDate}</td>
+                  <td className="p-2">
+                    {m.missionType === "full_day"
+                      ? t("hr.mission.typeFullDay")
+                      : t("hr.mission.typeTimed")}
+                  </td>
+                  <td className="p-2">
+                    {m.startTime && m.endTime ? `${m.startTime} – ${m.endTime}` : "—"}
+                  </td>
+                  <td className="p-2">{m.destination ?? "—"}</td>
+                  <td className="p-2">
+                    <span
+                      className={
+                        m.status === "approved"
+                          ? "text-green-700"
+                          : m.status === "pending"
+                            ? "text-amber-700"
+                            : "text-red-600"
+                      }
+                    >
+                      {t(`hr.mission.st.${m.status}`)}
+                    </span>
+                  </td>
+                  <td className="p-2 space-x-2">
+                    {m.status === "pending" && (
+                      <>
+                        <button
+                          className="text-xs text-green-700 underline"
+                          onClick={() => act(m.id, "decision", { decision: "approve" })}
+                        >
+                          {t("hr.mission.approve")}
+                        </button>
+                        <button
+                          className="text-xs text-red-600 underline"
+                          onClick={() => act(m.id, "decision", { decision: "reject" })}
+                        >
+                          {t("hr.mission.reject")}
+                        </button>
+                      </>
+                    )}
+                    {m.status === "approved" && (
+                      <button
+                        className="text-xs text-muted-foreground underline"
+                        onClick={() => act(m.id, "cancel")}
+                      >
+                        {t("hr.mission.cancel")}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {missions.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                    {t("hr.mission.none")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function LeaveTab() {

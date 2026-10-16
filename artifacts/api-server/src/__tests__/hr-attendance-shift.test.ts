@@ -8,6 +8,8 @@ const H = vi.hoisted(() => {
     settingRows: [] as Record<string, unknown>[],
     /** Punches returned for the day. */
     punchRows: [] as Record<string, unknown>[],
+    /** Approved missions returned for the day. */
+    missionRows: [] as Record<string, unknown>[],
     /** Which table the current select is reading from. */
     table: "",
   };
@@ -29,6 +31,7 @@ vi.mock("@workspace/db", () => {
     hrAttendanceDevicesTable,
     hrLeaveRequestsTable: table("leaveRequests"),
     hrLeaveTypesTable: table("leaveTypes"),
+    hrMissionsTable: table("missions"),
     db: {
       select: () => ({
         from: (t: { __table: string }) => {
@@ -36,6 +39,7 @@ vi.mock("@workspace/db", () => {
           const rowsFor = () => {
             if (t.__table === "hrSettings") return H.state.settingRows;
             if (t.__table === "punches") return H.state.punchRows;
+            if (t.__table === "missions") return H.state.missionRows;
             if (t.__table === "employees")
               return [{ role: "admin", permissions: null, isActive: true }];
             if (t.__table === "hrEmployees")
@@ -100,6 +104,7 @@ app.use("/api", router);
 beforeEach(() => {
   H.state.settingRows = [];
   H.state.punchRows = [];
+  H.state.missionRows = [];
 });
 
 describe("attendance shift start from HR settings", () => {
@@ -154,5 +159,105 @@ describe("attendance shift start from HR settings", () => {
     const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
     expect(res.status).toBe(200);
     expect(res.body.shiftStart).toBe("09:00");
+  });
+});
+
+describe("attendance with missions (مأموريات)", () => {
+  it("does NOT report an employee absent when a full-day mission is approved", async () => {
+    // The reported problem: sent to the bank at 08:00, no punch → absent.
+    H.state.missionRows = [
+      {
+        id: 1,
+        employeeId: 1,
+        missionDate: "2026-10-16",
+        missionType: "full_day",
+        status: "approved",
+      },
+    ];
+    const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
+    expect(res.status).toBe(200);
+    expect(res.body.rows[0].absent).toBe(false);
+    expect(res.body.rows[0].onMission).toBe(true);
+    expect(res.body.rows[0].missionFullDay).toBe(true);
+    expect(res.body.totals.absent).toBe(0);
+    expect(res.body.totals.onMission).toBe(1);
+  });
+
+  it("still reports absence when the mission is only pending (manager has not approved)", async () => {
+    H.state.missionRows = [];
+    const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
+    expect(res.status).toBe(200);
+    expect(res.body.rows[0].absent).toBe(true);
+    expect(res.body.rows[0].onMission).toBe(false);
+  });
+
+  it("excuses lateness for a punch inside an approved timed window", async () => {
+    // Shift 09:00, grace 0. A 10:00 punch is normally 60 minutes late, but the
+    // employee was on a mission from 08:00 to 12:00.
+    H.state.settingRows = [
+      { key: "work_shift", value: { start: "09:00", end: "17:00", lateGraceMinutes: 0 } },
+    ];
+    H.state.punchRows = [{ pin: "24940001", punchedAt: "2026-10-16 10:00:00" }];
+    H.state.missionRows = [
+      {
+        id: 2,
+        employeeId: 1,
+        missionDate: "2026-10-16",
+        missionType: "timed",
+        startTime: "08:00",
+        endTime: "12:00",
+        status: "approved",
+      },
+    ];
+    const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
+    expect(res.status).toBe(200);
+    expect(res.body.rows[0].lateMinutes).toBe(0);
+    expect(res.body.rows[0].onMission).toBe(true);
+    expect(res.body.rows[0].missionFullDay).toBe(false);
+    expect(res.body.rows[0].missionWindows).toEqual(["08:00-12:00"]);
+  });
+
+  it("still counts lateness for a punch outside the timed window", async () => {
+    H.state.settingRows = [
+      { key: "work_shift", value: { start: "09:00", end: "17:00", lateGraceMinutes: 0 } },
+    ];
+    H.state.punchRows = [{ pin: "24940001", punchedAt: "2026-10-16 13:00:00" }];
+    H.state.missionRows = [
+      {
+        id: 3,
+        employeeId: 1,
+        missionDate: "2026-10-16",
+        missionType: "timed",
+        startTime: "08:00",
+        endTime: "12:00",
+        status: "approved",
+      },
+    ];
+    const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
+    expect(res.status).toBe(200);
+    // 13:00 vs 09:00 = 240 minutes, outside the 08:00-12:00 mission window.
+    expect(res.body.rows[0].lateMinutes).toBe(240);
+  });
+
+  it("keeps a timed mission with no punch absent, but flags the mission", async () => {
+    H.state.missionRows = [
+      {
+        id: 4,
+        employeeId: 1,
+        missionDate: "2026-10-16",
+        missionType: "timed",
+        startTime: "08:00",
+        endTime: "12:00",
+        status: "approved",
+      },
+    ];
+    const res = await request(app).get("/api/hr/attendance?date=2026-10-16");
+    expect(res.status).toBe(200);
+    // A timed mission excuses a WINDOW, not the day: with no punch at all there
+    // is no evidence the employee was ever on site, so the absence stands — but
+    // the flag tells HR the mission explains why, so it is not read as a no-show.
+    expect(res.body.rows[0].absent).toBe(true);
+    expect(res.body.rows[0].onMission).toBe(true);
+    expect(res.body.rows[0].missingPunchWarning).toBe(true);
   });
 });

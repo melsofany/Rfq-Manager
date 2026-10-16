@@ -2615,6 +2615,29 @@ export async function initDb(): Promise<void> {
     await client.query(
       `CREATE INDEX IF NOT EXISTS hr_leave_requests_emp_idx ON hr_leave_requests (employee_id, start_date)`,
     );
+    // Missions (مأموريات) — an approved mission excuses a day or a time window
+    // from the absence calculation. Own statement: a sibling failure must not
+    // roll this CREATE back.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_missions (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL,
+        mission_date DATE NOT NULL,
+        mission_type TEXT NOT NULL DEFAULT 'full_day',
+        start_time TEXT,
+        end_time TEXT,
+        destination TEXT,
+        reason TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        decided_by INTEGER,
+        decided_at TIMESTAMPTZ,
+        created_by INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS hr_missions_emp_date_idx ON hr_missions (employee_id, mission_date)`,
+    );
     // Seed default leave types once (ON CONFLICT keeps any values the HR team edited).
     await client.query(`
       INSERT INTO hr_leave_types (code, name_ar, name_en, annual_days, paid, requires_certificate) VALUES
