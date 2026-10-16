@@ -337,4 +337,55 @@ describe("init-db migrations", () => {
     // Idempotent: a re-run must not duplicate a link.
     expect(link!).toContain("ON CONFLICT (supplier_id, category_id) DO NOTHING");
   });
+
+  it("SCOPES the supplier→item category mirror to canonical names (no junk domains)", () => {
+    // The mirror used to copy EVERY supplier-category name in as an item
+    // category, so a free-text spelling like `plumbing_sanitary_supplier` became
+    // an orphan functional domain («جت من فين»). It must only mirror a name that
+    // is ALREADY a canonical item category (carries a code).
+    const literal = sqlLiterals(source).find(
+      (b) =>
+        b.includes("INSERT INTO item_categories (name, sort_order)") &&
+        b.includes("FROM supplier_categories"),
+    );
+    expect(literal, "the startup mirror must exist").toBeDefined();
+    expect(literal!).toContain("ic.code IS NOT NULL");
+    expect(literal!).toContain("WHERE EXISTS (SELECT 1 FROM item_categories ic");
+  });
+
+  it("deletes ORPHAN item categories ONLY when provably unused", () => {
+    // The cleanup the operator asked for: junk categories (mirrored in from
+    // supplier-category text) with no code and no relation at all. A category
+    // with even ONE item or owner must be KEPT — its links may be correct and
+    // the conflict/repair flow owns mis-classification. Every relation below is
+    // a separate NOT EXISTS guard.
+    const literal = sqlLiterals(source).find(
+      (b) => b.includes("DELETE FROM item_categories ic") && b.includes("ic.code IS NULL"),
+    );
+    expect(literal, "the orphan cleanup must exist").toBeDefined();
+    // Only a name that also exists as a supplier category is a mirror orphan.
+    expect(literal!).toContain("FROM supplier_categories sc WHERE sc.name = ic.name");
+    const requiredGuards = [
+      "FROM rfq_items x WHERE x.category_id = ic.id",
+      "FROM customer_rfq_items x WHERE x.category_id = ic.id",
+      "FROM purchase_order_items x WHERE x.category_id = ic.id",
+      "FROM customer_rfq_item_categories x WHERE x.category_id = ic.id",
+      "FROM employee_categories x WHERE x.category_id = ic.id",
+      "FROM customer_rfq_item_assignments x WHERE x.category_id = ic.id",
+      "FROM rfq_item_assignments x WHERE x.category_id = ic.id",
+      "FROM item_categories child WHERE child.parent_id = ic.id",
+      "FROM item_category_aliases a WHERE a.category_id = ic.id",
+      "FROM item_category_keywords k WHERE k.category_id = ic.id",
+    ];
+    for (const g of requiredGuards) {
+      expect(literal!, `cleanup must guard: ${g}`).toContain(g);
+    }
+    // Single statement so no sibling failure can roll it back.
+    expect(
+      literal!
+        .split(";")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ).toHaveLength(1);
+  });
 });

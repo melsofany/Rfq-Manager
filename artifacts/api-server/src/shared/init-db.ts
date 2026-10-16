@@ -1811,14 +1811,18 @@ export async function initDb(): Promise<void> {
     }
 
     // ── Mirror supplier categories into item categories ─────────────────────
-    // The operator's rule: the item categories must be the SAME list as the
-    // supplier categories. A supplier category is copied in by NAME (idempotent,
-    // ON CONFLICT DO NOTHING), so any category added on /suppliers also appears
-    // as an item category — and the reverse is never deleted. Kept as its OWN
+    // A supplier category is copied in by NAME (idempotent, ON CONFLICT DO
+    // NOTHING) so a category added on /suppliers also appears as an item
+    // category. SCOPED: a mirror row is only created when the name is already a
+    // CANONICAL item category (it carries a code). This is what stops junk
+    // supplier-category spellings (e.g. plumbing_sanitary_supplier,
+    // sanitary_fittings_supplier) from being seeded in as orphan functional
+    // domains that classify no item and own no responsibility. Kept as its OWN
     // statement: a sibling failure must not roll the seed back.
     await client.query(`
       INSERT INTO item_categories (name, sort_order)
-      SELECT name, 100 FROM supplier_categories
+      SELECT sc.name, 100 FROM supplier_categories sc
+      WHERE EXISTS (SELECT 1 FROM item_categories ic WHERE ic.name = sc.name AND ic.code IS NOT NULL)
       ON CONFLICT (name) DO NOTHING;
     `);
 
@@ -2158,6 +2162,40 @@ export async function initDb(): Promise<void> {
       WHERE s.category IS NOT NULL
         AND trim(elem) <> ''
       ON CONFLICT (supplier_id, category_id) DO NOTHING;
+    `);
+
+    // ── Remove ORPHAN item categories (idempotent, safety-guarded) ───────────
+    // The operator's report: a list of categories that «احنا مش عاملينها اصلا ولا
+    // ضيفنا فيها موردين جت من فين» — junk functional domains such as
+    // plumbing_sanitary_supplier / sanitary_fittings_supplier, mirrored in
+    // from free-text supplier-category names. Nothing is deleted by NAME here:
+    // a row is removed ONLY when it is provably unused — it carries NO code
+    // (never a canonical seed), and every relation below is empty:
+    //   • no item references it (rfq_items / customer_rfq_items /
+    //     purchase_order_items / the item-category junction),
+    //   • NO employee owns it, and NO item responsibility is assigned to it,
+    //   • it is neither a parent of another category nor an alias target,
+    //   • it has no classifier keywords.
+    // A category with even ONE item is KEPT (it may be mis-classified, which the
+    // conflict/repair flow fixes) — so no incompatible reference can ever fail
+    // this DELETE. Own array-wrapped literal, so a sibling failure cannot roll
+    // it back; comments use SQL --, never JS comment.
+    await client.query(`
+      DELETE FROM item_categories ic
+      WHERE ic.code IS NULL
+        AND EXISTS (
+          SELECT 1 FROM supplier_categories sc WHERE sc.name = ic.name
+        )
+        AND NOT EXISTS (SELECT 1 FROM rfq_items x WHERE x.category_id = ic.id)
+        AND NOT EXISTS (SELECT 1 FROM customer_rfq_items x WHERE x.category_id = ic.id)
+        AND NOT EXISTS (SELECT 1 FROM purchase_order_items x WHERE x.category_id = ic.id)
+        AND NOT EXISTS (SELECT 1 FROM customer_rfq_item_categories x WHERE x.category_id = ic.id)
+        AND NOT EXISTS (SELECT 1 FROM employee_categories x WHERE x.category_id = ic.id)
+        AND NOT EXISTS (SELECT 1 FROM customer_rfq_item_assignments x WHERE x.category_id = ic.id)
+        AND NOT EXISTS (SELECT 1 FROM rfq_item_assignments x WHERE x.category_id = ic.id)
+        AND NOT EXISTS (SELECT 1 FROM item_categories child WHERE child.parent_id = ic.id)
+        AND NOT EXISTS (SELECT 1 FROM item_category_aliases a WHERE a.category_id = ic.id)
+        AND NOT EXISTS (SELECT 1 FROM item_category_keywords k WHERE k.category_id = ic.id);
     `);
 
     // ── Procurement responsibility migration (idempotent, re-runnable) ───────

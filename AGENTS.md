@@ -4033,3 +4033,30 @@ land in two categories.
   `User ID` or the punch is stored but never matched to an employee.
 - Setup guide: `docs/ZKTECO_K14_PRO_SETUP.md` (Arabic, for the operator).
 
+
+## الجذور الخفية للتصنيفات اليتيمة + تنظيف آمن (feat/cleanup-orphan-categories)
+
+المشغّل لاحظ تصنيفات «احنا مش عاملينها اصلا ولا ضيفنا فيها موردين جت من فين»
+(plumbing_sanitary_supplier، sanitary_fittings_supplier …) ظاهرة كمجالات وظيفية
+بلا مسؤول. التحقيق أثبت المصدر الحقيقي: **مرآة تصنيفات الموردين** بتتنسخ لأي اسم
+حر — من إضافة مورد، الاستيراد الجماعي (CSV)، ومزامنة ERP (s.category ?? "general")
+— عبر saveSupplierCategoryLinks ثم الـseed في init-db.ts.
+
+- **المرآة كانت بتنسخ كل اسم مورد لتصنيف بند** بغض النظر عن كونه تصنيفًا رسميًا.
+  دلوقتي **محدودة**: تُنسخ بس الأسماء اللي عندها تصنيف بند **canonical** (بيحمل
+  code). نفس القيد اتطبّق على مسار الإنشاء اللحظي في categories.ts
+  (POST /categories) — كان بيحقن أي نص حر كتصنيف بند.
+- **تنظيف اليتيم آمن وقابل لإعادة التشغيل** (init-db.ts، عبارة مستقلة): الحذف
+  **مش بالاسم** — يُحذف الصف فقط لما يكون مُثبتًا غير مستخدَم: code IS NULL،
+  موجود في supplier_categories (يعني مرآة)، وصفر مرجع في
+  rfq_items/customer_rfq_items/purchase_order_items/customer_rfq_item_categories،
+  وصفر employee_categories/customer_rfq_item_assignments/rfq_item_assignments،
+  ومش أب لتصنيف، ومش هدف alias، ومفيش كلمات مفتاحية. **أي تصنيف عليه بند واحد
+  يُحتفَظ به** (قد يكون تصنيفًا خاطئًا، وده بيصلحه مسار التعارض/الإصلاح) — فما
+  ينفعش يحصل انتهاك مرجعي يفشّل الحذف.
+- **درس**: كلمة «مصدر واحد للحقيقة» لا تكفي — المرآة بقت مصدر تلوّث لأنها نُسخ بدون
+  قيد. أي نسخ من مصدر حرّ يجب أن يكون **مقصورًا على قاموس معتمد**.
+- الحرّاس: init-db.test.ts (+2 — المرآة المقصوصة، وحماية الحذف بعشرة شروط) و
+  supplier-category-rename.test.ts (+2 — اسم مورد غير canonical ما ينفعش يتحول
+  لتصنيف بند). **الـ3 حرّاس بيفشلوا ضد الكود قبل الإصلاح** (اتأكدت بالـstash).
+  1603 اختبار api-server + 68 portal يمر؛ tsc + prettier + البناء نضيف.

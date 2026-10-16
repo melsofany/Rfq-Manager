@@ -24,6 +24,8 @@ vi.mock("drizzle-orm", () => ({
   count: () => ({ __op: "count" }),
   or: (...args: any[]) => ({ __op: "or", args }),
   ilike: (left: any, right: any) => ({ __op: "ilike", left, right }),
+  and: (...args: any[]) => ({ __op: "and", args }),
+  isNotNull: (col: any) => ({ __op: "isNotNull", col }),
   sql: Object.assign((strings: any, ...values: any[]) => ({ __op: "sql", strings, values }), {
     raw: (s: string) => ({ __op: "sql.raw", s }),
   }),
@@ -48,15 +50,24 @@ const supplierCategoryLinksTable = {
 let categoryRows: any[];
 let updatedCategoryRow: any;
 const itemCategoryUpdates: any[] = [];
+const itemCategoryInserts: any[] = [];
 const itemCategoryWhere: any[] = [];
 const executeCalls: any[] = [];
+// Rows returned by the canonical-item-category lookup (the mirror gate).
+let canonicalItemRows: any[] = [];
 
 const dbMock: any = {
   select: vi.fn(() => ({
     from: vi.fn((table: any) => {
       if (table === supplierCategoriesTable) {
         return chainable(categoryRows, {
-          where: vi.fn((cond: any) => chainable(categoryRows)),
+          // The POST duplicate check filters on `name`; the PATCH lookup filters
+          // on `id`. Only the id lookup should return a row.
+          where: vi.fn((cond: any) =>
+            chainable(cond?.left === "id" ? categoryRows : [], {
+              orderBy: vi.fn(() => chainable(categoryRows)),
+            }),
+          ),
           orderBy: vi.fn(() => chainable(categoryRows)),
         });
       }
@@ -72,14 +83,26 @@ const dbMock: any = {
           where: vi.fn(() => chainable([{ supplierCount: 0 }])),
         });
       }
+      if (table === itemCategoriesTable) {
+        // The canonical-item-category lookup that gates the mirror.
+        return chainable(canonicalItemRows, {
+          where: vi.fn(() =>
+            chainable(canonicalItemRows, { limit: vi.fn(() => canonicalItemRows) }),
+          ),
+        });
+      }
       return chainable([], { where: vi.fn(() => chainable([])) });
     }),
   })),
-  insert: vi.fn(() => ({
-    values: vi.fn(() => ({
-      returning: vi.fn(() => chainable([{ id: 1, name: "x" }])),
-      onConflictDoNothing: vi.fn(() => chainable(undefined)),
-    })),
+  insert: vi.fn((table: any) => ({
+    values: vi.fn((vals: any) => {
+      if (table === itemCategoriesTable) itemCategoryInserts.push(vals);
+      return {
+        // Echo the submitted name so the mirror inserts the REAL name.
+        returning: vi.fn(() => chainable([{ id: 1, name: vals?.name ?? "x" }])),
+        onConflictDoNothing: vi.fn(() => chainable(undefined)),
+      };
+    }),
   })),
   update: vi.fn((table: any) => ({
     set: vi.fn((vals: any) => {
@@ -124,10 +147,12 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   itemCategoryUpdates.length = 0;
+  itemCategoryInserts.length = 0;
   itemCategoryWhere.length = 0;
   executeCalls.length = 0;
   categoryRows = [{ id: 1, name: "elec" }];
   updatedCategoryRow = { id: 1, name: "كهرباء" };
+  canonicalItemRows = [];
 });
 
 describe("supplier-category rename propagates to suppliers.category", () => {
@@ -149,5 +174,31 @@ describe("supplier-category rename propagates to suppliers.category", () => {
   it("also mirrors the rename into item_categories (same list)", async () => {
     await request(testApp).patch("/categories/1").send({ name: "كهرباء" });
     expect(itemCategoryUpdates).toContainEqual({ name: "كهرباء" });
+  });
+});
+
+describe("supplier→item category mirror is SCOPED to canonical names", () => {
+  it("does NOT create an item category for a NON-canonical supplier category", async () => {
+    // The operator's orphan categories (`plumbing_sanitary_supplier` …) came from
+    // free-text supplier-category names being mirrored into item_categories. A
+    // name with no canonical item category (no code) must NOT be mirrored.
+    canonicalItemRows = []; // no canonical item category carries this name
+    const res = await request(testApp)
+      .post("/categories")
+      .send({ name: "plumbing_sanitary_supplier" });
+    expect(res.status).toBe(201);
+    expect(
+      itemCategoryInserts.find((v) => v?.name === "plumbing_sanitary_supplier"),
+      "a junk supplier category must not become an item category",
+    ).toBeUndefined();
+  });
+
+  it("DOES mirror a supplier category that is already canonical", async () => {
+    // A supplier category that matches an existing canonical item category (one
+    // that carries a code) is kept in step, so /items shows the same list.
+    canonicalItemRows = [{ id: 30 }];
+    const res = await request(testApp).post("/categories").send({ name: "كهرباء" });
+    expect(res.status).toBe(201);
+    expect(itemCategoryInserts).toContainEqual({ name: "كهرباء", sortOrder: 100 });
   });
 });
