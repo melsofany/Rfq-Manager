@@ -4003,3 +4003,33 @@ land in two categories.
   each guarded.
 - Tests: 1570 api-server pass (up from 1568; the two new guard tests). tsc (libs +
   api-server) clean; repo-wide prettier clean.
+
+## A device path is fixed by FIRMWARE, not by our router (ZKTeco K14 Pro ADMS)
+
+- **Symptom**: a ZKTeco K14 Pro could never deliver a punch, and the device log
+  looked like a broken server. `GET /iclock/cdata?SN=…&options=all` on production
+  returned **HTML**, not the device config.
+- **Cause**: `/iclock/*` is **hard-coded in ZKTeco firmware** — the device never
+  sends the `/api` prefix. The ADMS router was mounted only under `/api`, so every
+  device request fell through to the SPA catch-all. Mount it at the ROOT
+  (`app.ts`, before the SPA handler); the `/api/iclock` copy is only useful for
+  manual browser testing.
+- **Two more defects in the same module**: the handshake lacked
+  `ServerVer`/`PushProtVer`/`SupportPing`, which newer firmware requires before it
+  accepts the endpoint as a real ADMS server and opens the push channel; and
+  `/iclock/ping` + `/iclock/registry` were missing while the post-handshake
+  `OPTIONS` push was refused — an un-acked push makes the firmware retry forever.
+- **An ATTLOG from a still-inactive device must be ACKed (`OK`) while its punches
+  are DROPPED.** Refusing it leaves the device in an infinite retry loop; storing
+  it lets any unknown device inject attendance. Ack the transport, gate the data.
+- **Verify a device integration with a REAL protocol walk, not a route test**:
+  handshake → punch while pending → activate → punch stored → re-send the same
+  batch twice (dedup via the `(device_sn, pin, punched_at)` unique index) →
+  `/api/hr/attendance` reports `firstIn`/`lastOut`/`lateMinutes`. A green unit
+  test cannot see a mount path or a firmware-required key.
+- **Device clock and timezone are the operator's job**: the server stores the
+  timestamp the device sends, so a wrong `GMT+02:00` or a wrong device clock
+  silently mis-dates every punch. `biometricPin` must equal the device's
+  `User ID` or the punch is stored but never matched to an employee.
+- Setup guide: `docs/ZKTECO_K14_PRO_SETUP.md` (Arabic, for the operator).
+
