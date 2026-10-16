@@ -2483,6 +2483,22 @@ export async function initDb(): Promise<void> {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS hr_payslips_run_idx ON hr_payslips (run_id)`);
     await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_settlements (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL,
+        exit_date DATE NOT NULL,
+        reason TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        total NUMERIC(12,2) NOT NULL,
+        details JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        approved_at TIMESTAMPTZ
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS hr_settlements_emp_idx ON hr_settlements (employee_id)`,
+    );
+    await client.query(`
       CREATE TABLE IF NOT EXISTS hr_disciplinary_cases (
         id SERIAL PRIMARY KEY,
         employee_id INTEGER NOT NULL,
