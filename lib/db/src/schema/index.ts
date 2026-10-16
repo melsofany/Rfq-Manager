@@ -31,3 +31,4 @@ export * from "./hr_settings";
 export * from "./hr_payroll";
 export * from "./hr_settlement";
 export * from "./hr_missions";
+export * from "./hr_attendance_exceptions";

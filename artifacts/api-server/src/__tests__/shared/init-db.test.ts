@@ -410,4 +410,22 @@ describe("init-db migrations", () => {
     // follows it (ordering proof that it is not stranded after a failure).
     expect(createIdx).toBeLessThan(source.indexOf("INSERT INTO hr_leave_types"));
   });
+
+  it("creates the attendance-exceptions table in its OWN statement", () => {
+    // A per-employee exception overrides the company shift, so the table must
+    // exist before /hr/attendance reads it. Own statement: a sibling failure in
+    // a shared multi-statement block would roll this CREATE back silently.
+    const source = readFileSync(new URL("../../shared/init-db.ts", import.meta.url), "utf8");
+    const createIdx = source.indexOf("CREATE TABLE IF NOT EXISTS hr_attendance_exceptions");
+    expect(createIdx).toBeGreaterThan(-1);
+
+    const before = source.lastIndexOf("await client.query(", createIdx);
+    const literal = source.slice(before, source.indexOf("`);", createIdx));
+    expect(literal.split(";").filter((s) => /CREATE\s+TABLE/i.test(s))).toHaveLength(1);
+    expect(literal).not.toContain("hr_missions");
+
+    // One policy per employee: the UNIQUE constraint is what makes the
+    // resolution unambiguous.
+    expect(literal).toContain("employee_id INTEGER NOT NULL UNIQUE");
+  });
 });

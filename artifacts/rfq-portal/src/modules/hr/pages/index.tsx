@@ -13,6 +13,7 @@ type Tab =
   | "onboard"
   | "leave"
   | "missions"
+  | "exceptions"
   | "discipline"
   | "employees"
   | "devices"
@@ -36,6 +37,10 @@ interface AttendanceRow {
   missionFullDay: boolean;
   missionWindows: string[];
   missingPunchWarning: boolean;
+  shiftStart: string;
+  lateGraceMinutes: number;
+  hasException: boolean;
+  exemptFromPunch: boolean;
 }
 interface AttendanceResponse {
   date: string;
@@ -65,6 +70,18 @@ interface Mission {
   reason: string | null;
   status: string;
   decidedAt: string | null;
+}
+interface AttendanceException {
+  id: number;
+  employeeId: number;
+  employeeName?: string;
+  employeeNo?: string;
+  department?: string | null;
+  startTime: string | null;
+  lateGraceMinutes: number | null;
+  exemptFromPunch: boolean;
+  note: string | null;
+  isActive: boolean;
 }
 interface HrEmployee {
   id: number;
@@ -213,6 +230,7 @@ export default function HrPage() {
     { id: "onboard", label: t("hr.tab.onboard") },
     { id: "leave", label: t("hr.tab.leave") },
     { id: "missions", label: t("hr.tab.missions") },
+    { id: "exceptions", label: t("hr.tab.exceptions") },
     { id: "discipline", label: t("hr.tab.discipline") },
     { id: "employees", label: t("hr.tab.employees") },
     { id: "devices", label: t("hr.tab.devices") },
@@ -253,6 +271,7 @@ export default function HrPage() {
         {tab === "onboard" && <OnboardTab />}
         {tab === "leave" && <LeaveTab />}
         {tab === "missions" && <MissionsTab />}
+        {tab === "exceptions" && <ExceptionsTab />}
         {tab === "discipline" && <DisciplineTab />}
         {tab === "employees" && <EmployeesTab />}
         {tab === "devices" && <DevicesTab />}
@@ -370,6 +389,14 @@ function AttendanceTab() {
                         {r.lateMinutes > 0 ? `${r.lateMinutes} ${t("hr.att.minutes")}` : "—"}
                       </td>
                       <td className="p-2">
+                        {r.exemptFromPunch && (
+                          <span
+                            className="me-2 rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800 dark:bg-sky-950/50 dark:text-sky-300"
+                            title={t("hr.att.exemptHint")}
+                          >
+                            {t("hr.att.exemptBadge")}
+                          </span>
+                        )}
                         {r.onMission && (
                           <span className="me-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
                             {r.missionFullDay
@@ -890,6 +917,199 @@ interface BalanceRow {
     pending: number;
     remaining: number;
   }[];
+}
+
+function ExceptionsTab() {
+  const { t } = useLanguage();
+  const [rows, setRows] = useState<AttendanceException[]>([]);
+  const [employees, setEmployees] = useState<HrEmployee[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    employeeId: "",
+    startTime: "",
+    lateGraceMinutes: "",
+    exemptFromPunch: false,
+    note: "",
+  });
+
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      const [ex, emp] = await Promise.all([
+        api<AttendanceException[]>("/hr/attendance-exceptions"),
+        api<HrEmployee[]>("/hr/employees"),
+      ]);
+      setRows(ex);
+      setEmployees(emp.filter((e) => e.status === "active"));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.employeeId) return;
+    try {
+      setError(null);
+      setSaved(null);
+      const emp = employees.find((x) => String(x.id) === form.employeeId);
+      await api(`/hr/attendance-exceptions/${form.employeeId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          startTime: form.startTime || null,
+          lateGraceMinutes: form.lateGraceMinutes === "" ? null : Number(form.lateGraceMinutes),
+          exemptFromPunch: form.exemptFromPunch,
+          note: form.note,
+        }),
+      });
+      setSaved(t("hr.exc.savedFor").replace("{name}", emp?.fullName ?? ""));
+      setForm({
+        employeeId: "",
+        startTime: "",
+        lateGraceMinutes: "",
+        exemptFromPunch: false,
+        note: "",
+      });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function remove(employeeId: number) {
+    try {
+      setError(null);
+      setSaved(null);
+      await api(`/hr/attendance-exceptions/${employeeId}`, { method: "DELETE" });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  const input = "border rounded px-2 py-1.5 bg-background text-sm";
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardContent className="p-4 text-sm text-muted-foreground space-y-1">
+          <p>{t("hr.exc.intro")}</p>
+          <p>{t("hr.exc.introHint")}</p>
+        </CardContent>
+      </Card>
+
+      <form onSubmit={save} className="flex flex-wrap gap-2 items-end">
+        <select
+          className={input}
+          value={form.employeeId}
+          onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+          required
+        >
+          <option value="">{t("hr.mission.pickEmployee")}</option>
+          {employees.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.fullName}
+            </option>
+          ))}
+        </select>
+        <label className="flex flex-col text-xs text-muted-foreground gap-1">
+          {t("hr.exc.startTime")}
+          <input
+            type="time"
+            className={input}
+            value={form.startTime}
+            onChange={(e) => setForm({ ...form, startTime: e.target.value })}
+          />
+        </label>
+        <label className="flex flex-col text-xs text-muted-foreground gap-1">
+          {t("hr.exc.grace")}
+          <input
+            type="number"
+            min={0}
+            max={240}
+            className={`${input} w-24`}
+            placeholder={t("hr.exc.inherit")}
+            value={form.lateGraceMinutes}
+            onChange={(e) => setForm({ ...form, lateGraceMinutes: e.target.value })}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm pb-1.5">
+          <input
+            type="checkbox"
+            checked={form.exemptFromPunch}
+            onChange={(e) => setForm({ ...form, exemptFromPunch: e.target.checked })}
+          />
+          {t("hr.exc.exempt")}
+        </label>
+        <input
+          className={input}
+          placeholder={t("hr.exc.note")}
+          value={form.note}
+          onChange={(e) => setForm({ ...form, note: e.target.value })}
+        />
+        <Button type="submit">{t("hr.exc.save")}</Button>
+      </form>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {saved && <p className="text-sm text-green-700">{saved}</p>}
+
+      <Card>
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="p-2 text-start">{t("hr.col.no")}</th>
+                <th className="p-2 text-start">{t("hr.col.name")}</th>
+                <th className="p-2 text-start">{t("hr.exc.startTime")}</th>
+                <th className="p-2 text-start">{t("hr.exc.grace")}</th>
+                <th className="p-2 text-start">{t("hr.exc.exempt")}</th>
+                <th className="p-2 text-start">{t("hr.exc.note")}</th>
+                <th className="p-2 text-start">{t("hr.att.status")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t">
+                  <td className="p-2">{r.employeeNo ?? "—"}</td>
+                  <td className="p-2">{r.employeeName ?? "—"}</td>
+                  <td className="p-2">{r.startTime ?? t("hr.exc.inherit")}</td>
+                  <td className="p-2">
+                    {r.lateGraceMinutes === null ? t("hr.exc.inherit") : r.lateGraceMinutes}
+                  </td>
+                  <td className="p-2">{r.exemptFromPunch ? "✓" : "—"}</td>
+                  <td className="p-2">{r.note ?? "—"}</td>
+                  <td className="p-2">
+                    {r.isActive ? (
+                      <button
+                        className="text-xs text-red-600 underline"
+                        onClick={() => remove(r.employeeId)}
+                      >
+                        {t("hr.exc.remove")}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">{t("hr.exc.disabled")}</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                    {t("hr.exc.none")}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function MissionsTab() {
