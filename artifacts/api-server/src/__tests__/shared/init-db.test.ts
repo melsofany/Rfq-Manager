@@ -388,4 +388,26 @@ describe("init-db migrations", () => {
         .filter(Boolean),
     ).toHaveLength(1);
   });
+
+  it("creates the missions table in its OWN statement, before any dependent write", () => {
+    // Missions excuse an absence, so the table must exist before the routes
+    // read it. Its CREATE sits in its own client.query: a sibling failure in a
+    // shared multi-statement block would roll it back silently.
+    const source = readFileSync(new URL("../../shared/init-db.ts", import.meta.url), "utf8");
+    const createIdx = source.indexOf("CREATE TABLE IF NOT EXISTS hr_missions");
+    expect(createIdx).toBeGreaterThan(-1);
+    expect(source).toContain(
+      "CREATE INDEX IF NOT EXISTS hr_missions_emp_date_idx ON hr_missions (employee_id, mission_date)",
+    );
+
+    // The CREATE must be its own statement — no other DDL sharing the literal.
+    const before = source.lastIndexOf("await client.query(", createIdx);
+    const literal = source.slice(before, source.indexOf("`);", createIdx));
+    expect(literal).not.toContain("CREATE TABLE IF NOT EXISTS hr_leave_requests");
+    expect(literal.split(";").filter((s) => /CREATE\s+TABLE/i.test(s))).toHaveLength(1);
+
+    // The missions table must be created before the leave-type seed that
+    // follows it (ordering proof that it is not stranded after a failure).
+    expect(createIdx).toBeLessThan(source.indexOf("INSERT INTO hr_leave_types"));
+  });
 });
