@@ -11,6 +11,7 @@ export const SETTING_KEYS = [
   "fines",
   "allowance_types",
   "bank_export",
+  "end_of_service",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -123,6 +124,21 @@ function validateAllowanceTypes(v: unknown): Result {
   return { value: { items } };
 }
 
+/** End-of-service rule: days of pay per year for the first years, then months per year after. */
+function validateEndOfService(v: unknown): Result {
+  if (v === null) return { value: null };
+  if (!isObj(v)) return { error: "صيغة غير صالحة" };
+  const d = optNum(v.firstYearsDays, 0, 60, "أيام الأجر لكل سنة (أول سنين)");
+  if ("error" in d || d.value === null) return { error: "أيام الأجر لكل سنة مطلوبة" };
+  const lim = optInt(v.firstYearsLimit, 0, 50, "عدد السنين الأولى");
+  if ("error" in lim || lim.value === null) return { error: "عدد السنين الأولى مطلوب" };
+  const m = optNum(v.laterMonthsPerYear, 0, 12, "الشهور لكل سنة بعد السنين الأولى");
+  if ("error" in m || m.value === null) return { error: "الشهور لكل سنة بعد السنين الأولى مطلوبة" };
+  return {
+    value: { firstYearsDays: d.value, firstYearsLimit: lim.value, laterMonthsPerYear: m.value },
+  };
+}
+
 function validateBankExport(v: unknown): Result {
   if (v === null) return { value: null };
   if (!isObj(v)) return { error: "صيغة غير صالحة" };
@@ -154,5 +170,7 @@ export function validateSetting(key: SettingKey, value: unknown): Result {
       return validateAllowanceTypes(value);
     case "bank_export":
       return validateBankExport(value);
+    case "end_of_service":
+      return validateEndOfService(value);
   }
 }

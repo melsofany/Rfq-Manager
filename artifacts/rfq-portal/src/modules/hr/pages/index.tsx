@@ -15,6 +15,7 @@ type Tab =
   | "employees"
   | "devices"
   | "payroll"
+  | "settlement"
   | "settings";
 
 interface AttendanceRow {
@@ -185,6 +186,7 @@ export default function HrPage() {
     { id: "employees", label: t("hr.tab.employees") },
     { id: "devices", label: t("hr.tab.devices") },
     { id: "payroll", label: t("hr.tab.payroll") },
+    { id: "settlement", label: t("hr.tab.settlement") },
     { id: "settings", label: t("hr.tab.settings") },
   ];
 
@@ -222,6 +224,7 @@ export default function HrPage() {
         {tab === "employees" && <EmployeesTab />}
         {tab === "devices" && <DevicesTab />}
         {tab === "payroll" && <PayrollTab />}
+        {tab === "settlement" && <SettlementTab />}
         {tab === "settings" && <SettingsTab />}
       </div>
     </Layout>
@@ -1546,6 +1549,16 @@ function SettingsTab() {
       <AbsenceCard value={data.absence as { dailyDivisor: number } | null} onSaved={load} />
       <FinesCard value={data.fines as { monthlyCapDays: number | null } | null} onSaved={load} />
       <AllowancesCard value={data.allowance_types as { items: string[] } | null} onSaved={load} />
+      <EndOfServiceCard
+        value={
+          data.end_of_service as {
+            firstYearsDays: number;
+            firstYearsLimit: number;
+            laterMonthsPerYear: number;
+          } | null
+        }
+        onSaved={load}
+      />
       <BankCard
         value={data.bank_export as { format: string | null; notes: string | null } | null}
         onSaved={load}
@@ -2123,6 +2136,279 @@ function PayrollTab() {
                   <td className="p-2 text-end">{money(totals.gross)}</td>
                   <td colSpan={4} />
                   <td className="p-2 text-end">{money(totals.net)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function EndOfServiceCard({
+  value,
+  onSaved,
+}: {
+  value: { firstYearsDays: number; firstYearsLimit: number; laterMonthsPerYear: number } | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [days, setDays] = useState(numText(value?.firstYearsDays));
+  const [limit, setLimit] = useState(numText(value?.firstYearsLimit));
+  const [months, setMonths] = useState(numText(value?.laterMonthsPerYear));
+  return (
+    <SettingCard
+      title={t("hr.set.eos")}
+      configured={!!value}
+      onSaved={onSaved}
+      onSave={() => {
+        const all = [days, limit, months].every((x) => x.trim() !== "");
+        if (!all) return saveSetting("end_of_service", null);
+        return saveSetting("end_of_service", {
+          firstYearsDays: toNum(days),
+          firstYearsLimit: toNum(limit),
+          laterMonthsPerYear: toNum(months),
+        });
+      }}
+    >
+      <p className="text-xs text-muted-foreground">{t("hr.set.eosHint")}</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.eosDays")}</span>
+          <input
+            className={setInput}
+            type="number"
+            step="0.5"
+            value={days}
+            onChange={(e) => setDays(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.eosYears")}</span>
+          <input
+            className={setInput}
+            type="number"
+            value={limit}
+            onChange={(e) => setLimit(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className={setLabel}>{t("hr.set.eosMonths")}</span>
+          <input
+            className={setInput}
+            type="number"
+            step="0.5"
+            value={months}
+            onChange={(e) => setMonths(e.target.value)}
+          />
+        </label>
+      </div>
+    </SettingCard>
+  );
+}
+
+// ---------- التسويات: خروج الموظف بالحساب النهائي ----------
+
+type SettlementRow = {
+  id: number;
+  employeeId: number;
+  name: string;
+  exitDate: string;
+  reason: string;
+  status: string;
+  total: number;
+  details: {
+    result: {
+      years: number;
+      monthlyWage: number;
+      finalSalary: number;
+      endOfService: number;
+      unusedLeaveDays: number;
+      leavePayout: number;
+      deductions: number;
+      total: number;
+    };
+  };
+};
+
+function SettlementTab() {
+  const { t } = useLanguage();
+  const [employees, setEmployees] = useState<HrEmployee[]>([]);
+  const [rows, setRows] = useState<SettlementRow[]>([]);
+  const [employeeId, setEmployeeId] = useState("");
+  const [exitDate, setExitDate] = useState(todayStr());
+  const [reason, setReason] = useState("resignation");
+  const [eligibility, setEligibility] = useState("100");
+  const [deductions, setDeductions] = useState("0");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [emps, list] = await Promise.all([
+        api<HrEmployee[]>("/hr/employees"),
+        api<SettlementRow[]>("/hr/settlements"),
+      ]);
+      setEmployees(emps.filter((e) => e.status === "active"));
+      setRows(list);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function calculate() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/hr/employees/${employeeId}/settlements`, {
+        method: "POST",
+        body: JSON.stringify({
+          exitDate,
+          reason,
+          eligibilityPct: Number(eligibility),
+          deductions: Number(deductions),
+        }),
+      });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approve(id: number) {
+    if (!window.confirm(t("hr.set.confirmSettle"))) return;
+    try {
+      await api(`/hr/settlements/${id}/approve`, { method: "POST" });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  const money = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const input = "border rounded px-2 py-1.5 bg-background text-sm w-full";
+  const draft = rows.find((r) => r.employeeId === Number(employeeId) && r.status === "draft");
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">{t("hr.set.settleHelp")}</p>
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <label className="block md:col-span-2">
+              <span className={setLabel}>{t("hr.col.name")}</span>
+              <select
+                className={input}
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+              >
+                <option value="">—</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.fullName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className={setLabel}>{t("hr.set.exitDate")}</span>
+              <input
+                className={input}
+                type="date"
+                value={exitDate}
+                onChange={(e) => setExitDate(e.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className={setLabel}>{t("hr.set.reason")}</span>
+              <select className={input} value={reason} onChange={(e) => setReason(e.target.value)}>
+                <option value="resignation">{t("hr.set.r.resignation")}</option>
+                <option value="termination">{t("hr.set.r.termination")}</option>
+                <option value="end_of_contract">{t("hr.set.r.end")}</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className={setLabel}>{t("hr.set.eligibility")}</span>
+              <input
+                className={input}
+                type="number"
+                min={0}
+                max={100}
+                value={eligibility}
+                onChange={(e) => setEligibility(e.target.value)}
+              />
+            </label>
+          </div>
+          <label className="block max-w-xs">
+            <span className={setLabel}>{t("hr.set.deductions")}</span>
+            <input
+              className={input}
+              type="number"
+              min={0}
+              step="0.01"
+              value={deductions}
+              onChange={(e) => setDeductions(e.target.value)}
+            />
+          </label>
+          <div className="flex gap-2">
+            <Button onClick={calculate} disabled={busy || !employeeId}>
+              {t("hr.set.calcSettle")}
+            </Button>
+            {draft && (
+              <Button variant="outline" onClick={() => approve(draft.id)}>
+                {t("hr.set.approveSettle")}
+              </Button>
+            )}
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="p-2 text-start">{t("hr.col.name")}</th>
+                <th className="p-2 text-start">{t("hr.set.exitDate")}</th>
+                <th className="p-2 text-end">{t("hr.set.years")}</th>
+                <th className="p-2 text-end">{t("hr.set.finalSalary")}</th>
+                <th className="p-2 text-end">{t("hr.set.eosAmount")}</th>
+                <th className="p-2 text-end">{t("hr.set.leave")}</th>
+                <th className="p-2 text-end">{t("hr.set.total")}</th>
+                <th className="p-2 text-start">{t("hr.col.status")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t">
+                  <td className="p-2">{r.name}</td>
+                  <td className="p-2">{r.exitDate}</td>
+                  <td className="p-2 text-end">{r.details.result.years}</td>
+                  <td className="p-2 text-end">{money(r.details.result.finalSalary)}</td>
+                  <td className="p-2 text-end">{money(r.details.result.endOfService)}</td>
+                  <td className="p-2 text-end">
+                    {r.details.result.unusedLeaveDays} · {money(r.details.result.leavePayout)}
+                  </td>
+                  <td className="p-2 text-end font-semibold">{money(r.total)}</td>
+                  <td className="p-2">
+                    {r.status === "approved" ? t("hr.set.approvedTag") : t("hr.pay.draft")}
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                    {t("hr.set.noSettle")}
+                  </td>
                 </tr>
               )}
             </tbody>
