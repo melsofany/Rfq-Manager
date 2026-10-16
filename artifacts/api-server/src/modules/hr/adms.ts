@@ -66,6 +66,35 @@ export function parseAttlogBody(body: string): ParsedPunch[] {
 }
 
 /**
+ * Offset of Africa/Cairo from UTC, in minutes, at the given moment.
+ * Derived from the IANA zone so DST changes are picked up automatically
+ * (UTC+2 in winter, UTC+3 during Egypt's summer DST).
+ */
+export function cairoOffsetMinutes(at: Date = new Date()): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Africa/Cairo",
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(at);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const cairoAsUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second"),
+  );
+  const utcMs = Math.floor(at.getTime() / 1000) * 1000;
+  return Math.round((cairoAsUtc - utcMs) / 60_000);
+}
+
+/**
  * Config the device expects after handshake.
  *
  * The `*Stamp` values are the high-water marks of what we already hold. This
@@ -76,6 +105,10 @@ export function parseAttlogBody(body: string): ParsedPunch[] {
  * `ServerVer`/`PushProtVer`/`SupportPing` are what newer firmware (the K14 Pro
  * generation) looks for to accept the server as a real ADMS endpoint and to
  * enable the `/iclock/ping` liveness probe. Older firmware ignores them.
+ *
+ * `TimeZone` is the offset in minutes east of UTC. Without it the firmware
+ * falls back to its factory default (GMT+8) on every reconnect, so the device
+ * clock drifts by 8 hours no matter what the operator sets locally.
  */
 export function handshakeConfig(sn: string): string {
   return [
@@ -90,6 +123,7 @@ export function handshakeConfig(sn: string): string {
     "TransFlag=1000000000",
     "Realtime=1",
     "Encrypt=None",
+    `TimeZone=${cairoOffsetMinutes()}`,
     "ServerVer=3.0.1",
     "PushProtVer=2.4.1",
     "SupportPing=1",
@@ -209,7 +243,7 @@ router.post("/iclock/cdata", rawText, async (req: Request, res: Response): Promi
       // The device pushes its own configuration / photos / templates right
       // after the handshake. We do not store them, but they MUST be
       // acknowledged or the firmware treats the server as broken and re-sends.
-      logger.info({ sn, table }, "adms: push acknowledged");
+      logger.info({ sn, table, body: body.slice(0, 2000) }, "adms: push acknowledged");
     }
 
     res.type("text/plain").send("OK");
