@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { money, fmtMoney, periodLabel } from "@/lib/format";
+import { money, fmtMoney, periodLabel, clockTime } from "@/lib/format";
 
 /**
  * Accounting figures must use Latin digits with thousands grouping. An
@@ -36,5 +36,42 @@ describe("money / fmtMoney", () => {
 describe("periodLabel", () => {
   it("keeps the Arabic month name with Latin year digits", () => {
     expect(periodLabel("2026-09")).toBe("سبتمبر 2026");
+  });
+});
+
+describe("clockTime", () => {
+  it("formats a full timestamp in 12-hour form with Latin digits", () => {
+    expect(clockTime("2026-10-16 09:05:00")).toBe("9:05 AM");
+    expect(clockTime("2026-10-16T21:30:00")).toBe("9:30 PM");
+  });
+
+  it("uses 12 for midnight and noon instead of 0", () => {
+    expect(clockTime("2026-10-16 00:00:00")).toBe("12:00 AM");
+    expect(clockTime("2026-10-16 12:00:00")).toBe("12:00 PM");
+  });
+
+  it("accepts a bare HH:MM value", () => {
+    expect(clockTime("14:45")).toBe("2:45 PM");
+    expect(clockTime("09:00")).toBe("9:00 AM");
+  });
+
+  it("marks the AM/PM boundary at 11 and 12", () => {
+    expect(clockTime("11:59")).toBe("11:59 AM");
+    expect(clockTime("12:01")).toBe("12:01 PM");
+    expect(clockTime("23:59")).toBe("11:59 PM");
+  });
+
+  it("uses a dash for absent or unparseable values", () => {
+    expect(clockTime(null)).toBe("—");
+    expect(clockTime(undefined)).toBe("—");
+    expect(clockTime("")).toBe("—");
+    expect(clockTime("not a time")).toBe("—");
+    expect(clockTime("99:99")).toBe("—");
+  });
+
+  it("never leaks a 24-hour hour into the output", () => {
+    for (const v of ["13:00", "17:30", "23:00"]) {
+      expect(clockTime(v)).not.toMatch(/^(1[3-9]|2[0-3]):/);
+    }
   });
 });
