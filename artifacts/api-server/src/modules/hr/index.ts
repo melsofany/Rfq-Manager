@@ -10,6 +10,7 @@ import leaveRouter from "./leave-routes";
 import disciplineRouter from "./discipline-routes";
 import onboardingRouter from "./onboarding-routes";
 import settingsRouter from "./settings-routes";
+import payrollRouter from "./payroll-routes";
 
 const router: IRouter = Router();
 router.use(admsRouter);
@@ -18,5 +19,6 @@ router.use(leaveRouter);
 router.use(disciplineRouter);
 router.use(onboardingRouter);
 router.use(settingsRouter);
+router.use(payrollRouter);
 
 export default router;

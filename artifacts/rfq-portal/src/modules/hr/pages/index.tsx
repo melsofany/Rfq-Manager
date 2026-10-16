@@ -7,7 +7,15 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { BankCombobox } from "@/components/BankCombobox";
 import { findBankByName } from "@/lib/egyptian-banks";
 
-type Tab = "attendance" | "onboard" | "leave" | "discipline" | "employees" | "devices" | "settings";
+type Tab =
+  | "attendance"
+  | "onboard"
+  | "leave"
+  | "discipline"
+  | "employees"
+  | "devices"
+  | "payroll"
+  | "settings";
 
 interface AttendanceRow {
   employeeId: number;
@@ -176,6 +184,7 @@ export default function HrPage() {
     { id: "discipline", label: t("hr.tab.discipline") },
     { id: "employees", label: t("hr.tab.employees") },
     { id: "devices", label: t("hr.tab.devices") },
+    { id: "payroll", label: t("hr.tab.payroll") },
     { id: "settings", label: t("hr.tab.settings") },
   ];
 
@@ -212,6 +221,7 @@ export default function HrPage() {
         {tab === "discipline" && <DisciplineTab />}
         {tab === "employees" && <EmployeesTab />}
         {tab === "devices" && <DevicesTab />}
+        {tab === "payroll" && <PayrollTab />}
         {tab === "settings" && <SettingsTab />}
       </div>
     </Layout>
@@ -1891,5 +1901,234 @@ function BankCard({
         </label>
       </div>
     </SettingCard>
+  );
+}
+
+// ---------- الرواتب: مسير شهري بالحساب والاعتماد ----------
+
+type PayslipRow = {
+  id: number;
+  employeeId: number;
+  employeeNo: string;
+  name: string;
+  basic: number;
+  allowances: number;
+  bonuses: number;
+  incentives: number;
+  deductions: number;
+  absenceDays: number;
+  absenceAmount: number;
+  finesApplied: number;
+  finesDeferred: number;
+  socialEmployee: number;
+  healthEmployee: number;
+  incomeTax: number;
+  gross: number;
+  net: number;
+};
+
+function PayrollTab() {
+  const { t } = useLanguage();
+  const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [employees, setEmployees] = useState<HrEmployee[]>([]);
+  const [absence, setAbsence] = useState<Record<string, string>>({});
+  const [run, setRun] = useState<{ id: number; status: string } | null>(null);
+  const [slips, setSlips] = useState<PayslipRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const [emps, runs] = await Promise.all([
+        api<HrEmployee[]>("/hr/employees"),
+        api<{ id: number; period: string; status: string }[]>(`/hr/payroll/runs?period=${period}`),
+      ]);
+      setEmployees(emps.filter((e) => e.status === "active"));
+      if (runs.length) {
+        const detail = await api<{ run: { id: number; status: string }; payslips: PayslipRow[] }>(
+          `/hr/payroll/runs/${runs[0].id}`,
+        );
+        setRun(detail.run);
+        setSlips(detail.payslips);
+      } else {
+        setRun(null);
+        setSlips([]);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, [period]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function calculate() {
+    setBusy(true);
+    setError(null);
+    try {
+      const absenceDays: Record<string, number> = {};
+      for (const e of employees) absenceDays[String(e.id)] = Number(absence[String(e.id)] || 0);
+      await api("/hr/payroll/runs", {
+        method: "POST",
+        body: JSON.stringify({ period, absenceDays }),
+      });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approve() {
+    if (!run) return;
+    if (!window.confirm(t("hr.pay.confirmApprove"))) return;
+    try {
+      await api(`/hr/payroll/runs/${run.id}/approve`, { method: "POST" });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function removeDraft() {
+    if (!run) return;
+    try {
+      await api(`/hr/payroll/runs/${run.id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  const money = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const totals = slips.reduce((a, s) => ({ gross: a.gross + s.gross, net: a.net + s.net }), {
+    gross: 0,
+    net: 0,
+  });
+  const input = "border rounded px-2 py-1.5 bg-background text-sm";
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">{t("hr.pay.help")}</p>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="text-xs text-muted-foreground block mb-1">{t("hr.pay.period")}</span>
+          <input
+            className={input}
+            type="month"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+          />
+        </label>
+        {run && (
+          <span className="text-xs px-2 py-1 rounded bg-muted">
+            {run.status === "approved" ? t("hr.pay.approved") : t("hr.pay.draft")}
+          </span>
+        )}
+      </div>
+
+      {run?.status !== "approved" && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <h2 className="font-semibold">{t("hr.pay.absenceTitle")}</h2>
+            <p className="text-xs text-muted-foreground">{t("hr.pay.absenceHint")}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {employees.map((e) => (
+                <label key={e.id} className="block">
+                  <span className="text-xs text-muted-foreground block mb-1">{e.fullName}</span>
+                  <input
+                    className={input + " w-full"}
+                    type="number"
+                    min={0}
+                    max={31}
+                    value={absence[String(e.id)] ?? ""}
+                    onChange={(ev) => setAbsence({ ...absence, [String(e.id)]: ev.target.value })}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={calculate} disabled={busy}>
+                {run ? t("hr.pay.recalc") : t("hr.pay.calc")}
+              </Button>
+              {run?.status === "draft" && (
+                <>
+                  <Button variant="outline" onClick={approve}>
+                    {t("hr.pay.approve")}
+                  </Button>
+                  <Button variant="outline" onClick={removeDraft}>
+                    {t("hr.pay.deleteDraft")}
+                  </Button>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      <Card>
+        <CardContent className="p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="p-2 text-start">{t("hr.col.name")}</th>
+                <th className="p-2 text-end">{t("hr.pay.basic")}</th>
+                <th className="p-2 text-end">{t("hr.pay.gross")}</th>
+                <th className="p-2 text-end">{t("hr.pay.absence")}</th>
+                <th className="p-2 text-end">{t("hr.pay.fines")}</th>
+                <th className="p-2 text-end">{t("hr.pay.insurance")}</th>
+                <th className="p-2 text-end">{t("hr.pay.tax")}</th>
+                <th className="p-2 text-end">{t("hr.pay.net")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slips.map((s) => (
+                <tr key={s.id} className="border-t">
+                  <td className="p-2">{s.name}</td>
+                  <td className="p-2 text-end">{money(s.basic)}</td>
+                  <td className="p-2 text-end">{money(s.gross)}</td>
+                  <td className="p-2 text-end">
+                    {s.absenceDays ? `${s.absenceDays} · ${money(s.absenceAmount)}` : "—"}
+                  </td>
+                  <td className="p-2 text-end">
+                    {s.finesApplied ? money(s.finesApplied) : "—"}
+                    {s.finesDeferred > 0 && (
+                      <span className="block text-xs text-amber-600">
+                        {t("hr.pay.deferred")}: {money(s.finesDeferred)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-2 text-end">{money(s.socialEmployee + s.healthEmployee)}</td>
+                  <td className="p-2 text-end">{money(s.incomeTax)}</td>
+                  <td className="p-2 text-end font-semibold">{money(s.net)}</td>
+                </tr>
+              ))}
+              {slips.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                    {t("hr.pay.empty")}
+                  </td>
+                </tr>
+              )}
+              {slips.length > 0 && (
+                <tr className="border-t font-semibold">
+                  <td className="p-2">{t("hr.pay.total")}</td>
+                  <td colSpan={1} />
+                  <td className="p-2 text-end">{money(totals.gross)}</td>
+                  <td colSpan={4} />
+                  <td className="p-2 text-end">{money(totals.net)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

@@ -2451,6 +2451,38 @@ export async function initDb(): Promise<void> {
       )
     `);
     await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_payroll_runs (
+        id SERIAL PRIMARY KEY,
+        period TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'draft',
+        settings_snapshot JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        approved_at TIMESTAMPTZ
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_payslips (
+        id SERIAL PRIMARY KEY,
+        run_id INTEGER NOT NULL,
+        employee_id INTEGER NOT NULL,
+        basic_salary NUMERIC(12,2) NOT NULL,
+        allowances NUMERIC(12,2) NOT NULL,
+        bonuses NUMERIC(12,2) NOT NULL,
+        incentives NUMERIC(12,2) NOT NULL,
+        deductions NUMERIC(12,2) NOT NULL,
+        absence_days INTEGER NOT NULL,
+        absence_amount NUMERIC(12,2) NOT NULL,
+        fines_applied NUMERIC(12,2) NOT NULL,
+        fines_deferred NUMERIC(12,2) NOT NULL,
+        social_employee NUMERIC(12,2) NOT NULL,
+        health_employee NUMERIC(12,2) NOT NULL,
+        income_tax NUMERIC(12,2) NOT NULL,
+        gross NUMERIC(12,2) NOT NULL,
+        net NUMERIC(12,2) NOT NULL
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS hr_payslips_run_idx ON hr_payslips (run_id)`);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS hr_disciplinary_cases (
         id SERIAL PRIMARY KEY,
         employee_id INTEGER NOT NULL,
