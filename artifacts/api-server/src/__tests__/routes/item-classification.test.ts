@@ -78,6 +78,18 @@ describe("item classification", () => {
     const r = classifyItem({ description: "مضخة حريق" }, CATS);
     expect(r.ambiguous).toBe(true);
     expect(r.categoryId).toBeNull();
+    // The tie must NAME the categories in doubt. A bare «could not decide» sends
+    // the reviewer back to the item to guess, which is the work the queue exists
+    // to remove.
+    expect(r.candidates?.length).toBeGreaterThanOrEqual(2);
+    expect(r.candidates?.every((c) => typeof c.name === "string" && c.name.length > 0)).toBe(true);
+  });
+
+  it("does not report candidates for a decided or unknown item", () => {
+    const decided = classifyItem({ description: "CABLE 3X2.5 MM COPPER" }, CATS);
+    expect(decided.candidates ?? []).toEqual([]);
+    const unknown = classifyItem({ description: "ZQX UNKNOWN PART 999" }, CATS);
+    expect(unknown.candidates ?? []).toEqual([]);
   });
 });
 

@@ -32,7 +32,11 @@ const customerRfqsTbl = {
   id: "id",
 };
 const rfqTable = { _: "supplierRfqs", customerRfqNo: "customerRfqNo", id: "id" };
-const itemsTable = { _: "customerRfqItems", customerRfqId: "customerRfqId" };
+const itemsTable = {
+  _: "customerRfqItems",
+  customerRfqId: "customerRfqId",
+  isCancelled: "isCancelled",
+};
 const customersTable = { _: "customers", id: "id", name: "name" };
 const employeesTbl = { _: "employees", id: "id", name: "name" };
 const auditTable = { _: "audit" };
@@ -88,6 +92,15 @@ const tables = {
   },
   itemCategoriesTable: {
     _: "itemCats",
+    id: "id",
+    name: "name",
+    isActive: "isActive",
+    kind: "kind",
+    parentId: "parentId",
+    code: "code",
+  },
+  supplierCategoriesTable: {
+    _: "supplierCats",
     id: "id",
     name: "name",
   },
@@ -176,6 +189,15 @@ const memoryInserts: any[] = [];
 let itemCategoryListRows: any[] = [];
 // Rows returned by GET /customer-rfq/unowned-categories (categories with no owner).
 let unownedCategoryRows: any[] = [];
+
+// Review queue state. `reviewCatalogueRows` is the FULL item catalogue
+// ({id,name} — the review queue loads it to resolve trade-category membership);
+// `supplierCategoryRows` is the live trade list `/suppliers` shows.
+let reviewCatalogueRows: Array<{ id: number; name: string }> = [];
+let supplierCategoryRows: Array<{ name: string }> = [];
+// The WHERE the review queue built for its item scan, so a guard can prove the
+// actionable filter is applied in SQL (not only in JS after a LIMIT).
+let reviewWhereCond: any = null;
 
 // Build an object that is BOTH thenable (awaitable directly) and exposes chain
 // methods. Each chain method returns a thenable of `value`.
@@ -274,6 +296,37 @@ const dbMock: any = {
       }
       // items list for detail (bare select).from(items).where()
       if (table === itemsTable) {
+        // The review queue's own item select — keyed on the field set that is
+        // unique to it (`classifyReason` + `customerName` + `partNo`, and NOT
+        // `isCancelled`). The mock can only see the select OBJECT, not the
+        // WHERE, so the marker must be a key combination, not a filter.
+        if (
+          arg &&
+          typeof arg === "object" &&
+          "classifyReason" in arg &&
+          "customerName" in arg &&
+          "partNo" in arg &&
+          !("isCancelled" in arg)
+        ) {
+          const list = itemCategoryListRows;
+          return chainable(list, {
+            leftJoin: vi.fn(() =>
+              chainable(list, {
+                where: vi.fn((cond: any) => {
+                  // Recorded so a guard can assert the actionable filter is
+                  // applied in SQL. A JS-only filter would let a LIMIT-bounded
+                  // page of already-fine rows hide every real review case.
+                  reviewWhereCond = cond;
+                  return chainable(list, {
+                    orderBy: vi.fn(() => chainable(list, { limit: vi.fn(() => chainable(list)) })),
+                    limit: vi.fn(() => chainable(list)),
+                  });
+                }),
+              }),
+            ),
+            where: vi.fn(() => chainable(list)),
+          });
+        }
         // «تصنيفات البنود» tab list: select({...isCancelled}).from(items)
         // .leftJoin(rfqs). Checked FIRST because the select also carries
         // categoryId, which would otherwise match the by-id branch below.
@@ -449,6 +502,21 @@ const dbMock: any = {
       }
       // Category-management: item_categories name resolution.
       if (table === (tables as any).itemCategoriesTable) {
+        // The review queue first loads the ACTIVE catalogue as {id,name,isActive}
+        // (no other query in this router selects `isActive`) to decide which
+        // categories are trade categories.
+        if (arg && typeof arg === "object" && "isActive" in arg) {
+          return chainable(reviewCatalogueRows, {
+            where: vi.fn(() => chainable(reviewCatalogueRows)),
+          });
+        }
+        // The review queue then loads the classifier's category seed
+        // ({id,name,code,kind,parentId}) — keyed on `code` + `parentId`.
+        if (arg && typeof arg === "object" && "code" in arg && "parentId" in arg && "name" in arg) {
+          return chainable(reviewCatalogueRows, {
+            where: vi.fn(() => chainable(reviewCatalogueRows)),
+          });
+        }
         // The unowned-categories report selects {id,name,itemCount} and joins
         // employee_categories via a NOT EXISTS subquery + groupBy.
         if (arg && typeof arg === "object" && "itemCount" in arg) {
@@ -477,6 +545,12 @@ const dbMock: any = {
       if (table === (tables as any).employeeCategoriesTable) {
         return chainable(ownerRows, {
           where: vi.fn(() => chainable(ownerRows)),
+        });
+      }
+      // Review queue: the live supplier-category catalogue (the trade list).
+      if (table === (tables as any).supplierCategoriesTable) {
+        return chainable(supplierCategoryRows, {
+          where: vi.fn(() => chainable(supplierCategoryRows)),
         });
       }
       // customer name resolution (select {id}).from(customers).where().limit()
@@ -592,7 +666,7 @@ vi.mock("drizzle-orm", () => ({
   isNotNull: vi.fn((c: any) => c),
   ne: vi.fn((...a: any[]) => a),
   sql: Object.assign(
-    vi.fn(() => "sql"),
+    vi.fn((strings: any, ...values: any[]) => ({ __op: "sql", strings, values })),
     { raw: vi.fn() },
   ),
 }));
@@ -609,6 +683,13 @@ beforeAll(async () => {
     next();
   });
   testApp.use("/api", customerRfqRouter);
+  // Surface a route error in the response body. Express's default handler
+  // prints the stack to stderr, which vitest swallows — a 500 then says nothing
+  // about WHY, and debugging means guessing. This keeps the message in the
+  // assertion output.
+  testApp.use((err: any, _req: any, res: any, _next: any) => {
+    res.status(500).json({ error: err?.message ?? String(err) });
+  });
 });
 
 beforeEach(() => {
@@ -659,6 +740,9 @@ beforeEach(() => {
   memoryInserts.length = 0;
   itemCategoryListRows = [];
   unownedCategoryRows = [];
+  reviewCatalogueRows = [];
+  supplierCategoryRows = [];
+  reviewWhereCond = null;
 });
 
 describe("POST /api/customer-rfq (create)", () => {
@@ -2671,5 +2755,117 @@ describe("GET /api/customer-rfq/item-categories (تصنيفات البنود tab
     const res = await request(testApp).get("/api/customer-rfq/unowned-categories");
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
+  });
+});
+
+describe("GET /api/customer-rfq/classification-review-queue (بنود تحتاج مراجعة)", () => {
+  it("lists an unclassified item with reason `unclassified`", async () => {
+    reviewCatalogueRows = [
+      { id: 3, name: "كهرباء" },
+      { id: 9, name: "أجهزة" },
+    ];
+    supplierCategoryRows = [{ name: "كهرباء" }, { name: "أجهزة" }];
+    itemCategoryListRows = [
+      {
+        id: 501,
+        partNo: "PN-1",
+        lineItem: "LI-1",
+        description: "مروحة تهوية صناعية",
+        categoryId: null,
+        classifyConfidence: null,
+        classifyReason: null,
+        customerRfqId: 7,
+        customerRfqNo: "CRFQ-2026-000007",
+        customerName: "Acme",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/classification-review-queue");
+    expect(res.status).toBe(200);
+    // With no keyword evidence at all the classifier matches nothing, so the
+    // item is reported as «غير مصنّف» rather than dropped from the queue.
+    expect(res.body.count).toBe(1);
+    expect(res.body.items[0]).toMatchObject({
+      itemId: 501,
+      reason: "unclassified",
+      categoryId: null,
+      categoryName: null,
+    });
+    expect(res.body.byReason.unclassified).toBe(1);
+  });
+
+  it("reports `category_not_in_suppliers` when the category is not a trade category", async () => {
+    reviewCatalogueRows = [{ id: 77, name: "تصنيف داخلي قديم" }];
+    supplierCategoryRows = [{ name: "كهرباء" }, { name: "أجهزة" }];
+    itemCategoryListRows = [
+      {
+        id: 502,
+        partNo: "PN-2",
+        lineItem: "LI-2",
+        description: "بند مصنَّف بتصنيف غير تجاري",
+        categoryId: 77,
+        classifyConfidence: "80",
+        classifyReason: "keyword: x",
+        customerRfqId: 7,
+        customerRfqNo: "CRFQ-2026-000008",
+        customerName: "Acme",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/classification-review-queue");
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(1);
+    expect(res.body.items[0]).toMatchObject({
+      itemId: 502,
+      reason: "category_not_in_suppliers",
+      categoryId: 77,
+      categoryName: "تصنيف داخلي قديم",
+    });
+    expect(res.body.byReason.category_not_in_suppliers).toBe(1);
+  });
+
+  it("filters the actionable set in SQL, not after the LIMIT", async () => {
+    // The defect this guards: applying `limit` to the SCAN and filtering in JS
+    // afterwards reports an empty queue whenever the newest rows happen to be
+    // fine — every real review case hides behind them. The mock cannot see a
+    // filter, so the built WHERE is asserted directly: it must carry BOTH the
+    // cancelled exclusion and the «not one of the trade categories» predicate.
+    reviewCatalogueRows = [{ id: 3, name: "كهرباء" }];
+    supplierCategoryRows = [{ name: "كهرباء" }];
+    itemCategoryListRows = [];
+    const res = await request(testApp).get("/api/customer-rfq/classification-review-queue");
+    expect(res.status).toBe(200);
+    const cond = JSON.stringify(reviewWhereCond);
+    expect(cond).not.toBe("null");
+    // `isCancelled` equality and the <> ALL(tradeCategoryIds) SQL both present.
+    expect(cond).toContain("isCancelled");
+    expect(cond).toContain("<> ALL");
+    // The portal filters its category picker with this, so it must be the ids
+    // the queue itself used — not a second, drifting computation.
+    expect(res.body.tradeCategoryIds).toEqual([3]);
+  });
+
+  it("does NOT list an item whose category IS a trade category", async () => {
+    reviewCatalogueRows = [{ id: 3, name: "كهرباء" }];
+    supplierCategoryRows = [{ name: "كهرباء" }];
+    itemCategoryListRows = [
+      {
+        id: 503,
+        partNo: "PN-3",
+        lineItem: "LI-3",
+        description: "بند مصنَّف تصنيفًا تجاريًا سليمًا",
+        categoryId: 3,
+        classifyConfidence: "90",
+        classifyReason: "keyword: cable",
+        customerRfqId: 7,
+        customerRfqNo: "CRFQ-2026-000009",
+        customerName: "Acme",
+      },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/classification-review-queue");
+    expect(res.status).toBe(200);
+    // The mock serves rows regardless of the WHERE, so the JS pass must still
+    // exclude it: a correctly-classified item under a live trade category is not
+    // actionable, and a queue that never empties is one nobody reads.
+    expect(res.body.count).toBe(0);
+    expect(res.body.items).toEqual([]);
   });
 });

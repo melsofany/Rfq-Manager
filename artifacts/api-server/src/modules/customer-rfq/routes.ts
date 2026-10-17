@@ -16,6 +16,7 @@ import {
   itemCategoriesTable,
   employeeCategoriesTable,
   customerRfqItemCategoriesTable,
+  supplierCategoriesTable,
 } from "@workspace/db";
 import { eq, ilike, inArray, desc, and, isNull, or, isNotNull, sql, ne } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
@@ -26,6 +27,8 @@ import {
   listClassificationConflicts,
 } from "../rfq/customer-assignment";
 import { rememberClassification } from "../rfq/classification-memory";
+import { classifyItem, normalizeText } from "../rfq/classification";
+import { loadClassifierVocabulary } from "../rfq/keywords";
 
 const router = Router();
 
@@ -2162,6 +2165,198 @@ router.post(
       userAgent: req.get("user-agent"),
     });
     res.json(result);
+  },
+);
+
+// GET /customer-rfq/classification-review-queue — «بنود تحتاج مراجعة»: the items
+// the automatic classifier could NOT place, so a manager decides by hand.
+//
+// The operator's rule for what belongs here is exactly three cases, and each is
+// reported with its OWN reason so the reviewer knows what to do:
+//
+//   • `unclassified` — neither the AI nor the keyword classifier produced a
+//     category (the model answered «غير معروف», or nothing scored above the
+//     confidence floor). There is nothing to confirm; the manager picks.
+//   • `ambiguous` — the keyword classifier found TWO domains scoring EQUALLY
+//     («مشتبه بين تصنيفين»). Both are named so the choice is a real one.
+//   • `category_not_in_suppliers` — the item IS classified, but its category is
+//     not a trade category in `/suppliers` (not a main and not a sub). That is a
+//     catalogue gap, not an item problem: the fix is to add the category to the
+//     supplier catalogue, and the queue says so.
+//
+// Read-only. The manager resolves a row through the EXISTING endpoints (the
+// per-item category editor / the category owners panel), so no new write path
+// and no new permission is introduced. `ambiguous` is re-derived LIVE (a free,
+// deterministic keyword pass — never a model call) so the list reflects the
+// current vocabulary; the stored reason alone would go stale after a vocabulary
+// edit and could show a stale state on a category the manager already fixed.
+router.get(
+  "/customer-rfq/classification-review-queue",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "200"), 10) || 200, 1), 500);
+
+    // Every live trade category name, in the SAME form the catalogue uses.
+    // `/suppliers` lists `supplier_categories` rows verbatim, so membership is a
+    // plain name comparison after normalisation (the catalogue's own rule).
+    const supplierNames = await db
+      .select({ name: supplierCategoriesTable.name })
+      .from(supplierCategoriesTable);
+    const tradeNames = new Set(supplierNames.map((r) => normalizeText(r.name)));
+
+    // The item categories that ARE trade categories. `limit` must bound the
+    // RESULT, not the scan: filtering in JS after a LIMIT would report an empty
+    // queue whenever the newest rows happen to be fine, hiding every real case
+    // behind them. So the actionable set is selected in SQL. The select carries
+    // `isActive` (not just id/name) so it is unambiguous among the catalogue
+    // queries this route makes.
+    const allCats = await db
+      .select({
+        id: itemCategoriesTable.id,
+        name: itemCategoriesTable.name,
+        isActive: itemCategoriesTable.isActive,
+      })
+      .from(itemCategoriesTable)
+      .where(eq(itemCategoriesTable.isActive, true));
+    const tradeCategoryIds = allCats
+      .filter((c) => tradeNames.has(normalizeText(c.name)))
+      .map((c) => c.id);
+    const catName = new Map(allCats.map((c) => [c.id, c.name]));
+
+    // Actionable = unclassified OR classified under a category that is not a
+    // trade category. A cancelled item is never actionable, so it is excluded.
+    const rows = await db
+      .select({
+        id: customerRfqItemsTable.id,
+        partNo: customerRfqItemsTable.partNo,
+        lineItem: customerRfqItemsTable.lineItem,
+        description: customerRfqItemsTable.description,
+        categoryId: customerRfqItemsTable.categoryId,
+        classifyConfidence: customerRfqItemsTable.classifyConfidence,
+        classifyReason: customerRfqItemsTable.classifyReason,
+        customerRfqId: customerRfqsTable.id,
+        customerRfqNo: customerRfqsTable.customerRfqNo,
+        customerName: customerRfqsTable.customerName,
+      })
+      .from(customerRfqItemsTable)
+      .leftJoin(customerRfqsTable, eq(customerRfqItemsTable.customerRfqId, customerRfqsTable.id))
+      .where(
+        and(
+          eq(customerRfqItemsTable.isCancelled, false),
+          // With no trade categories at all every item is actionable, so no
+          // extra predicate is applied.
+          tradeCategoryIds.length
+            ? or(
+                isNull(customerRfqItemsTable.categoryId),
+                sql`${customerRfqItemsTable.categoryId} <> ALL(${tradeCategoryIds})`,
+              )
+            : undefined,
+        ),
+      )
+      .orderBy(desc(customerRfqItemsTable.id))
+      .limit(limit);
+
+    // Only UNCLASSIFIED rows need the classifier re-run; a classified row is
+    // checked against the catalogue by name alone (no model, no scoring).
+    const unclassified = rows.filter((r) => r.categoryId == null);
+    const vocabulary = unclassified.length
+      ? await loadClassifierVocabulary().catch(() => null)
+      : null;
+    const categories = vocabulary
+      ? await db
+          .select({
+            id: itemCategoriesTable.id,
+            name: itemCategoriesTable.name,
+            code: itemCategoriesTable.code,
+            kind: itemCategoriesTable.kind,
+            parentId: itemCategoriesTable.parentId,
+          })
+          .from(itemCategoriesTable)
+          .where(eq(itemCategoriesTable.isActive, true))
+      : [];
+
+    const queue: Array<{
+      itemId: number;
+      partNo: string | null;
+      lineItem: string | null;
+      description: string | null;
+      customerRfqId: number | null;
+      customerRfqNo: string | null;
+      customerName: string | null;
+      reason: "unclassified" | "ambiguous" | "category_not_in_suppliers";
+      categoryId: number | null;
+      categoryName: string | null;
+      candidates: Array<{ id: number; name: string }>;
+      confidence: number | null;
+    }> = [];
+
+    for (const r of rows) {
+      if (r.categoryId == null) {
+        // Re-run the deterministic classifier purely to tell «nothing matched»
+        // apart from «two matched equally» — free, and it cannot invent one.
+        const verdict =
+          vocabulary && categories.length
+            ? classifyItem(r, categories, vocabulary)
+            : {
+                ambiguous: false,
+                candidates: undefined as Array<{ id: number; name: string }> | undefined,
+              };
+        queue.push({
+          itemId: r.id,
+          partNo: r.partNo,
+          lineItem: r.lineItem,
+          description: r.description,
+          customerRfqId: r.customerRfqId ?? null,
+          customerRfqNo: r.customerRfqNo ?? null,
+          customerName: r.customerName ?? null,
+          reason: verdict.ambiguous ? "ambiguous" : "unclassified",
+          categoryId: null,
+          categoryName: null,
+          candidates: verdict.candidates ?? [],
+          confidence: null,
+        });
+        continue;
+      }
+
+      // Classified — only a category missing from the supplier catalogue is a
+      // review case. An item correctly classified under a live trade category is
+      // not actionable and must NOT appear (a queue that never empties is one
+      // nobody reads).
+      const name = catName.get(r.categoryId) ?? null;
+      if (name != null && !tradeNames.has(normalizeText(name))) {
+        queue.push({
+          itemId: r.id,
+          partNo: r.partNo,
+          lineItem: r.lineItem,
+          description: r.description,
+          customerRfqId: r.customerRfqId ?? null,
+          customerRfqNo: r.customerRfqNo ?? null,
+          customerName: r.customerName ?? null,
+          reason: "category_not_in_suppliers",
+          categoryId: r.categoryId,
+          categoryName: name,
+          candidates: [],
+          confidence: r.classifyConfidence != null ? Number(r.classifyConfidence) : null,
+        });
+      }
+    }
+
+    res.json({
+      count: queue.length,
+      scanned: rows.length,
+      // The trade-membership decision, resolved by the SAME rule that built the
+      // queue. The portal filters its category picker with this instead of
+      // re-implementing the name comparison — a second implementation would
+      // drift from this one and offer a category the queue would then re-report.
+      tradeCategoryIds,
+      byReason: {
+        unclassified: queue.filter((q) => q.reason === "unclassified").length,
+        ambiguous: queue.filter((q) => q.reason === "ambiguous").length,
+        category_not_in_suppliers: queue.filter((q) => q.reason === "category_not_in_suppliers")
+          .length,
+      },
+      items: queue,
+    });
   },
 );
 

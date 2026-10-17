@@ -46,6 +46,12 @@ export interface ClassifyResult {
   /** True when two categories scored equally — treated as "unknown". */
   ambiguous: boolean;
   /**
+   * The domains that tied for the top score. Present ONLY when `ambiguous` is
+   * true, so a reviewer can see WHICH categories are in doubt instead of a bare
+   * "could not decide".
+   */
+  candidates?: Array<{ id: number; name: string }>;
+  /**
    * The subcategories (قواطع/PLC/…) whose evidence supported the chosen domain.
    * A SUGGESTION only — the subcategory never owns responsibility, so it is
    * never used to pick the employee.
@@ -456,7 +462,18 @@ export function classifyItem(
 
   if (tie) {
     // Two domains matched equally well — do not pick one. Leave unclassified.
-    return { categoryId: null, confidence: 0, matchedTerm: top.term, ambiguous: true };
+    // Every domain sharing the top score is reported so the review queue can
+    // show the manager WHICH categories are in doubt, not just that one is.
+    const tied = candidates
+      .filter((c) => c.score === top.score)
+      .map((c) => ({ id: c.category.id, name: c.category.name }));
+    return {
+      categoryId: null,
+      confidence: 0,
+      matchedTerm: top.term,
+      ambiguous: true,
+      candidates: tied,
+    };
   }
   if (top.score < MIN_CONFIDENCE) {
     return { categoryId: null, confidence: top.score, matchedTerm: top.term, ambiguous: false };
