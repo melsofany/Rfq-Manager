@@ -28,6 +28,7 @@ import {
   PENALTY_TYPES,
   ADJUSTMENT_KINDS,
   CASE_STATUSES,
+  parseDays,
 } from "./discipline-logic";
 
 const router: IRouter = Router();
@@ -224,13 +225,25 @@ router.get("/hr/pay-adjustments", async (req, res): Promise<void> => {
 router.post("/hr/pay-adjustments", async (req, res): Promise<void> => {
   const employeeId = Number(req.body?.employeeId);
   const kind = req.body?.kind;
-  const amount = parseMoney(req.body?.amount);
   const period = req.body?.period;
+  // A bonus can be a fixed amount, or a number of days of basic pay (converted at payroll time).
+  const daysRaw = req.body?.days;
+  const days =
+    daysRaw === undefined || daysRaw === null || daysRaw === "" ? null : parseDays(daysRaw);
+  if (days === undefined) {
+    res.status(400).json({ error: "عدد الأيام يجب أن يكون بين 0.5 و 31 (بنصف يوم كحد أدنى)" });
+    return;
+  }
+  if (days !== null && kind !== "bonus") {
+    res.status(400).json({ error: "عدد الأيام يُستخدم للمكافآت فقط" });
+    return;
+  }
+  const amount = days !== null ? 0 : parseMoney(req.body?.amount);
   if (!Number.isInteger(employeeId) || !(ADJUSTMENT_KINDS as readonly string[]).includes(kind)) {
     res.status(400).json({ error: "الموظف ونوع الحركة مطلوبين" });
     return;
   }
-  if (amount === null || amount <= 0) {
+  if (days === null && (amount === null || amount <= 0)) {
     res.status(400).json({ error: "المبلغ يجب أن يكون أكبر من صفر (بحد أقصى منزلتين عشريتين)" });
     return;
   }
@@ -244,7 +257,8 @@ router.post("/hr/pay-adjustments", async (req, res): Promise<void> => {
     .values({
       employeeId,
       kind,
-      amount: String(amount),
+      amount: String(amount ?? 0),
+      days: days === null ? null : String(days),
       period,
       reason: str(req.body?.reason, 500),
       caseId,

@@ -83,6 +83,15 @@ interface AttendanceException {
   note: string | null;
   isActive: boolean;
 }
+interface RewardRow {
+  id: number;
+  employeeId: number;
+  kind: string;
+  amount: string;
+  days: string | null;
+  period: string;
+  reason: string | null;
+}
 interface HrEmployee {
   id: number;
   employeeNo: string;
@@ -521,6 +530,18 @@ function EmployeesTab() {
   const [rehireDate, setRehireDate] = useState(todayStr());
   const emptyBank = { bankName: "", accountHolder: "", accountNo: "", iban: "" };
   const [bankDraft, setBankDraft] = useState(emptyBank);
+  const [salaryDraft, setSalaryDraft] = useState({ basicSalary: "", incentive: "" });
+  const [currentSalary, setCurrentSalary] = useState<{
+    basicSalary: string;
+    incentive: string;
+  } | null>(null);
+  const [rewardPeriod, setRewardPeriod] = useState(todayStr().slice(0, 7));
+  const [rewardDraft, setRewardDraft] = useState({
+    mode: "amount" as "amount" | "days",
+    value: "",
+    reason: "",
+  });
+  const [rewards, setRewards] = useState<RewardRow[]>([]);
   const [nationalDraft, setNationalDraft] = useState("");
   const [currentNational, setCurrentNational] = useState<string | null>(null);
   const [currentBank, setCurrentBank] = useState<{
@@ -536,6 +557,11 @@ function EmployeesTab() {
     setCurrentBank(null);
     setNationalDraft("");
     setCurrentNational(null);
+    setSalaryDraft({ basicSalary: "", incentive: "" });
+    setCurrentSalary(null);
+    setRewardDraft({ mode: "amount", value: "", reason: "" });
+    setRewards([]);
+    loadRewards(r.id, rewardPeriod);
     setDraft({
       fullName: r.fullName ?? "",
       jobTitle: r.jobTitle ?? "",
@@ -546,6 +572,7 @@ function EmployeesTab() {
     try {
       const file = await api<{
         profile: { nationalIdMasked: string | null } | null;
+        contracts: { basicSalary: string; incentive: string; isCurrent: boolean }[];
         bankAccounts: {
           bankName: string;
           accountHolder: string;
@@ -554,11 +581,53 @@ function EmployeesTab() {
           isPrimary: boolean;
         }[];
       }>(`/hr/employees/${r.id}/file`);
+      const cur = file.contracts.find((c) => c.isCurrent);
+      setCurrentSalary(cur ? { basicSalary: cur.basicSalary, incentive: cur.incentive } : null);
       const primary = file.bankAccounts.find((b) => b.isPrimary) ?? file.bankAccounts[0];
       setCurrentBank(primary ?? null);
       setCurrentNational(file.profile?.nationalIdMasked ?? null);
     } catch {
       setCurrentBank(null);
+    }
+  }
+
+  async function loadRewards(empId: number, period: string) {
+    try {
+      const rows = await api<RewardRow[]>(`/hr/pay-adjustments?period=${period}`);
+      setRewards(rows.filter((x) => x.employeeId === empId && x.kind === "bonus"));
+    } catch {
+      setRewards([]);
+    }
+  }
+
+  async function addReward(empId: number) {
+    try {
+      setError(null);
+      const isDays = rewardDraft.mode === "days";
+      await api("/hr/pay-adjustments", {
+        method: "POST",
+        body: JSON.stringify({
+          employeeId: empId,
+          kind: "bonus",
+          period: rewardPeriod,
+          reason: rewardDraft.reason,
+          ...(isDays ? { days: rewardDraft.value } : { amount: rewardDraft.value }),
+        }),
+      });
+      setRewardDraft({ ...rewardDraft, value: "", reason: "" });
+      loadRewards(empId, rewardPeriod);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function deleteReward(empId: number, id: number) {
+    try {
+      setError(null);
+      await api(`/hr/pay-adjustments/${id}`, { method: "DELETE" });
+      loadRewards(empId, rewardPeriod);
+    } catch (err) {
+      setError((err as Error).message);
     }
   }
 
@@ -571,6 +640,17 @@ function EmployeesTab() {
         bankDraft.accountNo,
         bankDraft.iban,
       ].some((x) => x.trim() !== "");
+      const salaryTouched =
+        salaryDraft.basicSalary.trim() !== "" || salaryDraft.incentive.trim() !== "";
+      if (salaryTouched && currentSalary) {
+        await api(`/hr/employees/${id}/salary`, {
+          method: "PUT",
+          body: JSON.stringify({
+            basicSalary: salaryDraft.basicSalary.trim() || currentSalary.basicSalary,
+            incentive: salaryDraft.incentive.trim() || currentSalary.incentive,
+          }),
+        });
+      }
       if (nationalDraft.trim() !== "") {
         await api(`/hr/employees/${id}/national-id`, {
           method: "PUT",
@@ -751,6 +831,113 @@ function EmployeesTab() {
                               />
                             </label>
                           ))}
+                        </div>
+                        <div className="mt-4 space-y-2 border-t pt-3">
+                          <h3 className="text-sm font-semibold">{t("hr.emp.salarySection")}</h3>
+                          <p className="text-xs text-muted-foreground">
+                            {currentSalary
+                              ? `${t("hr.emp.salaryCurrent")}: ${currentSalary.basicSalary} / ${currentSalary.incentive}`
+                              : t("hr.emp.salaryNone")}
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-w-md">
+                            {(["basicSalary", "incentive"] as const).map((k) => (
+                              <label key={k} className="block">
+                                <span className="text-xs text-muted-foreground block mb-1">
+                                  {k === "basicSalary" ? t("hr.emp.basic") : t("hr.emp.incentive")}
+                                </span>
+                                <input
+                                  className={input + " w-full"}
+                                  inputMode="decimal"
+                                  value={salaryDraft[k]}
+                                  onChange={(e) =>
+                                    setSalaryDraft({ ...salaryDraft, [k]: e.target.value })
+                                  }
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="mt-4 space-y-2 border-t pt-3">
+                          <h3 className="text-sm font-semibold">{t("hr.emp.rewardsSection")}</h3>
+                          <div className="flex flex-wrap gap-2 items-end">
+                            <label className="block">
+                              <span className="text-xs text-muted-foreground block mb-1">
+                                {t("hr.emp.rewardPeriod")}
+                              </span>
+                              <input
+                                type="month"
+                                className={input}
+                                value={rewardPeriod}
+                                onChange={(e) => {
+                                  setRewardPeriod(e.target.value);
+                                  loadRewards(r.id, e.target.value);
+                                }}
+                              />
+                            </label>
+                            <select
+                              className={input}
+                              value={rewardDraft.mode}
+                              onChange={(e) =>
+                                setRewardDraft({
+                                  ...rewardDraft,
+                                  mode: e.target.value as "amount" | "days",
+                                })
+                              }
+                            >
+                              <option value="amount">{t("hr.emp.rewardByAmount")}</option>
+                              <option value="days">{t("hr.emp.rewardByDays")}</option>
+                            </select>
+                            <input
+                              className={input + " w-28"}
+                              inputMode="decimal"
+                              placeholder={
+                                rewardDraft.mode === "days"
+                                  ? t("hr.emp.rewardDays")
+                                  : t("hr.emp.rewardAmount")
+                              }
+                              value={rewardDraft.value}
+                              onChange={(e) =>
+                                setRewardDraft({ ...rewardDraft, value: e.target.value })
+                              }
+                            />
+                            <input
+                              className={input + " flex-1 min-w-40"}
+                              placeholder={t("hr.emp.rewardReason")}
+                              value={rewardDraft.reason}
+                              onChange={(e) =>
+                                setRewardDraft({ ...rewardDraft, reason: e.target.value })
+                              }
+                            />
+                            <Button size="sm" type="button" onClick={() => addReward(r.id)}>
+                              {t("hr.emp.rewardAdd")}
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{t("hr.emp.rewardHint")}</p>
+                          <ul className="text-sm space-y-1">
+                            {rewards.map((x) => (
+                              <li key={x.id} className="flex items-center gap-2">
+                                <span>
+                                  {x.days !== null
+                                    ? `${Number(x.days)} ${t("hr.emp.rewardDaysUnit")}`
+                                    : x.amount}
+                                </span>
+                                {x.reason && (
+                                  <span className="text-muted-foreground">· {x.reason}</span>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  type="button"
+                                  onClick={() => deleteReward(r.id, x.id)}
+                                >
+                                  {t("hr.emp.rewardDelete")}
+                                </Button>
+                              </li>
+                            ))}
+                            {rewards.length === 0 && (
+                              <li className="text-muted-foreground">{t("hr.emp.rewardNone")}</li>
+                            )}
+                          </ul>
                         </div>
                         <div className="mt-4 space-y-2 border-t pt-3">
                           <h3 className="text-sm font-semibold">{t("hr.emp.nationalSection")}</h3>
