@@ -22,7 +22,7 @@ export interface PayrollSettings {
     capAmount: number | null;
   } | null;
   tax: { brackets: { upTo: number | null; ratePct: number }[] } | null;
-  absence: { dailyDivisor: number } | null;
+  absence: { dailyDivisor: number; weeklyOffDays: number[] } | null;
   fines: { monthlyCapDays: number | null } | null;
 }
 
@@ -32,8 +32,37 @@ export function missingPayrollSettings(s: PayrollSettings): string[] {
   if (!s.social || s.social.employeeRatePct === null) missing.push("social_insurance");
   if (!s.health || s.health.employeeRatePct === null) missing.push("health_insurance");
   if (!s.tax || !s.tax.brackets.length) missing.push("income_tax");
-  if (!s.absence) missing.push("absence");
+  if (!s.absence || !Array.isArray(s.absence.weeklyOffDays)) missing.push("absence");
   return missing;
+}
+
+/**
+ * Calendar dates of a payroll month on which an employee could be absent:
+ * from the later of the 1st and the hire date, up to the earlier of the last day
+ * and today (future days are not counted yet), skipping the weekly day(s) off.
+ * Dates are YYYY-MM-DD; weekday is taken in UTC so the result is timezone-stable.
+ */
+export function absenceDates(
+  period: string,
+  hireDate: string | null,
+  todayYmd: string,
+  weeklyOffDays: number[],
+): string[] {
+  const [y, m] = period.split("-").map(Number);
+  const monthStart = `${period}-01`;
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const monthEnd = `${period}-${String(lastDay).padStart(2, "0")}`;
+  const from = hireDate && hireDate > monthStart ? hireDate : monthStart;
+  const to = todayYmd < monthEnd ? todayYmd : monthEnd;
+  const out: string[] = [];
+  if (from > to) return out;
+  const cursor = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  while (cursor <= end) {
+    if (!weeklyOffDays.includes(cursor.getUTCDay())) out.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return out;
 }
 
 export const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;

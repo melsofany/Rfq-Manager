@@ -259,13 +259,21 @@ export async function loadWorkShift(): Promise<WorkShift | null> {
   };
 }
 
-router.get("/hr/attendance", async (req, res): Promise<void> => {
-  const date = String(req.query.date ?? "");
+export type AttendanceOutcome =
+  { ok: true; body: Record<string, unknown> } | { ok: false; error: string };
+
+/**
+ * Attendance for one calendar date. The single source of the absence rule:
+ * the attendance screen and the monthly payroll both call this.
+ */
+export async function buildAttendance(
+  date: string,
+  requestedShiftStart: string | undefined,
+): Promise<AttendanceOutcome> {
   const configured = await loadWorkShift();
-  const shiftStart = String(req.query.shiftStart ?? configured?.start ?? "09:00");
+  const shiftStart = String(requestedShiftStart ?? configured?.start ?? "09:00");
   if (!DATE_RE.test(date) || !TIME_RE.test(shiftStart)) {
-    res.status(400).json({ error: "تاريخ أو وقت الوردية غير صالح" });
-    return;
+    return { ok: false, error: "تاريخ أو وقت الوردية غير صالح" };
   }
   const next = new Date(`${date}T00:00:00Z`);
   next.setUTCDate(next.getUTCDate() + 1);
@@ -402,21 +410,36 @@ router.get("/hr/attendance", async (req, res): Promise<void> => {
     };
   });
 
-  res.json({
-    date,
-    shiftStart,
-    shiftEnd: configured?.end ?? null,
-    lateGraceMinutes: graceMin,
-    totals: {
-      employees: rows.length,
-      present: rows.filter((r) => !r.absent).length,
-      absent: rows.filter((r) => r.absent).length,
-      onLeave: rows.filter((r) => r.onLeave).length,
-      onMission: rows.filter((r) => r.onMission).length,
-      late: rows.filter((r) => r.lateMinutes > 0).length,
+  return {
+    ok: true,
+    body: {
+      date,
+      shiftStart,
+      shiftEnd: configured?.end ?? null,
+      lateGraceMinutes: graceMin,
+      totals: {
+        employees: rows.length,
+        present: rows.filter((r) => !r.absent).length,
+        absent: rows.filter((r) => r.absent).length,
+        onLeave: rows.filter((r) => r.onLeave).length,
+        onMission: rows.filter((r) => r.onMission).length,
+        late: rows.filter((r) => r.lateMinutes > 0).length,
+      },
+      rows,
     },
-    rows,
-  });
+  };
+}
+
+router.get("/hr/attendance", async (req, res): Promise<void> => {
+  const outcome = await buildAttendance(
+    String(req.query.date ?? ""),
+    req.query.shiftStart ? String(req.query.shiftStart) : undefined,
+  );
+  if (!outcome.ok) {
+    res.status(400).json({ error: outcome.error });
+    return;
+  }
+  res.json(outcome.body);
 });
 
 router.get("/hr/punches/recent", async (req, res): Promise<void> => {
