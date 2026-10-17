@@ -2889,6 +2889,13 @@ type PayslipRow = {
   net: number;
 };
 
+const MISSING_SETTING_KEYS: Record<string, string> = {
+  social_insurance: "hr.pay.missing.social",
+  health_insurance: "hr.pay.missing.health",
+  income_tax: "hr.pay.missing.tax",
+  absence: "hr.pay.missing.absence",
+};
+
 function PayrollTab() {
   const { t } = useLanguage();
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
@@ -2896,6 +2903,7 @@ function PayrollTab() {
   const [run, setRun] = useState<{ id: number; status: string } | null>(null);
   const [slips, setSlips] = useState<PayslipRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [missingNote, setMissingNote] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -2929,10 +2937,11 @@ function PayrollTab() {
     setBusy(true);
     setError(null);
     try {
-      await api("/hr/payroll/runs", {
+      const res = await api<{ missingSettings?: string[] }>("/hr/payroll/runs", {
         method: "POST",
         body: JSON.stringify({ period }),
       });
+      setMissingNote(res.missingSettings ?? []);
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -3023,6 +3032,12 @@ function PayrollTab() {
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {missingNote.length > 0 && (
+        <p className="text-sm text-amber-700">
+          {t("hr.pay.missingNote")}:{" "}
+          {missingNote.map((k) => t(MISSING_SETTING_KEYS[k] ?? "hr.pay.missing.other")).join("، ")}
+        </p>
+      )}
 
       <Card>
         <CardContent className="p-0 overflow-x-auto">

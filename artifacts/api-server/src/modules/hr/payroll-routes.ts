@@ -26,6 +26,7 @@ import { buildAttendance } from "./routes";
 import {
   computePayslip,
   missingPayrollSettings,
+  withMissingPayrollSettingsAsDefaults,
   absenceDates,
   round2,
   type PayrollSettings,
@@ -179,12 +180,10 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
     res.status(400).json({ error: "الفترة يجب أن تكون YYYY-MM" });
     return;
   }
-  const { settings, raw } = await loadSettings();
-  const missing = missingPayrollSettings(settings);
-  if (missing.length) {
-    res.status(400).json({ error: "إعدادات ناقصة قبل الحساب", missing });
-    return;
-  }
+  const { settings: stored, raw } = await loadSettings();
+  // Missing settings don't block the run anymore; they count as defaults and the run records them.
+  const missingSettings = missingPayrollSettings(stored);
+  const settings = withMissingPayrollSettingsAsDefaults(stored);
 
   const employees = await db
     .select({
@@ -285,7 +284,11 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
       }
       const [created] = await tx
         .insert(hrPayrollRunsTable)
-        .values({ period, status: "draft", settingsSnapshot: raw })
+        .values({
+          period,
+          status: "draft",
+          settingsSnapshot: { ...raw, missingAtRun: missingSettings },
+        })
         .returning();
       await tx.insert(hrPayslipsTable).values(
         rows.map(({ employeeId, calc }) => ({
@@ -309,7 +312,13 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
       );
       return created;
     });
-    res.status(201).json({ id: run.id, period, status: "draft", employees: rows.length });
+    res.status(201).json({
+      id: run.id,
+      period,
+      status: "draft",
+      employees: rows.length,
+      missingSettings,
+    });
   } catch (err) {
     if (err instanceof PayrollRejected) {
       res.status(409).json({ error: err.message });

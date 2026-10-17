@@ -37,6 +37,22 @@ export function missingPayrollSettings(s: PayrollSettings): string[] {
 }
 
 /**
+ * Fill settings that are still missing, so a payroll run can go ahead while HR finishes them.
+ * Missing insurance rates count as 0%, missing tax brackets as no tax, and missing absence
+ * settings fall back to Friday as the weekly day off and a 30-day divisor.
+ * The caller records which settings were missing so the run can show it.
+ */
+export function withMissingPayrollSettingsAsDefaults(s: PayrollSettings): PayrollSettings {
+  return {
+    social: s.social ?? { employeeRatePct: 0, employerRatePct: 0, capAmount: null },
+    health: s.health ?? { employeeRatePct: 0, employerRatePct: 0, capAmount: null },
+    tax: s.tax ?? { brackets: [] },
+    absence: s.absence ?? { dailyDivisor: 30, weeklyOffDays: [5] },
+    fines: s.fines,
+  };
+}
+
+/**
  * Calendar dates of a payroll month on which an employee could be absent:
  * from the later of the 1st and the hire date, up to the earlier of the last day
  * and today (future days are not counted yet), skipping the weekly day(s) off.

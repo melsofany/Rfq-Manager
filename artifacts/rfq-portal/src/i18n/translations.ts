@@ -47,6 +47,13 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.day.4": "Thursday",
     "hr.day.5": "Friday",
     "hr.day.6": "Saturday",
+    "hr.pay.missingNote":
+      "Calculated with missing settings counted as defaults (to be completed in Settings)",
+    "hr.pay.missing.social": "social insurance (0%)",
+    "hr.pay.missing.health": "health insurance (0%)",
+    "hr.pay.missing.tax": "income tax (no tax)",
+    "hr.pay.missing.absence": "absence (Friday off, divisor 30)",
+    "hr.pay.missing.other": "other",
     "hr.pay.absenceAuto":
       "Absence days are calculated automatically from attendance (after hire date, excluding weekly days off and future days). Set the weekly day off in Settings → Absence.",
     "hr.set.workShift": "Work shift",
@@ -769,6 +776,13 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.day.4": "الخميس",
     "hr.day.5": "الجمعة",
     "hr.day.6": "السبت",
+    "hr.pay.missingNote":
+      "اتحسب الرواتب والإعدادات الناقصة اعتبرت افتراضية (لازم تتكمل من الإعدادات)",
+    "hr.pay.missing.social": "التأمينات الاجتماعية (0%)",
+    "hr.pay.missing.health": "التأمين الصحي (0%)",
+    "hr.pay.missing.tax": "ضريبة الدخل (بدون ضريبة)",
+    "hr.pay.missing.absence": "الغياب (الجمعة إجازة، مقسوم 30)",
+    "hr.pay.missing.other": "أخرى",
     "hr.pay.absenceAuto":
       "أيام الغياب بتتحسب تلقائياً من الحضور (من تاريخ التعيين، ومن غير الإجازة الأسبوعية ولا الأيام الجاية). الإجازة الأسبوعية بتتحدد من الإعدادات ← الغياب.",
     "hr.set.workShift": "وقت العمل",
