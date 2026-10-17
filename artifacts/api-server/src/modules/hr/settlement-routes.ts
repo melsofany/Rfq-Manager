@@ -23,7 +23,9 @@ import { requireHr } from "./routes";
 import { isValidYmd, daysInYear, remainingBalance } from "./leave-logic";
 import {
   computeSettlement,
+  eligibilityForYears,
   EXIT_REASONS,
+  serviceYears,
   type EndOfServiceRule,
   type ExitReason,
 } from "./settlement-logic";
@@ -86,7 +88,6 @@ router.post("/hr/employees/:id/settlements", async (req, res): Promise<void> => 
     res.status(400).json({ error: "إعدادات ناقصة قبل التسوية", missing });
     return;
   }
-  const eligibilityPct = overridePct ?? eos!.eligibilityByReason[reason];
   const eligibilitySource = overridePct === null ? "setting" : "manual";
 
   const [emp] = await db
@@ -120,6 +121,12 @@ router.post("/hr/employees/:id/settlements", async (req, res): Promise<void> => 
     res.status(400).json({ error: "الموظف مالوش عقد حالي" });
     return;
   }
+  // Share comes from the exit reason's band for this service length, unless HR entered an override.
+  const band = eligibilityForYears(
+    eos!.eligibilityByReason[reason],
+    serviceYears(emp.hireDate, exitDate),
+  );
+  const eligibilityPct = overridePct ?? band.pct;
 
   // رصيد الإجازة السنوية المتبقي في سنة الخروج
   const year = Number(exitDate.slice(0, 4));
@@ -205,7 +212,12 @@ router.post("/hr/employees/:id/settlements", async (req, res): Promise<void> => 
         details: {
           inputs,
           result,
-          settingsUsed: { absence, endOfService: eos, eligibilitySource },
+          settingsUsed: {
+            absence,
+            endOfService: eos,
+            eligibilitySource,
+            eligibilityBandFromYears: band.fromYears,
+          },
         },
       })
       .returning();

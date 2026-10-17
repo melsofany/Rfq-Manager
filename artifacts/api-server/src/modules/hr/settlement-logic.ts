@@ -15,8 +15,8 @@ export interface EndOfServiceRule {
   firstYearsDays: number;
   firstYearsLimit: number;
   laterMonthsPerYear: number;
-  /** Share of the entitlement (0–100) for each exit reason, set by HR in Settings. */
-  eligibilityByReason: Record<ExitReason, number>;
+  /** Per exit reason: bands of service years and the share of the entitlement (0–100). Set in Settings. */
+  eligibilityByReason: Record<ExitReason, { fromYears: number; pct: number }[]>;
 }
 
 export type ExitReason = "resignation" | "termination" | "end_of_contract";
@@ -33,6 +33,16 @@ const toUtc = (ymd: string) => Date.parse(`${ymd}T00:00:00Z`);
 export function serviceYears(hireYmd: string, exitYmd: string): number {
   const days = Math.round((toUtc(exitYmd) - toUtc(hireYmd)) / DAY_MS);
   return Math.max(0, days) / 365;
+}
+
+/** Share (0–100) of the entitlement for a service length, from the reason's bands. */
+export function eligibilityForYears(
+  bands: { fromYears: number; pct: number }[],
+  years: number,
+): { pct: number; fromYears: number } {
+  let chosen = bands[0];
+  for (const b of bands) if (b.fromYears <= years && b.fromYears >= chosen.fromYears) chosen = b;
+  return { pct: chosen.pct, fromYears: chosen.fromYears };
 }
 
 export function endOfServiceAmount(

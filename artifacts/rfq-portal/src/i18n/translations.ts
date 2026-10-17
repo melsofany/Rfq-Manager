@@ -148,6 +148,12 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.set.r.end": "End of contract",
     "hr.set.eosByReason": "Eligibility by exit reason",
     "hr.set.eosResignation": "Resignation",
+    "hr.set.eosBandsHint":
+      "Each reason has bands by years of service. A band applies from its start year onward, so the first band must start at 0. Enter the percentages from the official text or your accountant's review.",
+    "hr.set.eosFromYears": "From year",
+    "hr.set.eosPct": "Eligibility %",
+    "hr.set.eosAddBand": "Add band",
+    "hr.set.eosRemoveBand": "Remove",
     "hr.set.eosTermination": "Dismissal by the company",
     "hr.set.eosContract": "End of contract",
     "hr.set.eosByReasonHint":
@@ -863,6 +869,12 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.set.r.end": "انتهاء العقد",
     "hr.set.eosByReason": "نسبة الاستحقاق حسب سبب الخروج",
     "hr.set.eosResignation": "استقالة",
+    "hr.set.eosBandsHint":
+      "لكل سبب شرائح حسب سنين الخدمة. الشريحة بتنطبق من سنة البداية وبعدها، ولازم أول شريحة تبدأ من 0. الأرقام تتدخل من المحاسب بعد مراجعة النص الرسمي.",
+    "hr.set.eosFromYears": "من سنة",
+    "hr.set.eosPct": "نسبة الاستحقاق %",
+    "hr.set.eosAddBand": "إضافة شريحة",
+    "hr.set.eosRemoveBand": "حذف",
     "hr.set.eosTermination": "فصل من الشركة",
     "hr.set.eosContract": "انتهاء العقد",
     "hr.set.eosByReasonHint":

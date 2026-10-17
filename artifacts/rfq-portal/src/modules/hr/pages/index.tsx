@@ -3086,39 +3086,62 @@ function PayrollTab() {
 }
 
 /** End-of-service rule as stored in Settings. */
+type EosBand = { fromYears: number; pct: number };
 type EosRule = {
   firstYearsDays: number;
   firstYearsLimit: number;
   laterMonthsPerYear: number;
-  eligibilityByReason: { resignation: number; termination: number; end_of_contract: number };
+  eligibilityByReason: Record<"resignation" | "termination" | "end_of_contract", EosBand[]>;
 };
+type EosBandRow = { fromYears: string; pct: string };
+type EosReason = "resignation" | "termination" | "end_of_contract";
+const EOS_REASONS: EosReason[] = ["resignation", "termination", "end_of_contract"];
+
+function bandRowsFrom(bands: EosBand[] | undefined): EosBandRow[] {
+  if (!bands || bands.length === 0) return [{ fromYears: "0", pct: "" }];
+  return bands.map((b) => ({ fromYears: numText(b.fromYears), pct: numText(b.pct) }));
+}
 
 function EndOfServiceCard({ value, onSaved }: { value: EosRule | null; onSaved: () => void }) {
   const { t } = useLanguage();
   const [days, setDays] = useState(numText(value?.firstYearsDays));
   const [limit, setLimit] = useState(numText(value?.firstYearsLimit));
   const [months, setMonths] = useState(numText(value?.laterMonthsPerYear));
-  const [pct, setPct] = useState({
-    resignation: numText(value?.eligibilityByReason?.resignation),
-    termination: numText(value?.eligibilityByReason?.termination),
-    end_of_contract: numText(value?.eligibilityByReason?.end_of_contract),
+  const [bands, setBands] = useState<Record<EosReason, EosBandRow[]>>({
+    resignation: bandRowsFrom(value?.eligibilityByReason?.resignation),
+    termination: bandRowsFrom(value?.eligibilityByReason?.termination),
+    end_of_contract: bandRowsFrom(value?.eligibilityByReason?.end_of_contract),
   });
+  const setReasonRows = (k: EosReason, rows: EosBandRow[]) =>
+    setBands((prev) => ({ ...prev, [k]: rows }));
+
+  // A reason is complete when every band has numbers and one band starts at 0 years.
+  const reasonComplete = (rows: EosBandRow[]) =>
+    rows.every((r) => r.fromYears.trim() !== "" && r.pct.trim() !== "") &&
+    rows.some((r) => toNum(r.fromYears) === 0);
+
   return (
     <SettingCard
       title={t("hr.set.eos")}
       configured={!!value}
       onSaved={onSaved}
       onSave={() => {
-        const all = [days, limit, months, ...Object.values(pct)].every((x) => x.trim() !== "");
+        const all =
+          [days, limit, months].every((x) => x.trim() !== "") &&
+          EOS_REASONS.every((k) => reasonComplete(bands[k]));
         if (!all) return saveSetting("end_of_service", null);
+        const toBands = (rows: EosBandRow[]) =>
+          rows
+            .map((r) => ({ fromYears: Number(r.fromYears), pct: Number(r.pct) }))
+            .sort((a, b) => a.fromYears - b.fromYears);
         return saveSetting("end_of_service", {
           firstYearsDays: toNum(days),
           firstYearsLimit: toNum(limit),
           laterMonthsPerYear: toNum(months),
           eligibilityByReason: {
-            resignation: toNum(pct.resignation),
-            termination: toNum(pct.termination),
-            end_of_contract: toNum(pct.end_of_contract),
+            resignation: toBands(bands.resignation),
+            termination: toBands(bands.termination),
+            end_of_contract: toBands(bands.end_of_contract),
           },
         });
       }}
@@ -3155,30 +3178,79 @@ function EndOfServiceCard({ value, onSaved }: { value: EosRule | null; onSaved: 
           />
         </label>
       </div>
-      <div className="space-y-2 pt-2">
+      <div className="space-y-4 pt-2">
         <span className={setLabel}>{t("hr.set.eosByReason")}</span>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {(
-            [
-              ["resignation", t("hr.set.eosResignation")],
-              ["termination", t("hr.set.eosTermination")],
-              ["end_of_contract", t("hr.set.eosContract")],
-            ] as const
-          ).map(([k, label]) => (
-            <label key={k} className="block">
-              <span className="text-xs text-muted-foreground block mb-1">{label} (%)</span>
-              <input
-                className={setInput}
-                type="number"
-                min={0}
-                max={100}
-                value={pct[k]}
-                onChange={(e) => setPct({ ...pct, [k]: e.target.value })}
-              />
-            </label>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">{t("hr.set.eosByReasonHint")}</p>
+        <p className="text-xs text-muted-foreground">{t("hr.set.eosBandsHint")}</p>
+        {(
+          [
+            ["resignation", t("hr.set.eosResignation")],
+            ["termination", t("hr.set.eosTermination")],
+            ["end_of_contract", t("hr.set.eosContract")],
+          ] as const
+        ).map(([k, label]) => (
+          <div key={k} className="rounded-md border p-3 space-y-2">
+            <div className="text-sm font-medium">{label}</div>
+            {bands[k].map((row, i) => (
+              <div key={i} className="flex items-end gap-2">
+                <label className="block flex-1">
+                  <span className="text-xs text-muted-foreground block mb-1">
+                    {t("hr.set.eosFromYears")}
+                  </span>
+                  <input
+                    className={setInput}
+                    type="number"
+                    min={0}
+                    value={row.fromYears}
+                    onChange={(e) =>
+                      setReasonRows(
+                        k,
+                        bands[k].map((r, j) => (j === i ? { ...r, fromYears: e.target.value } : r)),
+                      )
+                    }
+                  />
+                </label>
+                <label className="block flex-1">
+                  <span className="text-xs text-muted-foreground block mb-1">
+                    {t("hr.set.eosPct")}
+                  </span>
+                  <input
+                    className={setInput}
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={row.pct}
+                    onChange={(e) =>
+                      setReasonRows(
+                        k,
+                        bands[k].map((r, j) => (j === i ? { ...r, pct: e.target.value } : r)),
+                      )
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="text-xs text-destructive px-2 py-2"
+                  disabled={bands[k].length === 1}
+                  onClick={() =>
+                    setReasonRows(
+                      k,
+                      bands[k].filter((_, j) => j !== i),
+                    )
+                  }
+                >
+                  {t("hr.set.eosRemoveBand")}
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="text-xs text-primary"
+              onClick={() => setReasonRows(k, [...bands[k], { fromYears: "", pct: "" }])}
+            >
+              + {t("hr.set.eosAddBand")}
+            </button>
+          </div>
+        ))}
       </div>
     </SettingCard>
   );
