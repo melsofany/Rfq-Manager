@@ -521,6 +521,8 @@ function EmployeesTab() {
   const [rehireDate, setRehireDate] = useState(todayStr());
   const emptyBank = { bankName: "", accountHolder: "", accountNo: "", iban: "" };
   const [bankDraft, setBankDraft] = useState(emptyBank);
+  const [nationalDraft, setNationalDraft] = useState("");
+  const [currentNational, setCurrentNational] = useState<string | null>(null);
   const [currentBank, setCurrentBank] = useState<{
     bankName: string;
     accountHolder: string;
@@ -532,6 +534,8 @@ function EmployeesTab() {
     setEditId(r.id);
     setBankDraft(emptyBank);
     setCurrentBank(null);
+    setNationalDraft("");
+    setCurrentNational(null);
     setDraft({
       fullName: r.fullName ?? "",
       jobTitle: r.jobTitle ?? "",
@@ -541,6 +545,7 @@ function EmployeesTab() {
     });
     try {
       const file = await api<{
+        profile: { nationalIdMasked: string | null } | null;
         bankAccounts: {
           bankName: string;
           accountHolder: string;
@@ -551,6 +556,7 @@ function EmployeesTab() {
       }>(`/hr/employees/${r.id}/file`);
       const primary = file.bankAccounts.find((b) => b.isPrimary) ?? file.bankAccounts[0];
       setCurrentBank(primary ?? null);
+      setCurrentNational(file.profile?.nationalIdMasked ?? null);
     } catch {
       setCurrentBank(null);
     }
@@ -565,6 +571,12 @@ function EmployeesTab() {
         bankDraft.accountNo,
         bankDraft.iban,
       ].some((x) => x.trim() !== "");
+      if (nationalDraft.trim() !== "") {
+        await api(`/hr/employees/${id}/national-id`, {
+          method: "PUT",
+          body: JSON.stringify({ nationalId: nationalDraft.trim() }),
+        });
+      }
       if (
         bankTouched &&
         (!bankDraft.bankName || !bankDraft.accountHolder || !bankDraft.accountNo)
@@ -739,6 +751,26 @@ function EmployeesTab() {
                               />
                             </label>
                           ))}
+                        </div>
+                        <div className="mt-4 space-y-2 border-t pt-3">
+                          <h3 className="text-sm font-semibold">{t("hr.emp.nationalSection")}</h3>
+                          <p className="text-xs text-muted-foreground">
+                            {currentNational
+                              ? `${t("hr.emp.nationalCurrent")}: ${currentNational}`
+                              : t("hr.emp.nationalNone")}
+                          </p>
+                          <label className="block max-w-sm">
+                            <span className="text-xs text-muted-foreground block mb-1">
+                              {t("hr.emp.nationalNew")}
+                            </span>
+                            <input
+                              className={input + " w-full"}
+                              inputMode="numeric"
+                              maxLength={14}
+                              value={nationalDraft}
+                              onChange={(e) => setNationalDraft(e.target.value.replace(/\D/g, ""))}
+                            />
+                          </label>
                         </div>
                         <div className="mt-4 space-y-2 border-t pt-3">
                           <h3 className="text-sm font-semibold">{t("hr.emp.bankSection")}</h3>
