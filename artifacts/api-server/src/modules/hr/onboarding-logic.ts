@@ -7,6 +7,25 @@ export function isValidNationalId(v: string): boolean {
   return /^\d{14}$/.test(v);
 }
 
+/**
+ * Birth date (YYYY-MM-DD) read from an Egyptian national ID:
+ * digit 1 = century (2 → 1900s, 3 → 2000s), digits 2–3 = year, 4–5 = month, 6–7 = day.
+ * Returns null when the ID is malformed or the encoded date does not exist.
+ */
+export function birthDateFromNationalId(v: string): string | null {
+  if (!isValidNationalId(v)) return null;
+  const century = v[0] === "2" ? 1900 : v[0] === "3" ? 2000 : null;
+  if (century === null) return null;
+  const year = century + Number(v.slice(1, 3));
+  const month = Number(v.slice(3, 5));
+  const day = Number(v.slice(5, 7));
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) {
+    return null;
+  }
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 /** Egyptian IBAN: "EG" + 27 digits (29 characters). */
 export function isValidEgyptianIban(v: string): boolean {
   return /^EG\d{27}$/.test(v.replace(/\s+/g, "").toUpperCase());
