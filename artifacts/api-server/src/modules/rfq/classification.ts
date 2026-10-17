@@ -592,6 +592,21 @@ const STOPWORDS = new Set(
     "spare",
     "spares",
     "supply",
+    // Generic dimension / descriptor words: they describe a size or a
+    // general-purpose item, never a domain, so they must not become rules.
+    "diameter",
+    "length",
+    "width",
+    "height",
+    "thickness",
+    "general",
+    "genral",
+    "generic",
+    "standard",
+    "pack",
+    "packing",
+    "color",
+    "colour",
     // Arabic generic words (normalised: ة→ه, ى→ي, أإآ→ا)
     "بند",
     "صنف",
@@ -638,7 +653,10 @@ function isBrandTerm(term: string, brandTerms: Set<string>): boolean {
 export function extractLearnableTerms(input: ClassifyInput, brandNames: string[] = []): string[] {
   const brandTerms = new Set(brandNames.map((b) => normalizeText(b)).filter(Boolean));
   const out = new Set<string>();
-  for (const raw of [input.description, input.partNo, input.lineItem]) {
+  // The line item is an internal ERP label (e.g. «5730.021.GENRAL.0702»): it
+  // names a ledger position, not the product, so its words must never be
+  // learned as keywords. Only the product's own text is a valid source.
+  for (const raw of [input.description, input.partNo]) {
     if (raw == null) continue;
     // Split the raw text too: `normalizeText` collapses everything to spaces, so
     // a part number's own letters ("SFCTR3P30") stay a single learnable token.
