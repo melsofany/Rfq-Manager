@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeSettlement,
+  eligibilityForYears,
   endOfServiceAmount,
   serviceYears,
   finalSalaryAmount,
@@ -11,7 +12,16 @@ const rule = {
   firstYearsDays: 15,
   firstYearsLimit: 5,
   laterMonthsPerYear: 1,
-  eligibilityByReason: { resignation: 50, termination: 100, end_of_contract: 100 },
+  eligibilityByReason: {
+    resignation: [
+      { fromYears: 0, pct: 0 },
+      { fromYears: 3, pct: 33.33 },
+      { fromYears: 5, pct: 66.67 },
+      { fromYears: 10, pct: 100 },
+    ],
+    termination: [{ fromYears: 0, pct: 100 }],
+    end_of_contract: [{ fromYears: 0, pct: 100 }],
+  },
 };
 
 describe("settlement math", () => {
@@ -82,23 +92,67 @@ describe("end_of_service setting validator", () => {
   it("refuses an incomplete rule", () => {
     expect(validateSetting("end_of_service", { firstYearsDays: 15 })).toHaveProperty("error");
   });
-  it("requires an eligibility percentage for every exit reason", () => {
+  it("requires bands for every exit reason, starting at 0 years, with valid percentages", () => {
     const { eligibilityByReason: _omit, ...noReasons } = rule;
     expect(validateSetting("end_of_service", noReasons)).toHaveProperty("error");
+    const { resignation: _r, ...missingOne } = rule.eligibilityByReason;
+    expect(
+      validateSetting("end_of_service", { ...rule, eligibilityByReason: missingOne }),
+    ).toHaveProperty("error");
     expect(
       validateSetting("end_of_service", {
         ...rule,
-        eligibilityByReason: { resignation: 50, termination: 100 },
+        eligibilityByReason: {
+          ...rule.eligibilityByReason,
+          termination: [{ fromYears: 2, pct: 100 }],
+        },
       }),
     ).toHaveProperty("error");
     expect(
       validateSetting("end_of_service", {
         ...rule,
-        eligibilityByReason: { resignation: 150, termination: 100, end_of_contract: 100 },
+        eligibilityByReason: {
+          ...rule.eligibilityByReason,
+          termination: [{ fromYears: 0, pct: 150 }],
+        },
       }),
     ).toHaveProperty("error");
   });
+  it("sorts bands by start year", () => {
+    const r = validateSetting("end_of_service", {
+      ...rule,
+      eligibilityByReason: {
+        ...rule.eligibilityByReason,
+        resignation: [
+          { fromYears: 5, pct: 66 },
+          { fromYears: 0, pct: 0 },
+        ],
+      },
+    });
+    expect(r).toHaveProperty("value");
+    if ("value" in r && r.value) {
+      expect(
+        (r.value as typeof rule).eligibilityByReason.resignation.map((b) => b.fromYears),
+      ).toEqual([0, 5]);
+    }
+  });
   it("null means not configured", () => {
     expect(validateSetting("end_of_service", null)).toEqual({ value: null });
+  });
+});
+
+describe("eligibility bands by service years", () => {
+  const bands = [
+    { fromYears: 0, pct: 0 },
+    { fromYears: 3, pct: 33.33 },
+    { fromYears: 5, pct: 66.67 },
+    { fromYears: 10, pct: 100 },
+  ];
+  it("uses the band with the highest start year not above the service length", () => {
+    expect(eligibilityForYears(bands, 2).pct).toBe(0);
+    expect(eligibilityForYears(bands, 3).pct).toBe(33.33);
+    expect(eligibilityForYears(bands, 7.5).pct).toBe(66.67);
+    expect(eligibilityForYears(bands, 12).pct).toBe(100);
+    expect(eligibilityForYears(bands, 12).fromYears).toBe(10);
   });
 });

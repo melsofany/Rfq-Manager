@@ -145,17 +145,36 @@ function validateEndOfService(v: unknown): Result {
   if ("error" in lim || lim.value === null) return { error: "عدد السنين الأولى مطلوب" };
   const m = optNum(v.laterMonthsPerYear, 0, 12, "الشهور لكل سنة بعد السنين الأولى");
   if ("error" in m || m.value === null) return { error: "الشهور لكل سنة بعد السنين الأولى مطلوبة" };
-  // Share of the entitlement per exit reason (0–100). HR sets these; nothing is assumed.
+  // Per exit reason: bands of service years with the share of the entitlement (0–100).
+  // The band with the highest "fromYears" not above the service length applies.
+  // Every reason needs a band starting at 0 years. HR and the accountant enter these.
   if (!isObj(v.eligibilityByReason)) {
-    return { error: "حدد نسبة الاستحقاق لكل سبب خروج (الاستقالة، الفصل، انتهاء العقد)" };
+    return { error: "حدد نسب الاستحقاق لكل سبب خروج (الاستقالة، الفصل، انتهاء العقد)" };
   }
-  const byReason: Record<string, number> = {};
+  const byReason: Record<string, { fromYears: number; pct: number }[]> = {};
   for (const reason of ["resignation", "termination", "end_of_contract"]) {
-    const p = optNum(v.eligibilityByReason[reason], 0, 100, `نسبة الاستحقاق (${reason})`);
-    if ("error" in p || p.value === null) {
-      return { error: "حدد نسبة الاستحقاق لكل سبب خروج (من 0 إلى 100)" };
+    const bands = v.eligibilityByReason[reason];
+    if (!Array.isArray(bands) || bands.length === 0) {
+      return { error: `أضف شرائح نسبة الاستحقاق لسبب (${reason})` };
     }
-    byReason[reason] = p.value;
+    const parsed: { fromYears: number; pct: number }[] = [];
+    for (const b of bands) {
+      if (!isObj(b)) return { error: "صيغة الشرائح غير صالحة" };
+      const from = optNum(b.fromYears, 0, 50, "من سنة");
+      const pct = optNum(b.pct, 0, 100, "نسبة الاستحقاق");
+      if ("error" in from || from.value === null || "error" in pct || pct.value === null) {
+        return { error: "كل شريحة لازم يكون ليها سنة بداية ونسبة (من 0 إلى 100)" };
+      }
+      parsed.push({ fromYears: from.value, pct: pct.value });
+    }
+    parsed.sort((a, b) => a.fromYears - b.fromYears);
+    if (parsed[0].fromYears !== 0) {
+      return { error: `شريحة (${reason}) لازم تبدأ من سنة 0` };
+    }
+    if (new Set(parsed.map((p) => p.fromYears)).size !== parsed.length) {
+      return { error: `فيه شريحتين بنفس سنة البداية لسبب (${reason})` };
+    }
+    byReason[reason] = parsed;
   }
   return {
     value: {
