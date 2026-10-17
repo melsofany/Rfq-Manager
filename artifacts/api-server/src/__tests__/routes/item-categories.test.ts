@@ -55,6 +55,11 @@ const itemCategoryAliasesTable = {
   categoryId: "categoryId",
   alias: "alias",
 };
+const supplierCategoriesTable = {
+  _: "supplierCategories",
+  id: "id",
+  name: "name",
+};
 
 let existingCategoryRows: any[];
 let validationRows: any[];
@@ -71,6 +76,9 @@ const auditInserts: any[] = [];
 const ownerReplaces: any[] = [];
 const employeeCatReplaces: any[] = [];
 const keywordDeletes: any[] = [];
+/** Mirrors onto `supplier_categories` recorded so the equality can be asserted. */
+const supplierMirrorInserts: any[] = [];
+const supplierMirrorDeletes: any[] = [];
 /** The `where` condition passed to the LIST query, so the filter is verifiable. */
 const listWhereConds: any[] = [];
 
@@ -124,6 +132,10 @@ const dbMock: any = {
   })),
   insert: vi.fn((table: any) => ({
     values: vi.fn((vals: any) => {
+      if (table === supplierCategoriesTable) {
+        supplierMirrorInserts.push(vals);
+        return { onConflictDoNothing: vi.fn(() => chainable(undefined)) };
+      }
       if (table === itemCategoriesTable) {
         return { returning: vi.fn(() => chainable([{ ...createdRow, ...vals }])) };
       }
@@ -161,6 +173,7 @@ const dbMock: any = {
     where: vi.fn((cond: any) => {
       if (table === employeeCategoriesTable) ownerReplaces.push(cond);
       if (table === itemCategoryKeywordsTable) keywordDeletes.push(cond);
+      if (table === supplierCategoriesTable) supplierMirrorDeletes.push(cond);
       return chainable(undefined);
     }),
   })),
@@ -176,6 +189,7 @@ vi.mock("@workspace/db", () => ({
   employeesTable,
   auditLogTable: auditTable,
   itemCategoryKeywordsTable,
+  supplierCategoriesTable,
 }));
 
 let testApp: express.Express;
@@ -198,6 +212,8 @@ beforeEach(() => {
   auditInserts.length = 0;
   ownerReplaces.length = 0;
   employeeCatReplaces.length = 0;
+  supplierMirrorInserts.length = 0;
+  supplierMirrorDeletes.length = 0;
   existingCategoryRows = [];
   validationRows = [
     { id: 1, kind: "functional" },
@@ -411,6 +427,50 @@ describe("item categories CRUD", () => {
       .send({ owners: [{ employeeId: 10, isPrimary: true }] });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("أساسي");
+  });
+});
+
+describe("the two category lists stay equal WITHOUT a deploy", () => {
+  // `init-db.ts` reconciles the catalogues at STARTUP, but a category the
+  // operator adds in between would sit on one side only until the next release —
+  // the «تنقص» they forbade. These assert the live mirror on the create path.
+
+  it("mirrors a new FUNCTIONAL domain onto supplier_categories", async () => {
+    existingCategoryRows = [];
+    createdRow = { id: 9, name: "تصنيف جديد", code: null, isActive: true, sortOrder: 0 };
+    const res = await request(testApp)
+      .post("/api/item-categories")
+      .send({ name: "تصنيف جديد", kind: "functional" });
+    expect(res.status).toBe(201);
+    expect(supplierMirrorInserts).toHaveLength(1);
+    expect(supplierMirrorInserts[0]).toMatchObject({ name: "تصنيف جديد" });
+  });
+
+  it("does NOT mirror a subcategory — it is not a trade category", async () => {
+    existingCategoryRows = [];
+    createdRow = { id: 9, name: "قواطع فرعية", code: null, isActive: true, sortOrder: 0 };
+    const res = await request(testApp)
+      .post("/api/item-categories")
+      .send({ name: "قواطع فرعية", kind: "subcategory", parentId: 3 });
+    expect(res.status).toBe(201);
+    expect(supplierMirrorInserts).toHaveLength(0);
+  });
+
+  it("removes the supplier row when a category stops being a trade category", async () => {
+    updatedRow = { id: 1, name: "كهرباء", code: "electrical", isActive: false, sortOrder: 30 };
+    const res = await request(testApp).patch("/api/item-categories/1").send({ isActive: false });
+    expect(res.status).toBe(200);
+    expect(supplierMirrorDeletes).toHaveLength(1);
+    // A supplier link means a real trade: the delete must be guarded by it.
+    expect(JSON.stringify(supplierMirrorDeletes[0])).toContain("supplier_category_links");
+  });
+
+  it("registers the supplier row when a category becomes a trade category", async () => {
+    updatedRow = { id: 1, name: "إضاءة", code: null, isActive: true, sortOrder: 30 };
+    const res = await request(testApp).patch("/api/item-categories/1").send({ kind: "functional" });
+    expect(res.status).toBe(200);
+    expect(supplierMirrorInserts).toHaveLength(1);
+    expect(supplierMirrorInserts[0]).toMatchObject({ name: "إضاءة" });
   });
 });
 

@@ -20,6 +20,7 @@ import {
   employeesTable,
   itemCategoryKeywordsTable,
   auditLogTable,
+  supplierCategoriesTable,
 } from "@workspace/db";
 import { eq, and, asc, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
@@ -316,6 +317,20 @@ router.post(
       })
       .returning();
     const added = await saveAliases(row.id, aliases);
+    // Mirror a new FUNCTIONAL domain onto `/suppliers`, so the two lists stay
+    // equal between deploys. The startup reconciliation in `init-db.ts` would
+    // otherwise be the only thing restoring equality — meaning a category the
+    // operator adds here would be missing from `/suppliers` until the next
+    // release, which is exactly the «تنقص» they forbade. A subcategory/brand is
+    // not a trade category, so it is deliberately NOT mirrored. Best-effort: a
+    // mirror failure must never fail the create — the next boot reconciles.
+    if (kindValue === "functional") {
+      try {
+        await db.insert(supplierCategoriesTable).values({ name: row.name }).onConflictDoNothing();
+      } catch {
+        // best-effort
+      }
+    }
     await db.insert(auditLogTable).values({
       action: "item_category.created",
       entityType: "item_category",
@@ -402,6 +417,27 @@ router.patch(
     if (previousName && previousName !== row.name) {
       await rewriteSupplierCategoryName(previousName, row.name);
     }
+    // Keep `/suppliers` in step with a kind/activation change, so the two lists
+    // never drift between deploys. Becoming a trade category registers the name;
+    // ceasing to be one removes it — but ONLY while no supplier links to it, since
+    // a linked category is a real trade that must never vanish. Best-effort.
+    try {
+      const nowTrade = (row.kind ?? "functional") === "functional" && row.isActive;
+      if (nowTrade) {
+        await db.insert(supplierCategoriesTable).values({ name: row.name }).onConflictDoNothing();
+      } else {
+        await db
+          .delete(supplierCategoriesTable)
+          .where(
+            and(
+              eq(supplierCategoriesTable.name, row.name),
+              sql`NOT EXISTS (SELECT 1 FROM supplier_category_links l WHERE l.category_id = ${supplierCategoriesTable.id})`,
+            ),
+          );
+      }
+    } catch {
+      // best-effort — the next boot reconciles
+    }
     const added =
       aliases !== undefined
         ? await saveAliases(id, aliases)
@@ -434,7 +470,7 @@ async function saveAliases(categoryId: number, raw: unknown): Promise<string[]> 
 router.delete("/item-categories/:id", requireRole("admin"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   const [row] = await db
-    .select({ id: itemCategoriesTable.id })
+    .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
     .from(itemCategoriesTable)
     .where(eq(itemCategoriesTable.id, id));
   if (!row) {
@@ -444,6 +480,21 @@ router.delete("/item-categories/:id", requireRole("admin"), async (req, res): Pr
   // employee_categories cascade-delete; rfq_item_assignments.category_id is
   // ON DELETE SET NULL, so an item's assignment survives as "unclassified".
   await db.delete(itemCategoriesTable).where(eq(itemCategoriesTable.id, id));
+  // Deleting the item category must not leave `/suppliers` listing a name the
+  // item side no longer has — unless a supplier still links to it, in which case
+  // the link is a real trade and the row stays. Best-effort.
+  try {
+    await db
+      .delete(supplierCategoriesTable)
+      .where(
+        and(
+          eq(supplierCategoriesTable.name, row.name),
+          sql`NOT EXISTS (SELECT 1 FROM supplier_category_links l WHERE l.category_id = ${supplierCategoriesTable.id})`,
+        ),
+      );
+  } catch {
+    // best-effort — the next boot reconciles
+  }
   res.status(204).end();
 });
 
