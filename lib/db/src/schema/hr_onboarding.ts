@@ -36,6 +36,8 @@ export const hrContractsTable = pgTable(
     probationEndDate: date("probation_end_date", { mode: "string" }),
     basicSalary: numeric("basic_salary", { precision: 12, scale: 2 }).notNull(),
     allowances: numeric("allowances", { precision: 12, scale: 2 }).notNull().default("0"),
+    /** Recurring monthly incentive (الحافز), paid on top of basic and allowances. */
+    incentive: numeric("incentive", { precision: 12, scale: 2 }).notNull().default("0"),
     isCurrent: boolean("is_current").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

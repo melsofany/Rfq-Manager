@@ -51,6 +51,8 @@ export const hrPayAdjustmentsTable = pgTable(
     employeeId: integer("employee_id").notNull(),
     kind: text("kind").notNull(),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    /** Bonus expressed in days of basic pay (مكافأة بعدد أيام). Null for a fixed amount. */
+    days: numeric("days", { precision: 6, scale: 2 }),
     period: text("period").notNull(),
     reason: text("reason"),
     caseId: integer("case_id"),

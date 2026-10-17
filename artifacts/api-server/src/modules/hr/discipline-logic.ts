@@ -32,3 +32,10 @@ export function parseMoney(v: unknown): number | null {
   if (Math.round(n * 100) !== n * 100) return null;
   return n;
 }
+
+/** Days for a day-based bonus: null = not given, undefined = invalid, else 0.5–31 in halves. */
+export function parseDays(v: unknown): number | null | undefined {
+  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
+  if (!Number.isFinite(n) || n < 0.5 || n > 31 || Math.round(n * 2) !== n * 2) return undefined;
+  return n;
+}

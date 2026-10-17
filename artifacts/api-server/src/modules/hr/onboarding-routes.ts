@@ -34,6 +34,7 @@ import {
 } from "./onboarding-logic";
 import { generateEmployeeNo } from "./employee-number";
 import { logger } from "../../shared/logger";
+import { parseMoney } from "./discipline-logic";
 
 const router: IRouter = Router();
 router.use("/hr", requireAuth, requireHr);
@@ -388,6 +389,43 @@ router.put("/hr/employees/:id/bank", async (req, res): Promise<void> => {
     }
   });
   res.json({ ok: true });
+});
+
+/**
+ * PUT /hr/employees/:id/salary — تعديل الراتب الأساسي والحافز على العقد الحالي.
+ * Body: { basicSalary, incentive }. Past payroll months keep their own snapshot.
+ */
+router.put("/hr/employees/:id/salary", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "معرف غير صالح" });
+    return;
+  }
+  const basic = parseMoney(req.body?.basicSalary);
+  const incentive = parseMoney(req.body?.incentive);
+  if (basic === null || basic <= 0) {
+    res.status(400).json({ error: "الراتب الأساسي يجب أن يكون أكبر من صفر" });
+    return;
+  }
+  if (incentive === null) {
+    res.status(400).json({ error: "الحافز يجب أن يكون رقماً موجباً أو صفر" });
+    return;
+  }
+  const [current] = await db
+    .select({ id: hrContractsTable.id })
+    .from(hrContractsTable)
+    .where(and(eq(hrContractsTable.employeeId, id), eq(hrContractsTable.isCurrent, true)))
+    .limit(1);
+  if (!current) {
+    res.status(409).json({ error: "لا يوجد عقد حالي للموظف" });
+    return;
+  }
+  await db
+    .update(hrContractsTable)
+    .set({ basicSalary: String(basic), incentive: String(incentive) })
+    .where(eq(hrContractsTable.id, current.id));
+  logger.info({ employeeId: id, basic, incentive }, "hr: salary updated");
+  res.json({ ok: true, basicSalary: basic, incentive });
 });
 
 /** Employee photo: GET returns the image bytes; PUT replaces it (JSON body { photo: dataUrl }). */
