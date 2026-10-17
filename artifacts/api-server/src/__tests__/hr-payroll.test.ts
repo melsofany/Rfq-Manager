@@ -3,6 +3,7 @@ import {
   computePayslip,
   missingPayrollSettings,
   monthlyIncomeTax,
+  withMissingPayrollSettingsAsDefaults,
   type PayrollSettings,
 } from "../modules/hr/payroll-logic";
 
@@ -106,5 +107,39 @@ describe("payslip", () => {
     );
     expect(r.finesApplied).toBe(1000);
     expect(r.finesDeferred).toBe(500);
+  });
+});
+
+describe("payroll runs with missing settings", () => {
+  it("fills missing settings with defaults so the run can compute", () => {
+    const empty = { social: null, health: null, tax: null, absence: null, fines: null };
+    const filled = withMissingPayrollSettingsAsDefaults(empty);
+    expect(missingPayrollSettings(filled)).toEqual(["income_tax"]);
+    const slip = computePayslip(
+      {
+        basic: 3000,
+        allowances: 0,
+        bonuses: 0,
+        incentives: 0,
+        deductions: 0,
+        absenceDays: 0,
+        finesTotal: 0,
+      },
+      filled,
+    );
+    expect(slip.socialEmployee).toBe(0);
+    expect(slip.healthEmployee).toBe(0);
+    expect(slip.incomeTax).toBe(0);
+    expect(slip.net).toBe(3000);
+  });
+  it("keeps settings that already exist", () => {
+    const full = {
+      social: { employeeRatePct: 11, employerRatePct: 18.75, capAmount: null },
+      health: { employeeRatePct: 1, employerRatePct: 3, capAmount: null },
+      tax: { brackets: [{ upTo: null, ratePct: 10 }] },
+      absence: { dailyDivisor: 26, weeklyOffDays: [5] },
+      fines: null,
+    };
+    expect(withMissingPayrollSettingsAsDefaults(full)).toEqual(full);
   });
 });
