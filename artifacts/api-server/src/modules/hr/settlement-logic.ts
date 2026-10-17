@@ -15,6 +15,8 @@ export interface EndOfServiceRule {
   firstYearsDays: number;
   firstYearsLimit: number;
   laterMonthsPerYear: number;
+  /** Share of the entitlement (0–100) for each exit reason, set by HR in Settings. */
+  eligibilityByReason: Record<ExitReason, number>;
 }
 
 export type ExitReason = "resignation" | "termination" | "end_of_contract";

@@ -2351,16 +2351,7 @@ function SettingsTab() {
       />
       <FinesCard value={data.fines as { monthlyCapDays: number | null } | null} onSaved={load} />
       <AllowancesCard value={data.allowance_types as { items: string[] } | null} onSaved={load} />
-      <EndOfServiceCard
-        value={
-          data.end_of_service as {
-            firstYearsDays: number;
-            firstYearsLimit: number;
-            laterMonthsPerYear: number;
-          } | null
-        }
-        onSaved={load}
-      />
+      <EndOfServiceCard value={data.end_of_service as EosRule | null} onSaved={load} />
       <BankCard
         value={data.bank_export as { format: string | null; notes: string | null } | null}
         onSaved={load}
@@ -3094,29 +3085,41 @@ function PayrollTab() {
   );
 }
 
-function EndOfServiceCard({
-  value,
-  onSaved,
-}: {
-  value: { firstYearsDays: number; firstYearsLimit: number; laterMonthsPerYear: number } | null;
-  onSaved: () => void;
-}) {
+/** End-of-service rule as stored in Settings. */
+type EosRule = {
+  firstYearsDays: number;
+  firstYearsLimit: number;
+  laterMonthsPerYear: number;
+  eligibilityByReason: { resignation: number; termination: number; end_of_contract: number };
+};
+
+function EndOfServiceCard({ value, onSaved }: { value: EosRule | null; onSaved: () => void }) {
   const { t } = useLanguage();
   const [days, setDays] = useState(numText(value?.firstYearsDays));
   const [limit, setLimit] = useState(numText(value?.firstYearsLimit));
   const [months, setMonths] = useState(numText(value?.laterMonthsPerYear));
+  const [pct, setPct] = useState({
+    resignation: numText(value?.eligibilityByReason?.resignation),
+    termination: numText(value?.eligibilityByReason?.termination),
+    end_of_contract: numText(value?.eligibilityByReason?.end_of_contract),
+  });
   return (
     <SettingCard
       title={t("hr.set.eos")}
       configured={!!value}
       onSaved={onSaved}
       onSave={() => {
-        const all = [days, limit, months].every((x) => x.trim() !== "");
+        const all = [days, limit, months, ...Object.values(pct)].every((x) => x.trim() !== "");
         if (!all) return saveSetting("end_of_service", null);
         return saveSetting("end_of_service", {
           firstYearsDays: toNum(days),
           firstYearsLimit: toNum(limit),
           laterMonthsPerYear: toNum(months),
+          eligibilityByReason: {
+            resignation: toNum(pct.resignation),
+            termination: toNum(pct.termination),
+            end_of_contract: toNum(pct.end_of_contract),
+          },
         });
       }}
     >
@@ -3151,6 +3154,31 @@ function EndOfServiceCard({
             onChange={(e) => setMonths(e.target.value)}
           />
         </label>
+      </div>
+      <div className="space-y-2 pt-2">
+        <span className={setLabel}>{t("hr.set.eosByReason")}</span>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {(
+            [
+              ["resignation", t("hr.set.eosResignation")],
+              ["termination", t("hr.set.eosTermination")],
+              ["end_of_contract", t("hr.set.eosContract")],
+            ] as const
+          ).map(([k, label]) => (
+            <label key={k} className="block">
+              <span className="text-xs text-muted-foreground block mb-1">{label} (%)</span>
+              <input
+                className={setInput}
+                type="number"
+                min={0}
+                max={100}
+                value={pct[k]}
+                onChange={(e) => setPct({ ...pct, [k]: e.target.value })}
+              />
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">{t("hr.set.eosByReasonHint")}</p>
       </div>
     </SettingCard>
   );
@@ -3187,7 +3215,7 @@ function SettlementTab() {
   const [employeeId, setEmployeeId] = useState("");
   const [exitDate, setExitDate] = useState(todayStr());
   const [reason, setReason] = useState("resignation");
-  const [eligibility, setEligibility] = useState("100");
+  const [eligibility, setEligibility] = useState("");
   const [deductions, setDeductions] = useState("0");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -3218,7 +3246,7 @@ function SettlementTab() {
         body: JSON.stringify({
           exitDate,
           reason,
-          eligibilityPct: Number(eligibility),
+          ...(eligibility.trim() === "" ? {} : { eligibilityPct: Number(eligibility) }),
           deductions: Number(deductions),
         }),
       });
@@ -3291,6 +3319,7 @@ function SettlementTab() {
                 min={0}
                 max={100}
                 value={eligibility}
+                placeholder={t("hr.set.eligibilityFromSettings")}
                 onChange={(e) => setEligibility(e.target.value)}
               />
             </label>

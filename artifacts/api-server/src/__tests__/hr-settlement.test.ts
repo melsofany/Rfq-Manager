@@ -7,7 +7,12 @@ import {
 } from "../modules/hr/settlement-logic";
 import { validateSetting } from "../modules/hr/settings-logic";
 
-const rule = { firstYearsDays: 15, firstYearsLimit: 5, laterMonthsPerYear: 1 };
+const rule = {
+  firstYearsDays: 15,
+  firstYearsLimit: 5,
+  laterMonthsPerYear: 1,
+  eligibilityByReason: { resignation: 50, termination: 100, end_of_contract: 100 },
+};
 
 describe("settlement math", () => {
   it("counts service in years", () => {
@@ -76,6 +81,22 @@ describe("end_of_service setting validator", () => {
   });
   it("refuses an incomplete rule", () => {
     expect(validateSetting("end_of_service", { firstYearsDays: 15 })).toHaveProperty("error");
+  });
+  it("requires an eligibility percentage for every exit reason", () => {
+    const { eligibilityByReason: _omit, ...noReasons } = rule;
+    expect(validateSetting("end_of_service", noReasons)).toHaveProperty("error");
+    expect(
+      validateSetting("end_of_service", {
+        ...rule,
+        eligibilityByReason: { resignation: 50, termination: 100 },
+      }),
+    ).toHaveProperty("error");
+    expect(
+      validateSetting("end_of_service", {
+        ...rule,
+        eligibilityByReason: { resignation: 150, termination: 100, end_of_contract: 100 },
+      }),
+    ).toHaveProperty("error");
   });
   it("null means not configured", () => {
     expect(validateSetting("end_of_service", null)).toEqual({ value: null });
