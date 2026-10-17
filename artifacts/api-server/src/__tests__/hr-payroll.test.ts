@@ -16,7 +16,7 @@ const full: PayrollSettings = {
       { upTo: null, ratePct: 20 },
     ],
   },
-  absence: { dailyDivisor: 30 },
+  absence: { dailyDivisor: 30, weeklyOffDays: [5] },
   fines: { monthlyCapDays: 5 },
 };
 

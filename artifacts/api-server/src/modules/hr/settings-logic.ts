@@ -98,7 +98,15 @@ function validateAbsence(v: unknown): Result {
   if (!isObj(v)) return { error: "صيغة غير صالحة" };
   const d = optInt(v.dailyDivisor, 1, 31, "قاعدة قسمة الراتب اليومي");
   if ("error" in d || d.value === null) return { error: "قاعدة قسمة الراتب اليومي مطلوبة" };
-  return { value: { dailyDivisor: d.value } };
+  // Weekly day(s) off (0 = Sunday … 6 = Saturday). An empty list is a valid choice.
+  if (
+    !Array.isArray(v.weeklyOffDays) ||
+    v.weeklyOffDays.some((x) => !Number.isInteger(x) || x < 0 || x > 6)
+  ) {
+    return { error: "حدد أيام الإجازة الأسبوعية (أو اتركها فاضية لو مفيش)" };
+  }
+  const days = [...new Set(v.weeklyOffDays as number[])].sort((a, b) => a - b);
+  return { value: { dailyDivisor: d.value, weeklyOffDays: days } };
 }
 
 function validateFines(v: unknown): Result {

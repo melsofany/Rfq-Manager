@@ -99,11 +99,27 @@ describe("income tax brackets", () => {
 
 describe("absence, fines, allowances, bank", () => {
   it("absence divisor is a whole number 1–31", () => {
-    expect(validateSetting("absence", { dailyDivisor: 30 })).toEqual({
-      value: { dailyDivisor: 30 },
+    expect(validateSetting("absence", { dailyDivisor: 30, weeklyOffDays: [5] })).toEqual({
+      value: { dailyDivisor: 30, weeklyOffDays: [5] },
     });
-    expect(validateSetting("absence", { dailyDivisor: 30.5 })).toHaveProperty("error");
-    expect(validateSetting("absence", { dailyDivisor: 0 })).toHaveProperty("error");
+    expect(validateSetting("absence", { dailyDivisor: 30.5, weeklyOffDays: [] })).toHaveProperty(
+      "error",
+    );
+    expect(validateSetting("absence", { dailyDivisor: 0, weeklyOffDays: [] })).toHaveProperty(
+      "error",
+    );
+  });
+  it("absence requires the weekly off list (0–6), an empty list is allowed", () => {
+    expect(validateSetting("absence", { dailyDivisor: 30 })).toHaveProperty("error");
+    expect(validateSetting("absence", { dailyDivisor: 30, weeklyOffDays: [] })).toEqual({
+      value: { dailyDivisor: 30, weeklyOffDays: [] },
+    });
+    expect(validateSetting("absence", { dailyDivisor: 30, weeklyOffDays: [7] })).toHaveProperty(
+      "error",
+    );
+    expect(validateSetting("absence", { dailyDivisor: 30, weeklyOffDays: [5, 5, 6] })).toEqual({
+      value: { dailyDivisor: 30, weeklyOffDays: [5, 6] },
+    });
   });
   it("fines cap is a whole number of days", () => {
     expect(validateSetting("fines", { monthlyCapDays: 5 })).toEqual({

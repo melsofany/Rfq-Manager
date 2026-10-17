@@ -3,7 +3,7 @@
  *
  *   GET    /api/hr/payroll/runs?period=YYYY-MM   list runs
  *   GET    /api/hr/payroll/runs/:id              run with payslips
- *   POST   /api/hr/payroll/runs                  { period, absenceDays: { [employeeId]: n } } calculates a draft
+ *   POST   /api/hr/payroll/runs                  { period } calculates a draft (absence days come from attendance)
  *   POST   /api/hr/payroll/runs/:id/approve      locks the run
  *   DELETE /api/hr/payroll/runs/:id              deletes a draft only
  */
@@ -22,9 +22,11 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { requireHr } from "./routes";
 import { isValidPeriod } from "./discipline-logic";
+import { buildAttendance } from "./routes";
 import {
   computePayslip,
   missingPayrollSettings,
+  absenceDates,
   round2,
   type PayrollSettings,
 } from "./payroll-logic";
@@ -51,18 +53,36 @@ async function loadSettings(): Promise<{
   return { settings, raw };
 }
 
-function parseAbsence(
-  v: unknown,
-  employeeIds: number[],
-): Record<number, number> | { error: string } {
+/** Today in Cairo as YYYY-MM-DD (the business calendar, not UTC). */
+function cairoToday(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo" }).format(new Date());
+}
+
+/**
+ * Absent days per employee for the month, taken from the attendance rule
+ * (buildAttendance), so payroll and the attendance screen always agree.
+ * Only days the employee could work count: after hire, not in the future,
+ * and not a weekly day off.
+ */
+async function countAbsenceDays(
+  employees: { id: number; hireDate: string | null }[],
+  period: string,
+  weeklyOffDays: number[],
+): Promise<Record<number, number>> {
+  const today = cairoToday();
+  const expected = new Map(
+    employees.map((e) => [e.id, new Set(absenceDates(period, e.hireDate, today, weeklyOffDays))]),
+  );
+  const allDates = [...new Set([...expected.values()].flatMap((set) => [...set]))].sort();
   const out: Record<number, number> = {};
-  const map = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
-  for (const id of employeeIds) {
-    const raw = map[String(id)];
-    const n = raw === undefined || raw === null || raw === "" ? 0 : Number(raw);
-    if (!Number.isInteger(n) || n < 0 || n > 31)
-      return { error: "أيام الغياب لازم تكون رقم صحيح من 0 إلى 31" };
-    out[id] = n;
+  for (const e of employees) out[e.id] = 0;
+  for (const date of allDates) {
+    const outcome = await buildAttendance(date, undefined);
+    if (!outcome.ok) throw new Error(outcome.error);
+    const rows = outcome.body.rows as { employeeId: number; absent: boolean }[];
+    for (const row of rows) {
+      if (row.absent && expected.get(row.employeeId)?.has(date)) out[row.employeeId] += 1;
+    }
   }
   return out;
 }
@@ -167,7 +187,11 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
   }
 
   const employees = await db
-    .select({ id: hrEmployeesTable.id, fullName: hrEmployeesTable.fullName })
+    .select({
+      id: hrEmployeesTable.id,
+      fullName: hrEmployeesTable.fullName,
+      hireDate: hrEmployeesTable.hireDate,
+    })
     .from(hrEmployeesTable)
     .where(eq(hrEmployeesTable.status, "active"));
   if (!employees.length) {
@@ -175,11 +199,7 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
     return;
   }
   const ids = employees.map((e) => e.id);
-  const absence = parseAbsence(req.body?.absenceDays, ids);
-  if ("error" in absence) {
-    res.status(400).json({ error: absence.error });
-    return;
-  }
+  const absence = await countAbsenceDays(employees, period, settings.absence!.weeklyOffDays);
 
   const contracts = await db
     .select()
