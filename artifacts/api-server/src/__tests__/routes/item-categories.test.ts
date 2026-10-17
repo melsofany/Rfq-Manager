@@ -71,6 +71,8 @@ const auditInserts: any[] = [];
 const ownerReplaces: any[] = [];
 const employeeCatReplaces: any[] = [];
 const keywordDeletes: any[] = [];
+/** The `where` condition passed to the LIST query, so the filter is verifiable. */
+const listWhereConds: any[] = [];
 
 const dbMock: any = {
   select: vi.fn((_arg?: any) => ({
@@ -85,7 +87,15 @@ const dbMock: any = {
         const isIdProbe = arg && "id" in arg;
         const rows = hasKind ? validationRows : isIdProbe ? existingCategoryRows : listRows;
         return chainable(rows, {
-          where: vi.fn(() => chainable(rows, { limit: vi.fn(() => chainable(rows)) })),
+          where: vi.fn((cond: any) => {
+            // The list query is the one that does NOT chain .limit(); recording
+            // its condition lets a test prove the trade-category filter exists.
+            if (!isIdProbe && !hasKind) listWhereConds.push(cond);
+            return chainable(rows, {
+              limit: vi.fn(() => chainable(rows)),
+              orderBy: vi.fn(() => chainable(rows)),
+            });
+          }),
           orderBy: vi.fn(() => chainable(rows)),
         });
       }
@@ -216,6 +226,7 @@ beforeEach(() => {
     enabled: false,
   };
   keywordDeletes.length = 0;
+  listWhereConds.length = 0;
   sessionState.role = "admin";
 });
 
@@ -224,6 +235,26 @@ describe("item categories CRUD", () => {
     const res = await request(testApp).get("/api/item-categories");
     expect(res.status).toBe(200);
     expect(res.body[0].name).toBe("كهرباء");
+  });
+
+  it("returns ONLY active functional domains — subcategories are hidden", async () => {
+    // The operator's rule: this list must match /suppliers exactly («ألا تزيد أو
+    // تنقص»). A subcategory refines a domain and inherits its owner, so it must
+    // not appear as a trade category; an inactive row is retired. The filter is
+    // asserted on the BUILT QUERY, because the mock returns rows directly and
+    // would otherwise pass with the `where` deleted.
+    const res = await request(testApp).get("/api/item-categories");
+    expect(res.status).toBe(200);
+
+    expect(listWhereConds.length).toBeGreaterThan(0);
+    const cond = listWhereConds[0];
+    // `and(eq(isActive, true), sql\`coalesce(kind,'functional') = 'functional'\`)`
+    const rendered = JSON.stringify(cond);
+    expect(rendered).toContain('"isActive"');
+    expect(rendered).toContain("functional");
+    // Both guards must be present: the active flag AND the functional kind.
+    expect(cond.__op).toBe("and");
+    expect(cond.args.length).toBe(2);
   });
 
   it("creates a category (admin)", async () => {
