@@ -2322,7 +2322,10 @@ function SettingsTab() {
         value={data.income_tax as { brackets: { upTo: number | null; ratePct: number }[] } | null}
         onSaved={load}
       />
-      <AbsenceCard value={data.absence as { dailyDivisor: number } | null} onSaved={load} />
+      <AbsenceCard
+        value={data.absence as { dailyDivisor: number; weeklyOffDays: number[] } | null}
+        onSaved={load}
+      />
       <WorkShiftCard
         value={
           data.work_shift as {
@@ -2563,24 +2566,52 @@ function TaxCard({
   );
 }
 
+const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
+
 function AbsenceCard({
   value,
   onSaved,
 }: {
-  value: { dailyDivisor: number } | null;
+  value: { dailyDivisor: number; weeklyOffDays: number[] } | null;
   onSaved: () => void;
 }) {
   const { t } = useLanguage();
   const [div, setDiv] = useState(numText(value?.dailyDivisor));
+  const [offDays, setOffDays] = useState<number[]>(value?.weeklyOffDays ?? []);
   return (
     <SettingCard
       title={t("hr.set.absence")}
-      configured={!!value}
+      configured={!!value && Array.isArray(value.weeklyOffDays)}
       onSaved={onSaved}
       onSave={() =>
-        saveSetting("absence", toNum(div) === null ? null : { dailyDivisor: toNum(div) })
+        saveSetting(
+          "absence",
+          toNum(div) === null ? null : { dailyDivisor: toNum(div), weeklyOffDays: offDays },
+        )
       }
     >
+      <div className="space-y-1">
+        <span className={setLabel}>{t("hr.set.weeklyOff")}</span>
+        <div className="flex flex-wrap gap-3">
+          {WEEKDAYS.map((d) => (
+            <label key={d} className="flex items-center gap-1 text-sm">
+              <input
+                type="checkbox"
+                checked={offDays.includes(d)}
+                onChange={(e) =>
+                  setOffDays(
+                    e.target.checked
+                      ? [...offDays, d].sort((a, b) => a - b)
+                      : offDays.filter((x) => x !== d),
+                  )
+                }
+              />
+              {t(`hr.day.${d}`)}
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">{t("hr.set.weeklyOffHint")}</p>
+      </div>
       <label className="block max-w-xs">
         <span className={setLabel}>{t("hr.set.divisor")}</span>
         <input
@@ -2790,7 +2821,6 @@ function PayrollTab() {
   const { t } = useLanguage();
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7));
   const [employees, setEmployees] = useState<HrEmployee[]>([]);
-  const [absence, setAbsence] = useState<Record<string, string>>({});
   const [run, setRun] = useState<{ id: number; status: string } | null>(null);
   const [slips, setSlips] = useState<PayslipRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -2827,11 +2857,9 @@ function PayrollTab() {
     setBusy(true);
     setError(null);
     try {
-      const absenceDays: Record<string, number> = {};
-      for (const e of employees) absenceDays[String(e.id)] = Number(absence[String(e.id)] || 0);
       await api("/hr/payroll/runs", {
         method: "POST",
-        body: JSON.stringify({ period, absenceDays }),
+        body: JSON.stringify({ period }),
       });
       await load();
     } catch (e) {
@@ -2902,22 +2930,7 @@ function PayrollTab() {
         <Card>
           <CardContent className="p-4 space-y-3">
             <h2 className="font-semibold">{t("hr.pay.absenceTitle")}</h2>
-            <p className="text-xs text-muted-foreground">{t("hr.pay.absenceHint")}</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {employees.map((e) => (
-                <label key={e.id} className="block">
-                  <span className="text-xs text-muted-foreground block mb-1">{e.fullName}</span>
-                  <input
-                    className={input + " w-full"}
-                    type="number"
-                    min={0}
-                    max={31}
-                    value={absence[String(e.id)] ?? ""}
-                    onChange={(ev) => setAbsence({ ...absence, [String(e.id)]: ev.target.value })}
-                  />
-                </label>
-              ))}
-            </div>
+            <p className="text-xs text-muted-foreground">{t("hr.pay.absenceAuto")}</p>
             <div className="flex gap-2">
               <Button onClick={calculate} disabled={busy}>
                 {run ? t("hr.pay.recalc") : t("hr.pay.calc")}
