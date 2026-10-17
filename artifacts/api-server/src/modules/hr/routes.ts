@@ -22,7 +22,7 @@ import {
   hrMissionsTable,
   hrAttendanceExceptionsTable,
 } from "@workspace/db";
-import { and, eq, gte, lt, lte, desc, asc } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, lte, desc, asc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { hrLeaveRequestsTable, hrLeaveTypesTable } from "@workspace/db";
 import { missionExcusal, withinMissionWindow } from "./missions-logic";
@@ -259,6 +259,27 @@ export async function loadWorkShift(): Promise<WorkShift | null> {
   };
 }
 
+/**
+ * Non-working days: the weekly day(s) off from Settings → Absence, and official
+ * holidays from Settings → Holidays. A non-working day is never absence.
+ */
+async function loadCalendar(): Promise<{
+  weeklyOffDays: number[];
+  holidays: Map<string, string>;
+}> {
+  const rows = await db
+    .select()
+    .from(hrSettingsTable)
+    .where(inArray(hrSettingsTable.key, ["absence", "holidays"]));
+  const byKey = new Map(rows.map((r) => [r.key, r.value]));
+  const absence = byKey.get("absence") as { weeklyOffDays?: number[] } | null | undefined;
+  const holidayList = (byKey.get("holidays") as { date: string; name: string }[] | null) ?? [];
+  return {
+    weeklyOffDays: Array.isArray(absence?.weeklyOffDays) ? absence.weeklyOffDays : [],
+    holidays: new Map(holidayList.map((h) => [h.date, h.name])),
+  };
+}
+
 export type AttendanceOutcome =
   { ok: true; body: Record<string, unknown> } | { ok: false; error: string };
 
@@ -275,6 +296,14 @@ export async function buildAttendance(
   if (!DATE_RE.test(date) || !TIME_RE.test(shiftStart)) {
     return { ok: false, error: "تاريخ أو وقت الوردية غير صالح" };
   }
+  const calendar = await loadCalendar();
+  const holidayName = calendar.holidays.get(date) ?? null;
+  const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
+  const dayOff: { kind: "holiday" | "weekly"; name: string | null } | null = holidayName
+    ? { kind: "holiday", name: holidayName }
+    : calendar.weeklyOffDays.includes(weekday)
+      ? { kind: "weekly", name: null }
+      : null;
   const next = new Date(`${date}T00:00:00Z`);
   next.setUTCDate(next.getUTCDate() + 1);
   const nextDate = next.toISOString().slice(0, 10);
@@ -372,12 +401,14 @@ export async function buildAttendance(
 
     // No punches is only absence when nothing excuses the day: a full-day
     // mission, an approved leave, or an exemption from punching at all.
-    const absent = isAbsent({
-      punchCount: times.length,
-      exemptFromPunch: resolved.exemptFromPunch,
-      fullDayMission: excusal.fullDay,
-      onLeave: leaveByEmp.has(e.id),
-    });
+    const absent = dayOff
+      ? false
+      : isAbsent({
+          punchCount: times.length,
+          exemptFromPunch: resolved.exemptFromPunch,
+          fullDayMission: excusal.fullDay,
+          onLeave: leaveByEmp.has(e.id),
+        });
 
     // A timed mission with no punch at all is worth flagging: the window was
     // excused but there is no evidence the employee was ever on site.
@@ -401,6 +432,8 @@ export async function buildAttendance(
       missionWindows: excusal.windows.map((w) => `${w.startTime}-${w.endTime}`),
       missingPunchWarning,
       absent,
+      dayOffName: dayOff?.name ?? null,
+      dayOffKind: dayOff?.kind ?? null,
       // Which terms were applied, so the screen can show the exception rather
       // than silently reporting a lateness of 0.
       shiftStart: resolved.start,
@@ -414,6 +447,7 @@ export async function buildAttendance(
     ok: true,
     body: {
       date,
+      dayOff,
       shiftStart,
       shiftEnd: configured?.end ?? null,
       lateGraceMinutes: graceMin,
