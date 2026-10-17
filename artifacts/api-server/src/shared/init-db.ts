@@ -1754,9 +1754,6 @@ export async function initDb(): Promise<void> {
       { name: "أجهزة", code: "equipment", sort: 10, kind: "functional", parent: null },
       { name: "قطع غيار", code: "spare_parts", sort: 20, kind: "functional", parent: null },
       { name: "كهرباء", code: "electrical", sort: 30, kind: "functional", parent: null },
-      // قواطع is a SPECIALISATION inside كهرباء, not a domain of its own: it must
-      // never create an independent responsibility, so it points at كهرباء.
-      { name: "قواطع", code: "breakers", sort: 40, kind: "subcategory", parent: "كهرباء" },
       { name: "مقاومة حريق", code: "fire_resistance", sort: 50, kind: "functional", parent: null },
     ];
     for (const c of itemCategories) {
@@ -1780,6 +1777,9 @@ export async function initDb(): Promise<void> {
     // The classifier's own subcategory vocabulary (PLC / Encoders / contactors…)
     // is seeded with its domain so the AI has a real list to choose from.
     const itemSubcategories = [
+      // قواطع is a SPECIALISATION inside كهرباء, not a domain of its own: it must
+      // never create an independent responsibility, so it points at كهرباء.
+      { name: "قواطع", code: "breakers", parent: "كهرباء", sort: 40 },
       { name: "كونتاكتورات", code: "contactors", parent: "كهرباء", sort: 41 },
       { name: "كابلات", code: "cables", parent: "كهرباء", sort: 42 },
       { name: "لوحات كهربائية", code: "panels", parent: "كهرباء", sort: 43 },
@@ -1792,8 +1792,6 @@ export async function initDb(): Promise<void> {
       { name: "Encoders", code: "encoders", parent: "Automation", sort: 46 },
       { name: "Control Systems", code: "control_systems", parent: "Automation", sort: 47 },
       { name: "Electrical Instruments", code: "instruments", parent: "كهرباء", sort: 48 },
-      // الإضاءة تخصص فرعي داخل الكهرباء وليست مجالًا وظيفيًا مستقلًا.
-      { name: "إضاءة", code: "lighting", parent: "كهرباء", sort: 49 },
     ];
     for (const s of itemSubcategories) {
       await client.query(
@@ -1810,19 +1808,65 @@ export async function initDb(): Promise<void> {
       );
     }
 
-    // ── Mirror supplier categories into item categories ─────────────────────
-    // A supplier category is copied in by NAME (idempotent, ON CONFLICT DO
-    // NOTHING) so a category added on /suppliers also appears as an item
-    // category. SCOPED: a mirror row is only created when the name is already a
-    // CANONICAL item category (it carries a code). This is what stops junk
-    // supplier-category spellings (e.g. plumbing_sanitary_supplier,
-    // sanitary_fittings_supplier) from being seeded in as orphan functional
-    // domains that classify no item and own no responsibility. Kept as its OWN
-    // statement: a sibling failure must not roll the seed back.
+    // ── Reconcile the item catalogue with the supplier catalogue ────────────
+    // The operator's rule: «تبويب تصنيفات البنود يجب ألا تزيد أو تنقص عن تصنيفات
+    // الموردين». The two lists drifted because the mirror below was one-way and
+    // SCOPED to names that already carried a seed code — so a supplier category
+    // like «مشروبات ومواد غذائية» never appeared on the item side, and a
+    // functional item category like «أجهزة» never appeared on the supplier side.
+    //
+    // Every statement is its OWN client.query call: statements in one literal
+    // share an implicit transaction, so a sibling failure would roll the whole
+    // block back silently (the outage class recorded in AGENTS.md). Comments use
+    // SQL --, never a JS // inside a SQL literal. Do not put backticks in these
+    // comments either — the guard below scans for backtick-delimited SQL bodies,
+    // and a stray backtick shifts every pairing after it.
+    //
+    // 1) Every supplier category is mirrored in as a functional trade domain.
     await client.query(`
-      INSERT INTO item_categories (name, sort_order)
-      SELECT sc.name, 100 FROM supplier_categories sc
-      WHERE EXISTS (SELECT 1 FROM item_categories ic WHERE ic.name = sc.name AND ic.code IS NOT NULL)
+      INSERT INTO item_categories (name, sort_order, kind)
+      SELECT sc.name, 100, 'functional' FROM supplier_categories sc
+      WHERE NOT EXISTS (SELECT 1 FROM item_categories ic WHERE ic.name = sc.name)
+      ON CONFLICT (name) DO NOTHING;
+    `);
+    // 2) Every ACTIVE functional item category is registered as a supplier
+    //    category, so a domain that only the item side knows («أجهزة»,
+    //    «قطع غيار», «مقاومة حريق») becomes selectable on /suppliers too.
+    await client.query(`
+      INSERT INTO supplier_categories (name)
+      SELECT ic.name FROM item_categories ic
+      WHERE ic.is_active = true
+        AND COALESCE(ic.kind, 'functional') = 'functional'
+        AND NOT EXISTS (SELECT 1 FROM supplier_categories sc WHERE sc.name = ic.name)
+      ON CONFLICT (name) DO NOTHING;
+    `);
+    // 3) A specialisation is NOT a trade category. A declared subcategory that no
+    //    supplier category declares is demoted to `subcategory` so it disappears
+    //    from both trade lists while its items keep their category and its owner
+    //    resolves to the functional domain. A subcategory the supplier side DOES
+    //    declare stays functional (it is a real trade there).
+    await client.query(`
+      UPDATE item_categories child
+      SET kind = 'subcategory',
+          parent_id = COALESCE(child.parent_id, (SELECT p.id FROM item_categories p WHERE p.name = 'كهرباء'))
+      WHERE child.name IN ('قواطع', 'كونتاكتورات', 'كابلات', 'لوحات كهربائية',
+                           'Automation', 'PLC', 'Encoders', 'Control Systems',
+                           'Electrical Instruments')
+        AND COALESCE(child.kind, 'functional') <> 'subcategory'
+        AND NOT EXISTS (SELECT 1 FROM supplier_categories sc WHERE sc.name = child.name);
+    `);
+    // 4) «إضاءة» is an INDEPENDENT trade domain (the operator's decision «أ١»):
+    //    14 suppliers filter by it, so it must appear on BOTH screens. It is
+    //    promoted out of the كهرباء specialisation it was folded into.
+    await client.query(`
+      UPDATE item_categories
+      SET kind = 'functional', parent_id = NULL, is_active = true
+      WHERE name = 'إضاءة'
+        AND (COALESCE(kind, 'functional') <> 'functional' OR parent_id IS NOT NULL OR is_active = false);
+    `);
+    await client.query(`
+      INSERT INTO supplier_categories (name)
+      SELECT 'إضاءة' WHERE EXISTS (SELECT 1 FROM item_categories WHERE name = 'إضاءة')
       ON CONFLICT (name) DO NOTHING;
     `);
 
@@ -1996,6 +2040,18 @@ export async function initDb(): Promise<void> {
       WHERE EXISTS (SELECT 1 FROM item_categories WHERE name = 'كهرباء')
       ON CONFLICT (alias) DO NOTHING;
     `);
+    // The alias ROW itself must stop being a trade category: «ELEC» is a spelling
+    // of «كهرباء», so leaving it active would keep it in the «تصنيفات البنود»
+    // list and break the equality with /suppliers. Deactivated, never deleted —
+    // its historical audit rows must survive and the alias table above keeps the
+    // spelling resolvable to «كهرباء».
+    await client.query(`
+      UPDATE item_categories
+      SET is_active = false
+      WHERE lower(trim(name)) IN ('elec','electrical','electric')
+        AND name <> 'كهرباء'
+        AND is_active = true;
+    `);
 
     // ── Reparent automation instruments under «Automation» (idempotent) ──────
     // PLC / Encoders / Control Systems are AUTOMATION instruments, so they belong
@@ -2051,16 +2107,9 @@ export async function initDb(): Promise<void> {
         WHERE name <> 'إضاءة' AND lower(trim(name)) IN ('اضاءة','اضاءه','lighting','light')
       );
     `);
-    // Ensure the canonical «إضاءة» row is a subcategory of «كهرباء» even if it was
-    // created earlier as a functional domain from the admin UI.
-    await client.query(`
-      UPDATE item_categories child
-      SET kind = 'subcategory', parent_id = parent.id
-      FROM item_categories parent
-      WHERE child.name = 'إضاءة'
-        AND parent.name = 'كهرباء'
-        AND (child.kind IS DISTINCT FROM 'subcategory' OR child.parent_id IS DISTINCT FROM parent.id);
-    `);
+    // «إضاءة» is NOT demoted here: the operator's decision «أ١» makes it an
+    // INDEPENDENT trade domain (14 suppliers filter by it), promoted above. The
+    // relation moves below only merge the stray spellings INTO it.
     // Deactivate (never delete) the folded duplicates so they stop appearing as
     // independent domains in the admin list while their history survives.
     await client.query(`

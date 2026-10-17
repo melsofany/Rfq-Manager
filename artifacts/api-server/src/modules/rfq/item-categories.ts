@@ -21,7 +21,7 @@ import {
   itemCategoryKeywordsTable,
   auditLogTable,
 } from "@workspace/db";
-import { eq, and, asc, inArray } from "drizzle-orm";
+import { eq, and, asc, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { isUniqueViolation } from "../../shared/pg-errors";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
@@ -242,10 +242,25 @@ router.delete(
   },
 );
 
+// GET /item-categories — the trade-category catalogue.
+//
+// Only ACTIVE FUNCTIONAL domains are returned. The operator's rule is that this
+// list must match `/suppliers` exactly («ألا تزيد أو تنقص»), and `/suppliers`
+// lists trade categories only. A `subcategory` (قواطع / PLC / إضاءة…) refines a
+// domain and inherits its owner, so it is NOT a trade category and would break
+// that equality; a `brand` is metadata; an inactive row is retired. The rows stay
+// in `item_categories` — items keep their category and ownership still resolves
+// to the domain — they are simply not offered as trade categories.
 router.get("/item-categories", requireAuth, async (_req, res): Promise<void> => {
   const rows = await db
     .select()
     .from(itemCategoriesTable)
+    .where(
+      and(
+        eq(itemCategoriesTable.isActive, true),
+        sql`coalesce(${itemCategoriesTable.kind}, 'functional') = 'functional'`,
+      ),
+    )
     .orderBy(asc(itemCategoriesTable.sortOrder), asc(itemCategoriesTable.name));
   const aliases = await loadAliases();
   res.json(rows.map((c) => serializeCategory(c, aliases.get(c.id) ?? [])));

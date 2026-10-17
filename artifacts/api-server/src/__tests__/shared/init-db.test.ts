@@ -338,19 +338,67 @@ describe("init-db migrations", () => {
     expect(link!).toContain("ON CONFLICT (supplier_id, category_id) DO NOTHING");
   });
 
-  it("SCOPES the supplier→item category mirror to canonical names (no junk domains)", () => {
-    // The mirror used to copy EVERY supplier-category name in as an item
-    // category, so a free-text spelling like `plumbing_sanitary_supplier` became
-    // an orphan functional domain («جت من فين»). It must only mirror a name that
-    // is ALREADY a canonical item category (carries a code).
-    const literal = sqlLiterals(source).find(
+  it("RECONCILES the item catalogue with the supplier catalogue (both directions)", () => {
+    // The operator's rule: «تبويب تصنيفات البنود يجب ألا تزيد أو تنقص عن تصنيفات
+    // الموردين». The old mirror was ONE-WAY and scoped to names already carrying a
+    // seed code, so «مشروبات ومواد غذائية» existed only on /suppliers and
+    // «أجهزة»/«قطع غيار» only on the item side. Both directions are now mirrored.
+    // The one-way scoped mirror is GONE: it can no longer be relied on.
+    const scoped = sqlLiterals(source).find(
       (b) =>
         b.includes("INSERT INTO item_categories (name, sort_order)") &&
-        b.includes("FROM supplier_categories"),
+        b.includes("FROM supplier_categories") &&
+        b.includes("ic.code IS NOT NULL"),
     );
-    expect(literal, "the startup mirror must exist").toBeDefined();
-    expect(literal!).toContain("ic.code IS NOT NULL");
-    expect(literal!).toContain("WHERE EXISTS (SELECT 1 FROM item_categories ic");
+    expect(scoped, "the old scoped one-way mirror must be removed").toBeUndefined();
+
+    // Supplier → item: every supplier category becomes a functional item domain.
+    const toItem = sqlLiterals(source).find(
+      (b) =>
+        b.includes("INSERT INTO item_categories (name, sort_order, kind)") &&
+        b.includes("FROM supplier_categories sc") &&
+        b.includes("'functional'"),
+    );
+    expect(toItem, "supplier categories must be mirrored INTO the item catalogue").toBeDefined();
+
+    // Item → supplier: every active functional domain becomes a supplier category.
+    const toSupplier = sqlLiterals(source).find(
+      (b) =>
+        b.includes("INSERT INTO supplier_categories (name)") &&
+        b.includes("FROM item_categories ic") &&
+        b.includes("'functional'"),
+    );
+    expect(toSupplier, "item domains must be mirrored INTO the supplier catalogue").toBeDefined();
+
+    // A specialisation whose live row is still functional must be demoted, so it
+    // is hidden from the trade lists while its items keep the category.
+    const demote = sqlLiterals(source).find(
+      (b) => b.includes("SET kind = 'subcategory'") && b.includes("'قواطع'"),
+    );
+    expect(demote, "declared specialisations must be demoted out of the trade list").toBeDefined();
+
+    // «إضاءة» is promoted to an independent domain (decision «أ١»: 14 suppliers
+    // filter by it), and its row must NOT be demoted back to a specialisation.
+    const promote = sqlLiterals(source).find(
+      (b) => b.includes("SET kind = 'functional', parent_id = NULL") && b.includes("'إضاءة'"),
+    );
+    expect(promote, "«إضاءة» must be promoted to a functional trade domain").toBeDefined();
+    const demoteLighting = sqlLiterals(source).find(
+      (b) =>
+        b.includes("SET kind = 'subcategory'") &&
+        b.includes("child.name = 'إضاءة'") &&
+        b.includes("parent.name = 'كهرباء'"),
+    );
+    expect(demoteLighting, "«إضاءة» must not be demoted back to a subcategory").toBeUndefined();
+
+    // The ELEC alias ROW must stop being a trade category.
+    const elec = sqlLiterals(source).find(
+      (b) =>
+        b.includes("UPDATE item_categories") &&
+        b.includes("is_active = false") &&
+        b.includes("'elec','electrical','electric'"),
+    );
+    expect(elec, "the ELEC alias row must be deactivated").toBeDefined();
   });
 
   it("deletes ORPHAN item categories ONLY when provably unused", () => {
