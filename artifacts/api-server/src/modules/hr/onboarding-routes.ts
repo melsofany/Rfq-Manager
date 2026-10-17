@@ -32,6 +32,7 @@ import {
   type ParsedPhoto,
 } from "./onboarding-logic";
 import { generateEmployeeNo } from "./employee-number";
+import { logger } from "../../shared/logger";
 
 const router: IRouter = Router();
 router.use("/hr", requireAuth, requireHr);
@@ -388,6 +389,55 @@ router.put("/hr/employees/:id/bank", async (req, res): Promise<void> => {
 });
 
 /** Employee photo: GET returns the image bytes; PUT replaces it (JSON body { photo: dataUrl }). */
+/**
+ * PUT /hr/employees/:id/national-id — تعديل الرقم القومي (مشفّر، بيظهر آخر 4 أرقام بس).
+ */
+router.put("/hr/employees/:id/national-id", async (req, res): Promise<void> => {
+  if (!isHrKeyConfigured()) {
+    res
+      .status(503)
+      .json({ error: "مفتاح تشفير بيانات الموظفين (HR_DATA_KEY) غير مضبوط على السيرفر" });
+    return;
+  }
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "معرف غير صالح" });
+    return;
+  }
+  const nationalId = String(req.body?.nationalId ?? "").trim();
+  if (!isValidNationalId(nationalId)) {
+    res.status(400).json({ error: "الرقم القومي يجب أن يكون 14 رقماً" });
+    return;
+  }
+  const [emp] = await db
+    .select({ id: hrEmployeesTable.id })
+    .from(hrEmployeesTable)
+    .where(eq(hrEmployeesTable.id, id))
+    .limit(1);
+  if (!emp) {
+    res.status(404).json({ error: "غير موجود" });
+    return;
+  }
+  const values = { nationalIdEnc: encryptField(nationalId), nationalIdLast4: last4(nationalId) };
+  await db.transaction(async (tx) => {
+    const [profile] = await tx
+      .select({ employeeId: hrEmployeeProfilesTable.employeeId })
+      .from(hrEmployeeProfilesTable)
+      .where(eq(hrEmployeeProfilesTable.employeeId, id))
+      .limit(1);
+    if (profile) {
+      await tx
+        .update(hrEmployeeProfilesTable)
+        .set({ ...values, updatedAt: new Date() })
+        .where(eq(hrEmployeeProfilesTable.employeeId, id));
+    } else {
+      await tx.insert(hrEmployeeProfilesTable).values({ employeeId: id, ...values });
+    }
+  });
+  logger.info({ employeeId: id }, "hr: national ID updated");
+  res.json({ ok: true, nationalIdMasked: `•••••••••••${values.nationalIdLast4}` });
+});
+
 router.get("/hr/employees/:id/photo", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {

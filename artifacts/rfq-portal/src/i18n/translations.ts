@@ -55,6 +55,10 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.emp.rehireConfirm": "Confirm re-hire",
     "hr.emp.cancel": "Cancel",
     "hr.emp.bankSection": "Bank account (salary deposit)",
+    "hr.emp.nationalSection": "National ID",
+    "hr.emp.nationalCurrent": "On file",
+    "hr.emp.nationalNone": "No national ID on file yet.",
+    "hr.emp.nationalNew": "New national ID (14 digits) — leave empty to keep current",
     "hr.emp.bankCurrent": "Current account",
     "hr.emp.bankNone": "No bank account on file yet.",
     "hr.emp.bankHint":
@@ -670,6 +674,10 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.emp.rehireConfirm": "تأكيد إعادة التعيين",
     "hr.emp.cancel": "إلغاء",
     "hr.emp.bankSection": "الحساب البنكي (تحويل المرتب)",
+    "hr.emp.nationalSection": "الرقم القومي",
+    "hr.emp.nationalCurrent": "المسجل حالياً",
+    "hr.emp.nationalNone": "مفيش رقم قومي مسجل لسه.",
+    "hr.emp.nationalNew": "الرقم القومي الجديد (14 رقم) — سيبه فاضي لو مش عايز تغيّره",
     "hr.emp.bankCurrent": "الحساب الحالي",
     "hr.emp.bankNone": "مفيش حساب بنكي مسجل لسه.",
     "hr.emp.bankHint":
