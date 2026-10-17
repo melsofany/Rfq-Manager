@@ -33,6 +33,8 @@ interface AttendanceRow {
   punchCount: number;
   lateMinutes: number;
   absent: boolean;
+  dayOffKind: "holiday" | "weekly" | null;
+  dayOffName: string | null;
   onMission: boolean;
   missionFullDay: boolean;
   missionWindows: string[];
@@ -413,9 +415,16 @@ function AttendanceTab() {
                               : `${t("hr.att.missionTimed")} ${r.missionWindows.join(" ، ")}`}
                           </span>
                         )}
+                        {r.dayOffKind && (
+                          <span className="me-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                            {r.dayOffKind === "holiday"
+                              ? `${t("hr.att.holiday")}: ${r.dayOffName ?? ""}`
+                              : t("hr.att.weeklyOff")}
+                          </span>
+                        )}
                         {r.absent ? (
                           <span className="text-red-600">{t("hr.att.absentLabel")}</span>
-                        ) : (
+                        ) : r.dayOffKind && r.punchCount === 0 ? null : (
                           <span className="text-green-700">{t("hr.att.presentLabel")}</span>
                         )}
                         {r.missingPunchWarning && (
@@ -2326,6 +2335,10 @@ function SettingsTab() {
         value={data.absence as { dailyDivisor: number; weeklyOffDays: number[] } | null}
         onSaved={load}
       />
+      <HolidaysCard
+        value={(data as { holidays?: { date: string; name: string }[] | null }).holidays ?? null}
+        onSaved={load}
+      />
       <WorkShiftCard
         value={
           data.work_shift as {
@@ -2567,6 +2580,74 @@ function TaxCard({
 }
 
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
+
+function HolidaysCard({
+  value,
+  onSaved,
+}: {
+  value: { date: string; name: string }[] | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [rows, setRows] = useState<{ date: string; name: string }[]>(value ?? []);
+  const [draft, setDraft] = useState({ date: "", name: "" });
+  function add() {
+    if (!draft.date || !draft.name.trim()) return;
+    setRows(
+      [
+        ...rows.filter((x) => x.date !== draft.date),
+        { date: draft.date, name: draft.name.trim() },
+      ].sort((a, b) => a.date.localeCompare(b.date)),
+    );
+    setDraft({ date: "", name: "" });
+  }
+  return (
+    <SettingCard
+      title={t("hr.set.holidays")}
+      configured={value !== null}
+      onSaved={onSaved}
+      onSave={() => saveSetting("holidays", rows)}
+    >
+      <div className="space-y-2">
+        {rows.map((h) => (
+          <div key={h.date} className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-mono">{h.date}</span>
+            <span>{h.name}</span>
+            <Button
+              size="sm"
+              variant="outline"
+              type="button"
+              onClick={() => setRows(rows.filter((x) => x.date !== h.date))}
+            >
+              {t("hr.set.holidayRemove")}
+            </Button>
+          </div>
+        ))}
+        {rows.length === 0 && (
+          <p className="text-xs text-muted-foreground">{t("hr.set.holidaysNone")}</p>
+        )}
+        <div className="flex flex-wrap items-end gap-2">
+          <input
+            type="date"
+            className={setInput}
+            value={draft.date}
+            onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+          />
+          <input
+            className={setInput}
+            placeholder={t("hr.set.holidayName")}
+            value={draft.name}
+            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+          />
+          <Button size="sm" type="button" onClick={add}>
+            {t("hr.set.holidayAdd")}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">{t("hr.set.holidaysHint")}</p>
+      </div>
+    </SettingCard>
+  );
+}
 
 function AbsenceCard({
   value,

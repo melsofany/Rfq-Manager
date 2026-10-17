@@ -1,3 +1,4 @@
+import { isValidYmd } from "./leave-logic";
 /**
  * HR settings — القيم اللي المحاسب بيعدّلها (التأمينات، الضرايب، الغياب، الجزاءات، بدلات، بنك).
  * كل مفتاح ليه validator. القيمة null معناها "غير مضبوط". مفيش أرقام افتراضية.
@@ -13,6 +14,7 @@ export const SETTING_KEYS = [
   "bank_export",
   "end_of_service",
   "work_shift",
+  "holidays",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -165,6 +167,30 @@ const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
  * The times are wall-clock "HH:MM"; lateMinutes is the grace period after the
  * shift start before an arrival counts as late.
  */
+/**
+ * Official holidays (إجازات رسمية) declared by HR, e.g. 6 October or Sham El-Nessim.
+ * A declared day is not counted as absence in attendance or payroll.
+ */
+function validateHolidays(v: unknown): Result {
+  if (v === null) return { value: [] };
+  if (!Array.isArray(v)) return { error: "صيغة غير صالحة" };
+  if (v.length > 100) return { error: "عدد الإجازات الرسمية كبير جداً" };
+  const seen = new Set<string>();
+  const out: { date: string; name: string }[] = [];
+  for (const item of v) {
+    if (!isObj(item)) return { error: "صيغة غير صالحة" };
+    const date = typeof item.date === "string" ? item.date : "";
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    if (!isValidYmd(date)) return { error: "تاريخ الإجازة غير صالح" };
+    if (!name || name.length > 100) return { error: "اكتب اسم الإجازة (حتى 100 حرف)" };
+    if (seen.has(date)) return { error: `التاريخ ${date} مكرر` };
+    seen.add(date);
+    out.push({ date, name });
+  }
+  out.sort((a, b) => a.date.localeCompare(b.date));
+  return { value: out };
+}
+
 function validateWorkShift(v: unknown): Result {
   if (v === null) return { value: null };
   if (!isObj(v)) return { error: "صيغة غير صالحة" };
@@ -202,5 +228,7 @@ export function validateSetting(key: SettingKey, value: unknown): Result {
       return validateEndOfService(value);
     case "work_shift":
       return validateWorkShift(value);
+    case "holidays":
+      return validateHolidays(value);
   }
 }

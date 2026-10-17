@@ -80,6 +80,7 @@ vi.mock("drizzle-orm", () => ({
   gte: (col: unknown, value: unknown) => ({ __gte: [col, value] }),
   lt: (col: unknown, value: unknown) => ({ __lt: [col, value] }),
   lte: (col: unknown, value: unknown) => ({ __lte: [col, value] }),
+  inArray: (col: unknown, values: unknown) => ({ __inArray: [col, values] }),
   desc: (col: unknown) => ({ __desc: col }),
   asc: (col: unknown) => ({ __asc: col }),
 }));
