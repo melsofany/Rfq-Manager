@@ -34,7 +34,7 @@ export interface CatalogCategory {
 }
 
 export interface ReconcileInput {
-  supplierCategories: Array<{ id: number; name: string }>;
+  supplierCategories: Array<{ id: number; name: string; linkCount?: number }>;
   itemCategories: CatalogCategory[];
   /**
    * Specialisations DECLARED by the seed (`قواطع` is a `كهرباء` specialisation,
@@ -64,6 +64,15 @@ export interface ReconcilePlan {
   promoteToFunctional: string[];
   /** Item-category names that must become `subcategory` of `parent`. */
   demoteToSubcategory: Array<{ name: string; parent: string }>;
+  /**
+   * Supplier-category rows to DELETE: a declared specialisation that no supplier
+   * actually links to. An earlier deploy mirrored every active functional item
+   * category into `supplier_categories`, so `قواطع` was added there even though
+   * it is a specialisation; leaving it makes `/suppliers` list one more category
+   * than the item side. A row with even ONE supplier link is KEPT — it is a real
+   * trade the operator uses.
+   */
+  dropFromSupplier: string[];
   /** Alias spellings folded into a canonical name; their own row is deactivated. */
   merges: Array<{ alias: string; canonical: string }>;
 }
@@ -118,12 +127,32 @@ export function reconcileCatalog(input: ReconcileInput): ReconcilePlan {
     .filter((name) => !isTradeCategory(itemByName.get(key(name))!))
     .map((name) => itemByName.get(key(name))!.name);
 
+  // ── Specialisation rows that must leave the supplier catalogue ────────────
+  // A declared specialisation has no business on `/suppliers`, and an earlier
+  // deploy mirrored one there (`قواطع`). This runs BEFORE the demotion because
+  // the demotion consults `supplierByName`: while the leaked row is still present
+  // the demotion sees `قواطع` as supplier-declared and refuses to hide it — the
+  // ordering bug found live. Only an UNUSED row is dropped; one supplier link
+  // means the operator really filters by it and it must never vanish.
+  const dropFromSupplier = input.declaredSubcategories
+    .filter((d) => !functionalKeys.has(key(d.name)))
+    .filter((d) => {
+      const s = input.supplierCategories.find((x) => key(x.name) === key(d.name));
+      return s != null && (s.linkCount ?? 0) === 0;
+    })
+    .map((d) => d.name);
+  const droppedKeys = new Set(dropFromSupplier.map(key));
+  // The supplier side as it will be AFTER the drop — what the demotion must see.
+  const effectiveSupplierKeys = new Set(
+    [...supplierByName.keys()].filter((k) => !droppedKeys.has(k)),
+  );
+
   // ── Demotions ─────────────────────────────────────────────────────────────
   // A declared specialisation that NO supplier category declares is not a trade
   // category: it stays in the catalogue (its items keep their category and its
   // owner resolves to the domain) but is hidden from the trade lists.
   const demoteToSubcategory = input.declaredSubcategories
-    .filter((d) => itemByName.has(key(d.name)) && !supplierByName.has(key(d.name)))
+    .filter((d) => itemByName.has(key(d.name)) && !effectiveSupplierKeys.has(key(d.name)))
     .filter((d) => !functionalKeys.has(key(d.name)))
     .filter((d) => {
       const cat = itemByName.get(key(d.name))!;
@@ -139,8 +168,11 @@ export function reconcileCatalog(input: ReconcileInput): ReconcilePlan {
   // unused supplier category still shows on `/suppliers`, so skipping it is
   // exactly how the lists drifted). Junk spellings are prevented at CREATION
   // time, which is where they originate, not by leaving the lists inconsistent.
+  // A specialisation row that is being dropped is excluded: it is about to leave
+  // `/suppliers`, so mirroring it in would re-add the very name being removed.
   const addToItem = input.supplierCategories
     .filter((s) => !itemByName.has(key(s.name)))
+    .filter((s) => !droppedKeys.has(key(s.name)))
     .map((s) => s.name);
 
   // Every trade item category belongs on `/suppliers`. A demoted specialisation
@@ -157,6 +189,7 @@ export function reconcileCatalog(input: ReconcileInput): ReconcilePlan {
     addToItem: [...new Set(addToItem)],
     promoteToFunctional: [...new Set(promoteToFunctional)],
     demoteToSubcategory,
+    dropFromSupplier: [...new Set(dropFromSupplier)],
     merges,
   };
 }
@@ -181,6 +214,7 @@ export function projectCatalog(
     items.delete(key(m.alias));
     suppliers.delete(m.alias);
   }
+  for (const name of plan.dropFromSupplier) suppliers.delete(name);
   for (const name of plan.promoteToFunctional) {
     const c = items.get(key(name));
     if (c) {

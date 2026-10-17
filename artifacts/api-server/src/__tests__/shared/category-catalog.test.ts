@@ -23,8 +23,13 @@ import {
   type ReconcileInput,
 } from "../../shared/category-catalog";
 
-// ── Live snapshot: supplier_categories (38 rows) ──────────────────────────────
-const SUPPLIER_CATEGORIES: Array<{ id: number; name: string }> = [
+// ── Live snapshot: supplier_categories (38 rows, plus the leaked mirror row) ──
+// `قواطع` (id 1314, zero links) is present because the FIRST cut of this fix
+// mirrored every active functional item category into `supplier_categories`, and
+// it shipped. Reproducing it here is what makes the ordering guard real: with the
+// row present, a demotion that consults `supplierByName` refuses to hide قواطع,
+// and the two lists stay 41 vs 40.
+const SUPPLIER_CATEGORIES: Array<{ id: number; name: string; linkCount?: number }> = [
   { id: 1, name: "كهرباء" },
   { id: 2, name: "معدات  فندقيه" },
   { id: 3, name: "الصحة والسلامة ومقاومة الحريق" },
@@ -63,6 +68,8 @@ const SUPPLIER_CATEGORIES: Array<{ id: number; name: string }> = [
   { id: 1182, name: "قطع غيار معدات ثقيلة" },
   { id: 1183, name: "كابلات متخصصة" },
   { id: 1223, name: "دهانات" },
+  // Leaked by the first cut of the reconciliation (see the header comment).
+  { id: 1314, name: "قواطع", linkCount: 0 },
 ];
 
 // ── Live snapshot: item_categories (50 rows) ─────────────────────────────────
@@ -256,6 +263,29 @@ describe("reconcileCatalog", () => {
   it("demotes the specialisation whose live row is still functional", () => {
     expect(plan.demoteToSubcategory).toEqual([{ name: "قواطع", parent: "كهرباء" }]);
   });
+
+  it("drops the UNUSED specialisation row that leaked into supplier_categories", () => {
+    // The first cut mirrored every active functional item category into
+    // `supplier_categories`, so `قواطع` was registered there. Left alone it makes
+    // `/suppliers` list one MORE category than the item side — the exact «تزيد»
+    // the operator forbade.
+    expect(plan.dropFromSupplier).toEqual(["قواطع"]);
+  });
+
+  it("NEVER drops a specialisation a supplier actually links to", () => {
+    // One link means the operator really filters by it, so the row is a live
+    // trade and must survive even though the seed calls it a specialisation.
+    const linked: ReconcileInput = {
+      ...INPUT,
+      supplierCategories: INPUT.supplierCategories.map((s) =>
+        s.name === "قواطع" ? { ...s, linkCount: 7 } : s,
+      ),
+    };
+    const p = reconcileCatalog(linked);
+    expect(p.dropFromSupplier).toEqual([]);
+    // And the demotion must then leave it alone too — it is supplier-declared.
+    expect(p.demoteToSubcategory).toEqual([]);
+  });
 });
 
 describe("the reconciled lists are IDENTICAL", () => {
@@ -294,9 +324,16 @@ describe("the reconciled lists are IDENTICAL", () => {
     expect(itemTradeNames).toContain("إضاءة");
   });
 
-  it("keeps every supplier category visible — nothing is dropped", () => {
+  it("keeps every GENUINE supplier category visible — only the leaked row goes", () => {
+    // The rule is «لا تزيد ولا تنقص»: a real supplier category must never vanish,
+    // but the row the first cut leaked in (`قواطع`, a specialisation with zero
+    // supplier links) must go, or /suppliers lists one MORE than the item side.
+    // Asserting the drop is a single, named, link-less row is the point.
+    expect(plan.dropFromSupplier).toEqual(["قواطع"]);
     for (const s of SUPPLIER_CATEGORIES) {
-      expect(supplierNames).toContain(s.name);
+      if (s.name === "قواطع") continue;
+      expect(supplierNames, `a genuine supplier category vanished: ${s.name}`).toContain(s.name);
     }
+    expect(supplierNames).not.toContain("قواطع");
   });
 });
