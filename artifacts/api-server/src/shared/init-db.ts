@@ -1815,36 +1815,56 @@ export async function initDb(): Promise<void> {
     // like «مشروبات ومواد غذائية» never appeared on the item side, and a
     // functional item category like «أجهزة» never appeared on the supplier side.
     //
+    // ORDER IS LOAD-BEARING, and the first cut got it wrong (caught live):
+    //   1. register every TRADE item domain as a supplier category FIRST, so the
+    //      specialisation test below can see the supplier side it must consult —
+    //      and so the orphan cleanup (which runs later) sees these names as
+    //      supplier-declared and mirrors them instead of deleting them;
+    //   2. demote the declared specialisations;
+    //   3. promote «إضاءة»;
+    //   4. mirror every supplier category INTO the item catalogue LAST.
+    // Mirroring last also means a name the demotion just hid cannot be re-added
+    // as a trade domain by step 4 (the demotion runs on the pre-existing row).
+    //
     // Every statement is its OWN client.query call: statements in one literal
     // share an implicit transaction, so a sibling failure would roll the whole
     // block back silently (the outage class recorded in AGENTS.md). Comments use
     // SQL --, never a JS // inside a SQL literal. Do not put backticks in these
-    // comments either — the guard below scans for backtick-delimited SQL bodies,
-    // and a stray backtick shifts every pairing after it.
+    // comments either — the guard scans for backtick-delimited SQL bodies, and a
+    // stray backtick shifts every pairing after it.
     //
-    // 1) Every supplier category is mirrored in as a functional trade domain.
-    await client.query(`
-      INSERT INTO item_categories (name, sort_order, kind)
-      SELECT sc.name, 100, 'functional' FROM supplier_categories sc
-      WHERE NOT EXISTS (SELECT 1 FROM item_categories ic WHERE ic.name = sc.name)
-      ON CONFLICT (name) DO NOTHING;
-    `);
-    // 2) Every ACTIVE functional item category is registered as a supplier
-    //    category, so a domain that only the item side knows («أجهزة»,
-    //    «قطع غيار», «مقاومة حريق») becomes selectable on /suppliers too.
+    // 1) Every ACTIVE functional item category is registered as a supplier
+    //    category, so a domain only the item side knows («أجهزة», «قطع غيار»,
+    //    «مقاومة حريق») becomes selectable on /suppliers too. A DECLARED
+    //    specialisation is excluded: it is not a trade category, and registering
+    //    it would make step 2's test see it on the supplier side and refuse to
+    //    demote it.
     await client.query(`
       INSERT INTO supplier_categories (name)
       SELECT ic.name FROM item_categories ic
       WHERE ic.is_active = true
         AND COALESCE(ic.kind, 'functional') = 'functional'
+        AND ic.name NOT IN ('قواطع', 'كونتاكتورات', 'كابلات', 'لوحات كهربائية',
+                            'Automation', 'PLC', 'Encoders', 'Control Systems',
+                            'Electrical Instruments')
         AND NOT EXISTS (SELECT 1 FROM supplier_categories sc WHERE sc.name = ic.name)
       ON CONFLICT (name) DO NOTHING;
     `);
-    // 3) A specialisation is NOT a trade category. A declared subcategory that no
-    //    supplier category declares is demoted to `subcategory` so it disappears
-    //    from both trade lists while its items keep their category and its owner
-    //    resolves to the functional domain. A subcategory the supplier side DOES
-    //    declare stays functional (it is a real trade there).
+    // 2) A specialisation is NOT a trade category. First drop a declared
+    //    specialisation row that leaked into `supplier_categories` from an
+    //    earlier deploy — but ONLY when no supplier links to it, since a linked
+    //    category is a real trade the operator uses and must never vanish.
+    await client.query(`
+      DELETE FROM supplier_categories sc
+      WHERE sc.name IN ('قواطع', 'كونتاكتورات', 'كابلات', 'لوحات كهربائية',
+                        'Automation', 'PLC', 'Encoders', 'Control Systems',
+                        'Electrical Instruments')
+        AND NOT EXISTS (SELECT 1 FROM supplier_category_links l WHERE l.category_id = sc.id);
+    `);
+    // 2b) Then demote the declared specialisations so they disappear from both
+    //     trade lists while their items keep their category and their owner
+    //     resolves to the functional domain. A subcategory the supplier side DOES
+    //     declare stays functional (it is a real trade there).
     await client.query(`
       UPDATE item_categories child
       SET kind = 'subcategory',
@@ -1855,7 +1875,7 @@ export async function initDb(): Promise<void> {
         AND COALESCE(child.kind, 'functional') <> 'subcategory'
         AND NOT EXISTS (SELECT 1 FROM supplier_categories sc WHERE sc.name = child.name);
     `);
-    // 4) «إضاءة» is an INDEPENDENT trade domain (the operator's decision «أ١»):
+    // 3) «إضاءة» is an INDEPENDENT trade domain (the operator's decision «أ١»):
     //    14 suppliers filter by it, so it must appear on BOTH screens. It is
     //    promoted out of the كهرباء specialisation it was folded into.
     await client.query(`
@@ -1867,6 +1887,15 @@ export async function initDb(): Promise<void> {
     await client.query(`
       INSERT INTO supplier_categories (name)
       SELECT 'إضاءة' WHERE EXISTS (SELECT 1 FROM item_categories WHERE name = 'إضاءة')
+      ON CONFLICT (name) DO NOTHING;
+    `);
+    // 4) Mirror every supplier category INTO the item catalogue as a functional
+    //    trade domain — LAST, so the demotion above is not undone and the orphan
+    //    cleanup below sees these names as supplier-declared.
+    await client.query(`
+      INSERT INTO item_categories (name, sort_order, kind)
+      SELECT sc.name, 100, 'functional' FROM supplier_categories sc
+      WHERE NOT EXISTS (SELECT 1 FROM item_categories ic WHERE ic.name = sc.name)
       ON CONFLICT (name) DO NOTHING;
     `);
 
@@ -2215,16 +2244,26 @@ export async function initDb(): Promise<void> {
 
     // ── Remove ORPHAN item categories (idempotent, safety-guarded) ───────────
     // The operator's report: a list of categories that «احنا مش عاملينها اصلا ولا
-    // ضيفنا فيها موردين جت من فين» — junk functional domains such as
-    // plumbing_sanitary_supplier / sanitary_fittings_supplier, mirrored in
-    // from free-text supplier-category names. Nothing is deleted by NAME here:
-    // a row is removed ONLY when it is provably unused — it carries NO code
-    // (never a canonical seed), and every relation below is empty:
+    // ضيفنا فيها موردين جت من فين» — junk functional domains mirrored in from
+    // free-text supplier-category names. Nothing is deleted by NAME here: a row
+    // is removed ONLY when it is provably unused — it carries NO code (never a
+    // canonical seed), and every relation below is empty:
     //   • no item references it (rfq_items / customer_rfq_items /
     //     purchase_order_items / the item-category junction),
     //   • NO employee owns it, and NO item responsibility is assigned to it,
     //   • it is neither a parent of another category nor an alias target,
-    //   • it has no classifier keywords.
+    //   • it is not a declared specialisation (no parent of its own),
+    //   • it has no classifier keywords,
+    //   • and NO supplier category declares it.
+    //
+    // That last guard is the one the reconciliation made load-bearing, and the
+    // first cut had it INVERTED (`EXISTS … supplier_categories`): it deleted
+    // exactly the names the reconciliation had just mirrored in — the two live
+    // supplier-only categories «مشروبات ومواد غذائية» / «كاوتش معدات ثقيلة»
+    // were removed on the same boot, which is how the operator's rule was still
+    // broken after the fix. A name `/suppliers` shows must be KEPT here; only a
+    // row that neither the seed nor the supplier catalogue declares is junk.
+    //
     // A category with even ONE item is KEPT (it may be mis-classified, which the
     // conflict/repair flow fixes) — so no incompatible reference can ever fail
     // this DELETE. Own array-wrapped literal, so a sibling failure cannot roll
@@ -2232,7 +2271,8 @@ export async function initDb(): Promise<void> {
     await client.query(`
       DELETE FROM item_categories ic
       WHERE ic.code IS NULL
-        AND EXISTS (
+        AND ic.parent_id IS NULL
+        AND NOT EXISTS (
           SELECT 1 FROM supplier_categories sc WHERE sc.name = ic.name
         )
         AND NOT EXISTS (SELECT 1 FROM rfq_items x WHERE x.category_id = ic.id)

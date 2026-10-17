@@ -399,6 +399,22 @@ describe("init-db migrations", () => {
         b.includes("'elec','electrical','electric'"),
     );
     expect(elec, "the ELEC alias row must be deactivated").toBeDefined();
+
+    // ORDERING (found live): the leaked specialisation row must be dropped from
+    // `supplier_categories` BEFORE the demotion runs. The demotion consults
+    // `supplier_categories`, so while the leaked `قواطع` row is still present the
+    // demotion sees it as supplier-declared and refuses to hide it — and the two
+    // lists stay 41 vs 40. Assert the position, not merely the presence.
+    const dropIdx = source.indexOf("DELETE FROM supplier_categories sc");
+    const demoteIdx = source.indexOf("SET kind = 'subcategory'");
+    expect(dropIdx, "the leaked specialisation row must be dropped").toBeGreaterThan(-1);
+    expect(
+      dropIdx,
+      "the drop must run BEFORE the demotion (the demotion reads supplier_categories)",
+    ).toBeLessThan(demoteIdx);
+    // The drop must never touch a row a supplier links to.
+    const drop = sqlLiterals(source).find((b) => b.includes("DELETE FROM supplier_categories sc"));
+    expect(drop).toContain("NOT EXISTS (SELECT 1 FROM supplier_category_links l");
   });
 
   it("deletes ORPHAN item categories ONLY when provably unused", () => {
@@ -411,8 +427,17 @@ describe("init-db migrations", () => {
       (b) => b.includes("DELETE FROM item_categories ic") && b.includes("ic.code IS NULL"),
     );
     expect(literal, "the orphan cleanup must exist").toBeDefined();
-    // Only a name that also exists as a supplier category is a mirror orphan.
-    expect(literal!).toContain("FROM supplier_categories sc WHERE sc.name = ic.name");
+    // A name the SUPPLIER catalogue declares must NEVER be deleted here: it is a
+    // trade category the operator sees on /suppliers, and the reconciliation
+    // mirrors exactly those names in. The guard is `NOT EXISTS`, and getting the
+    // polarity wrong (`EXISTS`) deleted the two live supplier-only categories
+    // («مشروبات ومواد غذائية» / «كاوتش معدات ثقيلة») on the same boot — which is
+    // how the rule was still broken after the first cut. Assert the polarity, not
+    // merely the presence of the subquery.
+    expect(literal!).toContain("AND NOT EXISTS (\n          SELECT 1 FROM supplier_categories sc");
+    expect(literal!).not.toMatch(/AND EXISTS\s*\(\s*SELECT 1 FROM supplier_categories sc/);
+    // A declared specialisation (it has a parent) is not an orphan either.
+    expect(literal!).toContain("AND ic.parent_id IS NULL");
     const requiredGuards = [
       "FROM rfq_items x WHERE x.category_id = ic.id",
       "FROM customer_rfq_items x WHERE x.category_id = ic.id",
