@@ -58,9 +58,15 @@ router.post("/hr/employees/:id/settlements", async (req, res): Promise<void> => 
     res.status(400).json({ error: "سبب الخروج غير صالح" });
     return;
   }
-  const eligibilityPct =
-    req.body?.eligibilityPct === undefined ? 100 : Number(req.body.eligibilityPct);
-  if (!Number.isFinite(eligibilityPct) || eligibilityPct < 0 || eligibilityPct > 100) {
+  // Optional manual override. Without it, the percentage comes from Settings for this exit reason.
+  const overridePct =
+    req.body?.eligibilityPct === undefined || req.body?.eligibilityPct === null
+      ? null
+      : Number(req.body.eligibilityPct);
+  if (
+    overridePct !== null &&
+    (!Number.isFinite(overridePct) || overridePct < 0 || overridePct > 100)
+  ) {
     res.status(400).json({ error: "نسبة الاستحقاق لازم تكون من 0 إلى 100" });
     return;
   }
@@ -72,11 +78,16 @@ router.post("/hr/employees/:id/settlements", async (req, res): Promise<void> => 
 
   const absence = (await setting("absence")) as { dailyDivisor: number } | null;
   const eos = (await setting("end_of_service")) as EndOfServiceRule | null;
-  const missing = [!absence && "absence", !eos && "end_of_service"].filter(Boolean);
+  const missing = [
+    !absence && "absence",
+    (!eos || !eos.eligibilityByReason) && "end_of_service",
+  ].filter(Boolean);
   if (missing.length) {
     res.status(400).json({ error: "إعدادات ناقصة قبل التسوية", missing });
     return;
   }
+  const eligibilityPct = overridePct ?? eos!.eligibilityByReason[reason];
+  const eligibilitySource = overridePct === null ? "setting" : "manual";
 
   const [emp] = await db
     .select()
@@ -191,7 +202,11 @@ router.post("/hr/employees/:id/settlements", async (req, res): Promise<void> => 
         reason,
         status: "draft",
         total: String(result.total),
-        details: { inputs, result, settingsUsed: { absence, endOfService: eos } },
+        details: {
+          inputs,
+          result,
+          settingsUsed: { absence, endOfService: eos, eligibilitySource },
+        },
       })
       .returning();
     return row;

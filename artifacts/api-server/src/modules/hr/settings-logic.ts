@@ -145,8 +145,25 @@ function validateEndOfService(v: unknown): Result {
   if ("error" in lim || lim.value === null) return { error: "عدد السنين الأولى مطلوب" };
   const m = optNum(v.laterMonthsPerYear, 0, 12, "الشهور لكل سنة بعد السنين الأولى");
   if ("error" in m || m.value === null) return { error: "الشهور لكل سنة بعد السنين الأولى مطلوبة" };
+  // Share of the entitlement per exit reason (0–100). HR sets these; nothing is assumed.
+  if (!isObj(v.eligibilityByReason)) {
+    return { error: "حدد نسبة الاستحقاق لكل سبب خروج (الاستقالة، الفصل، انتهاء العقد)" };
+  }
+  const byReason: Record<string, number> = {};
+  for (const reason of ["resignation", "termination", "end_of_contract"]) {
+    const p = optNum(v.eligibilityByReason[reason], 0, 100, `نسبة الاستحقاق (${reason})`);
+    if ("error" in p || p.value === null) {
+      return { error: "حدد نسبة الاستحقاق لكل سبب خروج (من 0 إلى 100)" };
+    }
+    byReason[reason] = p.value;
+  }
   return {
-    value: { firstYearsDays: d.value, firstYearsLimit: lim.value, laterMonthsPerYear: m.value },
+    value: {
+      firstYearsDays: d.value,
+      firstYearsLimit: lim.value,
+      laterMonthsPerYear: m.value,
+      eligibilityByReason: byReason,
+    },
   };
 }
 
