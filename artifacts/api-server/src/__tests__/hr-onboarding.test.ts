@@ -165,14 +165,21 @@ describe("onboarding payload", () => {
 });
 
 describe("onboarding: number, birth date and photo", () => {
-  it("refuses a hire without a date of birth (needed for the employee number)", () => {
+  it("refuses a national ID whose birth date cannot be read (needed for the employee number)", () => {
     const b = goodBody();
-    b.profile.dateOfBirth = null as any;
+    b.profile.nationalId = "19001011234567"; // century digit 1 is not valid
     expect(parseOnboard(b)).toHaveProperty("error");
   });
-  it("refuses a birth date too close to the hire date", () => {
+  it("takes the birth date from the national ID, ignoring any typed value", () => {
+    const b: any = goodBody();
+    b.profile.dateOfBirth = "1980-05-05";
+    const r = parseOnboard(b);
+    expect("input" in r).toBe(true);
+    if ("input" in r) expect(r.input.profile.dateOfBirth).toBe("1990-01-01");
+  });
+  it("refuses a birth date too close to the hire date (read from the national ID)", () => {
     const b = goodBody();
-    b.profile.dateOfBirth = "2020-01-01";
+    b.profile.nationalId = "32001011234567"; // born 2020-01-01
     expect(parseOnboard(b)).toHaveProperty("error");
   });
   it("carries an accepted photo into the parsed input", () => {

@@ -1379,6 +1379,21 @@ function MissionsTab() {
   );
 }
 
+/** Client copy of the server rule: birth date from an Egyptian national ID. */
+function birthDateFromNationalIdClient(v: string): string | null {
+  if (!/^\d{14}$/.test(v)) return null;
+  const century = v[0] === "2" ? 1900 : v[0] === "3" ? 2000 : null;
+  if (century === null) return null;
+  const year = century + Number(v.slice(1, 3));
+  const month = Number(v.slice(3, 5));
+  const day = Number(v.slice(5, 7));
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) {
+    return null;
+  }
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 function LeaveTab() {
   const { t } = useLanguage();
   const [types, setTypes] = useState<LeaveType[]>([]);
@@ -1927,7 +1942,6 @@ function OnboardTab() {
         },
         profile: {
           nationalId: f.nationalId,
-          dateOfBirth: f.dateOfBirth || null,
           gender: f.gender || null,
           address: f.address,
           emergencyContactName: f.emergencyContactName,
@@ -1996,7 +2010,12 @@ function OnboardTab() {
           <h2 className="font-semibold">{t("hr.onb.sec.personal")}</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {field("nationalId", t("hr.onb.nationalId"), "text", true)}
-            {field("dateOfBirth", t("hr.onb.dob"), "date", true)}
+            <div className="block">
+              <span className={label}>{t("hr.onb.dob")}</span>
+              <div className={input + " text-muted-foreground"}>
+                {birthDateFromNationalIdClient(f.nationalId) ?? t("hr.onb.dobAuto")}
+              </div>
+            </div>
             <label className="block">
               <span className={label}>{t("hr.onb.gender")}</span>
               <select className={input} value={f.gender} onChange={set("gender")}>

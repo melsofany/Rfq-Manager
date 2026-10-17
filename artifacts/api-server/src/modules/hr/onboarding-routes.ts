@@ -22,6 +22,7 @@ import { encryptField, last4, isHrKeyConfigured } from "../../shared/hr-crypto";
 import {
   CONTRACT_TYPES,
   isValidNationalId,
+  birthDateFromNationalId,
   isValidEgyptianIban,
   isValidAccountNo,
   normalizeAccountNo,
@@ -92,8 +93,9 @@ export function parseOnboard(body: any): { error: string } | { input: OnboardInp
 
   const nationalId = String(body?.profile?.nationalId ?? "").trim();
   if (!isValidNationalId(nationalId)) return { error: "الرقم القومي يجب أن يكون 14 رقماً" };
-  const dob = optDate(body?.profile?.dateOfBirth);
-  if (!dob) return { error: "تاريخ الميلاد مطلوب (يدخل في رقم الموظف)" };
+  // Birth date is read from the national ID, never typed by hand.
+  const dob = birthDateFromNationalId(nationalId);
+  if (!dob) return { error: "تعذّر قراءة تاريخ الميلاد من الرقم القومي، تأكد من الرقم" };
   if (Number(hireDate.slice(0, 4)) - Number(dob.slice(0, 4)) < 14)
     return { error: "تاريخ الميلاد لا يناسب تاريخ التعيين" };
 
@@ -418,7 +420,16 @@ router.put("/hr/employees/:id/national-id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "غير موجود" });
     return;
   }
-  const values = { nationalIdEnc: encryptField(nationalId), nationalIdLast4: last4(nationalId) };
+  const dob = birthDateFromNationalId(nationalId);
+  if (!dob) {
+    res.status(400).json({ error: "تعذّر قراءة تاريخ الميلاد من الرقم القومي، تأكد من الرقم" });
+    return;
+  }
+  const values = {
+    nationalIdEnc: encryptField(nationalId),
+    nationalIdLast4: last4(nationalId),
+    dateOfBirth: dob,
+  };
   await db.transaction(async (tx) => {
     const [profile] = await tx
       .select({ employeeId: hrEmployeeProfilesTable.employeeId })
@@ -435,7 +446,11 @@ router.put("/hr/employees/:id/national-id", async (req, res): Promise<void> => {
     }
   });
   logger.info({ employeeId: id }, "hr: national ID updated");
-  res.json({ ok: true, nationalIdMasked: `•••••••••••${values.nationalIdLast4}` });
+  res.json({
+    ok: true,
+    nationalIdMasked: `•••••••••••${values.nationalIdLast4}`,
+    dateOfBirth: dob,
+  });
 });
 
 router.get("/hr/employees/:id/photo", async (req, res): Promise<void> => {
