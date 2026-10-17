@@ -28,6 +28,7 @@ import {
 } from "../rfq/customer-assignment";
 import { rememberClassification } from "../rfq/classification-memory";
 import { classifyItem, normalizeText } from "../rfq/classification";
+import { isTradeCategory, loadTradeCategories, tradeNameSet } from "../rfq/trade-categories";
 import { loadClassifierVocabulary } from "../rfq/keywords";
 
 const router = Router();
@@ -2082,6 +2083,19 @@ router.get("/customer-rfq/item-category-options", requireAuth, async (_req, res)
   res.json(rows);
 });
 
+// GET /customer-rfq/trade-categories — the ONE list both pages must agree on.
+//
+// The «تصنيفات البنود» tab must never show more or fewer categories than the
+// supplier page. It previously read `/item-categories` (EVERY item category,
+// including the 9 subcategories and the deactivated ones), so it offered ~10
+// entries that are not trade categories at all — the mismatch the operator
+// reported. This serves the same set the supplier page is built from, resolved
+// by the shared rule so there is no second implementation to drift.
+router.get("/customer-rfq/trade-categories", requireAuth, async (_req, res): Promise<void> => {
+  const categories = await loadTradeCategories();
+  res.json({ count: categories.length, categories });
+});
+
 // GET /customer-rfq/unowned-categories — FUNCTIONAL domains that have NO
 // responsible employee yet. Such a category classifies an item but can never be
 // assigned (`pickOwner` returns null → «مصنّف — بلا مسؤول»), which is the root
@@ -2095,6 +2109,20 @@ router.get("/customer-rfq/item-category-options", requireAuth, async (_req, res)
 // domain's own items AND every subcategory beneath it, because those items are
 // owned by this domain.
 router.get("/customer-rfq/unowned-categories", requireAuth, async (_req, res): Promise<void> => {
+  // Restricted to the SHARED trade-category set, so «بلا مسؤول» can never list a
+  // category the main list does not show. A subcategory (قواطع/PLC/كابلات…) is a
+  // refinement INSIDE a domain and never owns work, so it is not a missing owner
+  // — it was the «more categories than /suppliers» drift when listed here.
+  //
+  // Filtered against the loaded set rather than a SQL `inArray`, so the same
+  // predicate that DEFINES a trade category is the one that filters here: a
+  // second, hand-built WHERE could drift from `isTradeCategory` silently.
+  const trade = await loadTradeCategories();
+  const tradeIds = new Set(trade.map((c) => c.id));
+  if (tradeIds.size === 0) {
+    res.json([]);
+    return;
+  }
   const rows = await db
     .select({
       id: itemCategoriesTable.id,
@@ -2116,15 +2144,15 @@ router.get("/customer-rfq/unowned-categories", requireAuth, async (_req, res): P
           )`,
     )
     .where(
-      and(
-        eq(itemCategoriesTable.isActive, true),
-        sql`coalesce(${itemCategoriesTable.kind}, 'functional') = 'functional'`,
-        sql`not exists (select 1 from ${employeeCategoriesTable} ec where ec.category_id = ${itemCategoriesTable.id})`,
-      ),
+      sql`not exists (select 1 from ${employeeCategoriesTable} ec where ec.category_id = ${itemCategoriesTable.id})`,
     )
     .groupBy(itemCategoriesTable.id, itemCategoriesTable.name)
     .orderBy(desc(sql`count(${customerRfqItemsTable.id})`));
-  res.json(rows.map((r) => ({ id: r.id, name: r.name, itemCount: Number(r.itemCount) })));
+  res.json(
+    rows
+      .filter((r) => tradeIds.has(r.id))
+      .map((r) => ({ id: r.id, name: r.name, itemCount: Number(r.itemCount) })),
+  );
 });
 
 // GET /customer-rfq/classification-conflicts — the «تضارب التصنيف» to-do list:
@@ -2202,25 +2230,25 @@ router.get(
     const supplierNames = await db
       .select({ name: supplierCategoriesTable.name })
       .from(supplierCategoriesTable);
-    const tradeNames = new Set(supplierNames.map((r) => normalizeText(r.name)));
+    const tradeNames = tradeNameSet(supplierNames);
 
     // The item categories that ARE trade categories. `limit` must bound the
     // RESULT, not the scan: filtering in JS after a LIMIT would report an empty
     // queue whenever the newest rows happen to be fine, hiding every real case
     // behind them. So the actionable set is selected in SQL. The select carries
-    // `isActive` (not just id/name) so it is unambiguous among the catalogue
-    // queries this route makes.
+    // `isActive` + `kind` so it is unambiguous among the catalogue queries this
+    // route makes, and the membership test is the SHARED rule — the same one
+    // `GET /customer-rfq/trade-categories` serves the tab.
     const allCats = await db
       .select({
         id: itemCategoriesTable.id,
         name: itemCategoriesTable.name,
+        kind: itemCategoriesTable.kind,
         isActive: itemCategoriesTable.isActive,
       })
       .from(itemCategoriesTable)
       .where(eq(itemCategoriesTable.isActive, true));
-    const tradeCategoryIds = allCats
-      .filter((c) => tradeNames.has(normalizeText(c.name)))
-      .map((c) => c.id);
+    const tradeCategoryIds = allCats.filter((c) => isTradeCategory(c, tradeNames)).map((c) => c.id);
     const catName = new Map(allCats.map((c) => [c.id, c.name]));
 
     // Actionable = unclassified OR classified under a category that is not a

@@ -193,7 +193,13 @@ let unownedCategoryRows: any[] = [];
 // Review queue state. `reviewCatalogueRows` is the FULL item catalogue
 // ({id,name} — the review queue loads it to resolve trade-category membership);
 // `supplierCategoryRows` is the live trade list `/suppliers` shows.
-let reviewCatalogueRows: Array<{ id: number; name: string }> = [];
+let reviewCatalogueRows: Array<{
+  id: number;
+  name: string;
+  code?: string | null;
+  kind?: string | null;
+  isActive?: boolean;
+}> = [];
 let supplierCategoryRows: Array<{ name: string }> = [];
 // The WHERE the review queue built for its item scan, so a guard can prove the
 // actionable filter is applied in SQL (not only in JS after a LIMIT).
@@ -2740,6 +2746,11 @@ describe("GET /api/customer-rfq/item-categories (تصنيفات البنود tab
   });
 
   it("lists categories with NO responsible employee (the «بلا مسؤول» root cause)", async () => {
+    supplierCategoryRows = [{ name: "أجهزة" }, { name: "مقاومة حريق" }];
+    reviewCatalogueRows = [
+      { id: 4, name: "أجهزة", kind: "functional", isActive: true },
+      { id: 6, name: "مقاومة حريق", kind: "functional", isActive: true },
+    ];
     unownedCategoryRows = [
       { id: 4, name: "أجهزة", itemCount: 12 },
       { id: 6, name: "مقاومة حريق", itemCount: 3 },
@@ -2751,10 +2762,65 @@ describe("GET /api/customer-rfq/item-categories (تصنيفات البنود tab
   });
 
   it("returns an empty unowned list when every category has an owner", async () => {
+    supplierCategoryRows = [{ name: "أجهزة" }];
+    reviewCatalogueRows = [{ id: 4, name: "أجهزة", kind: "functional", isActive: true }];
     unownedCategoryRows = [];
     const res = await request(testApp).get("/api/customer-rfq/unowned-categories");
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
+  });
+
+  it("never lists a category the supplier page does not show", async () => {
+    // The operator's requirement: «بلا مسؤول» must be a SUBSET of the trade
+    // categories, never a category of its own invention. A subcategory
+    // (قواطع) and a category absent from supplier_categories must both be
+    // excluded even though the DB would happily report them as unowned.
+    supplierCategoryRows = [{ name: "كهرباء" }];
+    reviewCatalogueRows = [
+      { id: 3, name: "كهرباء", kind: "functional", isActive: true },
+      { id: 4, name: "قواطع", kind: "subcategory", isActive: true },
+      { id: 9, name: "تصنيف مجهول", kind: "functional", isActive: true },
+    ];
+    unownedCategoryRows = [{ id: 4, name: "قواطع", itemCount: 30 }];
+    const res = await request(testApp).get("/api/customer-rfq/unowned-categories");
+    expect(res.status).toBe(200);
+    // Only «كهرباء» is a trade category; the unowned rows carry «قواطع», which
+    // must be filtered out rather than echoed.
+    expect(res.body).toEqual([]);
+  });
+});
+
+describe("GET /api/customer-rfq/trade-categories (the ONE list)", () => {
+  it("returns only the categories the supplier page also shows", async () => {
+    supplierCategoryRows = [{ name: "كهرباء" }, { name: "أجهزة" }];
+    reviewCatalogueRows = [
+      { id: 3, name: "كهرباء", code: null, kind: "functional", isActive: true },
+      { id: 1, name: "أجهزة", code: "equipment", kind: "functional", isActive: true },
+      // A subcategory: a refinement INSIDE a domain, never a trade category.
+      { id: 4, name: "قواطع", code: "breakers", kind: "subcategory", isActive: true },
+      // Functional but absent from supplier_categories — the drift to remove.
+      { id: 9, name: "تصنيف مجهول", code: null, kind: "functional", isActive: true },
+      // Deactivated: not on offer anywhere.
+      { id: 38, name: "إضاءة", code: null, kind: "functional", isActive: false },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/trade-categories");
+    expect(res.status).toBe(200);
+    expect(res.body.count).toBe(2);
+    expect(res.body.categories.map((c: any) => c.name)).toEqual(["كهرباء", "أجهزة"]);
+  });
+
+  it("never exceeds the supplier category count", async () => {
+    // The operator's invariant, asserted as an inequality so it holds whatever
+    // the catalogue contains.
+    supplierCategoryRows = [{ name: "كهرباء" }];
+    reviewCatalogueRows = [
+      { id: 3, name: "كهرباء", code: null, kind: "functional", isActive: true },
+      { id: 4, name: "قواطع", code: null, kind: "subcategory", isActive: true },
+      { id: 9, name: "غير معروف", code: null, kind: "functional", isActive: true },
+    ];
+    const res = await request(testApp).get("/api/customer-rfq/trade-categories");
+    expect(res.body.count).toBeLessThanOrEqual(supplierCategoryRows.length);
+    expect(res.body.count).toBe(1);
   });
 });
 

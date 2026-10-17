@@ -120,7 +120,6 @@ function ItemsCategoryList({
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("all");
-  const [allCats, setAllCats] = useState<CategoryOption[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Per-item editor
@@ -131,13 +130,6 @@ function ItemsCategoryList({
   const [saving, setSaving] = useState(false);
 
   const PAGE = 100;
-
-  useEffect(() => {
-    void (async () => {
-      const res = await fetch("/api/item-categories", { credentials: "include" });
-      if (res.ok) setAllCats((await res.json()) as CategoryOption[]);
-    })();
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -204,7 +196,7 @@ function ItemsCategoryList({
   const hasNext = offset + PAGE < total;
   const hasPrev = offset > 0;
   const colCount = canManage ? 7 : 6;
-  const categoryChoices = categories.length ? categories : allCats;
+  const categoryChoices = categories;
 
   return (
     <div className="space-y-4">
@@ -257,7 +249,7 @@ function ItemsCategoryList({
         >
           <option value="all">كل التصنيفات</option>
           <option value="unclassified">غير مصنّف</option>
-          {allCats.map((c) => (
+          {categories.map((c) => (
             <option key={c.id} value={String(c.id)}>
               {c.name}
             </option>
@@ -754,11 +746,6 @@ function ReviewQueuePanel({
   const [editCategory, setEditCategory] = useState<number | "">("");
   const [editEmployee, setEditEmployee] = useState<number | "">("");
   const [saving, setSaving] = useState(false);
-  // The categories the backend treats as trade categories. The picker offers
-  // ONLY these: choosing any other category would leave the item in the queue
-  // (its reason is precisely «not in the supplier categories»), i.e. a fix that
-  // does not fix. Read from the response so the rule lives in one place.
-  const [tradeCategoryIds, setTradeCategoryIds] = useState<number[] | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -767,12 +754,8 @@ function ReviewQueuePanel({
         credentials: "include",
       });
       if (res.ok) {
-        const body = (await res.json()) as {
-          items?: ReviewQueueItem[];
-          tradeCategoryIds?: number[];
-        };
+        const body = (await res.json()) as { items?: ReviewQueueItem[] };
         setRows(body.items ?? []);
-        setTradeCategoryIds(body.tradeCategoryIds ?? null);
       }
     } catch {
       /* advisory — a failure must not blank the tab */
@@ -949,10 +932,7 @@ function ReviewQueuePanel({
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               >
                 <option value="">— اختر تصنيفًا —</option>
-                {(tradeCategoryIds
-                  ? categories.filter((c) => tradeCategoryIds.includes(c.id))
-                  : categories
-                ).map((c) => (
+                {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
@@ -1013,11 +993,19 @@ export function ItemCategoriesTab() {
   useEffect(() => {
     void (async () => {
       try {
+        // `trade-categories` is the ONE list that matches the supplier page.
+        // `/item-categories` also carries the subcategories (قواطع/PLC/كابلات…)
+        // and the deactivated rows, which are refinements INSIDE a domain and
+        // never a category a supplier registers under — offering them here is
+        // exactly the «more categories than /suppliers» the operator reported.
         const [cRes, eRes] = await Promise.all([
-          fetch("/api/item-categories", { credentials: "include" }),
+          fetch("/api/customer-rfq/trade-categories", { credentials: "include" }),
           fetch("/api/employees", { credentials: "include" }),
         ]);
-        if (cRes.ok) setCategories((await cRes.json()) as CategoryOption[]);
+        if (cRes.ok) {
+          const body = (await cRes.json()) as { categories?: CategoryOption[] };
+          setCategories(body.categories ?? []);
+        }
         if (eRes.ok)
           setEmployees(
             ((await eRes.json()) as Array<EmployeeOption & { isActive?: boolean }>).filter(
@@ -1028,7 +1016,7 @@ export function ItemCategoriesTab() {
         /* selects degrade to empty; the list still renders */
       }
     })();
-  }, []);
+  }, [reloadKey]);
 
   async function runBulkClassify() {
     setClassifying(true);
