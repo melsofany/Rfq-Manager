@@ -106,6 +106,7 @@ interface HrEmployee {
   employeeNo: string;
   fullName: string;
   fullNameEn: string | null;
+  procurementEmployeeId: number | null;
   jobTitle: string | null;
   department: string | null;
   hireDate: string | null;
@@ -1041,7 +1042,13 @@ function Stat({
 function EmployeesTab() {
   const { t } = useLanguage();
   const [rows, setRows] = useState<HrEmployee[]>([]);
+  const [procAccounts, setProcAccounts] = useState<{ id: number; name: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api<{ id: number; name: string }[]>("/hr/procurement-accounts")
+      .then(setProcAccounts)
+      .catch(() => setProcAccounts([]));
+  }, []);
   const [form, setForm] = useState({
     employeeNo: "",
     fullName: "",
@@ -1095,6 +1102,7 @@ function EmployeesTab() {
   const [draft, setDraft] = useState({
     fullName: "",
     fullNameEn: "",
+    procurementId: "",
     jobTitle: "",
     department: "",
     phone: "",
@@ -1139,6 +1147,7 @@ function EmployeesTab() {
     setDraft({
       fullName: r.fullName ?? "",
       fullNameEn: r.fullNameEn ?? "",
+      procurementId: r.procurementEmployeeId != null ? String(r.procurementEmployeeId) : "",
       jobTitle: r.jobTitle ?? "",
       department: r.department ?? "",
       phone: r.phone ?? "",
@@ -1244,6 +1253,7 @@ function EmployeesTab() {
         body: JSON.stringify({
           fullName: draft.fullName,
           fullNameEn: draft.fullNameEn,
+          procurementEmployeeId: draft.procurementId === "" ? null : Number(draft.procurementId),
           jobTitle: draft.jobTitle,
           department: draft.department,
           phone: draft.phone,
@@ -1418,6 +1428,23 @@ function EmployeesTab() {
                               />
                             </label>
                           ))}
+                          <label className="block">
+                            <span className="text-xs text-muted-foreground block mb-1">
+                              {t("hr.emp.procAccount")}
+                            </span>
+                            <select
+                              className={input + " w-full"}
+                              value={draft.procurementId}
+                              onChange={(e) => setDraft({ ...draft, procurementId: e.target.value })}
+                            >
+                              <option value="">{t("hr.emp.procNone")}</option>
+                              {procAccounts.map((a) => (
+                                <option key={a.id} value={String(a.id)}>
+                                  {a.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
                         </div>
                         <div className="mt-4 space-y-2 border-t pt-3">
                           <h3 className="text-sm font-semibold">{t("hr.emp.salarySection")}</h3>

@@ -114,6 +114,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.emp.bankNone": "No bank account on file yet.",
     "hr.emp.bankHint":
       "Leave all bank fields empty to keep the current account. To change it, fill bank name, account holder and account number.",
+    "hr.emp.procAccount": "Procurement account (production incentive)",
+    "hr.emp.procNone": "— not linked —",
     "hr.emp.bankIncomplete":
       "To change the bank account, fill bank name, account holder and account number.",
     "hr.emp.iban": "IBAN (optional)",
@@ -903,6 +905,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.emp.bankNone": "مفيش حساب بنكي مسجل لسه.",
     "hr.emp.bankHint":
       "سيب كل خانات البنك فاضية عشان الحساب الحالي يفضل زي ما هو. لو عايز تغيّره، املا اسم البنك وصاحب الحساب ورقم الحساب.",
+    "hr.emp.procAccount": "حساب المشتريات (لحافز الإنتاج)",
+    "hr.emp.procNone": "— غير مرتبط —",
     "hr.emp.bankIncomplete": "عشان تغيّر الحساب البنكي، املا اسم البنك وصاحب الحساب ورقم الحساب.",
     "hr.emp.iban": "الآيبان (اختياري)",
     "hr.tab.payroll": "الرواتب",

@@ -2759,6 +2759,24 @@ export async function initDb(): Promise<void> {
     );
     await client.query(`ALTER TABLE hr_pay_adjustments ADD COLUMN IF NOT EXISTS days NUMERIC(6,2)`);
     await client.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS full_name_en TEXT`);
+    await client.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS procurement_employee_id INTEGER`);
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS hr_employees_procurement_uq ON hr_employees (procurement_employee_id) WHERE procurement_employee_id IS NOT NULL`,
+    );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_production_credits (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL,
+        basis_period TEXT NOT NULL,
+        run_period TEXT NOT NULL,
+        assigned_count INTEGER NOT NULL,
+        delivered_count INTEGER NOT NULL,
+        base_amount NUMERIC(12,2) NOT NULL,
+        credited_amount NUMERIC(12,2) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS hr_production_credits_emp_basis_idx ON hr_production_credits (employee_id, basis_period);
+    `);
     await client.query(`
       CREATE TABLE IF NOT EXISTS hr_employee_document_fields (
         employee_id INTEGER PRIMARY KEY,

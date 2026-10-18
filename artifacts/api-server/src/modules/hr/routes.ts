@@ -23,7 +23,7 @@ import {
   hrMissionsTable,
   hrAttendanceExceptionsTable,
 } from "@workspace/db";
-import { and, eq, gte, inArray, lt, lte, desc, asc } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, lte, desc, asc, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { hrLeaveRequestsTable, hrLeaveTypesTable } from "@workspace/db";
 import { missionExcusal, withinMissionWindow } from "./missions-logic";
@@ -176,6 +176,38 @@ router.patch("/hr/employees/:id", async (req, res): Promise<void> => {
       return;
     }
     patch.hireDate = req.body.hireDate;
+  }
+  if (req.body?.procurementEmployeeId !== undefined) {
+    // حساب المشتريات اللي البنود المسندة له بتحسب حافز الإنتاج لهذا الموظف. null = غير مرتبط.
+    const raw = req.body.procurementEmployeeId;
+    if (raw === null || raw === "") {
+      patch.procurementEmployeeId = null;
+    } else {
+      const linkId = Number(raw);
+      if (!Number.isInteger(linkId) || linkId <= 0) {
+        res.status(400).json({ error: "حساب المشتريات غير صالح" });
+        return;
+      }
+      const [account] = await db
+        .select({ id: employeesTable.id })
+        .from(employeesTable)
+        .where(and(eq(employeesTable.id, linkId), eq(employeesTable.isActive, true)))
+        .limit(1);
+      if (!account) {
+        res.status(400).json({ error: "حساب المشتريات غير موجود أو غير نشط" });
+        return;
+      }
+      const [taken] = await db
+        .select({ id: hrEmployeesTable.id })
+        .from(hrEmployeesTable)
+        .where(and(eq(hrEmployeesTable.procurementEmployeeId, linkId), sql`${hrEmployeesTable.id} <> ${id}`))
+        .limit(1);
+      if (taken) {
+        res.status(409).json({ error: "حساب المشتريات ده مربوط بموظف تاني بالفعل" });
+        return;
+      }
+      patch.procurementEmployeeId = linkId;
+    }
   }
   if (req.body?.jobTitle !== undefined) patch.jobTitle = str(req.body.jobTitle);
   if (req.body?.department !== undefined) patch.department = str(req.body.department);
