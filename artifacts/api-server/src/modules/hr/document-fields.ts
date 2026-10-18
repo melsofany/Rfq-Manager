@@ -17,6 +17,12 @@ export interface DocField {
 
 const YES_NO = ["نعم", "لا"] as const;
 
+const DELIVERED = [
+  "اللائحة الداخلية",
+  "ملحق السياسات المالية والإدارية",
+  "ملحق الجزاءات والإجراءات التأديبية",
+];
+
 export const EMPLOYEE_DOC_FIELDS: readonly DocField[] = [
   { name: "contractNo", label: "رقم العقد", type: "text" },
   { name: "contractDate", label: "تاريخ تحرير العقد", type: "date" },
@@ -53,6 +59,15 @@ export const EMPLOYEE_DOC_FIELDS: readonly DocField[] = [
   { name: "workDays", label: "أيام العمل", type: "text" },
   { name: "workTime", label: "موعد الدوام", type: "text" },
   { name: "restPeriod", label: "مدة الراحة", type: "text" },
+  ...DELIVERED.flatMap((title, i): DocField[] => [
+    {
+      name: `delivered${i + 1}`,
+      label: `تم تسليم: ${title}`,
+      type: "select",
+      options: YES_NO,
+    },
+    { name: `deliveredDate${i + 1}`, label: `تاريخ تسليم: ${title}`, type: "date" },
+  ]),
   { name: "amountType", label: "نوع الأمانة أو وصفها", type: "text" },
   { name: "purpose", label: "الغرض من التسليم", type: "text" },
   { name: "giverName", label: "اسم المسلم", type: "text" },
