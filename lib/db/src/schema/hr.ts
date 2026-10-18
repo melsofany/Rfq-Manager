@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, date, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, date, uniqueIndex, integer } from "drizzle-orm/pg-core";
 
 /** HR employee master record (separate from login `employees`). */
 export const hrEmployeesTable = pgTable("hr_employees", {
@@ -7,6 +7,8 @@ export const hrEmployeesTable = pgTable("hr_employees", {
   fullName: text("full_name").notNull(),
   /** English name, required on hire and edit; null for records created before it was required. */
   fullNameEn: text("full_name_en"),
+  /** Procurement login account (employees.id) whose assigned items drive this employee's production incentive. */
+  procurementEmployeeId: integer("procurement_employee_id"),
   jobTitle: text("job_title"),
   department: text("department"),
   hireDate: date("hire_date", { mode: "string" }),

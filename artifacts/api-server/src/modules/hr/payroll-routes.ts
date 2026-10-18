@@ -17,11 +17,14 @@ import {
   hrSettingsTable,
   hrPayrollRunsTable,
   hrPayslipsTable,
+  hrProductionCreditsTable,
+  employeesTable,
 } from "@workspace/db";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { requireHr } from "./routes";
 import { isValidPeriod } from "./discipline-logic";
+import { computeProductionIncentive, type ProductionIncentiveResult } from "./production-incentive";
 import { buildAttendance } from "./routes";
 import {
   computePayslip,
@@ -190,6 +193,7 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
       id: hrEmployeesTable.id,
       fullName: hrEmployeesTable.fullName,
       hireDate: hrEmployeesTable.hireDate,
+      procurementEmployeeId: hrEmployeesTable.procurementEmployeeId,
     })
     .from(hrEmployeesTable)
     .where(eq(hrEmployeesTable.status, "active"));
@@ -228,6 +232,21 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
       ),
     );
 
+  // Production incentive (حافز الإنتاج) for employees linked to a procurement account. It replaces
+  // the fixed contract incentive for them; manual incentive adjustments still apply on top.
+  const productionByEmp = new Map<number, number>();
+  for (const e of employees) {
+    if (e.procurementEmployeeId == null) continue;
+    const c = contracts.find((x) => x.employeeId === e.id)!;
+    const prod = await computeProductionIncentive({
+      hrEmployeeId: e.id,
+      procurementEmployeeId: e.procurementEmployeeId,
+      runPeriod: period,
+      contractIncentive: num(c.incentive),
+    });
+    productionByEmp.set(e.id, prod.total);
+  }
+
   const rows = ids.map((employeeId) => {
     const c = contracts.find((x) => x.employeeId === employeeId)!;
     const mine = adjustments.filter((a) => a.employeeId === employeeId);
@@ -251,7 +270,10 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
         basic: num(c.basicSalary),
         allowances: num(c.allowances),
         bonuses: sumKind("bonus") + round2(daysBonus * dailyRate),
-        incentives: num(c.incentive) + sumKind("incentive"),
+        incentives:
+          (productionByEmp.has(employeeId)
+            ? productionByEmp.get(employeeId)!
+            : num(c.incentive)) + sumKind("incentive"),
         deductions: sumKind("deduction"),
         absenceDays: absence[employeeId],
         finesTotal,
@@ -345,11 +367,135 @@ router.post("/hr/payroll/runs/:id/approve", async (req, res): Promise<void> => {
     res.status(409).json({ error: "المسير معتمد بالفعل" });
     return;
   }
-  await db
-    .update(hrPayrollRunsTable)
-    .set({ status: "approved", approvedAt: new Date() })
-    .where(eq(hrPayrollRunsTable.id, id));
+
+  // Recompute production incentive for linked employees right before approval. If the payslip no
+  // longer matches, the draft is stale and must be recalculated first.
+  const slips = await db.select().from(hrPayslipsTable).where(eq(hrPayslipsTable.runId, id));
+  const linked = await db
+    .select({
+      id: hrEmployeesTable.id,
+      fullName: hrEmployeesTable.fullName,
+      procurementEmployeeId: hrEmployeesTable.procurementEmployeeId,
+    })
+    .from(hrEmployeesTable)
+    .where(
+      and(
+        inArray(hrEmployeesTable.id, slips.map((s) => s.employeeId)),
+        isNotNull(hrEmployeesTable.procurementEmployeeId),
+      ),
+    );
+  const linkedIds = linked.map((e) => e.id);
+  const contracts = linkedIds.length
+    ? await db
+        .select()
+        .from(hrContractsTable)
+        .where(and(inArray(hrContractsTable.employeeId, linkedIds), eq(hrContractsTable.isCurrent, true)))
+    : [];
+  const manual = linkedIds.length
+    ? await db
+        .select()
+        .from(hrPayAdjustmentsTable)
+        .where(
+          and(
+            eq(hrPayAdjustmentsTable.period, run.period),
+            inArray(hrPayAdjustmentsTable.employeeId, linkedIds),
+            eq(hrPayAdjustmentsTable.kind, "incentive"),
+          ),
+        )
+    : [];
+
+  const plans: { employee: (typeof linked)[number]; result: ProductionIncentiveResult }[] = [];
+  const stale: string[] = [];
+  for (const e of linked) {
+    const c = contracts.find((x) => x.employeeId === e.id);
+    const slip = slips.find((s) => s.employeeId === e.id);
+    if (!c || !slip) continue;
+    const result = await computeProductionIncentive({
+      hrEmployeeId: e.id,
+      procurementEmployeeId: e.procurementEmployeeId!,
+      runPeriod: run.period,
+      contractIncentive: num(c.incentive),
+    });
+    const manualSum = manual
+      .filter((a) => a.employeeId === e.id)
+      .reduce((acc, a) => acc + num(a.amount), 0);
+    if (round2(num(slip.incentives)) !== round2(result.total + manualSum)) stale.push(e.fullName);
+    plans.push({ employee: e, result });
+  }
+  if (stale.length) {
+    res.status(409).json({
+      error: "تغيرت بيانات حافز الإنتاج بعد حساب المسير — أعد حسابه قبل الاعتماد",
+      employees: stale,
+    });
+    return;
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(hrPayrollRunsTable)
+      .set({ status: "approved", approvedAt: new Date() })
+      .where(eq(hrPayrollRunsTable.id, id));
+    for (const { employee, result } of plans) {
+      if (!result.months.length) continue;
+      await tx.insert(hrProductionCreditsTable).values(
+        result.months.map((m) => ({
+          employeeId: employee.id,
+          basisPeriod: m.basisPeriod,
+          runPeriod: run.period,
+          assignedCount: m.assigned,
+          deliveredCount: m.delivered,
+          baseAmount: m.base.toFixed(2),
+          creditedAmount: m.due.toFixed(2),
+        })),
+      );
+    }
+  });
   res.json({ ok: true });
+});
+
+// Production incentive preview for one payroll month (read-only; the approval recomputes it).
+router.get("/hr/production-incentive", async (req, res): Promise<void> => {
+  const period = String(req.query.period ?? "");
+  if (!isValidPeriod(period)) {
+    res.status(400).json({ error: "الفترة يجب أن تكون YYYY-MM" });
+    return;
+  }
+  const linked = await db
+    .select({
+      id: hrEmployeesTable.id,
+      fullName: hrEmployeesTable.fullName,
+      procurementEmployeeId: hrEmployeesTable.procurementEmployeeId,
+    })
+    .from(hrEmployeesTable)
+    .where(and(eq(hrEmployeesTable.status, "active"), isNotNull(hrEmployeesTable.procurementEmployeeId)));
+  const contracts = linked.length
+    ? await db
+        .select()
+        .from(hrContractsTable)
+        .where(and(inArray(hrContractsTable.employeeId, linked.map((e) => e.id)), eq(hrContractsTable.isCurrent, true)))
+    : [];
+  const out = [];
+  for (const e of linked) {
+    const c = contracts.find((x) => x.employeeId === e.id);
+    if (!c) continue;
+    const result = await computeProductionIncentive({
+      hrEmployeeId: e.id,
+      procurementEmployeeId: e.procurementEmployeeId!,
+      runPeriod: period,
+      contractIncentive: num(c.incentive),
+    });
+    out.push({ employeeId: e.id, fullName: e.fullName, ...result });
+  }
+  res.json({ period, employees: out });
+});
+
+// Procurement accounts that can be linked to an HR employee.
+router.get("/hr/procurement-accounts", async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({ id: employeesTable.id, name: employeesTable.name })
+    .from(employeesTable)
+    .where(eq(employeesTable.isActive, true));
+  res.json(rows);
 });
 
 router.delete("/hr/payroll/runs/:id", async (req, res): Promise<void> => {
