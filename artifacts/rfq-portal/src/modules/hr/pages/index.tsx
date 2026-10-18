@@ -285,7 +285,7 @@ function openEmployeeDocument(id: number, key: string, print: boolean) {
 type DocDefinition = {
   name: string;
   label: string;
-  type: "text" | "date" | "select" | "textarea";
+  type: "text" | "date" | "select" | "textarea" | "money";
   options?: string[];
 };
 type DocDefinitions = {
@@ -293,7 +293,12 @@ type DocDefinitions = {
   employee: DocDefinition[];
   company: DocDefinition[];
 };
-type DocStatus = { fields: Record<string, string>; missing: Record<string, string[]> };
+type DocStatus = {
+  defaults: Record<string, string>;
+  fields: Record<string, string>;
+  effective: Record<string, string>;
+  missing: Record<string, string[]>;
+};
 
 let docDefinitionsCache: Promise<DocDefinitions> | null = null;
 function loadDocDefinitions(): Promise<DocDefinitions> {
@@ -308,10 +313,12 @@ function DocFieldsGrid({
   defs,
   values,
   onChange,
+  suggestions,
 }: {
   defs: DocDefinition[];
   values: Record<string, string>;
   onChange: (name: string, value: string) => void;
+  suggestions?: string[];
 }) {
   const { t } = useLanguage();
   return (
@@ -343,6 +350,8 @@ function DocFieldsGrid({
             <input
               className={docTextInput}
               type={def.type === "date" ? "date" : "text"}
+              inputMode={def.type === "money" ? "decimal" : undefined}
+              list={def.name === "directManager" && suggestions ? "doc-managers" : undefined}
               maxLength={300}
               value={values[def.name] ?? ""}
               onChange={(e) => onChange(def.name, e.target.value)}
@@ -364,15 +373,18 @@ function EmployeeDocumentsButton({ id }: { id: number }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [managers, setManagers] = useState<string[]>([]);
 
   async function loadAll() {
-    const [d, s] = await Promise.all([
+    const [d, s, all] = await Promise.all([
       loadDocDefinitions(),
       api<DocStatus>(`/hr/employees/${id}/document-fields`),
+      api<HrEmployee[]>("/hr/employees"),
     ]);
     setDefs(d);
     setStatus(s);
-    setDraft(s.fields);
+    setDraft(s.effective);
+    setManagers(all.filter((e) => e.id !== id && e.status === "active").map((e) => e.fullName));
   }
 
   function openDialog(next: boolean) {
@@ -400,7 +412,7 @@ function EmployeeDocumentsButton({ id }: { id: number }) {
     }
   }
 
-  const dirty = status !== null && JSON.stringify(draft) !== JSON.stringify(status.fields);
+  const dirty = status !== null && JSON.stringify(draft) !== JSON.stringify(status.effective);
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => openDialog(true)}>
@@ -454,11 +466,18 @@ function EmployeeDocumentsButton({ id }: { id: number }) {
           {defs && (
             <div className="space-y-3 border-t pt-3">
               <h3 className="font-semibold text-sm">{t("hr.docs.fields")}</h3>
+              <p className="text-xs text-muted-foreground">{t("hr.docs.autoHint")}</p>
               <DocFieldsGrid
                 defs={defs.employee}
                 values={draft}
                 onChange={(name, value) => setDraft({ ...draft, [name]: value })}
+                suggestions={managers}
               />
+              <datalist id="doc-managers">
+                {managers.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
               <div className="flex items-center gap-3">
                 <Button size="sm" onClick={save} disabled={busy || !dirty}>
                   {t("hr.docs.save")}

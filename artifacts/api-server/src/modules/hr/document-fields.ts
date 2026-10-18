@@ -1,13 +1,15 @@
 /**
- * Values for the HR documents that are not in the employee record.
- * Employee fields are typed or picked per employee (saved in hr_employee_document_fields).
- * Company fields are set once in Settings (document_company) and used by every employee's documents.
- * Select fields print as a checkbox list, so the printed page shows the chosen option ticked.
+ * Values for the HR documents.
+ *
+ * Employee fields have a system default (from the employee record, contract, or company rules).
+ * The form shows the effective value; only values the user changed are saved as overrides, so
+ * untouched fields keep following the system. Company fields are set once in Settings.
+ * Select fields print as a ticked checkbox list.
  */
-import { formatCardDate, escapeHtml } from "./card-logic";
+import { formatCardDate } from "./card-logic";
 import { isValidYmd } from "./leave-logic";
 
-export type FieldType = "text" | "date" | "select" | "textarea";
+export type FieldType = "text" | "date" | "select" | "textarea" | "money";
 export interface DocField {
   name: string;
   label: string;
@@ -15,19 +17,38 @@ export interface DocField {
   options?: readonly string[];
 }
 
-const YES_NO = ["نعم", "لا"] as const;
-
-const DELIVERED = [
+export const YES_NO = ["نعم", "لا"] as const;
+export const CONTRACT_TYPE_OPTIONS = ["محدد المدة", "غير محدد المدة"] as const;
+export const DELIVERED_TITLES = [
   "اللائحة الداخلية",
   "ملحق السياسات المالية والإدارية",
   "ملحق الجزاءات والإجراءات التأديبية",
 ];
 
-export const EMPLOYEE_DOC_FIELDS: readonly DocField[] = [
+const SYSTEM_FIELDS: readonly DocField[] = [
+  { name: "fullName", label: "الاسم بالعربي", type: "text" },
+  { name: "nationalId", label: "الرقم القومي", type: "text" },
+  { name: "address", label: "العنوان", type: "text" },
+  { name: "phone", label: "رقم الهاتف", type: "text" },
+  { name: "jobTitle", label: "المسمى الوظيفي", type: "text" },
+  { name: "department", label: "القسم / الإدارة", type: "text" },
+  { name: "hireDate", label: "تاريخ بدء العمل", type: "date" },
+  { name: "contractType", label: "نوع العقد", type: "select", options: CONTRACT_TYPE_OPTIONS },
+  { name: "endDate", label: "تاريخ انتهاء العقد", type: "date" },
+  { name: "probationEndDate", label: "نهاية فترة التجربة", type: "date" },
+  { name: "basicSalary", label: "الأجر الأساسي الشهري", type: "money" },
+  { name: "allowances", label: "البدلات", type: "money" },
+  { name: "incentive", label: "الحافز الشهري", type: "money" },
   { name: "contractNo", label: "رقم العقد", type: "text" },
   { name: "contractDate", label: "تاريخ تحرير العقد", type: "date" },
-  { name: "agreementDay", label: "يوم الاتفاق", type: "text" },
   { name: "agreementDate", label: "تاريخ الاتفاق", type: "date" },
+  ...DELIVERED_TITLES.flatMap((title, i): DocField[] => [
+    { name: `delivered${i + 1}`, label: `تم تسليم: ${title}`, type: "select", options: YES_NO },
+    { name: `deliveredDate${i + 1}`, label: `تاريخ تسليم: ${title}`, type: "date" },
+  ]),
+];
+
+const MANUAL_FIELDS: readonly DocField[] = [
   { name: "nationality", label: "الجنسية", type: "text" },
   { name: "email", label: "البريد الإلكتروني", type: "text" },
   { name: "directManager", label: "المدير المباشر", type: "text" },
@@ -59,15 +80,6 @@ export const EMPLOYEE_DOC_FIELDS: readonly DocField[] = [
   { name: "workDays", label: "أيام العمل", type: "text" },
   { name: "workTime", label: "موعد الدوام", type: "text" },
   { name: "restPeriod", label: "مدة الراحة", type: "text" },
-  ...DELIVERED.flatMap((title, i): DocField[] => [
-    {
-      name: `delivered${i + 1}`,
-      label: `تم تسليم: ${title}`,
-      type: "select",
-      options: YES_NO,
-    },
-    { name: `deliveredDate${i + 1}`, label: `تاريخ تسليم: ${title}`, type: "date" },
-  ]),
   { name: "amountType", label: "نوع الأمانة أو وصفها", type: "text" },
   { name: "purpose", label: "الغرض من التسليم", type: "text" },
   { name: "giverName", label: "اسم المسلم", type: "text" },
@@ -79,6 +91,8 @@ export const EMPLOYEE_DOC_FIELDS: readonly DocField[] = [
   { name: "returnMethod", label: "طريقة الرد أو التسليم", type: "text" },
   { name: "notes", label: "ملاحظات", type: "textarea" },
 ];
+
+export const EMPLOYEE_DOC_FIELDS: readonly DocField[] = [...SYSTEM_FIELDS, ...MANUAL_FIELDS];
 
 export const COMPANY_DOC_FIELDS: readonly DocField[] = [
   { name: "issueNo", label: "رقم الإصدار", type: "text" },
@@ -110,10 +124,11 @@ export const ALL_DOC_FIELDS: readonly DocField[] = [...EMPLOYEE_DOC_FIELDS, ...C
 
 const MAX_TEXT = 300;
 const MAX_TEXTAREA = 2000;
+const MONEY_RE = /^\d{1,9}(\.\d{1,2})?$/;
 
 type Result = { error: string } | { value: Record<string, string> };
 
-/** Keeps only known fields; each value is validated against its type. Empty means not filled. */
+/** Keeps only known fields and validates each by type. An empty value is kept (it can override a default). */
 export function sanitizeFields(defs: readonly DocField[], input: unknown): Result {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     return { error: "البيانات لازم تكون كائن" };
@@ -124,19 +139,32 @@ export function sanitizeFields(defs: readonly DocField[], input: unknown): Resul
     const raw = src[def.name];
     if (raw === undefined || raw === null) continue;
     if (typeof raw !== "string") return { error: `${def.label} لازم يكون نص` };
-    const v = raw.trim();
-    if (v === "") continue;
-    if (def.type === "date") {
-      if (!isValidYmd(v)) return { error: `${def.label} لازم يكون تاريخ صحيح` };
-    } else if (def.type === "select") {
-      if (!def.options?.includes(v)) return { error: `${def.label}: اختيار غير متاح` };
-    } else {
-      const max = def.type === "textarea" ? MAX_TEXTAREA : MAX_TEXT;
-      if (v.length > max) return { error: `${def.label} أطول من ${max} حرف` };
+    let v = raw.trim();
+    if (v !== "") {
+      if (def.type === "date") {
+        if (!isValidYmd(v)) return { error: `${def.label} لازم يكون تاريخ صحيح` };
+      } else if (def.type === "select") {
+        if (!def.options?.includes(v)) return { error: `${def.label}: اختيار غير متاح` };
+      } else if (def.type === "money") {
+        const plain = v.replace(/,/g, "");
+        if (!MONEY_RE.test(plain)) return { error: `${def.label} لازم يكون مبلغ بالأرقام` };
+        v = Number(plain).toFixed(2);
+      } else {
+        const max = def.type === "textarea" ? MAX_TEXTAREA : MAX_TEXT;
+        if (v.length > max) return { error: `${def.label} أطول من ${max} حرف` };
+      }
     }
     out[def.name] = v;
   }
   return { value: out };
+}
+
+/** Money as 1,500.00 جنيه; empty when the amount is not known. */
+export function formatMoney(v: string | number | null | undefined): string {
+  if (v === null || v === undefined || v === "") return "";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "";
+  return `${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} جنيه`;
 }
 
 /** Text shown on the printed document for one field. Selects become a ticked checkbox list. */
@@ -146,13 +174,10 @@ export function displayValue(def: DocField, raw: string | undefined): string {
     return (def.options ?? []).map((o) => `${o === v ? "☑" : "☐"} ${o}`).join("　 ");
   }
   if (def.type === "date") return formatCardDate(v) ?? "";
+  if (def.type === "money") return formatMoney(v);
   return v;
 }
 
 export function isFieldEmpty(raw: string | undefined): boolean {
   return raw === undefined || raw.trim() === "";
-}
-
-export function escapedDisplay(def: DocField, raw: string | undefined): string {
-  return escapeHtml(displayValue(def, raw));
 }

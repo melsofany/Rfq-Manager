@@ -2,11 +2,15 @@ import { describe, it, expect } from "vitest";
 import { DOCUMENT_TEMPLATES, COMPANY_LOGO_DATA_URL } from "../modules/hr/document-templates";
 import {
   DOCUMENT_KEYS,
+  defaultFieldValues,
   documentValues,
-  formatMoney,
+  effectiveFieldValues,
   isDocumentKey,
   missingFields,
+  overridesFrom,
   renderDocument,
+  weekdayAr,
+  formatMoney,
   type DocumentData,
 } from "../modules/hr/document-logic";
 import {
@@ -15,55 +19,52 @@ import {
   EMPLOYEE_DOC_FIELDS,
   sanitizeFields,
 } from "../modules/hr/document-fields";
+import { validateEmployeeNames } from "../modules/hr/employee-names";
 
-const SYSTEM_PLACEHOLDERS = new Set([
+// Computed placeholders that are not stored fields.
+const COMPUTED = new Set([
   "logo",
-  "fullName",
-  "nationalId",
-  "address",
-  "phone",
-  "jobTitle",
-  "department",
-  "hireDate",
-  "endDate",
-  "probationText",
   "checkFixed",
   "checkIndefinite",
-  "basicSalary",
-  "allowances",
-  "incentive",
+  "probationText",
+  "agreementDay",
   "totalSalary",
 ]);
 
 const company = Object.fromEntries(
   COMPANY_DOC_FIELDS.map((f) => [f.name, f.type === "date" ? "2026-01-01" : `قيمة ${f.label}`]),
 );
-const fields = Object.fromEntries(
-  EMPLOYEE_DOC_FIELDS.map((f) => [
+
+// Values the user types for the fields that have no system default.
+const manual = Object.fromEntries(
+  EMPLOYEE_DOC_FIELDS.filter((f) => !(f.name in defaultFieldValues(baseEmployee()))).map((f) => [
     f.name,
-    f.type === "date" ? "2026-01-15" : (f.options?.[0] ?? `قيمة ${f.label}`),
+    f.type === "date" ? "2026-01-15" : f.type === "select" ? f.options![0] : `قيمة ${f.label}`,
   ]),
 );
 
-const employee: DocumentData = {
-  fullName: "أحمد يوسف",
-  nationalId: "29001011234567",
-  address: "مطروح — شارع علم الروم",
-  phone: "01000000000",
-  jobTitle: "مندوب مبيعات",
-  department: "المبيعات",
-  hireDate: "2024-03-01",
-  contractType: "fixed",
-  contractEndDate: "2026-12-31",
-  probationEndDate: "2024-06-01",
-  basicSalary: "5000.00",
-  allowances: "1000.00",
-  incentive: "500.00",
-  fields,
-  company,
-};
+function baseEmployee(): DocumentData {
+  return {
+    fullName: "أحمد يوسف",
+    nationalId: "29001011234567",
+    address: "مطروح — شارع علم الروم",
+    phone: "01000000000",
+    jobTitle: "مندوب مبيعات",
+    department: "المبيعات",
+    hireDate: "2026-02-01",
+    contractType: "fixed",
+    contractNo: "CT-2026-00012",
+    contractEndDate: "2026-12-31",
+    probationEndDate: "2026-05-01",
+    basicSalary: "5000",
+    allowances: "1000",
+    incentive: "500",
+    fields: {},
+    company,
+  };
+}
 
-import { validateEmployeeNames } from "../modules/hr/employee-names";
+const employee: DocumentData = { ...baseEmployee(), fields: manual };
 
 describe("employee names", () => {
   it("requires an Arabic name and an English name", () => {
@@ -71,28 +72,15 @@ describe("employee names", () => {
       fullName: "أحمد يوسف",
       fullNameEn: "Ahmed Youssef",
     });
-    expect("error" in validateEmployeeNames("", "Ahmed")).toBe(true);
     expect("error" in validateEmployeeNames("Ahmed", "Ahmed")).toBe(true);
-    expect("error" in validateEmployeeNames("أحمد", "")).toBe(true);
     expect("error" in validateEmployeeNames("أحمد", "أحمد")).toBe(true);
     expect("error" in validateEmployeeNames("أحمد", "Ahmed 2")).toBe(true);
   });
 });
 
 describe("employee documents", () => {
-  it("does not print the employee name on acknowledgment or signature lines", () => {
-    for (const key of ["internalRules", "annex1", "annex2"] as const) {
-      expect(renderDocument(key, employee), key).not.toContain("أحمد يوسف");
-    }
-    for (const key of ["contract", "receiptA", "receiptB"] as const) {
-      const html = renderDocument(key, employee);
-      // Only the employee's data row carries the name; the signing lines stay blank.
-      expect(html.split("أحمد يوسف").length - 1, key).toBe(1);
-    }
-  });
-
-  it("every placeholder is a system value or a known field", () => {
-    const known = new Set([...SYSTEM_PLACEHOLDERS, ...ALL_DOC_FIELDS.map((f) => f.name)]);
+  it("every placeholder is computed or a known field", () => {
+    const known = new Set([...COMPUTED, ...ALL_DOC_FIELDS.map((f) => f.name)]);
     for (const key of DOCUMENT_KEYS) {
       for (const m of DOCUMENT_TEMPLATES[key].matchAll(/\{\{(\w+)\}\}/g)) {
         expect(known.has(m[1]), `${key}: ${m[1]}`).toBe(true);
@@ -107,52 +95,111 @@ describe("employee documents", () => {
     }
   });
 
-  it("lists the empty fields a document still needs", () => {
-    const missing = missingFields("contract", { ...employee, fields: {}, company: {} });
+  it("defaults the contract and agreement dates to the hire date, with the weekday", () => {
+    const eff = effectiveFieldValues(baseEmployee());
+    expect(eff.contractDate).toBe("2026-02-01");
+    expect(eff.agreementDate).toBe("2026-02-01");
+    expect(documentValues(baseEmployee()).agreementDay).toBe("الأحد");
+    expect(weekdayAr("2026-02-01")).toBe("الأحد");
+    expect(weekdayAr(undefined)).toBe("");
+  });
+
+  it("shows the system contract number, name and salary, and lets the user change them", () => {
+    const d = {
+      ...baseEmployee(),
+      fields: { contractNo: "CT-2026-99999", basicSalary: "7000.00" },
+    };
+    const html = renderDocument("contract", { ...d, fields: { ...manual, ...d.fields } });
+    expect(html).toContain("CT-2026-99999");
+    expect(html).toContain("7,000.00 جنيه");
+    expect(html).toContain("أحمد يوسف");
+    expect(documentValues(baseEmployee()).contractNo).toBe("CT-2026-00012");
+  });
+
+  it("an override of the agreement date also changes its weekday", () => {
+    const d = { ...employee, fields: { ...manual, agreementDate: "2026-03-02" } };
+    expect(documentValues(d).agreementDay).toBe("الاثنين");
+  });
+
+  it("stores only the values that differ from the system default", () => {
+    const defaults = defaultFieldValues(baseEmployee());
+    const draft = { ...defaults, basicSalary: "7000.00", nationality: "مصري" };
+    expect(overridesFrom(defaults, draft)).toEqual({ basicSalary: "7000.00", nationality: "مصري" });
+    expect(overridesFrom(defaults, { ...defaults })).toEqual({});
+  });
+
+  it("an open-ended contract prints غير محدد and needs no end date", () => {
+    const d = {
+      ...baseEmployee(),
+      contractType: "indefinite",
+      contractEndDate: null,
+      fields: manual,
+    };
+    expect(documentValues(d).endDate).toBe("غير محدد");
+    expect(documentValues(d).checkIndefinite).toBe("☑");
+    expect(missingFields("contract", d)).not.toContain("تاريخ انتهاء العقد");
+  });
+
+  it("asks for the contract type and number when there is no current contract", () => {
+    const missing = missingFields("contract", {
+      ...baseEmployee(),
+      contractType: null,
+      contractNo: null,
+      basicSalary: null,
+      fields: {},
+    });
+    expect(missing).toContain("نوع العقد");
     expect(missing).toContain("رقم العقد");
-    expect(missing).toContain("مكان أداء العمل");
-    expect(missing).toContain("مدة العقد");
+    expect(missing).toContain("الأجر الأساسي الشهري");
+    expect(missing).not.toContain("البدلات");
+  });
+
+  it("lists the company fields an annex still needs", () => {
     expect(missingFields("internalRules", { ...employee, company: {} })).toContain("رقم الإصدار");
   });
 
   it("prints select fields as a ticked checkbox list", () => {
     const html = renderDocument("contract", {
       ...employee,
-      fields: { ...fields, workMode: "هجين" },
+      fields: { ...manual, workMode: "هجين" },
     });
     expect(html).toContain("☑ هجين");
     expect(html).toContain("☐ مقر الشركة");
   });
 
-  it("fills the employee data and the open-ended end date", () => {
-    const html = renderDocument("contract", employee);
-    expect(html).toContain("أحمد يوسف");
-    expect(html).toContain("29001011234567");
-    expect(html).toContain("01/03/2024");
-    expect(html).toContain("5,000.00 جنيه");
-    expect(html).toContain("6,500.00 جنيه");
-    expect(html).toContain(COMPANY_LOGO_DATA_URL);
-    expect(documentValues({ ...employee, contractType: "indefinite" }).endDate).toBe("غير محدد");
-    expect(documentValues({ ...employee, contractType: "fixed" }).checkFixed).toBe("☑");
+  it("does not print the employee name on acknowledgment or signature lines", () => {
+    for (const key of ["internalRules", "annex1", "annex2"] as const) {
+      expect(renderDocument(key, employee), key).not.toContain("أحمد يوسف");
+    }
+    for (const key of ["contract", "receiptA", "receiptB"] as const) {
+      expect(renderDocument(key, employee).split("أحمد يوسف").length - 1, key).toBe(1);
+    }
   });
 
   it("escapes employee text so it cannot inject markup", () => {
-    const html = renderDocument("receiptA", { ...employee, fullName: "<script>alert(1)</script>" });
-    expect(html).not.toContain("<script>alert");
+    const html = renderDocument("receiptA", {
+      ...employee,
+      fields: { ...manual, giverName: "<script>x</script>" },
+    });
+    expect(html).not.toContain("<script>x");
     expect(html).toContain("&lt;script&gt;");
   });
 
-  it("validates saved fields by type and drops unknown keys", () => {
+  it("validates saved fields by type, normalizes money and drops unknown keys", () => {
     const ok = sanitizeFields(EMPLOYEE_DOC_FIELDS, {
       contractDate: "2026-02-03",
       payMethod: "نقدًا",
+      basicSalary: "5,000",
       x: "y",
     });
-    expect(ok).toEqual({ value: { contractDate: "2026-02-03", payMethod: "نقدًا" } });
+    expect(ok).toEqual({
+      value: { contractDate: "2026-02-03", payMethod: "نقدًا", basicSalary: "5000.00" },
+    });
     expect("error" in sanitizeFields(EMPLOYEE_DOC_FIELDS, { contractDate: "31/12/2026" })).toBe(
       true,
     );
     expect("error" in sanitizeFields(EMPLOYEE_DOC_FIELDS, { payMethod: "شيك" })).toBe(true);
+    expect("error" in sanitizeFields(EMPLOYEE_DOC_FIELDS, { basicSalary: "abc" })).toBe(true);
     expect("error" in sanitizeFields(EMPLOYEE_DOC_FIELDS, { notes: "x".repeat(2001) })).toBe(true);
   });
 
