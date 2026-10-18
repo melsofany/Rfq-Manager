@@ -255,6 +255,7 @@ const CARD_PRINT_CSS = `
   #hr-card-print .hr-card-side:last-child { page-break-after: auto; break-after: auto; }
   #hr-card-print .card-preview { display: none; }
   #hr-card-print .card-print { display: block; width: 85.6mm !important; height: 54mm !important; }
+  #hr-card-print, #hr-card-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }`;
 
 /** Opens a preview of the employee's card (front and back) with a print button. */
@@ -300,6 +301,17 @@ function EmployeeCardButton({ id }: { id: number }) {
                 />
               </div>
             ))}
+          </div>
+          <div className="rounded border bg-muted/40 p-3 text-xs space-y-1">
+            <p className="font-medium">{t("hr.card.printSetupTitle")}</p>
+            <ol className="list-decimal ps-5 space-y-0.5 text-muted-foreground">
+              <li>{t("hr.card.printSetup1")}</li>
+              <li>{t("hr.card.printSetup2")}</li>
+              <li>{t("hr.card.printSetup3")}</li>
+              <li>{t("hr.card.printSetup4")}</li>
+              <li>{t("hr.card.printSetup5")}</li>
+              <li>{t("hr.card.printSetup6")}</li>
+            </ol>
           </div>
           <DialogFooter>
             <Button onClick={() => window.print()}>{t("hr.card.print")}</Button>
