@@ -63,7 +63,34 @@ const employee: DocumentData = {
   company,
 };
 
+import { validateEmployeeNames } from "../modules/hr/employee-names";
+
+describe("employee names", () => {
+  it("requires an Arabic name and an English name", () => {
+    expect(validateEmployeeNames("أحمد يوسف", "Ahmed Youssef")).toEqual({
+      fullName: "أحمد يوسف",
+      fullNameEn: "Ahmed Youssef",
+    });
+    expect("error" in validateEmployeeNames("", "Ahmed")).toBe(true);
+    expect("error" in validateEmployeeNames("Ahmed", "Ahmed")).toBe(true);
+    expect("error" in validateEmployeeNames("أحمد", "")).toBe(true);
+    expect("error" in validateEmployeeNames("أحمد", "أحمد")).toBe(true);
+    expect("error" in validateEmployeeNames("أحمد", "Ahmed 2")).toBe(true);
+  });
+});
+
 describe("employee documents", () => {
+  it("does not print the employee name on acknowledgment or signature lines", () => {
+    for (const key of ["internalRules", "annex1", "annex2"] as const) {
+      expect(renderDocument(key, employee), key).not.toContain("أحمد يوسف");
+    }
+    for (const key of ["contract", "receiptA", "receiptB"] as const) {
+      const html = renderDocument(key, employee);
+      // Only the employee's data row carries the name; the signing lines stay blank.
+      expect(html.split("أحمد يوسف").length - 1, key).toBe(1);
+    }
+  });
+
   it("every placeholder is a system value or a known field", () => {
     const known = new Set([...SYSTEM_PLACEHOLDERS, ...ALL_DOC_FIELDS.map((f) => f.name)]);
     for (const key of DOCUMENT_KEYS) {

@@ -2758,6 +2758,7 @@ export async function initDb(): Promise<void> {
       `ALTER TABLE hr_contracts ADD COLUMN IF NOT EXISTS incentive NUMERIC(12,2) NOT NULL DEFAULT 0`,
     );
     await client.query(`ALTER TABLE hr_pay_adjustments ADD COLUMN IF NOT EXISTS days NUMERIC(6,2)`);
+    await client.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS full_name_en TEXT`);
     await client.query(`
       CREATE TABLE IF NOT EXISTS hr_employee_document_fields (
         employee_id INTEGER PRIMARY KEY,

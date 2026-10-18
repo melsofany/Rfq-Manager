@@ -11,6 +11,7 @@
  *
  * Access: admin always; others need the `hr` permission (role default: manager).
  */
+import { validateEmployeeNames } from "./employee-names";
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import {
   db,
@@ -100,10 +101,14 @@ router.get("/hr/employees", async (_req, res): Promise<void> => {
 
 router.post("/hr/employees", async (req, res): Promise<void> => {
   const employeeNo = str(req.body?.employeeNo, 32);
-  const fullName = str(req.body?.fullName);
+  const names = validateEmployeeNames(req.body?.fullName, req.body?.fullNameEn);
   const biometricPin = str(req.body?.biometricPin, 32);
-  if (!employeeNo || !EMPNO_RE.test(employeeNo) || !fullName) {
-    res.status(400).json({ error: "رقم الموظف والاسم مطلوبان" });
+  if (!employeeNo || !EMPNO_RE.test(employeeNo)) {
+    res.status(400).json({ error: "رقم الموظف مطلوب ويجب أن يكون بالصيغة الصحيحة" });
+    return;
+  }
+  if ("error" in names) {
+    res.status(400).json({ error: names.error });
     return;
   }
   if (biometricPin && !PIN_RE.test(biometricPin)) {
@@ -115,7 +120,8 @@ router.post("/hr/employees", async (req, res): Promise<void> => {
       .insert(hrEmployeesTable)
       .values({
         employeeNo,
-        fullName,
+        fullName: names.fullName,
+        fullNameEn: names.fullNameEn,
         jobTitle: str(req.body?.jobTitle),
         department: str(req.body?.department),
         hireDate: DATE_RE.test(req.body?.hireDate ?? "") ? req.body.hireDate : null,
@@ -142,13 +148,26 @@ router.patch("/hr/employees/:id", async (req, res): Promise<void> => {
     return;
   }
   const patch: Record<string, unknown> = { updatedAt: new Date() };
-  if (req.body?.fullName !== undefined) {
-    const name = str(req.body.fullName);
-    if (!name) {
-      res.status(400).json({ error: "الاسم مطلوب" });
+  if (req.body?.fullName !== undefined || req.body?.fullNameEn !== undefined) {
+    const [current] = await db
+      .select({ fullName: hrEmployeesTable.fullName, fullNameEn: hrEmployeesTable.fullNameEn })
+      .from(hrEmployeesTable)
+      .where(eq(hrEmployeesTable.id, id))
+      .limit(1);
+    if (!current) {
+      res.status(404).json({ error: "غير موجود" });
       return;
     }
-    patch.fullName = name;
+    const names = validateEmployeeNames(
+      req.body?.fullName ?? current.fullName,
+      req.body?.fullNameEn ?? current.fullNameEn ?? "",
+    );
+    if ("error" in names) {
+      res.status(400).json({ error: names.error });
+      return;
+    }
+    patch.fullName = names.fullName;
+    patch.fullNameEn = names.fullNameEn;
   }
   if (req.body?.hireDate !== undefined) {
     // تاريخ التعيين الجديد عند إعادة تعيين موظف مستقيل

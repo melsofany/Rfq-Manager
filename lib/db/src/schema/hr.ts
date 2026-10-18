@@ -5,6 +5,8 @@ export const hrEmployeesTable = pgTable("hr_employees", {
   id: serial("id").primaryKey(),
   employeeNo: text("employee_no").notNull().unique(),
   fullName: text("full_name").notNull(),
+  /** English name, required on hire and edit; null for records created before it was required. */
+  fullNameEn: text("full_name_en"),
   jobTitle: text("job_title"),
   department: text("department"),
   hireDate: date("hire_date", { mode: "string" }),

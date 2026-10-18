@@ -33,6 +33,7 @@ import {
   type ParsedPhoto,
 } from "./onboarding-logic";
 import { generateEmployeeNo } from "./employee-number";
+import { validateEmployeeNames } from "./employee-names";
 import { logger } from "../../shared/logger";
 import { parseMoney } from "./discipline-logic";
 
@@ -55,6 +56,7 @@ interface OnboardInput {
   photo: ParsedPhoto | null;
   employee: {
     fullName: string;
+    fullNameEn: string;
     jobTitle: string | null;
     department: string | null;
     hireDate: string;
@@ -84,11 +86,11 @@ interface OnboardInput {
 
 /** Validate the whole onboarding payload. The employee number is generated on save, not sent by the client. */
 export function parseOnboard(body: any): { error: string } | { input: OnboardInput } {
-  const fullName = str(body?.employee?.fullName, 200);
+  const names = validateEmployeeNames(body?.employee?.fullName, body?.employee?.fullNameEn);
   const hireDate = optDate(body?.employee?.hireDate);
-  if (!fullName || !hireDate) {
-    return { error: "الاسم وتاريخ التعيين مطلوبين" };
-  }
+  if ("error" in names) return { error: names.error };
+  if (!hireDate) return { error: "تاريخ التعيين مطلوب" };
+  const { fullName, fullNameEn } = names;
   const biometricPin = str(body?.employee?.biometricPin, 32);
   if (biometricPin && !PIN_RE.test(biometricPin)) return { error: "رقم البصمة غير صالح" };
 
@@ -132,6 +134,7 @@ export function parseOnboard(body: any): { error: string } | { input: OnboardInp
       photo: photoParsed ? photoParsed.photo : null,
       employee: {
         fullName,
+        fullNameEn,
         jobTitle: str(body?.employee?.jobTitle),
         department: str(body?.employee?.department),
         hireDate,
@@ -203,6 +206,7 @@ router.post("/hr/onboard", async (req, res): Promise<void> => {
         .values({
           employeeNo: gen.employeeNo,
           fullName: input.employee.fullName,
+          fullNameEn: input.employee.fullNameEn,
           jobTitle: input.employee.jobTitle,
           department: input.employee.department,
           hireDate: input.employee.hireDate,
