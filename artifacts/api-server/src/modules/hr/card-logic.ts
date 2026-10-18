@@ -146,20 +146,21 @@ export function validateCardManager(v: unknown): ManagerResult {
   };
 }
 
-/** Uploaded designs are drawn at 1060px wide; 85.6 mm ≈ 323.5px, so the scale is 323.5 / 1060. */
-export const UPLOADED_CARD_SCALE = 0.3052;
-const CARD_FRAME_WIDTH_PX = 323.5;
-const CARD_FRAME_HEIGHT_PX = 204;
-
 /**
- * Put an uploaded design into a fixed 85.6 × 54 mm frame and scale its .card to fit.
- * The frame is a wrapper div (not zoom) so right-to-left layout doesn't shift the card.
+ * Uploaded designs are drawn at 1060px wide. They are placed in a fixed frame and scaled from the top-left:
+ * "print" fits 85.6 × 54 mm (323.5 × 204 px); "preview" is a larger on-screen size (517 × 326 px).
  */
-export function scaleForPrint(html: string): string {
+const CARD_SIZES = {
+  print: { scale: 0.3052, width: 323.5, height: 204 },
+  preview: { scale: 0.4883, width: 517, height: 326 },
+} as const;
+
+export function scaleForPrint(html: string, size: keyof typeof CARD_SIZES = "print"): string {
+  const { scale, width, height } = CARD_SIZES[size];
   const style =
     "<style>html,body{margin:0!important;padding:0!important;background:#fff!important}" +
-    `.hr-card-frame{width:${CARD_FRAME_WIDTH_PX}px;height:${CARD_FRAME_HEIGHT_PX}px;overflow:hidden;position:relative}` +
-    `.hr-card-frame .card{position:absolute!important;left:0!important;top:0!important;margin:0!important;transform:scale(${UPLOADED_CARD_SCALE});transform-origin:0 0}` +
+    `.hr-card-frame{width:${width}px;height:${height}px;overflow:hidden;position:relative}` +
+    `.hr-card-frame .card{position:absolute!important;left:0!important;top:0!important;margin:0!important;transform:scale(${scale});transform-origin:0 0}` +
     "</style>";
   let out = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${style}</head>`) : style + html;
   out = out.replace(/<body([^>]*)>/i, '<body$1><div class="hr-card-frame">');
