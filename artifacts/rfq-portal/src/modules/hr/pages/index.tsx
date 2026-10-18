@@ -245,43 +245,50 @@ function EmployeePhoto({ id }: { id: number }) {
 const CARD_PRINT_CSS = `
 @page { size: 85.6mm 54mm; margin: 0; }
 #hr-card-print iframe { border: 0; display: block; background: #fff; }
-#hr-card-print .hr-card-side { width: 517px; height: 326px; overflow: hidden; }
+#hr-card-print .hr-card-side { overflow: hidden; }
 #hr-card-print .card-print { display: none; }
 @media print {
   body * { visibility: hidden !important; }
   #hr-card-print, #hr-card-print * { visibility: visible !important; }
   #hr-card-print { position: fixed; left: 0; top: 0; width: 85.6mm; margin: 0 !important; padding: 0 !important; gap: 0 !important; }
-  #hr-card-print .hr-card-side { width: 85.6mm; height: 54mm; page-break-after: always; break-after: page; }
+  #hr-card-print .hr-card-side { width: 85.6mm !important; height: 54mm !important; page-break-after: always; break-after: page; }
   #hr-card-print .hr-card-side:last-child { page-break-after: auto; break-after: auto; }
   #hr-card-print .card-preview { display: none; }
-  #hr-card-print .card-print { display: block; width: 85.6mm; height: 54mm; }
+  #hr-card-print .card-print { display: block; width: 85.6mm !important; height: 54mm !important; }
 }`;
 
 /** Opens a preview of the employee's card (front and back) with a print button. */
 function EmployeeCardButton({ id }: { id: number }) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
+  // Preview fits the screen: up to 517 px wide, less on phones (the dialog has about 48 px of padding).
+  const previewWidth = Math.round(Math.min(517, Math.max(240, window.innerWidth - 100)));
+  const previewHeight = Math.round((previewWidth * 668.6916) / 1060);
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         {t("hr.card.open")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl w-[calc(100vw-2rem)]">
           <DialogHeader>
             <DialogTitle>{t("hr.card.preview")}</DialogTitle>
           </DialogHeader>
           <style>{CARD_PRINT_CSS}</style>
           <div id="hr-card-print" className="flex flex-col items-center gap-4">
             {(["front", "back"] as const).map((side) => (
-              <div key={side} className="hr-card-side">
+              <div
+                key={side}
+                className="hr-card-side"
+                style={{ width: previewWidth, height: previewHeight }}
+              >
                 <iframe
                   className="card-preview"
                   title={t(side === "front" ? "hr.card.front" : "hr.card.back")}
-                  src={`/api/hr/employees/${id}/card/${side}?preview=1`}
+                  src={`/api/hr/employees/${id}/card/${side}?width=${previewWidth}`}
                   scrolling="no"
-                  width={517}
-                  height={326}
+                  width={previewWidth}
+                  height={previewHeight}
                 />
                 <iframe
                   className="card-print"
