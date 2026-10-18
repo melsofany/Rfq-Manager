@@ -227,6 +227,20 @@ export async function runAssignmentRepairAtBoot(): Promise<void> {
   const mode = (process.env.ASSIGNMENT_REPAIR ?? "dry").toLowerCase();
   if (mode === "off") return;
   const plan = await buildAssignmentRepairPlan();
+  // Items to leave alone even when the plan proposes a change (e.g. a wrong classification
+  // that a repair would make permanent). Comma-separated customer item ids.
+  const skip = new Set(
+    (process.env.ASSIGNMENT_REPAIR_SKIP ?? "")
+      .split(",")
+      .map((x) => Number(x.trim()))
+      .filter((n) => Number.isInteger(n) && n > 0),
+  );
+  const skipped = plan.repairs.filter((r) => skip.has(r.customerRfqItemId));
+  plan.repairs = plan.repairs.filter((r) => !skip.has(r.customerRfqItemId));
+  logger.info(
+    { skipped: skipped.map((r) => r.customerRfqItemId) },
+    "assignment repair: skipped by ASSIGNMENT_REPAIR_SKIP",
+  );
   logger.info(
     {
       mode,
