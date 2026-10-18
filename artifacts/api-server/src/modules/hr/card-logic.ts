@@ -14,6 +14,8 @@ export const CARD_PLACEHOLDERS = [
   "department",
   "hireDate",
   "photo",
+  "managerName",
+  "managerSignature",
 ] as const;
 export type CardPlaceholder = (typeof CARD_PLACEHOLDERS)[number];
 
@@ -74,6 +76,8 @@ export interface CardData {
   department: string | null;
   hireDate: string | null;
   photo: string | null;
+  managerName: string;
+  managerSignature: string | null;
 }
 
 /** Replace every {{placeholder}} in the template with the escaped employee value. */
@@ -87,6 +91,9 @@ export function renderCardHtml(template: string, data: CardData): string {
     hireDate: escapeHtml(data.hireDate ?? ""),
     // Photo is a data URL we built ourselves (or a blank image); it is placed in src="" only.
     photo: data.photo ?? BLANK_PHOTO,
+    managerName: escapeHtml(data.managerName),
+    // Signature is a validated image data URL (see validateCardManager); it is placed in src="" only.
+    managerSignature: data.managerSignature ?? BLANK_PHOTO,
   };
   return template.replace(/\{\{\s*([a-zA-Z]+)\s*\}\}/g, (match, key: string) =>
     (CARD_PLACEHOLDERS as readonly string[]).includes(key) ? values[key as CardPlaceholder] : match,
@@ -106,4 +113,31 @@ export function validateCardTemplate(v: unknown): Result {
   if (/<script[\s>]/i.test(html) || /\son[a-z]+\s*=/i.test(html))
     return { error: "شيل أي كود JavaScript من التصميم (script أو on...) قبل الرفع" };
   return { value: { html } };
+}
+
+export const CARD_MANAGER_SIGNATURE_MAX_CHARS = 300_000;
+const SIGNATURE_RE = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+
+/**
+ * General manager shown on every card: { name, signature }. Signature is an optional image data URL.
+ * Both fields may be null (name blank, signature blank image).
+ */
+type ManagerResult =
+  { error: string } | { value: { name: string; signature: string | null } | null };
+
+export function validateCardManager(v: unknown): ManagerResult {
+  if (v === null || v === undefined) return { value: null };
+  if (typeof v !== "object" || Array.isArray(v)) return { error: "بيانات المدير غير صالحة" };
+  const { name, signature } = v as { name?: unknown; signature?: unknown };
+  const cleanName = typeof name === "string" ? name.trim() : "";
+  if (cleanName.length > 100) return { error: "اسم المدير طويل أوي (الحد 100 حرف)" };
+  if (signature !== null && signature !== undefined) {
+    if (typeof signature !== "string" || !SIGNATURE_RE.test(signature))
+      return { error: "التوقيع لازم يكون صورة PNG أو JPG أو WebP" };
+    if (signature.length > CARD_MANAGER_SIGNATURE_MAX_CHARS)
+      return { error: "صورة التوقيع كبيرة أوي (الحد حوالي 200 كيلوبايت)" };
+  }
+  return {
+    value: { name: cleanName, signature: typeof signature === "string" ? signature : null },
+  };
 }
