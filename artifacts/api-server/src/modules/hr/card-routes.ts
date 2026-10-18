@@ -21,6 +21,7 @@ import {
   DEFAULT_CARD_BACK,
   DEFAULT_CARD_FRONT,
   renderCardHtml,
+  withoutAutoLinks,
   formatCardDate,
   PRINT_CARD_SIZE,
   previewCardSize,
@@ -107,7 +108,7 @@ router.get("/hr/employees/:id/card/:side", async (req, res): Promise<void> => {
   const requested = Number(req.query.width);
   const size =
     Number.isFinite(requested) && requested > 0 ? previewCardSize(requested) : PRINT_CARD_SIZE;
-  const html = design.uploaded ? scaleForPrint(rendered, size) : rendered;
+  const html = withoutAutoLinks(design.uploaded ? scaleForPrint(rendered, size) : rendered);
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "private, no-store");
   // Printed cards never run scripts and load only the images embedded in the page.

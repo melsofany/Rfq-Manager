@@ -7,6 +7,7 @@ import {
   formatCardDate,
   previewCardSize,
   renderCardHtml,
+  withoutAutoLinks,
   scaleForPrint,
   validateCardManager,
   validateCardTemplate,
@@ -157,5 +158,17 @@ describe("preview size", () => {
     const out = scaleForPrint('<body><main class="card"></main></body>', previewCardSize(360));
     expect(out).toContain("width:360px;height:227px");
     expect(out).toContain(`transform:scale(${360 / 1060})`);
+  });
+});
+
+describe("no auto links", () => {
+  it("adds the format-detection meta to the head", () => {
+    const out = withoutAutoLinks('<html><head><meta charset="utf-8"></head><body></body></html>');
+    expect(out).toContain('<head><meta name="format-detection"');
+  });
+  it("works without a head element", () => {
+    expect(withoutAutoLinks("<body></body>").startsWith('<meta name="format-detection"')).toBe(
+      true,
+    );
   });
 });
