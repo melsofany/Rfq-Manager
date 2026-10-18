@@ -73,6 +73,10 @@ initDb()
         }
       })
       .catch((err) => logger.warn({ err }, "item classification backfill failed (non-fatal)"));
+    const { runCategoryCleanupAtBoot } = await import("./modules/rfq/category-cleanup");
+    await runCategoryCleanupAtBoot().catch((err) =>
+      logger.warn({ err }, "category cleanup (non-fatal)"),
+    );
     const { runAssignmentRepairAtBoot } = await import("./modules/rfq/assignment-repair");
     await runAssignmentRepairAtBoot().catch((err) =>
       logger.warn({ err }, "assignment repair (non-fatal)"),
