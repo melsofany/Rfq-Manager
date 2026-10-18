@@ -4,7 +4,7 @@ import {
   monthDue,
   monthlyItemCounts,
   buildProductionLines,
-  type AssignmentInput,
+  type OwnedItemInput,
   type DeliveryInput,
 } from "../modules/hr/production-incentive";
 
@@ -44,17 +44,9 @@ describe("monthDue", () => {
 });
 
 describe("monthlyItemCounts", () => {
-  const a = (
-    id: number,
-    item: number,
-    emp: number,
-    iso: string,
-    cancelled = false,
-  ): AssignmentInput => ({
-    id,
-    customerRfqItemId: item,
-    employeeId: emp,
-    assignedAt: at(iso),
+  const item = (id: number, iso: string | null, cancelled = false): OwnedItemInput => ({
+    customerRfqItemId: id,
+    attributedAt: at(iso ?? "2026-01-01T00:00:00Z"),
     cancelled,
   });
   const d = (item: number, iso: string, acceptedQty: number): DeliveryInput => ({
@@ -63,45 +55,51 @@ describe("monthlyItemCounts", () => {
     acceptedQty,
   });
 
-  it("counts an item for the employee holding its latest assignment, in the assignment month", () => {
-    const assignments = [a(1, 10, 5, "2026-01-10T08:00:00Z"), a(2, 10, 6, "2026-03-02T08:00:00Z")];
-    const deliveries = [d(10, "2026-03-20T08:00:00Z", 1)];
-    expect(monthlyItemCounts(assignments, deliveries, 5, NOW)).toEqual([]);
-    expect(monthlyItemCounts(assignments, deliveries, 6, NOW)).toEqual([
+  it("counts an owned item in the month of its attribution (first customer PO)", () => {
+    const items = [item(10, "2026-03-02T08:00:00Z")];
+    expect(monthlyItemCounts(items, [d(10, "2026-03-20T08:00:00Z", 1)], NOW)).toEqual([
       { period: "2026-03", assigned: 1, delivered: 1 },
     ]);
   });
 
-  it("matches the 100 / 95 / 91 / 90 example: 90 accepted out of 100 assigned", () => {
-    const assignments = Array.from({ length: 100 }, (_, i) =>
-      a(i + 1, i + 1, 5, "2026-02-05T08:00:00Z"),
-    );
+  it("uses Cairo month boundaries for the attribution date", () => {
+    // 22:30 UTC on Jan 31 is already Feb 1 in Cairo.
+    expect(monthlyItemCounts([item(1, "2026-01-31T22:30:00Z")], [], NOW)).toEqual([
+      { period: "2026-02", assigned: 1, delivered: 0 },
+    ]);
+  });
+
+  it("matches the 100 / 95 / 91 / 90 example: 90 accepted out of 100 owned", () => {
+    const items = Array.from({ length: 100 }, (_, i) => item(i + 1, "2026-02-05T08:00:00Z"));
     const deliveries = Array.from({ length: 90 }, (_, i) => d(i + 1, "2026-02-25T08:00:00Z", 2));
-    const [m] = monthlyItemCounts(assignments, deliveries, 5, NOW);
+    const [m] = monthlyItemCounts(items, deliveries, NOW);
     expect(m).toEqual({ period: "2026-02", assigned: 100, delivered: 90 });
     expect(monthDue(1000, m.assigned, m.delivered, 0)).toBe(900);
   });
 
   it("does not count a delivery where the customer rejected everything", () => {
-    const assignments = [a(1, 10, 5, "2026-02-05T08:00:00Z")];
-    expect(monthlyItemCounts(assignments, [d(10, "2026-02-20T08:00:00Z", 0)], 5, NOW)).toEqual([
-      { period: "2026-02", assigned: 1, delivered: 0 },
-    ]);
+    expect(
+      monthlyItemCounts(
+        [item(10, "2026-02-05T08:00:00Z")],
+        [d(10, "2026-02-20T08:00:00Z", 0)],
+        NOW,
+      ),
+    ).toEqual([{ period: "2026-02", assigned: 1, delivered: 0 }]);
   });
 
   it("ignores deliveries after the calculation time", () => {
-    const assignments = [a(1, 10, 5, "2026-02-05T08:00:00Z")];
-    expect(monthlyItemCounts(assignments, [d(10, "2027-01-05T08:00:00Z", 1)], 5, NOW)).toEqual([
-      { period: "2026-02", assigned: 1, delivered: 0 },
-    ]);
+    expect(
+      monthlyItemCounts(
+        [item(10, "2026-02-05T08:00:00Z")],
+        [d(10, "2027-01-05T08:00:00Z", 1)],
+        NOW,
+      ),
+    ).toEqual([{ period: "2026-02", assigned: 1, delivered: 0 }]);
   });
 
-  it("excludes cancelled items from the denominator", () => {
-    const assignments = [
-      a(1, 10, 5, "2026-02-05T08:00:00Z", true),
-      a(2, 11, 5, "2026-02-05T08:00:00Z"),
-    ];
-    expect(monthlyItemCounts(assignments, [], 5, NOW)).toEqual([
+  it("excludes cancelled items", () => {
+    const items = [item(10, "2026-02-05T08:00:00Z", true), item(11, "2026-02-05T08:00:00Z")];
+    expect(monthlyItemCounts(items, [], NOW)).toEqual([
       { period: "2026-02", assigned: 1, delivered: 0 },
     ]);
   });
