@@ -73,6 +73,10 @@ initDb()
         }
       })
       .catch((err) => logger.warn({ err }, "item classification backfill failed (non-fatal)"));
+    const { runAssignmentRepairAtBoot } = await import("./modules/rfq/assignment-repair");
+    await runAssignmentRepairAtBoot().catch((err) =>
+      logger.warn({ err }, "assignment repair (non-fatal)"),
+    );
     logProviderCapacity();
     // Which tool-loop engine this process will use.
     //
