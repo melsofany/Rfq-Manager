@@ -34,6 +34,7 @@ beforeAll(() => {
 const goodBody = () => ({
   employee: {
     fullName: "أحمد يوسف",
+    fullNameEn: "Ahmed Youssef",
     jobTitle: "مندوب",
     department: "المبيعات",
     hireDate: "2026-10-01",

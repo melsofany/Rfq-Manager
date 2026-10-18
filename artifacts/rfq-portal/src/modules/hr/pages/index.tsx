@@ -105,6 +105,7 @@ interface HrEmployee {
   id: number;
   employeeNo: string;
   fullName: string;
+  fullNameEn: string | null;
   jobTitle: string | null;
   department: string | null;
   hireDate: string | null;
@@ -1025,6 +1026,7 @@ function EmployeesTab() {
   const [form, setForm] = useState({
     employeeNo: "",
     fullName: "",
+    fullNameEn: "",
     department: "",
     jobTitle: "",
     biometricPin: "",
@@ -1047,7 +1049,14 @@ function EmployeesTab() {
     try {
       setError(null);
       await api("/hr/employees", { method: "POST", body: JSON.stringify(form) });
-      setForm({ employeeNo: "", fullName: "", department: "", jobTitle: "", biometricPin: "" });
+      setForm({
+        employeeNo: "",
+        fullName: "",
+        fullNameEn: "",
+        department: "",
+        jobTitle: "",
+        biometricPin: "",
+      });
       load();
     } catch (err) {
       setError((err as Error).message);
@@ -1066,6 +1075,7 @@ function EmployeesTab() {
   const [editId, setEditId] = useState<number | null>(null);
   const [draft, setDraft] = useState({
     fullName: "",
+    fullNameEn: "",
     jobTitle: "",
     department: "",
     phone: "",
@@ -1109,6 +1119,7 @@ function EmployeesTab() {
     loadRewards(r.id, rewardPeriod);
     setDraft({
       fullName: r.fullName ?? "",
+      fullNameEn: r.fullNameEn ?? "",
       jobTitle: r.jobTitle ?? "",
       department: r.department ?? "",
       phone: r.phone ?? "",
@@ -1213,6 +1224,7 @@ function EmployeesTab() {
         method: "PATCH",
         body: JSON.stringify({
           fullName: draft.fullName,
+          fullNameEn: draft.fullNameEn,
           jobTitle: draft.jobTitle,
           department: draft.department,
           phone: draft.phone,
@@ -1257,9 +1269,17 @@ function EmployeesTab() {
         />
         <input
           className={input}
-          placeholder={t("hr.col.name")}
+          placeholder={t("hr.col.nameAr")}
           value={form.fullName}
           onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+          required
+        />
+        <input
+          className={input}
+          dir="ltr"
+          placeholder={t("hr.col.nameEn")}
+          value={form.fullNameEn}
+          onChange={(e) => setForm({ ...form, fullNameEn: e.target.value })}
           required
         />
         <input
@@ -1360,7 +1380,8 @@ function EmployeesTab() {
                         <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
                           {(
                             [
-                              ["fullName", t("hr.col.name")],
+                              ["fullName", t("hr.col.nameAr")],
+                              ["fullNameEn", t("hr.col.nameEn")],
                               ["jobTitle", t("hr.col.job")],
                               ["department", t("hr.col.dept")],
                               ["phone", t("hr.onb.phone")],
@@ -2623,6 +2644,7 @@ function OnboardTab() {
   const { t } = useLanguage();
   const empty = {
     fullName: "",
+    fullNameEn: "",
     jobTitle: "",
     department: "",
     hireDate: todayStr(),
@@ -2668,6 +2690,7 @@ function OnboardTab() {
         photo,
         employee: {
           fullName: f.fullName,
+          fullNameEn: f.fullNameEn,
           jobTitle: f.jobTitle,
           department: f.department,
           hireDate: f.hireDate,
@@ -2729,7 +2752,8 @@ function OnboardTab() {
           <p className="text-xs text-muted-foreground">{t("hr.onb.empNoAuto")}</p>
           <PhotoPicker value={photo} onChange={setPhoto} />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {field("fullName", t("hr.col.name"), "text", true)}
+            {field("fullName", t("hr.col.nameAr"), "text", true)}
+            {field("fullNameEn", t("hr.col.nameEn"), "text", true)}
             {field("hireDate", t("hr.onb.hireDate"), "date", true)}
             {field("jobTitle", t("hr.col.job"))}
             {field("department", t("hr.col.dept"))}
