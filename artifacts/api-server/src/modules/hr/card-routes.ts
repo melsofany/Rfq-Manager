@@ -22,6 +22,8 @@ import {
   DEFAULT_CARD_FRONT,
   renderCardHtml,
   formatCardDate,
+  PRINT_CARD_SIZE,
+  previewCardSize,
   scaleForPrint,
   type CardData,
 } from "./card-logic";
@@ -101,7 +103,10 @@ router.get("/hr/employees/:id/card/:side", async (req, res): Promise<void> => {
   };
   const design = await designFor(side);
   const rendered = renderCardHtml(design.html, data);
-  const size = req.query.preview === "1" ? "preview" : "print";
+  // ?width=<px> asks for an on-screen preview that fits that width; without it the card is print-sized.
+  const requested = Number(req.query.width);
+  const size =
+    Number.isFinite(requested) && requested > 0 ? previewCardSize(requested) : PRINT_CARD_SIZE;
   const html = design.uploaded ? scaleForPrint(rendered, size) : rendered;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "private, no-store");

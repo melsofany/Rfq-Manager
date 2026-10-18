@@ -146,17 +146,35 @@ export function validateCardManager(v: unknown): ManagerResult {
   };
 }
 
-/**
- * Uploaded designs are drawn at 1060px wide. They are placed in a fixed frame and scaled from the top-left:
- * "print" fits 85.6 × 54 mm (323.5 × 204 px); "preview" is a larger on-screen size (517 × 326 px).
- */
-const CARD_SIZES = {
-  print: { scale: 0.3052, width: 323.5, height: 204 },
-  preview: { scale: 0.4883, width: 517, height: 326 },
-} as const;
+/** Uploaded designs are drawn at 1060px wide (see CARD_DESIGN_WIDTH). */
+export const CARD_DESIGN_WIDTH = 1060;
+const CARD_DESIGN_HEIGHT = 668.6916;
 
-export function scaleForPrint(html: string, size: keyof typeof CARD_SIZES = "print"): string {
-  const { scale, width, height } = CARD_SIZES[size];
+/** Fixed print frame: 85.6 × 54 mm ≈ 323.5 × 204 px. */
+export const PRINT_CARD_SIZE = { scale: 0.3052, width: 323.5, height: 204 } as const;
+
+export interface CardFrameSize {
+  scale: number;
+  width: number;
+  height: number;
+}
+
+/** On-screen preview size for a given frame width in px, clamped to 240–517 px. */
+export function previewCardSize(width: number): CardFrameSize {
+  const w = Math.round(Math.min(517, Math.max(240, width)));
+  return {
+    scale: w / CARD_DESIGN_WIDTH,
+    width: w,
+    height: Math.round((w * CARD_DESIGN_HEIGHT) / CARD_DESIGN_WIDTH),
+  };
+}
+
+/**
+ * Put an uploaded design into a fixed frame and scale its .card to fit, from the top-left corner.
+ * The frame is a wrapper div (not zoom) so right-to-left layout doesn't shift the card.
+ */
+export function scaleForPrint(html: string, size: CardFrameSize = PRINT_CARD_SIZE): string {
+  const { scale, width, height } = size;
   const style =
     "<style>html,body{margin:0!important;padding:0!important;background:#fff!important}" +
     `.hr-card-frame{width:${width}px;height:${height}px;overflow:hidden;position:relative}` +

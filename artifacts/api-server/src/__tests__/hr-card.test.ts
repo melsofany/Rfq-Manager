@@ -5,6 +5,7 @@ import {
   DEFAULT_CARD_FRONT,
   escapeHtml,
   formatCardDate,
+  previewCardSize,
   renderCardHtml,
   scaleForPrint,
   validateCardManager,
@@ -146,9 +147,15 @@ describe("valid until", () => {
 });
 
 describe("preview size", () => {
-  it("uses the larger preview frame and scale when asked", () => {
-    const out = scaleForPrint('<body><main class="card"></main></body>', "preview");
-    expect(out).toContain("width:517px;height:326px");
-    expect(out).toContain("transform:scale(0.4883)");
+  it("fits the requested width and clamps it to 240–517 px", () => {
+    expect(previewCardSize(517)).toEqual({ scale: 517 / 1060, width: 517, height: 326 });
+    expect(previewCardSize(900).width).toBe(517);
+    expect(previewCardSize(100).width).toBe(240);
+  });
+
+  it("uses the requested frame size in the wrapper", () => {
+    const out = scaleForPrint('<body><main class="card"></main></body>', previewCardSize(360));
+    expect(out).toContain("width:360px;height:227px");
+    expect(out).toContain(`transform:scale(${360 / 1060})`);
   });
 });
