@@ -5,6 +5,7 @@ import {
   DEFAULT_CARD_FRONT,
   escapeHtml,
   renderCardHtml,
+  validateCardManager,
   validateCardTemplate,
   type CardData,
 } from "../modules/hr/card-logic";
@@ -12,6 +13,8 @@ import {
 const emp: CardData = {
   fullName: "أحمد <b>يوسف</b>",
   nationalId: "29801011234567",
+  managerName: "",
+  managerSignature: null,
   employeeNo: "EMP-0001",
   jobTitle: "مهندس",
   department: null,
@@ -74,5 +77,36 @@ describe("card template validation", () => {
     expect(validateCardTemplate({ html: "a".repeat(CARD_MAX_HTML_CHARS + 1) })).toHaveProperty(
       "error",
     );
+  });
+});
+
+describe("general manager on cards", () => {
+  it("renders the manager name escaped and the signature image", () => {
+    const out = renderCardHtml('<p>{{managerName}}</p><img src="{{managerSignature}}">', {
+      ...emp,
+      managerName: "أ/ <i>محمد</i>",
+      managerSignature: "data:image/png;base64,AAAA",
+    });
+    expect(out).toBe('<p>أ/ &lt;i&gt;محمد&lt;/i&gt;</p><img src="data:image/png;base64,AAAA">');
+  });
+
+  it("accepts a name and an image signature, or nothing", () => {
+    expect(validateCardManager(null)).toEqual({ value: null });
+    expect(
+      validateCardManager({ name: "  محمد كمال  ", signature: "data:image/png;base64,AAAA" }),
+    ).toEqual({ value: { name: "محمد كمال", signature: "data:image/png;base64,AAAA" } });
+    expect(validateCardManager({ name: "", signature: null })).toEqual({
+      value: { name: "", signature: null },
+    });
+  });
+
+  it("rejects non-image signatures, long names and oversized signatures", () => {
+    expect(
+      validateCardManager({ name: "x", signature: "data:text/html;base64,PHNjcmlwdD4=" }),
+    ).toHaveProperty("error");
+    expect(validateCardManager({ name: "x".repeat(101) })).toHaveProperty("error");
+    expect(
+      validateCardManager({ name: "x", signature: "data:image/png;base64," + "A".repeat(300_000) }),
+    ).toHaveProperty("error");
   });
 });

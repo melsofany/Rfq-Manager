@@ -74,7 +74,15 @@ router.get("/hr/employees/:id/card/:side", async (req, res): Promise<void> => {
     .limit(1);
   const nationalId =
     profile?.nationalIdEnc && isHrKeyConfigured() ? decryptField(profile.nationalIdEnc) : null;
+  const [managerRow] = await db
+    .select()
+    .from(hrSettingsTable)
+    .where(eq(hrSettingsTable.key, "card_manager"))
+    .limit(1);
+  const manager = managerRow?.value as { name?: string; signature?: string | null } | null;
   const data: CardData = {
+    managerName: manager?.name ?? "",
+    managerSignature: manager?.signature ?? null,
     fullName: emp.fullName,
     nationalId,
     employeeNo: emp.employeeNo,

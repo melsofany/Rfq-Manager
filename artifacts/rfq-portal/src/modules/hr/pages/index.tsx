@@ -289,6 +289,91 @@ function EmployeeCardButton({ id }: { id: number }) {
   );
 }
 
+/** General manager shown on every card: name plus signature image. */
+function CardManagerCard({
+  value,
+  onSaved,
+}: {
+  value: { name: string; signature: string | null } | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [name, setName] = useState(value?.name ?? "");
+  const [signature, setSignature] = useState<string | null>(value?.signature ?? null);
+  const [sigErr, setSigErr] = useState<string | null>(null);
+  const SIG_MAX_BYTES = 150 * 1024;
+  const SIG_TYPES = ["image/png", "image/jpeg", "image/webp"];
+  function pickSignature(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!SIG_TYPES.includes(file.type)) {
+      setSigErr(t("hr.card.badImage"));
+      return;
+    }
+    if (file.size > SIG_MAX_BYTES) {
+      setSigErr(t("hr.card.sigTooBig"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSignature(String(reader.result));
+      setSigErr(null);
+    };
+    reader.onerror = () => setSigErr(t("hr.card.badImage"));
+    reader.readAsDataURL(file);
+  }
+  return (
+    <SettingCard
+      title={t("hr.card.manager")}
+      configured={!!value}
+      onSaved={onSaved}
+      onSave={() => saveSetting("card_manager", { name: name.trim(), signature })}
+    >
+      <p className="text-xs text-muted-foreground">{t("hr.card.managerHint")}</p>
+      <label className="block">
+        <span className={setLabel}>{t("hr.card.managerName")}</span>
+        <input
+          className={setInput}
+          value={name}
+          maxLength={100}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </label>
+      <div className="space-y-2">
+        <span className={setLabel}>{t("hr.card.signature")}</span>
+        <p className="text-xs text-muted-foreground">{t("hr.card.signatureHint")}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          {signature ? (
+            <img
+              src={signature}
+              alt=""
+              className="h-16 w-40 rounded border bg-white object-contain"
+            />
+          ) : (
+            <span className="text-xs text-muted-foreground">{t("hr.card.noSignature")}</span>
+          )}
+          <label className="cursor-pointer text-xs text-primary underline">
+            {t("hr.card.uploadSignature")}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={pickSignature}
+              className="hidden"
+            />
+          </label>
+          {signature && (
+            <Button variant="outline" size="sm" onClick={() => setSignature(null)}>
+              {t("hr.card.removeSignature")}
+            </Button>
+          )}
+        </div>
+        {sigErr && <p className="text-xs text-red-600">{sigErr}</p>}
+      </div>
+    </SettingCard>
+  );
+}
+
 function CardSideUpload({
   settingKey,
   label,
@@ -2519,6 +2604,10 @@ function SettingsTab() {
       <AllowancesCard value={data.allowance_types as { items: string[] } | null} onSaved={load} />
       <EndOfServiceCard value={data.end_of_service as EosRule | null} onSaved={load} />
       <CardDesignCard front={data.card_front} back={data.card_back} onSaved={load} />
+      <CardManagerCard
+        value={data.card_manager as { name: string; signature: string | null } | null}
+        onSaved={load}
+      />
       <BankCard
         value={data.bank_export as { format: string | null; notes: string | null } | null}
         onSaved={load}
