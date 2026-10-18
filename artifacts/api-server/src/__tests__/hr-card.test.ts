@@ -5,6 +5,7 @@ import {
   DEFAULT_CARD_FRONT,
   escapeHtml,
   renderCardHtml,
+  scaleForPrint,
   validateCardManager,
   validateCardTemplate,
   type CardData,
@@ -108,5 +109,22 @@ describe("general manager on cards", () => {
     expect(
       validateCardManager({ name: "x", signature: "data:image/png;base64," + "A".repeat(300_000) }),
     ).toHaveProperty("error");
+  });
+});
+
+describe("uploaded design scaling", () => {
+  it("wraps the body in an 85.6 mm frame and scales the card from its corner", () => {
+    const out = scaleForPrint(
+      '<!doctype html><html><head><style>.card{width:1060px}</style></head><body><main class="card">x</main></body></html>',
+    );
+    expect(out).toContain('<div class="hr-card-frame"><main class="card">x</main></div></body>');
+    expect(out).toContain("transform:scale(0.3052)");
+    expect(out.indexOf("<style>html,body")).toBeLessThan(out.indexOf("</head>"));
+  });
+
+  it("still wraps a document without a head", () => {
+    expect(scaleForPrint('<body><main class="card"></main></body>')).toContain(
+      'class="hr-card-frame"',
+    );
   });
 });
