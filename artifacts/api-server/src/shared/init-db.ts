@@ -1729,6 +1729,9 @@ export async function initDb(): Promise<void> {
     await client.query(`
       ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS classify_reason TEXT;
     `);
+    await client.query(`
+      ALTER TABLE customer_rfq_items ADD COLUMN IF NOT EXISTS suggested_category_id INTEGER;
+    `);
 
     // ── Category aliases (ELEC / Electrical / كهرباء → one category) ─────────
     // DDL in its OWN statement so a sibling failure cannot roll the CREATE back.
