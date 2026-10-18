@@ -35,6 +35,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { loadCategories } from "./assignment";
 import { classifyItem, normalizeText, type CategorySeed } from "./classification";
 import { loadClassifierVocabulary } from "./keywords";
+import { classifyItemsWithAi, type AiClassifyInput } from "./ai-classifier";
 import { ensureCustomerAssignmentsSafe } from "./customer-assignment";
 import { logger } from "../../shared/logger";
 
@@ -60,6 +61,8 @@ export interface ReclassRow {
   suggestedName: string | null;
   /** How toCategoryId was decided: "supplier" or "review" (no move). */
   source: "supplier" | "review";
+  /** True when the review suggestion came from the AI classifier. */
+  aiSuggested?: boolean;
 }
 export interface CleanupPlan {
   nameChecksOk: boolean;
@@ -161,11 +164,58 @@ export function planReclassification(
       toCategoryId,
       toName: toCategoryId != null ? (nameOf.get(toCategoryId) ?? null) : null,
       suggestedCategoryId: toCategoryId == null ? suggestedCategoryId : null,
-      suggestedName:
-        toCategoryId == null && finalId != null ? (nameOf.get(finalId) ?? null) : null,
+      suggestedName: toCategoryId == null && finalId != null ? (nameOf.get(finalId) ?? null) : null,
       source: toCategoryId != null ? "supplier" : "review",
     };
   });
+}
+
+/**
+ * Asks the AI classifier for a suggestion on every item left without a supplier answer.
+ * It only fills `suggestedCategoryId`; it never moves an item. Best-effort: if the
+ * provider is unavailable the keyword suggestion stays.
+ */
+export async function suggestWithAi(
+  reclass: ReclassRow[],
+  items: Map<
+    number,
+    { description: string | null; partNo: string | null; lineItem: string | null }
+  >,
+  categories: CategorySeed[],
+  retiredId: number,
+  batchSize = 30,
+): Promise<ReclassRow[]> {
+  const targets = categories.filter(
+    (c) => c.id !== retiredId && (!c.kind || c.kind === "functional"),
+  );
+  const nameOf = new Map(targets.map((c) => [c.id, c.name]));
+  const pending = reclass.filter((r) => r.toCategoryId == null);
+  const out = new Map<number, ReclassRow>(reclass.map((r) => [r.itemId, r]));
+  for (let i = 0; i < pending.length; i += batchSize) {
+    const slice = pending.slice(i, i + batchSize);
+    const inputs: AiClassifyInput[] = slice.map((r) => {
+      const it = items.get(r.itemId);
+      return {
+        description: it?.description ?? null,
+        partNo: it?.partNo ?? null,
+        lineItem: it?.lineItem ?? null,
+      };
+    });
+    const replies = await classifyItemsWithAi(inputs, targets);
+    if (!replies) break; // no provider: keep the keyword suggestions
+    slice.forEach((r, idx) => {
+      const ai = replies[idx];
+      if (ai?.categoryId != null && nameOf.has(ai.categoryId)) {
+        out.set(r.itemId, {
+          ...r,
+          suggestedCategoryId: ai.categoryId,
+          suggestedName: nameOf.get(ai.categoryId) ?? null,
+          aiSuggested: true,
+        });
+      }
+    });
+  }
+  return reclass.map((r) => out.get(r.itemId) ?? r);
 }
 
 export async function buildCleanupPlan(): Promise<CleanupPlan> {
@@ -260,13 +310,11 @@ export async function buildCleanupPlan(): Promise<CleanupPlan> {
     categories,
     RETIRE.id,
   );
-  const reclass = planReclassification(
-    items,
-    categories,
-    vocabulary,
-    RETIRE.id,
-    supplierSets,
-  );
+  let reclass = planReclassification(items, categories, vocabulary, RETIRE.id, supplierSets);
+  if (process.env.ITEM_CATEGORY_AI === "on") {
+    const byId = new Map(items.map((i) => [i.id, i]));
+    reclass = await suggestWithAi(reclass, byId, categories, RETIRE.id);
+  }
   const distribution: Record<string, number> = {};
   for (const r of reclass) {
     const key = r.toName ?? "للمراجعة";
@@ -304,9 +352,7 @@ export async function applyCleanup(
           categoryId: r.toCategoryId,
           suggestedCategoryId: r.suggestedCategoryId,
           classifyReason:
-            r.toCategoryId != null
-              ? "cleanup: تصنيف المورد"
-              : "cleanup: قطع غيار — للمراجعة",
+            r.toCategoryId != null ? "cleanup: تصنيف المورد" : "cleanup: قطع غيار — للمراجعة",
           classifyConfidence: null,
         })
         .where(

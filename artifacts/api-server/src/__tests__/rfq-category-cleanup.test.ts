@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { planReclassification, supplierCategorySets } from "../modules/rfq/category-cleanup";
+import {
+  planReclassification,
+  supplierCategorySets,
+  suggestWithAi,
+} from "../modules/rfq/category-cleanup";
 
 const cats = [
   { id: 2, code: "spare", name: "قطع غيار", kind: "functional", parentId: null },
@@ -47,13 +51,7 @@ describe("planReclassification", () => {
   });
 
   it("never moves an item on a keyword match alone, but suggests the keyword category", () => {
-    const [row] = planReclassification(
-      [item(1, "WATER PUMP 1 HP")],
-      cats,
-      vocab,
-      2,
-      new Map(),
-    );
+    const [row] = planReclassification([item(1, "WATER PUMP 1 HP")], cats, vocab, 2, new Map());
     expect(row.toCategoryId).toBeNull();
     expect(row.suggestedCategoryId).toBe(5);
   });
@@ -74,5 +72,16 @@ describe("planReclassification", () => {
     const [row] = planReclassification([item(1, "XYZ 123")], cats, vocab, 2, new Map());
     expect(row.toCategoryId).toBeNull();
     expect(row.suggestedCategoryId).toBeNull();
+  });
+});
+
+describe("suggestWithAi", () => {
+  it("keeps the keyword suggestion when no AI provider answers", async () => {
+    const reclass = planReclassification([item(1, "WATER PUMP 1 HP")], cats, vocab, 2, new Map());
+    const items = new Map([[1, { description: "WATER PUMP 1 HP", partNo: null, lineItem: null }]]);
+    const out = await suggestWithAi(reclass, items, cats, 2);
+    expect(out[0].toCategoryId).toBeNull();
+    expect(out[0].suggestedCategoryId).toBe(5);
+    expect(out[0].aiSuggested).toBeUndefined();
   });
 });
