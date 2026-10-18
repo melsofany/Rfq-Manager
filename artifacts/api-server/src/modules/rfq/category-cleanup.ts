@@ -24,7 +24,9 @@ import {
 } from "@workspace/db";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { loadCategories } from "./assignment";
-import { classifyItem, MIN_CONFIDENCE, type CategorySeed } from "./classification";
+import { classifyItem, type CategorySeed } from "./classification";
+
+export const CLEANUP_MIN_CONFIDENCE = 80;
 import { loadClassifierVocabulary } from "./keywords";
 import { ensureCustomerAssignmentsSafe } from "./customer-assignment";
 import { logger } from "../../shared/logger";
@@ -75,7 +77,9 @@ export function planReclassification(
       targets,
       vocabulary,
     );
-    const ok = r.categoryId != null && !r.ambiguous && r.confidence >= MIN_CONFIDENCE;
+    // Strict: a 45-confidence match is a weak keyword hit (e.g. «air cleaner for a diesel tower light»
+    // → إضاءة). Only confident matches move; the rest stay unclassified for manual review.
+    const ok = r.categoryId != null && !r.ambiguous && r.confidence >= CLEANUP_MIN_CONFIDENCE;
     return {
       itemId: it.id,
       customerRfqId: it.customerRfqId,

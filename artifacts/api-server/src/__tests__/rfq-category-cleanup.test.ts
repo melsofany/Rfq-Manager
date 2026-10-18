@@ -27,15 +27,15 @@ describe("planReclassification", () => {
     expect(rows[0].toCategoryId).not.toBe(2);
   });
 
-  it("moves a clearly matching item to its category", () => {
+  it("does not move a weak keyword hit below the confidence threshold", () => {
     const rows = planReclassification(
       [{ id: 1, customerRfqId: 9, description: "WATER PUMP 1 HP", partNo: null, lineItem: null }],
       cats,
       vocab,
       2,
     );
-    expect(rows[0].toCategoryId).toBe(5);
-    expect(rows[0].toName).toBe("مضخات");
+    expect(rows[0].confidence).toBeLessThan(80);
+    expect(rows[0].toCategoryId).toBeNull();
   });
 
   it("leaves an item with no confident match unclassified", () => {
