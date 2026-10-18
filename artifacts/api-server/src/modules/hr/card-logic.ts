@@ -141,3 +141,24 @@ export function validateCardManager(v: unknown): ManagerResult {
     value: { name: cleanName, signature: typeof signature === "string" ? signature : null },
   };
 }
+
+/** Uploaded designs are drawn at 1060px wide; 85.6 mm ≈ 323.5px, so the scale is 323.5 / 1060. */
+export const UPLOADED_CARD_SCALE = 0.3052;
+const CARD_FRAME_WIDTH_PX = 323.5;
+const CARD_FRAME_HEIGHT_PX = 204;
+
+/**
+ * Put an uploaded design into a fixed 85.6 × 54 mm frame and scale its .card to fit.
+ * The frame is a wrapper div (not zoom) so right-to-left layout doesn't shift the card.
+ */
+export function scaleForPrint(html: string): string {
+  const style =
+    "<style>html,body{margin:0!important;padding:0!important;background:#fff!important}" +
+    `.hr-card-frame{width:${CARD_FRAME_WIDTH_PX}px;height:${CARD_FRAME_HEIGHT_PX}px;overflow:hidden;position:relative}` +
+    `.hr-card-frame .card{position:absolute!important;left:0!important;top:0!important;margin:0!important;transform:scale(${UPLOADED_CARD_SCALE});transform-origin:0 0}` +
+    "</style>";
+  let out = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${style}</head>`) : style + html;
+  out = out.replace(/<body([^>]*)>/i, '<body$1><div class="hr-card-frame">');
+  out = out.replace(/<\/body>/i, "</div></body>");
+  return out;
+}

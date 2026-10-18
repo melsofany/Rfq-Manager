@@ -16,18 +16,16 @@ import { eq } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { requireHr } from "./routes";
 import { decryptField, isHrKeyConfigured } from "../../shared/hr-crypto";
-import { DEFAULT_CARD_BACK, DEFAULT_CARD_FRONT, renderCardHtml, type CardData } from "./card-logic";
+import {
+  DEFAULT_CARD_BACK,
+  DEFAULT_CARD_FRONT,
+  renderCardHtml,
+  scaleForPrint,
+  type CardData,
+} from "./card-logic";
 
 const router: IRouter = Router();
 router.use("/hr", requireAuth, requireHr);
-
-/** Uploaded designs are drawn at 1060px wide; this scales them to the 85.6 × 54 mm card size. */
-const UPLOADED_CARD_ZOOM = 0.3052;
-
-function scaleForPrint(html: string): string {
-  const style = `<style>html,body{margin:0!important;padding:0!important;background:#fff!important}html{zoom:${UPLOADED_CARD_ZOOM}}</style>`;
-  return html.includes("</head>") ? html.replace("</head>", `${style}</head>`) : style + html;
-}
 
 async function designFor(side: "front" | "back"): Promise<{ html: string; uploaded: boolean }> {
   const key = side === "front" ? "card_front" : "card_back";
