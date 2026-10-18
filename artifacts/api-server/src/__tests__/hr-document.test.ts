@@ -5,9 +5,45 @@ import {
   documentValues,
   formatMoney,
   isDocumentKey,
+  missingFields,
   renderDocument,
   type DocumentData,
 } from "../modules/hr/document-logic";
+import {
+  ALL_DOC_FIELDS,
+  COMPANY_DOC_FIELDS,
+  EMPLOYEE_DOC_FIELDS,
+  sanitizeFields,
+} from "../modules/hr/document-fields";
+
+const SYSTEM_PLACEHOLDERS = new Set([
+  "logo",
+  "fullName",
+  "nationalId",
+  "address",
+  "phone",
+  "jobTitle",
+  "department",
+  "hireDate",
+  "endDate",
+  "probationText",
+  "checkFixed",
+  "checkIndefinite",
+  "basicSalary",
+  "allowances",
+  "incentive",
+  "totalSalary",
+]);
+
+const company = Object.fromEntries(
+  COMPANY_DOC_FIELDS.map((f) => [f.name, f.type === "date" ? "2026-01-01" : `قيمة ${f.label}`]),
+);
+const fields = Object.fromEntries(
+  EMPLOYEE_DOC_FIELDS.map((f) => [
+    f.name,
+    f.type === "date" ? "2026-01-15" : (f.options?.[0] ?? `قيمة ${f.label}`),
+  ]),
+);
 
 const employee: DocumentData = {
   fullName: "أحمد يوسف",
@@ -23,55 +59,74 @@ const employee: DocumentData = {
   basicSalary: "5000.00",
   allowances: "1000.00",
   incentive: "500.00",
+  fields,
+  company,
 };
 
 describe("employee documents", () => {
-  it("has a template for every key and no leftover unknown placeholders", () => {
+  it("every placeholder is a system value or a known field", () => {
+    const known = new Set([...SYSTEM_PLACEHOLDERS, ...ALL_DOC_FIELDS.map((f) => f.name)]);
     for (const key of DOCUMENT_KEYS) {
-      expect(DOCUMENT_TEMPLATES[key].length).toBeGreaterThan(1000);
-      const html = renderDocument(key, employee);
-      expect(html).not.toMatch(/\{\{\w+\}\}/);
+      for (const m of DOCUMENT_TEMPLATES[key].matchAll(/\{\{(\w+)\}\}/g)) {
+        expect(known.has(m[1]), `${key}: ${m[1]}`).toBe(true);
+      }
     }
   });
 
-  it("fills the employee data into the contract", () => {
+  it("a complete record leaves nothing to fill in by hand", () => {
+    for (const key of DOCUMENT_KEYS) {
+      expect(missingFields(key, employee), key).toEqual([]);
+      expect(renderDocument(key, employee)).not.toMatch(/\{\{\w+\}\}/);
+    }
+  });
+
+  it("lists the empty fields a document still needs", () => {
+    const missing = missingFields("contract", { ...employee, fields: {}, company: {} });
+    expect(missing).toContain("رقم العقد");
+    expect(missing).toContain("مكان أداء العمل");
+    expect(missing).toContain("مدة العقد");
+    expect(missingFields("internalRules", { ...employee, company: {} })).toContain("رقم الإصدار");
+  });
+
+  it("prints select fields as a ticked checkbox list", () => {
+    const html = renderDocument("contract", {
+      ...employee,
+      fields: { ...fields, workMode: "هجين" },
+    });
+    expect(html).toContain("☑ هجين");
+    expect(html).toContain("☐ مقر الشركة");
+  });
+
+  it("fills the employee data and the open-ended end date", () => {
     const html = renderDocument("contract", employee);
     expect(html).toContain("أحمد يوسف");
     expect(html).toContain("29001011234567");
     expect(html).toContain("01/03/2024");
-    expect(html).toContain("31/12/2026");
     expect(html).toContain("5,000.00 جنيه");
     expect(html).toContain("6,500.00 جنيه");
     expect(html).toContain(COMPANY_LOGO_DATA_URL);
-  });
-
-  it("checks the matching contract type box only", () => {
+    expect(documentValues({ ...employee, contractType: "indefinite" }).endDate).toBe("غير محدد");
     expect(documentValues({ ...employee, contractType: "fixed" }).checkFixed).toBe("☑");
-    expect(documentValues({ ...employee, contractType: "fixed" }).checkIndefinite).toBe("☐");
-    expect(documentValues({ ...employee, contractType: "indefinite" }).checkIndefinite).toBe("☑");
-  });
-
-  it("shows an open-ended contract end as غير محدد", () => {
-    const v = documentValues({ ...employee, contractType: "indefinite", contractEndDate: null });
-    expect(v.endDate).toBe("غير محدد");
-  });
-
-  it("leaves unknown fields blank for handwriting", () => {
-    const v = documentValues({
-      ...employee,
-      nationalId: null,
-      address: null,
-      contractEndDate: null,
-    });
-    expect(v.nationalId).toBe("");
-    expect(v.address).toBe("");
-    expect(v.endDate).toBe("");
   });
 
   it("escapes employee text so it cannot inject markup", () => {
     const html = renderDocument("receiptA", { ...employee, fullName: "<script>alert(1)</script>" });
     expect(html).not.toContain("<script>alert");
     expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("validates saved fields by type and drops unknown keys", () => {
+    const ok = sanitizeFields(EMPLOYEE_DOC_FIELDS, {
+      contractDate: "2026-02-03",
+      payMethod: "نقدًا",
+      x: "y",
+    });
+    expect(ok).toEqual({ value: { contractDate: "2026-02-03", payMethod: "نقدًا" } });
+    expect("error" in sanitizeFields(EMPLOYEE_DOC_FIELDS, { contractDate: "31/12/2026" })).toBe(
+      true,
+    );
+    expect("error" in sanitizeFields(EMPLOYEE_DOC_FIELDS, { payMethod: "شيك" })).toBe(true);
+    expect("error" in sanitizeFields(EMPLOYEE_DOC_FIELDS, { notes: "x".repeat(2001) })).toBe(true);
   });
 
   it("formats money and validates keys", () => {

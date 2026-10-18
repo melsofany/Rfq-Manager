@@ -2758,6 +2758,13 @@ export async function initDb(): Promise<void> {
       `ALTER TABLE hr_contracts ADD COLUMN IF NOT EXISTS incentive NUMERIC(12,2) NOT NULL DEFAULT 0`,
     );
     await client.query(`ALTER TABLE hr_pay_adjustments ADD COLUMN IF NOT EXISTS days NUMERIC(6,2)`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_employee_document_fields (
+        employee_id INTEGER PRIMARY KEY,
+        fields JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
 
     logger.info("initDb: seed complete");
   } catch (err) {

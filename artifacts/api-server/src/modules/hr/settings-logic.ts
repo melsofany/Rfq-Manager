@@ -1,4 +1,5 @@
 import { validateCardManager, validateCardTemplate } from "./card-logic";
+import { COMPANY_DOC_FIELDS, sanitizeFields } from "./document-fields";
 import { isValidYmd } from "./leave-logic";
 /**
  * HR settings — القيم اللي المحاسب بيعدّلها (التأمينات، الضرايب، الغياب، الجزاءات، بدلات، بنك).
@@ -19,6 +20,7 @@ export const SETTING_KEYS = [
   "card_front",
   "card_back",
   "card_manager",
+  "document_company",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -275,5 +277,7 @@ export function validateSetting(key: SettingKey, value: unknown): Result {
       return validateCardTemplate(value);
     case "card_manager":
       return validateCardManager(value);
+    case "document_company":
+      return sanitizeFields(COMPANY_DOC_FIELDS, value);
   }
 }

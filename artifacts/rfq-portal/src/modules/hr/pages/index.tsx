@@ -259,15 +259,6 @@ const CARD_PRINT_CSS = `
 }`;
 
 /** Opens a preview of the employee's card (front and back) with a print button. */
-const EMPLOYEE_DOCUMENTS = [
-  "contract",
-  "internalRules",
-  "annex1",
-  "annex2",
-  "receiptA",
-  "receiptB",
-] as const;
-
 /** Opens an employee document in a hidden frame and prints it (or only previews it in a new tab). */
 function openEmployeeDocument(id: number, key: string, print: boolean) {
   const url = `/api/hr/employees/${id}/documents/${key}`;
@@ -290,43 +281,234 @@ function openEmployeeDocument(id: number, key: string, print: boolean) {
   document.body.appendChild(frame);
 }
 
+type DocDefinition = {
+  name: string;
+  label: string;
+  type: "text" | "date" | "select" | "textarea";
+  options?: string[];
+};
+type DocDefinitions = {
+  keys: string[];
+  employee: DocDefinition[];
+  company: DocDefinition[];
+};
+type DocStatus = { fields: Record<string, string>; missing: Record<string, string[]> };
+
+let docDefinitionsCache: Promise<DocDefinitions> | null = null;
+function loadDocDefinitions(): Promise<DocDefinitions> {
+  docDefinitionsCache ??= api<DocDefinitions>("/hr/document-definitions");
+  return docDefinitionsCache;
+}
+
+const docTextInput = "border rounded px-2 py-1.5 bg-background text-sm w-full disabled:opacity-60";
+
+/** One input per field, by type. Calls onChange with the field name and its new value. */
+function DocFieldsGrid({
+  defs,
+  values,
+  onChange,
+}: {
+  defs: DocDefinition[];
+  values: Record<string, string>;
+  onChange: (name: string, value: string) => void;
+}) {
+  const { t } = useLanguage();
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {defs.map((def) => (
+        <label key={def.name} className={def.type === "textarea" ? "sm:col-span-2" : ""}>
+          <span className={setLabel}>{def.label}</span>
+          {def.type === "select" ? (
+            <select
+              className={docTextInput}
+              value={values[def.name] ?? ""}
+              onChange={(e) => onChange(def.name, e.target.value)}
+            >
+              <option value="">{t("hr.docs.select")}</option>
+              {def.options?.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          ) : def.type === "textarea" ? (
+            <textarea
+              className={`${docTextInput} min-h-[60px]`}
+              maxLength={2000}
+              value={values[def.name] ?? ""}
+              onChange={(e) => onChange(def.name, e.target.value)}
+            />
+          ) : (
+            <input
+              className={docTextInput}
+              type={def.type === "date" ? "date" : "text"}
+              maxLength={300}
+              value={values[def.name] ?? ""}
+              onChange={(e) => onChange(def.name, e.target.value)}
+            />
+          )}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** Documents for one employee: the fields to fill, what is still missing, and preview/print. */
 function EmployeeDocumentsButton({ id }: { id: number }) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
+  const [defs, setDefs] = useState<DocDefinitions | null>(null);
+  const [status, setStatus] = useState<DocStatus | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  async function loadAll() {
+    const [d, s] = await Promise.all([
+      loadDocDefinitions(),
+      api<DocStatus>(`/hr/employees/${id}/document-fields`),
+    ]);
+    setDefs(d);
+    setStatus(s);
+    setDraft(s.fields);
+  }
+
+  function openDialog(next: boolean) {
+    setOpen(next);
+    setErr(null);
+    setSaved(false);
+    if (next) loadAll().catch((e) => setErr((e as Error).message));
+  }
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    setSaved(false);
+    try {
+      await api(`/hr/employees/${id}/document-fields`, {
+        method: "PUT",
+        body: JSON.stringify({ fields: draft }),
+      });
+      await loadAll();
+      setSaved(true);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const dirty = status !== null && JSON.stringify(draft) !== JSON.stringify(status.fields);
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="outline" size="sm" onClick={() => openDialog(true)}>
         <FileText className="me-1 h-4 w-4" />
         {t("hr.docs.button")}
       </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg w-[calc(100vw-2rem)]">
+      <Dialog open={open} onOpenChange={openDialog}>
+        <DialogContent className="max-w-3xl w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("hr.docs.title")}</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground">{t("hr.docs.hint")}</p>
-          <ul className="divide-y">
-            {EMPLOYEE_DOCUMENTS.map((key) => (
-              <li key={key} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span className="text-sm">{t(`hr.docs.${key}`)}</span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openEmployeeDocument(id, key, false)}
-                  >
-                    {t("hr.docs.preview")}
-                  </Button>
-                  <Button size="sm" onClick={() => openEmployeeDocument(id, key, true)}>
-                    {t("hr.docs.print")}
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {defs && status && (
+            <ul className="divide-y">
+              {defs.keys.map((key) => {
+                const missing = status.missing[key] ?? [];
+                const ready = missing.length === 0 && !dirty;
+                return (
+                  <li key={key} className="py-2 space-y-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm">{t(`hr.docs.${key}`)}</span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEmployeeDocument(id, key, false)}
+                        >
+                          {t("hr.docs.preview")}
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={!ready}
+                          onClick={() => openEmployeeDocument(id, key, true)}
+                        >
+                          {t("hr.docs.print")}
+                        </Button>
+                      </div>
+                    </div>
+                    {!ready && (
+                      <p className="text-xs text-amber-700">
+                        {dirty
+                          ? t("hr.docs.unsaved")
+                          : `${t("hr.docs.incomplete")} ${missing.join("، ")}`}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {defs && (
+            <div className="space-y-3 border-t pt-3">
+              <h3 className="font-semibold text-sm">{t("hr.docs.fields")}</h3>
+              <DocFieldsGrid
+                defs={defs.employee}
+                values={draft}
+                onChange={(name, value) => setDraft({ ...draft, [name]: value })}
+              />
+              <div className="flex items-center gap-3">
+                <Button size="sm" onClick={save} disabled={busy || !dirty}>
+                  {t("hr.docs.save")}
+                </Button>
+                {saved && <span className="text-xs text-green-700">{t("hr.docs.saved")}</span>}
+                {err && <span className="text-xs text-red-600">{err}</span>}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** Company values used by every employee's documents (Settings). */
+function CompanyDocumentsCard({
+  value,
+  onSaved,
+}: {
+  value: Record<string, string> | null;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [defs, setDefs] = useState<DocDefinitions | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>(value ?? {});
+  useEffect(() => {
+    loadDocDefinitions()
+      .then(setDefs)
+      .catch(() => setDefs(null));
+  }, []);
+  useEffect(() => {
+    setDraft(value ?? {});
+  }, [value]);
+  const complete = defs !== null && defs.company.every((f) => !!draft[f.name]);
+  return (
+    <SettingCard
+      title={t("hr.docs.companyTitle")}
+      configured={!!value && complete}
+      onSaved={onSaved}
+      onSave={() => saveSetting("document_company", draft)}
+    >
+      <p className="text-xs text-muted-foreground">{t("hr.docs.companyHint")}</p>
+      {defs && (
+        <DocFieldsGrid
+          defs={defs.company}
+          values={draft}
+          onChange={(name, v) => setDraft({ ...draft, [name]: v })}
+        />
+      )}
+    </SettingCard>
   );
 }
 
@@ -2711,6 +2893,10 @@ function SettingsTab() {
       <CardDesignCard front={data.card_front} back={data.card_back} onSaved={load} />
       <CardManagerCard
         value={data.card_manager as { name: string; signature: string | null } | null}
+        onSaved={load}
+      />
+      <CompanyDocumentsCard
+        value={data.document_company as Record<string, string> | null}
         onSaved={load}
       />
       <BankCard

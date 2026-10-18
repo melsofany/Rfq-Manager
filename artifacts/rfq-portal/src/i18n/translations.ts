@@ -177,6 +177,15 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.docs.annex2": "Annex 2: disciplinary regulations",
     "hr.docs.receiptA": "Deposit receipt (1)",
     "hr.docs.receiptB": "Deposit receipt (2)",
+    "hr.docs.fields": "Employee details for the documents",
+    "hr.docs.save": "Save details",
+    "hr.docs.saved": "Saved",
+    "hr.docs.unsaved": "Save your changes before printing.",
+    "hr.docs.incomplete": "Missing:",
+    "hr.docs.select": "Choose…",
+    "hr.docs.companyTitle": "Company details for documents",
+    "hr.docs.companyHint":
+      "Used on every employee's documents. Enter once; printing stays blocked until these are filled.",
     "hr.card.manager": "General manager on cards",
     "hr.card.managerHint":
       "Shown on the front of every card. Change the name here and re-upload the front design if its name is typed in the file.",
@@ -951,6 +960,15 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.docs.annex2": "ملحق رقم (2): لائحة الجزاءات والإجراءات التأديبية",
     "hr.docs.receiptA": "إيصال أمانة (1)",
     "hr.docs.receiptB": "إيصال أمانة (2)",
+    "hr.docs.fields": "بيانات الموظف للمستندات",
+    "hr.docs.save": "حفظ البيانات",
+    "hr.docs.saved": "تم الحفظ",
+    "hr.docs.unsaved": "احفظ التعديلات قبل الطباعة.",
+    "hr.docs.incomplete": "ناقص:",
+    "hr.docs.select": "اختر…",
+    "hr.docs.companyTitle": "بيانات الشركة للمستندات",
+    "hr.docs.companyHint":
+      "تُستخدم في مستندات كل الموظفين. تُكتب مرة واحدة، والطباعة تتوقف لحد ما تتكمل.",
     "hr.card.manager": "المدير العام على البطاقات",
     "hr.card.managerHint":
       "بيظهر على وجه كل البطاقات. غيّر الاسم هنا، ولو اسمه مكتوب جوه ملف التصميم ارفع الوجه تاني بالتصميم الجديد.",
