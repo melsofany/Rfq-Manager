@@ -2759,7 +2759,9 @@ export async function initDb(): Promise<void> {
     );
     await client.query(`ALTER TABLE hr_pay_adjustments ADD COLUMN IF NOT EXISTS days NUMERIC(6,2)`);
     await client.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS full_name_en TEXT`);
-    await client.query(`ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS procurement_employee_id INTEGER`);
+    await client.query(
+      `ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS procurement_employee_id INTEGER`,
+    );
     await client.query(
       `CREATE UNIQUE INDEX IF NOT EXISTS hr_employees_procurement_uq ON hr_employees (procurement_employee_id) WHERE procurement_employee_id IS NOT NULL`,
     );
