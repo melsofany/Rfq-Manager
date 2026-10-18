@@ -3,8 +3,11 @@
  * from the customer items assigned to them, and that the customer has actually accepted.
  *
  * Rules (agreed with the business):
- *   - Denominator: the customer items whose CURRENT holder is the employee and whose assignment
- *     date falls in the basis month (Cairo time). Cancelled items are excluded.
+ *   - Owner of an item: the employee credited by its attribution (customer_rfq_items.
+ *     attribution_employee_id) — the one who obtained the supplier price the customer PO was
+ *     raised on. Attribution is frozen at the first customer PO and never changes afterwards.
+ *   - Denominator: the items owned by the employee whose attribution date
+ *     (attribution_first_po_at, Cairo time) falls in the basis month. Cancelled items are excluded.
  *   - Numerator: those items that have at least one non-voided customer delivery whose accepted
  *     quantity (delivered − rejected by customer) is greater than zero, delivered on or before
  *     the calculation time. A partial delivery counts the whole item.
@@ -12,13 +15,11 @@
  *   - Late deliveries are settled retroactively: each basis month is recalculated on every
  *     payroll run, and only the difference from what was already credited is paid in the run
  *     where the delivery happens.
- *   - Reassignment: an item belongs to the employee whose assignment row is the latest one.
  *
  * The month arithmetic and the ratio are pure functions so they can be tested without a database.
  */
 import {
   db,
-  customerRfqItemAssignmentsTable,
   customerRfqItemsTable,
   customerPoItemsTable,
   customerPoItemDeliveriesTable,
@@ -56,11 +57,10 @@ export function monthDue(
   return (targetCents - Math.round(credited * 100)) / 100;
 }
 
-export interface AssignmentInput {
-  id: number;
+export interface OwnedItemInput {
   customerRfqItemId: number;
-  employeeId: number;
-  assignedAt: Date;
+  /** Attribution date: when the item was frozen to its owner (first customer PO). */
+  attributedAt: Date;
   cancelled: boolean;
 }
 
@@ -78,28 +78,14 @@ export interface MonthCounts {
 }
 
 /**
- * Counts, per basis month, the items this employee currently holds and how many of them the
- * customer has accepted by `cutoff`.
+ * Counts, per basis month, the items the employee owns (already filtered to that employee by the
+ * caller) and how many the customer has accepted by `cutoff`.
  */
 export function monthlyItemCounts(
-  assignments: AssignmentInput[],
+  items: OwnedItemInput[],
   deliveries: DeliveryInput[],
-  employeeId: number,
   cutoff: Date,
 ): MonthCounts[] {
-  // Latest assignment row per item decides the holder.
-  const latest = new Map<number, AssignmentInput>();
-  for (const a of assignments) {
-    const cur = latest.get(a.customerRfqItemId);
-    if (
-      !cur ||
-      a.assignedAt.getTime() > cur.assignedAt.getTime() ||
-      (a.assignedAt.getTime() === cur.assignedAt.getTime() && a.id > cur.id)
-    ) {
-      latest.set(a.customerRfqItemId, a);
-    }
-  }
-
   const acceptedByItem = new Set<number>();
   for (const d of deliveries) {
     if (d.acceptedQty > 0 && d.deliveredAt.getTime() <= cutoff.getTime()) {
@@ -108,12 +94,12 @@ export function monthlyItemCounts(
   }
 
   const byPeriod = new Map<string, MonthCounts>();
-  for (const row of latest.values()) {
-    if (row.employeeId !== employeeId || row.cancelled) continue;
-    const period = cairoPeriod(row.assignedAt);
+  for (const item of items) {
+    if (item.cancelled) continue;
+    const period = cairoPeriod(item.attributedAt);
     const m = byPeriod.get(period) ?? { period, assigned: 0, delivered: 0 };
     m.assigned++;
-    if (acceptedByItem.has(row.customerRfqItemId)) m.delivered++;
+    if (acceptedByItem.has(item.customerRfqItemId)) m.delivered++;
     byPeriod.set(period, m);
   }
   return [...byPeriod.values()].sort((a, b) => a.period.localeCompare(b.period));
@@ -181,29 +167,19 @@ export async function computeProductionIncentive(args: {
 }): Promise<ProductionIncentiveResult> {
   const cutoff = args.now ?? new Date();
 
-  const touched = await db
-    .select({ itemId: customerRfqItemAssignmentsTable.customerRfqItemId })
-    .from(customerRfqItemAssignmentsTable)
-    .where(eq(customerRfqItemAssignmentsTable.employeeId, args.procurementEmployeeId));
-  const itemIds = [...new Set(touched.map((t) => t.itemId))];
+  const owned = await db
+    .select({
+      id: customerRfqItemsTable.id,
+      attributedAt: customerRfqItemsTable.attributionFirstPoAt,
+      cancelled: customerRfqItemsTable.isCancelled,
+    })
+    .from(customerRfqItemsTable)
+    .where(eq(customerRfqItemsTable.attributionEmployeeId, args.procurementEmployeeId));
+  const ownedWithDate = owned.filter((o) => o.attributedAt != null);
+  const itemIds = ownedWithDate.map((o) => o.id);
 
   let counts: MonthCounts[] = [];
   if (itemIds.length) {
-    const assignRows = await db
-      .select({
-        id: customerRfqItemAssignmentsTable.id,
-        customerRfqItemId: customerRfqItemAssignmentsTable.customerRfqItemId,
-        employeeId: customerRfqItemAssignmentsTable.employeeId,
-        assignedAt: customerRfqItemAssignmentsTable.assignedAt,
-      })
-      .from(customerRfqItemAssignmentsTable)
-      .where(inArray(customerRfqItemAssignmentsTable.customerRfqItemId, itemIds));
-    const cancelledRows = await db
-      .select({ id: customerRfqItemsTable.id, cancelled: customerRfqItemsTable.isCancelled })
-      .from(customerRfqItemsTable)
-      .where(inArray(customerRfqItemsTable.id, itemIds));
-    const cancelled = new Map(cancelledRows.map((r) => [r.id, r.cancelled]));
-
     const deliveryRows = await db
       .select({
         customerRfqItemId: customerPoItemsTable.customerRfqItemId,
@@ -225,12 +201,10 @@ export async function computeProductionIncentive(args: {
       );
 
     counts = monthlyItemCounts(
-      assignRows.map((a) => ({
-        id: a.id,
-        customerRfqItemId: a.customerRfqItemId,
-        employeeId: a.employeeId ?? -1,
-        assignedAt: new Date(a.assignedAt),
-        cancelled: cancelled.get(a.customerRfqItemId) ?? false,
+      ownedWithDate.map((o) => ({
+        customerRfqItemId: o.id,
+        attributedAt: new Date(o.attributedAt as unknown as string),
+        cancelled: o.cancelled,
       })),
       deliveryRows.flatMap((d) =>
         d.customerRfqItemId == null
@@ -243,7 +217,6 @@ export async function computeProductionIncentive(args: {
               },
             ],
       ),
-      args.procurementEmployeeId,
       cutoff,
     ).filter((m) => m.period <= args.runPeriod);
   }
