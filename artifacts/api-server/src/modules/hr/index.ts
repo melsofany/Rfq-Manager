@@ -16,6 +16,7 @@ import payrollRouter from "./payroll-routes";
 import settlementRouter from "./settlement-routes";
 import bankTransferRouter from "./bank-transfer-routes";
 import reportsRouter from "./reports-routes";
+import cardRouter from "./card-routes";
 
 const router: IRouter = Router();
 router.use(admsRouter);
@@ -30,5 +31,6 @@ router.use(payrollRouter);
 router.use(settlementRouter);
 router.use(bankTransferRouter);
 router.use(reportsRouter);
+router.use(cardRouter);
 
 export default router;
