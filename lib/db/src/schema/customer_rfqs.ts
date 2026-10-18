@@ -51,6 +51,9 @@ export const customerRfqItemsTable = pgTable("customer_rfq_items", {
   technicalAttributes: text("technical_attributes"),
   classifyConfidence: numeric("classify_confidence", { precision: 5, scale: 2 }),
   classifyReason: text("classify_reason"),
+  // Review suggestion for an item left unclassified (cleanup of a retired category).
+  // Never applied on its own: a manager accepts it by choosing the category.
+  suggestedCategoryId: integer("suggested_category_id"),
   // Soft-cancel: an item is disabled, never hard-deleted (its assignment
   // history must survive). Plain boolean; DDL lives in init-db.ts.
   isCancelled: boolean("is_cancelled").notNull().default(false),

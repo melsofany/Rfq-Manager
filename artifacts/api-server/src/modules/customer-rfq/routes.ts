@@ -2234,6 +2234,7 @@ router.get(
         categoryId: customerRfqItemsTable.categoryId,
         classifyConfidence: customerRfqItemsTable.classifyConfidence,
         classifyReason: customerRfqItemsTable.classifyReason,
+        suggestedCategoryId: customerRfqItemsTable.suggestedCategoryId,
         customerRfqId: customerRfqsTable.id,
         customerRfqNo: customerRfqsTable.customerRfqNo,
         customerName: customerRfqsTable.customerName,
@@ -2301,6 +2302,15 @@ router.get(
                 ambiguous: false,
                 candidates: undefined as Array<{ id: number; name: string }> | undefined,
               };
+        // A suggestion stored by the cleanup comes first: it is the reviewer's starting point.
+        const suggested =
+          r.suggestedCategoryId != null && catName.get(r.suggestedCategoryId)
+            ? [{ id: r.suggestedCategoryId, name: catName.get(r.suggestedCategoryId) as string }]
+            : [];
+        const candidates = [
+          ...suggested,
+          ...(verdict.candidates ?? []).filter((c) => !suggested.some((s) => s.id === c.id)),
+        ];
         queue.push({
           itemId: r.id,
           partNo: r.partNo,
@@ -2312,7 +2322,7 @@ router.get(
           reason: verdict.ambiguous ? "ambiguous" : "unclassified",
           categoryId: null,
           categoryName: null,
-          candidates: verdict.candidates ?? [],
+          candidates,
           confidence: null,
         });
         continue;
