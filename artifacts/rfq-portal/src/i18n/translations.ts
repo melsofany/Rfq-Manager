@@ -155,6 +155,16 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.set.r.end": "End of contract",
     "hr.set.eosByReason": "Eligibility by exit reason",
     "hr.set.eosResignation": "Resignation",
+    "hr.card.printSetupTitle": "Card printer settings (check before printing)",
+    "hr.card.printSetup1":
+      "Choose your card printer's driver (Zebra, Evolis, Magicard...), not a paper printer.",
+    "hr.card.printSetup2": "Paper size: CR80 (85.6 × 54 mm), or custom 85.6 × 54 mm.",
+    "hr.card.printSetup3": "Margins: None. Scale: 100% / Actual size, never Fit to page.",
+    "hr.card.printSetup4":
+      "Turn off Headers and footers, so the date and URL don't print on the card.",
+    "hr.card.printSetup5":
+      "Turn on Background graphics, so the colors print. Use 600 DPI if the driver offers it.",
+    "hr.card.printSetup6": "Test on plain paper first and measure: it should be 85.6 × 54 mm.",
     "hr.card.manager": "General manager on cards",
     "hr.card.managerHint":
       "Shown on the front of every card. Change the name here and re-upload the front design if its name is typed in the file.",
@@ -908,6 +918,16 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.set.r.end": "انتهاء العقد",
     "hr.set.eosByReason": "نسبة الاستحقاق حسب سبب الخروج",
     "hr.set.eosResignation": "استقالة",
+    "hr.card.printSetupTitle": "إعدادات ماكينة الكروت (راجعها قبل الطباعة)",
+    "hr.card.printSetup1":
+      "اختار درايفر ماكينة الكروت (Zebra أو Evolis أو Magicard...) مش طابعة الورق العادية.",
+    "hr.card.printSetup2": "حجم الورق: CR80 (85.6 × 54 مم)، أو Custom بنفس المقاس.",
+    "hr.card.printSetup3":
+      "الهوامش (Margins): None. والمقياس (Scale): 100% أو Actual size، ومتختارش Fit to page أبداً.",
+    "hr.card.printSetup4": "اقفل Headers and footers عشان التاريخ والرابط ما يطلعوش على الكارت.",
+    "hr.card.printSetup5":
+      "افتح Background graphics عشان الألوان تطلع. واختار 600 DPI لو الدرايفر بيدعمها.",
+    "hr.card.printSetup6": "جرّب الأول على ورقة عادية وقيس: لازم يكون 85.6 × 54 مم.",
     "hr.card.manager": "المدير العام على البطاقات",
     "hr.card.managerHint":
       "بيظهر على وجه كل البطاقات. غيّر الاسم هنا، ولو اسمه مكتوب جوه ملف التصميم ارفع الوجه تاني بالتصميم الجديد.",
