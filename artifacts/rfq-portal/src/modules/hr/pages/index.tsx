@@ -245,12 +245,13 @@ function EmployeePhoto({ id }: { id: number }) {
 const CARD_PRINT_CSS = `
 @page { size: 85.6mm 54mm; margin: 0; }
 #hr-card-print iframe { width: 85.6mm; height: 54mm; border: 0; display: block; background: #fff; }
+#hr-card-print .hr-card-side { zoom: 1.6; }
 #hr-card-print .hr-card-side { width: 85.6mm; height: 54mm; overflow: hidden; }
 @media print {
   body * { visibility: hidden !important; }
   #hr-card-print, #hr-card-print * { visibility: visible !important; }
   #hr-card-print { position: fixed; left: 0; top: 0; width: 85.6mm; margin: 0 !important; padding: 0 !important; gap: 0 !important; }
-  #hr-card-print .hr-card-side { page-break-after: always; break-after: page; }
+  #hr-card-print .hr-card-side { zoom: 1; page-break-after: always; break-after: page; }
   #hr-card-print .hr-card-side:last-child { page-break-after: auto; break-after: auto; }
 }`;
 
@@ -264,7 +265,7 @@ function EmployeeCardButton({ id }: { id: number }) {
         {t("hr.card.open")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{t("hr.card.preview")}</DialogTitle>
           </DialogHeader>
