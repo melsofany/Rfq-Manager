@@ -16,6 +16,7 @@ export const CARD_PLACEHOLDERS = [
   "photo",
   "managerName",
   "managerSignature",
+  "validUntil",
 ] as const;
 export type CardPlaceholder = (typeof CARD_PLACEHOLDERS)[number];
 
@@ -78,6 +79,8 @@ export interface CardData {
   photo: string | null;
   managerName: string;
   managerSignature: string | null;
+  /** Text shown for "valid until": a formatted date, "غير محدد" for open-ended contracts, or null. */
+  validUntil: string | null;
 }
 
 /** Replace every {{placeholder}} in the template with the escaped employee value. */
@@ -94,6 +97,7 @@ export function renderCardHtml(template: string, data: CardData): string {
     managerName: escapeHtml(data.managerName),
     // Signature is a validated image data URL (see validateCardManager); it is placed in src="" only.
     managerSignature: data.managerSignature ?? BLANK_PHOTO,
+    validUntil: escapeHtml(data.validUntil ?? ""),
   };
   return template.replace(/\{\{\s*([a-zA-Z]+)\s*\}\}/g, (match, key: string) =>
     (CARD_PLACEHOLDERS as readonly string[]).includes(key) ? values[key as CardPlaceholder] : match,
@@ -161,4 +165,10 @@ export function scaleForPrint(html: string): string {
   out = out.replace(/<body([^>]*)>/i, '<body$1><div class="hr-card-frame">');
   out = out.replace(/<\/body>/i, "</div></body>");
   return out;
+}
+
+/** "2026-12-31" → "31/12/2026". Returns null for anything that isn't a YYYY-MM-DD date. */
+export function formatCardDate(ymd: string | null | undefined): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd ?? "");
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
 }

@@ -10,9 +10,10 @@ import {
   hrEmployeesTable,
   hrEmployeePhotosTable,
   hrEmployeeProfilesTable,
+  hrContractsTable,
   hrSettingsTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { requireHr } from "./routes";
 import { decryptField, isHrKeyConfigured } from "../../shared/hr-crypto";
@@ -20,6 +21,7 @@ import {
   DEFAULT_CARD_BACK,
   DEFAULT_CARD_FRONT,
   renderCardHtml,
+  formatCardDate,
   scaleForPrint,
   type CardData,
 } from "./card-logic";
@@ -78,7 +80,15 @@ router.get("/hr/employees/:id/card/:side", async (req, res): Promise<void> => {
     .where(eq(hrSettingsTable.key, "card_manager"))
     .limit(1);
   const manager = managerRow?.value as { name?: string; signature?: string | null } | null;
+  // "Valid until" is the current contract's end date; open-ended contracts show "غير محدد".
+  const [contract] = await db
+    .select({ endDate: hrContractsTable.endDate })
+    .from(hrContractsTable)
+    .where(and(eq(hrContractsTable.employeeId, id), eq(hrContractsTable.isCurrent, true)))
+    .limit(1);
+  const validUntil = contract ? (formatCardDate(contract.endDate) ?? "غير محدد") : null;
   const data: CardData = {
+    validUntil,
     managerName: manager?.name ?? "",
     managerSignature: manager?.signature ?? null,
     fullName: emp.fullName,

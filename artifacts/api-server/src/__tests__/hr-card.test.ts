@@ -4,6 +4,7 @@ import {
   CARD_MAX_HTML_CHARS,
   DEFAULT_CARD_FRONT,
   escapeHtml,
+  formatCardDate,
   renderCardHtml,
   scaleForPrint,
   validateCardManager,
@@ -16,6 +17,7 @@ const emp: CardData = {
   nationalId: "29801011234567",
   managerName: "",
   managerSignature: null,
+  validUntil: null,
   employeeNo: "EMP-0001",
   jobTitle: "مهندس",
   department: null,
@@ -125,6 +127,20 @@ describe("uploaded design scaling", () => {
   it("still wraps a document without a head", () => {
     expect(scaleForPrint('<body><main class="card"></main></body>')).toContain(
       'class="hr-card-frame"',
+    );
+  });
+});
+
+describe("valid until", () => {
+  it("formats contract end dates as DD/MM/YYYY", () => {
+    expect(formatCardDate("2026-12-31")).toBe("31/12/2026");
+    expect(formatCardDate(null)).toBeNull();
+    expect(formatCardDate("31/12/2026")).toBeNull();
+  });
+
+  it("renders the valid-until text", () => {
+    expect(renderCardHtml("<b>{{validUntil}}</b>", { ...emp, validUntil: "31/12/2026" })).toBe(
+      "<b>31/12/2026</b>",
     );
   });
 });
