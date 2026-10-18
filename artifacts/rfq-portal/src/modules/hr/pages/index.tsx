@@ -245,13 +245,17 @@ function EmployeePhoto({ id }: { id: number }) {
 const CARD_PRINT_CSS = `
 @page { size: 85.6mm 54mm; margin: 0; }
 #hr-card-print iframe { width: 85.6mm; height: 54mm; border: 0; display: block; background: #fff; }
-#hr-card-print .hr-card-side { zoom: 1.6; }
 #hr-card-print .hr-card-side { width: 85.6mm; height: 54mm; overflow: hidden; }
+@media screen {
+  #hr-card-print .hr-card-side { position: relative; width: 517px; height: 326px; overflow: hidden; }
+  #hr-card-print iframe { position: absolute; left: 0; top: 0; transform: scale(1.6); transform-origin: 0 0; }
+}
 @media print {
   body * { visibility: hidden !important; }
   #hr-card-print, #hr-card-print * { visibility: visible !important; }
   #hr-card-print { position: fixed; left: 0; top: 0; width: 85.6mm; margin: 0 !important; padding: 0 !important; gap: 0 !important; }
-  #hr-card-print .hr-card-side { zoom: 1; page-break-after: always; break-after: page; }
+  #hr-card-print .hr-card-side { page-break-after: always; break-after: page; }
+  #hr-card-print iframe { position: static; transform: none; }
   #hr-card-print .hr-card-side:last-child { page-break-after: auto; break-after: auto; }
 }`;
 
