@@ -191,3 +191,13 @@ export function formatCardDate(ymd: string | null | undefined): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd ?? "");
   return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
 }
+
+/**
+ * Stop mobile browsers from turning numbers and addresses into blue links on the printed/previewed card.
+ */
+export function withoutAutoLinks(html: string): string {
+  const meta = '<meta name="format-detection" content="telephone=no,email=no,address=no,date=no">';
+  return /<head[^>]*>/i.test(html)
+    ? html.replace(/<head([^>]*)>/i, `<head$1>${meta}`)
+    : meta + html;
+}
