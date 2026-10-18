@@ -241,22 +241,20 @@ function EmployeePhoto({ id }: { id: number }) {
 
 // ---------- بطاقات الموظفين ----------
 
-/** Print rules: only the two card sides are printed, one per page, at 85.6 × 54 mm. */
+/** Preview shows larger cards on screen; print shows only the 85.6 × 54 mm sides, one per page. */
 const CARD_PRINT_CSS = `
 @page { size: 85.6mm 54mm; margin: 0; }
-#hr-card-print iframe { width: 85.6mm; height: 54mm; border: 0; display: block; background: #fff; }
-#hr-card-print .hr-card-side { width: 85.6mm; height: 54mm; overflow: hidden; }
-@media screen {
-  #hr-card-print .hr-card-side { position: relative; width: 517px; height: 326px; overflow: hidden; }
-  #hr-card-print iframe { position: absolute; left: 0; top: 0; transform: scale(1.6); transform-origin: 0 0; }
-}
+#hr-card-print iframe { border: 0; display: block; background: #fff; }
+#hr-card-print .hr-card-side { width: 517px; height: 326px; overflow: hidden; }
+#hr-card-print .card-print { display: none; }
 @media print {
   body * { visibility: hidden !important; }
   #hr-card-print, #hr-card-print * { visibility: visible !important; }
   #hr-card-print { position: fixed; left: 0; top: 0; width: 85.6mm; margin: 0 !important; padding: 0 !important; gap: 0 !important; }
-  #hr-card-print .hr-card-side { page-break-after: always; break-after: page; }
-  #hr-card-print iframe { position: static; transform: none; }
+  #hr-card-print .hr-card-side { width: 85.6mm; height: 54mm; page-break-after: always; break-after: page; }
   #hr-card-print .hr-card-side:last-child { page-break-after: auto; break-after: auto; }
+  #hr-card-print .card-preview { display: none; }
+  #hr-card-print .card-print { display: block; width: 85.6mm; height: 54mm; }
 }`;
 
 /** Opens a preview of the employee's card (front and back) with a print button. */
@@ -278,9 +276,20 @@ function EmployeeCardButton({ id }: { id: number }) {
             {(["front", "back"] as const).map((side) => (
               <div key={side} className="hr-card-side">
                 <iframe
+                  className="card-preview"
+                  title={t(side === "front" ? "hr.card.front" : "hr.card.back")}
+                  src={`/api/hr/employees/${id}/card/${side}?preview=1`}
+                  scrolling="no"
+                  width={517}
+                  height={326}
+                />
+                <iframe
+                  className="card-print"
                   title={t(side === "front" ? "hr.card.front" : "hr.card.back")}
                   src={`/api/hr/employees/${id}/card/${side}`}
                   scrolling="no"
+                  width={324}
+                  height={204}
                 />
               </div>
             ))}

@@ -144,3 +144,11 @@ describe("valid until", () => {
     );
   });
 });
+
+describe("preview size", () => {
+  it("uses the larger preview frame and scale when asked", () => {
+    const out = scaleForPrint('<body><main class="card"></main></body>', "preview");
+    expect(out).toContain("width:517px;height:326px");
+    expect(out).toContain("transform:scale(0.4883)");
+  });
+});

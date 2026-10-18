@@ -101,7 +101,8 @@ router.get("/hr/employees/:id/card/:side", async (req, res): Promise<void> => {
   };
   const design = await designFor(side);
   const rendered = renderCardHtml(design.html, data);
-  const html = design.uploaded ? scaleForPrint(rendered) : rendered;
+  const size = req.query.preview === "1" ? "preview" : "print";
+  const html = design.uploaded ? scaleForPrint(rendered, size) : rendered;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "private, no-store");
   // Printed cards never run scripts and load only the images embedded in the page.
