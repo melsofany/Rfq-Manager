@@ -2,6 +2,13 @@ import { Fragment, useEffect, useState, useCallback } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { IdCard } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { BankCombobox } from "@/components/BankCombobox";
@@ -229,6 +236,164 @@ function EmployeePhoto({ id }: { id: number }) {
       </label>
       {err && <span className="text-xs text-red-600">{err}</span>}
     </div>
+  );
+}
+
+// ---------- بطاقات الموظفين ----------
+
+/** Print rules: only the two card sides are printed, one per page, at 85.6 × 54 mm. */
+const CARD_PRINT_CSS = `
+@page { size: 85.6mm 54mm; margin: 0; }
+#hr-card-print iframe { width: 85.6mm; height: 54mm; border: 0; display: block; background: #fff; }
+#hr-card-print .hr-card-side { width: 85.6mm; height: 54mm; overflow: hidden; }
+@media print {
+  body * { visibility: hidden !important; }
+  #hr-card-print, #hr-card-print * { visibility: visible !important; }
+  #hr-card-print { position: fixed; left: 0; top: 0; width: 85.6mm; margin: 0 !important; padding: 0 !important; gap: 0 !important; }
+  #hr-card-print .hr-card-side { page-break-after: always; break-after: page; }
+  #hr-card-print .hr-card-side:last-child { page-break-after: auto; break-after: auto; }
+}`;
+
+/** Opens a preview of the employee's card (front and back) with a print button. */
+function EmployeeCardButton({ id }: { id: number }) {
+  const { t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        {t("hr.card.open")}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("hr.card.preview")}</DialogTitle>
+          </DialogHeader>
+          <style>{CARD_PRINT_CSS}</style>
+          <div id="hr-card-print" className="flex flex-col items-center gap-4">
+            {(["front", "back"] as const).map((side) => (
+              <div key={side} className="hr-card-side">
+                <iframe
+                  title={t(side === "front" ? "hr.card.front" : "hr.card.back")}
+                  src={`/api/hr/employees/${id}/card/${side}`}
+                  scrolling="no"
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => window.print()}>{t("hr.card.print")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function CardSideUpload({
+  settingKey,
+  label,
+  configured,
+  onSaved,
+}: {
+  settingKey: "card_front" | "card_back";
+  label: string;
+  configured: boolean;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function upload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!/\.html?$/i.test(file.name)) {
+      setErr(t("hr.card.badFile"));
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const html = await file.text();
+      await saveSetting(settingKey, { html });
+      onSaved();
+    } catch (ex) {
+      setErr((ex as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await saveSetting(settingKey, null);
+      onSaved();
+    } catch (ex) {
+      setErr((ex as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded border p-3">
+      <span className="text-sm font-medium">{label}</span>
+      <span
+        className={`rounded px-2 py-0.5 text-xs ${
+          configured ? "bg-green-100 text-green-800" : "bg-muted text-muted-foreground"
+        }`}
+      >
+        {configured ? t("hr.card.uploaded") : t("hr.card.default")}
+      </span>
+      <label className="cursor-pointer text-xs text-primary underline">
+        {t("hr.card.upload")}
+        <input
+          type="file"
+          accept=".html,text/html"
+          onChange={upload}
+          disabled={busy}
+          className="hidden"
+        />
+      </label>
+      {configured && (
+        <Button variant="outline" size="sm" onClick={remove} disabled={busy}>
+          {t("hr.card.remove")}
+        </Button>
+      )}
+      {err && <span className="w-full text-xs text-red-600">{err}</span>}
+    </div>
+  );
+}
+
+function CardDesignCard({
+  front,
+  back,
+  onSaved,
+}: {
+  front: unknown;
+  back: unknown;
+  onSaved: () => void;
+}) {
+  const { t } = useLanguage();
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <h2 className="font-semibold">{t("hr.card.title")}</h2>
+        <p className="text-xs text-muted-foreground">{t("hr.card.hint")}</p>
+        <CardSideUpload
+          settingKey="card_front"
+          label={t("hr.card.front")}
+          configured={!!front}
+          onSaved={onSaved}
+        />
+        <CardSideUpload
+          settingKey="card_back"
+          label={t("hr.card.back")}
+          configured={!!back}
+          onSaved={onSaved}
+        />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -783,6 +948,7 @@ function EmployeesTab() {
                     <td className="p-2">{t(`hr.status.${r.status}`)}</td>
                     <td className="p-2 text-end">
                       <div className="flex flex-wrap justify-end gap-2">
+                        <EmployeeCardButton id={r.id} />
                         <Button variant="outline" size="sm" onClick={() => startEdit(r)}>
                           {t("hr.emp.edit")}
                         </Button>
@@ -2352,6 +2518,7 @@ function SettingsTab() {
       <FinesCard value={data.fines as { monthlyCapDays: number | null } | null} onSaved={load} />
       <AllowancesCard value={data.allowance_types as { items: string[] } | null} onSaved={load} />
       <EndOfServiceCard value={data.end_of_service as EosRule | null} onSaved={load} />
+      <CardDesignCard front={data.card_front} back={data.card_back} onSaved={load} />
       <BankCard
         value={data.bank_export as { format: string | null; notes: string | null } | null}
         onSaved={load}

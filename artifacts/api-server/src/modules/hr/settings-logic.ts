@@ -1,3 +1,4 @@
+import { validateCardTemplate } from "./card-logic";
 import { isValidYmd } from "./leave-logic";
 /**
  * HR settings — القيم اللي المحاسب بيعدّلها (التأمينات، الضرايب، الغياب، الجزاءات، بدلات، بنك).
@@ -15,6 +16,8 @@ export const SETTING_KEYS = [
   "end_of_service",
   "work_shift",
   "holidays",
+  "card_front",
+  "card_back",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -266,5 +269,8 @@ export function validateSetting(key: SettingKey, value: unknown): Result {
       return validateWorkShift(value);
     case "holidays":
       return validateHolidays(value);
+    case "card_front":
+    case "card_back":
+      return validateCardTemplate(value);
   }
 }
