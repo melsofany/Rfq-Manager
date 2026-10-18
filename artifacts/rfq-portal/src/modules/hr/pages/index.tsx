@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { IdCard } from "lucide-react";
+import { FileText, IdCard } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { BankCombobox } from "@/components/BankCombobox";
 import { findBankByName } from "@/lib/egyptian-banks";
@@ -259,6 +259,77 @@ const CARD_PRINT_CSS = `
 }`;
 
 /** Opens a preview of the employee's card (front and back) with a print button. */
+const EMPLOYEE_DOCUMENTS = [
+  "contract",
+  "internalRules",
+  "annex1",
+  "annex2",
+  "receiptA",
+  "receiptB",
+] as const;
+
+/** Opens an employee document in a hidden frame and prints it (or only previews it in a new tab). */
+function openEmployeeDocument(id: number, key: string, print: boolean) {
+  const url = `/api/hr/employees/${id}/documents/${key}`;
+  if (!print) {
+    window.open(url, "_blank");
+    return;
+  }
+  const frame = document.createElement("iframe");
+  frame.style.cssText =
+    "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  frame.onload = () => {
+    try {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+    } finally {
+      setTimeout(() => frame.remove(), 60_000);
+    }
+  };
+  frame.src = url;
+  document.body.appendChild(frame);
+}
+
+function EmployeeDocumentsButton({ id }: { id: number }) {
+  const { t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <FileText className="me-1 h-4 w-4" />
+        {t("hr.docs.button")}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg w-[calc(100vw-2rem)]">
+          <DialogHeader>
+            <DialogTitle>{t("hr.docs.title")}</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">{t("hr.docs.hint")}</p>
+          <ul className="divide-y">
+            {EMPLOYEE_DOCUMENTS.map((key) => (
+              <li key={key} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span className="text-sm">{t(`hr.docs.${key}`)}</span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openEmployeeDocument(id, key, false)}
+                  >
+                    {t("hr.docs.preview")}
+                  </Button>
+                  <Button size="sm" onClick={() => openEmployeeDocument(id, key, true)}>
+                    {t("hr.docs.print")}
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function EmployeeCardButton({ id }: { id: number }) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -1067,6 +1138,7 @@ function EmployeesTab() {
                     <td className="p-2 text-end">
                       <div className="flex flex-wrap justify-end gap-2">
                         <EmployeeCardButton id={r.id} />
+                        <EmployeeDocumentsButton id={r.id} />
                         <Button variant="outline" size="sm" onClick={() => startEdit(r)}>
                           {t("hr.emp.edit")}
                         </Button>

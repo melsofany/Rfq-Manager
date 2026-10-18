@@ -165,6 +165,18 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.card.printSetup5":
       "Turn on Background graphics, so the colors print. Use 600 DPI if the driver offers it.",
     "hr.card.printSetup6": "Test on plain paper first and measure: it should be 85.6 × 54 mm.",
+    "hr.docs.button": "Documents",
+    "hr.docs.title": "Employee documents",
+    "hr.docs.hint":
+      "Filled automatically from the employee record. Blank fields are completed by hand when signing.",
+    "hr.docs.preview": "Preview",
+    "hr.docs.print": "Print",
+    "hr.docs.contract": "Employment contract",
+    "hr.docs.internalRules": "Internal regulations",
+    "hr.docs.annex1": "Annex 1: financial and administrative policies",
+    "hr.docs.annex2": "Annex 2: disciplinary regulations",
+    "hr.docs.receiptA": "Deposit receipt (1)",
+    "hr.docs.receiptB": "Deposit receipt (2)",
     "hr.card.manager": "General manager on cards",
     "hr.card.managerHint":
       "Shown on the front of every card. Change the name here and re-upload the front design if its name is typed in the file.",
@@ -928,6 +940,17 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.card.printSetup5":
       "افتح Background graphics عشان الألوان تطلع. واختار 600 DPI لو الدرايفر بيدعمها.",
     "hr.card.printSetup6": "جرّب الأول على ورقة عادية وقيس: لازم يكون 85.6 × 54 مم.",
+    "hr.docs.button": "المستندات",
+    "hr.docs.title": "مستندات الموظف",
+    "hr.docs.hint": "تتعبأ تلقائياً ببيانات الموظف. الحقول الفارغة تُستكمل يدوياً عند التوقيع.",
+    "hr.docs.preview": "معاينة",
+    "hr.docs.print": "طباعة",
+    "hr.docs.contract": "عقد عمل",
+    "hr.docs.internalRules": "اللائحة الداخلية للموظفين",
+    "hr.docs.annex1": "ملحق رقم (1): السياسات المالية والإدارية",
+    "hr.docs.annex2": "ملحق رقم (2): لائحة الجزاءات والإجراءات التأديبية",
+    "hr.docs.receiptA": "إيصال أمانة (1)",
+    "hr.docs.receiptB": "إيصال أمانة (2)",
     "hr.card.manager": "المدير العام على البطاقات",
     "hr.card.managerHint":
       "بيظهر على وجه كل البطاقات. غيّر الاسم هنا، ولو اسمه مكتوب جوه ملف التصميم ارفع الوجه تاني بالتصميم الجديد.",
