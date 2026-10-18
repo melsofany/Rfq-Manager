@@ -44,7 +44,13 @@ describe("monthDue", () => {
 });
 
 describe("monthlyItemCounts", () => {
-  const a = (id: number, item: number, emp: number, iso: string, cancelled = false): AssignmentInput => ({
+  const a = (
+    id: number,
+    item: number,
+    emp: number,
+    iso: string,
+    cancelled = false,
+  ): AssignmentInput => ({
     id,
     customerRfqItemId: item,
     employeeId: emp,
@@ -67,7 +73,9 @@ describe("monthlyItemCounts", () => {
   });
 
   it("matches the 100 / 95 / 91 / 90 example: 90 accepted out of 100 assigned", () => {
-    const assignments = Array.from({ length: 100 }, (_, i) => a(i + 1, i + 1, 5, "2026-02-05T08:00:00Z"));
+    const assignments = Array.from({ length: 100 }, (_, i) =>
+      a(i + 1, i + 1, 5, "2026-02-05T08:00:00Z"),
+    );
     const deliveries = Array.from({ length: 90 }, (_, i) => d(i + 1, "2026-02-25T08:00:00Z", 2));
     const [m] = monthlyItemCounts(assignments, deliveries, 5, NOW);
     expect(m).toEqual({ period: "2026-02", assigned: 100, delivered: 90 });
@@ -83,13 +91,16 @@ describe("monthlyItemCounts", () => {
 
   it("ignores deliveries after the calculation time", () => {
     const assignments = [a(1, 10, 5, "2026-02-05T08:00:00Z")];
-    expect(
-      monthlyItemCounts(assignments, [d(10, "2027-01-05T08:00:00Z", 1)], 5, NOW),
-    ).toEqual([{ period: "2026-02", assigned: 1, delivered: 0 }]);
+    expect(monthlyItemCounts(assignments, [d(10, "2027-01-05T08:00:00Z", 1)], 5, NOW)).toEqual([
+      { period: "2026-02", assigned: 1, delivered: 0 },
+    ]);
   });
 
   it("excludes cancelled items from the denominator", () => {
-    const assignments = [a(1, 10, 5, "2026-02-05T08:00:00Z", true), a(2, 11, 5, "2026-02-05T08:00:00Z")];
+    const assignments = [
+      a(1, 10, 5, "2026-02-05T08:00:00Z", true),
+      a(2, 11, 5, "2026-02-05T08:00:00Z"),
+    ];
     expect(monthlyItemCounts(assignments, [], 5, NOW)).toEqual([
       { period: "2026-02", assigned: 1, delivered: 0 },
     ]);
@@ -131,7 +142,12 @@ describe("buildProductionLines — retroactive settlement", () => {
   });
 
   it("uses the current contract incentive for a month that was never credited", () => {
-    const r = buildProductionLines([{ period: "2026-02", assigned: 4, delivered: 3 }], [], "2026-02", 1200);
+    const r = buildProductionLines(
+      [{ period: "2026-02", assigned: 4, delivered: 3 }],
+      [],
+      "2026-02",
+      1200,
+    );
     expect(r.months[0].base).toBe(1200);
     expect(r.total).toBe(900);
   });

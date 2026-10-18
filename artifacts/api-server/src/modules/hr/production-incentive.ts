@@ -45,7 +45,12 @@ export function cairoPeriod(d: Date): string {
  * Works in piasters (integers) so rounding never drifts. With no assigned items the target is
  * zero, so any earlier payment becomes a clawback.
  */
-export function monthDue(base: number, assigned: number, delivered: number, credited: number): number {
+export function monthDue(
+  base: number,
+  assigned: number,
+  delivered: number,
+  credited: number,
+): number {
   const baseCents = Math.round(base * 100);
   const targetCents = assigned > 0 ? Math.round((baseCents * delivered) / assigned) : 0;
   return (targetCents - Math.round(credited * 100)) / 100;

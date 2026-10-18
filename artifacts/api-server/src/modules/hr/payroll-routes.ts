@@ -271,9 +271,8 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
         allowances: num(c.allowances),
         bonuses: sumKind("bonus") + round2(daysBonus * dailyRate),
         incentives:
-          (productionByEmp.has(employeeId)
-            ? productionByEmp.get(employeeId)!
-            : num(c.incentive)) + sumKind("incentive"),
+          (productionByEmp.has(employeeId) ? productionByEmp.get(employeeId)! : num(c.incentive)) +
+          sumKind("incentive"),
         deductions: sumKind("deduction"),
         absenceDays: absence[employeeId],
         finesTotal,
@@ -380,7 +379,10 @@ router.post("/hr/payroll/runs/:id/approve", async (req, res): Promise<void> => {
     .from(hrEmployeesTable)
     .where(
       and(
-        inArray(hrEmployeesTable.id, slips.map((s) => s.employeeId)),
+        inArray(
+          hrEmployeesTable.id,
+          slips.map((s) => s.employeeId),
+        ),
         isNotNull(hrEmployeesTable.procurementEmployeeId),
       ),
     );
@@ -389,7 +391,12 @@ router.post("/hr/payroll/runs/:id/approve", async (req, res): Promise<void> => {
     ? await db
         .select()
         .from(hrContractsTable)
-        .where(and(inArray(hrContractsTable.employeeId, linkedIds), eq(hrContractsTable.isCurrent, true)))
+        .where(
+          and(
+            inArray(hrContractsTable.employeeId, linkedIds),
+            eq(hrContractsTable.isCurrent, true),
+          ),
+        )
     : [];
   const manual = linkedIds.length
     ? await db
@@ -467,12 +474,22 @@ router.get("/hr/production-incentive", async (req, res): Promise<void> => {
       procurementEmployeeId: hrEmployeesTable.procurementEmployeeId,
     })
     .from(hrEmployeesTable)
-    .where(and(eq(hrEmployeesTable.status, "active"), isNotNull(hrEmployeesTable.procurementEmployeeId)));
+    .where(
+      and(eq(hrEmployeesTable.status, "active"), isNotNull(hrEmployeesTable.procurementEmployeeId)),
+    );
   const contracts = linked.length
     ? await db
         .select()
         .from(hrContractsTable)
-        .where(and(inArray(hrContractsTable.employeeId, linked.map((e) => e.id)), eq(hrContractsTable.isCurrent, true)))
+        .where(
+          and(
+            inArray(
+              hrContractsTable.employeeId,
+              linked.map((e) => e.id),
+            ),
+            eq(hrContractsTable.isCurrent, true),
+          ),
+        )
     : [];
   const out = [];
   for (const e of linked) {

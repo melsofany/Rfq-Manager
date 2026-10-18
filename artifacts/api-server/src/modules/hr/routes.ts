@@ -200,7 +200,12 @@ router.patch("/hr/employees/:id", async (req, res): Promise<void> => {
       const [taken] = await db
         .select({ id: hrEmployeesTable.id })
         .from(hrEmployeesTable)
-        .where(and(eq(hrEmployeesTable.procurementEmployeeId, linkId), sql`${hrEmployeesTable.id} <> ${id}`))
+        .where(
+          and(
+            eq(hrEmployeesTable.procurementEmployeeId, linkId),
+            sql`${hrEmployeesTable.id} <> ${id}`,
+          ),
+        )
         .limit(1);
       if (taken) {
         res.status(409).json({ error: "حساب المشتريات ده مربوط بموظف تاني بالفعل" });

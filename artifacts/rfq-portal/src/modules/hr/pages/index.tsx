@@ -1435,7 +1435,9 @@ function EmployeesTab() {
                             <select
                               className={input + " w-full"}
                               value={draft.procurementId}
-                              onChange={(e) => setDraft({ ...draft, procurementId: e.target.value })}
+                              onChange={(e) =>
+                                setDraft({ ...draft, procurementId: e.target.value })
+                              }
                             >
                               <option value="">{t("hr.emp.procNone")}</option>
                               {procAccounts.map((a) => (

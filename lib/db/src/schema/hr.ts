@@ -1,4 +1,13 @@
-import { pgTable, text, serial, timestamp, boolean, date, uniqueIndex, integer } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  serial,
+  timestamp,
+  boolean,
+  date,
+  uniqueIndex,
+  integer,
+} from "drizzle-orm/pg-core";
 
 /** HR employee master record (separate from login `employees`). */
 export const hrEmployeesTable = pgTable("hr_employees", {
