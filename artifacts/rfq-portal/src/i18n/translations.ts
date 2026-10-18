@@ -180,6 +180,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.col.nameAr": "Name (Arabic)",
     "hr.col.nameEn": "Name (English)",
     "hr.docs.fields": "Employee details for the documents",
+    "hr.docs.autoHint":
+      "Filled from the employee record and contract. Change any value if needed; untouched values follow the record.",
     "hr.docs.save": "Save details",
     "hr.docs.saved": "Saved",
     "hr.docs.unsaved": "Save your changes before printing.",
@@ -965,6 +967,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.col.nameAr": "الاسم بالعربي",
     "hr.col.nameEn": "الاسم بالإنجليزي",
     "hr.docs.fields": "بيانات الموظف للمستندات",
+    "hr.docs.autoHint":
+      "تتعبأ تلقائياً من بيانات الموظف والعقد. عدّل أي قيمة لو محتاج؛ القيم اللي ما اتغيرتش بتفضل مربوطة بالنظام.",
     "hr.docs.save": "حفظ البيانات",
     "hr.docs.saved": "تم الحفظ",
     "hr.docs.unsaved": "احفظ التعديلات قبل الطباعة.",

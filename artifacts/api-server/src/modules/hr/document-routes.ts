@@ -23,8 +23,11 @@ import { withoutAutoLinks } from "./card-logic";
 import {
   DOCUMENT_KEYS,
   DOCUMENT_TITLES,
+  defaultFieldValues,
+  effectiveFieldValues,
   isDocumentKey,
   missingFields,
+  overridesFrom,
   renderDocument,
   type DocumentData,
 } from "./document-logic";
@@ -93,6 +96,10 @@ async function loadDocumentData(id: number): Promise<DocumentData | null> {
     department: emp.department,
     hireDate: emp.hireDate,
     contractType: contract?.contractType ?? null,
+    // Contract number is generated from the contract record: CT-<start year>-<id>.
+    contractNo: contract
+      ? `CT-${contract.startDate.slice(0, 4)}-${String(contract.id).padStart(5, "0")}`
+      : null,
     contractEndDate: contract?.endDate ?? null,
     probationEndDate: contract?.probationEndDate ?? null,
     basicSalary: contract?.basicSalary ?? null,
@@ -145,7 +152,13 @@ router.get("/hr/employees/:id/document-fields", async (req, res): Promise<void> 
     return;
   }
   const missing = Object.fromEntries(DOCUMENT_KEYS.map((k) => [k, missingFields(k, data)]));
-  res.json({ fields: data.fields, company: data.company, missing });
+  res.json({
+    defaults: defaultFieldValues(data),
+    fields: data.fields,
+    effective: effectiveFieldValues(data),
+    company: data.company,
+    missing,
+  });
 });
 
 router.put("/hr/employees/:id/document-fields", async (req, res): Promise<void> => {
@@ -168,14 +181,21 @@ router.put("/hr/employees/:id/document-fields", async (req, res): Promise<void> 
     res.status(400).json({ error: checked.error });
     return;
   }
+  // Store only what differs from the system default, so untouched fields keep following the record.
+  const data = await loadDocumentData(id);
+  if (!data) {
+    res.status(404).json({ error: "غير موجود" });
+    return;
+  }
+  const overrides = overridesFrom(defaultFieldValues(data), checked.value);
   await db
     .insert(hrEmployeeDocumentFieldsTable)
-    .values({ employeeId: id, fields: checked.value })
+    .values({ employeeId: id, fields: overrides })
     .onConflictDoUpdate({
       target: hrEmployeeDocumentFieldsTable.employeeId,
-      set: { fields: checked.value, updatedAt: new Date() },
+      set: { fields: overrides, updatedAt: new Date() },
     });
-  res.json({ fields: checked.value });
+  res.json({ fields: overrides });
 });
 
 export default router;
