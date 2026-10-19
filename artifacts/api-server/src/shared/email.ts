@@ -197,6 +197,35 @@ export async function verifyEmailConnection(): Promise<{
   }
 }
 
+/**
+ * Send a plain-text operational alert (backup failures, etc.) from the shared
+ * identity. Kept separate from the supplier-facing templates: an alert goes to
+ * our own team, has no branding to preserve, and must never be blocked by
+ * mail-read-only staging checks meant for outbound supplier mail.
+ */
+export async function sendAlertEmail(opts: {
+  to: string | string[];
+  subject: string;
+  body: string;
+}): Promise<void> {
+  const recipients = Array.isArray(opts.to) ? opts.to : [opts.to];
+  const clean = recipients.filter((r) => r && r.includes("@"));
+  if (!clean.length) throw new Error("لا يوجد بريد مستلم للتنبيه");
+  const transporter = await createTransporter();
+  try {
+    await transporter.sendMail({
+      from: fromHeader(),
+      replyTo: replyToHeader(),
+      to: clean.join(", "),
+      subject: opts.subject,
+      text: opts.body,
+    });
+    logger.info({ to: clean, subject: opts.subject }, "Alert email sent");
+  } finally {
+    transporter.close();
+  }
+}
+
 export async function sendRfqEmail(opts: {
   to: string;
   toName: string;

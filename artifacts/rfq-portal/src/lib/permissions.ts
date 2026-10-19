@@ -131,6 +131,12 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
       { key: "ai-assistant:settings", labelKey: "perm.aiAssistant.settings" },
     ],
   },
+  {
+    key: "backup",
+    href: "/backup",
+    labelKey: "nav.backup",
+    children: [{ key: "backup:alerts", labelKey: "perm.backup.alerts" }],
+  },
 ];
 
 /** All permission keys flattened (pages + tabs). */
@@ -190,7 +196,8 @@ export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
         k !== "hr" &&
         k !== "audit" &&
         k !== "integrations" &&
-        k !== "ai-assistant",
+        k !== "ai-assistant" &&
+        k !== "backup",
     ),
     "customer-rfq:edit",
     "customer-po:edit",

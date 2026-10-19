@@ -2796,6 +2796,42 @@ export async function initDb(): Promise<void> {
     );
     await client.query(`ALTER TABLE hr_payslips ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ`);
     await client.query(`ALTER TABLE hr_payslips ADD COLUMN IF NOT EXISTS delivery_error TEXT`);
+    // ── Backup log + settings (each its own statement: statements in one
+    // client.query share an implicit transaction, so a sibling failure would
+    // roll this CREATE back silently). ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS db_backup_runs (
+        id SERIAL PRIMARY KEY,
+        started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        finished_at TIMESTAMPTZ,
+        status TEXT NOT NULL DEFAULT 'RUNNING',
+        size_bytes BIGINT,
+        file_name TEXT,
+        drive_file_id TEXT,
+        error TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        trigger TEXT NOT NULL DEFAULT 'schedule',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS db_backup_runs_started_idx ON db_backup_runs (started_at DESC)`,
+    );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS db_backup_settings (
+        key TEXT PRIMARY KEY,
+        recipients JSONB DEFAULT '[]'::jsonb,
+        retention_days INTEGER NOT NULL DEFAULT 30,
+        hour_utc INTEGER NOT NULL DEFAULT 3,
+        alerts_enabled BOOLEAN NOT NULL DEFAULT true,
+        last_alert_at TIMESTAMPTZ,
+        last_alert_fingerprint TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `INSERT INTO db_backup_settings (key) VALUES ('default') ON CONFLICT (key) DO NOTHING`,
+    );
 
     logger.info("initDb: seed complete");
   } catch (err) {
