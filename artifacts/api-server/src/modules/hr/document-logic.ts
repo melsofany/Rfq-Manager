@@ -192,12 +192,33 @@ export function missingFields(key: DocumentKey, d: DocumentData): string[] {
   }).map((def) => def.label);
 }
 
+/**
+ * Print rules added to every document: a signature block, a heading or a table
+ * row must not be split across two sheets, and a heading must not be left alone
+ * at the bottom of a sheet. Without them the header and the signature land on
+ * different pages whenever the content length changes.
+ */
+const PRINT_PAGINATION_CSS = `<style>
+@media print {
+  .signature, .sign, .signatures, .two-col, .two, .notice, .footer-note, .foot, .cover,
+  table, tr, td, th, p, li, h1, h2, h3, .page-header, header {
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .bar, .section-title, h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+  .document, .sheet, main { min-height: 0 !important; }
+  .page-header img, .brand img, .cover img, header img { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}
+</style>`;
+
 /** Fills every {{key}} with its escaped value; a placeholder with no value becomes blank. */
 export function renderDocument(key: DocumentKey, data: DocumentData): string {
   const values = documentValues(data);
-  return DOCUMENT_TEMPLATES[key].replace(/\{\{(\w+)\}\}/g, (_m, name: string) =>
+  const html = DOCUMENT_TEMPLATES[key].replace(/\{\{(\w+)\}\}/g, (_m, name: string) =>
     escapeHtml(values[name] ?? ""),
   );
+  return html.includes("</head>")
+    ? html.replace("</head>", `${PRINT_PAGINATION_CSS}</head>`)
+    : `${PRINT_PAGINATION_CSS}${html}`;
 }
 
 export { ALL_DOC_FIELDS, COMPANY_DOC_FIELDS, EMPLOYEE_DOC_FIELDS };

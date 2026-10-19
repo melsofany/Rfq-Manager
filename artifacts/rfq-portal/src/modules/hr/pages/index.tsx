@@ -270,15 +270,37 @@ function openEmployeeDocument(id: number, key: string, print: boolean) {
     return;
   }
   const frame = document.createElement("iframe");
+  // A real A4-sized frame (kept invisible), not a 0×0 one: a zero-size frame lays
+  // the document out at the wrong width, so sheets break in the wrong places.
   frame.style.cssText =
-    "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+    "position:fixed;left:0;top:0;width:210mm;height:297mm;border:0;opacity:0;pointer-events:none";
   frame.onload = () => {
-    try {
-      frame.contentWindow?.focus();
-      frame.contentWindow?.print();
-    } finally {
-      setTimeout(() => frame.remove(), 60_000);
+    const win = frame.contentWindow;
+    const doc = frame.contentDocument;
+    if (!win || !doc) {
+      frame.remove();
+      return;
     }
+    // Print only after the logo and the fonts are decoded; printing right at
+    // `load` is what made the logo disappear on some prints.
+    const pending = Array.from(doc.images)
+      .filter((img) => !img.complete)
+      .map(
+        (img) =>
+          new Promise<void>((done) => {
+            img.onload = img.onerror = () => done();
+          }),
+      );
+    void Promise.all([...pending, doc.fonts?.ready]).then(() => {
+      setTimeout(() => {
+        try {
+          win.focus();
+          win.print();
+        } finally {
+          setTimeout(() => frame.remove(), 60_000);
+        }
+      }, 300);
+    });
   };
   frame.src = url;
   document.body.appendChild(frame);
