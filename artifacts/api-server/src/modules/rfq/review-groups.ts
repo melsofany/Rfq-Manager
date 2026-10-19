@@ -156,3 +156,66 @@ export async function assignReviewGroup(params: {
   for (const rfqId of affected) await ensureCustomerAssignmentsSafe(rfqId);
   return { assigned: rows.length, affectedRfqs: affected.size };
 }
+
+/**
+ * Resolves a classification conflict for an explicit set of items: every item gets
+ * the chosen functional category at once, so a conflict group is closed with one
+ * decision instead of one edit per item. Items already on the category are left as
+ * they are; cancelled items are never touched. Same side effects as the group
+ * assignment: the manager's decision is remembered and each RFQ's assignments are
+ * re-synced.
+ */
+export async function resolveConflictItems(params: {
+  itemIds: number[];
+  categoryId: number;
+  decidedBy: number | null;
+}): Promise<{ assigned: number; affectedRfqs: number } | { error: string; status: number }> {
+  const [cat] = await db
+    .select({
+      id: itemCategoriesTable.id,
+      kind: itemCategoriesTable.kind,
+      isActive: itemCategoriesTable.isActive,
+    })
+    .from(itemCategoriesTable)
+    .where(eq(itemCategoriesTable.id, params.categoryId))
+    .limit(1);
+  if (!cat || !cat.isActive || (cat.kind ?? "functional") !== "functional") {
+    return { error: "اختر تصنيفًا وظيفيًا نشطًا", status: 400 };
+  }
+  const ids = [...new Set(params.itemIds)];
+  if (ids.length === 0) return { assigned: 0, affectedRfqs: 0 };
+
+  const rows = await db
+    .update(customerRfqItemsTable)
+    .set({
+      categoryId: params.categoryId,
+      suggestedCategoryId: null,
+      classifyReason: "manual: حل تضارب",
+      classifyConfidence: null,
+    })
+    .where(
+      and(inArray(customerRfqItemsTable.id, ids), eq(customerRfqItemsTable.isCancelled, false)),
+    )
+    .returning({
+      id: customerRfqItemsTable.id,
+      customerRfqId: customerRfqItemsTable.customerRfqId,
+      partNo: customerRfqItemsTable.partNo,
+      lineItem: customerRfqItemsTable.lineItem,
+      description: customerRfqItemsTable.description,
+    });
+
+  const affected = new Set<number>();
+  for (const r of rows) {
+    if (r.customerRfqId != null) affected.add(r.customerRfqId);
+    await rememberClassification({
+      partNo: r.partNo,
+      description: r.description,
+      lineItem: r.lineItem,
+      categoryId: params.categoryId,
+      source: "manual",
+      decidedBy: params.decidedBy,
+    }).catch(() => null);
+  }
+  for (const rfqId of affected) await ensureCustomerAssignmentsSafe(rfqId);
+  return { assigned: rows.length, affectedRfqs: affected.size };
+}

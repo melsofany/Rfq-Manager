@@ -29,7 +29,7 @@ import {
 import { rememberClassification } from "../rfq/classification-memory";
 import { classifyItem, normalizeText } from "../rfq/classification";
 import { loadClassifierVocabulary } from "../rfq/keywords";
-import { assignReviewGroup, listReviewGroups } from "../rfq/review-groups";
+import { assignReviewGroup, resolveConflictItems, listReviewGroups } from "../rfq/review-groups";
 
 const router = Router();
 
@@ -1934,6 +1934,43 @@ router.post(
   },
 );
 
+// POST /customer-rfq/classification-conflicts/resolve — one decision for a whole
+// conflict group. Body: { itemIds: number[], categoryId: number }. Manager+ only.
+router.post(
+  "/customer-rfq/classification-conflicts/resolve",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const body = req.body as { itemIds?: unknown; categoryId?: unknown };
+    const itemIds = Array.isArray(body.itemIds)
+      ? body.itemIds.map((v) => Number(v)).filter((v) => Number.isInteger(v) && v > 0)
+      : [];
+    const categoryId = Number(body.categoryId);
+    if (itemIds.length === 0 || !Number.isInteger(categoryId) || categoryId <= 0) {
+      res.status(400).json({ error: "البنود والتصنيف مطلوبان" });
+      return;
+    }
+    const result = await resolveConflictItems({
+      itemIds,
+      categoryId,
+      decidedBy: req.session.employeeId ?? null,
+    });
+    if ("error" in result) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    await db.insert(auditLogTable).values({
+      action: "customer_rfq.conflict_resolved",
+      entityType: "customer_rfq_item",
+      employeeId: req.session.employeeId ?? null,
+      description: `Conflict resolved: ${result.assigned} items to category ${categoryId}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json(result);
+  },
+);
+
 // GET /customer-rfq/item-categories — the «تصنيفات البنود» tab: EVERY item with
 // its identity (line item / part number / description) and its category, so the
 // whole team can review which item belongs to which category. Read-only for any
@@ -2332,11 +2369,13 @@ router.get(
       customerRfqId: number | null;
       customerRfqNo: string | null;
       customerName: string | null;
-      reason: "unclassified" | "ambiguous" | "category_not_in_suppliers";
+      reason: "unclassified" | "ambiguous" | "category_not_in_suppliers" | "conflict";
       categoryId: number | null;
       categoryName: string | null;
       candidates: Array<{ id: number; name: string }>;
       confidence: number | null;
+      /** Conflict rows only: every item of the conflict group, for one-step resolution. */
+      groupItemIds?: number[];
     }> = [];
 
     for (const r of rows) {
@@ -2399,9 +2438,64 @@ router.get(
       }
     }
 
+    // Conflicts: the same identity is filed under two or more domains. Those items
+    // are classified under live trade categories, so the scan above never sees them;
+    // they are added here so the manager resolves them in this tab, not a separate panel.
+    // Every item of a conflict group gets the group's categories as its choices.
+    const conflictGroups = await listClassificationConflicts();
+    const queuedIds = new Set(queue.map((q) => q.itemId));
+    const conflictItemIds = conflictGroups
+      .flatMap((g) => g.itemIds)
+      .filter((id) => !queuedIds.has(id));
+    const conflictRows = conflictItemIds.length
+      ? await db
+          .select({
+            id: customerRfqItemsTable.id,
+            partNo: customerRfqItemsTable.partNo,
+            lineItem: customerRfqItemsTable.lineItem,
+            description: customerRfqItemsTable.description,
+            categoryId: customerRfqItemsTable.categoryId,
+            customerRfqId: customerRfqsTable.id,
+            customerRfqNo: customerRfqsTable.customerRfqNo,
+            customerName: customerRfqsTable.customerName,
+          })
+          .from(customerRfqItemsTable)
+          .leftJoin(
+            customerRfqsTable,
+            eq(customerRfqItemsTable.customerRfqId, customerRfqsTable.id),
+          )
+          .where(inArray(customerRfqItemsTable.id, conflictItemIds))
+      : [];
+    const conflictById = new Map(conflictRows.map((r) => [r.id, r]));
+    for (const g of conflictGroups) {
+      const choices = g.categories.map((c) => ({ id: c.id, name: c.name }));
+      for (const itemId of g.itemIds) {
+        if (queuedIds.has(itemId)) continue;
+        const r = conflictById.get(itemId);
+        if (!r) continue;
+        queuedIds.add(itemId);
+        const current = r.categoryId != null ? (catName.get(r.categoryId) ?? null) : null;
+        queue.push({
+          itemId: r.id,
+          partNo: r.partNo,
+          lineItem: r.lineItem,
+          description: r.description,
+          customerRfqId: r.customerRfqId ?? null,
+          customerRfqNo: r.customerRfqNo ?? null,
+          customerName: r.customerName ?? null,
+          reason: "conflict",
+          categoryId: r.categoryId ?? null,
+          categoryName: current,
+          candidates: choices,
+          confidence: null,
+          groupItemIds: g.itemIds,
+        });
+      }
+    }
+
     res.json({
       count: queue.length,
-      scanned: rows.length,
+      scanned: rows.length + conflictRows.length,
       // The trade-membership decision, resolved by the SAME rule that built the
       // queue. The portal filters its category picker with this instead of
       // re-implementing the name comparison — a second implementation would
@@ -2412,6 +2506,7 @@ router.get(
         ambiguous: queue.filter((q) => q.reason === "ambiguous").length,
         category_not_in_suppliers: queue.filter((q) => q.reason === "category_not_in_suppliers")
           .length,
+        conflict: queue.filter((q) => q.reason === "conflict").length,
       },
       items: queue,
     });

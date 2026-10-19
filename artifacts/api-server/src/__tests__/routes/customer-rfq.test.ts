@@ -653,6 +653,13 @@ vi.mock("@workspace/db", () => ({
   ...tables,
   db: dbMock,
 }));
+// The review queue appends classification conflicts. These suites model the
+// catalogue rows, not the conflict aggregation, so it is stubbed to "no conflicts"
+// here. The conflict path of the queue has no route test yet.
+vi.mock("../../modules/rfq/customer-assignment", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../modules/rfq/customer-assignment")>()),
+  listClassificationConflicts: vi.fn(async () => []),
+}));
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((col: any, val: any) => ({ col, val })),
   ilike: vi.fn((col: any, val: any) => ({ col, val })),
