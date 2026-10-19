@@ -199,8 +199,25 @@ export function missingFields(key: DocumentKey, d: DocumentData): string[] {
  * different pages whenever the content length changes.
  */
 const PRINT_PAGINATION_CSS = `<style>
+/* Every printed sheet carries its own footer: page X of Y, the company name and
+   the employee's signature line. Printed by the browser on each A4 sheet, so the
+   numbering and the signature are never missing or typed by hand. */
+@page {
+  size: A4;
+  margin: 16mm 14mm 20mm 14mm;
+  @bottom-left { content: "صفحة " counter(page) " من " counter(pages); font-family: Tahoma, Arial, sans-serif; font-size: 9px; color: #5b6573; }
+  @bottom-center { content: "شركة قرطبة للتوريدات"; font-family: Tahoma, Arial, sans-serif; font-size: 9px; color: #5b6573; }
+  @bottom-right { content: "توقيع الموظف: ............................"; font-family: Tahoma, Arial, sans-serif; font-size: 9px; color: #263238; }
+}
 @media print {
-  .signature, .sign, .signatures, .two-col, .two, .notice, .footer-note, .foot, .cover,
+  html, body { background: #fff !important; }
+  .toolbar, button { display: none !important; }
+  .footer-note, .foot { display: none !important; }
+  .document, .sheet, main {
+    margin: 0 !important; padding: 0 !important; border: 0 !important;
+    box-shadow: none !important; width: auto !important; max-width: none !important;
+  }
+  .signature, .sign, .signatures, .two-col, .two, .notice, .cover,
   table, tr, td, th, p, li, h1, h2, h3, .page-header, header {
     break-inside: avoid; page-break-inside: avoid;
   }
