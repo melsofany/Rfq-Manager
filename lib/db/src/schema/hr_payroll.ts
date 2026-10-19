@@ -40,6 +40,15 @@ export const hrPayslipsTable = pgTable(
     incomeTax: numeric("income_tax", { precision: 12, scale: 2 }).notNull(),
     gross: numeric("gross", { precision: 12, scale: 2 }).notNull(),
     net: numeric("net", { precision: 12, scale: 2 }).notNull(),
+    /**
+     * WhatsApp delivery of this payslip to the employee. Kept on the payslip so
+     * the payroll screen can show which employees still need a resend — nothing
+     * is written to `whatsapp_chats`, which is the shared procurement inbox and
+     * must not expose one employee's salary to their colleagues.
+     */
+    deliveryStatus: text("delivery_status").notNull().default("pending"),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    deliveryError: text("delivery_error"),
   },
   (t) => [index("hr_payslips_run_idx").on(t.runId)],
 );

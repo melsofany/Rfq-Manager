@@ -130,7 +130,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.pay.recalc": "Recalculate draft",
     "hr.pay.approve": "Approve and lock",
     "hr.pay.deleteDraft": "Delete draft",
-    "hr.pay.confirmApprove": "Approve this payroll? After approval it cannot be changed.",
+    "hr.pay.confirmApprove":
+      "Approve this payroll? After approval it cannot be changed, and each employee is sent their own payslip on WhatsApp.",
     "hr.pay.basic": "Basic",
     "hr.pay.gross": "Gross",
     "hr.pay.absence": "Absence (days · amount)",
@@ -141,6 +142,21 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.pay.net": "Net",
     "hr.pay.total": "Total",
     "hr.pay.empty": "No payroll for this month yet.",
+    "hr.pay.payslipsTitle": "Payslip delivery on WhatsApp",
+    "hr.pay.payslipsHint":
+      "Each employee receives only their own payslip on their own number. Payslips are never shown in the shared WhatsApp inbox, so no colleague can see another employee's salary.",
+    "hr.pay.sendAll": "Send payslips",
+    "hr.pay.resend": "Resend",
+    "hr.pay.send": "Send",
+    "hr.pay.sending": "Sending…",
+    "hr.pay.deliverySent": "Sent",
+    "hr.pay.deliveryFailed": "Failed",
+    "hr.pay.deliveryPending": "Not sent",
+    "hr.pay.deliveryNoPhone": "No phone number",
+    "hr.pay.sendResult": "Sent {sent} · Failed {failed} · No phone {noPhone}",
+    "hr.pay.sendAllConfirm":
+      "Send each employee their own payslip on WhatsApp now? Already-delivered employees are skipped.",
+    "hr.pay.colDelivery": "Payslip",
     "hr.tab.settlement": "Exit settlement",
     "hr.set.eos": "End of service",
     "hr.set.eosHint":
@@ -920,7 +936,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.pay.recalc": "إعادة حساب المسودة",
     "hr.pay.approve": "اعتماد وقفل",
     "hr.pay.deleteDraft": "حذف المسودة",
-    "hr.pay.confirmApprove": "تعتمد المرتبات دي؟ بعد الاعتماد مفيش تعديل.",
+    "hr.pay.confirmApprove":
+      "تعتمد المرتبات دي؟ بعد الاعتماد مفيش تعديل، وكل موظف هيوصله كشف مرتبه لوحده على الواتساب.",
     "hr.pay.basic": "الأساسي",
     "hr.pay.gross": "الإجمالي",
     "hr.pay.absence": "الغياب (أيام · مبلغ)",
@@ -931,6 +948,21 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.pay.net": "الصافي",
     "hr.pay.total": "الإجمالي",
     "hr.pay.empty": "مفيش مرتبات للشهر ده لسه.",
+    "hr.pay.payslipsTitle": "إرسال كشوف المرتبات على واتساب",
+    "hr.pay.payslipsHint":
+      "كل موظف بيوصله كشف مرتبه هو بس على رقمه. الكشوف مش بتظهر في صفحة الواتساب المشتركة، فمحدش بيشوف مرتب زميله.",
+    "hr.pay.sendAll": "إرسال الكشوف",
+    "hr.pay.resend": "إعادة إرسال",
+    "hr.pay.send": "إرسال",
+    "hr.pay.sending": "جارٍ الإرسال…",
+    "hr.pay.deliverySent": "تم الإرسال",
+    "hr.pay.deliveryFailed": "فشل",
+    "hr.pay.deliveryPending": "لم يُرسل",
+    "hr.pay.deliveryNoPhone": "مفيش رقم",
+    "hr.pay.sendResult": "تم الإرسال {sent} · فشل {failed} · بدون رقم {noPhone}",
+    "hr.pay.sendAllConfirm":
+      "إرسال كشف المرتب لكل موظف على رقمه على الواتساب دلوقتي؟ اللي وصله كشفه قبل كده مش هيتبعتله تاني.",
+    "hr.pay.colDelivery": "الكشف",
     "hr.tab.settlement": "تسوية الخروج",
     "hr.set.eos": "نهاية الخدمة",
     "hr.set.eosHint":

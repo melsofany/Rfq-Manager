@@ -2790,6 +2790,13 @@ export async function initDb(): Promise<void> {
       )
     `);
 
+    // Payslip WhatsApp delivery tracking (added after the first release).
+    await client.query(
+      `ALTER TABLE hr_payslips ADD COLUMN IF NOT EXISTS delivery_status TEXT NOT NULL DEFAULT 'pending'`,
+    );
+    await client.query(`ALTER TABLE hr_payslips ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE hr_payslips ADD COLUMN IF NOT EXISTS delivery_error TEXT`);
+
     logger.info("initDb: seed complete");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");
