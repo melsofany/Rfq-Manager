@@ -21,6 +21,7 @@ import {
 import { logger } from "../../shared/logger";
 import { generateRfqPdf } from "../rfq/rfq-pdf";
 import { generatePoPdf } from "../po/po-pdf";
+import { generatePayslipPdf } from "../hr/payslip-pdf";
 
 // ─── Official WhatsApp Business (Meta) Cloud API client ──────────────────────
 // This module is built on top of the open-source "whatsapp-api-js" library
@@ -42,6 +43,8 @@ const TEMPLATE_TEXT = process.env.WHATSAPP_TEMPLATE_TEXT || "rfq_send_ar";
 const TEMPLATE_UTILITY = process.env.WHATSAPP_TEMPLATE_UTILITY || "rfq_utility_ar";
 const TEMPLATE_PDF = process.env.WHATSAPP_TEMPLATE_PDF || "rfq_pdf_ar";
 const TEMPLATE_PO_PDF = process.env.WHATSAPP_TEMPLATE_PO_PDF || "po_pdf_ar";
+/** Employee payslip — a document header plus name/period/net. See ensurePayslipTemplate(). */
+const TEMPLATE_PAYSLIP = process.env.WHATSAPP_TEMPLATE_PAYSLIP || "payslip_pdf_ar";
 export const TEMPLATE_WORK_ORDER =
   process.env.WHATSAPP_TEMPLATE_WORK_ORDER || "representative_work_order_ar_v2";
 const TEMPLATE_PO_CANCEL = process.env.WHATSAPP_TEMPLATE_PO_CANCEL || "po_cancel_ar";
@@ -49,6 +52,8 @@ const TEMPLATE_PO_CANCEL_ITEM = process.env.WHATSAPP_TEMPLATE_PO_CANCEL_ITEM || 
 const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
 
 const BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
+/** Meta app id — required only to auto-create templates that carry a document header. */
+const APP_ID = process.env.WHATSAPP_APP_ID || "";
 export const isWhatsAppConfigured = Boolean(PHONE_NUMBER_ID && TOKEN);
 
 export async function ensureWorkOrderTemplate(): Promise<void> {
@@ -219,6 +224,122 @@ export async function ensurePoCancelItemTemplate(): Promise<void> {
   logger.info(
     { template: TEMPLATE_PO_CANCEL_ITEM },
     "WhatsApp po_cancel_item template submitted to Meta for approval",
+  );
+}
+
+/**
+ * Upload a sample payslip to Meta and return its header handle, which the
+ * template-create call needs for a DOCUMENT header. Two steps, as Meta's own
+ * SDK does: open a resumable upload session against the app, then push the
+ * bytes to the returned session id.
+ */
+async function uploadTemplateHeaderSample(pdf: Buffer): Promise<string> {
+  const start = await fetch(
+    `https://graph.facebook.com/v22.0/${APP_ID}/uploads` +
+      `?file_name=${encodeURIComponent("payslip-sample.pdf")}` +
+      `&file_length=${pdf.length}&file_type=application/pdf`,
+    { method: "POST", headers: { Authorization: `OAuth ${TOKEN}` } },
+  );
+  if (!start.ok)
+    throw new Error(`Template sample upload start failed: ${start.status} ${await start.text()}`);
+  const { id: sessionId } = (await start.json()) as { id?: string };
+  if (!sessionId) throw new Error("Template sample upload start returned no session id");
+  const push = await fetch(`https://graph.facebook.com/v22.0/${sessionId}`, {
+    method: "POST",
+    headers: { Authorization: `OAuth ${TOKEN}`, file_offset: "0" },
+    body: new Uint8Array(pdf),
+  });
+  if (!push.ok)
+    throw new Error(`Template sample upload failed: ${push.status} ${await push.text()}`);
+  const { h } = (await push.json()) as { h?: string };
+  if (!h) throw new Error("Template sample upload returned no header handle");
+  return h;
+}
+
+/**
+ * Ensures the Meta template `payslip_pdf_ar` exists so an approved payroll run
+ * can send each employee their own payslip as a PDF document. A document header
+ * is what makes the payslip arrive as a file the employee can keep, and a
+ * UTILITY template is what lets it be delivered outside the 24-hour window
+ * (a plain document send is accepted by the API but never delivered).
+ *
+ * Body parameters: {{1}} employee name, {{2}} period (MM/YYYY), {{3}} net pay.
+ * The header must be a DOCUMENT header for the send to work — a text header
+ * would make `sendPayslipWhatsApp` fail with a parameter-mismatch error.
+ *
+ * Idempotent: returns early when the template already exists. Creating a
+ * document-header template needs a real header sample, so this requires
+ * WHATSAPP_APP_ID; without it the template must be created once by hand in
+ * Business Manager (the exact definition is logged).
+ */
+export async function ensurePayslipTemplate(): Promise<void> {
+  if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
+    logger.warn(
+      "WhatsApp payslip template provisioning skipped: missing token or business account id",
+    );
+    return;
+  }
+  const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
+  const existing = await fetch(`${base}?name=${encodeURIComponent(TEMPLATE_PAYSLIP)}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  if (!existing.ok)
+    throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
+  if (found.data?.some((t) => t.name === TEMPLATE_PAYSLIP)) {
+    logger.info({ template: TEMPLATE_PAYSLIP }, "WhatsApp payslip template already exists");
+    return;
+  }
+  if (!APP_ID) {
+    logger.warn(
+      { template: TEMPLATE_PAYSLIP },
+      "WhatsApp payslip template NOT created: WHATSAPP_APP_ID is not set, so no document header sample can be uploaded. Create it once in Business Manager with a DOCUMENT header and body: كشف مرتب {{1}} عن شهر {{2}}. صافي المستحق: {{3}} جنيه.",
+    );
+    return;
+  }
+  const handle = await uploadTemplateHeaderSample(
+    await generatePayslipPdf({
+      period: new Date().toISOString().slice(0, 7),
+      employeeNo: "EMP-0000",
+      fullName: "اسم الموظف",
+      basic: 0,
+      allowances: 0,
+      bonuses: 0,
+      incentives: 0,
+      deductions: 0,
+      absenceDays: 0,
+      absenceAmount: 0,
+      finesApplied: 0,
+      finesDeferred: 0,
+      socialEmployee: 0,
+      healthEmployee: 0,
+      incomeTax: 0,
+      gross: 0,
+      net: 0,
+    }),
+  );
+  const response = await fetch(base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: TEMPLATE_PAYSLIP,
+      language: TEMPLATE_LANG,
+      category: "UTILITY",
+      components: [
+        { type: "HEADER", format: "DOCUMENT", example: { header_handle: [handle] } },
+        {
+          type: "BODY",
+          text: "كشف مرتب {{1}} عن شهر {{2}}.\nصافي المستحق: {{3}} جنيه.\nالمستند مرفق بهذا الرقم ولا يطلع عليه إلا صاحب المرتب. للاستفسار يُرجى مراجعة إدارة الموارد البشرية.",
+          example: { body_text: [["محمد أحمد", "07/2026", "7,450.00"]] },
+        },
+      ],
+    }),
+  });
+  if (!response.ok)
+    throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info(
+    { template: TEMPLATE_PAYSLIP },
+    "WhatsApp payslip template submitted to Meta for approval",
   );
 }
 
@@ -741,6 +862,59 @@ export async function sendPoCancelItemWhatsApp(opts: SendPoCancelItemOpts): Prom
   logger.info(
     { to, poNo: opts.poNo, waId },
     "PO item cancellation sent via po_cancel_item_ar template",
+  );
+  return waId || null;
+}
+
+export interface SendPayslipOpts {
+  phone: string;
+  employeeName: string;
+  /** Payroll period, YYYY-MM. */
+  period: string;
+  net: number;
+  /** The rendered payslip PDF, sent as the template's document header. */
+  pdf: Buffer;
+}
+
+/** «2026-07» → «07/2026». Western digits: Arabic-Indic numerals reverse in PDFKit. */
+function payslipPeriodLabel(period: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(period);
+  return m ? `${m[2]}/${m[1]}` : period;
+}
+
+/**
+ * Sends one employee their payslip as a PDF document via the approved
+ * `payslip_pdf_ar` template. Goes only to that employee's own number — the
+ * payroll caller must never fan this out to the shared procurement inbox.
+ *
+ * Throws on failure so the caller can record `delivery_status = 'failed'` with
+ * the real reason; there is deliberately NO fallback to a direct document send
+ * (the API accepts it but never delivers outside the 24-hour window, which
+ * would show a false "sent" in the payroll screen).
+ */
+export async function sendPayslipWhatsApp(opts: SendPayslipOpts): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(opts.phone);
+  const filename = `Payslip-${opts.period}-${opts.employeeName.replace(/[\\/:*?"<>|]/g, "_")}.pdf`;
+  const mediaId = await uploadWhatsAppMedia(opts.pdf, filename, "application/pdf");
+  const net = opts.net.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const template = new Template(
+    TEMPLATE_PAYSLIP,
+    new Language(TEMPLATE_LANG),
+    new HeaderComponent(new HeaderParameter(new WADocument(mediaId, true, undefined, filename))),
+    new BodyComponent(
+      new BodyParameter(sanitizeWaParam(opts.employeeName)), // {{1}} employee name
+      new BodyParameter(payslipPeriodLabel(opts.period)), // {{2}} period MM/YYYY
+      new BodyParameter(net), // {{3}} net pay
+    ),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info(
+    { to, period: opts.period, waId },
+    "Payslip sent to employee via payslip_pdf_ar template",
   );
   return waId || null;
 }

@@ -4,7 +4,8 @@
  *   GET    /api/hr/payroll/runs?period=YYYY-MM   list runs
  *   GET    /api/hr/payroll/runs/:id              run with payslips
  *   POST   /api/hr/payroll/runs                  { period } calculates a draft (absence days come from attendance)
- *   POST   /api/hr/payroll/runs/:id/approve      locks the run
+ *   POST   /api/hr/payroll/runs/:id/approve      locks the run and sends payslips on WhatsApp
+ *   POST   /api/hr/payroll/runs/:id/send-payslips  (re)send payslips to employees
  *   DELETE /api/hr/payroll/runs/:id              deletes a draft only
  */
 import { Router, type IRouter } from "express";
@@ -20,12 +21,14 @@ import {
   hrProductionCreditsTable,
   employeesTable,
 } from "@workspace/db";
-import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { requireHr } from "./routes";
 import { isValidPeriod } from "./discipline-logic";
 import { computeProductionIncentive, type ProductionIncentiveResult } from "./production-incentive";
 import { buildAttendance } from "./routes";
+import { deliverPayslips } from "./payroll-delivery";
+import { logger } from "../../shared/logger";
 import {
   computePayslip,
   missingPayrollSettings,
@@ -148,13 +151,14 @@ router.get("/hr/payroll/runs/:id", async (req, res): Promise<void> => {
       slip: hrPayslipsTable,
       name: hrEmployeesTable.fullName,
       employeeNo: hrEmployeesTable.employeeNo,
+      hasPhone: sql<boolean>`(${hrEmployeesTable.phone} IS NOT NULL AND btrim(${hrEmployeesTable.phone}) <> '')`,
     })
     .from(hrPayslipsTable)
     .innerJoin(hrEmployeesTable, eq(hrEmployeesTable.id, hrPayslipsTable.employeeId))
     .where(eq(hrPayslipsTable.runId, id));
   res.json({
     run: { id: run.id, period: run.period, status: run.status, approvedAt: run.approvedAt },
-    payslips: slips.map(({ slip: s, name, employeeNo }) => ({
+    payslips: slips.map(({ slip: s, name, employeeNo, hasPhone }) => ({
       id: s.id,
       employeeId: s.employeeId,
       employeeNo,
@@ -173,6 +177,12 @@ router.get("/hr/payroll/runs/:id", async (req, res): Promise<void> => {
       incomeTax: num(s.incomeTax),
       gross: num(s.gross),
       net: num(s.net),
+      // WhatsApp delivery of this employee's payslip. Never surfaced on the
+      // shared /whatsapp screen — only here, behind the HR permission.
+      deliveryStatus: s.deliveryStatus,
+      deliveredAt: s.deliveredAt,
+      deliveryError: s.deliveryError,
+      hasPhone,
     })),
   });
 });
@@ -457,7 +467,62 @@ router.post("/hr/payroll/runs/:id/approve", async (req, res): Promise<void> => {
       );
     }
   });
+
+  // Send every employee their own payslip. Best-effort and after the commit: the
+  // run is already approved and locked, so a WhatsApp/PDF problem must not fail
+  // the approval. Each failure is recorded on the payslip row and surfaced in
+  // the payroll screen for a resend.
+  try {
+    const { results } = await deliverPayslips(id);
+    const failed = results.filter((r) => r.outcome !== "sent").length;
+    logger.info(
+      { runId: id, period: run.period, sent: results.length - failed, failed },
+      "hr: payslips dispatched after approval",
+    );
+  } catch (err) {
+    logger.error({ err, runId: id }, "hr: payslip dispatch after approval failed");
+  }
+
   res.json({ ok: true });
+});
+
+/**
+ * (Re)send payslips for an approved run over WhatsApp.
+ *   body: { employeeIds?: number[] }  — omit to send to every employee,
+ *                                      pass ids to resend for specific employees.
+ * Already-delivered employees are skipped unless `force: true` is passed.
+ */
+router.post("/hr/payroll/runs/:id/send-payslips", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "معرف غير صالح" });
+    return;
+  }
+  const rawIds = req.body?.employeeIds;
+  if (rawIds !== undefined && !Array.isArray(rawIds)) {
+    res.status(400).json({ error: "employeeIds لازم يكون مصفوفة أرقام" });
+    return;
+  }
+  const employeeIds = Array.isArray(rawIds)
+    ? rawIds.map(Number).filter((n) => Number.isInteger(n) && n > 0)
+    : undefined;
+  const force = req.body?.force === true;
+
+  try {
+    const out = await deliverPayslips(id, { employeeIds, force });
+    res.json({
+      ok: true,
+      period: out.period,
+      sent: out.results.filter((r) => r.outcome === "sent").length,
+      failed: out.results.filter((r) => r.outcome === "failed").length,
+      skippedNoPhone: out.results.filter((r) => r.outcome === "skipped_no_phone").length,
+      results: out.results,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const status = message === "المسير غير موجود" ? 404 : 409;
+    res.status(status).json({ error: message });
+  }
 });
 
 // Production incentive preview for one payroll month (read-only; the approval recomputes it).

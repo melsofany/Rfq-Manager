@@ -14,6 +14,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { BankCombobox } from "@/components/BankCombobox";
 import { findBankByName } from "@/lib/egyptian-banks";
 import { clockTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 type Tab =
   | "attendance"
@@ -3506,7 +3507,32 @@ type PayslipRow = {
   incomeTax: number;
   gross: number;
   net: number;
+  deliveryStatus: string;
+  deliveredAt: string | null;
+  deliveryError: string | null;
+  hasPhone: boolean;
 };
+
+type SendPayslipsResult = {
+  sent: number;
+  failed: number;
+  skippedNoPhone: number;
+};
+
+/** Label + colour for a payslip's WhatsApp delivery state. */
+function deliveryLabel(s: PayslipRow, t: (k: string) => string): string {
+  if (s.deliveryStatus === "sent") return t("hr.pay.deliverySent");
+  if (s.deliveryStatus === "failed") {
+    return s.hasPhone ? t("hr.pay.deliveryFailed") : t("hr.pay.deliveryNoPhone");
+  }
+  return t("hr.pay.deliveryPending");
+}
+
+function deliveryClass(s: PayslipRow): string {
+  if (s.deliveryStatus === "sent") return "text-green-700";
+  if (s.deliveryStatus === "failed") return "text-red-600";
+  return "text-muted-foreground";
+}
 
 const MISSING_SETTING_KEYS: Record<string, string> = {
   social_insurance: "hr.pay.missing.social",
@@ -3524,6 +3550,8 @@ function PayrollTab() {
   const [error, setError] = useState<string | null>(null);
   const [missingNote, setMissingNote] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState<number | "all" | null>(null);
+  const [sendNote, setSendNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -3577,6 +3605,37 @@ function PayrollTab() {
       await load();
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+
+  /**
+   * Send payslips over WhatsApp. `target` is "all" for the whole run, or one
+   * employee id for the per-row resend. Nothing here writes to the shared
+   * WhatsApp inbox — the server sends each employee their own PDF only.
+   */
+  async function sendPayslips(target: number | "all") {
+    if (!run) return;
+    if (target === "all" && !window.confirm(t("hr.pay.sendAllConfirm"))) return;
+    setSending(target);
+    setError(null);
+    setSendNote(null);
+    try {
+      const res = await api<SendPayslipsResult>(`/hr/payroll/runs/${run.id}/send-payslips`, {
+        method: "POST",
+        body: JSON.stringify(target === "all" ? {} : { employeeIds: [target], force: true }),
+      });
+      setSendNote(
+        t("hr.pay.sendResult", {
+          sent: res.sent,
+          failed: res.failed,
+          noPhone: res.skippedNoPhone,
+        }),
+      );
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSending(null);
     }
   }
 
@@ -3650,6 +3709,21 @@ function PayrollTab() {
         </Card>
       )}
 
+      {run?.status === "approved" && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <h2 className="font-semibold">{t("hr.pay.payslipsTitle")}</h2>
+            <p className="text-xs text-muted-foreground">{t("hr.pay.payslipsHint")}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button onClick={() => sendPayslips("all")} disabled={sending !== null}>
+                {sending === "all" ? t("hr.pay.sending") : t("hr.pay.sendAll")}
+              </Button>
+              {sendNote && <span className="text-xs text-muted-foreground">{sendNote}</span>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {error && <p className="text-sm text-red-600">{error}</p>}
       {missingNote.length > 0 && (
         <p className="text-sm text-amber-700">
@@ -3671,6 +3745,9 @@ function PayrollTab() {
                 <th className="p-2 text-end">{t("hr.pay.insurance")}</th>
                 <th className="p-2 text-end">{t("hr.pay.tax")}</th>
                 <th className="p-2 text-end">{t("hr.pay.net")}</th>
+                {run?.status === "approved" && (
+                  <th className="p-2 text-start">{t("hr.pay.colDelivery")}</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -3693,11 +3770,40 @@ function PayrollTab() {
                   <td className="p-2 text-end">{money(s.socialEmployee + s.healthEmployee)}</td>
                   <td className="p-2 text-end">{money(s.incomeTax)}</td>
                   <td className="p-2 text-end font-semibold">{money(s.net)}</td>
+                  {run?.status === "approved" && (
+                    <td className="p-2 text-start">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("text-xs", deliveryClass(s))}>
+                          {deliveryLabel(s, t)}
+                        </span>
+                        <Button
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => sendPayslips(s.employeeId)}
+                          disabled={sending !== null}
+                        >
+                          {sending === s.employeeId
+                            ? t("hr.pay.sending")
+                            : s.deliveryStatus === "sent"
+                              ? t("hr.pay.resend")
+                              : t("hr.pay.send")}
+                        </Button>
+                      </div>
+                      {s.deliveryError && (
+                        <span className="block text-xs text-red-600" title={s.deliveryError}>
+                          {s.deliveryError}
+                        </span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {slips.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                  <td
+                    colSpan={run?.status === "approved" ? 9 : 8}
+                    className="p-6 text-center text-muted-foreground"
+                  >
                     {t("hr.pay.empty")}
                   </td>
                 </tr>
@@ -3709,6 +3815,7 @@ function PayrollTab() {
                   <td className="p-2 text-end">{money(totals.gross)}</td>
                   <td colSpan={4} />
                   <td className="p-2 text-end">{money(totals.net)}</td>
+                  {run?.status === "approved" && <td />}
                 </tr>
               )}
             </tbody>
