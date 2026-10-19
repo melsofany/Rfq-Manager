@@ -230,7 +230,8 @@ export async function buildCleanupPlan(): Promise<CleanupPlan> {
   const nameChecksOk =
     nameById.get(MERGE.keepId) === MERGE.keepName &&
     nameById.get(MERGE.parentId) === MERGE.parentName &&
-    nameById.get(MERGE.dropId) === MERGE.dropName &&
+    // «اضاءة» may already be deleted by a manager: that is the desired end state, not an error.
+    (nameById.get(MERGE.dropId) === undefined || nameById.get(MERGE.dropId) === MERGE.dropName) &&
     nameById.get(RETIRE.id) === RETIRE.name;
 
   const items = await db
