@@ -29,6 +29,7 @@ import {
 import { rememberClassification } from "../rfq/classification-memory";
 import { classifyItem, normalizeText } from "../rfq/classification";
 import { loadClassifierVocabulary } from "../rfq/keywords";
+import { assignReviewGroup, listReviewGroups } from "../rfq/review-groups";
 
 const router = Router();
 
@@ -1879,6 +1880,53 @@ router.post(
       entityType: "customer_rfq_item",
       employeeId: req.session.employeeId ?? null,
       description: `Bulk AI classification: scanned ${result.scanned}, classified ${result.classified}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json(result);
+  },
+);
+
+// GET /customer-rfq/review-groups — unclassified items grouped by identical text,
+// so the manager decides once per text instead of once per item. Manager+ only.
+router.get(
+  "/customer-rfq/review-groups",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (_req, res): Promise<void> => {
+    const groups = await listReviewGroups();
+    res.json({ groups });
+  },
+);
+
+// POST /customer-rfq/review-groups/assign — one category for every item of a group.
+// Body: { key: string, categoryId: number }. Manager+ only.
+router.post(
+  "/customer-rfq/review-groups/assign",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const body = req.body as { key?: unknown; categoryId?: unknown };
+    const key = typeof body.key === "string" ? body.key : "";
+    const categoryId = Number(body.categoryId);
+    if (!key || !Number.isInteger(categoryId) || categoryId <= 0) {
+      res.status(400).json({ error: "المجموعة والتصنيف مطلوبان" });
+      return;
+    }
+    const result = await assignReviewGroup({
+      key,
+      categoryId,
+      decidedBy: req.session.employeeId ?? null,
+    });
+    if ("error" in result) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    await db.insert(auditLogTable).values({
+      action: "customer_rfq.review_group_assigned",
+      entityType: "customer_rfq_item",
+      employeeId: req.session.employeeId ?? null,
+      description: `Group assign: ${result.assigned} items to category ${categoryId}`,
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
