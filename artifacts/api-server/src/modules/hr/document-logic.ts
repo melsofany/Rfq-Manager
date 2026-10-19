@@ -204,10 +204,14 @@ const PRINT_PAGINATION_CSS = `<style>
    numbering and the signature are never missing or typed by hand. */
 @page {
   size: A4;
-  margin: 16mm 14mm 20mm 14mm;
-  @bottom-left { content: "صفحة " counter(page) " من " counter(pages); font-family: Tahoma, Arial, sans-serif; font-size: 9px; color: #5b6573; }
+  margin: 18mm 14mm 20mm 14mm;
+  @bottom-left { content: "ورقة " counter(page) " من " counter(pages); font-family: Tahoma, Arial, sans-serif; font-size: 9px; color: #5b6573; }
   @bottom-center { content: "شركة قرطبة للتوريدات"; font-family: Tahoma, Arial, sans-serif; font-size: 9px; color: #5b6573; }
   @bottom-right { content: "توقيع الموظف: ............................"; font-family: Tahoma, Arial, sans-serif; font-size: 9px; color: #263238; }
+}
+/* The first sheet states how many sheets the document has. */
+@page :first {
+  @top-center { content: "هذا المستند من " counter(pages) " ورقة"; font-family: Tahoma, Arial, sans-serif; font-size: 9px; color: #263238; }
 }
 @media print {
   html, body { background: #fff !important; }
