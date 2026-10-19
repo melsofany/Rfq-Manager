@@ -179,7 +179,7 @@ describe("employee documents", () => {
   it("escapes employee text so it cannot inject markup", () => {
     const html = renderDocument("receiptA", {
       ...employee,
-      fields: { ...manual, giverName: "<script>x</script>" },
+      fullName: "<script>x</script>",
     });
     expect(html).not.toContain("<script>x");
     expect(html).toContain("&lt;script&gt;");
