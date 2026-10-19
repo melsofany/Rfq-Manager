@@ -608,6 +608,7 @@ export async function listClassificationConflicts(limit = 5000): Promise<
   Array<{
     identityKey: string;
     itemCount: number;
+    itemIds: number[];
     categories: Array<{ id: number; name: string; count: number }>;
     sampleDescription: string | null;
   }>
@@ -641,6 +642,7 @@ export async function listClassificationConflicts(limit = 5000): Promise<
   const out: Array<{
     identityKey: string;
     itemCount: number;
+    itemIds: number[];
     categories: Array<{ id: number; name: string; count: number }>;
     sampleDescription: string | null;
   }> = [];
@@ -660,6 +662,7 @@ export async function listClassificationConflicts(limit = 5000): Promise<
     out.push({
       identityKey,
       itemCount: rows.length,
+      itemIds: rows.map((r) => r.id),
       categories: [...counts]
         .map(([id, count]) => ({ id, name: nameById.get(id) ?? `#${id}`, count }))
         .sort((a, b) => b.count - a.count),

@@ -65,7 +65,7 @@ interface ClassificationConflict {
 }
 
 /** Why an item needs a human decision — mirrors the server's three reasons. */
-type ReviewReason = "unclassified" | "ambiguous" | "category_not_in_suppliers";
+type ReviewReason = "unclassified" | "ambiguous" | "category_not_in_suppliers" | "conflict";
 
 interface ReviewQueueItem {
   itemId: number;
@@ -80,12 +80,15 @@ interface ReviewQueueItem {
   categoryName: string | null;
   candidates: Array<{ id: number; name: string }>;
   confidence: number | null;
+  /** Conflict rows: every item of the conflict group, so one decision closes the group. */
+  groupItemIds?: number[];
 }
 
 const REVIEW_REASON_LABEL: Record<ReviewReason, string> = {
   unclassified: "غير مصنّف — الذكاء الاصطناعي لم يتعرّف عليه",
   ambiguous: "مشتبه بين تصنيفين",
   category_not_in_suppliers: "تصنيفه غير موجود في تصنيفات الموردين",
+  conflict: "تضارب تصنيف — نفس البند مصنّف في أكثر من مجال",
 };
 
 const REVIEW_REASON_TONE: Record<ReviewReason, string> = {
@@ -93,6 +96,7 @@ const REVIEW_REASON_TONE: Record<ReviewReason, string> = {
   ambiguous: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   category_not_in_suppliers:
     "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900 dark:text-fuchsia-200",
+  conflict: "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200",
 };
 
 /**
@@ -785,6 +789,30 @@ function ReviewQueuePanel({
     void load();
   }, [load]);
 
+  /** Closes a whole conflict group with one category, not one edit per item. */
+  async function resolveConflict(row: ReviewQueueItem, categoryId: number) {
+    const itemIds = row.groupItemIds?.length ? row.groupItemIds : [row.itemId];
+    if (!window.confirm(`سيتم تحديد التصنيف لـ ${itemIds.length} بند. متابعة؟`)) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/customer-rfq/classification-conflicts/resolve", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemIds, categoryId }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const body = (await res.json()) as { assigned: number };
+      toast.success(`تم حل التضارب لـ ${body.assigned} بند`);
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveResolution() {
     if (!editFor || editCategory === "") return;
     setSaving(true);
@@ -817,6 +845,7 @@ function ReviewQueuePanel({
     unclassified: rows.filter((r) => r.reason === "unclassified").length,
     ambiguous: rows.filter((r) => r.reason === "ambiguous").length,
     category_not_in_suppliers: rows.filter((r) => r.reason === "category_not_in_suppliers").length,
+    conflict: rows.filter((r) => r.reason === "conflict").length,
   };
 
   if (loading) {
@@ -835,11 +864,13 @@ function ReviewQueuePanel({
         </h3>
         <p className="text-xs text-muted-foreground mt-0.5">
           البنود التي لم يستطع التصنيف الآلي حسم تصنيفها — إما لأن الذكاء الاصطناعي لم يتعرّف عليها،
-          أو لأنها مشتبهة بين تصنيفين، أو لأن تصنيفها غير موجود في تصنيفات الموردين. حدِّد التصنيف
-          والمسؤول لكل بند لإخراجه من هذه القائمة.
+          أو لأنها مشتبهة بين تصنيفين، أو لأن تصنيفها غير موجود في تصنيفات الموردين، أو لأن البند
+          مصنّف في أكثر من مجال (تضارب). حدِّد التصنيف والمسؤول لكل بند لإخراجه من هذه القائمة.
         </p>
         <div className="flex flex-wrap gap-2 mt-3">
-          {(["all", "unclassified", "ambiguous", "category_not_in_suppliers"] as const).map((k) => (
+          {(
+            ["all", "unclassified", "ambiguous", "category_not_in_suppliers", "conflict"] as const
+          ).map((k) => (
             <button
               key={k}
               onClick={() => setReasonFilter(k)}
@@ -910,6 +941,30 @@ function ReviewQueuePanel({
                       {r.categoryName ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
+                      {canManage && r.reason === "conflict" && r.candidates.length > 0 ? (
+                        <div className="flex flex-col items-end gap-1 mb-2">
+                          {r.candidates.map((c) => {
+                            const isTrade = !tradeCategoryIds || tradeCategoryIds.includes(c.id);
+                            return (
+                              <Button
+                                key={c.id}
+                                size="sm"
+                                variant="outline"
+                                disabled={saving}
+                                title={
+                                  isTrade
+                                    ? undefined
+                                    : "هذا التصنيف غير موجود عند الموردين — البنود ستبقى في القائمة"
+                                }
+                                onClick={() => resolveConflict(r, c.id)}
+                              >
+                                حل الكل إلى: {c.name}
+                                {isTrade ? "" : " ⚠"}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
                       {canManage && (
                         <Button
                           size="sm"
