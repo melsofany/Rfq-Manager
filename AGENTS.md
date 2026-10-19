@@ -4131,3 +4131,38 @@ land in two categories.
   والـportal + `typecheck:libs` نضيف؛ البناء بينسخ `dist/assets/fonts/Amiri-Regular.ttf`
   فعلًا. **ملاحظة تشغيلية**: القالب لازم يكون **Approved** في Meta قبل الاعتماد الأول،
   وإلا الإرسال هيفشل ويتسجّل على الصف (وده مقصود — الشاشة بتقول السبب).
+
+## النسخ الاحتياطي اليومي — Service Account + Shared Drive، حالة دائمة، تنبيهات (PR #350)
+
+العَرَض الحي: النسخ الاحتياطي اليومي واقف **بصمت**. السبب الجذري: كان بيعتمد على
+**OAuth refresh token** جوجل؛ التوكن انتهى (`invalid_grant`) فكل تشغيل بعدها فشل،
+وكانت النتيجة مجرد سطر في اللوج — **مفيش سجل دائم، ولا تنبيه، ولا طريقة تعرف من
+الواجهة إن النسخة واقفة**. نفس عائلة «قدرة بتعمل حاجة غير اللي بتقولها».
+
+- **Service Account فقط** (`GOOGLE_ACCOUNT_BASE_64`, صلاحية `drive` كاملة). الـOAuth
+  اتشال بالكامل. حساب الخدمة ملوش مساحة تخزين شخصية، فـ**لازم Shared Drive**، وكل
+  نداءات Drive بقت بـ `supportsAllDrives: true`. `GOOGLE_DRIVE_BACKUP_FOLDER_ID`
+  بقى **إجباري** — لو ناقص يطلع خطأ واضح بدل رفع صامت في مكان غلط.
+- **الحذف النهائي مستحيل** على Shared Drive بحساب خدمة (`File not found`) → التنظيف
+  بالمهملات (`files.update({trashed:true})`)، وبيمس الملفات اللي ببادئتنا بس.
+- **حالة دائمة** في `db_backup_runs` (كل محاولة صف: RUNNING ثم SUCCESS/FAILED) +
+  `db_backup_settings` (المستلمين/الاحتفاظ/الساعة). الـadvisory lock يمنع نسختين
+  متزامنتين (حتى عبر أكثر من instance). **نسخة تعويضية** عند الإقلاع لو فات وقت
+  النسخة ومفيش نجاح النهاردة (مرة واحدة/يوم).
+- **الأمانة**: الملف بيتأكد إنه موجود وحجمه أكبر من صفر قبل ما نعتبر النسخة ناجحة،
+  والـupload promise بيتعمله observe فورًا فرفض التوكن يوقف الـdump بدل unhandled
+  rejection. عند الفشل: إيميل + واتساب لمن عنده `backup:alerts` (أو admin/manager)
+  مع منع تكرار نفس السبب.
+- **الشاشة**: `/backup` (الحالة، السجل، اختبار الاتصال، تشغيل فوري، الإعدادات)
+  بصلاحية `backup` جديدة. `POST /backup/test-connection` يتحقق من وصول الحساب للفولدر.
+- **الاختبارات**: 31 اختبار للنسخ الاحتياطي (routes 18، service 6، alerts 6،
+  upload-failure 1). الإجمالي 1882 api-server + 14 متخطّى يمر؛ tsc للـapi-server
+  والـportal نظيف؛ prettier لكل المستودع نظيف.
+- **نشر مُتحقَّق**: PR #350 اتدمج squash `c248ac7`؛ CI + Deploy-to-Render ناجحان؛
+  حيًّا `/api/healthz` 200 و`/api/backup/{status,settings,test-connection}` كلها
+  **401** (مركّبة خلف requireAuth، مش 404). الفرع طلع `dirty` لأن `main` المحلي كان
+  قديم — الحل كان `fetch` الحقيقي ثم `rebase --onto` ثم `push --force-with-lease`
+  بالـSHA من `git ls-remote`.
+- **نقطة تشغيلية**: حساب الخدمة
+  `cortoba-sys@cortoba-supp-sys.iam.gserviceaccount.com` لازم يكون عضو في الـShared
+  Drive، والفولدر `0APNCUmMhL81RUk9PVA`.
