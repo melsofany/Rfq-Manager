@@ -1,8 +1,9 @@
 import { Router, type Request } from "express";
 import bcrypt from "bcryptjs";
 import { rateLimit, ipKeyGenerator } from "express-rate-limit";
-import { db, employeesTable, auditLogTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, employeesTable, auditLogTable, hrEmployeesTable } from "@workspace/db";
+import { and, eq, isNull } from "drizzle-orm";
+import { checkHrCandidate } from "./hr-candidate";
 import { logger } from "../../shared/logger";
 
 const router = Router();
@@ -178,16 +179,63 @@ router.get("/employees", async (req, res): Promise<void> => {
   );
 });
 
+// Employees that may be added to the procurement list: appointed (HR), active, not linked yet.
+router.get("/employees/hr-candidates", async (req, res): Promise<void> => {
+  if (!req.session.employeeId || req.session.role !== "admin") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const rows = await db
+    .select({
+      id: hrEmployeesTable.id,
+      fullName: hrEmployeesTable.fullName,
+      fullNameEn: hrEmployeesTable.fullNameEn,
+      phone: hrEmployeesTable.phone,
+    })
+    .from(hrEmployeesTable)
+    .where(
+      and(eq(hrEmployeesTable.status, "active"), isNull(hrEmployeesTable.procurementEmployeeId)),
+    )
+    .orderBy(hrEmployeesTable.fullName);
+  res.json(rows);
+});
+
 router.post("/employees", async (req, res): Promise<void> => {
   if (!req.session.employeeId || req.session.role !== "admin") {
     res.status(403).json({ error: "Forbidden" });
     return;
   }
-  const { name, email, password, role, phone, permissions } = req.body as Record<string, unknown>;
-  if (!name || !email || !password || !role) {
+  const { hrEmployeeId, email, password, role, phone, permissions } = req.body as Record<
+    string,
+    unknown
+  >;
+  // The procurement account is always an appointed HR employee: the name comes from the HR record.
+  const hrId = Number(hrEmployeeId);
+  if (!Number.isInteger(hrId) || hrId <= 0) {
+    res.status(400).json({ error: "اختار الموظف من قائمة المعينين" });
+    return;
+  }
+  if (!email || !password || !role) {
     res.status(400).json({ error: "Missing required fields" });
     return;
   }
+  const [hrRow] = await db
+    .select({
+      id: hrEmployeesTable.id,
+      fullName: hrEmployeesTable.fullName,
+      status: hrEmployeesTable.status,
+      procurementEmployeeId: hrEmployeesTable.procurementEmployeeId,
+      phone: hrEmployeesTable.phone,
+    })
+    .from(hrEmployeesTable)
+    .where(eq(hrEmployeesTable.id, hrId))
+    .limit(1);
+  const check = checkHrCandidate(hrRow);
+  if (!check.ok) {
+    res.status(check.status).json({ error: check.error });
+    return;
+  }
+  const name = hrRow.fullName;
 
   // Reject duplicate email
   const [existingEmail] = await db
@@ -200,7 +248,7 @@ router.post("/employees", async (req, res): Promise<void> => {
     return;
   }
 
-  const phoneStr = typeof phone === "string" ? phone.trim() : "";
+  const phoneStr = typeof phone === "string" ? phone.trim() : (hrRow.phone ?? "").trim();
 
   // Reject duplicate phone (if provided)
   if (phoneStr) {
@@ -216,17 +264,39 @@ router.post("/employees", async (req, res): Promise<void> => {
   }
 
   const passwordHash = await bcrypt.hash(password as string, 10);
-  const [employee] = await db
-    .insert(employeesTable)
-    .values({
-      name: name as string,
-      email: (email as string).toLowerCase(),
-      passwordHash,
-      role: role as string,
-      phone: phoneStr || null,
-      permissions: sanitizePermissions(permissions),
-    })
-    .returning();
+  // Create the account and link it to the HR record in ONE transaction. The link update only
+  // matches a record that is still unlinked, so two admins cannot link the same person twice.
+  let employee: typeof employeesTable.$inferSelect;
+  try {
+    employee = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(employeesTable)
+        .values({
+          name,
+          email: (email as string).toLowerCase(),
+          passwordHash,
+          role: role as string,
+          phone: phoneStr || null,
+          permissions: sanitizePermissions(permissions),
+        })
+        .returning();
+      const linked = await tx
+        .update(hrEmployeesTable)
+        .set({ procurementEmployeeId: created.id })
+        .where(and(eq(hrEmployeesTable.id, hrId), isNull(hrEmployeesTable.procurementEmployeeId)))
+        .returning({ id: hrEmployeesTable.id });
+      if (linked.length === 0) throw new Error("HR_LINK_TAKEN");
+      return created;
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === "HR_LINK_TAKEN") {
+      res
+        .status(409)
+        .json({ error: "الموظف ده اتربط بحساب مشتريات في نفس اللحظة. حدّث الصفحة وحاول تاني" });
+      return;
+    }
+    throw err;
+  }
 
   logger.info({ employeeId: employee.id }, "Employee created");
   res.status(201).json({

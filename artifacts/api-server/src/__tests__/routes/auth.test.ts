@@ -17,6 +17,22 @@ function chainable(value: any, methods: Record<string, any> = {}): any {
 }
 
 const employeesTbl = { _: "employees", id: "id", email: "email", phone: "phone" };
+const hrEmployeesTbl = {
+  _: "hr_employees",
+  id: "id",
+  status: "status",
+  procurementEmployeeId: "procurementEmployeeId",
+};
+// Appointed HR employee the procurement account is created for (null = not found).
+let hrRow: any | null = {
+  id: 3,
+  fullName: "HR Name",
+  status: "active",
+  procurementEmployeeId: null,
+  phone: null,
+};
+// Rows returned by the HR link update (empty = someone linked it first).
+let hrLinkRows: any[] = [{ id: 3 }];
 
 // Per-test state.
 let employeeRow: any | null; // a single employee returned by select().where().limit(1) / select().where()
@@ -31,7 +47,16 @@ const sessionState: { employeeId: number; role?: string } = { employeeId: 1, rol
 vi.mock("@workspace/db", () => {
   const dbMock: any = {
     select: vi.fn((_arg?: any) => ({
-      from: vi.fn((_table: any) => {
+      from: vi.fn((table: any) => {
+        if (table === hrEmployeesTbl) {
+          return chainable(hrRow ? [hrRow] : [], {
+            where: vi.fn(() =>
+              chainable(hrRow ? [hrRow] : [], {
+                limit: vi.fn(() => chainable(hrRow ? [hrRow] : [])),
+              }),
+            ),
+          });
+        }
         // Used by email/phone duplicate checks + login/me lookups: .where().limit(1)
         return chainable(employeeRow ? [employeeRow] : [], {
           where: vi.fn(() =>
@@ -52,11 +77,16 @@ vi.mock("@workspace/db", () => {
         return chainable(undefined, { returning: vi.fn(() => chainable([insertedRow])) });
       }),
     })),
-    update: vi.fn(() => ({
+    update: vi.fn((table: any) => ({
       set: vi.fn((_vals: any) => ({
-        where: vi.fn(() => ({ returning: vi.fn(() => chainable(updatedRow ? [updatedRow] : [])) })),
+        where: vi.fn(() => ({
+          returning: vi.fn(() =>
+            chainable(table === hrEmployeesTbl ? hrLinkRows : updatedRow ? [updatedRow] : []),
+          ),
+        })),
       })),
     })),
+    transaction: vi.fn(async (fn: any) => fn(dbMock)),
     delete: vi.fn(() => ({
       where: vi.fn(() => ({ returning: vi.fn(() => chainable(updatedRow ? [updatedRow] : [])) })),
     })),
@@ -64,6 +94,7 @@ vi.mock("@workspace/db", () => {
   return {
     db: dbMock,
     employeesTable: employeesTbl,
+    hrEmployeesTable: hrEmployeesTbl,
     // Re-export the same table handles some route modules import.
     auditLogTable: { _: "audit" },
   };
@@ -113,7 +144,7 @@ describe("POST /api/employees — permissions persistence", () => {
     const res = await request(testApp)
       .post("/api/employees")
       .send({
-        name: "Data Clerk",
+        hrEmployeeId: 3,
         email: "clerk@cortoba.com",
         password: "secret123",
         role: "data_entry",
@@ -137,9 +168,45 @@ describe("POST /api/employees — permissions persistence", () => {
     };
     const res = await request(testApp)
       .post("/api/employees")
-      .send({ name: "Mgr", email: "mgr@cortoba.com", password: "secret123", role: "manager" });
+      .send({ hrEmployeeId: 3, email: "mgr@cortoba.com", password: "secret123", role: "manager" });
     expect(res.status).toBe(201);
     expect(res.body.permissions).toBeNull();
+  });
+
+  it("refuses a procurement account for someone who is not an appointed HR employee", async () => {
+    hrRow = null;
+    const res = await request(testApp)
+      .post("/api/employees")
+      .send({ hrEmployeeId: 99, email: "x@cortoba.com", password: "secret123", role: "manager" });
+    expect(res.status).toBe(400);
+    hrRow = {
+      id: 3,
+      fullName: "HR Name",
+      status: "active",
+      procurementEmployeeId: null,
+      phone: null,
+    };
+  });
+
+  it("refuses when the HR employee is already linked to a procurement account", async () => {
+    hrRow = {
+      id: 3,
+      fullName: "HR Name",
+      status: "active",
+      procurementEmployeeId: 12,
+      phone: null,
+    };
+    const res = await request(testApp)
+      .post("/api/employees")
+      .send({ hrEmployeeId: 3, email: "y@cortoba.com", password: "secret123", role: "manager" });
+    expect(res.status).toBe(409);
+    hrRow = {
+      id: 3,
+      fullName: "HR Name",
+      status: "active",
+      procurementEmployeeId: null,
+      phone: null,
+    };
   });
 });
 

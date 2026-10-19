@@ -30,6 +30,8 @@ import {
 const ROLES = ["admin", "manager", "purchasing", "data_entry"];
 
 type EmpForm = {
+  /** Appointed HR employee the account is created for (required on create). */
+  hrEmployeeId?: string;
   name: string;
   email: string;
   password: string;
@@ -38,6 +40,7 @@ type EmpForm = {
   permissions: PermissionsValue;
 };
 const EMPTY_FORM: EmpForm = {
+  hrEmployeeId: "",
   name: "",
   email: "",
   password: "",
@@ -65,6 +68,10 @@ export default function EmployeesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState<EmpForm>(EMPTY_FORM);
   const [createError, setCreateError] = useState<string | null>(null);
+  // Appointed HR employees that can still be added (active, not linked yet).
+  const [hrCandidates, setHrCandidates] = useState<
+    Array<{ id: number; fullName: string; phone: string | null }>
+  >([]);
 
   const [editId, setEditId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<EmpForm>(EMPTY_FORM);
@@ -99,6 +106,15 @@ export default function EmployeesPage() {
   useEffect(() => {
     void loadAllEmpCats();
   }, [loadAllEmpCats]);
+
+  async function loadHrCandidates() {
+    try {
+      const res = await fetch("/api/employees/hr-candidates", { credentials: "include" });
+      if (res.ok) setHrCandidates(await res.json());
+    } catch {
+      setHrCandidates([]);
+    }
+  }
 
   async function openCats(emp: { id: number; name: string }) {
     setCatsFor(emp);
@@ -273,6 +289,7 @@ export default function EmployeesPage() {
               onClick={() => {
                 setShowCreate(true);
                 setCreateError(null);
+                void loadHrCandidates();
               }}
               size="sm"
               className="gap-1.5"
@@ -326,6 +343,7 @@ export default function EmployeesPage() {
                     e.preventDefault();
                     const payload = {
                       ...createForm,
+                      hrEmployeeId: Number(createForm.hrEmployeeId),
                       permissions: createForm.role === "admin" ? null : createForm.permissions,
                     };
                     createMutation.mutate({
@@ -336,12 +354,34 @@ export default function EmployeesPage() {
                 >
                   <div className="space-y-1.5">
                     <Label>{t("employees.fullName")}</Label>
-                    <Input
-                      value={createForm.name}
-                      onChange={(e) => updateCreate("name", e.target.value)}
-                      placeholder={t("employees.placeholder.name")}
+                    <select
+                      value={createForm.hrEmployeeId}
+                      onChange={(e) => {
+                        const picked = hrCandidates.find((c) => String(c.id) === e.target.value);
+                        setCreateForm((p) => ({
+                          ...p,
+                          hrEmployeeId: e.target.value,
+                          name: picked?.fullName ?? "",
+                          phone: picked?.phone ?? p.phone,
+                        }));
+                      }}
+                      className="w-full h-9 px-3 rounded border border-input bg-background text-sm text-foreground"
                       required
-                    />
+                    >
+                      <option value="">
+                        {hrCandidates.length
+                          ? "— اختار من الموظفين المعينين —"
+                          : "— مفيش موظفين معينين متاحين —"}
+                      </option>
+                      {hrCandidates.map((c) => (
+                        <option key={c.id} value={String(c.id)}>
+                          {c.fullName}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      الموظف لازم يكون معين في الموارد البشرية الأول
+                    </p>
                   </div>
                   <div className="space-y-1.5">
                     <Label>{t("employees.email")}</Label>
@@ -409,7 +449,11 @@ export default function EmployeesPage() {
                       >
                         {t("employees.cancel")}
                       </Button>
-                      <Button type="submit" size="sm" disabled={createMutation.isPending}>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={createMutation.isPending || !createForm.hrEmployeeId}
+                      >
                         {createMutation.isPending
                           ? t("employees.saving")
                           : t("employees.createEmployee")}
