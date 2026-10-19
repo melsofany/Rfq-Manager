@@ -30,6 +30,7 @@ import {
   offerItemsTable,
   supplierCategoryLinksTable,
   supplierCategoriesTable,
+  itemClassificationIdentityTable,
 } from "@workspace/db";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { loadCategories } from "./assignment";
@@ -229,7 +230,8 @@ export async function buildCleanupPlan(): Promise<CleanupPlan> {
   const nameChecksOk =
     nameById.get(MERGE.keepId) === MERGE.keepName &&
     nameById.get(MERGE.parentId) === MERGE.parentName &&
-    nameById.get(MERGE.dropId) === MERGE.dropName &&
+    // «اضاءة» may already be deleted by a manager: that is the desired end state, not an error.
+    (nameById.get(MERGE.dropId) === undefined || nameById.get(MERGE.dropId) === MERGE.dropName) &&
     nameById.get(RETIRE.id) === RETIRE.name;
 
   const items = await db
@@ -364,6 +366,19 @@ export async function applyCleanup(
         .returning({ id: customerRfqItemsTable.id });
       if (row && r.customerRfqId != null) affected.add(r.customerRfqId);
     }
+
+    // 2b. Classification memory: automatic rows that still point at «قطع غيار» would put the
+    // items straight back there on the next classification. Clear them (the item then goes
+    // through review). Manual decisions are never touched.
+    await tx
+      .update(itemClassificationIdentityTable)
+      .set({ categoryId: null, subcategoryIds: null })
+      .where(
+        and(
+          eq(itemClassificationIdentityTable.categoryId, RETIRE.id),
+          eq(itemClassificationIdentityTable.source, "auto"),
+        ),
+      );
 
     // 3. Retire «قطع غيار» from use (kept for history; old purchase lines reference it).
     await tx
