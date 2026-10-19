@@ -999,6 +999,133 @@ function ReviewQueuePanel({
   );
 }
 
+interface ReviewGroup {
+  key: string;
+  sample: string;
+  count: number;
+  itemIds: number[];
+  suggestedCategoryId: number | null;
+  suggestedName: string | null;
+}
+
+/** Unclassified items grouped by identical text: one decision applies to the whole group. */
+function ReviewGroupsPanel({
+  categories,
+  canManage,
+  onChanged,
+}: {
+  categories: CategoryOption[];
+  canManage: boolean;
+  onChanged: () => void;
+}) {
+  const [groups, setGroups] = useState<ReviewGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [picked, setPicked] = useState<Record<string, number>>({});
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/customer-rfq/review-groups", { credentials: "include" });
+      if (!res.ok) throw new Error(await readError(res));
+      const out = (await res.json()) as { groups: ReviewGroup[] };
+      setGroups(out.groups);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function assign(group: ReviewGroup) {
+    const categoryId = picked[group.key] ?? group.suggestedCategoryId;
+    if (categoryId == null) {
+      toast.error("اختر تصنيفًا أولًا");
+      return;
+    }
+    setBusyKey(group.key);
+    try {
+      const res = await fetch("/api/customer-rfq/review-groups/assign", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: group.key, categoryId }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const out = (await res.json()) as { assigned: number };
+      toast.success(`تم تصنيف ${out.assigned} بند`);
+      setGroups((prev) => prev.filter((g) => g.key !== group.key));
+      onChanged();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  if (loading) return <div className="p-6 text-center text-muted-foreground">جارٍ التحميل…</div>;
+  if (groups.length === 0)
+    return <div className="p-6 text-center text-muted-foreground">لا توجد بنود غير مصنّفة.</div>;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        كل مجموعة بنود لها نفس النص. القرار هنا يطبق على كل بنود المجموعة مرة واحدة.
+      </p>
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 text-right">
+            <tr>
+              <th className="px-3 py-2">النص</th>
+              <th className="px-3 py-2">عدد البنود</th>
+              <th className="px-3 py-2">التصنيف المقترح</th>
+              <th className="px-3 py-2">التصنيف</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => (
+              <tr key={g.key} className="border-t">
+                <td className="px-3 py-2 max-w-md truncate" title={g.sample}>
+                  {g.sample}
+                </td>
+                <td className="px-3 py-2">{g.count}</td>
+                <td className="px-3 py-2">{g.suggestedName ?? "—"}</td>
+                <td className="px-3 py-2">
+                  <select
+                    className="rounded-md border bg-background px-2 py-1"
+                    disabled={!canManage || busyKey === g.key}
+                    value={picked[g.key] ?? g.suggestedCategoryId ?? ""}
+                    onChange={(e) => setPicked((p) => ({ ...p, [g.key]: Number(e.target.value) }))}
+                  >
+                    <option value="">اختر تصنيفًا</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-3 py-2">
+                  {canManage && (
+                    <Button size="sm" onClick={() => assign(g)} disabled={busyKey === g.key}>
+                      {busyKey === g.key ? "جارٍ…" : `تطبيق على ${g.count}`}
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function ItemCategoriesTab() {
   const { employee } = useAuth();
   const canManage = canManageItemAssignment(employee?.role, employee?.permissions);
@@ -1006,7 +1133,7 @@ export function ItemCategoriesTab() {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [classifying, setClassifying] = useState(false);
-  const [sub, setSub] = useState<"list" | "unowned" | "review">("list");
+  const [sub, setSub] = useState<"list" | "unowned" | "review" | "groups">("list");
 
   const onChanged = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -1062,6 +1189,7 @@ export function ItemCategoriesTab() {
     { key: "list" as const, label: "التصنيفات" },
     { key: "unowned" as const, label: "بلا مسؤول" },
     { key: "review" as const, label: "بنود تحتاج مراجعة" },
+    { key: "groups" as const, label: "مجموعات المراجعة" },
   ];
 
   return (
@@ -1084,6 +1212,8 @@ export function ItemCategoriesTab() {
 
       {sub === "unowned" ? (
         <UnownedCategoriesPanel employees={employees} canManage={canManage} onChanged={onChanged} />
+      ) : sub === "groups" ? (
+        <ReviewGroupsPanel categories={categories} canManage={canManage} onChanged={onChanged} />
       ) : sub === "review" ? (
         <ReviewQueuePanel
           categories={categories}
