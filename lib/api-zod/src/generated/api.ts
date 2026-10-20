@@ -206,6 +206,9 @@ export const ListSuppliersResponseItem = zod.object({
   "category": zod.string(),
   "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)'),
   "isActive": zod.boolean().optional(),
+  "registrationVerifiedAt": zod.string().nullish().describe('تاريخ تأكيد المورد لبياناته بنفسه عبر رابط الاستكمال'),
+  "registrationComplete": zod.boolean().optional().describe('true عندما تكون كل البيانات المطلوبة (السجل التجاري\/الضريبي + البنكية) مكتملة — بدونه لا يُرسل أمر الشراء'),
+  "registrationMissingFields": zod.array(zod.string()).optional().describe('الحقول الناقصة المطلوب من المورد إدخالها'),
   "createdAt": zod.string().optional()
 })
 export const ListSuppliersResponse = zod.array(ListSuppliersResponseItem)
@@ -252,6 +255,9 @@ export const CreateSupplierResponse = zod.object({
   "category": zod.string(),
   "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)'),
   "isActive": zod.boolean().optional(),
+  "registrationVerifiedAt": zod.string().nullish().describe('تاريخ تأكيد المورد لبياناته بنفسه عبر رابط الاستكمال'),
+  "registrationComplete": zod.boolean().optional().describe('true عندما تكون كل البيانات المطلوبة (السجل التجاري\/الضريبي + البنكية) مكتملة — بدونه لا يُرسل أمر الشراء'),
+  "registrationMissingFields": zod.array(zod.string()).optional().describe('الحقول الناقصة المطلوب من المورد إدخالها'),
   "createdAt": zod.string().optional()
 })
 
@@ -282,6 +288,9 @@ export const GetSupplierResponse = zod.object({
   "category": zod.string(),
   "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)'),
   "isActive": zod.boolean().optional(),
+  "registrationVerifiedAt": zod.string().nullish().describe('تاريخ تأكيد المورد لبياناته بنفسه عبر رابط الاستكمال'),
+  "registrationComplete": zod.boolean().optional().describe('true عندما تكون كل البيانات المطلوبة (السجل التجاري\/الضريبي + البنكية) مكتملة — بدونه لا يُرسل أمر الشراء'),
+  "registrationMissingFields": zod.array(zod.string()).optional().describe('الحقول الناقصة المطلوب من المورد إدخالها'),
   "createdAt": zod.string().optional()
 })
 
@@ -331,6 +340,9 @@ export const UpdateSupplierResponse = zod.object({
   "category": zod.string(),
   "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)'),
   "isActive": zod.boolean().optional(),
+  "registrationVerifiedAt": zod.string().nullish().describe('تاريخ تأكيد المورد لبياناته بنفسه عبر رابط الاستكمال'),
+  "registrationComplete": zod.boolean().optional().describe('true عندما تكون كل البيانات المطلوبة (السجل التجاري\/الضريبي + البنكية) مكتملة — بدونه لا يُرسل أمر الشراء'),
+  "registrationMissingFields": zod.array(zod.string()).optional().describe('الحقول الناقصة المطلوب من المورد إدخالها'),
   "createdAt": zod.string().optional()
 })
 
@@ -391,6 +403,9 @@ export const BulkImportSuppliersResponse = zod.object({
   "category": zod.string(),
   "invoiceHasVat": zod.boolean().optional().describe('false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)'),
   "isActive": zod.boolean().optional(),
+  "registrationVerifiedAt": zod.string().nullish().describe('تاريخ تأكيد المورد لبياناته بنفسه عبر رابط الاستكمال'),
+  "registrationComplete": zod.boolean().optional().describe('true عندما تكون كل البيانات المطلوبة (السجل التجاري\/الضريبي + البنكية) مكتملة — بدونه لا يُرسل أمر الشراء'),
+  "registrationMissingFields": zod.array(zod.string()).optional().describe('الحقول الناقصة المطلوب من المورد إدخالها'),
   "createdAt": zod.string().optional()
 }).optional()
 })).optional()
@@ -1328,7 +1343,13 @@ export const ExportToIntegrationResponse = zod.object({
 export const ListRfqsQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "employeeId": zod.coerce.number().optional(),
-  "search": zod.coerce.string().optional()
+  "search": zod.coerce.string().optional(),
+  "view": zod.enum(['archive']).optional().describe('archive = closed RFQs only (status SUCCESS\/FAILED or closing date passed); omitted = active RFQs only.'),
+  "closedFrom": zod.coerce.string().optional().describe('YYYY-MM-DD. Closing-date lower bound (inclusive).'),
+  "closedTo": zod.coerce.string().optional().describe('YYYY-MM-DD. Closing-date upper bound (inclusive).'),
+  "employeeName": zod.coerce.string().optional().describe('Case-insensitive part of the responsible employee\'s name.'),
+  "createdFrom": zod.coerce.string().optional().describe('YYYY-MM-DD. Request-date lower bound (inclusive).'),
+  "createdTo": zod.coerce.string().optional().describe('YYYY-MM-DD. Request-date upper bound (inclusive).')
 })
 
 export const ListRfqsResponseItem = zod.object({
@@ -1344,6 +1365,7 @@ export const ListRfqsResponseItem = zod.object({
   "expiresAt": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "supplierCount": zod.number().optional(),
+  "approvedCount": zod.number().optional().describe('Number of RFQ items with an approved supplier price.'),
   "offerCount": zod.number().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
@@ -1373,6 +1395,7 @@ export const CreateRfqResponse = zod.object({
   "expiresAt": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "supplierCount": zod.number().optional(),
+  "approvedCount": zod.number().optional().describe('Number of RFQ items with an approved supplier price.'),
   "offerCount": zod.number().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
@@ -1399,6 +1422,7 @@ export const GetRfqResponse = zod.object({
   "expiresAt": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "supplierCount": zod.number().optional(),
+  "approvedCount": zod.number().optional().describe('Number of RFQ items with an approved supplier price.'),
   "offerCount": zod.number().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
@@ -1430,6 +1454,7 @@ export const UpdateRfqResponse = zod.object({
   "expiresAt": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "supplierCount": zod.number().optional(),
+  "approvedCount": zod.number().optional().describe('Number of RFQ items with an approved supplier price.'),
   "offerCount": zod.number().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
@@ -1533,6 +1558,7 @@ export const GetRfqOffersResponse = zod.object({
   "expiresAt": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "supplierCount": zod.number().optional(),
+  "approvedCount": zod.number().optional().describe('Number of RFQ items with an approved supplier price.'),
   "offerCount": zod.number().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
@@ -1680,7 +1706,9 @@ export const CreatePurchaseOrderBody = zod.object({
   "qty": zod.number().nullish(),
   "referencePrice": zod.number().nullish(),
   "supplierId": zod.number().nullish(),
-  "taxIncluded": zod.boolean().default(createPurchaseOrderBodyItemsItemTaxIncludedDefault)
+  "taxIncluded": zod.boolean().default(createPurchaseOrderBodyItemsItemTaxIncludedDefault),
+  "rfqNumber": zod.string().nullish().describe('Internal or customer RFQ number for this line. Internal only; never sent to suppliers.'),
+  "rfqItemId": zod.number().nullish().describe('Explicit RFQ line id when known. Takes precedence over rfqNumber.')
 })).min(1)
 })
 
@@ -1751,7 +1779,9 @@ export const UpdatePurchaseOrderBody = zod.object({
   "qty": zod.number().nullish(),
   "referencePrice": zod.number().nullish(),
   "supplierId": zod.number().nullish(),
-  "taxIncluded": zod.boolean().default(updatePurchaseOrderBodyItemsItemTaxIncludedDefault)
+  "taxIncluded": zod.boolean().default(updatePurchaseOrderBodyItemsItemTaxIncludedDefault),
+  "rfqNumber": zod.string().nullish().describe('Internal or customer RFQ number for this line. Internal only; never sent to suppliers.'),
+  "rfqItemId": zod.number().nullish().describe('Explicit RFQ line id when known. Takes precedence over rfqNumber.')
 })).min(1)
 })
 
@@ -2057,6 +2087,7 @@ export const GetDashboardStatsResponse = zod.object({
   "expiresAt": zod.string().nullish(),
   "itemCount": zod.number().optional(),
   "supplierCount": zod.number().optional(),
+  "approvedCount": zod.number().optional().describe('Number of RFQ items with an approved supplier price.'),
   "offerCount": zod.number().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()

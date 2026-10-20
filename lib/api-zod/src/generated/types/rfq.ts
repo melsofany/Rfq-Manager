@@ -25,8 +25,9 @@ export interface Rfq {
   expiresAt?: string | null;
   itemCount?: number;
   supplierCount?: number;
-  offerCount?: number;
+  /** Number of RFQ items with an approved supplier price. */
   approvedCount?: number;
+  offerCount?: number;
   createdAt: string;
   updatedAt?: string;
 }

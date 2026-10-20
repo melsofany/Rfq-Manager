@@ -33,6 +33,12 @@ export const suppliersTable = pgTable("suppliers", {
   // so reactivating a supplier resets its no-reply counter and it takes 10
   // MORE unanswered sends to auto-deactivate again.
   reactivatedAt: timestamp("reactivated_at", { withTimezone: true }),
+  // When the supplier himself confirmed his registration data through the
+  // one-time registration link (entered twice, matched, then written here).
+  // Set once and never cleared — the confirmation is a fact about the record,
+  // not a permission. The link itself dies on completion; this stamp is what
+  // the supplier page shows as «مؤكَّد من المورد».
+  registrationVerifiedAt: timestamp("registration_verified_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

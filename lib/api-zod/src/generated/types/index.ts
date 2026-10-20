@@ -83,6 +83,7 @@ export * from './listCustomersParams';
 export * from './listOffersParams';
 export * from './listPurchaseOrdersParams';
 export * from './listRfqsParams';
+export * from './listRfqsView';
 export * from './listSheetPoNumbers200';
 export * from './listSheetPoNumbersParams';
 export * from './listSuppliersParams';

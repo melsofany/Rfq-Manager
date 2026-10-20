@@ -1867,6 +1867,17 @@ components:
           description: false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات)
         isActive:
           type: boolean
+        registrationVerifiedAt:
+          type: ["string", "null"]
+          description: تاريخ تأكيد المورد لبياناته بنفسه عبر رابط الاستكمال
+        registrationComplete:
+          type: boolean
+          description: true عندما تكون كل البيانات المطلوبة (السجل التجاري/الضريبي + البنكية) مكتملة — بدونه لا يُرسل أمر الشراء
+        registrationMissingFields:
+          type: array
+          items:
+            type: string
+          description: الحقول الناقصة المطلوب من المورد إدخالها
         createdAt:
           type: string
 

@@ -515,6 +515,40 @@ export async function initDb(): Promise<void> {
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS bank_branch TEXT;
     `);
 
+    // استكمال بيانات المورد — the stamp left when the SUPPLIER himself confirmed
+    // his data through the one-time registration link. Its own statement: a
+    // sibling failure in a shared literal would roll this ALTER back silently.
+    await client.query(
+      `ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS registration_verified_at TIMESTAMPTZ`,
+    );
+
+    // طلبات استكمال بيانات المورد — one row per registration link sent to a
+    // supplier who has no bank data (a PO cannot be paid without it, so it is
+    // not dispatched until the supplier fills this in).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS supplier_registration_requests (
+        id SERIAL PRIMARY KEY,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+        token TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'pending',
+        held_data JSONB,
+        requested_fields JSONB,
+        submitted_data JSONB,
+        confirmed_data JSONB,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_mismatch_at TIMESTAMPTZ,
+        last_mismatch_fields JSONB,
+        po_id INTEGER REFERENCES purchase_orders(id) ON DELETE SET NULL,
+        created_by_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        completed_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS supplier_registration_requests_supplier_idx ON supplier_registration_requests (supplier_id, status)`,
+    );
+
     // Add owning customer to customer_pos (safe migration — skipped if already present)
     await client.query(`
       ALTER TABLE customer_pos ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES customers(id);

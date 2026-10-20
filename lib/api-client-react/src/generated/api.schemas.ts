@@ -175,6 +175,15 @@ export interface Supplier {
   /** false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات) */
   invoiceHasVat?: boolean;
   isActive?: boolean;
+  /**
+     * تاريخ تأكيد المورد لبياناته بنفسه عبر رابط الاستكمال
+     * @nullable
+     */
+  registrationVerifiedAt?: string | null;
+  /** true عندما تكون كل البيانات المطلوبة (السجل التجاري/الضريبي + البنكية) مكتملة — بدونه لا يُرسل أمر الشراء */
+  registrationComplete?: boolean;
+  /** الحقول الناقصة المطلوب من المورد إدخالها */
+  registrationMissingFields?: string[];
   createdAt?: string;
 }
 
@@ -891,6 +900,7 @@ export interface Rfq {
   expiresAt?: string | null;
   itemCount?: number;
   supplierCount?: number;
+  /** Number of RFQ items with an approved supplier price. */
   approvedCount?: number;
   offerCount?: number;
   createdAt: string;
@@ -1038,14 +1048,14 @@ export interface PurchaseOrderItemInput {
   supplierId?: number | null;
   taxIncluded?: boolean;
   /**
-   * Internal or customer RFQ number for this line. Internal only; never sent to suppliers.
-   * @nullable
-   */
+     * Internal or customer RFQ number for this line. Internal only; never sent to suppliers.
+     * @nullable
+     */
   rfqNumber?: string | null;
   /**
-   * Explicit RFQ line id when known. Takes precedence over rfqNumber.
-   * @nullable
-   */
+     * Explicit RFQ line id when known. Takes precedence over rfqNumber.
+     * @nullable
+     */
   rfqItemId?: number | null;
 }
 
@@ -1661,13 +1671,38 @@ export type ListRfqsParams = {
 status?: string;
 employeeId?: number;
 search?: string;
-view?: string;
+/**
+ * archive = closed RFQs only (status SUCCESS/FAILED or closing date passed); omitted = active RFQs only.
+ */
+view?: ListRfqsView;
+/**
+ * YYYY-MM-DD. Closing-date lower bound (inclusive).
+ */
 closedFrom?: string;
+/**
+ * YYYY-MM-DD. Closing-date upper bound (inclusive).
+ */
 closedTo?: string;
+/**
+ * Case-insensitive part of the responsible employee's name.
+ */
 employeeName?: string;
+/**
+ * YYYY-MM-DD. Request-date lower bound (inclusive).
+ */
 createdFrom?: string;
+/**
+ * YYYY-MM-DD. Request-date upper bound (inclusive).
+ */
 createdTo?: string;
 };
+
+export type ListRfqsView = typeof ListRfqsView[keyof typeof ListRfqsView];
+
+
+export const ListRfqsView = {
+  archive: 'archive',
+} as const;
 
 export type ApproveOfferItemBody = {
   approved?: boolean;
