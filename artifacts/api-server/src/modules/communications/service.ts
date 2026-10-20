@@ -49,7 +49,32 @@ export const TEMPLATE_WORK_ORDER =
   process.env.WHATSAPP_TEMPLATE_WORK_ORDER || "representative_work_order_ar_v2";
 const TEMPLATE_PO_CANCEL = process.env.WHATSAPP_TEMPLATE_PO_CANCEL || "po_cancel_ar";
 const TEMPLATE_PO_CANCEL_ITEM = process.env.WHATSAPP_TEMPLATE_PO_CANCEL_ITEM || "po_cancel_item_ar";
+/** استكمال بيانات المورد — the one-time self-registration link. */
+const TEMPLATE_SUPPLIER_REGISTRATION =
+  process.env.WHATSAPP_TEMPLATE_SUPPLIER_REGISTRATION || "supplier_registration_ar";
+const TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH =
+  process.env.WHATSAPP_TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH ||
+  "supplier_registration_mismatch_ar";
 const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
+
+/**
+ * Body of `supplier_registration_ar`. Exported so the operator's required
+ * wording is directly testable — it must open with «يسرنا بأن نبلغكم…» and close
+ * with «حتى يتسنى لنا سداد مستحقاتكم المالية», and it must carry the URL button
+ * that opens the one-time link.
+ *
+ * {{1}} document clause · {{2}} supplier name · {{3}} required fields · {{4}} expiry
+ */
+export const SUPPLIER_REGISTRATION_BODY =
+  "يسرنا بأن نبلغكم بأنه تم إصدار {{1}} لصالحكم.\n\nالمورد: {{2}}\nالبيانات المطلوبة:\n{{3}}\n\nيرجى إدخال بياناتكم مرتين متطابقتين عبر زر «إدخال البيانات» أدناه.\n\nتنبيه: مسؤولية صحة البيانات المدخلة تقع على عاتق المورد.\nالرابط صالح حتى: {{4}}\n\nنشكر لكم حسن تعاونكم، حتى يتسنى لنا سداد مستحقاتكم المالية في الموعد.";
+
+/**
+ * Body of `supplier_registration_mismatch_ar` — sent when the supplier's second
+ * entry did not match the first and NOTHING was recorded.
+ * {{1}} supplier name · {{2}} mismatched fields
+ */
+export const SUPPLIER_REGISTRATION_MISMATCH_BODY =
+  "نأسف لإبلاغكم بأن البيانات التي أدخلتموها في المرة الثانية غير مطابقة لما أدخلتموه في المرة الأولى، ولذلك لم يتم تسجيلها.\n\nالمورد: {{1}}\nالحقول غير المطابقة: {{2}}\n\nيرجى إعادة الدخول على الرابط وإدخال البيانات بعناية مرتين متطابقتين، حتى يتسنى لنا سداد مستحقاتكم المالية.";
 
 const BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
 /** Meta app id — required only to auto-create templates that carry a document header. */
@@ -224,6 +249,144 @@ export async function ensurePoCancelItemTemplate(): Promise<void> {
   logger.info(
     { template: TEMPLATE_PO_CANCEL_ITEM },
     "WhatsApp po_cancel_item template submitted to Meta for approval",
+  );
+}
+
+/**
+ * Ensures the Meta template `supplier_registration_ar` exists — the message that
+ * tells a supplier a purchase order has been issued for him and carries the
+ * one-time self-registration link he must complete so we can pay him.
+ *
+ * A UTILITY template with a URL button whose single path segment is the token
+ * (same shape as the RFQ link templates), so the supplier taps it directly.
+ *
+ * Body parameters: {{1}} the document clause («أمر شراء رقم P26E…» or, for a
+ * manual request, «طلب استكمال بيانات موردكم»), {{2}} supplier name,
+ * {{3}} the list of required fields, {{4}} the expiry date. Idempotent.
+ *
+ * NOTE: Meta does NOT allow an approved template's body to be edited, so a text
+ * change requires a NEW template name (plus an env override) — the lookup below
+ * would otherwise keep the old one forever.
+ */
+export async function ensureSupplierRegistrationTemplate(): Promise<void> {
+  if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
+    logger.warn(
+      "WhatsApp supplier_registration template provisioning skipped: missing token or business account id",
+    );
+    return;
+  }
+  const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
+  const existing = await fetch(
+    `${base}?name=${encodeURIComponent(TEMPLATE_SUPPLIER_REGISTRATION)}`,
+    {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    },
+  );
+  if (!existing.ok)
+    throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
+  if (found.data?.some((t) => t.name === TEMPLATE_SUPPLIER_REGISTRATION)) {
+    logger.info(
+      { template: TEMPLATE_SUPPLIER_REGISTRATION },
+      "WhatsApp supplier_registration template already exists",
+    );
+    return;
+  }
+  const response = await fetch(base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: TEMPLATE_SUPPLIER_REGISTRATION,
+      language: TEMPLATE_LANG,
+      category: "UTILITY",
+      components: [
+        {
+          type: "BODY",
+          text: SUPPLIER_REGISTRATION_BODY,
+          example: {
+            body_text: [
+              [
+                "أمر شراء رقم PO-2026-000042",
+                "شركة النور للتوريدات",
+                "اسم البنك، رقم الحساب البنكي، رقم IBAN، السويف كود",
+                "2026-11-03",
+              ],
+            ],
+          },
+        },
+        {
+          type: "BUTTONS",
+          buttons: [
+            {
+              type: "URL",
+              text: "إدخال البيانات",
+              url: "https://cortoba-rfq.onrender.com/s/{{1}}",
+              example: ["https://cortoba-rfq.onrender.com/s/AbCdEf123456"],
+            },
+          ],
+        },
+      ],
+    }),
+  });
+  if (!response.ok)
+    throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info(
+    { template: TEMPLATE_SUPPLIER_REGISTRATION },
+    "WhatsApp supplier_registration template submitted to Meta for approval",
+  );
+}
+
+/**
+ * Ensures the Meta template `supplier_registration_mismatch_ar` exists — the
+ * notice sent when the second (confirmation) entry does not match the first, so
+ * nothing is recorded. Body: {{1}} supplier/contact name, {{2}} the mismatched
+ * fields. Idempotent.
+ */
+export async function ensureSupplierRegistrationMismatchTemplate(): Promise<void> {
+  if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
+    logger.warn(
+      "WhatsApp supplier_registration_mismatch template provisioning skipped: missing token or business account id",
+    );
+    return;
+  }
+  const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
+  const existing = await fetch(
+    `${base}?name=${encodeURIComponent(TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH)}`,
+    { headers: { Authorization: `Bearer ${TOKEN}` } },
+  );
+  if (!existing.ok)
+    throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
+  if (found.data?.some((t) => t.name === TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH)) {
+    logger.info(
+      { template: TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH },
+      "WhatsApp supplier_registration_mismatch template already exists",
+    );
+    return;
+  }
+  const response = await fetch(base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH,
+      language: TEMPLATE_LANG,
+      category: "UTILITY",
+      components: [
+        {
+          type: "BODY",
+          text: SUPPLIER_REGISTRATION_MISMATCH_BODY,
+          example: {
+            body_text: [["شركة النور للتوريدات", "رقم الحساب البنكي، رقم IBAN"]],
+          },
+        },
+      ],
+    }),
+  });
+  if (!response.ok)
+    throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info(
+    { template: TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH },
+    "WhatsApp supplier_registration_mismatch template submitted to Meta for approval",
   );
 }
 
@@ -863,6 +1026,87 @@ export async function sendPoCancelItemWhatsApp(opts: SendPoCancelItemOpts): Prom
     { to, poNo: opts.poNo, waId },
     "PO item cancellation sent via po_cancel_item_ar template",
   );
+  return waId || null;
+}
+
+export interface SendSupplierRegistrationOpts {
+  phone: string;
+  supplierName: string;
+  contactPerson?: string | null;
+  /** The one-time token; it becomes the template's URL-button path segment. */
+  token: string;
+  /**
+   * The document clause that opens the message, e.g. «أمر شراء رقم PO-2026-000042».
+   * Passed in full (not just the number) because a manually-requested link has no
+   * purchase order, and the sentence must stay true in both cases.
+   */
+  documentLabel: string;
+  /** Arabic labels of the fields the supplier must fill. */
+  requiredFields: string[];
+  /** Human-readable expiry, e.g. "2026-11-01". */
+  expiresAt: string;
+}
+
+/**
+ * Sends the supplier his one-time self-registration link via the approved
+ * `supplier_registration_ar` template. Throws on failure — no direct-send
+ * fallback, because the API accepts a direct message it never delivers outside
+ * the 24-hour window (the false "✓ أُرسل" this repo has already been bitten by).
+ */
+export async function sendSupplierRegistrationWhatsApp(
+  opts: SendSupplierRegistrationOpts,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(opts.phone);
+  const documentLabel = sanitizeWaParam(opts.documentLabel?.trim() || "طلب استكمال بيانات موردكم");
+  const toName = sanitizeWaParam(opts.contactPerson?.trim() || opts.supplierName);
+  const fields = sanitizeWaParam(opts.requiredFields.join("، ") || "البيانات البنكية");
+  const template = new Template(
+    TEMPLATE_SUPPLIER_REGISTRATION,
+    new Language(TEMPLATE_LANG),
+    new BodyComponent(
+      new BodyParameter(documentLabel), // {{1}} document clause
+      new BodyParameter(toName), // {{2}} supplier / contact name
+      new BodyParameter(fields), // {{3}} required fields
+      new BodyParameter(opts.expiresAt), // {{4}} expiry
+    ),
+    new URLComponent(opts.token),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, waId }, "Supplier registration link sent via supplier_registration_ar");
+  return waId || null;
+}
+
+export interface SendSupplierRegistrationMismatchOpts {
+  phone: string;
+  supplierName: string;
+  contactPerson?: string | null;
+  /** Arabic labels of the fields whose two entries disagreed. */
+  mismatchedFields: string[];
+}
+
+/**
+ * Tells the supplier his confirmation entry did not match the first, so nothing
+ * was recorded. The point of the notice is that the refusal is not silent — he
+ * must know the data was NOT saved before he leaves the page.
+ */
+export async function sendSupplierRegistrationMismatchWhatsApp(
+  opts: SendSupplierRegistrationMismatchOpts,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(opts.phone);
+  const toName = sanitizeWaParam(opts.contactPerson?.trim() || opts.supplierName);
+  const fields = sanitizeWaParam(opts.mismatchedFields.join("، ") || "البيانات المدخلة");
+  const template = new Template(
+    TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH,
+    new Language(TEMPLATE_LANG),
+    new BodyComponent(
+      new BodyParameter(toName), // {{1}} supplier / contact name
+      new BodyParameter(fields), // {{2}} mismatched fields
+    ),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, waId }, "Supplier registration mismatch notice sent");
   return waId || null;
 }
 

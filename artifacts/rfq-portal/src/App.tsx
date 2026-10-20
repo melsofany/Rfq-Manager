@@ -30,6 +30,7 @@ import PricingPage from "@/modules/users/pages/pricing";
 import SuppliersPage from "@/modules/users/pages/suppliers/index";
 import NewSupplierPage from "@/modules/users/pages/suppliers/new";
 import SupplierDetailPage from "@/modules/users/pages/suppliers/detail";
+import SupplierRegistrationPage from "@/modules/users/pages/supplier-registration";
 
 // ── Module: Reports — التقارير والتحليلات ─────────────────────────────────
 import AnalyticsPage from "@/modules/reports/pages/analytics";
@@ -111,6 +112,9 @@ function Router() {
 
       {/* Supplier token-based pricing page — no auth required */}
       <Route path="/q/:token" component={PricingPage} />
+
+      {/* Supplier self-registration link — no auth required, single-use */}
+      <Route path="/s/:token" component={SupplierRegistrationPage} />
 
       <Route path="/">
         {!isLoading && employee ? (

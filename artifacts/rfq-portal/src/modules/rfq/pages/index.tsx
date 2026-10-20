@@ -374,7 +374,7 @@ export default function RfqListPage() {
   const params = {
     status: status !== "all" ? status : undefined,
     search: search || undefined,
-    view: isArchive ? "archive" : undefined,
+    view: isArchive ? ("archive" as const) : undefined,
     employeeName: pick("employee")?.text.trim() || undefined,
     createdFrom: pick("created")?.from || undefined,
     createdTo: pick("created")?.to || undefined,

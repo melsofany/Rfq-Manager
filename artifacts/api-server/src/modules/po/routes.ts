@@ -32,6 +32,11 @@ import {
 } from "../communications/service";
 import { sendPoEmail } from "../../shared/email";
 import { normalizeSinglePhone, pickSendablePhone, splitPhoneCandidates } from "../../shared/phone";
+import {
+  missingRegistrationFields,
+  REGISTRATION_FIELD_LABELS,
+} from "../../shared/supplier-registration";
+import { createRegistrationRequest } from "../users/supplier-registration";
 
 const router = Router();
 
@@ -520,6 +525,10 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
     emailError: string | null;
     whatsappSent: boolean;
     whatsappError: string | null;
+    /** True when the PO was WITHHELD because the supplier's data is incomplete. */
+    registrationRequired: boolean;
+    /** Arabic labels of the fields the supplier must supply himself. */
+    missingFields: string[];
   }> = [];
 
   const poNo = poRow.po.internalPoNo;
@@ -531,6 +540,52 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
   const notes = poRow.po.notes ?? null;
 
   for (const [supplierId, { supplier, items }] of bySupplier) {
+    // ── The registration gate ────────────────────────────────────────────
+    // A purchase order we cannot pay for is not a purchase order. When the
+    // supplier has no bank data the PO is NOT sent; he receives a one-time link
+    // instead, and the PO goes out once he confirms his data. Sending it anyway
+    // (the previous behaviour) produced an order he could not invoice against
+    // and nobody noticed until the invoice arrived.
+    const missing = missingRegistrationFields(supplier);
+    if (missing.length > 0) {
+      const labels = missing.map((f) => REGISTRATION_FIELD_LABELS[f]);
+      let regWhatsappSent = false;
+      let regWhatsappError: string | null = null;
+      let regEmailSent = false;
+      let regEmailError: string | null = null;
+      try {
+        const reg = await createRegistrationRequest({
+          supplierId,
+          poId: id,
+          employeeId: req.session.employeeId ?? null,
+          // The supplier is told a purchase order was issued FOR HIM and is held
+          // pending his data. The clause is passed in full so the manual-request
+          // path (no PO) can say something else truthfully.
+          documentLabel: `أمر شراء رقم ${poNo}`,
+          req,
+        });
+        regWhatsappSent = reg.whatsappSent;
+        regWhatsappError = reg.whatsappError;
+        regEmailSent = reg.emailSent;
+        regEmailError = reg.emailError;
+      } catch (err) {
+        regWhatsappError = err instanceof Error ? err.message : String(err);
+        req.log.error({ err, supplierId }, "PO dispatch: registration link failed");
+      }
+
+      results.push({
+        supplierId,
+        supplierName: supplier.name,
+        emailSent: regEmailSent,
+        emailError: regEmailError,
+        whatsappSent: regWhatsappSent,
+        whatsappError: regWhatsappError,
+        registrationRequired: true,
+        missingFields: labels,
+      });
+      continue;
+    }
+
     const pdfItems = items.map((r) => ({
       lineItem: r.item.lineItem,
       partNo: r.item.partNo,
@@ -565,6 +620,8 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
         emailError: `PDF error: ${msg}`,
         whatsappSent: false,
         whatsappError: `PDF error: ${msg}`,
+        registrationRequired: false,
+        missingFields: [],
       });
       continue;
     }
@@ -651,6 +708,8 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
       emailError,
       whatsappSent,
       whatsappError,
+      registrationRequired: false,
+      missingFields: [],
     });
   }
 
@@ -675,6 +734,12 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
 
       // Group pending items by supplier (reuse the bySupplier map).
       for (const [supplierId, { supplier, items }] of bySupplier) {
+        // A supplier whose PO was withheld (registration incomplete) must NOT
+        // be queued for receipt: the rep would be sent to collect goods from an
+        // order that was never issued. The rep notification follows the PO, not
+        // the item list.
+        if (missingRegistrationFields(supplier).length > 0) continue;
+
         const pending = items.filter(
           (r) => r.item.lineStatus !== "fulfilled" && r.item.lineStatus !== "rejected",
         );
@@ -743,8 +808,12 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
     }
   }
 
-  // Update PO status to "sent" if at least one message went through
-  const anySent = results.some((r) => r.emailSent || r.whatsappSent);
+  // Update PO status to "sent" only when an actual PURCHASE ORDER went out. A
+  // registration link is not a PO — marking the PO "sent" because we emailed a
+  // form would tell the operator the supplier has the order when he does not.
+  const poDelivered = results.filter((r) => !r.registrationRequired);
+  const anySent = poDelivered.some((r) => r.emailSent || r.whatsappSent);
+  const withheld = results.filter((r) => r.registrationRequired);
   if (anySent) {
     await db
       .update(purchaseOrdersTable)
@@ -756,13 +825,26 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
       entityType: "po",
       entityId: id,
       employeeId: req.session.employeeId,
-      description: `Dispatched PO ${poNo} to ${results.filter((r) => r.emailSent || r.whatsappSent).length} supplier(s)`,
+      description:
+        `Dispatched PO ${poNo} to ${poDelivered.filter((r) => r.emailSent || r.whatsappSent).length} supplier(s)` +
+        (withheld.length > 0
+          ? ` — withheld from ${withheld.length} supplier(s) pending registration data: ${withheld.map((r) => r.supplierName).join("، ")}`
+          : ""),
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
   }
 
-  res.json({ poNo, results, workOrderSent, workOrderError });
+  res.json({
+    poNo,
+    results,
+    workOrderSent,
+    workOrderError,
+    // Explicit so the UI can say «لم يُرسل أمر الشراء» without re-deriving it
+    // from per-supplier flags.
+    registrationWithheld: withheld.length,
+    poDelivered: anySent,
+  });
 });
 
 // POST /api/po/:id/cancel — cancel a single supplier's lines within a

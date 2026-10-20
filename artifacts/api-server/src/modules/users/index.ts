@@ -17,6 +17,7 @@ import suppliersRouter from "./suppliers";
 import customersRouter from "./customers";
 import categoriesRouter from "./categories";
 import representativesRouter from "./representatives";
+import supplierRegistrationRouter from "./supplier-registration";
 
 const router: IRouter = Router();
 
@@ -25,5 +26,7 @@ router.use(suppliersRouter);
 router.use(customersRouter);
 router.use(categoriesRouter);
 router.use(representativesRouter);
+// Public supplier self-registration link + its operator-side routes.
+router.use(supplierRegistrationRouter);
 
 export default router;

@@ -32,6 +32,7 @@ import {
   ChevronRight,
   Landmark,
   Copy,
+  ShieldCheck,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -148,6 +149,169 @@ interface SupplierPo {
   itemCount: number;
   receipt: { total: number; received: number; rejected: number } | null;
   createdAt: string;
+}
+
+// ── Registration card ────────────────────────────────────────────────────────
+// The operator side of the self-registration flow: shows whether the supplier
+// can be paid, and (re)sends the one-time link. The link is what unblocks a PO
+// that the dispatch gate withheld.
+
+interface RegistrationRequestRow {
+  id: number;
+  status: string;
+  createdAt: string;
+  expiresAt: string;
+  completedAt: string | null;
+  attempts: number;
+}
+
+const REG_STATUS_STYLES: Record<string, string> = {
+  pending: "bg-amber-50 text-amber-700",
+  completed: "bg-green-50 text-green-700",
+  expired: "bg-muted text-muted-foreground",
+  cancelled: "bg-red-50 text-red-600",
+};
+
+const REG_STATUS_LABELS: Record<string, string> = {
+  pending: "بانتظار المورد",
+  completed: "مكتمل",
+  expired: "منتهي",
+  cancelled: "ملغي",
+};
+
+function RegistrationCard({
+  supplier,
+  supplierId,
+}: {
+  supplier: {
+    registrationComplete?: boolean;
+    registrationVerifiedAt?: string | null;
+    registrationMissingFields?: string[];
+  };
+  supplierId: number;
+}) {
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const { data: history } = useQuery<RegistrationRequestRow[]>({
+    queryKey: ["registration-requests", supplierId],
+    queryFn: async () => {
+      const res = await fetch(`/api/suppliers/${supplierId}/registration-requests`, {
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const send = async () => {
+    setSending(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch(`/api/suppliers/${supplierId}/registration-request`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body?.error ?? "تعذّر إرسال الرابط");
+        return;
+      }
+      const channels: string[] = [];
+      if (body.whatsappSent) channels.push("واتساب");
+      if (body.emailSent) channels.push("البريد الإلكتروني");
+      setResult(
+        channels.length > 0
+          ? `تم إرسال رابط استكمال البيانات عبر ${channels.join(" و ")}`
+          : `لم يتم الإرسال — ${body.whatsappError ?? body.emailError ?? "لا توجد وسيلة تواصل مسجَّلة"}`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["registration-requests", supplierId] });
+    } catch {
+      setError("تعذّر الاتصال بالخادم");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const complete = supplier.registrationComplete ?? false;
+  const missing = supplier.registrationMissingFields ?? [];
+
+  return (
+    <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold text-sm text-foreground flex items-center gap-2">
+          <ShieldCheck size={15} className="text-muted-foreground" />
+          استكمال بيانات المورد
+        </h2>
+        <span
+          className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+            complete ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+          }`}
+        >
+          {complete
+            ? "البيانات مكتملة — يمكن إرسال أوامر الشراء"
+            : "البيانات ناقصة — لن يُرسل أمر شراء"}
+        </span>
+      </div>
+
+      {!complete && (
+        <>
+          <p className="text-xs text-muted-foreground">
+            الحقول الناقصة: <span className="text-red-600">{missing.join("، ") || "—"}</span>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            لن يتم إرسال أمر الشراء لهذا المورد حتى يستكمل بياناته بنفسه. عند الضغط على الإرسال يصل
+            للمورد رابط يفتحه مرة واحدة فقط، يُدخل البيانات مرتين للتأكيد، وفي حال عدم التطابق تُرفض
+            البيانات ويُبلَّغ المورد فورًا.
+          </p>
+          <Button size="sm" onClick={() => void send()} disabled={sending}>
+            {sending ? "جارٍ الإرسال..." : "إرسال رابط استكمال البيانات"}
+          </Button>
+        </>
+      )}
+
+      {supplier.registrationVerifiedAt && (
+        <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
+          أكّد المورد بياناته بنفسه بتاريخ {fmtDate(supplier.registrationVerifiedAt)}
+        </p>
+      )}
+
+      {result && (
+        <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded p-2">
+          {result}
+        </p>
+      )}
+      {error && (
+        <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded p-2">{error}</p>
+      )}
+
+      {history && history.length > 0 && (
+        <div className="pt-3 border-t border-border space-y-2">
+          <p className="text-xs text-muted-foreground font-semibold">سجل الروابط</p>
+          {history.slice(0, 5).map((r) => (
+            <div key={r.id} className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">{fmtDate(r.createdAt)}</span>
+              <span className="flex items-center gap-2">
+                {r.attempts > 0 && (
+                  <span className="text-red-600">{r.attempts} محاولة غير مطابقة</span>
+                )}
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded font-medium ${
+                    REG_STATUS_STYLES[r.status] ?? "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {REG_STATUS_LABELS[r.status] ?? r.status}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -712,6 +876,9 @@ export default function SupplierDetailPage() {
               </p>
             )}
           </div>
+
+          {/* استكمال بيانات المورد — the self-registration link */}
+          <RegistrationCard supplier={supplier} supplierId={supplierId} />
 
           {/* Scorecard */}
           <div className="bg-card border border-border rounded-lg p-5 space-y-4">

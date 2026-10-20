@@ -28,6 +28,7 @@ import {
   Save,
   Trash2,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import {
   SupplierCombobox,
@@ -90,11 +91,17 @@ interface DispatchResult {
   emailError: string | null;
   whatsappSent: boolean;
   whatsappError: string | null;
+  /** True when the PO was withheld pending the supplier's own registration data. */
+  registrationRequired?: boolean;
+  /** Arabic labels of the fields the supplier must fill himself. */
+  missingFields?: string[];
 }
 
 interface DispatchResponse {
   poNo: string;
   results: DispatchResult[];
+  registrationWithheld?: number;
+  poDelivered?: boolean;
 }
 
 function usePoDetail(id: number) {
@@ -822,32 +829,71 @@ export default function PurchaseOrderDetailPage() {
             <div className="px-4 py-2.5 border-b border-border bg-muted/20 text-xs font-medium text-muted-foreground">
               نتيجة الإرسال — {po.internalPoNo}
             </div>
+
+            {/* The gate: some suppliers received a registration link instead of
+                the PO. Say so plainly — otherwise the operator reads a green
+                «تم واتساب» and believes the order reached the supplier. */}
+            {(dispatchResult.registrationWithheld ?? 0) > 0 && (
+              <div className="px-4 py-3 bg-red-50 border-b border-red-200 flex items-start gap-2">
+                <AlertTriangle size={16} className="text-red-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-red-700 space-y-1">
+                  <p className="font-semibold">
+                    لم يُرسل أمر الشراء إلى {dispatchResult.registrationWithheld} مورد — البيانات
+                    البنكية ناقصة.
+                  </p>
+                  <p>
+                    تم إرسال رابط استكمال البيانات لهم بدلًا من أمر الشراء. سيتم إرسال الأمر بعد أن
+                    يؤكد المورد بياناته بنفسه.
+                  </p>
+                  {dispatchResult.poDelivered === false && (
+                    <p className="font-semibold">
+                      أمر الشراء لم يُرسل لأي مورد — حالته لم تتغير إلى «مُرسل».
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="divide-y divide-border">
               {dispatchResult.results.map((r) => (
-                <div key={r.supplierId} className="px-4 py-3 flex items-center gap-4 text-sm">
+                <div
+                  key={r.supplierId}
+                  className={`px-4 py-3 flex items-center gap-4 text-sm ${
+                    r.registrationRequired ? "bg-red-50/60" : ""
+                  }`}
+                >
                   <span className="font-medium flex-1">{r.supplierName}</span>
-                  <span className="flex items-center gap-1 text-xs">
-                    <Mail size={12} />
-                    {r.emailSent ? (
-                      <CheckCircle2 size={14} className="text-green-600" />
-                    ) : (
-                      <XCircle size={14} className="text-red-500" />
-                    )}
-                    <span className={r.emailSent ? "text-green-700" : "text-red-600"}>
-                      {r.emailSent ? "تم الإيميل" : (r.emailError ?? "لا يوجد إيميل")}
+                  {r.registrationRequired ? (
+                    <span className="flex items-center gap-1 text-xs text-red-700">
+                      <AlertTriangle size={14} />
+                      <span className="font-semibold">لم يُرسل الأمر — طُلب استكمال البيانات</span>
                     </span>
-                  </span>
-                  <span className="flex items-center gap-1 text-xs">
-                    <MessageCircle size={12} />
-                    {r.whatsappSent ? (
-                      <CheckCircle2 size={14} className="text-green-600" />
-                    ) : (
-                      <XCircle size={14} className="text-red-500" />
-                    )}
-                    <span className={r.whatsappSent ? "text-green-700" : "text-red-600"}>
-                      {r.whatsappSent ? "تم واتساب" : (r.whatsappError ?? "لا يوجد هاتف")}
-                    </span>
-                  </span>
+                  ) : (
+                    <>
+                      <span className="flex items-center gap-1 text-xs">
+                        <Mail size={12} />
+                        {r.emailSent ? (
+                          <CheckCircle2 size={14} className="text-green-600" />
+                        ) : (
+                          <XCircle size={14} className="text-red-500" />
+                        )}
+                        <span className={r.emailSent ? "text-green-700" : "text-red-600"}>
+                          {r.emailSent ? "تم الإيميل" : (r.emailError ?? "لا يوجد إيميل")}
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-1 text-xs">
+                        <MessageCircle size={12} />
+                        {r.whatsappSent ? (
+                          <CheckCircle2 size={14} className="text-green-600" />
+                        ) : (
+                          <XCircle size={14} className="text-red-500" />
+                        )}
+                        <span className={r.whatsappSent ? "text-green-700" : "text-red-600"}>
+                          {r.whatsappSent ? "تم واتساب" : (r.whatsappError ?? "لا يوجد هاتف")}
+                        </span>
+                      </span>
+                    </>
+                  )}
                 </div>
               ))}
             </div>

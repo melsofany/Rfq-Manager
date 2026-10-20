@@ -49,6 +49,23 @@ vi.mock("../../modules/po/po-pdf", () => ({
   generatePoPdf: vi.fn().mockResolvedValue(Buffer.from("")),
 }));
 
+// The registration gate: dispatch must call into the registration module for a
+// supplier with incomplete data, and must NOT send the PO to that supplier.
+const createRegistrationMock = vi.fn().mockResolvedValue({
+  requestId: 1,
+  token: "tok",
+  url: "https://example.com/s/tok",
+  reused: false,
+  missingFields: ["bankName"],
+  whatsappSent: true,
+  whatsappError: null,
+  emailSent: true,
+  emailError: null,
+});
+vi.mock("../../modules/users/supplier-registration", () => ({
+  createRegistrationRequest: (...a: any[]) => createRegistrationMock(...a),
+}));
+
 // ── Configurable chainable DB mock ────────────────────────────────────────
 function thenable<T>(value: T, extra: Record<string, any> = {}): any {
   const obj: any = { then: (resolve: any) => Promise.resolve(value).then(resolve) };
@@ -164,6 +181,14 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
           email: "acme@example.com",
           contactPerson: "Hassan",
           address: "Cairo",
+          commercialRegister: "12345",
+          taxRegistration: "67890",
+          bankName: "NBE",
+          bankAccountHolder: "Acme Co",
+          bankAccountNumber: "1234567890",
+          iban: "EG380019000500000000263180002",
+          swiftCode: "NBEGEGCX",
+          bankBranch: "Cairo",
         },
       },
       {
@@ -183,6 +208,14 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
           email: "",
           contactPerson: null,
           address: null,
+          commercialRegister: "12345",
+          taxRegistration: "67890",
+          bankName: "NBE",
+          bankAccountHolder: "Acme Co",
+          bankAccountNumber: "1234567890",
+          iban: "EG380019000500000000263180002",
+          swiftCode: "NBEGEGCX",
+          bankBranch: "Cairo",
         },
       },
     ];
@@ -263,6 +296,14 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
             email: "",
             contactPerson: null,
             address: null,
+            commercialRegister: "12345",
+            taxRegistration: "67890",
+            bankName: "NBE",
+            bankAccountHolder: "Acme Co",
+            bankAccountNumber: "1234567890",
+            iban: "EG380019000500000000263180002",
+            swiftCode: "NBEGEGCX",
+            bankBranch: "Cairo",
           },
         },
       ],
@@ -311,6 +352,14 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
             email: "",
             contactPerson: null,
             address: null,
+            commercialRegister: "12345",
+            taxRegistration: "67890",
+            bankName: "NBE",
+            bankAccountHolder: "Acme Co",
+            bankAccountNumber: "1234567890",
+            iban: "EG380019000500000000263180002",
+            swiftCode: "NBEGEGCX",
+            bankBranch: "Cairo",
           },
         },
         {
@@ -329,6 +378,14 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
             email: "",
             contactPerson: null,
             address: null,
+            commercialRegister: "12345",
+            taxRegistration: "67890",
+            bankName: "NBE",
+            bankAccountHolder: "Acme Co",
+            bankAccountNumber: "1234567890",
+            iban: "EG380019000500000000263180002",
+            swiftCode: "NBEGEGCX",
+            bankBranch: "Cairo",
           },
         },
       ],
@@ -354,5 +411,121 @@ describe("POST /api/po/:id/dispatch — consolidated rep receipt notification", 
     const res = await request(testApp).post("/api/po/999/dispatch");
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/not found/i);
+  });
+});
+
+describe("POST /api/po/:id/dispatch — the supplier-registration gate", () => {
+  const basePoRow = {
+    po: {
+      id: 1,
+      internalPoNo: "CPO-2025-000009",
+      createdAt: new Date("2025-01-01"),
+      receiverName: null,
+      receiverPhone: null,
+      notes: null,
+      status: "draft",
+      employeeId: null,
+    },
+    employeeName: null,
+    employeePhone: null,
+  };
+
+  const unregisteredSupplier = {
+    id: 7,
+    name: "Acme",
+    phone: "201111111111",
+    email: "acme@example.com",
+    contactPerson: "Hassan",
+    address: "Cairo",
+    // No bank data at all — this is the supplier the PO must NOT reach.
+    commercialRegister: null,
+    taxRegistration: null,
+    bankName: null,
+    bankAccountHolder: null,
+    bankAccountNumber: null,
+    iban: null,
+    swiftCode: null,
+    bankBranch: null,
+  };
+
+  it("withholds the PO and sends a registration link instead when the supplier has no bank data", async () => {
+    selectQueue = [
+      [basePoRow],
+      [
+        {
+          item: {
+            id: 40,
+            lineItem: "1",
+            description: "Widget",
+            qty: "5",
+            lineStatus: "pending",
+            supplierId: 7,
+          },
+          supplier: unregisteredSupplier,
+        },
+      ],
+    ];
+
+    const res = await request(testApp).post("/api/po/1/dispatch");
+
+    expect(res.status).toBe(200);
+    // The PO was NOT sent...
+    expect(sendPoWhatsAppMock).not.toHaveBeenCalled();
+    // ...the registration link was.
+    expect(createRegistrationMock).toHaveBeenCalledTimes(1);
+    expect(createRegistrationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ supplierId: 7, poId: 1 }),
+    );
+    // The supplier is told a purchase order was issued for HIM — the clause
+    // carries the REAL PO number, not a generic phrase.
+    const regArg = createRegistrationMock.mock.calls[0][0];
+    expect(regArg.documentLabel).toBe("أمر شراء رقم CPO-2025-000009");
+    expect(res.body.results[0]).toMatchObject({
+      registrationRequired: true,
+      whatsappSent: true,
+      emailSent: true,
+    });
+    expect(res.body.registrationWithheld).toBe(1);
+    // A registration link is not a PO: the PO must NOT be marked "sent".
+    expect(res.body.poDelivered).toBe(false);
+    // The rep is not queued to collect an order that was never issued.
+    expect(sendRepDispatchMock).not.toHaveBeenCalled();
+  });
+
+  it("sends the PO normally once the supplier's data is complete", async () => {
+    selectQueue = [
+      [basePoRow],
+      [
+        {
+          item: {
+            id: 41,
+            lineItem: "1",
+            description: "Widget",
+            qty: "5",
+            lineStatus: "pending",
+            supplierId: 7,
+          },
+          supplier: {
+            ...unregisteredSupplier,
+            commercialRegister: "12345",
+            taxRegistration: "67890",
+            bankName: "NBE",
+            bankAccountHolder: "Acme Co",
+            bankAccountNumber: "1234567890",
+            iban: "EG380019000500000000263180002",
+            swiftCode: "NBEGEGCX",
+            bankBranch: "Cairo",
+          },
+        },
+      ],
+    ];
+
+    const res = await request(testApp).post("/api/po/1/dispatch");
+
+    expect(res.status).toBe(200);
+    expect(createRegistrationMock).not.toHaveBeenCalled();
+    expect(sendPoWhatsAppMock).toHaveBeenCalledTimes(1);
+    expect(res.body.results[0].registrationRequired).toBe(false);
+    expect(res.body.poDelivered).toBe(true);
   });
 });

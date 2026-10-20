@@ -17,6 +17,7 @@ import {
 import { eq, ilike, or, and, ne, count, sql, inArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { isForeignKeyViolation } from "../../shared/pg-errors";
+import { missingRegistrationFields } from "../../shared/supplier-registration";
 import {
   categoriesToStored,
   loadSupplierCategoryMap,
@@ -68,6 +69,12 @@ function serializeSupplier(s: typeof suppliersTable.$inferSelect) {
     isActive: s.isActive,
     invoiceHasVat: s.invoiceHasVat,
     ...Object.fromEntries(REGISTRATION_FIELDS.map((k) => [k, s[k]])),
+    // The supplier confirmed this data himself through the one-time link.
+    // `registrationComplete` is derived (never stored) so the page and the PO
+    // dispatch gate cannot disagree about whether he can be paid.
+    registrationVerifiedAt: s.registrationVerifiedAt?.toISOString() ?? null,
+    registrationComplete: missingRegistrationFields(s).length === 0,
+    registrationMissingFields: missingRegistrationFields(s),
     createdAt: s.createdAt.toISOString(),
   };
 }

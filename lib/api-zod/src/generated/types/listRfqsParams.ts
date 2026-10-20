@@ -5,15 +5,34 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
+import type { ListRfqsView } from './listRfqsView';
 
 export type ListRfqsParams = {
 status?: string;
 employeeId?: number;
 search?: string;
-view?: string;
+/**
+ * archive = closed RFQs only (status SUCCESS/FAILED or closing date passed); omitted = active RFQs only.
+ */
+view?: ListRfqsView;
+/**
+ * YYYY-MM-DD. Closing-date lower bound (inclusive).
+ */
 closedFrom?: string;
+/**
+ * YYYY-MM-DD. Closing-date upper bound (inclusive).
+ */
 closedTo?: string;
+/**
+ * Case-insensitive part of the responsible employee's name.
+ */
 employeeName?: string;
+/**
+ * YYYY-MM-DD. Request-date lower bound (inclusive).
+ */
 createdFrom?: string;
+/**
+ * YYYY-MM-DD. Request-date upper bound (inclusive).
+ */
 createdTo?: string;
 };

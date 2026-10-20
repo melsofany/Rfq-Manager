@@ -62,5 +62,14 @@ export interface Supplier {
   /** false when the supplier is not VAT-registered (غير مُسجَّل — كامل المبلغ مصروف بدون ض.ق.م. مدخلات) */
   invoiceHasVat?: boolean;
   isActive?: boolean;
+  /**
+     * تاريخ تأكيد المورد لبياناته بنفسه عبر رابط الاستكمال
+     * @nullable
+     */
+  registrationVerifiedAt?: string | null;
+  /** true عندما تكون كل البيانات المطلوبة (السجل التجاري/الضريبي + البنكية) مكتملة — بدونه لا يُرسل أمر الشراء */
+  registrationComplete?: boolean;
+  /** الحقول الناقصة المطلوب من المورد إدخالها */
+  registrationMissingFields?: string[];
   createdAt?: string;
 }
