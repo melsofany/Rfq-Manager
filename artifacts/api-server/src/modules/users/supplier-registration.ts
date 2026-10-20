@@ -47,12 +47,15 @@ import {
 } from "../communications/service";
 import { sendSupplierRegistrationEmail, sendRegistrationMismatchEmail } from "../../shared/email";
 import {
+  OPTIONAL_REGISTRATION_FIELDS,
   REGISTRATION_FIELD_LABELS,
   cleanValue,
   compareRegistrationEntries,
   describeFields,
   heldDataSnapshot,
+  isOptionalRegistrationField,
   missingRegistrationFields,
+  registrationFormFields,
   validateRegistrationSubmission,
   type RegistrationField,
   type RegistrationValues,
@@ -180,6 +183,9 @@ export async function createRegistrationRequest(opts: {
   if (!supplier) throw new Error("المورد غير موجود");
 
   const missing = missingRegistrationFields(supplier);
+  // The form asks for the missing fields PLUS the optional ones; the gate above
+  // still decides completeness from `missing` alone.
+  const formFields = registrationFormFields(missing);
 
   // Reuse a live link when there is one (re-dispatching a PO must not mint a
   // second token for the same supplier).
@@ -209,7 +215,7 @@ export async function createRegistrationRequest(opts: {
         token,
         status: SUPPLIER_REGISTRATION_STATUS.PENDING,
         heldData: heldDataSnapshot(supplier),
-        requestedFields: missing,
+        requestedFields: formFields,
         poId: opts.poId ?? null,
         createdByEmployeeId: opts.employeeId ?? null,
         expiresAt: expires,
@@ -220,6 +226,16 @@ export async function createRegistrationRequest(opts: {
 
   const url = registrationUrlFor(row.token, opts.req);
   const expiresLabel = formatDate(new Date(row.expiresAt));
+  // The message lists every field the FORM asks for, but marks the optional one
+  // as optional — sending «البيانات المطلوبة: رقم IBAN» when he may legitimately
+  // leave it blank is a false requirement.
+  const messageFields = formFields.map((f) =>
+    isOptionalRegistrationField(f)
+      ? `${REGISTRATION_FIELD_LABELS[f]} (اختياري)`
+      : REGISTRATION_FIELD_LABELS[f],
+  );
+  // The audit trail records only what was actually MISSING — an optional field is
+  // not a gap in the supplier's record.
   const fieldLabels = missing.map((f) => REGISTRATION_FIELD_LABELS[f]);
 
   let whatsappSent = false;
@@ -236,7 +252,7 @@ export async function createRegistrationRequest(opts: {
         contactPerson: supplier.contactPerson,
         token: row.token,
         documentLabel: opts.documentLabel?.trim() || "طلب استكمال بيانات موردكم",
-        requiredFields: fieldLabels,
+        requiredFields: messageFields,
         expiresAt: expiresLabel,
       });
       whatsappSent = Boolean(wamid);
@@ -268,7 +284,7 @@ export async function createRegistrationRequest(opts: {
         toName: supplier.contactPerson ?? supplier.name,
         supplierName: supplier.name,
         registrationUrl: url,
-        missingFields: fieldLabels,
+        missingFields: messageFields,
         documentLabel: opts.documentLabel?.trim() || "طلب استكمال بيانات موردكم",
         expiresAt: expiresLabel,
         employeeName: "Cortoba Supplies",
@@ -341,6 +357,9 @@ router.get(
       status,
       supplierName: supplier?.name ?? "",
       requestedFields: loaded.row.requestedFields ?? [],
+      // Which of those are optional — the page marks them instead of demanding
+      // them. Derived from the shared rule, never duplicated in the client.
+      optionalFields: [...OPTIONAL_REGISTRATION_FIELDS],
       expiresAt: new Date(loaded.row.expiresAt).toISOString(),
       // A mismatch already happened: the page can say so before the supplier types.
       attempts: loaded.row.attempts,

@@ -3,6 +3,7 @@ import { useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { BankCombobox } from "@/components/BankCombobox";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -18,8 +19,9 @@ import {
  *
  * Three rules the operator fixed, and how the page enforces each:
  *
- *  1. The supplier sees what WE hold, read-only, and is asked only for what is
- *     missing. He confirms our record rather than guessing at it.
+ *  1. The supplier is shown ONLY the company name and the fields to fill. Our
+ *     stored record is never rendered — he supplies the values himself, and that
+ *     is precisely what the double entry validates.
  *  2. He enters the data TWICE. A mismatch is refused, nothing is saved, and he
  *     is told (the server also sends the notice by WhatsApp and email). The
  *     second step is deliberately a full re-entry, not a "yes, correct" checkbox
@@ -28,6 +30,10 @@ import {
  *     closed state and says any later change must go through the company. The
  *     token is dead server-side, so this is a fact, not a screen we chose to
  *     hide.
+ *
+ * The bank is picked from the SAME list (with logos) used when an employee edits
+ * a supplier, so the two screens can never disagree about what a bank is called.
+ * IBAN is optional — an account may not have one issued yet.
  *
  * A red notice states plainly that the accuracy of the data is the supplier's
  * own responsibility — he is the only one who can verify what his bank holds.
@@ -47,10 +53,10 @@ const FIELD_LABELS: Record<string, string> = {
 const FIELD_HINTS: Record<string, string> = {
   commercialRegister: "أرقام فقط",
   taxRegistration: "أرقام فقط",
-  bankName: "كما هو مكتوب على الحساب",
+  bankName: "اختر البنك من القائمة أو اكتب اسمه",
   bankAccountHolder: "يجب أن يطابق الاسم المسجَّل لدى البنك تمامًا",
   bankAccountNumber: "6 إلى 30 رقمًا، بدون مسافات",
-  iban: "يبدأ بـ EG ويتكون من 29 خانة",
+  iban: "اختياري — يبدأ بـ EG ويتكون من 29 خانة",
   swiftCode: "8 أو 11 خانة، حروف وأرقام لاتينية",
   bankBranch: "اسم الفرع",
 };
@@ -59,6 +65,8 @@ interface RegistrationInfo {
   status: "open" | "completed" | "expired" | "cancelled";
   supplierName: string;
   requestedFields: string[];
+  /** Fields the supplier MAY leave blank (IBAN) — marked, never demanded. */
+  optionalFields?: string[];
   expiresAt: string;
   attempts: number;
   canSubmit: boolean;
@@ -315,25 +323,44 @@ export default function SupplierRegistrationPage() {
         )}
 
         <div className="grid sm:grid-cols-2 gap-3">
-          {required.map((key) => (
-            <div key={key} className="space-y-1">
-              <Label className="text-sm">
-                {labelOf(key, info.labels)} <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                value={values[key] ?? ""}
-                onChange={(e) => setField(key, e.target.value)}
-                dir={["iban", "bankAccountNumber", "swiftCode"].includes(key) ? "ltr" : "rtl"}
-                placeholder={FIELD_HINTS[key] ?? ""}
-                autoComplete="off"
-              />
-              {fieldErrors[key] ? (
-                <p className="text-xs text-red-600">{fieldErrors[key]}</p>
-              ) : (
-                <p className="text-xs text-slate-400">{FIELD_HINTS[key] ?? ""}</p>
-              )}
-            </div>
-          ))}
+          {required.map((key) => {
+            const optional = (info.optionalFields ?? []).includes(key);
+            return (
+              <div key={key} className="space-y-1">
+                <Label className="text-sm">
+                  {labelOf(key, info.labels)}{" "}
+                  {optional ? (
+                    <span className="text-slate-400 font-normal">(اختياري)</span>
+                  ) : (
+                    <span className="text-red-500">*</span>
+                  )}
+                </Label>
+                {key === "bankName" ? (
+                  // نفس القائمة المنسدلة (بالشعارات) المستخدمة عند تعديل بيانات
+                  // المورد من صفحة الموردين — مصدر واحد للبنوك فلا تختلف القائمتان.
+                  // الكتابة الحرة تبقى مسموحة لبنك غير مُدرَج.
+                  <BankCombobox
+                    value={values[key] ?? ""}
+                    onChange={(v) => setField(key, v)}
+                    placeholder={FIELD_HINTS[key] ?? ""}
+                  />
+                ) : (
+                  <Input
+                    value={values[key] ?? ""}
+                    onChange={(e) => setField(key, e.target.value)}
+                    dir={["iban", "bankAccountNumber", "swiftCode"].includes(key) ? "ltr" : "rtl"}
+                    placeholder={FIELD_HINTS[key] ?? ""}
+                    autoComplete="off"
+                  />
+                )}
+                {fieldErrors[key] ? (
+                  <p className="text-xs text-red-600">{fieldErrors[key]}</p>
+                ) : (
+                  <p className="text-xs text-slate-400">{FIELD_HINTS[key] ?? ""}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <Button

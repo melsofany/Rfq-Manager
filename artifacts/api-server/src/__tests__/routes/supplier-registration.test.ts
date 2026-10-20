@@ -150,6 +150,9 @@ describe("GET /api/supplier-registration/:token", () => {
     expect(res.body.canSubmit).toBe(true);
     expect(res.body.supplierName).toBe("Acme");
     expect(res.body.requestedFields).toEqual(["bankName", "bankAccountHolder", "iban"]);
+    // The page needs to know WHICH fields may be left blank, or it would demand
+    // an IBAN the supplier may legitimately not have.
+    expect(res.body.optionalFields).toEqual(["iban"]);
     // The supplier must NOT see our stored record nor the contact person — he
     // supplies the values himself; the double entry is what validates them.
     expect(res.body.heldData).toBeUndefined();
@@ -310,6 +313,42 @@ describe("POST /api/suppliers/:id/registration-request", () => {
     expect(waArg.documentLabel).toBe("طلب استكمال بيانات موردكم");
     // And the chat record was saved so the operator sees it in the inbox.
     expect(insertCalls.some((c) => c.table === "wa")).toBe(true);
+  });
+
+  it("asks for IBAN on the form but marks it OPTIONAL in the message", async () => {
+    supplierRow = {
+      id: 7,
+      name: "Acme",
+      phone: "201111111111",
+      email: "a@b.com",
+      contactPerson: "Hassan",
+      // Every required field present except the account number, so the form asks
+      // for it — and IBAN must STILL appear, as an optional invitation.
+      commercialRegister: "12345",
+      taxRegistration: "67890",
+      bankName: "NBE",
+      bankAccountHolder: "Acme Co",
+      swiftCode: "NBEGEGCX",
+      bankBranch: "Cairo",
+    };
+    requestRow = null;
+    const res = await request(testApp).post("/api/suppliers/7/registration-request");
+    expect(res.status).toBe(200);
+
+    // The FORM asks for the missing field plus the optional one, or the supplier
+    // could never supply an IBAN he was never shown.
+    const regInsert = insertCalls.find((c) => c.table === "reg");
+    expect(regInsert.vals.requestedFields).toContain("bankAccountNumber");
+    expect(regInsert.vals.requestedFields).toContain("iban");
+
+    // The MESSAGE must not present it as required.
+    const waArg = sendRegistrationWhatsApp.mock.calls[0][0];
+    const joined = (waArg.requiredFields as string[]).join(" | ");
+    expect(joined).toContain("رقم IBAN (اختياري)");
+    expect(joined).toContain("رقم الحساب البنكي");
+    // …and the email says the same thing — one wording, two channels.
+    const emailArg = sendRegistrationEmail.mock.calls[0][0];
+    expect((emailArg.missingFields as string[]).join(" | ")).toContain("رقم IBAN (اختياري)");
   });
 
   it("404s for a missing supplier", async () => {
