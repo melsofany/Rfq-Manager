@@ -222,6 +222,7 @@ export default function PurchaseOrderDetailPage() {
         unitPrice: it.referencePrice != null ? String(it.referencePrice) : "",
         supplierId: it.supplierId != null ? String(it.supplierId) : "",
         taxIncluded: it.taxIncluded ?? false,
+        rfqNumber: "",
       })),
     );
     setSaveError(null);
@@ -250,6 +251,7 @@ export default function PurchaseOrderDetailPage() {
         unitPrice: "",
         supplierId: "",
         taxIncluded: false,
+        rfqNumber: "",
       },
     ]);
   };

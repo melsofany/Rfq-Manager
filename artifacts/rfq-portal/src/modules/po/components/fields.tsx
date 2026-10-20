@@ -22,6 +22,8 @@ export interface PoItemRow {
   unitPrice: string;
   supplierId: string;
   taxIncluded: boolean;
+  /** RFQ number typed for this line (internal or customer). Never sent to suppliers. */
+  rfqNumber: string;
 }
 
 export function useRepresentatives() {
