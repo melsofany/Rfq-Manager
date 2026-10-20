@@ -185,6 +185,11 @@ Cortoba Supplies — ش.الاسكندرية - برج نجمة مطروح الد
  * when the supplier has no bank data: the order cannot be paid, so sending it
  * would only produce an invoice we cannot settle. The mail names the fields we
  * are missing and carries the one-time link.
+ *
+ * The wording deliberately mirrors the WhatsApp template (`supplier_registration_ar`)
+ * — same «يسرنا بأن نبلغكم…» opening and same «حتى يتسنى لنا سداد مستحقاتكم
+ * المالية» closing — because the supplier may receive either channel first, and
+ * two different messages about the same order read as two different problems.
  */
 export async function sendSupplierRegistrationEmail(opts: {
   to: string;
@@ -192,6 +197,8 @@ export async function sendSupplierRegistrationEmail(opts: {
   supplierName: string;
   registrationUrl: string;
   missingFields: string[];
+  /** Clause the message opens with, e.g. «أمر شراء رقم PO-2026-000042». */
+  documentLabel?: string | null;
   poNo?: string | null;
   expiresAt: string;
   employeeName: string;
@@ -201,45 +208,50 @@ export async function sendSupplierRegistrationEmail(opts: {
   const transporter = await createTransporter();
   const senderEmail = senderIdentity().email.toLowerCase();
 
+  const documentLabel = opts.documentLabel?.trim() || "طلب استكمال بيانات موردكم";
   const fieldList = opts.missingFields.map((f) => `<li style="margin:4px 0">${f}</li>`).join("");
 
   const html = `
 <!DOCTYPE html>
-<html dir="ltr" lang="en">
+<html dir="rtl" lang="ar">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Supplier data confirmation</title></head>
-<body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f3f4f6">
+<title>استكمال بيانات المورد</title></head>
+<body style="margin:0;padding:0;font-family:Arial,Tahoma,sans-serif;background:#f3f4f6">
   <div style="max-width:700px;margin:32px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
     <div style="background:#1e3a5f;padding:20px 32px">
       <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700">Cortoba Supplies</h1>
       <p style="margin:4px 0 0;color:#93c5fd;font-size:13px">قرطبة للتوريدات — استكمال بيانات المورد</p>
     </div>
     <div style="padding:32px">
-      <p style="margin:0 0 8px;font-size:15px;color:#374151">Dear <strong>${opts.toName}</strong>,</p>
-      <p style="margin:0 0 16px;font-size:15px;color:#374151">
-        Before we can issue a purchase order to <strong>${opts.supplierName}</strong>, we need your
-        registration and bank details. The purchase order is on hold until they are confirmed.
+      <p style="margin:0 0 16px;font-size:16px;color:#111827;font-weight:600">
+        يسرنا بأن نبلغكم بأنه تم إصدار ${documentLabel} لصالحكم.
       </p>
-      <p style="margin:0 0 8px;font-size:14px;color:#374151"><strong>Required data:</strong></p>
+      <p style="margin:0 0 8px;font-size:15px;color:#374151">
+        المورد: <strong>${opts.supplierName}</strong>
+      </p>
+      <p style="margin:0 0 8px;font-size:14px;color:#374151"><strong>البيانات المطلوبة:</strong></p>
       <ul style="margin:0 0 24px 18px;padding:0;font-size:14px;color:#374151">${fieldList}</ul>
       <div style="text-align:center;margin:24px 0">
         <a href="${opts.registrationUrl}"
-           style="background:#1e3a5f;color:#ffffff;padding:14px 32px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600;display:inline-block">
-          Enter your data
+           style="background:#1e3a5f;color:#ffffff;padding:14px 32px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:600;display:inline-block">
+          إدخال البيانات
         </a>
       </div>
       <p style="font-size:13px;color:#374151;text-align:center">
-        Or copy this link into your browser:<br>
+        أو انسخ الرابط التالي في المتصفح:<br>
         <a href="${opts.registrationUrl}" style="color:#1e3a5f;word-break:break-all">${opts.registrationUrl}</a>
       </p>
-      <p style="font-size:12px;color:#b91c1c;text-align:center;margin-top:16px;font-weight:600">
-        This link is unique to your company and can be used once only.<br>
-        It expires on <strong>${opts.expiresAt}</strong>.
+      <p style="font-size:13px;color:#b91c1c;text-align:center;margin-top:16px;font-weight:600">
+        تنبيه: مسؤولية صحة البيانات المدخلة تقع على عاتق المورد.<br>
+        يرجى إدخال البيانات مرتين متطابقتين للتأكيد — الرابط صالح حتى <strong>${opts.expiresAt}</strong>.
+      </p>
+      <p style="font-size:14px;color:#111827;text-align:center;margin-top:20px">
+        نشكر لكم حسن تعاونكم، حتى يتسنى لنا سداد مستحقاتكم المالية في الموعد.
       </p>
     </div>
     <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px">
       <p style="margin:0 0 4px;font-size:13px;color:#6b7280">
-        Contact: <strong>${opts.employeeName}</strong>${opts.employeePhone ? " &nbsp;|&nbsp; " + opts.employeePhone : ""}
+        للتواصل: <strong>${opts.employeeName}</strong>${opts.employeePhone ? " &nbsp;|&nbsp; " + opts.employeePhone : ""}
         &nbsp;|&nbsp; <a href="mailto:${senderEmail}" style="color:#1e3a5f">${senderEmail}</a>
       </p>
     </div>
@@ -247,17 +259,19 @@ export async function sendSupplierRegistrationEmail(opts: {
 </body>
 </html>`;
 
-  const text = `Dear ${opts.toName},
+  const text = `يسرنا بأن نبلغكم بأنه تم إصدار ${documentLabel} لصالحكم.
 
-Before we can issue a purchase order to ${opts.supplierName}, we need your registration and bank details.
-
-Required data:
+المورد: ${opts.supplierName}
+البيانات المطلوبة:
 ${opts.missingFields.map((f) => `  - ${f}`).join("\n")}
 
-Enter your data here:
+يرجى إدخال بياناتكم مرتين متطابقتين عبر الرابط أدناه:
 ${opts.registrationUrl}
 
-This link is unique to your company and can be used once only. It expires on ${opts.expiresAt}.
+تنبيه: مسؤولية صحة البيانات المدخلة تقع على عاتق المورد.
+الرابط صالح حتى: ${opts.expiresAt}
+
+نشكر لكم حسن تعاونكم، حتى يتسنى لنا سداد مستحقاتكم المالية في الموعد.
 
 ---
 ${opts.employeeName}${opts.employeePhone ? " | " + opts.employeePhone : ""}
@@ -269,7 +283,7 @@ Cortoba Supplies — ش.الاسكندرية - برج نجمة مطروح الد
       from: fromHeader(),
       replyTo: replyToHeader(),
       to: `"${opts.toName}" <${opts.to}>`,
-      subject: `Supplier registration required${opts.poNo ? ` — ${opts.poNo}` : ""}`,
+      subject: `استكمال بيانات المورد${opts.poNo ? ` — ${opts.poNo}` : ""}`,
       text,
       html,
     });
@@ -289,21 +303,23 @@ export async function sendRegistrationMismatchEmail(opts: {
 }): Promise<void> {
   assertCanSend();
   const transporter = await createTransporter();
+  const fieldList = opts.mismatchedFields.map((f) => `  - ${f}`).join("\n");
   try {
     await transporter.sendMail({
       from: fromHeader(),
       replyTo: replyToHeader(),
       to: `"${opts.toName}" <${opts.to}>`,
-      subject: `Supplier registration — confirmation did not match`,
-      text: `Dear ${opts.toName},
+      subject: `استكمال بيانات المورد — عدم تطابق`,
+      text: `نأسف لإبلاغكم بأن البيانات التي أدخلتموها في المرة الثانية غير مطابقة لما أدخلتموه في المرة الأولى، ولذلك لم يتم تسجيلها.
 
-The data you entered the second time does NOT match what you entered the first time, so it was not saved.
+المورد: ${opts.supplierName}
+الحقول غير المطابقة:
+${fieldList}
 
-Fields that did not match:
-${opts.mismatchedFields.map((f) => `  - ${f}`).join("\n")}
-
-Nothing has been recorded. Please open the link again and re-enter your data carefully, making sure both entries are identical:
+يرجى إعادة الدخول على الرابط وإدخال البيانات بعناية مرتين متطابقتين:
 ${opts.registrationUrl}
+
+حتى يتسنى لنا سداد مستحقاتكم المالية.
 
 Cortoba Supplies — قرطبة للتوريدات`.trim(),
     });

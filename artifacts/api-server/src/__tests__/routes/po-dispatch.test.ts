@@ -476,6 +476,10 @@ describe("POST /api/po/:id/dispatch — the supplier-registration gate", () => {
     expect(createRegistrationMock).toHaveBeenCalledWith(
       expect.objectContaining({ supplierId: 7, poId: 1 }),
     );
+    // The supplier is told a purchase order was issued for HIM — the clause
+    // carries the REAL PO number, not a generic phrase.
+    const regArg = createRegistrationMock.mock.calls[0][0];
+    expect(regArg.documentLabel).toBe("أمر شراء رقم CPO-2025-000009");
     expect(res.body.results[0]).toMatchObject({
       registrationRequired: true,
       whatsappSent: true,

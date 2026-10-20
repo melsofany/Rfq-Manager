@@ -154,6 +154,13 @@ export async function createRegistrationRequest(opts: {
   supplierId: number;
   poId?: number | null;
   employeeId?: number | null;
+  /**
+   * What triggered the link, as a clause the template can open with, e.g.
+   * «أمر شراء رقم PO-2026-000042». When absent (a manual request from the
+   * supplier page) the message says «طلب استكمال بيانات موردكم» instead — the
+   * sentence must never claim a purchase order that does not exist.
+   */
+  documentLabel?: string | null;
   req?: Parameters<typeof resolvePublicBaseUrl>[0];
 }): Promise<{
   requestId: number;
@@ -228,6 +235,7 @@ export async function createRegistrationRequest(opts: {
         supplierName: supplier.name,
         contactPerson: supplier.contactPerson,
         token: row.token,
+        documentLabel: opts.documentLabel?.trim() || "طلب استكمال بيانات موردكم",
         requiredFields: fieldLabels,
         expiresAt: expiresLabel,
       });
@@ -261,6 +269,7 @@ export async function createRegistrationRequest(opts: {
         supplierName: supplier.name,
         registrationUrl: url,
         missingFields: fieldLabels,
+        documentLabel: opts.documentLabel?.trim() || "طلب استكمال بيانات موردكم",
         expiresAt: expiresLabel,
         employeeName: "Cortoba Supplies",
         employeePhone: null,

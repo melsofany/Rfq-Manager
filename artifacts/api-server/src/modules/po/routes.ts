@@ -558,6 +558,10 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
           supplierId,
           poId: id,
           employeeId: req.session.employeeId ?? null,
+          // The supplier is told a purchase order was issued FOR HIM and is held
+          // pending his data. The clause is passed in full so the manual-request
+          // path (no PO) can say something else truthfully.
+          documentLabel: `أمر شراء رقم ${poNo}`,
           req,
         });
         regWhatsappSent = reg.whatsappSent;

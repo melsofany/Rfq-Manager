@@ -305,6 +305,9 @@ describe("POST /api/suppliers/:id/registration-request", () => {
     // The link went out naming the missing fields.
     expect(sendRegistrationWhatsApp).toHaveBeenCalledTimes(1);
     expect(sendRegistrationEmail).toHaveBeenCalledTimes(1);
+    // A MANUAL request (no PO) must not claim a purchase order was issued.
+    const waArg = sendRegistrationWhatsApp.mock.calls[0][0];
+    expect(waArg.documentLabel).toBe("طلب استكمال بيانات موردكم");
     // And the chat record was saved so the operator sees it in the inbox.
     expect(insertCalls.some((c) => c.table === "wa")).toBe(true);
   });

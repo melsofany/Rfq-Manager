@@ -57,6 +57,25 @@ const TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH =
   "supplier_registration_mismatch_ar";
 const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
 
+/**
+ * Body of `supplier_registration_ar`. Exported so the operator's required
+ * wording is directly testable — it must open with «يسرنا بأن نبلغكم…» and close
+ * with «حتى يتسنى لنا سداد مستحقاتكم المالية», and it must carry the URL button
+ * that opens the one-time link.
+ *
+ * {{1}} document clause · {{2}} supplier name · {{3}} required fields · {{4}} expiry
+ */
+export const SUPPLIER_REGISTRATION_BODY =
+  "يسرنا بأن نبلغكم بأنه تم إصدار {{1}} لصالحكم.\n\nالمورد: {{2}}\nالبيانات المطلوبة:\n{{3}}\n\nيرجى إدخال بياناتكم مرتين متطابقتين عبر زر «إدخال البيانات» أدناه.\n\nتنبيه: مسؤولية صحة البيانات المدخلة تقع على عاتق المورد.\nالرابط صالح حتى: {{4}}\n\nنشكر لكم حسن تعاونكم، حتى يتسنى لنا سداد مستحقاتكم المالية في الموعد.";
+
+/**
+ * Body of `supplier_registration_mismatch_ar` — sent when the supplier's second
+ * entry did not match the first and NOTHING was recorded.
+ * {{1}} supplier name · {{2}} mismatched fields
+ */
+export const SUPPLIER_REGISTRATION_MISMATCH_BODY =
+  "نأسف لإبلاغكم بأن البيانات التي أدخلتموها في المرة الثانية غير مطابقة لما أدخلتموه في المرة الأولى، ولذلك لم يتم تسجيلها.\n\nالمورد: {{1}}\nالحقول غير المطابقة: {{2}}\n\nيرجى إعادة الدخول على الرابط وإدخال البيانات بعناية مرتين متطابقتين، حتى يتسنى لنا سداد مستحقاتكم المالية.";
+
 const BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
 /** Meta app id — required only to auto-create templates that carry a document header. */
 const APP_ID = process.env.WHATSAPP_APP_ID || "";
@@ -235,12 +254,19 @@ export async function ensurePoCancelItemTemplate(): Promise<void> {
 
 /**
  * Ensures the Meta template `supplier_registration_ar` exists — the message that
- * carries the one-time self-registration link. A UTILITY template with a URL
- * button whose single path segment is the token (same shape as the RFQ link
- * templates), so the supplier taps it directly from WhatsApp.
+ * tells a supplier a purchase order has been issued for him and carries the
+ * one-time self-registration link he must complete so we can pay him.
  *
- * Body parameters: {{1}} supplier/contact name, {{2}} the list of required
- * fields, {{3}} the expiry date. Idempotent.
+ * A UTILITY template with a URL button whose single path segment is the token
+ * (same shape as the RFQ link templates), so the supplier taps it directly.
+ *
+ * Body parameters: {{1}} the document clause («أمر شراء رقم P26E…» or, for a
+ * manual request, «طلب استكمال بيانات موردكم»), {{2}} supplier name,
+ * {{3}} the list of required fields, {{4}} the expiry date. Idempotent.
+ *
+ * NOTE: Meta does NOT allow an approved template's body to be edited, so a text
+ * change requires a NEW template name (plus an env override) — the lookup below
+ * would otherwise keep the old one forever.
  */
 export async function ensureSupplierRegistrationTemplate(): Promise<void> {
   if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
@@ -276,13 +302,14 @@ export async function ensureSupplierRegistrationTemplate(): Promise<void> {
       components: [
         {
           type: "BODY",
-          text: "قرطبة للتوريدات: لاستكمال إصدار أمر التوريد الخاص بكم، نحتاج البيانات التالية:\n{{2}}\n\nالمورد: {{1}}\nيرجى الدخول على الرابط وإدخال البيانات مرتين للتأكيد.\nتنبيه: مسؤولية صحة البيانات المدخلة تقع على عاتق المورد.\nالرابط صالح حتى: {{3}}",
+          text: SUPPLIER_REGISTRATION_BODY,
           example: {
             body_text: [
               [
+                "أمر شراء رقم PO-2026-000042",
                 "شركة النور للتوريدات",
                 "اسم البنك، رقم الحساب البنكي، رقم IBAN، السويف كود",
-                "2026-11-01",
+                "2026-11-03",
               ],
             ],
           },
@@ -347,7 +374,7 @@ export async function ensureSupplierRegistrationMismatchTemplate(): Promise<void
       components: [
         {
           type: "BODY",
-          text: "قرطبة للتوريدات: البيانات التي أدخلتها في المرة الثانية غير مطابقة لما أدخلته في المرة الأولى، لذلك لم يتم تسجيلها.\nالمورد: {{1}}\nالحقول غير المطابقة: {{2}}\nيرجى إعادة الدخول على الرابط وإدخال البيانات بعناية مرتين متطابقتين.",
+          text: SUPPLIER_REGISTRATION_MISMATCH_BODY,
           example: {
             body_text: [["شركة النور للتوريدات", "رقم الحساب البنكي، رقم IBAN"]],
           },
@@ -1008,6 +1035,12 @@ export interface SendSupplierRegistrationOpts {
   contactPerson?: string | null;
   /** The one-time token; it becomes the template's URL-button path segment. */
   token: string;
+  /**
+   * The document clause that opens the message, e.g. «أمر شراء رقم PO-2026-000042».
+   * Passed in full (not just the number) because a manually-requested link has no
+   * purchase order, and the sentence must stay true in both cases.
+   */
+  documentLabel: string;
   /** Arabic labels of the fields the supplier must fill. */
   requiredFields: string[];
   /** Human-readable expiry, e.g. "2026-11-01". */
@@ -1025,15 +1058,17 @@ export async function sendSupplierRegistrationWhatsApp(
 ): Promise<string | null> {
   requireConfigured();
   const to = normalizePhone(opts.phone);
+  const documentLabel = sanitizeWaParam(opts.documentLabel?.trim() || "طلب استكمال بيانات موردكم");
   const toName = sanitizeWaParam(opts.contactPerson?.trim() || opts.supplierName);
   const fields = sanitizeWaParam(opts.requiredFields.join("، ") || "البيانات البنكية");
   const template = new Template(
     TEMPLATE_SUPPLIER_REGISTRATION,
     new Language(TEMPLATE_LANG),
     new BodyComponent(
-      new BodyParameter(toName), // {{1}} supplier / contact name
-      new BodyParameter(fields), // {{2}} required fields
-      new BodyParameter(opts.expiresAt), // {{3}} expiry
+      new BodyParameter(documentLabel), // {{1}} document clause
+      new BodyParameter(toName), // {{2}} supplier / contact name
+      new BodyParameter(fields), // {{3}} required fields
+      new BodyParameter(opts.expiresAt), // {{4}} expiry
     ),
     new URLComponent(opts.token),
   );
