@@ -4194,6 +4194,19 @@ land in two categories.
   مختلفتان عن نفس الأمر تُقرأان كمشكلتين مختلفتين.
 - **قوالب واتساب لا تدعم الألوان** — «التنبيه الأحمر» نصّ فقط في الواتساب، واللون يظهر في
   صفحة الويب فقط.
+
+**نشر مُتحقَّق (PR #355، `8d29daa`)**: CI + Deploy-to-Render ناجحان؛ حيًّا `/api/healthz`
+= 200، و`POST /api/suppliers/:id/registration-request` = **401** (مركّب خلف requireAuth)،
+و`GET /api/supplier-registration/<توكن وهمي>` = **404 بجسم عربيّ من عندنا**
+(`{"error":"الرابط غير صحيح"}`). **هذا الجسم هو الإثبات** — الاستعلام
+`from(supplierRegistrationRequestsTable)` نُفِّذ فعلًا على الإنتاج: لو كان الجدول
+مفقودًا لصار الخطأ `42P01` ⇒ 500، لا 404. أي أن ترحيل `init-db.ts` طُبِّق.
+
+**القالب في ميتا**: `supplier_registration_ar` + `supplier_registration_mismatch_ar`
+يُنشآن تلقائيًا عند الإقلاع (index.ts). لكن حالة الاعتماد **لا يمكن التحقق منها من هذه
+البيئة** — `WHATSAPP_TOKEN`/`WHATSAPP_BUSINESS_ACCOUNT_ID` غير متاحين هنا. راجعها من
+لوحة ميتا (WhatsApp Manager → Message templates) أو من سجل Render: النجاح يُسجَّل
+`submitted to Meta for approval`، والفشل يُسجَّل داخل try/catch الإقلاع (non-fatal).
 - **مصدر حقيقة واحد للقاعدة**: `shared/supplier-registration.ts` وحدة **نقية** بلا قاعدة بيانات ولا نموذج — `missingRegistrationFields` / `isSupplierRegistrationComplete`. البوابة في `po/routes.ts`، وصفحة المورد، وصفحة الموردين تقرأ نفس الجواب. نسختان من القاعدة هما ما يجعل الصفحة تقول «مكتمل» والبوابة ترفض (صنف العيب المتكرر هنا).
 
 - **`iban` و`bankAccountNumber` بديلان**: أحدهما يكفي (حساب محلي قد لا يكون له IBAN)، وكل حقل آخر مطلوب. طلب الاثنين يرفض موردًا بنكُه أصدر واحدًا فقط — رفض كاذب.

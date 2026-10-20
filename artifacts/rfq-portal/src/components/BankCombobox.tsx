@@ -58,9 +58,13 @@ export function BankLogoByName({ name, size = 20 }: { name: string; size?: numbe
 export function BankCombobox({
   value,
   onChange,
+  placeholder = "ابحث عن البنك أو اكتب اسمه",
+  id,
 }: {
   value: string;
   onChange: (v: string) => void;
+  placeholder?: string;
+  id?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState(value);
@@ -99,6 +103,7 @@ export function BankCombobox({
           </span>
         )}
         <Input
+          id={id}
           value={filter}
           onChange={(e) => {
             setFilter(e.target.value);
@@ -106,7 +111,7 @@ export function BankCombobox({
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
-          placeholder="ابحث عن البنك أو اكتب اسمه"
+          placeholder={placeholder}
           className={selected ? "rounded-l-none" : ""}
           dir="rtl"
         />

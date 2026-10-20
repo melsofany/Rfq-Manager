@@ -3,8 +3,11 @@ import {
   compareRegistrationEntries,
   describeFields,
   heldDataSnapshot,
+  isOptionalRegistrationField,
   isSupplierRegistrationComplete,
   missingRegistrationFields,
+  OPTIONAL_REGISTRATION_FIELDS,
+  registrationFormFields,
   normalizeForCompare,
   validateRegistrationSubmission,
   validateRegistrationValue,
@@ -113,6 +116,57 @@ describe("supplier registration rules", () => {
 
   it("normalises an account number with dashes to the bare digits", () => {
     expect(normalizeForCompare("bankAccountNumber", "1234-5678-90")).toBe("1234567890");
+  });
+
+  it("accepts a blank IBAN — it is optional, not a gap", () => {
+    // The operator made IBAN optional: an Egyptian account may not have one
+    // issued yet, and refusing a payable supplier over it is a false refusal.
+    const { iban: _omit, ...noIban } = complete;
+    expect(validateRegistrationValue("iban", "")).toBeNull();
+    expect(validateRegistrationValue("iban", "   ")).toBeNull();
+    // …but a SUPPLIED IBAN is still format-checked. "Optional" means "may be
+    // blank", never "unvalidated" — an unvalidated value looks like a confirmed
+    // account.
+    expect(validateRegistrationValue("iban", "EG123")).not.toBeNull();
+    expect(noIban.bankAccountNumber).toBe("1234567890");
+  });
+
+  it("omits a blank optional field instead of storing an empty string", () => {
+    // Writing "" would WIPE an IBAN the supplier already had while only topping
+    // up an unrelated field — silent data loss on the confirm step.
+    const result = validateRegistrationSubmission(
+      { bankName: "NBE", bankAccountHolder: "Acme Co", bankAccountNumber: "1234567890" },
+      ["bankName", "bankAccountHolder", "bankAccountNumber", "iban"],
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect("iban" in result.data).toBe(false);
+    expect(result.data.bankName).toBe("NBE");
+  });
+
+  it("still stores a supplied optional value", () => {
+    const result = validateRegistrationSubmission({ iban: "EG380019000500000000263180002" }, [
+      "iban",
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.iban).toBe("EG380019000500000000263180002");
+  });
+
+  it("marks exactly IBAN as the optional field", () => {
+    expect([...OPTIONAL_REGISTRATION_FIELDS]).toEqual(["iban"]);
+    expect(isOptionalRegistrationField("iban")).toBe(true);
+    expect(isOptionalRegistrationField("bankName")).toBe(false);
+    expect(isOptionalRegistrationField("bankAccountNumber")).toBe(false);
+  });
+
+  it("adds the optional fields to the form even when nothing is missing", () => {
+    // An absent field is not "optional" — it is INVISIBLE, and the supplier could
+    // never supply an IBAN he was never asked for.
+    expect(registrationFormFields([])).toEqual(["iban"]);
+    expect(registrationFormFields(["bankName"])).toEqual(["bankName", "iban"]);
+    // Never duplicated when the field is also genuinely missing.
+    expect(registrationFormFields(["iban", "bankName"])).toEqual(["iban", "bankName"]);
   });
 
   it("names the fields in Arabic for the mismatch notice", () => {

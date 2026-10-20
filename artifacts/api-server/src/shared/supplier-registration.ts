@@ -27,6 +27,25 @@ export const REQUIRED_REGISTRATION_FIELDS = [
 
 export type RegistrationField = (typeof REQUIRED_REGISTRATION_FIELDS)[number];
 
+/**
+ * Fields the supplier is INVITED to supply but is not required to.
+ *
+ * IBAN is optional by operator decision: an Egyptian account may not have one
+ * issued yet, and refusing a payable supplier over a field his bank never gave
+ * him is a false refusal. When he DOES provide it the format is still checked
+ * and the value is still recorded — optional means "may be blank", not
+ * "unvalidated".
+ *
+ * The dispatch GATE still accepts an IBAN in place of an account number
+ * (`missingRegistrationFields`), so a supplier who supplies only an IBAN is
+ * complete. This list governs the FORM, not the gate.
+ */
+export const OPTIONAL_REGISTRATION_FIELDS = ["iban"] as const;
+
+export function isOptionalRegistrationField(field: RegistrationField): boolean {
+  return (OPTIONAL_REGISTRATION_FIELDS as readonly string[]).includes(field);
+}
+
 /** Arabic labels — used in messages, the link page and the audit trail. */
 export const REGISTRATION_FIELD_LABELS: Record<RegistrationField, string> = {
   commercialRegister: "رقم السجل التجاري",
@@ -114,13 +133,20 @@ export function heldDataSnapshot(supplier: RegistrationHolder): RegistrationValu
   };
 }
 
-/** Validate one field's format. Returns an Arabic error, or null when fine. */
+/**
+ * Validate one field's format. Returns an Arabic error, or null when fine.
+ *
+ * An OPTIONAL field that is blank passes: "may be left empty" is the whole point
+ * of the list. A blank REQUIRED field fails, and a supplied optional value is
+ * format-checked exactly like a required one — an unvalidated value would be
+ * worse than no value, since it looks like a confirmed account.
+ */
 export function validateRegistrationValue(
   field: RegistrationField,
   raw: string | null | undefined,
 ): string | null {
   const value = cleanValue(raw);
-  if (!value) return "هذا الحقل مطلوب";
+  if (!value) return isOptionalRegistrationField(field) ? null : "هذا الحقل مطلوب";
 
   switch (field) {
     case "iban": {
@@ -168,7 +194,13 @@ export function validateRegistrationSubmission(
   for (const field of required) {
     const err = validateRegistrationValue(field, values[field]);
     if (err) errors[field] = err;
-    else data[field] = cleanValue(values[field]);
+    else {
+      const cleaned = cleanValue(values[field]);
+      // A blank OPTIONAL value is omitted rather than stored as "". Writing ""
+      // would WIPE an IBAN the supplier already had on his record while only
+      // topping up an unrelated field — silent data loss on the confirm step.
+      if (cleaned || !isOptionalRegistrationField(field)) data[field] = cleaned;
+    }
   }
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
@@ -222,6 +254,22 @@ export function normalizeForCompare(
       // «شركة  النور » and «شركة النور» are the same company name.
       return value.replace(/\s+/g, " ").toLowerCase();
   }
+}
+
+/**
+ * The fields the FORM asks for: everything missing, plus the optional ones the
+ * supplier is invited to fill.
+ *
+ * The optional fields must be present in `requestedFields` or the page has no
+ * way to know about them — an absent field is not "optional", it is invisible,
+ * and the supplier could never supply an IBAN he was never asked for.
+ */
+export function registrationFormFields(missing: readonly RegistrationField[]): RegistrationField[] {
+  const out = [...missing];
+  for (const field of OPTIONAL_REGISTRATION_FIELDS) {
+    if (!out.includes(field)) out.push(field);
+  }
+  return out;
 }
 
 /** Arabic sentence naming the fields, for the mismatch notice. */
