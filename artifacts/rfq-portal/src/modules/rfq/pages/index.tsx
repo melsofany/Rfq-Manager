@@ -27,6 +27,30 @@ const ARCHIVE_STATUSES = ["all", "SUCCESS", "FAILED"];
 // Types
 // ---------------------------------------------------------------------------
 
+type FilterKey = "employee" | "created" | "closed";
+
+interface ActiveFilter {
+  key: FilterKey;
+  text: string;
+  from: string;
+  to: string;
+}
+
+const FILTER_OPTIONS: Array<{ key: FilterKey; label: string }> = [
+  { key: "employee", label: "اسم الموظف" },
+  { key: "created", label: "تاريخ الطلب" },
+  { key: "closed", label: "تاريخ الانتهاء" },
+];
+
+function filterLabel(key: FilterKey): string {
+  return FILTER_OPTIONS.find((o) => o.key === key)?.label ?? key;
+}
+
+function filterValue(f: ActiveFilter): string {
+  if (f.key === "employee") return f.text.trim();
+  return `من ${f.from || "…"} إلى ${f.to || "…"}`;
+}
+
 interface ClosingSoonRfq {
   id: number;
   internalRfqNo: string;
@@ -339,24 +363,23 @@ export default function RfqListPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [view, setView] = useState<"active" | "archive">("active");
-  const [createdFrom, setCreatedFrom] = useState("");
-  const [createdTo, setCreatedTo] = useState("");
-  const [closedFrom, setClosedFrom] = useState("");
-  const [closedTo, setClosedTo] = useState("");
-  const [employeeName, setEmployeeName] = useState("");
+  // Dynamic filters: pick a type from the list, enter its value, and it becomes a chip.
+  const [filters, setFilters] = useState<ActiveFilter[]>([]);
+  const [draftKey, setDraftKey] = useState<FilterKey>("employee");
+  const [draft, setDraft] = useState({ text: "", from: "", to: "" });
   const { t } = useLanguage();
 
   const isArchive = view === "archive";
-  const hasDateOrName = Boolean(createdFrom || createdTo || closedFrom || closedTo || employeeName);
+  const pick = (k: FilterKey) => filters.find((f) => f.key === k);
   const params = {
     status: status !== "all" ? status : undefined,
     search: search || undefined,
     view: isArchive ? "archive" : undefined,
-    createdFrom: createdFrom || undefined,
-    createdTo: createdTo || undefined,
-    closedFrom: closedFrom || undefined,
-    closedTo: closedTo || undefined,
-    employeeName: employeeName.trim() || undefined,
+    employeeName: pick("employee")?.text.trim() || undefined,
+    createdFrom: pick("created")?.from || undefined,
+    createdTo: pick("created")?.to || undefined,
+    closedFrom: pick("closed")?.from || undefined,
+    closedTo: pick("closed")?.to || undefined,
   };
   const { data: rfqs, isLoading } = useListRfqs(params, {
     query: { queryKey: getListRfqsQueryKey(params) },
@@ -416,70 +439,105 @@ export default function RfqListPage() {
           ))}
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search
-              size={15}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search RFQ number..."
-              className="pl-8 h-8 text-sm"
-            />
-          </div>
-          <Input
-            value={employeeName}
-            onChange={(e) => setEmployeeName(e.target.value)}
-            placeholder="اسم الموظف (مثال: Amr)"
-            className="h-8 text-sm max-w-[220px]"
-          />
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>تاريخ الطلب من</span>
-            <Input
-              type="date"
-              value={createdFrom}
-              onChange={(e) => setCreatedFrom(e.target.value)}
-              className="h-8 text-sm w-[150px]"
-            />
-            <span>إلى</span>
-            <Input
-              type="date"
-              value={createdTo}
-              onChange={(e) => setCreatedTo(e.target.value)}
-              className="h-8 text-sm w-[150px]"
-            />
-            <span>تاريخ الإغلاق من</span>
-            <Input
-              type="date"
-              value={closedFrom}
-              onChange={(e) => setClosedFrom(e.target.value)}
-              className="h-8 text-sm w-[150px]"
-            />
-            <span>إلى</span>
-            <Input
-              type="date"
-              value={closedTo}
-              onChange={(e) => setClosedTo(e.target.value)}
-              className="h-8 text-sm w-[150px]"
-            />
-            {hasDateOrName && (
-              <button
-                className="underline hover:text-foreground"
+        {/* Filters: search, then a builder (type → value → add) and the active chips */}
+        <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-start sm:items-center">
+            <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <Search
+                size={15}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search RFQ number..."
+                className="pl-8 h-8 text-sm"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={draftKey}
+                onChange={(e) => {
+                  setDraftKey(e.target.value as FilterKey);
+                  setDraft({ text: "", from: "", to: "" });
+                }}
+                className="h-8 rounded-md border border-border bg-background px-2 text-sm"
+              >
+                {FILTER_OPTIONS.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {draftKey === "employee" ? (
+                <Input
+                  value={draft.text}
+                  onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+                  placeholder="مثال: Amr أو Ahmed"
+                  className="h-8 text-sm w-[200px]"
+                />
+              ) : (
+                <>
+                  <span className="text-xs text-muted-foreground">من</span>
+                  <Input
+                    type="date"
+                    value={draft.from}
+                    onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+                    className="h-8 text-sm w-[150px]"
+                  />
+                  <span className="text-xs text-muted-foreground">إلى</span>
+                  <Input
+                    type="date"
+                    value={draft.to}
+                    onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+                    className="h-8 text-sm w-[150px]"
+                  />
+                </>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
                 onClick={() => {
-                  setCreatedFrom("");
-                  setCreatedTo("");
-                  setClosedFrom("");
-                  setClosedTo("");
-                  setEmployeeName("");
+                  const next: ActiveFilter = { key: draftKey, ...draft };
+                  const hasValue =
+                    draftKey === "employee" ? draft.text.trim() !== "" : draft.from || draft.to;
+                  if (!hasValue) return;
+                  // One chip per type: adding again replaces the previous value.
+                  setFilters((cur) => [...cur.filter((f) => f.key !== draftKey), next]);
+                  setDraft({ text: "", from: "", to: "" });
                 }}
               >
-                مسح الفلاتر
-              </button>
-            )}
+                إضافة الفلتر
+              </Button>
+            </div>
           </div>
+          {filters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {filters.map((f) => (
+                <span
+                  key={f.key}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs"
+                >
+                  <span className="text-muted-foreground">{filterLabel(f.key)}:</span>
+                  <span className="font-medium text-foreground">{filterValue(f)}</span>
+                  <button
+                    aria-label="إزالة الفلتر"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => setFilters((cur) => cur.filter((x) => x.key !== f.key))}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <button
+                className="text-xs underline text-muted-foreground hover:text-foreground"
+                onClick={() => setFilters([])}
+              >
+                مسح الكل
+              </button>
+            </div>
+          )}
           <div className="flex gap-1 overflow-x-auto pb-0.5 flex-nowrap">
             {(isArchive ? ARCHIVE_STATUSES : STATUSES).map((s) => (
               <button
@@ -515,12 +573,6 @@ export default function RfqListPage() {
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-left">
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
-                      تاريخ الطلب
-                    </th>
-                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
-                      تاريخ الإغلاق
-                    </th>
-                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
                       Internal No.
                     </th>
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
@@ -539,6 +591,10 @@ export default function RfqListPage() {
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
                       Offers
                     </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Created</th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      تاريخ الانتهاء
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -548,12 +604,6 @@ export default function RfqListPage() {
                       className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
                       onClick={() => navigate(`/rfq/${rfq.id}`)}
                     >
-                      <td className="px-4 py-3 text-xs text-foreground tabular-nums">
-                        {new Date(rfq.createdAt).toLocaleDateString("en-GB")}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-foreground tabular-nums">
-                        {rfq.expiresAt ? new Date(rfq.expiresAt).toLocaleDateString("en-GB") : "—"}
-                      </td>
                       <td className="px-4 py-3">
                         <span className="font-mono text-xs text-primary font-medium">
                           {rfq.internalRfqNo}
@@ -589,6 +639,12 @@ export default function RfqListPage() {
                         <span className="inline-flex items-center justify-center w-6 h-6 bg-green-50 text-green-700 rounded text-xs font-medium">
                           {rfq.offerCount}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {new Date(rfq.createdAt).toLocaleDateString()}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs">
+                        {rfq.expiresAt ? new Date(rfq.expiresAt).toLocaleDateString() : "—"}
                       </td>
                     </tr>
                   ))}
