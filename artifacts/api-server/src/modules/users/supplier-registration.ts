@@ -300,9 +300,12 @@ export async function createRegistrationRequest(opts: {
 /**
  * GET /api/supplier-registration/:token
  *
- * The only unauthenticated read of a supplier record. It deliberately returns
- * ONLY the fields this module already considers public to the supplier (his own
- * registration data) — never prices, orders, or another supplier's anything.
+ * The only unauthenticated read of a supplier record. It returns ONLY what the
+ * supplier needs to fill his own form: the company name and the list of fields
+ * he must supply. The data WE hold is deliberately NOT returned — the supplier
+ * must not see, nor confirm, our stored record; he supplies the values himself
+ * and the double entry is what validates them. (The snapshot stays on the
+ * request row for the operator's own audit trail.)
  */
 router.get(
   "/supplier-registration/:token",
@@ -320,7 +323,6 @@ router.get(
       .select({
         id: suppliersTable.id,
         name: suppliersTable.name,
-        contactPerson: suppliersTable.contactPerson,
       })
       .from(suppliersTable)
       .where(eq(suppliersTable.id, loaded.row.supplierId));
@@ -329,9 +331,6 @@ router.get(
     res.json({
       status,
       supplierName: supplier?.name ?? "",
-      contactPerson: supplier?.contactPerson ?? null,
-      // The data WE hold, shown read-only on the page.
-      heldData: loaded.row.heldData ?? {},
       requestedFields: loaded.row.requestedFields ?? [],
       expiresAt: new Date(loaded.row.expiresAt).toISOString(),
       // A mismatch already happened: the page can say so before the supplier types.

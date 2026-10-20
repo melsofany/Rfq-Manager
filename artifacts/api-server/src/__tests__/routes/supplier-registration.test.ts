@@ -141,7 +141,7 @@ const openRequest = (over: Record<string, any> = {}) => ({
 });
 
 describe("GET /api/supplier-registration/:token", () => {
-  it("returns the held data and the fields to fill for an open link", async () => {
+  it("returns only the company name and the fields to fill — never the data we hold", async () => {
     requestRow = openRequest();
     supplierRow = { id: 7, name: "Acme", contactPerson: "Hassan" };
     const res = await request(testApp).get("/api/supplier-registration/tok-abc");
@@ -150,6 +150,10 @@ describe("GET /api/supplier-registration/:token", () => {
     expect(res.body.canSubmit).toBe(true);
     expect(res.body.supplierName).toBe("Acme");
     expect(res.body.requestedFields).toEqual(["bankName", "bankAccountHolder", "iban"]);
+    // The supplier must NOT see our stored record nor the contact person — he
+    // supplies the values himself; the double entry is what validates them.
+    expect(res.body.heldData).toBeUndefined();
+    expect(res.body.contactPerson).toBeUndefined();
   });
 
   it("returns 404 for an unknown token", async () => {

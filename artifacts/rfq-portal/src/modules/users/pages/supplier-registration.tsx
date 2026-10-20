@@ -55,22 +55,9 @@ const FIELD_HINTS: Record<string, string> = {
   bankBranch: "اسم الفرع",
 };
 
-const FIELD_ORDER = [
-  "commercialRegister",
-  "taxRegistration",
-  "bankName",
-  "bankAccountHolder",
-  "bankAccountNumber",
-  "iban",
-  "swiftCode",
-  "bankBranch",
-];
-
 interface RegistrationInfo {
   status: "open" | "completed" | "expired" | "cancelled";
   supplierName: string;
-  contactPerson: string | null;
-  heldData: Record<string, string | null>;
   requestedFields: string[];
   expiresAt: string;
   attempts: number;
@@ -257,8 +244,6 @@ export default function SupplierRegistrationPage() {
     );
   }
 
-  const heldRows = FIELD_ORDER.filter((k) => k !== "iban" || info.heldData?.iban);
-
   return renderShell(
     <>
       {/* The red responsibility notice the operator asked for. */}
@@ -270,45 +255,14 @@ export default function SupplierRegistrationPage() {
         </p>
       </div>
 
+      {/* ONLY the company name is shown — never the data we already hold. The
+          supplier must not see (or confirm) our stored record; he supplies the
+          values himself, and that is the whole point of the double entry. */}
       <div>
         <p className="text-sm text-slate-600">
-          المورد: <strong className="text-slate-900">{info.supplierName}</strong>
-          {info.contactPerson ? ` — ${info.contactPerson}` : ""}
+          الشركة: <strong className="text-slate-900">{info.supplierName}</strong>
         </p>
         <p className="text-xs text-slate-500 mt-1">الرابط صالح حتى: {expiresLabel}</p>
-      </div>
-
-      {/* ── What we already hold, read-only ─────────────────────────────── */}
-      <div className="border rounded-lg overflow-hidden">
-        <div className="bg-slate-50 px-4 py-2 border-b">
-          <p className="text-sm font-semibold text-slate-700">
-            البيانات المسجَّلة لدينا (للاطلاع فقط — لا يمكن التعديل عليها)
-          </p>
-        </div>
-        <table className="w-full text-sm">
-          <tbody>
-            {heldRows.map((key) => {
-              const val = info.heldData?.[key];
-              const missing = required.includes(key);
-              return (
-                <tr key={key} className="border-b last:border-b-0">
-                  <td className="px-4 py-2 text-slate-500 w-1/2">{labelOf(key, info.labels)}</td>
-                  <td className="px-4 py-2">
-                    {val ? (
-                      <span className="text-slate-900" dir="auto">
-                        {val}
-                      </span>
-                    ) : (
-                      <span className={missing ? "text-red-600 font-semibold" : "text-slate-400"}>
-                        {missing ? "ناقص — مطلوب إدخاله" : "غير مسجَّل"}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
       </div>
 
       {/* ── The form ────────────────────────────────────────────────────── */}
