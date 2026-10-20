@@ -18,6 +18,7 @@ import {
   WORK_ORDER_KIND,
 } from "@workspace/db";
 import { eq, count, inArray, sql, and, ilike, ne, desc } from "drizzle-orm";
+import { linkNewPoItemsToRfq, createAllocation, getRfqItemQuantities } from "./rfq-allocations";
 import { requireAuth } from "../../middlewares/auth";
 import { lookupPoFromSheet, listSheetPoNumbers } from "../../shared/google-sheets";
 import { generatePoPdf } from "./po-pdf";
@@ -200,6 +201,10 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
       referencePrice?: string | number | null;
       supplierId?: number | null;
       taxIncluded?: boolean;
+      /** RFQ number typed for this line (internal or customer number). Internal only. */
+      rfqNumber?: string | null;
+      /** Explicit RFQ line id, when the PO is created from an RFQ screen. */
+      rfqItemId?: number | null;
     }>;
   };
 
@@ -234,24 +239,29 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
         })
         .returning();
 
-      await tx.insert(purchaseOrderItemsTable).values(
-        validItems.map((it) => ({
-          poId: po.id,
-          itemId: it.itemId || null,
-          customerPoItemId: it.customerPoItemId ?? null,
-          lineItem: it.lineItem || null,
-          partNo: it.partNo || null,
-          description: it.description.trim(),
-          uom: it.uom || null,
-          qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
-          referencePrice:
-            it.referencePrice != null && it.referencePrice !== ""
-              ? String(it.referencePrice)
-              : null,
-          supplierId: it.supplierId ?? null,
-          taxIncluded: it.taxIncluded ?? false,
-        })),
-      );
+      const insertedItems = await tx
+        .insert(purchaseOrderItemsTable)
+        .values(
+          validItems.map((it) => ({
+            poId: po.id,
+            itemId: it.itemId || null,
+            customerPoItemId: it.customerPoItemId ?? null,
+            lineItem: it.lineItem || null,
+            partNo: it.partNo || null,
+            description: it.description.trim(),
+            uom: it.uom || null,
+            qty: it.qty != null && it.qty !== "" ? String(it.qty) : null,
+            referencePrice:
+              it.referencePrice != null && it.referencePrice !== ""
+                ? String(it.referencePrice)
+                : null,
+            supplierId: it.supplierId ?? null,
+            taxIncluded: it.taxIncluded ?? false,
+          })),
+        )
+        .returning({ id: purchaseOrderItemsTable.id });
+
+      const rfqLinks = await linkNewPoItemsToRfq(tx, insertedItems, validItems);
 
       await tx.insert(auditLogTable).values({
         action: "po.created",
@@ -277,22 +287,23 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
         });
       }
 
-      return po;
+      return { po, rfqLinks };
     });
 
     res.status(201).json({
-      id: created.id,
-      internalPoNo: created.internalPoNo,
-      sheetPoNo: created.sheetPoNo,
-      receiverName: created.receiverName,
-      receiverPhone: created.receiverPhone,
-      status: created.status,
-      employeeId: created.employeeId,
+      rfqLinks: created.rfqLinks,
+      id: created.po.id,
+      internalPoNo: created.po.internalPoNo,
+      sheetPoNo: created.po.sheetPoNo,
+      receiverName: created.po.receiverName,
+      receiverPhone: created.po.receiverPhone,
+      status: created.po.status,
+      employeeId: created.po.employeeId,
       employeeName: null,
-      notes: created.notes,
+      notes: created.po.notes,
       itemCount: validItems.length,
-      createdAt: created.createdAt.toISOString(),
-      updatedAt: created.updatedAt.toISOString(),
+      createdAt: created.po.createdAt.toISOString(),
+      updatedAt: created.po.updatedAt.toISOString(),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to create purchase order");
@@ -1452,6 +1463,65 @@ router.get("/po/:id/items", requireAuth, async (req, res): Promise<void> => {
       };
     }),
   );
+});
+
+/**
+ * Quantities for one RFQ line: requested, purchased, remaining to purchase,
+ * received and delivered, plus warnings for over- or under-purchase.
+ */
+router.get("/po/rfq-items/:rfqItemId/quantities", requireAuth, async (req, res): Promise<void> => {
+  const rfqItemId = Number(req.params.rfqItemId);
+  if (!Number.isInteger(rfqItemId) || rfqItemId <= 0) {
+    res.status(400).json({ error: "invalid rfqItemId" });
+    return;
+  }
+  const out = await getRfqItemQuantities(db, rfqItemId);
+  if (!out.found) {
+    res.status(404).json({ error: "RFQ item not found" });
+    return;
+  }
+  res.json(out);
+});
+
+/**
+ * Creator confirms a suggested RFQ link for one PO line. Quantity is the line's
+ * quantity; any excess shows up as a warning in the quantities endpoint.
+ */
+router.post("/po/items/:poItemId/rfq-allocations", requireAuth, async (req, res): Promise<void> => {
+  const poItemId = Number(req.params.poItemId);
+  const rfqItemId = Number((req.body as { rfqItemId?: unknown })?.rfqItemId);
+  if (!Number.isInteger(poItemId) || !Number.isInteger(rfqItemId) || rfqItemId <= 0) {
+    res.status(400).json({ error: "poItemId and rfqItemId are required" });
+    return;
+  }
+  const [poItem] = await db
+    .select({
+      id: purchaseOrderItemsTable.id,
+      qty: purchaseOrderItemsTable.qty,
+      lineStatus: purchaseOrderItemsTable.lineStatus,
+    })
+    .from(purchaseOrderItemsTable)
+    .where(eq(purchaseOrderItemsTable.id, poItemId));
+  if (!poItem) {
+    res.status(404).json({ error: "PO item not found" });
+    return;
+  }
+  const [rfqItem] = await db
+    .select({ id: rfqItemsTable.id })
+    .from(rfqItemsTable)
+    .where(eq(rfqItemsTable.id, rfqItemId));
+  if (!rfqItem) {
+    res.status(404).json({ error: "RFQ item not found" });
+    return;
+  }
+  await createAllocation(db, {
+    rfqItemId,
+    poItemId,
+    qty: poItem.qty != null ? Number(poItem.qty) : 0,
+    matchBasis: "manual",
+    confidence: "confirmed",
+  });
+  res.status(201).json({ poItemId, rfqItemId, status: "linked" });
 });
 
 export default router;

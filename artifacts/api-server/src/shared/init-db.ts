@@ -599,6 +599,19 @@ export async function initDb(): Promise<void> {
       ALTER TABLE purchase_order_items
         ADD COLUMN IF NOT EXISTS line_status TEXT NOT NULL DEFAULT 'pending';
 
+      -- RFQ ↔ PO line allocations (internal only; never sent to suppliers).
+      CREATE TABLE IF NOT EXISTS rfq_po_allocations (
+        id SERIAL PRIMARY KEY,
+        rfq_item_id INTEGER NOT NULL REFERENCES rfq_items(id) ON DELETE CASCADE,
+        po_item_id INTEGER NOT NULL REFERENCES purchase_order_items(id) ON DELETE CASCADE,
+        allocated_qty NUMERIC(15,4) NOT NULL,
+        match_basis TEXT NOT NULL,
+        confidence TEXT NOT NULL DEFAULT 'auto',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS rfq_po_alloc_rfq_item_idx ON rfq_po_allocations(rfq_item_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS rfq_po_alloc_pair_uidx ON rfq_po_allocations(rfq_item_id, po_item_id);
+
       ALTER TABLE customer_po_items
         ADD COLUMN IF NOT EXISTS total_delivered_qty NUMERIC(15,4);
       ALTER TABLE customer_po_items
