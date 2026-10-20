@@ -42,7 +42,7 @@ const WARNING_TEXT: Record<string, string> = {
 const REASON_TEXT: Record<string, string> = {
   no_rfq_found: "رقم طلب التسعير غير موجود",
   rfq_has_no_items: "طلب التسعير ده مفيهوش بنود",
-  rfq_number_ambiguous: "رقم العميل ده موجود في أكتر من طلب، اختار الطلب الصحيح",
+  rfq_number_ambiguous: "رقم العميل ده موجود في أكتر من طلب، اكتب الرقم الداخلي بدله",
   no_matching_line: "مفيش بند مطابق في طلب التسعير",
   rfq_item_not_found: "البند المحدد غير موجود",
 };

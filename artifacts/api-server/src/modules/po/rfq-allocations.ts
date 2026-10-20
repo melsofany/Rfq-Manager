@@ -175,14 +175,19 @@ export async function getRfqItemQuantities(
   let customerPoItemId: number | null = null;
   let delivered: number | null = null;
 
-  const cust = await ex
-    .select({
-      id: customerPoItemsTable.id,
-      qty: customerPoItemsTable.qty,
-      totalDeliveredQty: customerPoItemsTable.totalDeliveredQty,
-    })
-    .from(customerPoItemsTable)
-    .where(eq(customerPoItemsTable.customerRfqItemId, rfqItem.id));
+  // customer_po_items point at customer_rfq_items, so the join key is the
+  // customer RFQ line this supplier RFQ line was created from.
+  const cust =
+    rfqItem.customerRfqItemId == null
+      ? []
+      : await ex
+          .select({
+            id: customerPoItemsTable.id,
+            qty: customerPoItemsTable.qty,
+            totalDeliveredQty: customerPoItemsTable.totalDeliveredQty,
+          })
+          .from(customerPoItemsTable)
+          .where(eq(customerPoItemsTable.customerRfqItemId, rfqItem.customerRfqItemId));
   if (cust.length > 0) {
     customerPoItemId = cust[0].id;
     requested = num(cust[0].qty) ?? requested;

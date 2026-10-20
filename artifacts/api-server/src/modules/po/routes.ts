@@ -1506,6 +1506,10 @@ router.post("/po/items/:poItemId/rfq-allocations", requireAuth, async (req, res)
     res.status(404).json({ error: "PO item not found" });
     return;
   }
+  if (poItem.lineStatus === "cancelled") {
+    res.status(409).json({ error: "PO line is cancelled" });
+    return;
+  }
   const [rfqItem] = await db
     .select({ id: rfqItemsTable.id })
     .from(rfqItemsTable)
