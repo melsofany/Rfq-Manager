@@ -10,4 +10,10 @@ export type ListRfqsParams = {
 status?: string;
 employeeId?: number;
 search?: string;
+view?: string;
+closedFrom?: string;
+closedTo?: string;
+employeeName?: string;
+createdFrom?: string;
+createdTo?: string;
 };

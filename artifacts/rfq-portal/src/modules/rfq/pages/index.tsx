@@ -19,7 +19,9 @@ import {
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 
-const STATUSES = ["all", "DRAFT", "SENT", "QUOTED", "FAILED", "SUCCESS"];
+const STATUSES = ["all", "DRAFT", "SENT", "QUOTED"];
+// Closed RFQs: the archive tab shows only these (plus closing-date passed).
+const ARCHIVE_STATUSES = ["all", "SUCCESS", "FAILED"];
 
 // ---------------------------------------------------------------------------
 // Types
@@ -224,7 +226,8 @@ function ClosingSoonSection({
 
 function ClosingSoonPanel({ navigate }: { navigate: (path: string) => void }) {
   const { isLoading, isError, data } = useClosingSoon();
-  const [open, setOpen] = useState(true);
+  // Collapsed on every page load, so the list below is the first thing the eye meets.
+  const [open, setOpen] = useState(false);
 
   const today = data?.today ?? [];
   const tomorrow = data?.tomorrow ?? [];
@@ -335,19 +338,29 @@ export default function RfqListPage() {
   const [, navigate] = useLocation();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [view, setView] = useState<"active" | "archive">("active");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [closedFrom, setClosedFrom] = useState("");
+  const [closedTo, setClosedTo] = useState("");
+  const [employeeName, setEmployeeName] = useState("");
   const { t } = useLanguage();
 
-  const { data: rfqs, isLoading } = useListRfqs(
-    { status: status !== "all" ? status : undefined, search: search || undefined },
-    {
-      query: {
-        queryKey: getListRfqsQueryKey({
-          status: status !== "all" ? status : undefined,
-          search: search || undefined,
-        }),
-      },
-    },
-  );
+  const isArchive = view === "archive";
+  const hasDateOrName = Boolean(createdFrom || createdTo || closedFrom || closedTo || employeeName);
+  const params = {
+    status: status !== "all" ? status : undefined,
+    search: search || undefined,
+    view: isArchive ? "archive" : undefined,
+    createdFrom: createdFrom || undefined,
+    createdTo: createdTo || undefined,
+    closedFrom: closedFrom || undefined,
+    closedTo: closedTo || undefined,
+    employeeName: employeeName.trim() || undefined,
+  };
+  const { data: rfqs, isLoading } = useListRfqs(params, {
+    query: { queryKey: getListRfqsQueryKey(params) },
+  });
 
   const statusLabel = (s: string) => {
     if (s === "all") return t("rfq.filter.all");
@@ -380,8 +393,31 @@ export default function RfqListPage() {
         {/* Closing Soon Panel */}
         <ClosingSoonPanel navigate={navigate} />
 
+        {/* Tabs: active RFQs and the archive of closed ones */}
+        <div className="flex gap-1 border-b border-border">
+          {[
+            { key: "active" as const, label: "الطلبات الجارية" },
+            { key: "archive" as const, label: "الأرشيف" },
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => {
+                setView(tab.key);
+                setStatus("all");
+              }}
+              className={`px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
+                view === tab.key
+                  ? "border-primary text-primary font-semibold"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search
               size={15}
@@ -394,8 +430,58 @@ export default function RfqListPage() {
               className="pl-8 h-8 text-sm"
             />
           </div>
+          <Input
+            value={employeeName}
+            onChange={(e) => setEmployeeName(e.target.value)}
+            placeholder="اسم الموظف (مثال: Amr)"
+            className="h-8 text-sm max-w-[220px]"
+          />
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span>تاريخ الطلب من</span>
+            <Input
+              type="date"
+              value={createdFrom}
+              onChange={(e) => setCreatedFrom(e.target.value)}
+              className="h-8 text-sm w-[150px]"
+            />
+            <span>إلى</span>
+            <Input
+              type="date"
+              value={createdTo}
+              onChange={(e) => setCreatedTo(e.target.value)}
+              className="h-8 text-sm w-[150px]"
+            />
+            <span>تاريخ الإغلاق من</span>
+            <Input
+              type="date"
+              value={closedFrom}
+              onChange={(e) => setClosedFrom(e.target.value)}
+              className="h-8 text-sm w-[150px]"
+            />
+            <span>إلى</span>
+            <Input
+              type="date"
+              value={closedTo}
+              onChange={(e) => setClosedTo(e.target.value)}
+              className="h-8 text-sm w-[150px]"
+            />
+            {hasDateOrName && (
+              <button
+                className="underline hover:text-foreground"
+                onClick={() => {
+                  setCreatedFrom("");
+                  setCreatedTo("");
+                  setClosedFrom("");
+                  setClosedTo("");
+                  setEmployeeName("");
+                }}
+              >
+                مسح الفلاتر
+              </button>
+            )}
+          </div>
           <div className="flex gap-1 overflow-x-auto pb-0.5 flex-nowrap">
-            {STATUSES.map((s) => (
+            {(isArchive ? ARCHIVE_STATUSES : STATUSES).map((s) => (
               <button
                 key={s}
                 onClick={() => setStatus(s)}
@@ -429,6 +515,12 @@ export default function RfqListPage() {
                 <thead>
                   <tr className="border-b border-border bg-muted/30 text-left">
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      تاريخ الطلب
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                      تاريخ الإغلاق
+                    </th>
+                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
                       Internal No.
                     </th>
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
@@ -447,7 +539,6 @@ export default function RfqListPage() {
                     <th className="px-4 py-3 text-muted-foreground text-xs font-medium text-center">
                       Offers
                     </th>
-                    <th className="px-4 py-3 text-muted-foreground text-xs font-medium">Created</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -457,6 +548,12 @@ export default function RfqListPage() {
                       className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
                       onClick={() => navigate(`/rfq/${rfq.id}`)}
                     >
+                      <td className="px-4 py-3 text-xs text-foreground tabular-nums">
+                        {new Date(rfq.createdAt).toLocaleDateString("en-GB")}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-foreground tabular-nums">
+                        {rfq.expiresAt ? new Date(rfq.expiresAt).toLocaleDateString("en-GB") : "—"}
+                      </td>
                       <td className="px-4 py-3">
                         <span className="font-mono text-xs text-primary font-medium">
                           {rfq.internalRfqNo}
@@ -469,7 +566,14 @@ export default function RfqListPage() {
                         {rfq.employeeName ?? "-"}
                       </td>
                       <td className="px-4 py-3">
-                        <StatusBadge status={rfq.status} />
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <StatusBadge status={rfq.status} />
+                          {(rfq.approvedCount ?? 0) > 0 && (
+                            <span className="inline-flex items-center rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                              معتمد {rfq.approvedCount}/{rfq.itemCount}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className="inline-flex items-center justify-center w-6 h-6 bg-muted rounded text-xs font-medium text-foreground">
@@ -485,9 +589,6 @@ export default function RfqListPage() {
                         <span className="inline-flex items-center justify-center w-6 h-6 bg-green-50 text-green-700 rounded text-xs font-medium">
                           {rfq.offerCount}
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">
-                        {new Date(rfq.createdAt).toLocaleDateString()}
                       </td>
                     </tr>
                   ))}
