@@ -21,6 +21,32 @@ import {
   type PoItemRow,
 } from "../components/fields";
 
+interface RfqLinkNotice {
+  lineIndex: number;
+  poItemId: number;
+  status: "linked" | "suggested" | "unresolved";
+  rfqNo?: string;
+  warnings: string[];
+  candidates: { rfqItemId: number; basis: string | null; uomMatch: boolean }[];
+  reason?: string;
+}
+
+const WARNING_TEXT: Record<string, string> = {
+  uom_mismatch: "وحدة القياس مختلفة عن طلب التسعير",
+  qty_exceeds_remaining: "الكمية أكبر من المتبقي في طلب التسعير",
+  ambiguous: "أكتر من بند في طلب التسعير ينطبق على البند",
+  over_purchased: "الكمية المشتراة أكبر من المطلوب",
+  under_purchased: "الكمية المشتراة أقل من المطلوب",
+};
+
+const REASON_TEXT: Record<string, string> = {
+  no_rfq_found: "رقم طلب التسعير غير موجود",
+  rfq_has_no_items: "طلب التسعير ده مفيهوش بنود",
+  rfq_number_ambiguous: "رقم العميل ده موجود في أكتر من طلب، اختار الطلب الصحيح",
+  no_matching_line: "مفيش بند مطابق في طلب التسعير",
+  rfq_item_not_found: "البند المحدد غير موجود",
+};
+
 interface SheetItem {
   itemId: string | null;
   customerPoItemId?: number | null;
@@ -190,6 +216,8 @@ export default function NewPurchaseOrderPage() {
   const [lookupError, setLookupError] = useState<string | null>(null);
 
   const [items, setItems] = useState<PoItemRow[]>([]);
+  const [linkNotices, setLinkNotices] = useState<RfqLinkNotice[] | null>(null);
+  const submittedDescriptionsRef = useRef<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [priceLoadingIds, setPriceLoadingIds] = useState<Set<string>>(new Set());
 
@@ -208,6 +236,12 @@ export default function NewPurchaseOrderPage() {
       onSuccess: (po) => {
         queryClient.invalidateQueries({ queryKey: getListPurchaseOrdersQueryKey() });
         endSession(po.id);
+        const reports = (po as unknown as { rfqLinks?: RfqLinkNotice[] }).rfqLinks ?? [];
+        const notices = reports.filter((r) => r.status !== "linked");
+        if (notices.length > 0) {
+          setLinkNotices(notices);
+          return;
+        }
         navigate(`/purchase-orders`);
       },
     },
@@ -239,6 +273,7 @@ export default function NewPurchaseOrderPage() {
           unitPrice: item.referencePrice != null ? String(item.referencePrice) : "",
           supplierId: "",
           taxIncluded: false,
+          rfqNumber: "",
         }));
         setItems(mapped);
         setSelectedIds(new Set(mapped.map((m) => m.id)));
@@ -288,6 +323,26 @@ export default function NewPurchaseOrderPage() {
 
   const updateTaxIncluded = (id: string, taxIncluded: boolean) =>
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, taxIncluded } : i)));
+
+  const confirmRfqSuggestion = async (notice: RfqLinkNotice, rfqItemId: number) => {
+    const res = await fetch(`/api/po/items/${notice.poItemId}/rfq-allocations`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rfqItemId }),
+    });
+    if (!res.ok) return;
+    setLinkNotices((prev) =>
+      (prev ?? []).map((n) =>
+        n.lineIndex === notice.lineIndex
+          ? ({ ...n, status: "linked", candidates: [], rfqItemId } as RfqLinkNotice)
+          : n,
+      ),
+    );
+  };
+
+  const updateRfqNumber = (id: string, rfqNumber: string) =>
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, rfqNumber } : i)));
 
   const updateSupplier = (id: string, supplierId: string) => {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, supplierId, unitPrice: "" } : i)));
@@ -343,6 +398,7 @@ export default function NewPurchaseOrderPage() {
     if (!sheetPoNo) return;
     const chosen = items.filter((i) => selectedIds.has(i.id));
     if (chosen.length === 0) return;
+    submittedDescriptionsRef.current = chosen.map((i) => i.description);
     createMutation.mutate({
       data: {
         sheetPoNo,
@@ -360,6 +416,7 @@ export default function NewPurchaseOrderPage() {
           referencePrice: i.unitPrice ? parseFloat(i.unitPrice) : undefined,
           supplierId: i.supplierId ? parseInt(i.supplierId, 10) : undefined,
           taxIncluded: i.taxIncluded,
+          rfqNumber: i.rfqNumber.trim() || undefined,
         })),
       },
     });
@@ -434,6 +491,9 @@ export default function NewPurchaseOrderPage() {
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium">
                           Qty (PO)
                         </th>
+                        <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[130px]">
+                          رقم طلب التسعير
+                        </th>
                         <th className="px-2 py-2.5 text-muted-foreground text-xs font-medium min-w-[160px]">
                           Supplier
                         </th>
@@ -468,6 +528,16 @@ export default function NewPurchaseOrderPage() {
                           <td className="px-2 py-1.5 text-xs max-w-[220px]">{row.description}</td>
                           <td className="px-2 py-1.5 text-xs">{row.uom || "—"}</td>
                           <td className="px-2 py-1.5 text-xs font-medium">{row.qty || "—"}</td>
+                          <td className="px-2 py-1.5">
+                            <Input
+                              value={row.rfqNumber}
+                              onChange={(e) => updateRfqNumber(row.id, e.target.value)}
+                              disabled={!selectedIds.has(row.id)}
+                              placeholder="داخلي أو رقم العميل"
+                              dir="ltr"
+                              className="h-7 text-xs w-36 disabled:opacity-50"
+                            />
+                          </td>
                           <td className="px-2 py-1.5">
                             <SupplierCombobox
                               value={row.supplierId}
@@ -595,6 +665,50 @@ export default function NewPurchaseOrderPage() {
                   />
                 </div>
               </div>
+
+              {linkNotices && linkNotices.length > 0 && (
+                <div className="rounded border border-amber-300 bg-amber-50/60 dark:bg-amber-950/20 p-3 space-y-2 text-sm">
+                  <div className="font-medium">بعض البنود محتاجة مراجعة الربط بطلب التسعير</div>
+                  {linkNotices.map((n) => (
+                    <div key={n.lineIndex} className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-medium max-w-[280px] truncate">
+                        {submittedDescriptionsRef.current[n.lineIndex] ?? `بند ${n.lineIndex + 1}`}
+                      </span>
+                      {n.status === "linked" ? (
+                        <span className="text-green-700 dark:text-green-400">تم الربط</span>
+                      ) : n.status === "suggested" ? (
+                        n.candidates.map((c) => (
+                          <button
+                            key={c.rfqItemId}
+                            type="button"
+                            onClick={() => confirmRfqSuggestion(n, c.rfqItemId)}
+                            className="px-2 py-0.5 rounded border border-border hover:bg-accent"
+                          >
+                            تأكيد الربط بطلب {n.rfqNo ?? c.rfqItemId}
+                          </button>
+                        ))
+                      ) : (
+                        <span className="text-destructive">
+                          {REASON_TEXT[n.reason ?? ""] ?? "لم يتم الربط"}
+                        </span>
+                      )}
+                      {n.warnings.map((w) => (
+                        <span key={w} className="text-amber-700 dark:text-amber-400">
+                          ⚠ {WARNING_TEXT[w] ?? w}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/purchase-orders`)}
+                  >
+                    متابعة إلى أوامر الشراء
+                  </Button>
+                </div>
+              )}
 
               <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end sm:items-center">
                 <p className="text-sm text-muted-foreground sm:mr-auto">

@@ -1037,6 +1037,16 @@ export interface PurchaseOrderItemInput {
   /** @nullable */
   supplierId?: number | null;
   taxIncluded?: boolean;
+  /**
+   * Internal or customer RFQ number for this line. Internal only; never sent to suppliers.
+   * @nullable
+   */
+  rfqNumber?: string | null;
+  /**
+   * Explicit RFQ line id when known. Takes precedence over rfqNumber.
+   * @nullable
+   */
+  rfqItemId?: number | null;
 }
 
 export interface PurchaseOrderInput {

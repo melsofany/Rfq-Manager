@@ -2927,6 +2927,12 @@ components:
         taxIncluded:
           type: boolean
           default: false
+        rfqNumber:
+          type: ["string", "null"]
+          description: Internal or customer RFQ number for this line. Internal only; never sent to suppliers.
+        rfqItemId:
+          type: ["integer", "null"]
+          description: Explicit RFQ line id when known. Takes precedence over rfqNumber.
 
     PurchaseOrderUpdateInput:
       type: object

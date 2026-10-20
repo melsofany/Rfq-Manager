@@ -98,7 +98,7 @@ export async function loadRfqItemsWithRemaining(
 export type PoLineRfqOutcome =
   | { kind: "none"; reason: "no_rfq_found" | "rfq_has_no_items" }
   | { kind: "ambiguous_rfq"; rfqs: Awaited<ReturnType<typeof findRfqsByNumber>> }
-  | { kind: "matched"; rfqId: number; result: RfqLinkResult };
+  | { kind: "matched"; rfqId: number; rfqNo: string; result: RfqLinkResult };
 
 /**
  * Work out which RFQ line a supplier PO line belongs to, given the RFQ number
@@ -114,7 +114,12 @@ export async function resolvePoLineRfq(
   if (rfqs.length > 1) return { kind: "ambiguous_rfq", rfqs };
   const items = await loadRfqItemsWithRemaining(ex, rfqs[0].id);
   if (items.length === 0) return { kind: "none", reason: "rfq_has_no_items" };
-  return { kind: "matched", rfqId: rfqs[0].id, result: matchRfqItem(line, items) };
+  return {
+    kind: "matched",
+    rfqId: rfqs[0].id,
+    rfqNo: rfqs[0].internalRfqNo,
+    result: matchRfqItem(line, items),
+  };
 }
 
 /**
@@ -236,6 +241,8 @@ export interface RfqLinkReport {
   basis: string | null;
   warnings: string[];
   candidates: { rfqItemId: number; basis: string | null; uomMatch: boolean }[];
+  /** Internal RFQ number the line was matched to, for display. */
+  rfqNo?: string;
   /** Present when a customer RFQ number matches more than one RFQ. */
   rfqChoices?: { id: number; internalRfqNo: string; customerRfqNo: string }[];
   reason?: string;
@@ -339,7 +346,7 @@ export async function linkNewPoItemsToRfq(
       continue;
     }
 
-    const { result } = outcome;
+    const { result, rfqNo } = outcome;
     const candidates = result.candidates.map((c) => ({
       rfqItemId: c.rfqItemId,
       basis: c.basis,
@@ -361,6 +368,7 @@ export async function linkNewPoItemsToRfq(
         basis: result.basis,
         warnings: result.warnings,
         candidates,
+        rfqNo,
       });
     } else {
       reports.push({
@@ -371,6 +379,7 @@ export async function linkNewPoItemsToRfq(
         basis: result.basis,
         warnings: result.warnings,
         candidates,
+        rfqNo,
         reason: result.status === "none" ? "no_matching_line" : undefined,
       });
     }
