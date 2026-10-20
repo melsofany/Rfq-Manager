@@ -891,6 +891,7 @@ export interface Rfq {
   expiresAt?: string | null;
   itemCount?: number;
   supplierCount?: number;
+  approvedCount?: number;
   offerCount?: number;
   createdAt: string;
   updatedAt?: string;
@@ -1650,6 +1651,12 @@ export type ListRfqsParams = {
 status?: string;
 employeeId?: number;
 search?: string;
+view?: string;
+closedFrom?: string;
+closedTo?: string;
+employeeName?: string;
+createdFrom?: string;
+createdTo?: string;
 };
 
 export type ApproveOfferItemBody = {

@@ -1057,6 +1057,37 @@ paths:
           in: query
           schema:
             type: string
+        - name: view
+          in: query
+          description: "archive = closed RFQs only (status SUCCESS/FAILED or closing date passed); omitted = active RFQs only."
+          schema:
+            type: string
+            enum: [archive]
+        - name: closedFrom
+          in: query
+          description: "YYYY-MM-DD. Closing-date lower bound (inclusive)."
+          schema:
+            type: string
+        - name: closedTo
+          in: query
+          description: "YYYY-MM-DD. Closing-date upper bound (inclusive)."
+          schema:
+            type: string
+        - name: employeeName
+          in: query
+          description: Case-insensitive part of the responsible employee's name.
+          schema:
+            type: string
+        - name: createdFrom
+          in: query
+          description: "YYYY-MM-DD. Request-date lower bound (inclusive)."
+          schema:
+            type: string
+        - name: createdTo
+          in: query
+          description: "YYYY-MM-DD. Request-date upper bound (inclusive)."
+          schema:
+            type: string
       responses:
         "200":
           description: List of RFQs
@@ -2667,6 +2698,9 @@ components:
           type: integer
         supplierCount:
           type: integer
+        approvedCount:
+          type: integer
+          description: Number of RFQ items with an approved supplier price.
         offerCount:
           type: integer
         createdAt:

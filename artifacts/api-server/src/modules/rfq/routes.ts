@@ -83,7 +83,17 @@ async function autoFailExpiredRfqs(): Promise<void> {
 }
 
 router.get("/rfq", requireAuth, async (req, res): Promise<void> => {
-  const { status, employeeId, search } = req.query as Record<string, string>;
+  const {
+    status,
+    employeeId,
+    search,
+    view,
+    closedFrom,
+    closedTo,
+    createdFrom,
+    createdTo,
+    employeeName,
+  } = req.query as Record<string, string>;
 
   // Auto-fail SENT RFQs whose closing date has passed with no offers received
   await autoFailExpiredRfqs().catch(() => {
@@ -99,8 +109,44 @@ router.get("/rfq", requireAuth, async (req, res): Promise<void> => {
     .leftJoin(employeesTable, eq(rfqTable.employeeId, employeesTable.id))
     .orderBy(sql`${rfqTable.createdAt} DESC`);
 
-  let filtered = rows;
+  // Archive = closed RFQs: won or lost (SUCCESS / FAILED), or a closing date that has
+  // passed. The active list shows the complement, so a closed RFQ moves out of it.
+  const nowMs = Date.now();
+  const isArchived = (r: (typeof rows)[number]): boolean =>
+    r.rfq.status === "SUCCESS" ||
+    r.rfq.status === "FAILED" ||
+    (r.rfq.expiresAt != null && new Date(r.rfq.expiresAt).getTime() < nowMs);
+
+  let filtered = rows.filter((r) => (view === "archive" ? isArchived(r) : !isArchived(r)));
   if (status) filtered = filtered.filter((r) => r.rfq.status === status);
+  // Closing-date range, inclusive, on YYYY-MM-DD (UTC day boundaries).
+  if (closedFrom) {
+    const from = new Date(`${closedFrom}T00:00:00Z`).getTime();
+    if (!Number.isNaN(from))
+      filtered = filtered.filter(
+        (r) => r.rfq.expiresAt != null && new Date(r.rfq.expiresAt).getTime() >= from,
+      );
+  }
+  if (closedTo) {
+    const to = new Date(`${closedTo}T00:00:00Z`).getTime() + 24 * 60 * 60 * 1000;
+    if (!Number.isNaN(to))
+      filtered = filtered.filter(
+        (r) => r.rfq.expiresAt != null && new Date(r.rfq.expiresAt).getTime() < to,
+      );
+  }
+  // Request-date range (createdAt), same inclusive UTC-day rule as the closing date.
+  if (createdFrom) {
+    const from = new Date(`${createdFrom}T00:00:00Z`).getTime();
+    if (!Number.isNaN(from)) filtered = filtered.filter((r) => r.rfq.createdAt.getTime() >= from);
+  }
+  if (createdTo) {
+    const to = new Date(`${createdTo}T00:00:00Z`).getTime() + 24 * 60 * 60 * 1000;
+    if (!Number.isNaN(to)) filtered = filtered.filter((r) => r.rfq.createdAt.getTime() < to);
+  }
+  if (employeeName) {
+    const n = employeeName.toLowerCase();
+    filtered = filtered.filter((r) => (r.employeeName ?? "").toLowerCase().includes(n));
+  }
   if (employeeId) filtered = filtered.filter((r) => r.rfq.employeeId === parseInt(employeeId, 10));
   if (search) {
     const s = search.toLowerCase();
@@ -137,6 +183,28 @@ router.get("/rfq", requireAuth, async (req, res): Promise<void> => {
           .groupBy(offersTable.rfqId)
       : [];
 
+  // Approved supplier prices per RFQ: distinct RFQ items that have an approved offer item.
+  const approvedCounts =
+    rfqIds.length > 0
+      ? await db
+          .select({
+            rfqId: rfqItemsTable.rfqId,
+            cnt: sql<number>`count(distinct ${rfqItemsTable.id})`,
+          })
+          .from(offerItemsTable)
+          .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
+          .where(and(inArray(rfqItemsTable.rfqId, rfqIds), eq(offerItemsTable.isApproved, true)))
+          .groupBy(rfqItemsTable.rfqId)
+      : [];
+  const approvedMap = Object.fromEntries(
+    approvedCounts.map((r) => [r.rfqId, Number(r.cnt)]),
+  ) as Record<number, number>;
+  // An RFQ whose supplier price was approved moves to the bottom of the list; the
+  // rest keep their newest-first order (the sort is stable).
+  filtered.sort(
+    (a, b) => Number((approvedMap[a.rfq.id] ?? 0) > 0) - Number((approvedMap[b.rfq.id] ?? 0) > 0),
+  );
+
   const itemMap = Object.fromEntries(itemCounts.map((r) => [r.rfqId, r.cnt]));
   const sentMap = Object.fromEntries(sentCounts.map((r) => [r.rfqId, r.cnt]));
   const offerMap = Object.fromEntries(offerCounts.map((r) => [r.rfqId, r.cnt]));
@@ -156,6 +224,7 @@ router.get("/rfq", requireAuth, async (req, res): Promise<void> => {
       itemCount: itemMap[r.rfq.id] ?? 0,
       supplierCount: sentMap[r.rfq.id] ?? 0,
       offerCount: offerMap[r.rfq.id] ?? 0,
+      approvedCount: approvedMap[r.rfq.id] ?? 0,
       createdAt: r.rfq.createdAt.toISOString(),
       updatedAt: r.rfq.updatedAt.toISOString(),
     })),

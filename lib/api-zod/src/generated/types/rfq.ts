@@ -26,6 +26,7 @@ export interface Rfq {
   itemCount?: number;
   supplierCount?: number;
   offerCount?: number;
+  approvedCount?: number;
   createdAt: string;
   updatedAt?: string;
 }
