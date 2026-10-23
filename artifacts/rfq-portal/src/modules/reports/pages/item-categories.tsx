@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,6 +27,8 @@ interface EmployeeOption {
 }
 
 interface ItemCategoryRow {
+  /** Review gate: `pending` = suggestion awaiting approval; null = no assignment yet. */
+  reviewStatus: "approved" | "pending" | null;
   customerRfqItemId: number;
   partNo: string | null;
   lineItem: string | null;
@@ -107,6 +109,407 @@ const REVIEW_REASON_TONE: Record<ReviewReason, string> = {
  * the assigned employee, and links here. Editing is admin/manager only, by role
  * (assigning an item moves KPI responsibility between employees).
  */
+interface PendingReviewRow {
+  rfqId: number;
+  customerRfqNo: string | null;
+  customerName: string | null;
+  pendingCount: number;
+  unclassifiedCount: number;
+}
+
+interface RequestItemRow {
+  customerRfqItemId: number;
+  partNo: string | null;
+  lineItem: string | null;
+  description: string | null;
+  categoryId: number | null;
+  categoryName: string | null;
+  employeeId: number | null;
+  employeeName: string | null;
+  status: string;
+  source: string | null;
+  reviewStatus: "approved" | "pending" | null;
+}
+
+/** One request's items, with per-item approve / edit (opened from the panel). */
+function RequestItemsDrilldown({
+  rfqId,
+  canManage,
+  categories,
+  employees,
+  onChanged,
+}: {
+  rfqId: number;
+  canManage: boolean;
+  categories: CategoryOption[];
+  employees: EmployeeOption[];
+  onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<RequestItemRow[] | null>(null);
+  const [draft, setDraft] = useState<Record<number, { categoryId: string; employeeId: string }>>(
+    {},
+  );
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/customer-rfq/${rfqId}/assignments`, { credentials: "include" });
+      if (!res.ok) throw new Error(await readError(res));
+      const asg = (await res.json()) as RequestItemRow[];
+      setRows(asg);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+      setRows([]);
+    }
+  }, [rfqId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  function draftFor(r: RequestItemRow) {
+    return (
+      draft[r.customerRfqItemId] ?? {
+        categoryId: r.categoryId != null ? String(r.categoryId) : "",
+        employeeId: r.employeeId != null ? String(r.employeeId) : "",
+      }
+    );
+  }
+
+  function setDraftField(itemId: number, field: "categoryId" | "employeeId", value: string) {
+    setDraft((prev) => {
+      const base = prev[itemId] ?? { categoryId: "", employeeId: "" };
+      return { ...prev, [itemId]: { ...base, [field]: value } };
+    });
+  }
+
+  async function approve(r: RequestItemRow) {
+    setBusyId(r.customerRfqItemId);
+    try {
+      const res = await fetch(`/api/customer-rfq/items/${r.customerRfqItemId}/approve`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const json = (await res.json()) as { propagatedItemIds: number[] };
+      toast.success(
+        json.propagatedItemIds.length
+          ? `تم الاعتماد وتعميمه على ${json.propagatedItemIds.length} بند مشابه`
+          : "تم اعتماد التصنيف",
+      );
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // Saving an edit through PATCH also approves it and propagates to same-customer siblings.
+  async function saveEdit(r: RequestItemRow) {
+    const d = draftFor(r);
+    setBusyId(r.customerRfqItemId);
+    try {
+      const res = await fetch(`/api/customer-rfq/items/${r.customerRfqItemId}/assignment`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          categoryId: d.categoryId === "" ? null : Number(d.categoryId),
+          employeeId: d.employeeId === "" ? null : Number(d.employeeId),
+          reason: null,
+        }),
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      toast.success("تم حفظ التصنيف واعتماده");
+      setDraft((prev) => {
+        const next = { ...prev };
+        delete next[r.customerRfqItemId];
+        return next;
+      });
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (rows === null) {
+    return <div className="px-4 py-4 text-sm text-muted-foreground">جارٍ تحميل البنود…</div>;
+  }
+  if (rows.length === 0) {
+    return <div className="px-4 py-4 text-sm text-muted-foreground">لا توجد بنود.</div>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-muted/40 border-b border-border text-right">
+            <th className="px-3 py-2 text-xs font-medium text-muted-foreground">PN</th>
+            <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Line Item</th>
+            <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الوصف</th>
+            <th className="px-3 py-2 text-xs font-medium text-muted-foreground">التصنيف</th>
+            <th className="px-3 py-2 text-xs font-medium text-muted-foreground">المسؤول</th>
+            <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الحالة</th>
+            {canManage && <th className="px-3 py-2 w-40" />}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const d = draftFor(r);
+            const dirty =
+              d.categoryId !== (r.categoryId != null ? String(r.categoryId) : "") ||
+              d.employeeId !== (r.employeeId != null ? String(r.employeeId) : "");
+            const busy = busyId === r.customerRfqItemId;
+            return (
+              <tr key={r.customerRfqItemId} className="border-b border-border/40 last:border-0">
+                <td className="px-3 py-2 font-mono text-xs" dir="ltr">
+                  {r.partNo || "—"}
+                </td>
+                <td className="px-3 py-2 font-mono text-xs" dir="ltr">
+                  {r.lineItem || "—"}
+                </td>
+                <td className="px-3 py-2 text-xs max-w-xs truncate" title={r.description ?? ""}>
+                  {r.description || "—"}
+                </td>
+                <td className="px-3 py-2">
+                  {canManage ? (
+                    <select
+                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      value={d.categoryId}
+                      onChange={(e) =>
+                        setDraftField(r.customerRfqItemId, "categoryId", e.target.value)
+                      }
+                    >
+                      <option value="">— بدون تصنيف —</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs">{r.categoryName || "غير مصنّف"}</span>
+                  )}
+                </td>
+                <td className="px-3 py-2">
+                  {canManage ? (
+                    <select
+                      className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      value={d.employeeId}
+                      onChange={(e) =>
+                        setDraftField(r.customerRfqItemId, "employeeId", e.target.value)
+                      }
+                    >
+                      <option value="">— بلا مسؤول —</option>
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-xs">{r.employeeName || "بلا مسؤول"}</span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-xs">
+                  {r.reviewStatus === "pending" ? (
+                    <span className="inline-flex px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                      بانتظار الاعتماد
+                    </span>
+                  ) : r.reviewStatus === "approved" ? (
+                    <span className="inline-flex px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+                      معتمد
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">غير مسند</span>
+                  )}
+                </td>
+                {canManage && (
+                  <td className="px-3 py-2">
+                    <div className="flex gap-1 justify-end">
+                      {dirty ? (
+                        <Button size="sm" disabled={busy} onClick={() => void saveEdit(r)}>
+                          حفظ واعتماد
+                        </Button>
+                      ) : (
+                        r.reviewStatus === "pending" &&
+                        r.categoryId != null && (
+                          <Button size="sm" disabled={busy} onClick={() => void approve(r)}>
+                            اعتماد
+                          </Button>
+                        )
+                      )}
+                    </div>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Requests that still wait for a manager's approval, with per-item approval inline. */
+function PendingReviewPanel({
+  canManage,
+  categories,
+  employees,
+  onChanged,
+}: {
+  canManage: boolean;
+  categories: CategoryOption[];
+  employees: EmployeeOption[];
+  onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<PendingReviewRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/customer-rfq/pending-review", { credentials: "include" });
+      if (!res.ok) throw new Error(await readError(res));
+      const json = (await res.json()) as { rows: PendingReviewRow[] };
+      setRows(json.rows);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function approveAll(rfqId: number) {
+    setBusyId(rfqId);
+    try {
+      const res = await fetch(`/api/customer-rfq/${rfqId}/approve-all`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const json = (await res.json()) as { approved: number; failed: number[] };
+      toast.success(`تم اعتماد ${json.approved} بند`);
+      if (json.failed.length) toast.error(`فشل اعتماد ${json.failed.length} بند`);
+      setOpenId(null);
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-lg font-semibold text-foreground">طلبات بانتظار الاعتماد</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          التصنيف الآلي لا يدخل الـ KPI قبل اعتماد المدير. افتح الطلب لاعتماد كل بند أو تعديله، أو
+          اعتمد كل بنود الطلب مرة واحدة.
+        </p>
+      </div>
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-muted/60 border-b border-border text-right">
+              <th className="px-3 py-2 text-xs font-medium text-muted-foreground">طلب العميل</th>
+              <th className="px-3 py-2 text-xs font-medium text-muted-foreground">العميل</th>
+              <th className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                بانتظار الاعتماد
+              </th>
+              <th className="px-3 py-2 text-xs font-medium text-muted-foreground">بلا تصنيف</th>
+              <th className="px-3 py-2 w-56" />
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  جارٍ التحميل…
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  لا توجد طلبات بانتظار الاعتماد.
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => {
+                const isOpen = openId === r.rfqId;
+                return (
+                  <Fragment key={r.rfqId}>
+                    <tr className="border-b border-border/40">
+                      <td className="px-3 py-2 font-mono text-xs" dir="ltr">
+                        {r.customerRfqNo || `#${r.rfqId}`}
+                      </td>
+                      <td className="px-3 py-2">{r.customerName || "—"}</td>
+                      <td className="px-3 py-2 font-semibold text-amber-700 dark:text-amber-400">
+                        {r.pendingCount}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">{r.unclassifiedCount}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setOpenId(isOpen ? null : r.rfqId)}
+                          >
+                            {isOpen ? "إغلاق" : "فتح الطلب"}
+                          </Button>
+                          {canManage && r.pendingCount > 0 && (
+                            <Button
+                              size="sm"
+                              onClick={() => void approveAll(r.rfqId)}
+                              disabled={busyId === r.rfqId}
+                            >
+                              {busyId === r.rfqId ? "جارٍ الاعتماد…" : "اعتماد كل البنود"}
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="border-b border-border/40 bg-muted/10">
+                        <td colSpan={5} className="p-0">
+                          <RequestItemsDrilldown
+                            rfqId={r.rfqId}
+                            canManage={canManage}
+                            categories={categories}
+                            employees={employees}
+                            onChanged={() => {
+                              void load();
+                              onChanged();
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function ItemsCategoryList({
   canManage,
   categories,
@@ -172,6 +575,26 @@ function ItemsCategoryList({
     void load();
   }, [load]);
 
+  async function approveRow(r: ItemCategoryRow) {
+    try {
+      const res = await fetch(`/api/customer-rfq/items/${r.customerRfqItemId}/approve`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(await readError(res));
+      const json = (await res.json()) as { propagatedItemIds: number[] };
+      toast.success(
+        json.propagatedItemIds.length
+          ? `تم الاعتماد وتعميمه على ${json.propagatedItemIds.length} بند مشابه`
+          : "تم اعتماد التصنيف",
+      );
+      await load();
+      onChanged();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    }
+  }
+
   function openEditor(r: ItemCategoryRow) {
     setEditFor(r);
     setEditCategory(r.categoryId ?? "");
@@ -207,7 +630,7 @@ function ItemsCategoryList({
 
   const hasNext = offset + PAGE < total;
   const hasPrev = offset > 0;
-  const colCount = canManage ? 7 : 6;
+  const colCount = canManage ? 8 : 7;
   const categoryChoices = categories.length ? categories : allCats;
 
   return (
@@ -288,8 +711,9 @@ function ItemsCategoryList({
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">
                   الموظف المسند إليه
                 </th>
+                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الحالة</th>
                 <th className="px-3 py-2 text-xs font-medium text-muted-foreground">طلب التسعير</th>
-                {canManage && <th className="px-3 py-2 w-16" />}
+                {canManage && <th className="px-3 py-2 w-40" />}
               </tr>
             </thead>
             <tbody>
@@ -357,6 +781,19 @@ function ItemsCategoryList({
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
+                      {r.reviewStatus === "pending" ? (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                          بانتظار الاعتماد
+                        </span>
+                      ) : r.reviewStatus === "approved" ? (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+                          معتمد
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">غير مسند</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
                       {r.customerRfqNo ? (
                         <span className="font-mono text-xs" dir="ltr">
                           {r.customerRfqNo}
@@ -370,9 +807,16 @@ function ItemsCategoryList({
                     </td>
                     {canManage && (
                       <td className="px-3 py-2 text-center">
-                        <Button size="sm" variant="outline" onClick={() => openEditor(r)}>
-                          تعديل
-                        </Button>
+                        <div className="inline-flex gap-1">
+                          {r.reviewStatus === "pending" && r.categoryId != null && (
+                            <Button size="sm" onClick={() => void approveRow(r)}>
+                              اعتماد
+                            </Button>
+                          )}
+                          <Button size="sm" variant="outline" onClick={() => openEditor(r)}>
+                            تعديل
+                          </Button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -1188,7 +1632,7 @@ export function ItemCategoriesTab() {
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
   const [classifying, setClassifying] = useState(false);
-  const [sub, setSub] = useState<"list" | "unowned" | "review" | "groups">("list");
+  const [sub, setSub] = useState<"list" | "unowned" | "review" | "groups" | "approval">("list");
 
   const onChanged = useCallback(() => setReloadKey((k) => k + 1), []);
 
@@ -1245,6 +1689,7 @@ export function ItemCategoriesTab() {
     { key: "unowned" as const, label: "بلا مسؤول" },
     { key: "review" as const, label: "بنود تحتاج مراجعة" },
     { key: "groups" as const, label: "مجموعات المراجعة" },
+    { key: "approval" as const, label: "بانتظار الاعتماد" },
   ];
 
   return (
@@ -1265,7 +1710,14 @@ export function ItemCategoriesTab() {
         ))}
       </div>
 
-      {sub === "unowned" ? (
+      {sub === "approval" ? (
+        <PendingReviewPanel
+          canManage={canManage}
+          categories={categories}
+          employees={employees}
+          onChanged={onChanged}
+        />
+      ) : sub === "unowned" ? (
         <UnownedCategoriesPanel employees={employees} canManage={canManage} onChanged={onChanged} />
       ) : sub === "groups" ? (
         <ReviewGroupsPanel categories={categories} canManage={canManage} onChanged={onChanged} />

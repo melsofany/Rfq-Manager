@@ -77,6 +77,14 @@ const tables = {
     finalActualCost: "finalActualCost",
     referencePrice: "referencePrice",
   },
+  customerRfqItemAssignmentsTable: {
+    _: "crfqItemAssignments",
+    customerRfqItemId: "customerRfqItemId",
+    categoryId: "categoryId",
+    employeeId: "employeeId",
+    reviewStatus: "reviewStatus",
+    validTo: "validTo",
+  },
   customerRfqItemCategoriesTable: {
     _: "crfqItemCats",
     customerRfqItemId: "customerRfqItemId",
