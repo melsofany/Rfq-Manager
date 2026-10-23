@@ -222,6 +222,14 @@ export const customerRfqItemAssignmentsTable = pgTable(
     // Period start/end. `validTo` null = the currently open period.
     validFrom: timestamp("valid_from", { withTimezone: true }).notNull().defaultNow(),
     validTo: timestamp("valid_to", { withTimezone: true }),
+    // Review gate. `pending` = the AI/keyword suggestion awaiting a human; it
+    // carries NO KPI and starts NO work. `approved` = a manager/admin confirmed
+    // it (directly, or by propagation from an approved line-item sibling).
+    reviewStatus: text("review_status").notNull().default("pending"),
+    reviewedBy: integer("reviewed_by").references(() => employeesTable.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   },
   (t) => [
     // At most ONE open period per item. Overlap protection for CLOSED periods

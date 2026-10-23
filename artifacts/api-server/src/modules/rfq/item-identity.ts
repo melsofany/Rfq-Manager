@@ -168,3 +168,34 @@ export function classificationIdentityKey(item: {
 
   return null;
 }
+
+/**
+ * Customer-scoped identity of a CUSTOMER RFQ item.
+ *
+ * The operator's rule: the customer's own LINE ITEM number identifies the item
+ * for that customer, so the same line item on two requests from the same
+ * customer is the same item and inherits one approved decision. The key is
+ * namespaced by customer, so two different customers never share a decision
+ * even when their line-item numbers happen to match.
+ *
+ * Without a line item it falls back to the generic identity (part no / text),
+ * still namespaced by customer.
+ */
+export function customerItemIdentityKey(
+  customerScope: string,
+  item: { partNo?: string | null; description?: string | null; lineItem?: string | null },
+): string | null {
+  const li = normalizeText(item.lineItem).replace(/ /g, "");
+  if (li.length >= 3) return `cust:${customerScope}|li:${li}`;
+  const base = classificationIdentityKey(item);
+  return base ? `cust:${customerScope}|${base}` : null;
+}
+
+/** Stable scope for a customer RFQ's customer: the customer row, else its name. */
+export function customerScopeOf(rfq: {
+  customerId?: number | null;
+  customerName?: string | null;
+}): string {
+  if (rfq.customerId != null) return `id:${rfq.customerId}`;
+  return `name:${normalizeText(rfq.customerName).replace(/ /g, "")}`;
+}

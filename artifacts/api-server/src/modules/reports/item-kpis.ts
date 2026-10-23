@@ -92,7 +92,14 @@ router.get("/analytics/procurement/by-item", requireAuth, async (req, res): Prom
       source: customerRfqItemAssignmentsTable.source,
     })
     .from(customerRfqItemAssignmentsTable)
-    .where(isNull(customerRfqItemAssignmentsTable.validTo));
+    // Review gate: only a human-approved assignment counts toward KPI. A pending
+    // suggestion carries no responsibility yet.
+    .where(
+      and(
+        isNull(customerRfqItemAssignmentsTable.validTo),
+        eq(customerRfqItemAssignmentsTable.reviewStatus, "approved"),
+      ),
+    );
 
   const itemIds = assignments.map((a) => a.customerRfqItemId);
 
@@ -510,7 +517,7 @@ router.get("/analytics/categories/coverage", requireAuth, async (_req, res): Pro
     .select({ assignedItems: sql<number>`count(*)::int` })
     .from(customerRfqItemAssignmentsTable)
     .where(
-      sql`${customerRfqItemAssignmentsTable.validTo} IS NULL AND ${customerRfqItemAssignmentsTable.employeeId} IS NOT NULL`,
+      sql`${customerRfqItemAssignmentsTable.validTo} IS NULL AND ${customerRfqItemAssignmentsTable.reviewStatus} = 'approved' AND ${customerRfqItemAssignmentsTable.employeeId} IS NOT NULL`,
     );
 
   res.json({

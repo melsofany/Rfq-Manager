@@ -500,8 +500,8 @@ describe("POST /api/customer-po (create)", () => {
     expect(insertedItems[0].customerRfqItemId).toBe(11);
   });
 
-  it("FREEZES attribution at the first customer PO (owner snapshot from the open period)", async () => {
-    freezeItemRows = [{ firstPoAt: null }]; // not yet frozen
+  it("does NOT freeze attribution at PO creation — the achievement waits for the customer's delivery", async () => {
+    freezeItemRows = [{ firstPoAt: null }];
     activePeriodRows = [{ employeeId: 7, employeeName: "Sara" }];
     const res = await request(testApp)
       .post("/api/customer-po")
@@ -511,34 +511,8 @@ describe("POST /api/customer-po (create)", () => {
         items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 1 }],
       });
     expect(res.status).toBe(201);
-    // The item's attribution_* columns are stamped in the SAME transaction.
-    const frozen = attributionUpdates.find((u) => u.attributionFirstPoAt != null);
-    expect(frozen).toBeTruthy();
-    expect(frozen.attributionEmployeeId).toBe(7);
-    expect(frozen.attributionEmployeeName).toBe("Sara");
-    // No approved offer → the fallback owner (open period) is attributed.
-    expect(frozen.attributionEvent).toBe("first_customer_po_no_approved_price");
-  });
-
-  it("attributes the APPROVED offer's employee — «من أحضر السعر الفائز»", async () => {
-    freezeItemRows = [{ firstPoAt: null }];
-    approvedOfferRows = [{ employeeId: 42, isApproved: true, createdAt: new Date("2025-01-01") }];
-    // The open-period owner is deliberately DIFFERENT: the approved-price owner
-    // must win, not the item's category owner.
-    activePeriodRows = [{ employeeId: 7, employeeName: "Sara" }];
-    const res = await request(testApp)
-      .post("/api/customer-po")
-      .send({
-        customerPoNo: "PO-105",
-        customerName: "Acme",
-        items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 1 }],
-      });
-    expect(res.status).toBe(201);
-    const frozen = attributionUpdates.find((u) => u.attributionFirstPoAt != null);
-    expect(frozen).toBeTruthy();
-    expect(frozen.attributionEmployeeId).toBe(42);
-    expect(frozen.attributionEmployeeName).toBe("Tester"); // employeesTbl lookup
-    expect(frozen.attributionEvent).toBe("first_customer_po");
+    // Credit is decided on delivery (freezeOnDelivery), never on the PO.
+    expect(attributionUpdates.find((u) => u.attributionFirstPoAt != null)).toBeUndefined();
   });
 
   it("falls back to the SENT offer's employee when NO price is approved", async () => {
@@ -554,10 +528,8 @@ describe("POST /api/customer-po (create)", () => {
         items: [{ customerRfqId: 3, customerRfqItemId: 11, partNo: "P1", qty: 1 }],
       });
     expect(res.status).toBe(201);
-    const frozen = attributionUpdates.find((u) => u.attributionFirstPoAt != null);
-    expect(frozen).toBeTruthy();
-    expect(frozen.attributionEmployeeId).toBe(55);
-    expect(frozen.attributionEvent).toBe("first_customer_po_sent_price");
+    // Attribution (incl. the sent-price fallback) is decided on delivery, not on the PO.
+    expect(attributionUpdates.find((u) => u.attributionFirstPoAt != null)).toBeUndefined();
   });
 
   it("keeps an ALREADY-frozen item unattributed (a later PO never re-attributes)", async () => {

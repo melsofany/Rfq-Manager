@@ -18,6 +18,7 @@ import {
   db,
   customerRfqItemsTable,
   customerRfqItemAssignmentsTable,
+  customerPoItemsTable,
   employeesTable,
   rfqItemsTable,
   offerItemsTable,
@@ -35,6 +36,9 @@ export interface OpenPeriodInput {
   source: "auto" | "manual" | "inherited";
   confidence: string | null;
   assignedBy: number | null;
+  /** Review gate. Defaults to `pending` (no KPI, no work) unless a human approved it. */
+  reviewStatus?: "pending" | "approved";
+  reviewedBy?: number | null;
 }
 
 /**
@@ -75,6 +79,9 @@ export async function closeAndOpenPeriod(
     confidence: input.confidence,
     assignedBy: input.assignedBy,
     validFrom: sql`${at}::timestamptz`,
+    reviewStatus: input.reviewStatus ?? "pending",
+    reviewedBy: input.reviewedBy ?? null,
+    reviewedAt: input.reviewStatus === "approved" ? sql`${at}::timestamptz` : null,
   });
 }
 
@@ -115,6 +122,27 @@ export async function freezeAttributionForItem(
       employeeId: null,
       employeeName: null,
       freezeAt: new Date(existing[0].firstPoAt as unknown as string).toISOString(),
+    };
+  }
+
+  // Review gate: nothing is credited until a human approved the classification.
+  // An unapproved item stays unfrozen, so a later approval (or a later delivery)
+  // can still freeze it.
+  const [openAssignment] = await tx
+    .select({ reviewStatus: customerRfqItemAssignmentsTable.reviewStatus })
+    .from(customerRfqItemAssignmentsTable)
+    .where(
+      and(
+        eq(customerRfqItemAssignmentsTable.customerRfqItemId, customerRfqItemId),
+        isNull(customerRfqItemAssignmentsTable.validTo),
+      ),
+    );
+  if (!openAssignment || openAssignment.reviewStatus !== "approved") {
+    return {
+      frozen: false,
+      employeeId: null,
+      employeeName: null,
+      freezeAt: "",
     };
   }
 
@@ -200,4 +228,20 @@ export async function freezeAttributionForItem(
     );
 
   return { frozen: true, employeeId, employeeName, freezeAt };
+}
+
+/**
+ * Freeze attribution when the customer actually RECEIVES a delivery. The
+ * achievement is credited on delivery, not on the purchase order. Idempotent;
+ * an unapproved item is left unfrozen by `freezeAttributionForItem`.
+ */
+export async function freezeOnDelivery(tx: DbLike, customerPoItemId: number): Promise<void> {
+  const [row] = await tx
+    .select({ rfqItemId: customerPoItemsTable.customerRfqItemId })
+    .from(customerPoItemsTable)
+    .where(eq(customerPoItemsTable.id, customerPoItemId));
+  const rfqItemId = row?.rfqItemId ?? null;
+  if (rfqItemId == null) return;
+  await lockItemRows(tx, [rfqItemId]);
+  await freezeAttributionForItem(tx, rfqItemId);
 }
