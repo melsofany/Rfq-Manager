@@ -28,6 +28,7 @@ import {
 } from "./assignment";
 import {
   assignCustomerItemManually,
+  approveCustomerItem,
   ensureCustomerAssignments,
   responsibleForRfqItem,
 } from "./customer-assignment";
@@ -289,6 +290,41 @@ router.post(
   },
 );
 
+/**
+ * POST /customer-rfq/items/:itemId/approve — approve the suggested classification
+ * as-is (or with an optional category/employee override). Propagates to the same
+ * customer's same line item. Manager/admin only.
+ */
+router.post("/customer-rfq/items/:itemId/approve", requireAuth, async (req, res): Promise<void> => {
+  if (!hasAssignmentManageAccess(req)) {
+    res.status(403).json({ error: "غير مصرح — الاعتماد متاح للمدير أو الأدمن فقط" });
+    return;
+  }
+  const customerRfqItemId = parseInt(req.params.itemId as string, 10);
+  const body = (req.body ?? {}) as { categoryId?: number | null; employeeId?: number | null };
+  try {
+    const result = await approveCustomerItem({
+      customerRfqItemId,
+      approvedBy: req.session.employeeId ?? null,
+      categoryId: body.categoryId,
+      employeeId: body.employeeId,
+    });
+    await db.insert(auditLogTable).values({
+      action: "customer_rfq_item.approved",
+      entityType: "customer_rfq_item",
+      entityId: customerRfqItemId,
+      employeeId: req.session.employeeId,
+      description: `Approved item ${customerRfqItemId}; propagated to ${result.propagatedItemIds.length} sibling item(s)`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json({ ok: true, propagatedItemIds: result.propagatedItemIds });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "approve failed";
+    res.status(msg.includes("not found") ? 404 : 400).json({ error: msg });
+  }
+});
+
 /** PATCH /customer-rfq/items/:itemId/assignment — manual override (audited). */
 router.patch(
   "/customer-rfq/items/:itemId/assignment",
@@ -308,13 +344,24 @@ router.patch(
     };
 
     try {
-      await assignCustomerItemManually({
-        customerRfqItemId,
-        categoryId: categoryId ?? null,
-        employeeId: employeeId ?? null,
-        assignedBy: req.session.employeeId ?? null,
-        reason: reason ?? null,
-      });
+      // A manager's category decision is an approval and propagates to every
+      // same-customer, same-line-item sibling. Clearing a category is not.
+      if (categoryId != null) {
+        await approveCustomerItem({
+          customerRfqItemId,
+          approvedBy: req.session.employeeId ?? null,
+          categoryId,
+          employeeId: employeeId ?? null,
+        });
+      } else {
+        await assignCustomerItemManually({
+          customerRfqItemId,
+          categoryId: null,
+          employeeId: employeeId ?? null,
+          assignedBy: req.session.employeeId ?? null,
+          reason: reason ?? null,
+        });
+      }
     } catch {
       res.status(404).json({ error: "البند غير موجود" });
       return;

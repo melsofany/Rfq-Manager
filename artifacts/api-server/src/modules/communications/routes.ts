@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { freezeOnDelivery } from "../rfq/attribution";
 import {
   db,
   suppliersTable,
@@ -1312,6 +1313,9 @@ export async function recordItemDelivery(
     deliveryStatus: opts.customerRejectedFromOrdered ? "rejected" : "delivered",
     deliveredBy: "واتساب",
   });
+  if (opts.deliveredFromOrdered && ordered) {
+    await db.transaction((tx) => freezeOnDelivery(tx, cpi.id));
+  }
 
   // Re-aggregate (mirrors the deliveries endpoint logic) — voided rows never count.
   const rows = await db

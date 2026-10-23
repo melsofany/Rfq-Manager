@@ -11,7 +11,7 @@ import {
 } from "@workspace/db";
 import { eq, count, inArray, desc, sql, and, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole } from "../../middlewares/auth";
-import { freezeAttributionForItem, lockItemRows } from "../rfq/attribution";
+import { lockItemRows } from "../rfq/attribution";
 
 const router = Router();
 
@@ -644,11 +644,9 @@ router.post("/customer-po", requireAuth, async (req, res): Promise<void> => {
       })),
     );
 
-    // Freeze attribution at this FIRST customer PO. An item with no responsible
-    // employee is frozen with a null owner ("غير محسوم") and never re-attributed.
-    for (const itemId of itemIdsToFreeze) {
-      await freezeAttributionForItem(tx, itemId);
-    }
+    // Attribution is NOT frozen here any more. The achievement is credited on the
+    // customer's delivery (freezeOnDelivery), and only for an approved item.
+    void itemIdsToFreeze;
 
     await tx.insert(auditLogTable).values({
       action: "customer_po.created",

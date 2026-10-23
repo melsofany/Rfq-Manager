@@ -15,13 +15,16 @@
 import {
   db,
   customerRfqItemsTable,
+  customerRfqsTable,
+  customerPoItemsTable,
+  customerPoItemDeliveriesTable,
   customerRfqItemAssignmentsTable,
   itemAssignmentAuditTable,
   employeesTable,
   itemCategoriesTable,
   itemCategoryKeywordsTable,
 } from "@workspace/db";
-import { eq, and, inArray, asc, desc, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, inArray, asc, desc, isNull, isNotNull, ne, sql } from "drizzle-orm";
 import {
   classifyItem,
   isFunctionalCategory,
@@ -32,7 +35,11 @@ import {
   resolveDomainId,
 } from "./classification";
 import { classifyItemsWithAi, type AiClassifyResult } from "./ai-classifier";
-import { classificationIdentityKey } from "./item-identity";
+import {
+  classificationIdentityKey,
+  customerItemIdentityKey,
+  customerScopeOf,
+} from "./item-identity";
 import { loadClassifierVocabulary } from "./keywords";
 import {
   loadClassificationMap,
@@ -45,7 +52,12 @@ import {
   loadCustomerWorkloads,
   type AssignContext,
 } from "./assignment";
-import { closeAndOpenPeriod, dbClockTimestamp, lockItemRows } from "./attribution";
+import {
+  closeAndOpenPeriod,
+  dbClockTimestamp,
+  freezeOnDelivery,
+  lockItemRows,
+} from "./attribution";
 
 /** At most this many learned keywords are added per confirmed correction. */
 const LEARN_KEYWORD_LIMIT = 5;
@@ -123,6 +135,22 @@ export async function ensureCustomerAssignments(
 
   if (targetItems.length === 0) return [];
 
+  // Identity is scoped to the CUSTOMER and its LINE ITEM number: the same line
+  // item from the same customer is the same item across requests.
+  const [rfqRow] = await db
+    .select({
+      customerId: customerRfqsTable.customerId,
+      customerName: customerRfqsTable.customerName,
+    })
+    .from(customerRfqsTable)
+    .where(eq(customerRfqsTable.id, customerRfqId));
+  const scope = customerScopeOf(rfqRow ?? { customerId: null, customerName: "" });
+  const keyOf = (i: {
+    partNo?: string | null;
+    description?: string | null;
+    lineItem?: string | null;
+  }) => customerItemIdentityKey(scope, i);
+
   const existing = await db
     .select({ customerRfqItemId: customerRfqItemAssignmentsTable.customerRfqItemId })
     .from(customerRfqItemAssignmentsTable)
@@ -148,9 +176,9 @@ export async function ensureCustomerAssignments(
   const needsClassification = targetItems.filter(
     (i) => !alreadyAssigned.has(i.id) && (i.categoryId ?? null) == null,
   );
-  const memoryMap = await loadClassificationMap(needsClassification).catch(
-    () => new Map<string, RememberedClassification>(),
-  );
+  const memoryMap = await loadClassificationMap(
+    needsClassification.map((i) => ({ ...i, key: keyOf(i) })),
+  ).catch(() => new Map<string, RememberedClassification>());
 
   // ── AI classification pass ────────────────────────────────────────────────
   // Items that still have no category AND no memory entry are classified by the
@@ -160,9 +188,7 @@ export async function ensureCustomerAssignments(
   // (unconfigured / provider error / unparsable), `aiResults` is null and every
   // item falls back to the deterministic keyword classifier below. Best-effort:
   // this must never fail the customer RFQ it is classifying.
-  const needsAi = needsClassification.filter(
-    (i) => !memoryMap.has(classificationIdentityKey(i) ?? ""),
-  );
+  const needsAi = needsClassification.filter((i) => !memoryMap.has(keyOf(i) ?? ""));
   const aiResults = needsAi.length > 0 ? await classifyItemsWithAi(needsAi, ctx.categories) : null;
   const aiByItemId = new Map<number, AiClassifyResult>();
   if (aiResults) {
@@ -188,7 +214,10 @@ export async function ensureCustomerAssignments(
     let confidence = 100;
     // The item's canonical identity — computed once, used both to consult the
     // memory and to remember the decision below.
-    const identityKey = classificationIdentityKey(item);
+    const identityKey = keyOf(item);
+    // Only a HUMAN decision (memory source = manual) is approved. An automatic
+    // suggestion is always pending until a manager/admin confirms it.
+    let approvedFromMemory = false;
     let analysis: {
       brandId: number | null;
       subcategoryIds: number[];
@@ -200,7 +229,8 @@ export async function ensureCustomerAssignments(
       //    the same way here, with no model call. This is the primary fix for the
       //    «same item, different categories» defect.
       const remembered = identityKey ? memoryMap.get(identityKey) : undefined;
-      if (remembered && remembered.categoryId != null) {
+      if (remembered && remembered.categoryId != null && remembered.source === "manual") {
+        approvedFromMemory = true;
         categoryId = remembered.categoryId;
         confidence = remembered.source === "manual" ? 100 : (remembered.confidence ?? 100);
         analysis = {
@@ -262,23 +292,8 @@ export async function ensureCustomerAssignments(
         })
         .where(eq(customerRfqItemsTable.id, item.id));
 
-      // Remember the decision against the item's IDENTITY so the next RFQ with
-      // the same item resolves instantly. A decision that came FROM memory is
-      // not re-written (it already exists); a manager's decision is authoritative
-      // and is never overwritten by an automatic one (enforced in the memory
-      // module). Best-effort — remembering must never fail the RFQ.
-      if (identityKey && !memoryMap.has(identityKey)) {
-        await rememberClassification({
-          partNo: item.partNo,
-          description: item.description,
-          lineItem: item.lineItem,
-          categoryId,
-          subcategoryIds: subIds,
-          brandId: analysis?.brandId ?? null,
-          source: "auto",
-          confidence,
-        }).catch(() => {});
-      }
+      // Suggestions are NOT remembered: only a human approval becomes identity
+      // memory (see approveCustomerItem). The item stays pending until then.
     } else {
       categoryId = null;
     }
@@ -317,6 +332,8 @@ export async function ensureCustomerAssignments(
         employeeId,
         source: "auto",
         confidence: String(confidence),
+        reviewStatus: approvedFromMemory ? "approved" : "pending",
+        reviewedAt: approvedFromMemory ? new Date() : null,
       })
       .onConflictDoNothing();
 
@@ -814,8 +831,11 @@ export async function assignCustomerItemManually(params: {
   employeeId: number | null;
   assignedBy: number | null;
   reason?: string | null;
+  /** A manager/admin write is an approval; `pending` is for suggestions only. */
+  reviewStatus?: "pending" | "approved";
 }): Promise<void> {
   const { customerRfqItemId, categoryId, employeeId, assignedBy, reason } = params;
+  const reviewStatus = params.reviewStatus ?? "approved";
 
   await db.transaction(async (tx) => {
     // Lock the item row FIRST — serializes every writer of this item's periods.
@@ -824,6 +844,7 @@ export async function assignCustomerItemManually(params: {
     const [item] = await tx
       .select({
         id: customerRfqItemsTable.id,
+        customerRfqId: customerRfqItemsTable.customerRfqId,
         categoryId: customerRfqItemsTable.categoryId,
         description: customerRfqItemsTable.description,
         partNo: customerRfqItemsTable.partNo,
@@ -832,6 +853,14 @@ export async function assignCustomerItemManually(params: {
       .from(customerRfqItemsTable)
       .where(eq(customerRfqItemsTable.id, customerRfqItemId));
     if (!item) throw new Error("customer rfq item not found");
+    const [rfqRow] = await tx
+      .select({
+        customerId: customerRfqsTable.customerId,
+        customerName: customerRfqsTable.customerName,
+      })
+      .from(customerRfqsTable)
+      .where(eq(customerRfqsTable.id, item.customerRfqId));
+    const scope = customerScopeOf(rfqRow ?? { customerId: null, customerName: "" });
 
     const [prev] = await tx
       .select({
@@ -882,6 +911,8 @@ export async function assignCustomerItemManually(params: {
           source: "manual",
           confidence: null,
           assignedBy,
+          reviewStatus,
+          reviewedBy: reviewStatus === "approved" ? assignedBy : null,
         },
         at,
       );
@@ -913,9 +944,32 @@ export async function assignCustomerItemManually(params: {
     // classification, so the same item in a later RFQ keeps the manager's
     // category. Written even when only the OWNER changed (categoryId unchanged)
     // so a re-confirmation refreshes the memory's evidence.
+    // A re-confirmation with no change still counts as the approval.
+    if (
+      reviewStatus === "approved" &&
+      categoryChanged === false &&
+      employeeChanged === false &&
+      prev
+    ) {
+      await tx
+        .update(customerRfqItemAssignmentsTable)
+        .set({
+          reviewStatus: "approved",
+          reviewedBy: assignedBy,
+          reviewedAt: sql`clock_timestamp()`,
+        })
+        .where(
+          and(
+            eq(customerRfqItemAssignmentsTable.customerRfqItemId, customerRfqItemId),
+            isNull(customerRfqItemAssignmentsTable.validTo),
+          ),
+        );
+    }
+
     if (categoryId != null) {
       await rememberClassification(
         {
+          key: customerItemIdentityKey(scope, item),
           partNo: item.partNo,
           description: item.description,
           lineItem: item.lineItem,
@@ -927,6 +981,135 @@ export async function assignCustomerItemManually(params: {
         tx,
       ).catch(() => {});
     }
+  });
+}
+
+/**
+ * Approve a customer item's classification (manager/admin). Writes the approval,
+ * remembers it against the customer-scoped line item, and propagates the same
+ * decision to every other item of the SAME customer with the SAME line item.
+ * Credits the achievement only if the item already has a recorded delivery.
+ */
+export async function approveCustomerItem(params: {
+  customerRfqItemId: number;
+  approvedBy: number | null;
+  /** Optional override; omitted = approve what is currently suggested. */
+  categoryId?: number | null;
+  employeeId?: number | null;
+}): Promise<{ propagatedItemIds: number[] }> {
+  const { customerRfqItemId, approvedBy } = params;
+
+  const [item] = await db
+    .select({
+      id: customerRfqItemsTable.id,
+      customerRfqId: customerRfqItemsTable.customerRfqId,
+      categoryId: customerRfqItemsTable.categoryId,
+      lineItem: customerRfqItemsTable.lineItem,
+    })
+    .from(customerRfqItemsTable)
+    .where(eq(customerRfqItemsTable.id, customerRfqItemId));
+  if (!item) throw new Error("customer rfq item not found");
+
+  const [open] = await db
+    .select({
+      categoryId: customerRfqItemAssignmentsTable.categoryId,
+      employeeId: customerRfqItemAssignmentsTable.employeeId,
+    })
+    .from(customerRfqItemAssignmentsTable)
+    .where(
+      and(
+        eq(customerRfqItemAssignmentsTable.customerRfqItemId, customerRfqItemId),
+        isNull(customerRfqItemAssignmentsTable.validTo),
+      ),
+    );
+
+  const categoryId =
+    params.categoryId !== undefined
+      ? params.categoryId
+      : (open?.categoryId ?? item.categoryId ?? null);
+  if (categoryId == null) throw new Error("no category to approve");
+  const employeeId =
+    params.employeeId !== undefined ? params.employeeId : (open?.employeeId ?? null);
+
+  await assignCustomerItemManually({
+    customerRfqItemId,
+    categoryId,
+    employeeId,
+    assignedBy: approvedBy,
+    reason: "approved",
+    reviewStatus: "approved",
+  });
+
+  const propagatedItemIds: number[] = [];
+  const li = normalizeText(item.lineItem).replace(/ /g, "");
+  if (li.length >= 3) {
+    const [rfqRow] = await db
+      .select({
+        customerId: customerRfqsTable.customerId,
+        customerName: customerRfqsTable.customerName,
+      })
+      .from(customerRfqsTable)
+      .where(eq(customerRfqsTable.id, item.customerRfqId));
+    const scope = customerScopeOf(rfqRow ?? { customerId: null, customerName: "" });
+
+    const siblings = await db
+      .select({
+        id: customerRfqItemsTable.id,
+        customerId: customerRfqsTable.customerId,
+        customerName: customerRfqsTable.customerName,
+      })
+      .from(customerRfqItemsTable)
+      .innerJoin(customerRfqsTable, eq(customerRfqItemsTable.customerRfqId, customerRfqsTable.id))
+      .where(
+        and(
+          sql`lower(regexp_replace(${customerRfqItemsTable.lineItem}, '\\s', '', 'g')) = ${li}`,
+          eq(customerRfqItemsTable.isCancelled, false),
+          ne(customerRfqItemsTable.id, customerRfqItemId),
+        ),
+      );
+
+    const ctx = await buildContext();
+    for (const sib of siblings) {
+      if (customerScopeOf(sib) !== scope) continue;
+      const owner = employeeId ?? pickOwner(categoryId, ctx);
+      await assignCustomerItemManually({
+        customerRfqItemId: sib.id,
+        categoryId,
+        employeeId: owner,
+        assignedBy: approvedBy,
+        reason: `propagated from approved item ${customerRfqItemId}`,
+        reviewStatus: "approved",
+      });
+      propagatedItemIds.push(sib.id);
+    }
+  }
+
+  for (const id of [customerRfqItemId, ...propagatedItemIds]) {
+    await freezeIfDelivered(id);
+  }
+  return { propagatedItemIds };
+}
+
+/** Freeze an item's achievement if it already has a recorded (non-voided) delivery. */
+async function freezeIfDelivered(customerRfqItemId: number): Promise<void> {
+  const [delivered] = await db
+    .select({ poItemId: customerPoItemsTable.id })
+    .from(customerPoItemDeliveriesTable)
+    .innerJoin(
+      customerPoItemsTable,
+      eq(customerPoItemDeliveriesTable.customerPoItemId, customerPoItemsTable.id),
+    )
+    .where(
+      and(
+        eq(customerPoItemsTable.customerRfqItemId, customerRfqItemId),
+        eq(customerPoItemDeliveriesTable.voided, false),
+        sql`${customerPoItemDeliveriesTable.deliveredQty} > 0`,
+      ),
+    )
+    .limit(1);
+  if (!delivered) return;
+  await db.transaction(async (tx) => {
+    await freezeOnDelivery(tx, delivered.poItemId);
   });
 }
 

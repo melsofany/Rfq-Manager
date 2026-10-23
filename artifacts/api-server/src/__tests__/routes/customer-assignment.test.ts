@@ -59,6 +59,11 @@ const rfqItemAssignmentsTable = {
   employeeId: "employeeId",
 };
 const rfqTable = { _: "rfq", id: "id", status: "status" };
+const customerRfqsTable = {
+  id: "rfq.id",
+  customerId: "rfq.customerId",
+  customerName: "rfq.customerName",
+};
 const customerRfqItemsTable = {
   _: "customerRfqItems",
   id: "id",
@@ -134,6 +139,7 @@ const dbMock: any = {
         return chain(isWorkload ? workloadRows : customerAssignmentRows);
       }
       if (table === customerRfqItemsTable) return chain(customerItemRows);
+      if (table === customerRfqsTable) return chain([{ customerId: 1, customerName: "ACME" }]);
       if (table === rfqItemsTable) return chain(supplierItemRows);
       if (table === itemClassificationIdentityTable) return chain(memoryRows);
       if (table === employeesTable) return chain([]);
@@ -193,6 +199,7 @@ vi.mock("@workspace/db", () => ({
   rfqItemAssignmentsTable,
   rfqTable,
   customerRfqItemsTable,
+  customerRfqsTable,
   customerRfqItemAssignmentsTable,
   itemAssignmentAuditTable,
   itemCategoryKeywordsTable,
@@ -574,7 +581,11 @@ describe("identity memory — the same item keeps ONE category", () => {
   it("reuses a remembered category and never calls the model", async () => {
     // The SAME part number was classified as كهرباء (3) on an earlier RFQ. This
     // RFQ must resolve it from memory — no AI call, no keyword guess.
-    memoryRows = [{ identityKey: "pn:680632", categoryId: 3, source: "auto", confidence: 90 }];
+    // Identity keys are customer-scoped (customer id 1 in the rfq mock). Only a
+    // HUMAN decision is trusted as approved memory.
+    memoryRows = [
+      { identityKey: "cust:id:1|pn:680632", categoryId: 3, source: "manual", confidence: 100 },
+    ];
     customerItemRows = [
       {
         id: 800,
@@ -590,6 +601,7 @@ describe("identity memory — the same item keeps ONE category", () => {
     expect(outcomes[0].reason).toBe("assigned");
     expect(outcomes[0].employeeId).toBe(5);
     expect(aiClassify).not.toHaveBeenCalled(); // memory short-circuits the model
+    expect(insertedCustomerAssignments.at(-1)?.reviewStatus).toBe("approved");
     expect(updatedCustomerItemCalls.some((c) => c.id === 800 && c.vals.categoryId === 3)).toBe(
       true,
     );
@@ -599,7 +611,9 @@ describe("identity memory — the same item keeps ONE category", () => {
     // «منظم جهد اتوماتيكي» carries no seeded keyword — without memory it is
     // unclassified. Memory places it, proving memory (not keywords) is what
     // keeps the same item consistent.
-    memoryRows = [{ identityKey: "ds:اتوماتيكي جهد منظم", categoryId: 3, source: "auto" }];
+    memoryRows = [
+      { identityKey: "cust:id:1|ds:اتوماتيكي جهد منظم", categoryId: 3, source: "manual" },
+    ];
     customerItemRows = [
       {
         id: 801,
@@ -616,7 +630,7 @@ describe("identity memory — the same item keeps ONE category", () => {
     expect(aiClassify).not.toHaveBeenCalled();
   });
 
-  it("remembers an automatic decision by identity so the next RFQ reuses it", async () => {
+  it("does NOT remember an automatic suggestion — only a human approval is memory", async () => {
     customerItemRows = [
       {
         id: 802,
@@ -628,10 +642,8 @@ describe("identity memory — the same item keeps ONE category", () => {
       },
     ];
     await ensureCustomerAssignments(20);
-    expect(insertedMemory).toHaveLength(1);
-    expect(insertedMemory[0].source).toBe("auto");
-    expect(insertedMemory[0].categoryId).toBe(3);
-    expect(insertedMemory[0].identityKey.startsWith("ds:")).toBe(true);
+    expect(insertedMemory).toHaveLength(0);
+    expect(insertedCustomerAssignments.at(-1)?.reviewStatus).toBe("pending");
   });
 
   it("a manager's manual decision is remembered authoritatively", async () => {

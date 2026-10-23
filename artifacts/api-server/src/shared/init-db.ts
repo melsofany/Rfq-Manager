@@ -2364,6 +2364,16 @@ export async function initDb(): Promise<void> {
     await client.query(
       `ALTER TABLE customer_rfq_item_assignments ADD COLUMN IF NOT EXISTS valid_to TIMESTAMPTZ`,
     );
+    // Review gate (see schema). Each statement is separate and idempotent.
+    await client.query(
+      `ALTER TABLE customer_rfq_item_assignments ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'pending'`,
+    );
+    await client.query(
+      `ALTER TABLE customer_rfq_item_assignments ADD COLUMN IF NOT EXISTS reviewed_by INTEGER`,
+    );
+    await client.query(
+      `ALTER TABLE customer_rfq_item_assignments ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ`,
+    );
     // Backfill only untouched rows — a re-run never rewrites migrated dates.
     await client.query(
       `UPDATE customer_rfq_item_assignments SET valid_from = COALESCE(assigned_at, clock_timestamp()) WHERE valid_from IS NULL`,

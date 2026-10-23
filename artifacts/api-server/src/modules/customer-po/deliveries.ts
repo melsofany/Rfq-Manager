@@ -15,6 +15,7 @@
  *   DELETE /customer-po/deliveries/:deliveryId → delete a delivery row
  */
 import { Router } from "express";
+import { freezeOnDelivery } from "../rfq/attribution";
 import {
   db,
   customerPosTable,
@@ -316,6 +317,12 @@ router.post("/customer-po/:id/deliveries", requireAuth, async (req, res): Promis
           })
           .returning({ id: customerPoItemDeliveriesTable.id });
         ids.push(row.id);
+
+        // The achievement is credited on DELIVERY (customer receipt), and only
+        // for an approved classification — freezeOnDelivery enforces the gate.
+        if ((delivered ?? 0) > 0) {
+          await freezeOnDelivery(tx, customerPoItemId);
+        }
 
         await recomputeItemTotals(customerPoItemId);
       }

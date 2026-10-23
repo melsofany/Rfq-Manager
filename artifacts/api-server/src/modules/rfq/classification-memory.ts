@@ -28,6 +28,8 @@ export interface RememberedClassification {
 }
 
 export interface RememberClassificationInput {
+  /** Explicit identity key (e.g. customer-scoped). Derived from the item when absent. */
+  key?: string | null;
   partNo?: string | null;
   description?: string | null;
   lineItem?: string | null;
@@ -67,7 +69,7 @@ export async function rememberClassification(
   input: RememberClassificationInput,
   handle: DbLike = db,
 ): Promise<string | null> {
-  const key = classificationIdentityKey(input);
+  const key = input.key ?? classificationIdentityKey(input);
   if (key == null) return null;
 
   const values = {
@@ -138,12 +140,17 @@ export async function lookupClassification(
  * identity key are looked up; the map is keyed by that key.
  */
 export async function loadClassificationMap(
-  items: Array<{ partNo?: string | null; description?: string | null; lineItem?: string | null }>,
+  items: Array<{
+    key?: string | null;
+    partNo?: string | null;
+    description?: string | null;
+    lineItem?: string | null;
+  }>,
   handle: DbLike = db,
 ): Promise<Map<string, RememberedClassification>> {
   const keys: string[] = [];
   for (const it of items) {
-    const k = classificationIdentityKey(it);
+    const k = it.key ?? classificationIdentityKey(it);
     if (k) keys.push(k);
   }
   const out = new Map<string, RememberedClassification>();
