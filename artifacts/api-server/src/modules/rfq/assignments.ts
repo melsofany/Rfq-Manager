@@ -222,6 +222,7 @@ router.get("/customer-rfq/:id/assignments", requireAuth, async (req, res): Promi
       employeeId: customerRfqItemAssignmentsTable.employeeId,
       source: customerRfqItemAssignmentsTable.source,
       confidence: customerRfqItemAssignmentsTable.confidence,
+      reviewStatus: customerRfqItemAssignmentsTable.reviewStatus,
       employeeName: employeesTable.name,
       categoryName: itemCategoriesTable.name,
     })
@@ -265,6 +266,7 @@ router.get("/customer-rfq/:id/assignments", requireAuth, async (req, res): Promi
         employeeName: a?.employeeName ?? null,
         source: a?.source ?? null,
         confidence: a?.confidence != null ? Number(a.confidence) : null,
+        reviewStatus: a?.reviewStatus ?? null,
         status,
         unclassified: categoryId == null,
         unassigned: employeeId == null,

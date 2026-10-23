@@ -3,6 +3,7 @@ import {
   db,
   customerRfqsTable,
   customerRfqItemsTable,
+  customerRfqItemAssignmentsTable,
   customersTable,
   employeesTable,
   rfqTable,
@@ -27,6 +28,7 @@ import {
   listClassificationConflicts,
 } from "../rfq/customer-assignment";
 import { rememberClassification } from "../rfq/classification-memory";
+import { approveCustomerItem } from "../rfq/customer-assignment";
 import { classifyItem, normalizeText } from "../rfq/classification";
 import { loadClassifierVocabulary } from "../rfq/keywords";
 import { assignReviewGroup, resolveConflictItems, listReviewGroups } from "../rfq/review-groups";
@@ -2095,6 +2097,24 @@ router.get("/customer-rfq/item-categories", requireAuth, async (req, res): Promi
     : [];
   const ownerName = new Map(owners.map((o) => [o.id, o.name]));
 
+  // Review status of each item's open assignment: approved | pending. An item
+  // without an open assignment has no status (null) — it is unassigned.
+  const openAssignments = itemIds.length
+    ? await db
+        .select({
+          customerRfqItemId: customerRfqItemAssignmentsTable.customerRfqItemId,
+          reviewStatus: customerRfqItemAssignmentsTable.reviewStatus,
+        })
+        .from(customerRfqItemAssignmentsTable)
+        .where(
+          and(
+            inArray(customerRfqItemAssignmentsTable.customerRfqItemId, itemIds),
+            isNull(customerRfqItemAssignmentsTable.validTo),
+          ),
+        )
+    : [];
+  const reviewByItem = new Map(openAssignments.map((a) => [a.customerRfqItemId, a.reviewStatus]));
+
   let enriched = rows.map((r) => {
     const rowExtras = extraByItem.get(r.id) ?? [];
     const categories: SheetCategory[] = [];
@@ -2129,6 +2149,7 @@ router.get("/customer-rfq/item-categories", requireAuth, async (req, res): Promi
       customerRfqId: r.customerRfqId,
       customerRfqNo: r.customerRfqNo,
       customerName: r.customerName,
+      reviewStatus: reviewByItem.get(r.id) ?? null,
       categoryId: r.categoryId,
       categoryName: r.categoryId != null ? (catName.get(r.categoryId) ?? null) : null,
       // The employee responsible for the item = the owner of its PRIMARY
@@ -2653,6 +2674,138 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
 });
 
 // GET /customer-rfq/:id — single with items
+/**
+ * POST /customer-rfq/:id/approve-all — approve every PENDING, categorised item of
+ * one customer request. Manager/admin only. Each item goes through the same
+ * approval path (propagates to same-customer, same-line-item siblings).
+ */
+/**
+ * GET /customer-rfq/pending-review — customer requests that still have items
+ * waiting for a manager's approval (pending suggestions) or no category yet.
+ */
+router.get(
+  "/customer-rfq/pending-review",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (_req, res): Promise<void> => {
+    const pendingRows = await db
+      .select({
+        rfqId: customerRfqItemsTable.customerRfqId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(customerRfqItemAssignmentsTable)
+      .innerJoin(
+        customerRfqItemsTable,
+        eq(customerRfqItemAssignmentsTable.customerRfqItemId, customerRfqItemsTable.id),
+      )
+      .where(
+        and(
+          isNull(customerRfqItemAssignmentsTable.validTo),
+          eq(customerRfqItemAssignmentsTable.reviewStatus, "pending"),
+          isNotNull(customerRfqItemAssignmentsTable.categoryId),
+          eq(customerRfqItemsTable.isCancelled, false),
+        ),
+      )
+      .groupBy(customerRfqItemsTable.customerRfqId);
+
+    const unclassifiedRows = await db
+      .select({
+        rfqId: customerRfqItemsTable.customerRfqId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(customerRfqItemsTable)
+      .where(
+        and(isNull(customerRfqItemsTable.categoryId), eq(customerRfqItemsTable.isCancelled, false)),
+      )
+      .groupBy(customerRfqItemsTable.customerRfqId);
+
+    const byRfq = new Map<number, { pending: number; unclassified: number }>();
+    for (const r of pendingRows) {
+      const e = byRfq.get(r.rfqId) ?? { pending: 0, unclassified: 0 };
+      e.pending = Number(r.count) || 0;
+      byRfq.set(r.rfqId, e);
+    }
+    for (const r of unclassifiedRows) {
+      const e = byRfq.get(r.rfqId) ?? { pending: 0, unclassified: 0 };
+      e.unclassified = Number(r.count) || 0;
+      byRfq.set(r.rfqId, e);
+    }
+    const ids = [...byRfq.keys()];
+    const headers = ids.length
+      ? await db
+          .select({
+            id: customerRfqsTable.id,
+            customerRfqNo: customerRfqsTable.customerRfqNo,
+            customerName: customerRfqsTable.customerName,
+          })
+          .from(customerRfqsTable)
+          .where(inArray(customerRfqsTable.id, ids))
+      : [];
+    const rows = headers
+      .map((h) => ({
+        rfqId: h.id,
+        customerRfqNo: h.customerRfqNo,
+        customerName: h.customerName,
+        pendingCount: byRfq.get(h.id)?.pending ?? 0,
+        unclassifiedCount: byRfq.get(h.id)?.unclassified ?? 0,
+      }))
+      .filter((r) => r.pendingCount > 0 || r.unclassifiedCount > 0)
+      .sort((a, b) => b.pendingCount - a.pendingCount);
+    res.json({ rows });
+  },
+);
+
+router.post(
+  "/customer-rfq/:id/approve-all",
+  requireAuth,
+  requireRole("admin", "manager"),
+  async (req, res): Promise<void> => {
+    const rfqId = parseInt(req.params.id as string, 10);
+    if (!Number.isFinite(rfqId)) {
+      res.status(400).json({ error: "معرّف الطلب غير صالح" });
+      return;
+    }
+    const pending = await db
+      .select({ id: customerRfqItemAssignmentsTable.customerRfqItemId })
+      .from(customerRfqItemAssignmentsTable)
+      .innerJoin(
+        customerRfqItemsTable,
+        eq(customerRfqItemAssignmentsTable.customerRfqItemId, customerRfqItemsTable.id),
+      )
+      .where(
+        and(
+          eq(customerRfqItemsTable.customerRfqId, rfqId),
+          isNull(customerRfqItemAssignmentsTable.validTo),
+          eq(customerRfqItemAssignmentsTable.reviewStatus, "pending"),
+          isNotNull(customerRfqItemAssignmentsTable.categoryId),
+        ),
+      );
+    let approved = 0;
+    const failed: number[] = [];
+    for (const row of pending) {
+      try {
+        await approveCustomerItem({
+          customerRfqItemId: row.id,
+          approvedBy: req.session.employeeId ?? null,
+        });
+        approved += 1;
+      } catch {
+        failed.push(row.id);
+      }
+    }
+    await db.insert(auditLogTable).values({
+      action: "customer_rfq.approved_all",
+      entityType: "customer_rfq",
+      entityId: rfqId,
+      employeeId: req.session.employeeId,
+      description: `Approved ${approved} pending item(s) of request ${rfqId}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.json({ ok: true, approved, failed });
+  },
+);
+
 router.get("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
