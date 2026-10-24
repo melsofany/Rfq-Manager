@@ -2683,73 +2683,104 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
  * GET /customer-rfq/pending-review — customer requests that still have items
  * waiting for a manager's approval (pending suggestions) or no category yet.
  */
+// Approval tab (تصنيفات البنود → بانتظار الاعتماد). Each request is in exactly one
+// of two lists:
+//  - active (default): still has an item that is pending approval, unclassified
+//    or without an owner, and its close date has not passed;
+//  - archive (view=archive): every active item is classified, assigned and
+//    approved (archiveReason "approved"), or its close date has passed
+//    (archiveReason "expired").
 router.get(
   "/customer-rfq/pending-review",
   requireAuth,
   requireRole("admin", "manager"),
-  async (_req, res): Promise<void> => {
-    const pendingRows = await db
-      .select({
-        rfqId: customerRfqItemsTable.customerRfqId,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(customerRfqItemAssignmentsTable)
-      .innerJoin(
-        customerRfqItemsTable,
-        eq(customerRfqItemAssignmentsTable.customerRfqItemId, customerRfqItemsTable.id),
-      )
-      .where(
-        and(
-          isNull(customerRfqItemAssignmentsTable.validTo),
-          eq(customerRfqItemAssignmentsTable.reviewStatus, "pending"),
-          isNotNull(customerRfqItemAssignmentsTable.categoryId),
-          eq(customerRfqItemsTable.isCancelled, false),
-        ),
-      )
-      .groupBy(customerRfqItemsTable.customerRfqId);
+  async (req, res): Promise<void> => {
+    const view = (req.query as Record<string, string>).view === "archive" ? "archive" : "active";
 
-    const unclassifiedRows = await db
+    const headers = await db
       .select({
-        rfqId: customerRfqItemsTable.customerRfqId,
-        count: sql<number>`count(*)::int`,
+        id: customerRfqsTable.id,
+        customerRfqNo: customerRfqsTable.customerRfqNo,
+        customerName: customerRfqsTable.customerName,
+        expiryDate: customerRfqsTable.expiryDate,
+      })
+      .from(customerRfqsTable);
+
+    const items = await db
+      .select({
+        id: customerRfqItemsTable.id,
+        customerRfqId: customerRfqItemsTable.customerRfqId,
+        categoryId: customerRfqItemsTable.categoryId,
       })
       .from(customerRfqItemsTable)
-      .where(
-        and(isNull(customerRfqItemsTable.categoryId), eq(customerRfqItemsTable.isCancelled, false)),
-      )
-      .groupBy(customerRfqItemsTable.customerRfqId);
+      .where(eq(customerRfqItemsTable.isCancelled, false));
 
-    const byRfq = new Map<number, { pending: number; unclassified: number }>();
-    for (const r of pendingRows) {
-      const e = byRfq.get(r.rfqId) ?? { pending: 0, unclassified: 0 };
-      e.pending = Number(r.count) || 0;
-      byRfq.set(r.rfqId, e);
-    }
-    for (const r of unclassifiedRows) {
-      const e = byRfq.get(r.rfqId) ?? { pending: 0, unclassified: 0 };
-      e.unclassified = Number(r.count) || 0;
-      byRfq.set(r.rfqId, e);
-    }
-    const ids = [...byRfq.keys()];
-    const headers = ids.length
+    const asg = items.length
       ? await db
           .select({
-            id: customerRfqsTable.id,
-            customerRfqNo: customerRfqsTable.customerRfqNo,
-            customerName: customerRfqsTable.customerName,
+            customerRfqItemId: customerRfqItemAssignmentsTable.customerRfqItemId,
+            categoryId: customerRfqItemAssignmentsTable.categoryId,
+            employeeId: customerRfqItemAssignmentsTable.employeeId,
+            reviewStatus: customerRfqItemAssignmentsTable.reviewStatus,
           })
-          .from(customerRfqsTable)
-          .where(inArray(customerRfqsTable.id, ids))
+          .from(customerRfqItemAssignmentsTable)
+          .where(isNull(customerRfqItemAssignmentsTable.validTo))
       : [];
+    const asgByItem = new Map(asg.map((a) => [a.customerRfqItemId, a]));
+
+    const stats = new Map<
+      number,
+      { total: number; pending: number; unclassified: number; unassigned: number; approved: number }
+    >();
+    for (const it of items) {
+      const st = stats.get(it.customerRfqId) ?? {
+        total: 0,
+        pending: 0,
+        unclassified: 0,
+        unassigned: 0,
+        approved: 0,
+      };
+      const a = asgByItem.get(it.id);
+      st.total += 1;
+      if (it.categoryId == null) st.unclassified += 1;
+      if (a?.reviewStatus === "pending" && a.categoryId != null) st.pending += 1;
+      if (a?.categoryId != null && a.employeeId == null) st.unassigned += 1;
+      if (
+        a != null &&
+        a.categoryId != null &&
+        a.employeeId != null &&
+        a.reviewStatus === "approved"
+      )
+        st.approved += 1;
+      stats.set(it.customerRfqId, st);
+    }
+
     const rows = headers
-      .map((h) => ({
-        rfqId: h.id,
-        customerRfqNo: h.customerRfqNo,
-        customerName: h.customerName,
-        pendingCount: byRfq.get(h.id)?.pending ?? 0,
-        unclassifiedCount: byRfq.get(h.id)?.unclassified ?? 0,
-      }))
-      .filter((r) => r.pendingCount > 0 || r.unclassifiedCount > 0)
+      .map((h) => {
+        const st = stats.get(h.id) ?? {
+          total: 0,
+          pending: 0,
+          unclassified: 0,
+          unassigned: 0,
+          approved: 0,
+        };
+        const expired = hasExpired(h.expiryDate);
+        const fullyApproved = st.total > 0 && st.approved === st.total;
+        const archiveReason = expired ? "expired" : fullyApproved ? "approved" : null;
+        const needsWork = st.pending > 0 || st.unclassified > 0 || st.unassigned > 0;
+        return {
+          rfqId: h.id,
+          customerRfqNo: h.customerRfqNo,
+          customerName: h.customerName,
+          pendingCount: st.pending,
+          unclassifiedCount: st.unclassified,
+          unassignedCount: st.unassigned,
+          archiveReason,
+          inActive: archiveReason == null && needsWork,
+        };
+      })
+      .filter((r) => (view === "archive" ? r.archiveReason != null : r.inActive))
+      .map(({ inActive: _inActive, ...r }) => r)
       .sort((a, b) => b.pendingCount - a.pendingCount);
     res.json({ rows });
   },

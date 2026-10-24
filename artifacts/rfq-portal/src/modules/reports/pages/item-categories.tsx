@@ -115,6 +115,8 @@ interface PendingReviewRow {
   customerName: string | null;
   pendingCount: number;
   unclassifiedCount: number;
+  unassignedCount: number;
+  archiveReason: "approved" | "expired" | null;
 }
 
 interface RequestItemRow {
@@ -372,11 +374,14 @@ function PendingReviewPanel({
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [view, setView] = useState<"active" | "archive">("active");
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/customer-rfq/pending-review", { credentials: "include" });
+      const res = await fetch(`/api/customer-rfq/pending-review?view=${view}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error(await readError(res));
       const json = (await res.json()) as { rows: PendingReviewRow[] };
       setRows(json.rows);
@@ -386,7 +391,7 @@ function PendingReviewPanel({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [view]);
 
   useEffect(() => {
     void load();
@@ -416,10 +421,34 @@ function PendingReviewPanel({
   return (
     <div className="space-y-3">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">طلبات بانتظار الاعتماد</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          التصنيف الآلي لا يدخل الـ KPI قبل اعتماد المدير. افتح الطلب لاعتماد كل بند أو تعديله، أو
-          اعتمد كل بنود الطلب مرة واحدة.
+        <h2 className="text-lg font-semibold text-foreground">
+          {view === "archive" ? "أرشيف الطلبات" : "طلبات بانتظار الاعتماد"}
+        </h2>
+        <div className="flex gap-1 border-b border-border mt-3">
+          {[
+            { key: "active" as const, label: "بانتظار الاعتماد" },
+            { key: "archive" as const, label: "الأرشيف" },
+          ].map((t) => (
+            <button
+              key={t.key}
+              onClick={() => {
+                setView(t.key);
+                setOpenId(null);
+              }}
+              className={`inline-flex items-center px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                view === t.key
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-sm text-muted-foreground mt-3">
+          {view === "archive"
+            ? "الطلبات التي صُنّفت وأُسندت واعتُمدت بالكامل، أو انتهى تاريخ انتهائها."
+            : "التصنيف الآلي لا يدخل الـ KPI قبل اعتماد المدير. افتح الطلب لاعتماد كل بند أو تعديله، أو اعتمد كل بنود الطلب مرة واحدة."}
         </p>
       </div>
       <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -432,20 +461,22 @@ function PendingReviewPanel({
                 بانتظار الاعتماد
               </th>
               <th className="px-3 py-2 text-xs font-medium text-muted-foreground">بلا تصنيف</th>
+              <th className="px-3 py-2 text-xs font-medium text-muted-foreground">بلا مسؤول</th>
+              <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الحالة</th>
               <th className="px-3 py-2 w-56" />
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   جارٍ التحميل…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
-                  لا توجد طلبات بانتظار الاعتماد.
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                  {view === "archive" ? "الأرشيف فارغ." : "لا توجد طلبات بانتظار الاعتماد."}
                 </td>
               </tr>
             ) : (
@@ -462,6 +493,14 @@ function PendingReviewPanel({
                         {r.pendingCount}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">{r.unclassifiedCount}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{r.unassignedCount}</td>
+                      <td className="px-3 py-2 text-xs">
+                        {r.archiveReason === "expired"
+                          ? "انتهى التاريخ"
+                          : r.archiveReason === "approved"
+                            ? "معتمد بالكامل"
+                            : "جارٍ"}
+                      </td>
                       <td className="px-3 py-2">
                         <div className="flex gap-2 justify-end">
                           <Button
@@ -485,7 +524,7 @@ function PendingReviewPanel({
                     </tr>
                     {isOpen && (
                       <tr className="border-b border-border/40 bg-muted/10">
-                        <td colSpan={5} className="p-0">
+                        <td colSpan={7} className="p-0">
                           <RequestItemsDrilldown
                             rfqId={r.rfqId}
                             canManage={canManage}
