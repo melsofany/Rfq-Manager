@@ -49,7 +49,11 @@ export function dateDomain(field: string, range: DateRange): unknown[] {
   return d;
 }
 
+// account.move carries `state`; account.move.line does not — it exposes the
+// related, stored `parent_state`. Using the wrong one makes Odoo reject the
+// whole domain with "Invalid field ... in leaf".
 const POSTED: unknown = ["state", "=", "posted"];
+const POSTED_LINE: unknown = ["parent_state", "=", "posted"];
 
 // ─── Chart of accounts ──────────────────────────────────────────────────────
 
@@ -92,7 +96,7 @@ export async function listJournalLines(
   accountId?: number,
 ): Promise<OdooMoveLine[]> {
   const domain: unknown[] = [
-    POSTED,
+    POSTED_LINE,
     ["display_type", "not in", ["line_section", "line_note"]],
     ...dateDomain("date", range),
   ];
@@ -137,7 +141,7 @@ export async function trialBalance(cfg: OdooConfig, range: DateRange): Promise<T
   }>(
     cfg,
     "account.move.line",
-    [POSTED, ...dateDomain("date", range)],
+    [POSTED_LINE, ...dateDomain("date", range)],
     ["debit:sum", "credit:sum", "balance:sum"],
     ["account_id"],
   );
