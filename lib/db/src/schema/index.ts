@@ -22,6 +22,7 @@ export * from "./attachments";
 export * from "./tax_settings";
 export * from "./expenses";
 export * from "./accounting";
+export * from "./accounts_bridge";
 export * from "./data_entry_sessions";
 export * from "./backup";
 export * from "./ai_assistant";

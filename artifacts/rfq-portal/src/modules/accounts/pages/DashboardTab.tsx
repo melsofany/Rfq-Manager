@@ -1,133 +1,101 @@
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Wallet,
-  Landmark,
-  TrendingDown,
-  TrendingUp,
-  AlertTriangle,
-  Clock,
-  FileText,
-} from "lucide-react";
-import { toast } from "sonner";
-import { getApiErrorMessage } from "@/lib/api-error";
-import { Link } from "wouter";
-import { api } from "@/lib/accounts-api";
-import { TotalCard } from "../components/ui";
+import { StatCard, PageHeader, Loading, ErrorState, NotConfigured } from "../components/ui";
+import { useBridgeQuery, egp, type SyncStatus } from "../lib/bridge";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
-interface Dashboard {
-  totalAP: string | null;
-  totalAR: string | null;
-  cash: string | null;
-  bank: string | null;
-  pendingDrafts: number;
-  recentEntries: Array<{
-    id: number;
-    entryNo: string;
-    entryDate: string;
-    description: string;
-    totalDebit: string | null;
-  }>;
+interface DashboardPayload {
+  company: { name: string; currency: string; country: string } | null;
+  receivables: { total: number; overdue: number; count: number };
+  payables: { total: number; overdue: number; count: number };
+  sales: { count: number; untaxed: number; tax: number; total: number; residual: number };
+  purchases: { count: number; untaxed: number; tax: number; total: number; residual: number };
+  payments: { collected: number; paid: number };
 }
 
+/** لوحة الحسابات — key totals, read live from Odoo. */
 export default function DashboardTab() {
-  const [data, setData] = useState<Dashboard | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, error, notConfigured, reload } = useBridgeQuery<DashboardPayload>(
+    "/accounts/odoo/dashboard",
+  );
+  const sync = useBridgeQuery<SyncStatus>("/accounts/sync-status");
 
-  async function load() {
-    setLoading(true);
-    try {
-      setData(await api.get<Dashboard>("/api/accounts/dashboard"));
-    } catch (e) {
-      toast.error(getApiErrorMessage(e, "فشل تحميل لوحة المحاسب"));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  if (loading || !data) {
-    return <div className="p-8 text-center text-muted-foreground text-sm">جارٍ التحميل...</div>;
-  }
+  if (notConfigured) return <NotConfigured onRetry={reload} />;
+  if (isLoading) return <Loading />;
+  if (error) return <ErrorState message={error} onRetry={reload} />;
+  if (!data) return <ErrorState message="لا توجد بيانات" onRetry={reload} />;
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <TotalCard
-          label="ذمم الموردين (مستحق)"
-          value={data.totalAP ?? "-"}
-          icon={<TrendingDown size={16} className="text-red-600" />}
-          tone="loss"
-        />
-        <TotalCard
-          label="ذمم العملاء (متحصّل)"
-          value={data.totalAR ?? "-"}
-          icon={<TrendingUp size={16} className="text-emerald-600" />}
-          tone="profit"
-        />
-        <TotalCard
-          label="رصيد النقدية"
-          value={data.cash ?? "-"}
-          icon={<Wallet size={16} className="text-primary" />}
-        />
-        <TotalCard
-          label="رصيد البنك"
-          value={data.bank ?? "-"}
-          icon={<Landmark size={16} className="text-primary" />}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div className="bg-card border border-border rounded-lg p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold flex items-center gap-2">
-              <Clock size={16} className="text-amber-600" />
-              قيود بانتظار المراجعة والترحيل
-            </h3>
-            <span className="text-2xl font-bold text-amber-600">{data.pendingDrafts}</span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            قيود اليومية في حالة مسودة تحتاج مراجعة المحاسب قبل ترحيلها إلى دفتر الأستاذ.
-          </p>
-          <Link to="/accounts?tab=journal">
-            <Button size="sm" variant="outline" className="gap-1.5">
-              <FileText size={14} /> مراجعة القيود
-            </Button>
-          </Link>
-        </div>
-
-        <div className="bg-card border border-border rounded-lg p-4">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-            <AlertTriangle size={16} className="text-primary" /> أحدث القيود المرحّلة
-          </h3>
-          {data.recentEntries.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-4">
-              لا توجد قيود مرحّلة بعد
-            </p>
+    <div className="space-y-4">
+      <PageHeader
+        title="لوحة الحسابات"
+        subtitle={
+          data.company
+            ? `${data.company.name} — العملة ${data.company.currency || "—"} — ${data.company.country || "—"}`
+            : "المصدر: Odoo"
+        }
+        actions={
+          sync.data?.odoo.ok ? (
+            <Badge variant="outline" className="text-emerald-600">
+              Odoo متصل
+            </Badge>
           ) : (
-            <div className="space-y-2">
-              {data.recentEntries.map((e) => (
-                <div
-                  key={e.id}
-                  className="flex items-center justify-between text-xs border-b border-border last:border-0 pb-2 last:pb-0"
-                >
-                  <div className="min-w-0">
-                    <div className="font-mono text-primary truncate">{e.entryNo}</div>
-                    <div className="text-muted-foreground truncate">{e.description}</div>
-                  </div>
-                  <div className="text-left">
-                    <div className="font-medium">{e.totalDebit ?? "-"}</div>
-                    <div className="text-muted-foreground">{e.entryDate}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+            <Badge variant="outline" className="text-amber-600">
+              Odoo غير متاح
+            </Badge>
+          )
+        }
+      />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          label="المبيعات (بدون ضريبة)"
+          value={egp(data.sales.untaxed)}
+          hint={`${data.sales.count} فاتورة`}
+        />
+        <StatCard label="ض.ق.م. مخرجات" value={egp(data.sales.tax)} tone="warning" />
+        <StatCard
+          label="المشتريات (بدون ضريبة)"
+          value={egp(data.purchases.untaxed)}
+          hint={`${data.purchases.count} فاتورة`}
+        />
+        <StatCard label="ض.ق.م. مدخلات" value={egp(data.purchases.tax)} tone="warning" />
       </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          label="مدينون (ذمم مدينة)"
+          value={egp(data.receivables.total)}
+          hint={`متأخر ${egp(data.receivables.overdue)}`}
+          tone={data.receivables.overdue > 0 ? "negative" : "default"}
+        />
+        <StatCard
+          label="دائنون (ذمم دائنة)"
+          value={egp(data.payables.total)}
+          hint={`متأخر ${egp(data.payables.overdue)}`}
+          tone={data.payables.overdue > 0 ? "negative" : "default"}
+        />
+        <StatCard label="تحصيلات من العملاء" value={egp(data.payments.collected)} tone="positive" />
+        <StatCard label="مدفوعات للموردين" value={egp(data.payments.paid)} />
+      </div>
+
+      <Card className="p-4">
+        <div className="font-medium text-sm mb-3">حالة مزامنة Odoo</div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard label="إجمالي الأحداث" value={sync.data?.counts.total ?? 0} />
+          <StatCard label="تمت المزامنة" value={sync.data?.counts.synced ?? 0} tone="positive" />
+          <StatCard
+            label="فاشلة"
+            value={sync.data?.counts.failed ?? 0}
+            tone={(sync.data?.counts.failed ?? 0) > 0 ? "negative" : "default"}
+          />
+          <StatCard label="معلّقة" value={sync.data?.counts.pending ?? 0} tone="warning" />
+        </div>
+        {sync.data?.failures.length ? (
+          <div className="mt-3 text-xs text-red-600">
+            يوجد {sync.data.failures.length} عملية فاشلة — راجع تبويب «حالة المزامنة».
+          </div>
+        ) : null}
+      </Card>
     </div>
   );
 }
