@@ -337,7 +337,7 @@ export interface OdooPayment {
   payment_type: string;
   partner_type: string;
   state: string;
-  ref: string;
+  payment_reference: string;
   memo: string;
 }
 
@@ -359,7 +359,7 @@ export async function listPayments(
       "payment_type",
       "partner_type",
       "state",
-      "ref",
+      "payment_reference",
       "memo",
     ],
     { order: "date desc, id desc", limit: 500 },

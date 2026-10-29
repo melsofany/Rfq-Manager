@@ -222,7 +222,7 @@ export interface OdooPayment {
   payment_type: string;
   partner_type: string;
   state: string;
-  ref: string;
+  payment_reference: string;
   memo: string;
 }
 

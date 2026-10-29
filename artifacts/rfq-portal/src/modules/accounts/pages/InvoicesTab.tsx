@@ -104,7 +104,7 @@ export default function InvoicesTab() {
                 ]}
                 rows={(supplierPayments.data?.payments ?? []).map((p) => [
                   p.date,
-                  p.name || p.ref,
+                  p.name || p.payment_reference,
                   partnerName(p.partner_id),
                   p.memo,
                   egp(p.amount),
