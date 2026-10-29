@@ -15,6 +15,10 @@ import rfqModule from "../modules/rfq/index";
 import customerRfqModule from "../modules/customer-rfq/index";
 import customerPoModule from "../modules/customer-po/index";
 import poModule from "../modules/po/index";
+import accountsBridgeModule from "../modules/accounts-bridge/index";
+// DEPRECATED: the home-grown ledger. Kept mounted until Odoo is verified
+// working in production — see modules/accounts/DEPRECATED.md. New accounts
+// reads must go through accountsBridgeModule (Odoo) instead.
 import accountsModule from "../modules/accounts/index";
 import expensesModule from "../modules/expenses/index";
 import collectionsModule from "../modules/collections/index";
@@ -38,7 +42,11 @@ router.use(rfqModule); // rfq · offers · pricing · items
 router.use(customerRfqModule); // customer-rfq intake
 router.use(customerPoModule); // customer purchase orders
 router.use(poModule); // purchase-orders
-router.use(accountsModule); // accounts · realized margins · Egyptian tax
+// Odoo bridge FIRST: it owns /accounts/sync-status, /accounts/odoo/* and
+// /accounts/bridge/*. The deprecated ledger module is mounted after it and
+// keeps its own distinct /accounts/* paths.
+router.use(accountsBridgeModule); // Odoo bridge — sync status + Odoo reads
+router.use(accountsModule); // DEPRECATED ledger · realized margins · Egyptian tax
 router.use(expensesModule); // operating expenses
 router.use(collectionsModule); // customer collection tracking
 router.use(reportsModule); // analytics · audit · sync

@@ -2890,6 +2890,40 @@ export async function initDb(): Promise<void> {
       `INSERT INTO db_backup_settings (key) VALUES ('default') ON CONFLICT (key) DO NOTHING`,
     );
 
+    // ── RFQ → Odoo bridge sync state (each its own statement: statements in one
+    // client.query share an implicit transaction, so a sibling failure would
+    // roll this CREATE back silently). The UNIQUE event_key is what makes the
+    // bridge idempotent — see lib/db/src/schema/accounts_bridge.ts. ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS accounts_bridge_sync (
+        id SERIAL PRIMARY KEY,
+        event_key TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        source_table TEXT,
+        source_id INTEGER,
+        odoo_model TEXT,
+        odoo_id INTEGER,
+        odoo_ref TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        payload JSONB,
+        synced_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS accounts_bridge_sync_event_key_idx
+         ON accounts_bridge_sync (event_key)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS accounts_bridge_sync_status_idx ON accounts_bridge_sync (status)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS accounts_bridge_sync_type_idx ON accounts_bridge_sync (event_type)`,
+    );
+
     logger.info("initDb: seed complete");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");
