@@ -102,11 +102,28 @@ export async function resolvePartner(
   const prefix = opts.kind === "supplier" ? "RFQ-SUP" : "RFQ-CUS";
   const ref = opts.rfqId != null ? `${prefix}-${opts.rfqId}` : null;
   if (ref) {
+    // The stable reference is the only identity we trust. A name match is
+    // never used here: two partners can share a name, and a bill posted to
+    // the wrong one is hard to spot later.
     const byRef = await findOneId(cfg, "res.partner", [["ref", "=", ref]]);
     if (byRef != null) return byRef;
+  } else {
+    // No reference to go on. Use the name only when it is unambiguous, and
+    // stop rather than guess between duplicates.
+    const matches = await searchRead<{ id: number }>(
+      cfg,
+      "res.partner",
+      [["name", "=", opts.name]],
+      ["id"],
+      { limit: 2 },
+    );
+    if (matches.length > 1) {
+      throw new Error(
+        `accounts-bridge: ${matches.length} Odoo partners are named "${opts.name}"; refusing to guess`,
+      );
+    }
+    if (matches.length === 1) return matches[0].id;
   }
-  const byName = await findOneId(cfg, "res.partner", [["name", "=", opts.name]]);
-  if (byName != null) return byName;
 
   const values: Record<string, unknown> = {
     name: opts.name,
