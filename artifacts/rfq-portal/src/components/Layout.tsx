@@ -21,6 +21,7 @@ import {
   Bot,
   IdCard,
   DatabaseBackup,
+  Mail,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/employees", label: t("nav.employees"), icon: UserCog },
     { href: "/audit", label: t("nav.auditLog"), icon: ClipboardList },
     { href: "/integrations", label: t("nav.integrations"), icon: Plug },
+    // Admin-only: the path is not in the permission catalog, so gate it by role here.
+    ...(role === "admin"
+      ? [{ href: "/email-accounts", label: "Email accounts", icon: Mail }]
+      : []),
   ];
 
   // Filter both groups by the employee's effective permissions.
