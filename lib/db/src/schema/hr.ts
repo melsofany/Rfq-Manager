@@ -18,6 +18,8 @@ export const hrEmployeesTable = pgTable("hr_employees", {
   fullNameEn: text("full_name_en"),
   /** Procurement login account (employees.id) whose assigned items drive this employee's production incentive. */
   procurementEmployeeId: integer("procurement_employee_id"),
+  /** Exception for employees without a procurement link: keep the fixed contract incentive in payroll. */
+  keepFixedIncentive: boolean("keep_fixed_incentive").notNull().default(false),
   jobTitle: text("job_title"),
   department: text("department"),
   hireDate: date("hire_date", { mode: "string" }),

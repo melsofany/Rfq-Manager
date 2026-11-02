@@ -214,6 +214,10 @@ router.patch("/hr/employees/:id", async (req, res): Promise<void> => {
       patch.procurementEmployeeId = linkId;
     }
   }
+  if (req.body?.keepFixedIncentive !== undefined) {
+    // استثناء: الموظف غير المربوط بحساب مشتريات يحتفظ بالحافز الثابت من العقد بدل 0
+    patch.keepFixedIncentive = req.body.keepFixedIncentive === true;
+  }
   if (req.body?.jobTitle !== undefined) patch.jobTitle = str(req.body.jobTitle);
   if (req.body?.department !== undefined) patch.department = str(req.body.department);
   if (req.body?.phone !== undefined) patch.phone = str(req.body.phone, 40);
