@@ -204,6 +204,7 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
       fullName: hrEmployeesTable.fullName,
       hireDate: hrEmployeesTable.hireDate,
       procurementEmployeeId: hrEmployeesTable.procurementEmployeeId,
+      keepFixedIncentive: hrEmployeesTable.keepFixedIncentive,
     })
     .from(hrEmployeesTable)
     .where(eq(hrEmployeesTable.status, "active"));
@@ -284,7 +285,11 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
         incentives:
           // Incentive = contract incentive × KPI %. Employees with no procurement account have no
           // production data, so their KPI-based incentive is 0 (manual adjustments still apply).
-          (productionByEmp.has(employeeId) ? productionByEmp.get(employeeId)! : 0) +
+          (productionByEmp.has(employeeId)
+            ? productionByEmp.get(employeeId)!
+            : employees.find((e) => e.id === employeeId)?.keepFixedIncentive
+              ? num(c.incentive)
+              : 0) +
           sumKind("incentive"),
         deductions: sumKind("deduction"),
         absenceDays: absence[employeeId],

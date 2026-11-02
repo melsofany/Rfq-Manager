@@ -108,6 +108,7 @@ interface HrEmployee {
   fullName: string;
   fullNameEn: string | null;
   procurementEmployeeId: number | null;
+  keepFixedIncentive: boolean;
   jobTitle: string | null;
   department: string | null;
   hireDate: string | null;
@@ -1126,6 +1127,7 @@ function EmployeesTab() {
     fullName: "",
     fullNameEn: "",
     procurementId: "",
+    keepFixed: false,
     jobTitle: "",
     department: "",
     phone: "",
@@ -1171,6 +1173,7 @@ function EmployeesTab() {
       fullName: r.fullName ?? "",
       fullNameEn: r.fullNameEn ?? "",
       procurementId: r.procurementEmployeeId != null ? String(r.procurementEmployeeId) : "",
+      keepFixed: r.keepFixedIncentive === true,
       jobTitle: r.jobTitle ?? "",
       department: r.department ?? "",
       phone: r.phone ?? "",
@@ -1277,6 +1280,7 @@ function EmployeesTab() {
           fullName: draft.fullName,
           fullNameEn: draft.fullNameEn,
           procurementEmployeeId: draft.procurementId === "" ? null : Number(draft.procurementId),
+          keepFixedIncentive: draft.procurementId === "" ? draft.keepFixed : false,
           jobTitle: draft.jobTitle,
           department: draft.department,
           phone: draft.phone,
@@ -1470,6 +1474,22 @@ function EmployeesTab() {
                               ))}
                             </select>
                           </label>
+                          {draft.procurementId === "" && (
+                            <label className="flex items-start gap-2 text-sm md:col-span-2">
+                              <input
+                                type="checkbox"
+                                className="mt-1"
+                                checked={draft.keepFixed}
+                                onChange={(e) => setDraft({ ...draft, keepFixed: e.target.checked })}
+                              />
+                              <span>
+                                {t("hr.emp.keepFixed")}
+                                <span className="block text-xs text-muted-foreground">
+                                  {t("hr.emp.keepFixedHint")}
+                                </span>
+                              </span>
+                            </label>
+                          )}
                         </div>
                         <div className="mt-4 space-y-2 border-t pt-3">
                           <h3 className="text-sm font-semibold">{t("hr.emp.salarySection")}</h3>
