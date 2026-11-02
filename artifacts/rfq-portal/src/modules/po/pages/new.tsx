@@ -345,7 +345,9 @@ export default function NewPurchaseOrderPage() {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, rfqNumber } : i)));
 
   const updateSupplier = (id: string, supplierId: string) => {
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, supplierId, unitPrice: "" } : i)));
+    setItems((prev) =>
+      prev.map((i) => (i.id === id ? { ...i, supplierId, unitPrice: "", offerItemId: null } : i)),
+    );
     if (supplierId) {
       const item = items.find((i) => i.id === id);
       if (item) {
@@ -359,6 +361,7 @@ export default function NewPurchaseOrderPage() {
                       ...i,
                       unitPrice: quote.price != null ? String(quote.price) : "",
                       taxIncluded: quote.taxIncluded,
+                      offerItemId: quote.offerItemId,
                     }
                   : i,
               ),
@@ -408,6 +411,7 @@ export default function NewPurchaseOrderPage() {
         items: chosen.map((i) => ({
           itemId: i.itemId || undefined,
           customerPoItemId: i.customerPoItemId ?? undefined,
+          offerItemId: i.offerItemId ?? undefined,
           lineItem: i.lineItem || undefined,
           partNo: i.partNo || undefined,
           description: i.description,

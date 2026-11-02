@@ -285,6 +285,7 @@ export default function PurchaseOrderDetailPage() {
                       ...i,
                       unitPrice: quote.price != null ? String(quote.price) : "",
                       taxIncluded: quote.taxIncluded,
+                      offerItemId: quote.offerItemId,
                     }
                   : i,
               ),
@@ -327,6 +328,7 @@ export default function PurchaseOrderDetailPage() {
           items: validItems.map((i) => ({
             itemId: i.itemId || null,
             customerPoItemId: i.customerPoItemId ?? null,
+            offerItemId: i.offerItemId ?? null,
             lineItem: i.lineItem || null,
             partNo: i.partNo || null,
             description: i.description.trim(),

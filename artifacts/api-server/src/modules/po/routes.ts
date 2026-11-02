@@ -206,6 +206,7 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
     items?: Array<{
       itemId?: string | null;
       customerPoItemId?: number | null;
+      offerItemId?: number | null;
       lineItem?: string;
       partNo?: string;
       description: string;
@@ -457,7 +458,7 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
 
   // Search by description (case-insensitive) first
   const byDesc = await db
-    .select({ price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
+    .select({ offerItemId: offerItemsTable.id, price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
     .from(offerItemsTable)
     .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
     .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
@@ -471,14 +472,18 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
     .limit(1);
 
   if (byDesc.length > 0) {
-    res.json({ price: parseFloat(byDesc[0].price), taxIncluded: byDesc[0].taxIncluded ?? false });
+    res.json({
+      price: parseFloat(byDesc[0].price),
+      taxIncluded: byDesc[0].taxIncluded ?? false,
+      offerItemId: byDesc[0].offerItemId,
+    });
     return;
   }
 
   // Fallback: search by part number if provided
   if (partNo && partNo.trim()) {
     const byPart = await db
-      .select({ price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
+      .select({ offerItemId: offerItemsTable.id, price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
       .from(offerItemsTable)
       .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
       .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
@@ -492,12 +497,13 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
       res.json({
         price: parseFloat(byPart[0].price),
         taxIncluded: byPart[0].taxIncluded ?? false,
+        offerItemId: byPart[0].offerItemId,
       });
       return;
     }
   }
 
-  res.json({ price: null, taxIncluded: false });
+  res.json({ price: null, taxIncluded: false, offerItemId: null });
 });
 
 // POST /api/po/:id/dispatch — generate PDF per supplier and send via WhatsApp + email
@@ -1293,6 +1299,7 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
     items?: Array<{
       itemId?: string | null;
       customerPoItemId?: number | null;
+      offerItemId?: number | null;
       lineItem?: string;
       partNo?: string;
       description: string;
@@ -1351,6 +1358,7 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
           poId: id,
           itemId: it.itemId || null,
           customerPoItemId: it.customerPoItemId ?? null,
+          offerItemId: it.offerItemId ?? null,
           lineItem: it.lineItem || null,
           partNo: it.partNo || null,
           description: it.description.trim(),
