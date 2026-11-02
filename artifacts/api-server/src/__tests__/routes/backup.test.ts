@@ -128,6 +128,8 @@ function buildApp() {
   app.use(express.json());
   app.use((req: any, _res, next) => {
     req.log = { error: vi.fn(), info: vi.fn(), warn: vi.fn() };
+    // Like express-session: the session exists before the route guards run.
+    req.session = { ...sessionState };
     next();
   });
   app.use(backupRouter);

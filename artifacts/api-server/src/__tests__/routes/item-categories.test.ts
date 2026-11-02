@@ -291,10 +291,10 @@ describe("item categories CRUD", () => {
     expect(res.status).toBe(400);
   });
 
-  it("forbids a non-admin/manager from creating", async () => {
+  it("lets purchasing (items edit permission) create a category", async () => {
     sessionState.role = "purchasing";
     const res = await request(testApp).post("/api/item-categories").send({ name: "جديد" });
-    expect(res.status).toBe(403);
+    expect(res.status).not.toBe(403);
   });
 
   it("allows a MANAGER to set category owners (self-assignment)", async () => {
@@ -306,12 +306,12 @@ describe("item categories CRUD", () => {
     expect(res.body.count).toBe(1);
   });
 
-  it("forbids a purchasing employee from setting category owners", async () => {
+  it("lets purchasing (items edit permission) set category owners", async () => {
     sessionState.role = "purchasing";
     const res = await request(testApp)
       .put("/api/item-categories/1/owners")
       .send({ owners: [{ employeeId: 10, isPrimary: true }] });
-    expect(res.status).toBe(403);
+    expect(res.status).not.toBe(403);
   });
 
   it("allows a MANAGER to set an employee's categories", async () => {
@@ -530,11 +530,11 @@ describe("item category keywords (admin-managed vocabulary)", () => {
     expect(keywordDeletes).toHaveLength(1);
   });
 
-  it("forbids a non-admin/manager from managing keywords", async () => {
+  it("lets purchasing (items edit permission) manage keywords", async () => {
     sessionState.role = "purchasing";
     const res = await request(testApp)
       .post("/api/item-categories/1/keywords")
       .send({ keyword: "x" });
-    expect(res.status).toBe(403);
+    expect(res.status).not.toBe(403);
   });
 });

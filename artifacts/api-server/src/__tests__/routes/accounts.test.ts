@@ -483,7 +483,8 @@ describe("GET /api/accounts/margins/summary", () => {
 });
 
 describe("PUT /api/accounts/tax-settings", () => {
-  it("rejects non-admin/manager users (403)", async () => {
+  it("rejects a role without accounts access (403)", async () => {
+    sessionState = { employeeId: 7, role: "data_entry" };
     const res = await request(testApp).put("/api/accounts/tax-settings").send({ vatRate: 15 });
     expect(res.status).toBe(403);
   });

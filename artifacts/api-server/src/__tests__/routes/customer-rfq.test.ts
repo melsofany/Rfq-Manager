@@ -1385,8 +1385,8 @@ describe("PATCH /api/customer-rfq/:id", () => {
     expect(res.body.status).toBe("sent");
   });
 
-  it("blocks editing once the RFQ is sent (no session role)", async () => {
-    sessionState.role = undefined;
+  it("blocks a non-privileged editor once the RFQ is sent (data entry)", async () => {
+    sessionState.role = "data_entry";
     detailRow = { ...insertedRfq, status: "sent" };
     const res = await request(testApp)
       .patch("/api/customer-rfq/42")
@@ -2639,13 +2639,13 @@ describe("customer-RFQ item multi-category (manager editor)", () => {
     expect(res.status).toBe(404);
   });
 
-  it("blocks a data-entry employee from editing categories", async () => {
+  it("lets a data-entry employee edit categories (customer-rfq edit permission)", async () => {
     sessionState.role = "data_entry";
     catItemRow = { id: 7, categoryId: 3 };
     const res = await request(testApp)
       .put("/api/customer-rfq/items/7/categories")
       .send({ categoryIds: [5] });
-    expect(res.status).toBe(403);
+    expect(res.status).not.toBe(403);
   });
 });
 
