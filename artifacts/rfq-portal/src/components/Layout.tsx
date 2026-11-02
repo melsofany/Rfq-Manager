@@ -157,11 +157,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-          {visibleMain.map((item) => {
+          {visibleMain.map((item, index) => {
             const active = location === item.href || location.startsWith(item.href + "/");
             const expanded = sidebarOpen || mobile;
+            const prev = index > 0 ? visibleMain[index - 1] : undefined;
+            // A divider starts each group, and each standalone item that follows a group.
+            const startsSection =
+              index > 0 && (item.groupLabel !== undefined || (!item.nested && prev?.nested === true));
             return (
               <Fragment key={item.href}>
+              {startsSection && <div className="my-2 mx-2 border-t border-sidebar-border" />}
               {item.groupLabel && expanded && (
                 <p className="text-sidebar-foreground/30 text-xs px-2 pt-3 pb-1 uppercase tracking-wider">
                   {item.groupLabel}
