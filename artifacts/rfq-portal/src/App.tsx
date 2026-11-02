@@ -28,6 +28,7 @@ import LoginPage from "@/modules/users/pages/login";
 import EmployeesPage from "@/modules/users/pages/employees";
 import PricingPage from "@/modules/users/pages/pricing";
 import SuppliersPage from "@/modules/users/pages/suppliers/index";
+import EmailAccountsPage from "@/modules/email-accounts/pages/index";
 import NewSupplierPage from "@/modules/users/pages/suppliers/new";
 import SupplierDetailPage from "@/modules/users/pages/suppliers/detail";
 import SupplierRegistrationPage from "@/modules/users/pages/supplier-registration";
@@ -168,6 +169,9 @@ function Router() {
       </Route>
       <Route path="/suppliers">
         <ProtectedRoute component={SuppliersPage} />
+      </Route>
+      <Route path="/email-accounts">
+        <ProtectedRoute component={EmailAccountsPage} />
       </Route>
       <Route path="/employees">
         <ProtectedRoute component={EmployeesPage} />
