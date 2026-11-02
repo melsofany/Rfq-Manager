@@ -193,12 +193,16 @@ router.get(
         res.status(404).json({ error: "Attachment not found" });
         return;
       }
-      res.setHeader("Content-Type", file.mimeType);
+      // Images and PDFs open in the browser. Everything else is a download,
+      // so an HTML or script attachment never runs on this site.
+      const viewable = /^(image\/(png|jpeg|gif|webp)|application\/pdf)$/.test(file.mimeType);
+      res.setHeader("Content-Type", viewable ? file.mimeType : "application/octet-stream");
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+        `${viewable ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
       );
       res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "sandbox");
       res.send(file.data);
     } catch (err) {
       handleMailError(err, res, "download attachment");

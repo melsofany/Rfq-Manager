@@ -171,6 +171,8 @@ function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: () => vo
                       <li key={`${idx}-${a.filename}`}>
                         <a
                           href={`/api/email-accounts/${encodeURIComponent(mailbox)}/messages/${openId}/attachments/${idx}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded border border-border text-xs text-foreground hover:bg-muted/30"
                         >
                           <Paperclip size={13} />
