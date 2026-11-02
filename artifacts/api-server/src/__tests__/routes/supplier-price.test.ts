@@ -127,6 +127,6 @@ describe("GET /api/po/supplier-price — quoted price + tax flag", () => {
       .get("/api/po/supplier-price")
       .query({ supplierId: "5", description: "Widget", partNo: "W-1" });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ price: null, taxIncluded: false });
+    expect(res.body).toEqual({ price: null, taxIncluded: false, offerItemId: null });
   });
 });

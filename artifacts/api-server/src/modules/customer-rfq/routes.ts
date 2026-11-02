@@ -13,6 +13,9 @@ import {
   auditLogTable,
   customerPoItemsTable,
   customerPosTable,
+  purchaseOrdersTable,
+  purchaseOrderItemsTable,
+  customerPosTable,
   customerPoItemDeliveriesTable,
   purchaseOrderItemsTable,
   itemCategoriesTable,
@@ -3248,6 +3251,62 @@ router.delete("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> 
     return;
   }
   res.status(204).end();
+});
+
+/** Document chain of one customer RFQ: supplier RFQs, customer POs, supplier POs. */
+router.get("/customer-rfq/:id/chain", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const [customerRfq] = await db
+    .select({ id: customerRfqsTable.id, customerRfqNo: customerRfqsTable.customerRfqNo, status: customerRfqsTable.status })
+    .from(customerRfqsTable)
+    .where(eq(customerRfqsTable.id, id));
+  if (!customerRfq) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const supplierRfqs = await db
+    .select({ id: rfqTable.id, internalRfqNo: rfqTable.internalRfqNo, status: rfqTable.status })
+    .from(rfqTable)
+    .where(eq(rfqTable.customerRfqId, id));
+  const customerPoIds = [
+    ...new Set(
+      (
+        await db
+          .select({ customerPoId: customerPoItemsTable.customerPoId })
+          .from(customerPoItemsTable)
+          .where(eq(customerPoItemsTable.customerRfqId, id))
+      ).map((r) => r.customerPoId),
+    ),
+  ];
+  const customerPos = customerPoIds.length
+    ? await db
+        .select({ id: customerPosTable.id, customerPoNo: customerPosTable.customerPoNo, status: customerPosTable.status })
+        .from(customerPosTable)
+        .where(inArray(customerPosTable.id, customerPoIds))
+    : [];
+  const supplierRfqIds = supplierRfqs.map((r) => r.id);
+  const poIdsFromRfq = supplierRfqIds.length
+    ? (await db.select({ id: purchaseOrdersTable.id }).from(purchaseOrdersTable).where(inArray(purchaseOrdersTable.rfqId, supplierRfqIds))).map((r) => r.id)
+    : [];
+  const poIdsFromCustomerPo = (
+    await db
+      .select({ poId: purchaseOrderItemsTable.poId })
+      .from(purchaseOrderItemsTable)
+      .innerJoin(customerPoItemsTable, eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id))
+      .where(eq(customerPoItemsTable.customerRfqId, id))
+  ).map((r) => r.poId);
+  const poIds = [...new Set([...poIdsFromRfq, ...poIdsFromCustomerPo])];
+  const purchaseOrders = poIds.length
+    ? await db
+        .select({ id: purchaseOrdersTable.id, internalPoNo: purchaseOrdersTable.internalPoNo, status: purchaseOrdersTable.status })
+        .from(purchaseOrdersTable)
+        .where(inArray(purchaseOrdersTable.id, poIds))
+    : [];
+  res.json({ customerRfq, supplierRfqs, customerPos, purchaseOrders });
 });
 
 export default router;

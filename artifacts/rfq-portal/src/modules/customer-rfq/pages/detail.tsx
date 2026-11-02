@@ -1,3 +1,4 @@
+import { DocumentChain } from "@/components/DocumentChain";
 import { useEffect, useState, useCallback } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -365,6 +366,8 @@ export default function CustomerRfqDetailPage() {
             </span>
           </div>
         )}
+
+        <DocumentChain kind="customer-rfq" id={rfq.id} />
 
         {editing ? (
           <form onSubmit={handleSave} className="space-y-5">

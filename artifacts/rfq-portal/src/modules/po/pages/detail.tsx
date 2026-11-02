@@ -1,3 +1,4 @@
+import { DocumentChain } from "@/components/DocumentChain";
 import { useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -284,6 +285,7 @@ export default function PurchaseOrderDetailPage() {
                       ...i,
                       unitPrice: quote.price != null ? String(quote.price) : "",
                       taxIncluded: quote.taxIncluded,
+                      offerItemId: quote.offerItemId,
                     }
                   : i,
               ),
@@ -326,6 +328,7 @@ export default function PurchaseOrderDetailPage() {
           items: validItems.map((i) => ({
             itemId: i.itemId || null,
             customerPoItemId: i.customerPoItemId ?? null,
+            offerItemId: i.offerItemId ?? null,
             lineItem: i.lineItem || null,
             partNo: i.partNo || null,
             description: i.description.trim(),
@@ -636,6 +639,8 @@ export default function PurchaseOrderDetailPage() {
             )}
           </div>
         </div>
+
+        <DocumentChain kind="po" id={po.id} />
 
         {deleteError && (
           <div className="text-destructive text-sm bg-destructive/10 border border-destructive/30 rounded px-3 py-2">

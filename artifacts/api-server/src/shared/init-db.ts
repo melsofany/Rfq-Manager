@@ -2940,6 +2940,23 @@ export async function initDb(): Promise<void> {
       `CREATE INDEX IF NOT EXISTS accounts_bridge_sync_type_idx ON accounts_bridge_sync (event_type)`,
     );
 
+    // Document chain: supplier RFQ → customer RFQ header, PO line → offer line.
+    await client.query(
+      `ALTER TABLE rfq ADD COLUMN IF NOT EXISTS customer_rfq_id INTEGER REFERENCES customer_rfqs(id) ON DELETE SET NULL`,
+    );
+    await client.query(
+      `ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS offer_item_id INTEGER REFERENCES offer_items(id) ON DELETE SET NULL`,
+    );
+    await client.query(
+      `UPDATE rfq r SET customer_rfq_id = c.id
+         FROM (SELECT DISTINCT ON (customer_rfq_no) id, customer_rfq_no FROM customer_rfqs ORDER BY customer_rfq_no, id) c
+        WHERE r.customer_rfq_id IS NULL AND r.customer_rfq_no = c.customer_rfq_no`,
+    );
+    await client.query(`CREATE INDEX IF NOT EXISTS rfq_customer_rfq_id_idx ON rfq (customer_rfq_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS po_items_offer_item_id_idx ON purchase_order_items (offer_item_id)`,
+    );
+
     logger.info("initDb: seed complete");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");

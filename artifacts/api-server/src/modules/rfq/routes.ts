@@ -22,7 +22,7 @@ import { generateDispatchReportPdf } from "../reports/dispatch-pdf.js";
 import { sendRfqEmail } from "../../shared/email";
 import { sendRfqWhatsApp } from "../communications/service";
 import { resolvePublicBaseUrl } from "../../shared/base-url";
-import { whatsappChatsTable } from "@workspace/db";
+import { whatsappChatsTable, customerRfqsTable } from "@workspace/db";
 import { lookupRfqFromSheet, listSheetRfqNumbers, listSheetTabs } from "../../shared/google-sheets";
 import { ensureAssignmentsForRfqSafe } from "./assignment";
 import { guardFor } from "../../shared/permissions";
@@ -256,11 +256,18 @@ router.post("/rfq", requireAuth, async (req, res): Promise<void> => {
   }
 
   const internalRfqNo = await generateInternalRfqNo();
+  // Resolve the customer RFQ header so the link is a real key, not only text.
+  const [matchedCustomerRfq] = await db
+    .select({ id: customerRfqsTable.id })
+    .from(customerRfqsTable)
+    .where(eq(customerRfqsTable.customerRfqNo, customerRfqNo))
+    .limit(1);
   const [rfq] = await db
     .insert(rfqTable)
     .values({
       internalRfqNo,
       customerRfqNo,
+      customerRfqId: matchedCustomerRfq?.id ?? null,
       status: "DRAFT",
       employeeId: req.session.employeeId,
       notes,

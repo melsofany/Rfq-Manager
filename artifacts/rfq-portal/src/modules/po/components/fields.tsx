@@ -14,6 +14,8 @@ export interface PoItemRow {
   id: string;
   itemId: string | null;
   customerPoItemId: number | null;
+  /** Supplier offer line the price came from (price origin). */
+  offerItemId?: number | null;
   lineItem: string | null;
   partNo: string | null;
   description: string;
@@ -241,6 +243,7 @@ export function SupplierCombobox({
 export interface SupplierQuote {
   price: number | null;
   taxIncluded: boolean;
+  offerItemId: number | null;
 }
 
 /**
@@ -257,14 +260,15 @@ export async function fetchSupplierQuote(
   if (partNo) params.append("partNo", partNo);
   try {
     const res = await fetch(`/api/po/supplier-price?${params}`, { credentials: "include" });
-    if (!res.ok) return { price: null, taxIncluded: false };
+    if (!res.ok) return { price: null, taxIncluded: false, offerItemId: null };
     const data = await res.json();
     return {
       price: typeof data.price === "number" ? data.price : null,
       taxIncluded: data.taxIncluded === true,
+      offerItemId: typeof data.offerItemId === "number" ? data.offerItemId : null,
     };
   } catch {
-    return { price: null, taxIncluded: false };
+    return { price: null, taxIncluded: false, offerItemId: null };
   }
 }
 
