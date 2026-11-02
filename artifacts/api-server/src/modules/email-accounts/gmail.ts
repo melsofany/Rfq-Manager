@@ -138,22 +138,25 @@ export async function getMessage(mailbox: string, id: string): Promise<MessageDe
 }
 
 /**
- * Download one attachment's bytes. The attachment is looked up in the message
- * first, so only attachments that really belong to this message can be read.
+ * Download one attachment's bytes, by its position in the message.
+ *
+ * Gmail attachment ids are not stable between requests, so the attachment is
+ * located by its index in a fresh read of the message, and the current id is
+ * used for the download.
  */
 export async function getAttachment(
   mailbox: string,
   messageId: string,
-  attachmentId: string,
+  index: number,
 ): Promise<{ filename: string; mimeType: string; data: Buffer } | null> {
   const gmail = gmailFor(mailbox);
   const msg = await gmail.users.messages.get({ userId: mailbox, id: messageId, format: "full" });
-  const info = collectAttachments(msg.data.payload).find((a) => a.attachmentId === attachmentId);
+  const info = collectAttachments(msg.data.payload)[index];
   if (!info) return null;
   const res = await gmail.users.messages.attachments.get({
     userId: mailbox,
     messageId,
-    id: attachmentId,
+    id: info.attachmentId,
   });
   return {
     filename: info.filename,

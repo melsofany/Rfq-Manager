@@ -141,17 +141,17 @@ router.get(
 );
 
 router.get(
-  "/email-accounts/:mailbox/messages/:id/attachments/:attachmentId",
+  "/email-accounts/:mailbox/messages/:id/attachments/:index",
   requireRole("admin"),
   async (req, res): Promise<void> => {
     const mailbox = domainMailbox(String(req.params.mailbox));
     const id = String(req.params.id);
-    const attachmentId = String(req.params.attachmentId);
+    const index = String(req.params.index);
     if (!mailbox) {
       res.status(400).json({ error: "Mailbox must be an address on the company domain" });
       return;
     }
-    if (!/^[a-f0-9]{6,32}$/i.test(id) || !/^[A-Za-z0-9_-]{8,2000}$/.test(attachmentId)) {
+    if (!/^[a-f0-9]{6,32}$/i.test(id) || !/^\d{1,3}$/.test(index)) {
       res.status(400).json({ error: "Invalid id" });
       return;
     }
@@ -160,7 +160,7 @@ router.get(
       "email-accounts: mailbox read",
     );
     try {
-      const file = await getAttachment(mailbox, id, attachmentId);
+      const file = await getAttachment(mailbox, id, parseInt(index, 10));
       if (!file) {
         res.status(404).json({ error: "Attachment not found" });
         return;

@@ -167,10 +167,10 @@ function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: () => vo
                     المرفقات ({detail.data.attachments.length})
                   </p>
                   <ul className="space-y-1">
-                    {detail.data.attachments.map((a) => (
-                      <li key={a.attachmentId}>
+                    {detail.data.attachments.map((a, idx) => (
+                      <li key={`${idx}-${a.filename}`}>
                         <a
-                          href={`/api/email-accounts/${encodeURIComponent(mailbox)}/messages/${openId}/attachments/${encodeURIComponent(a.attachmentId)}`}
+                          href={`/api/email-accounts/${encodeURIComponent(mailbox)}/messages/${openId}/attachments/${idx}`}
                           className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded border border-border text-xs text-foreground hover:bg-muted/30"
                         >
                           <Paperclip size={13} />
