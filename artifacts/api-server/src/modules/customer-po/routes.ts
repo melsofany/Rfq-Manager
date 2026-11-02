@@ -1,3 +1,4 @@
+import { guardByMethod } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -12,8 +13,12 @@ import {
 import { eq, count, inArray, desc, sql, and, isNotNull, ne } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { lockItemRows } from "../rfq/attribution";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/customer-po", guardByMethod(["customer-po", "customer-rfq", "dashboard"], ["customer-po"]));
+router.use("/customer-po", guardFor("/customer-po"));
+
 
 // Generate internal customer-PO number: CPO-YYYY-NNNNNN.
 // Uses MAX of existing numbers (not COUNT) so deletions never cause collisions.

@@ -1,10 +1,15 @@
+import { guardByMethod } from "../../shared/permissions";
 import { Router } from "express";
 import { db, customersTable } from "@workspace/db";
 import { eq, ilike, or, and, ne, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { isForeignKeyViolation } from "../../shared/pg-errors";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/customers", guardByMethod(["customers", "customer-rfq", "customer-po", "dashboard"], ["customers"]));
+router.use("/customers", guardFor("/customers"));
+
 
 // ─── Routes ────────────────────────────────────────────────────────────────
 

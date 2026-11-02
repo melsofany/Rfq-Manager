@@ -1,8 +1,13 @@
+import { guardByMethod } from "../../shared/permissions";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { runFullSync, getSyncStatus } from "../../shared/sheet-sync";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/sync", guardByMethod(["analytics"], ["analytics"]));
+router.use("/sync", guardFor("/sync"));
+
 
 /** GET /api/sync/status — current sync status */
 router.get("/sync/status", requireAuth, (_req, res): void => {

@@ -9,8 +9,11 @@ import {
 } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/offers", guardFor("/offers"));
+
 
 router.get("/offers", requireAuth, async (req, res): Promise<void> => {
   const { rfqId, supplierId } = req.query as Record<string, string>;

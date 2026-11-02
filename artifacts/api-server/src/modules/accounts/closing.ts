@@ -11,13 +11,18 @@
  *   POST   /accounts/closings        → lock a month (accountant/manager/admin)
  *   DELETE /accounts/closings/:id    → unlock a month (admin only, audited)
  */
+import { guardByMethod } from "../../shared/permissions";
 import { requirePermission } from "../../shared/permissions";
 import { Router } from "express";
 import { db, accountingClosingsTable, journalEntriesTable, auditLogTable } from "@workspace/db";
 import { eq, desc, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { guardFor, requirePermission } from "../../shared/permissions";
 
 const router = Router();
+router.use("/accounts", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/accounts", guardFor("/accounts"));
+
 
 /** YYYY-MM from a date string (or full ISO). Returns null when unparseable。 */
 export function monthOf(date: string | null | undefined): string | null {

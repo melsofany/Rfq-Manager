@@ -59,8 +59,11 @@ import { canonicalDescription } from "../ai-assistant/sql-registry";
 import { canonicalPartNo, buildItemIdentity, itemsEquivalent } from "../ai-assistant/item-identity";
 import { loadTaxSettings } from "../accounts/helpers";
 import { netOfTax, round2 } from "../accounts/tax";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/items", guardFor("/items"));
+
 
 // ── Tuning ───────────────────────────────────────────────────────────────────
 /** Matching rows examined per source. A cap exists so one query cannot exhaust

@@ -111,7 +111,7 @@ beforeAll(async () => {
   // Provide req.log + req.session so the route's audit logging works without real middleware.
   testApp.use((req: any, _res: any, next: any) => {
     req.log = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} };
-    req.session = { employeeId: 1 };
+    req.session = { employeeId: 1, role: "admin" };
     next();
   });
   testApp.use("/api", poRouter);

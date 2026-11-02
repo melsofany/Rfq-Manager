@@ -4,7 +4,7 @@ import request from "supertest";
 import { marginOf, type MarginInput } from "../../modules/accounts/tax";
 
 // ── Mock auth ───────────────────────────────────────────────────────────────
-let sessionState = { employeeId: 7, role: "employee" };
+let sessionState = { employeeId: 7, role: "manager" };
 vi.mock("../../middlewares/auth", () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.session = req.session ?? {};
@@ -135,7 +135,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  sessionState = { employeeId: 7, role: "employee" };
+  sessionState = { employeeId: 7, role: "manager" };
   taxSettingsRow = {
     id: 1,
     vatRate: "14",

@@ -15,6 +15,7 @@
  *   GET /accounts/tax-settings      → Egyptian tax identity + rates
  *   PUT /accounts/tax-settings      → update the tax identity + rates (admin/manager)
  */
+import { guardByMethod } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -35,8 +36,12 @@ import { requireAuth } from "../../middlewares/auth";
 import { rateOf, round2, vatOnNet, marginOf } from "./tax";
 import { numOrZero as toNum, formatNum, loadTaxSettings } from "./helpers";
 import { supplierLineByCustomerItem } from "../../shared/po-links";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/accounts", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/accounts", guardFor("/accounts"));
+
 
 function buildConditions(customerName?: string, from?: string, to?: string) {
   const conditions = [];

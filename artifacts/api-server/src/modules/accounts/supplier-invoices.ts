@@ -24,6 +24,7 @@
  *   POST   /accounts/supplier-payments
  *   GET    /accounts/supplier-payments/:id
  */
+import { guardByMethod } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -40,8 +41,12 @@ import { requireAuth } from "../../middlewares/auth";
 import { rateOf, vatOnNet, round2 } from "./tax";
 import { postJournalEntry, insertWithDocNo } from "./posting";
 import { num as toNum, formatNum, loadTaxSettings } from "./helpers";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/accounts", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/accounts", guardFor("/accounts"));
+
 
 // Compute net/vat/gross/withholding for a supplier invoice. `net` is the
 // VAT-exclusive supply value; VAT added on top at 14%; withholding applied to

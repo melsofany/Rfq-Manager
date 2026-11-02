@@ -24,6 +24,7 @@
  *   PATCH  /collections/payments/:id        → edit a payment
  *   DELETE /collections/payments/:id        → delete a payment
  */
+import { guardByMethod } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -42,8 +43,12 @@ import { requireAuth } from "../../middlewares/auth";
 import { postJournalEntry } from "../accounts/posting";
 import { ACCOUNT_CODES } from "@workspace/db";
 import { cashAccountFor } from "../accounts/integration";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/collections", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/collections", guardFor("/collections"));
+
 
 function toNum(v: unknown): number | null {
   if (v == null || v === "") return null;

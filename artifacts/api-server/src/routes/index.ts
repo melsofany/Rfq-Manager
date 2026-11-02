@@ -10,7 +10,7 @@
  *   /api/whatsapp         → communications module
  */
 import { Router, type IRouter } from "express";
-import { guardByMethod } from "../shared/permissions";
+import { guardFor, ROUTE_GUARDS } from "../shared/permissions";
 import healthRouter from "./health";
 import rfqModule from "../modules/rfq/index";
 import customerRfqModule from "../modules/customer-rfq/index";
@@ -34,6 +34,14 @@ import hrModule from "../modules/hr/index";
 import emailAccountsModule from "../modules/email-accounts/index";
 
 const router: IRouter = Router();
+
+// Infrastructure
+router.use(healthRouter);
+
+// Page permissions per API area (map lives in shared/permissions.ts).
+for (const prefix of Object.keys(ROUTE_GUARDS)) {
+  router.use(prefix, guardFor(prefix));
+}
 
 // Infrastructure
 router.use(healthRouter);

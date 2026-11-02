@@ -26,8 +26,11 @@ import {
 } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/analytics", guardFor("/analytics"));
+
 
 router.get("/analytics/procurement", requireAuth, async (req, res): Promise<void> => {
   const fromStr = req.query.from as string | undefined;

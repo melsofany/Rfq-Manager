@@ -5,8 +5,11 @@ import { db, employeesTable, auditLogTable, hrEmployeesTable } from "@workspace/
 import { and, eq, isNull } from "drizzle-orm";
 import { checkHrCandidate } from "./hr-candidate";
 import { logger } from "../../shared/logger";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/employees", guardFor("/employees"));
+
 
 // Per-IP ceiling (generous — a shared office NAT must not trip it) …
 const loginIpLimiter = rateLimit({

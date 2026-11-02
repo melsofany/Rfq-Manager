@@ -1,3 +1,4 @@
+import { guardByMethod } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -32,8 +33,12 @@ import { approveCustomerItem } from "../rfq/customer-assignment";
 import { classifyItem, normalizeText } from "../rfq/classification";
 import { loadClassifierVocabulary } from "../rfq/keywords";
 import { assignReviewGroup, resolveConflictItems, listReviewGroups } from "../rfq/review-groups";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/customer-rfq", guardByMethod(["customer-rfq", "rfq", "customer-po", "dashboard"], ["customer-rfq"]));
+router.use("/customer-rfq", guardFor("/customer-rfq"));
+
 
 // VAT rate — must match the rfq module (used to normalize tax-inclusive
 // supplier prices to excl-tax for the margin check).

@@ -11,8 +11,11 @@ import {
 } from "@workspace/db";
 import { eq, ilike, or, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/items", guardFor("/items"));
+
 
 // GET /items/search?q=...
 // Search rfq_items by description, part_no, or line_item and return full history

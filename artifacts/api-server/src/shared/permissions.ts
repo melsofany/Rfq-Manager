@@ -30,7 +30,7 @@ export const ROLE_DEFAULTS: Record<string, string[]> = {
   ],
   data_entry: ["dashboard", "customers", "customer-rfq", "customer-po", "mailbox", "customer-rfq:edit", "customer-po:edit"],
   // Legacy backend-only role (not in the portal). Kept so accounting staff keep the accounts API.
-  accountant: ["dashboard", "accounts", "mailbox", "accounts:records", "accounts:expenses", "accounts:posting"],
+  accountant: ["dashboard", "accounts", "mailbox", "customer-po", "accounts:records", "accounts:expenses", "accounts:posting"],
 };
 
 export interface Access {
@@ -115,4 +115,41 @@ export function guardByMethod(read: string[], write: string[]) {
     const method = req.method.toUpperCase();
     (method === "GET" || method === "HEAD" ? onRead : onWrite)(req, res, next);
   };
+}
+
+const RFQ_READ = ["rfq", "purchase-orders", "customer-rfq", "customer-po", "accounts", "dashboard"];
+
+/** Page guards per API prefix: reads need any of `read`, writes any of `write`. */
+export const ROUTE_GUARDS: Record<string, { read: string[]; write: string[] }> = {
+  "/suppliers": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers"] },
+  "/categories": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers"] },
+  "/customers": { read: ["customers", "customer-rfq", "customer-po", "dashboard"], write: ["customers"] },
+  "/representatives": { read: ["employees", "customers", "customer-rfq", "customer-po"], write: ["employees"] },
+  "/employees": { read: ["employees", "rfq", "customer-rfq", "customer-po", "purchase-orders", "dashboard"], write: ["employees"] },
+  "/items": { read: ["items", "rfq", "customer-rfq", "customer-po", "purchase-orders", "analytics", "dashboard"], write: ["items"] },
+  "/item-categories": { read: ["items", "rfq", "customer-rfq"], write: ["items"] },
+  "/offers": { read: RFQ_READ, write: ["rfq"] },
+  "/offer": { read: RFQ_READ, write: ["rfq"] },
+  "/rfq": { read: RFQ_READ, write: ["rfq"] },
+  "/customer-rfq": { read: ["customer-rfq", "rfq", "customer-po", "dashboard"], write: ["customer-rfq"] },
+  "/customer-po": { read: ["customer-po", "customer-rfq", "dashboard"], write: ["customer-po"] },
+  "/po": { read: ["purchase-orders", "rfq", "accounts", "dashboard"], write: ["purchase-orders"] },
+  "/accounts": { read: ["accounts", "dashboard"], write: ["accounts"] },
+  "/expenses": { read: ["accounts", "accounts:expenses"], write: ["accounts", "accounts:expenses"] },
+  "/collections": { read: ["accounts", "dashboard"], write: ["accounts"] },
+  "/analytics": { read: ["analytics", "dashboard"], write: ["analytics"] },
+  "/sync": { read: ["analytics"], write: ["analytics"] },
+  "/audit": { read: ["audit"], write: ["audit"] },
+  "/whatsapp": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp", "whatsapp:chats"] },
+  "/chatwoot": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp", "whatsapp:chats"] },
+  "/ai-assistant": { read: ["ai-assistant"], write: ["ai-assistant"] },
+  "/integrations": { read: ["integrations"], write: ["integrations"] },
+  "/backup": { read: ["backup"], write: ["backup"] },
+};
+
+/** Router-level guard for one API prefix, from ROUTE_GUARDS. */
+export function guardFor(prefix: string) {
+  const g = ROUTE_GUARDS[prefix];
+  if (!g) throw new Error(`No page guard for ${prefix}`);
+  return guardByMethod(g.read, g.write);
 }

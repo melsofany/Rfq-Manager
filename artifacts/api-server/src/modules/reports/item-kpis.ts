@@ -36,8 +36,11 @@ import {
 } from "@workspace/db";
 import { and, eq, inArray, sql, isNull, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/analytics", guardFor("/analytics"));
+
 
 /** Normalise an identifier for cross-table item matching. */
 function normKey(v: string | null | undefined): string {

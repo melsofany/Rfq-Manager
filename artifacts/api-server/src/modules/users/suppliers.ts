@@ -1,3 +1,4 @@
+import { guardByMethod } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -23,8 +24,12 @@ import {
   loadSupplierCategoryMap,
   saveSupplierCategoryLinks,
 } from "../../shared/supplier-category-links";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/suppliers", guardByMethod(["suppliers", "rfq", "purchase-orders"], ["suppliers"]));
+router.use("/suppliers", guardFor("/suppliers"));
+
 
 function toArray(cat: string | null | undefined): string[] {
   if (!cat) return [];

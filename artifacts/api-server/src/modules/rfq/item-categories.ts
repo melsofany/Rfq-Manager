@@ -11,6 +11,7 @@
  *   GET    /employees/:id/categories           — categories an employee owns
  *   PUT    /employees/:id/categories           — replace (admin/manager)
  */
+import { guardByMethod } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -26,8 +27,13 @@ import { eq, and, asc, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { isUniqueViolation } from "../../shared/pg-errors";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/item-categories", guardByMethod(["items", "rfq", "customer-rfq"], ["items"]));
+router.use("/item-categories", guardFor("/item-categories"));
+router.use("/employees", guardFor("/employees"));
+
 
 const PRIMARY_CONFLICT_MESSAGE = "لا يمكن تعيين أكثر من مسؤول أساسي لنفس التصنيف";
 

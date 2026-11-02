@@ -44,8 +44,11 @@ import multer from "multer";
 const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 import { resolveCustomerPoLinks } from "../../shared/po-links";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/whatsapp", guardFor("/whatsapp"));
+
 
 const WA_TOKEN = process.env.WHATSAPP_TOKEN;
 const WA_PHONE_ID = PHONE_NUMBER_ID;

@@ -33,8 +33,11 @@ import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { sendRepMainMenu } from "../communications/service";
 import { applyDeliverySideEffects } from "../communications/routes";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/customer-po", guardFor("/customer-po"));
+
 
 /** Carries an HTTP status out of the delivery transaction to the response. */
 class HttpError extends Error {

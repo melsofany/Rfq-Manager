@@ -47,8 +47,11 @@ import { requireAuth } from "../../middlewares/auth";
 import { round2, marginOf } from "../accounts/tax";
 import { accountBalance } from "../accounts/posting";
 import { numOrZero as toNum, loadTaxSettings } from "../accounts/helpers";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/analytics", guardFor("/analytics"));
+
 
 function fmt(n: number | null): number | null {
   return n == null ? null : round2(n);

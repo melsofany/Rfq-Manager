@@ -24,6 +24,7 @@
  *   GET    /accounts/balance-sheet               → الميزانية العمومية
  *   GET    /accounts/dashboard                   → accountant dashboard summary
  */
+import { guardByMethod } from "../../shared/permissions";
 import { requirePermission } from "../../shared/permissions";
 import { Router } from "express";
 import {
@@ -55,8 +56,12 @@ import {
   AGING_BUCKETS,
   type AgingBucket,
 } from "./reporting";
+import { guardFor, requirePermission } from "../../shared/permissions";
 
 const router = Router();
+router.use("/accounts", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/accounts", guardFor("/accounts"));
+
 
 // ───────────────────────────────────────────────────────────────────────────
 // Chart of Accounts — دليل الحسابات

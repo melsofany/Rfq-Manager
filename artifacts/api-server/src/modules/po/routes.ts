@@ -37,8 +37,11 @@ import {
   REGISTRATION_FIELD_LABELS,
 } from "../../shared/supplier-registration";
 import { createRegistrationRequest } from "../users/supplier-registration";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/po", guardFor("/po"));
+
 
 export function normalizePhone(phone: string): string {
   // Shared with every send path: a field holding several numbers resolves to the

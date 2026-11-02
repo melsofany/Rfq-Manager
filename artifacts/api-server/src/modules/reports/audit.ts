@@ -2,8 +2,11 @@ import { Router } from "express";
 import { db, auditLogTable, employeesTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/audit", guardFor("/audit"));
+
 
 router.get("/audit", requireAuth, async (req, res): Promise<void> => {
   const { rfqId, employeeId, limit } = req.query as Record<string, string>;

@@ -11,8 +11,13 @@ import {
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import type { Request } from "express";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/rfq", guardFor("/rfq"));
+router.use("/offers", guardFor("/offers"));
+router.use("/offer", guardFor("/offer"));
+
 
 const ALLOWED_MIMES = new Set([
   "application/pdf",

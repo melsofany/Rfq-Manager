@@ -3,11 +3,16 @@
  * /api/integrations/*
  */
 
+import { guardByMethod } from "../../shared/permissions";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import * as svc from "./service";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/integrations", guardByMethod(["integrations"], ["integrations"]));
+router.use("/integrations", guardFor("/integrations"));
+
 
 /** GET /integrations — قائمة كل التكاملات */
 router.get("/integrations", requireAuth, async (_req, res): Promise<void> => {

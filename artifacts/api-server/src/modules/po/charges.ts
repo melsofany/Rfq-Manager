@@ -15,8 +15,11 @@ import { Router } from "express";
 import { db, poItemChargesTable, purchaseOrderItemsTable, auditLogTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/po", guardFor("/po"));
+
 
 function toNum(v: unknown): number | null {
   if (v == null || v === "") return null;
