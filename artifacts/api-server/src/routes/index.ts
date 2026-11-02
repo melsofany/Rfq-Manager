@@ -10,6 +10,7 @@
  *   /api/whatsapp         → communications module
  */
 import { Router, type IRouter } from "express";
+import { guardByMethod } from "../shared/permissions";
 import healthRouter from "./health";
 import rfqModule from "../modules/rfq/index";
 import customerRfqModule from "../modules/customer-rfq/index";
@@ -36,6 +37,36 @@ const router: IRouter = Router();
 
 // Infrastructure
 router.use(healthRouter);
+
+// Page permissions per API area. Reads need any of the first list, writes any
+// of the second. Public routes (/pricing token pages, /webhook, auth) are not
+// listed here. Role checks inside the modules still apply on top of this.
+const RFQ_READ = ["rfq", "purchase-orders", "customer-rfq", "customer-po", "accounts", "dashboard"];
+router.use("/suppliers", guardByMethod(["suppliers", "rfq", "purchase-orders"], ["suppliers"]));
+router.use("/categories", guardByMethod(["suppliers", "rfq", "purchase-orders"], ["suppliers"]));
+router.use("/customers", guardByMethod(["customers", "customer-rfq", "customer-po", "dashboard"], ["customers"]));
+router.use("/representatives", guardByMethod(["employees", "customers", "customer-rfq", "customer-po"], ["employees"]));
+router.use("/employees", guardByMethod(["employees", "rfq", "customer-rfq", "customer-po", "purchase-orders", "dashboard"], ["employees"]));
+router.use("/items", guardByMethod(["items", "rfq", "customer-rfq", "customer-po", "purchase-orders", "analytics", "dashboard"], ["items"]));
+router.use("/item-categories", guardByMethod(["items", "rfq", "customer-rfq"], ["items"]));
+router.use("/offers", guardByMethod(RFQ_READ, ["rfq"]));
+router.use("/offer", guardByMethod(RFQ_READ, ["rfq"]));
+router.use("/rfq", guardByMethod(RFQ_READ, ["rfq"]));
+router.use("/customer-rfq", guardByMethod(["customer-rfq", "rfq", "customer-po", "dashboard"], ["customer-rfq"]));
+router.use("/customer-po", guardByMethod(["customer-po", "customer-rfq", "dashboard"], ["customer-po"]));
+router.use("/po", guardByMethod(["purchase-orders", "rfq", "accounts", "dashboard"], ["purchase-orders"]));
+router.use("/accounts", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/expenses", guardByMethod(["accounts", "accounts:expenses"], ["accounts", "accounts:expenses"]));
+router.use("/collections", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/analytics", guardByMethod(["analytics", "dashboard"], ["analytics"]));
+router.use("/sync", guardByMethod(["analytics"], ["analytics"]));
+router.use("/audit", guardByMethod(["audit"], ["audit"]));
+router.use("/whatsapp", guardByMethod(["whatsapp", "whatsapp:chats"], ["whatsapp", "whatsapp:chats"]));
+router.use("/chatwoot", guardByMethod(["whatsapp", "whatsapp:chats"], ["whatsapp", "whatsapp:chats"]));
+router.use("/ai-assistant", guardByMethod(["ai-assistant"], ["ai-assistant"]));
+router.use("/integrations", guardByMethod(["integrations"], ["integrations"]));
+router.use("/backup", guardByMethod(["backup"], ["backup"]));
+
 
 // Business modules
 router.use(usersModule); // auth · suppliers · categories · customers

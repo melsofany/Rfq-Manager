@@ -11,39 +11,9 @@ import { and, eq } from "drizzle-orm";
 import { db, employeesTable, mailboxAccessTable } from "@workspace/db";
 import { workspaceDomain } from "./directory";
 
-/**
- * Page keys (mirrors portal permissions.ts). Admin has everything. Other roles
- * use the explicit `permissions` map when it has entries; otherwise the role
- * default: every non-admin role gets "mailbox" and none gets "email-settings".
- */
 export const MAILBOX_PAGE = "mailbox";
 export const EMAIL_SETTINGS_PAGE = "email-settings";
-const DEFAULT_PAGES: Record<string, string[]> = {
-  manager: [MAILBOX_PAGE],
-  purchasing: [MAILBOX_PAGE],
-  data_entry: [MAILBOX_PAGE],
-};
-
-/** Does this employee have the page permission? Mirrors portal resolvePermissions. */
-export async function hasPagePermission(employeeId: number, key: string): Promise<boolean> {
-  const [emp] = await db
-    .select({
-      role: employeesTable.role,
-      permissions: employeesTable.permissions,
-      isActive: employeesTable.isActive,
-    })
-    .from(employeesTable)
-    .where(eq(employeesTable.id, employeeId))
-    .limit(1);
-  if (!emp || !emp.isActive) return false;
-  if (emp.role === "admin") return true;
-  const explicit =
-    emp.permissions && typeof emp.permissions === "object"
-      ? (emp.permissions as Record<string, unknown>)
-      : null;
-  if (explicit && Object.keys(explicit).length) return explicit[key] === true;
-  return (DEFAULT_PAGES[emp.role] ?? []).includes(key);
-}
+export { hasPagePermission } from "../../shared/permissions";
 
 export interface Session {
   employeeId?: number;
