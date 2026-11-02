@@ -13,7 +13,7 @@ import { db, employeesTable, mailboxAccessTable } from "@workspace/db";
 import { requireAuth, requireRole } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { buildEmailAccountsView, type EmployeeRef } from "./accounts";
-import { canReadMailbox, mailboxesGrantedTo, type Session } from "./access";
+import { canReadMailbox, mailboxesFor, type Session } from "./access";
 import { DirectoryNotConfiguredError, listDomainUsers, workspaceDomain } from "./directory";
 import {
   getAttachment,
@@ -210,14 +210,14 @@ router.get(
   },
 );
 
-/** Mailboxes this employee may read (admins also see mailboxes granted to them). */
+/** Mailboxes this employee may read: their own company address and grants. */
 router.get("/my-mailboxes", requireAuth, async (req, res): Promise<void> => {
   const session = (req as Request & { session?: Session }).session;
   if (!session?.employeeId) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  res.json({ mailboxes: await mailboxesGrantedTo(session.employeeId) });
+  res.json({ mailboxes: await mailboxesFor(session.employeeId) });
 });
 
 /** Admin: current read grants and the employee list to pick from. */
