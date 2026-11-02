@@ -242,8 +242,9 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
       ),
     );
 
-  // Production incentive (حافز الإنتاج) for employees linked to a procurement account. It replaces
-  // the fixed contract incentive for them; manual incentive adjustments still apply on top.
+  // Production incentive (حافز الإنتاج) = contract incentive × KPI % (delivered ÷ assigned), for
+  // employees linked to a procurement account. It replaces the fixed contract incentive entirely;
+  // manual incentive adjustments still apply on top.
   const productionByEmp = new Map<number, number>();
   for (const e of employees) {
     if (e.procurementEmployeeId == null) continue;
@@ -281,7 +282,9 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
         allowances: num(c.allowances),
         bonuses: sumKind("bonus") + round2(daysBonus * dailyRate),
         incentives:
-          (productionByEmp.has(employeeId) ? productionByEmp.get(employeeId)! : num(c.incentive)) +
+          // Incentive = contract incentive × KPI %. Employees with no procurement account have no
+          // production data, so their KPI-based incentive is 0 (manual adjustments still apply).
+          (productionByEmp.has(employeeId) ? productionByEmp.get(employeeId)! : 0) +
           sumKind("incentive"),
         deductions: sumKind("deduction"),
         absenceDays: absence[employeeId],
