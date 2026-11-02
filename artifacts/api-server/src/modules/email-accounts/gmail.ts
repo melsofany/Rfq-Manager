@@ -66,15 +66,47 @@ function summarize(m: gmail_v1.Schema$Message): MessageSummary {
   };
 }
 
+export interface LabelInfo {
+  id: string;
+  name: string;
+  type: "system" | "user";
+}
+
+/** System folders shown in the viewer, in display order. */
+const SYSTEM_FOLDERS = ["INBOX", "STARRED", "IMPORTANT", "SENT", "DRAFT", "SPAM", "TRASH"];
+
+/** Folders and user labels of a mailbox. Gmail's category tabs are not shown. */
+export async function listLabels(mailbox: string): Promise<LabelInfo[]> {
+  const gmail = gmailFor(mailbox);
+  const res = await gmail.users.labels.list({ userId: mailbox });
+  const labels: LabelInfo[] = (res.data.labels ?? [])
+    .filter((l) => !!l.id && (l.type === "user" || SYSTEM_FOLDERS.includes(l.id)))
+    .map((l) => ({
+      id: l.id as string,
+      name: l.name ?? (l.id as string),
+      type: l.type === "user" ? "user" : "system",
+    }));
+  const order = (l: LabelInfo) =>
+    l.type === "system" ? SYSTEM_FOLDERS.indexOf(l.id) : SYSTEM_FOLDERS.length;
+  return labels.sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));
+}
+
+export interface MessagePage {
+  messages: MessageSummary[];
+  nextPageToken?: string;
+}
+
 export async function listMessages(
   mailbox: string,
-  opts: { query?: string; max: number },
-): Promise<MessageSummary[]> {
+  opts: { query?: string; max: number; labelId?: string; pageToken?: string },
+): Promise<MessagePage> {
   const gmail = gmailFor(mailbox);
   const list = await gmail.users.messages.list({
     userId: mailbox,
     maxResults: opts.max,
     q: opts.query || undefined,
+    labelIds: opts.labelId ? [opts.labelId] : undefined,
+    pageToken: opts.pageToken || undefined,
   });
   const ids = (list.data.messages ?? []).map((m) => m.id).filter((id): id is string => !!id);
   const metas = await Promise.all(
@@ -87,7 +119,10 @@ export async function listMessages(
       }),
     ),
   );
-  return metas.map((r) => summarize(r.data));
+  return {
+    messages: metas.map((r) => summarize(r.data)),
+    nextPageToken: list.data.nextPageToken ?? undefined,
+  };
 }
 
 export async function getMessage(mailbox: string, id: string): Promise<MessageDetail> {
