@@ -24,6 +24,7 @@
  *   POST   /accounts/supplier-payments
  *   GET    /accounts/supplier-payments/:id
  */
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -36,12 +37,16 @@ import {
   ACCOUNT_CODES,
 } from "@workspace/db";
 import { eq, desc, and, lte, gte, sql } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { rateOf, vatOnNet, round2 } from "./tax";
 import { postJournalEntry, insertWithDocNo } from "./posting";
 import { num as toNum, formatNum, loadTaxSettings } from "./helpers";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/accounts", guardFor("/accounts"));
+router.use("/accounts", guardFor("/accounts"));
+
 
 // Compute net/vat/gross/withholding for a supplier invoice. `net` is the
 // VAT-exclusive supply value; VAT added on top at 14%; withholding applied to
@@ -160,7 +165,6 @@ router.get("/accounts/supplier-invoices/:id", requireAuth, async (req, res): Pro
 
 router.post(
   "/accounts/supplier-invoices",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const body = (req.body ?? {}) as {
       supplierInvoiceNo?: string | null;
@@ -256,7 +260,6 @@ router.post(
 
 router.patch(
   "/accounts/supplier-invoices/:id",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     const [existing] = await db
@@ -340,7 +343,6 @@ router.patch(
 // Post → immutable + generates the balanced journal entry.
 router.post(
   "/accounts/supplier-invoices/:id/post",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     const [inv] = await db
@@ -423,7 +425,6 @@ router.post(
 
 router.post(
   "/accounts/supplier-invoices/:id/void",
-  requireRole("admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     const [inv] = await db
@@ -532,7 +533,6 @@ router.get("/accounts/supplier-payments/:id", requireAuth, async (req, res): Pro
 // and a single posted invoice is open, the whole amount applies to it.
 router.post(
   "/accounts/supplier-payments",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const body = (req.body ?? {}) as {
       supplierId?: number | null;

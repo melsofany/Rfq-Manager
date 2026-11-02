@@ -28,8 +28,11 @@ import {
 } from "@workspace/db";
 import { eq, and, gte, lte, isNotNull, sql, desc } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/analytics", guardFor("/analytics"));
+
 
 const VALID_TYPES = new Set(["supplier_rfq", "customer_rfq", "supplier_po", "customer_po"]);
 

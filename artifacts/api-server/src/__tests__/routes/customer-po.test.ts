@@ -151,7 +151,7 @@ const deleteItemIds: number[] = [];
 const updateItemCalls: Array<{ id: number; vals: any }> = [];
 
 // Mutable session so tests can flip role/state.
-const sessionState: { employeeId: number; role?: string } = { employeeId: 1 };
+const sessionState: { employeeId: number; role?: string } = { employeeId: 1, role: "manager" };
 
 const dbMock: any = {
   select: vi.fn((arg?: any) => ({
@@ -383,7 +383,7 @@ beforeEach(() => {
   linkedPoItemRows = [];
   receivedItemRows = [];
   supplierItemRows = [];
-  sessionState.role = undefined;
+  sessionState.role = "manager";
   insertedItems.length = 0;
   updateCalls.length = 0;
   updateItemIds.length = 0;
@@ -942,9 +942,10 @@ describe("PATCH /api/customer-po/:id", () => {
   });
 
   it("rejects editing a PO that is already sent (no session role)", async () => {
+    sessionState.role = undefined;
     detailRow = { ...insertedPo, status: "sent" };
     const res = await request(testApp).patch("/api/customer-po/7").send({ buyerName: "X" });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(403);
   });
 
   it("rejects editing a sent PO for a non-privileged role", async () => {
@@ -1053,8 +1054,8 @@ describe("PATCH /api/customer-po/items/:itemId/highlight", () => {
     expect(res.status).toBe(404);
   });
 
-  it("403 for a role that is not admin/accountant/manager", async () => {
-    sessionState.role = "purchasing";
+  it("403 for a role without the customer-po page", async () => {
+    sessionState.role = "viewer";
     detailItems = [{ id: 42, customerPoId: 7 }];
     const res = await request(testApp)
       .patch("/api/customer-po/items/42/highlight")

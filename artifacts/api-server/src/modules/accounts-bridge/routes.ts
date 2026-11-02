@@ -41,8 +41,11 @@ import { probeOdoo } from "./service";
 import { listSyncRows, syncCounts, findByEventKey } from "./store";
 import { DEFAULT_VAT_RATE, DEFAULT_WITHHOLDING_RATE } from "./tax";
 import { logger } from "../../shared/logger";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/accounts", guardFor("/accounts"));
+
 
 /** Wrap an Odoo-backed handler so an unconfigured bridge answers 503. */
 function odooRoute(

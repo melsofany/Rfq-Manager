@@ -1,3 +1,4 @@
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -20,7 +21,7 @@ import {
   supplierCategoriesTable,
 } from "@workspace/db";
 import { eq, ilike, inArray, desc, and, isNull, or, isNotNull, sql, ne } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import {
   ensureCustomerAssignmentsSafe,
   classifyUnclassifiedItems,
@@ -32,8 +33,12 @@ import { approveCustomerItem } from "../rfq/customer-assignment";
 import { classifyItem, normalizeText } from "../rfq/classification";
 import { loadClassifierVocabulary } from "../rfq/keywords";
 import { assignReviewGroup, resolveConflictItems, listReviewGroups } from "../rfq/review-groups";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/customer-rfq", guardFor("/customer-rfq"));
+router.use("/customer-rfq", guardFor("/customer-rfq"));
+
 
 // VAT rate — must match the rfq module (used to normalize tax-inclusive
 // supplier prices to excl-tax for the margin check).
@@ -1698,7 +1703,6 @@ router.get(
 router.put(
   "/customer-rfq/items/:itemId/categories",
   requireAuth,
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const itemId = parseInt(String(req.params.itemId), 10);
     if (!Number.isFinite(itemId)) {
@@ -1870,7 +1874,6 @@ router.put(
 router.post(
   "/customer-rfq/items/classify",
   requireAuth,
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const body = req.body as { limit?: unknown };
     const limit = body.limit != null ? Number(body.limit) : undefined;
@@ -1894,7 +1897,6 @@ router.post(
 router.get(
   "/customer-rfq/review-groups",
   requireAuth,
-  requireRole("admin", "manager"),
   async (_req, res): Promise<void> => {
     const groups = await listReviewGroups();
     res.json({ groups });
@@ -1906,7 +1908,6 @@ router.get(
 router.post(
   "/customer-rfq/review-groups/assign",
   requireAuth,
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const body = req.body as { key?: unknown; categoryId?: unknown };
     const key = typeof body.key === "string" ? body.key : "";
@@ -1941,7 +1942,6 @@ router.post(
 router.post(
   "/customer-rfq/classification-conflicts/resolve",
   requireAuth,
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const body = req.body as { itemIds?: unknown; categoryId?: unknown };
     const itemIds = Array.isArray(body.itemIds)
@@ -2255,7 +2255,6 @@ router.get(
 router.post(
   "/customer-rfq/classification-repair",
   requireAuth,
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const body = req.body as { limit?: unknown };
     const limit = body.limit != null ? Number(body.limit) : undefined;
@@ -2693,7 +2692,6 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
 router.get(
   "/customer-rfq/pending-review",
   requireAuth,
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const view = (req.query as Record<string, string>).view === "archive" ? "archive" : "active";
 
@@ -2789,7 +2787,6 @@ router.get(
 router.post(
   "/customer-rfq/:id/approve-all",
   requireAuth,
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const rfqId = parseInt(req.params.id as string, 10);
     if (!Number.isFinite(rfqId)) {

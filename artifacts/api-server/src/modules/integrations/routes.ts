@@ -3,11 +3,16 @@
  * /api/integrations/*
  */
 
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import * as svc from "./service";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/integrations", guardFor("/integrations"));
+router.use("/integrations", guardFor("/integrations"));
+
 
 /** GET /integrations — قائمة كل التكاملات */
 router.get("/integrations", requireAuth, async (_req, res): Promise<void> => {
@@ -28,7 +33,7 @@ router.get("/integrations/:id", requireAuth, async (req, res): Promise<void> => 
 });
 
 /** POST /integrations — إنشاء تكامل جديد (admin/manager) */
-router.post("/integrations", requireRole("admin", "manager"), async (req, res): Promise<void> => {
+router.post("/integrations", async (req, res): Promise<void> => {
   const { name, type, config } = req.body as {
     name: string;
     type: svc.ErpType;
@@ -50,7 +55,6 @@ router.post("/integrations", requireRole("admin", "manager"), async (req, res): 
 /** PATCH /integrations/:id — تعديل تكامل */
 router.patch(
   "/integrations/:id",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const id = parseInt(req.params.id as string, 10);
     const updated = await svc.updateIntegration(id, req.body);
@@ -65,7 +69,6 @@ router.patch(
 /** DELETE /integrations/:id — حذف تكامل */
 router.delete(
   "/integrations/:id",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const id = parseInt(req.params.id as string, 10);
     const deleted = await svc.deleteIntegration(id);
@@ -80,7 +83,6 @@ router.delete(
 /** POST /integrations/:id/test — اختبار الاتصال */
 router.post(
   "/integrations/:id/test",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const id = parseInt(req.params.id as string, 10);
     const integration = await svc.getIntegration(id);
@@ -96,7 +98,6 @@ router.post(
 /** POST /integrations/:id/sync — تشغيل المزامنة */
 router.post(
   "/integrations/:id/sync",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const id = parseInt(req.params.id as string, 10);
     const integration = await svc.getIntegration(id);
@@ -121,7 +122,6 @@ router.post(
 /** POST /integrations/:id/sync-suppliers — استيراد الموردين فقط */
 router.post(
   "/integrations/:id/sync-suppliers",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const id = parseInt(req.params.id as string, 10);
     const integration = await svc.getIntegration(id);
@@ -141,7 +141,6 @@ router.post(
 /** POST /integrations/:id/export — تصدير البيانات للـ ERP */
 router.post(
   "/integrations/:id/export",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const id = parseInt(req.params.id as string, 10);
     const integration = await svc.getIntegration(id);

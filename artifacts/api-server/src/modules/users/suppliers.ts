@@ -1,3 +1,4 @@
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -15,7 +16,7 @@ import {
   supplierCategoriesTable,
 } from "@workspace/db";
 import { eq, ilike, or, and, ne, count, sql, inArray } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { isForeignKeyViolation } from "../../shared/pg-errors";
 import { missingRegistrationFields } from "../../shared/supplier-registration";
 import {
@@ -23,8 +24,12 @@ import {
   loadSupplierCategoryMap,
   saveSupplierCategoryLinks,
 } from "../../shared/supplier-category-links";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/suppliers", guardFor("/suppliers"));
+router.use("/suppliers", guardFor("/suppliers"));
+
 
 function toArray(cat: string | null | undefined): string[] {
   if (!cat) return [];
@@ -669,7 +674,6 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
 // Only admin or manager can delete a supplier
 router.delete(
   "/suppliers/:id",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const id = parseInt(raw, 10);

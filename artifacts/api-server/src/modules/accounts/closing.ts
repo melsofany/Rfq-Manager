@@ -11,12 +11,18 @@
  *   POST   /accounts/closings        → lock a month (accountant/manager/admin)
  *   DELETE /accounts/closings/:id    → unlock a month (admin only, audited)
  */
+import { guardFor } from "../../shared/permissions";
+import { requirePermission } from "../../shared/permissions";
 import { Router } from "express";
 import { db, accountingClosingsTable, journalEntriesTable, auditLogTable } from "@workspace/db";
 import { eq, desc, sql } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
+import { guardFor, requirePermission } from "../../shared/permissions";
 
 const router = Router();
+router.use("/accounts", guardFor("/accounts"));
+router.use("/accounts", guardFor("/accounts"));
+
 
 /** YYYY-MM from a date string (or full ISO). Returns null when unparseable。 */
 export function monthOf(date: string | null | undefined): string | null {
@@ -62,7 +68,6 @@ router.get("/accounts/closings", requireAuth, async (_req, res): Promise<void> =
 
 router.post(
   "/accounts/closings",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const body = (req.body ?? {}) as { period?: string; notes?: string | null };
     const period = body.period?.trim() ?? "";
@@ -119,7 +124,7 @@ router.post(
   },
 );
 
-router.delete("/accounts/closings/:id", requireRole("admin"), async (req, res): Promise<void> => {
+router.delete("/accounts/closings/:id", requirePermission("accounts:posting"), async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const [lock] = await db
     .select()

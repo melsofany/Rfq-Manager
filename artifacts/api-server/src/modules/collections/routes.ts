@@ -24,6 +24,7 @@
  *   PATCH  /collections/payments/:id        → edit a payment
  *   DELETE /collections/payments/:id        → delete a payment
  */
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -38,12 +39,16 @@ import {
   DUE_SOON_DAYS,
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { postJournalEntry } from "../accounts/posting";
 import { ACCOUNT_CODES } from "@workspace/db";
 import { cashAccountFor } from "../accounts/integration";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/collections", guardFor("/collections"));
+router.use("/collections", guardFor("/collections"));
+
 
 function toNum(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -566,7 +571,6 @@ router.patch("/collections/payments/:id", requireAuth, async (req, res): Promise
 // DELETE /collections/payments/:id — delete a payment.
 router.delete(
   "/collections/payments/:id",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const id = parseInt(String(req.params.id), 10);
     if (!isFinite(id)) {

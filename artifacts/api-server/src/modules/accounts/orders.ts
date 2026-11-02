@@ -38,8 +38,11 @@ import { requireAuth } from "../../middlewares/auth";
 import { round2, netOfTax } from "./tax";
 import { num, numOr as toNum, trimNum as fmt, loadTaxSettings } from "./helpers";
 import { resolveCustomerPoLinks } from "../../shared/po-links";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/accounts", guardFor("/accounts"));
+
 
 const DELIVERED_STATES = new Set(["delivered", "rejected", "cancelled"]);
 const RECEIVED_STATES = new Set(["fulfilled", "partial", "rejected"]);

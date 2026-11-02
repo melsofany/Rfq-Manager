@@ -15,6 +15,7 @@
  *   GET /accounts/tax-settings      → Egyptian tax identity + rates
  *   PUT /accounts/tax-settings      → update the tax identity + rates (admin/manager)
  */
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -31,12 +32,16 @@ import {
   salesInvoicesTable,
 } from "@workspace/db";
 import { eq, sql, and, desc, gte, lte } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { rateOf, round2, vatOnNet, marginOf } from "./tax";
 import { numOrZero as toNum, formatNum, loadTaxSettings } from "./helpers";
 import { supplierLineByCustomerItem } from "../../shared/po-links";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/accounts", guardFor("/accounts"));
+router.use("/accounts", guardFor("/accounts"));
+
 
 function buildConditions(customerName?: string, from?: string, to?: string) {
   const conditions = [];
@@ -587,7 +592,6 @@ router.get("/accounts/tax-settings", requireAuth, async (_req, res): Promise<voi
 
 router.put(
   "/accounts/tax-settings",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const body = (req.body ?? {}) as {
       companyName?: string | null;

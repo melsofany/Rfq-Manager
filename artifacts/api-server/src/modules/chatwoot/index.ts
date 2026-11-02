@@ -14,8 +14,11 @@ import { db, employeesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
+import { guardFor } from "../../shared/permissions";
 
 const router: IRouter = Router();
+router.use("/chatwoot", guardFor("/chatwoot"));
+
 
 const CHATWOOT_URL = process.env.CHATWOOT_URL?.replace(/\/$/, "") || "";
 const CHATWOOT_ACCOUNT_ID = process.env.CHATWOOT_ACCOUNT_ID || "";

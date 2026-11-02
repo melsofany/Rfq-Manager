@@ -25,8 +25,11 @@ import { resolvePublicBaseUrl } from "../../shared/base-url";
 import { whatsappChatsTable } from "@workspace/db";
 import { lookupRfqFromSheet, listSheetRfqNumbers, listSheetTabs } from "../../shared/google-sheets";
 import { ensureAssignmentsForRfqSafe } from "./assignment";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/rfq", guardFor("/rfq"));
+
 
 // Generate internal RFQ number: CRQ-YYYY-XXXXXX
 async function generateInternalRfqNo(): Promise<string> {

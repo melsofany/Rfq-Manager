@@ -33,7 +33,12 @@ export interface PermissionNode {
  */
 export const PERMISSION_CATALOG: PermissionNode[] = [
   { key: "dashboard", href: "/dashboard", labelKey: "nav.dashboard" },
-  { key: "customers", href: "/customers", labelKey: "nav.customers" },
+  {
+    key: "customers",
+    href: "/customers",
+    labelKey: "nav.customers",
+    children: [{ key: "customers:edit", labelKey: "perm.pageEdit" }],
+  },
   {
     key: "customer-rfq",
     href: "/customer-rfq",
@@ -57,13 +62,14 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     key: "rfq",
     href: "/rfq",
     labelKey: "nav.rfq",
-    children: [{ key: "rfq:assign", labelKey: "perm.rfq.assign" }],
+    children: [{ key: "rfq:edit", labelKey: "perm.pageEdit" }, { key: "rfq:assign", labelKey: "perm.rfq.assign" }],
   },
   {
     key: "suppliers",
     href: "/suppliers",
     labelKey: "nav.suppliers",
     children: [
+      { key: "suppliers:edit", labelKey: "perm.pageEdit" },
       { key: "suppliers:list", labelKey: "perm.suppliers.list" },
       { key: "suppliers:import", labelKey: "perm.suppliers.import" },
     ],
@@ -73,6 +79,7 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     href: "/items",
     labelKey: "nav.items",
     children: [
+      { key: "items:edit", labelKey: "perm.pageEdit" },
       { key: "items:search", labelKey: "perm.items.search" },
       { key: "items:analysis", labelKey: "perm.items.analysis" },
       { key: "items:sheet", labelKey: "perm.items.sheet" },
@@ -84,6 +91,7 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     href: "/purchase-orders",
     labelKey: "nav.purchaseOrders",
     children: [
+      { key: "purchase-orders:edit", labelKey: "perm.pageEdit" },
       { key: "purchase-orders:orders", labelKey: "perm.po.orders" },
       { key: "purchase-orders:receipts", labelKey: "perm.po.receipts" },
     ],
@@ -93,6 +101,7 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     href: "/accounts",
     labelKey: "nav.accounts",
     children: [
+      { key: "accounts:edit", labelKey: "perm.pageEdit" },
       { key: "accounts:records", labelKey: "perm.accounts.records" },
       { key: "accounts:expenses", labelKey: "perm.accounts.expenses" },
       { key: "accounts:posting", labelKey: "perm.accounts.posting" },
@@ -104,6 +113,7 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     href: "/whatsapp",
     labelKey: "nav.whatsapp",
     children: [
+      { key: "whatsapp:edit", labelKey: "perm.pageEdit" },
       { key: "whatsapp:chats", labelKey: "perm.whatsapp.chats" },
       { key: "whatsapp:templates", labelKey: "perm.whatsapp.templates" },
       { key: "whatsapp:broadcast", labelKey: "perm.whatsapp.broadcast" },
@@ -115,13 +125,24 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     href: "/employees",
     labelKey: "nav.employees",
     children: [
+      { key: "employees:edit", labelKey: "perm.pageEdit" },
       { key: "employees:employees", labelKey: "perm.employees.employees" },
       { key: "employees:representatives", labelKey: "perm.employees.representatives" },
     ],
   },
-  { key: "hr", href: "/hr", labelKey: "nav.hr" },
+  {
+    key: "hr",
+    href: "/hr",
+    labelKey: "nav.hr",
+    children: [{ key: "hr:edit", labelKey: "perm.pageEdit" }],
+  },
   { key: "audit", href: "/audit", labelKey: "nav.auditLog" },
-  { key: "integrations", href: "/integrations", labelKey: "nav.integrations" },
+  {
+    key: "integrations",
+    href: "/integrations",
+    labelKey: "nav.integrations",
+    children: [{ key: "integrations:edit", labelKey: "perm.pageEdit" }],
+  },
   // Email: the mailbox viewer is open to every employee (each still only sees
   // their own address and grants). Email settings is admin by default.
   { key: "mailbox", href: "/mailbox", labelKey: "nav.mailbox" },
@@ -131,6 +152,7 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     href: "/ai-assistant",
     labelKey: "nav.aiAssistant",
     children: [
+      { key: "ai-assistant:edit", labelKey: "perm.pageEdit" },
       { key: "ai-assistant:users", labelKey: "perm.aiAssistant.users" },
       { key: "ai-assistant:settings", labelKey: "perm.aiAssistant.settings" },
     ],
@@ -139,7 +161,7 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     key: "backup",
     href: "/backup",
     labelKey: "nav.backup",
-    children: [{ key: "backup:alerts", labelKey: "perm.backup.alerts" }],
+    children: [{ key: "backup:edit", labelKey: "perm.pageEdit" }, { key: "backup:alerts", labelKey: "perm.backup.alerts" }],
   },
 ];
 
@@ -190,9 +212,29 @@ export const ADMIN_ONLY_PAGES: string[] = ["email-settings"];
  * pre-existing ability to edit drafts — an admin can still revoke them per
  * employee via the permissions editor.
  */
+/** Pages whose write actions are controlled by a `${page}:edit` key. */
+export const EDIT_PAGES: string[] = [
+  "customers", "rfq", "suppliers", "items", "purchase-orders", "accounts", "whatsapp",
+  "employees", "hr", "integrations", "ai-assistant", "backup",
+];
+const editKeysOf = (pages: string[]): string[] =>
+  pages.filter((k) => EDIT_PAGES.includes(k)).map((k) => `${k}:edit`);
+
+const PURCHASING_PAGES = PAGE_KEYS.filter(
+  (k) =>
+    k !== "employees" &&
+    k !== "hr" &&
+    k !== "audit" &&
+    k !== "integrations" &&
+    k !== "ai-assistant" &&
+    k !== "backup" &&
+    !ADMIN_ONLY_PAGES.includes(k),
+);
+
 export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
   manager: [
     ...PAGE_KEYS.filter((k) => !ADMIN_ONLY_PAGES.includes(k)),
+    ...editKeysOf(PAGE_KEYS.filter((k) => !ADMIN_ONLY_PAGES.includes(k))),
     "customer-rfq:edit",
     "customer-rfq:price",
     "customer-po:edit",
@@ -200,16 +242,9 @@ export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
     ASSIGN_PERM.itemAssign,
   ],
   purchasing: [
-    ...PAGE_KEYS.filter(
-      (k) =>
-        k !== "employees" &&
-        k !== "hr" &&
-        k !== "audit" &&
-        k !== "integrations" &&
-        k !== "ai-assistant" &&
-        k !== "backup" &&
-        !ADMIN_ONLY_PAGES.includes(k),
-    ),
+    ...PURCHASING_PAGES,
+    // Accounts writes stay with accountants and managers.
+    ...editKeysOf(PURCHASING_PAGES.filter((k) => k !== "accounts")),
     "customer-rfq:edit",
     "customer-po:edit",
     ...ITEMS_TABS,

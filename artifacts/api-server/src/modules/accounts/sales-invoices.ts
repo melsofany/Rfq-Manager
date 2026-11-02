@@ -20,6 +20,7 @@
  *   POST   /accounts/sales-invoices/:id/void
  *   GET    /accounts/sales-invoices/:id/pdf     → branded PDF
  */
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -34,13 +35,17 @@ import {
   ACCOUNT_CODES,
 } from "@workspace/db";
 import { eq, desc, and, lte, gte } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { vatOnNet, round2 } from "./tax";
 import { postJournalEntry, insertWithDocNo } from "./posting";
 import { generateSalesInvoicePdf } from "./sales-invoice-pdf";
 import { num as toNum, formatNum, loadTaxSettings } from "./helpers";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/accounts", guardFor("/accounts"));
+router.use("/accounts", guardFor("/accounts"));
+
 
 // ───────────────────────────────────────────────────────────────────────────
 // List
@@ -140,7 +145,6 @@ router.get("/accounts/sales-invoices/:id", requireAuth, async (req, res): Promis
 // from the customer PO's priced items (qty × unitPrice).
 router.post(
   "/accounts/sales-invoices",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const body = (req.body ?? {}) as {
       customerPoId?: number | null;
@@ -279,7 +283,6 @@ router.post(
 // ───────────────────────────────────────────────────────────────────────────
 router.patch(
   "/accounts/sales-invoices/:id",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     const [existing] = await db
@@ -365,7 +368,6 @@ router.patch(
 // ───────────────────────────────────────────────────────────────────────────
 router.post(
   "/accounts/sales-invoices/:id/post",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     const [inv] = await db.select().from(salesInvoicesTable).where(eq(salesInvoicesTable.id, id));
@@ -476,7 +478,6 @@ router.post(
 
 router.post(
   "/accounts/sales-invoices/:id/void",
-  requireRole("admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     const [inv] = await db.select().from(salesInvoicesTable).where(eq(salesInvoicesTable.id, id));

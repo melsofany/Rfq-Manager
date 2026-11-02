@@ -6,9 +6,10 @@
  *   GET  /backup/settings        → alert recipients + retention/schedule
  *   PUT  /backup/settings        → update settings (admin/manager)
  */
+import { guardFor } from "../../shared/permissions";
 import { Router, type IRouter } from "express";
 import { db, auditLogTable, type BackupRecipient } from "@workspace/db";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import {
   getBackupStatus,
   isBackupConfigured,
@@ -18,8 +19,12 @@ import {
   BackupAlreadyDoneToday,
 } from "./service";
 import { loadBackupSettings, updateBackupSettings } from "./store";
+import { guardFor } from "../../shared/permissions";
 
 const router: IRouter = Router();
+router.use("/backup", guardFor("/backup"));
+router.use("/backup", guardFor("/backup"));
+
 
 router.get("/backup/status", requireAuth, async (_req, res) => {
   try {
@@ -33,14 +38,13 @@ router.get("/backup/status", requireAuth, async (_req, res) => {
 router.post(
   "/backup/test-connection",
   requireAuth,
-  requireRole("admin", "manager"),
   async (_req, res) => {
     const result = await testBackupConnection();
     res.status(result.ok ? 200 : 502).json(result);
   },
 );
 
-router.post("/backup/run", requireAuth, requireRole("admin", "manager"), async (_req, res) => {
+router.post("/backup/run", requireAuth, async (_req, res) => {
   if (!isBackupConfigured()) {
     res.status(400).json({
       error: `النسخ الاحتياطي غير مُفعَّل: ${backupConfigProblems().join("، ")}`,
@@ -78,7 +82,7 @@ router.get("/backup/settings", requireAuth, async (_req, res) => {
   }
 });
 
-router.put("/backup/settings", requireAuth, requireRole("admin", "manager"), async (req, res) => {
+router.put("/backup/settings", requireAuth, async (req, res) => {
   try {
     const body = req.body ?? {};
     const patch: {

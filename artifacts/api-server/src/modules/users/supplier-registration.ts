@@ -60,8 +60,11 @@ import {
   type RegistrationField,
   type RegistrationValues,
 } from "../../shared/supplier-registration";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/suppliers", guardFor("/suppliers"));
+
 
 /** A registration link lives two weeks by default — long enough for a bank reply. */
 const DEFAULT_EXPIRY_DAYS = Number(process.env.SUPPLIER_REGISTRATION_EXPIRY_DAYS) || 14;

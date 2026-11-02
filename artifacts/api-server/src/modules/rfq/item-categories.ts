@@ -11,6 +11,7 @@
  *   GET    /employees/:id/categories           — categories an employee owns
  *   PUT    /employees/:id/categories           — replace (admin/manager)
  */
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -23,11 +24,16 @@ import {
   supplierCategoriesTable,
 } from "@workspace/db";
 import { eq, and, asc, inArray, sql } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { isUniqueViolation } from "../../shared/pg-errors";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/item-categories", guardFor("/item-categories"));
+router.use("/item-categories", guardFor("/item-categories"));
+router.use("/employees", guardFor("/employees"));
+
 
 const PRIMARY_CONFLICT_MESSAGE = "لا يمكن تعيين أكثر من مسؤول أساسي لنفس التصنيف";
 
@@ -112,7 +118,6 @@ router.get("/item-categories/:id/keywords", requireAuth, async (req, res): Promi
 
 router.post(
   "/item-categories/:id/keywords",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const categoryId = parseInt(req.params.id as string, 10);
     const { keyword, weight, language } = req.body as {
@@ -158,7 +163,6 @@ router.post(
 
 router.patch(
   "/item-categories/:id/keywords/:keywordId",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const categoryId = parseInt(req.params.id as string, 10);
     const keywordId = parseInt(req.params.keywordId as string, 10);
@@ -218,7 +222,6 @@ router.patch(
 
 router.delete(
   "/item-categories/:id/keywords/:keywordId",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const categoryId = parseInt(req.params.id as string, 10);
     const keywordId = parseInt(req.params.keywordId as string, 10);
@@ -269,7 +272,6 @@ router.get("/item-categories", requireAuth, async (_req, res): Promise<void> => 
 
 router.post(
   "/item-categories",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const { name, code, sortOrder, kind, parentId, aliases } = req.body as {
       name?: string;
@@ -346,7 +348,6 @@ router.post(
 
 router.patch(
   "/item-categories/:id",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const id = parseInt(req.params.id as string, 10);
     const { name, code, isActive, sortOrder, kind, parentId, aliases } = req.body as {
@@ -467,7 +468,7 @@ async function saveAliases(categoryId: number, raw: unknown): Promise<string[]> 
   return (await loadAliases()).get(categoryId) ?? [];
 }
 
-router.delete("/item-categories/:id", requireRole("admin"), async (req, res): Promise<void> => {
+router.delete("/item-categories/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   const [row] = await db
     .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
@@ -515,7 +516,6 @@ router.get("/item-categories/:id/owners", requireAuth, async (req, res): Promise
 
 router.put(
   "/item-categories/:id/owners",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const categoryId = parseInt(req.params.id as string, 10);
     const { owners } = req.body as {
@@ -624,7 +624,6 @@ router.get("/employees/categories", requireAuth, async (_req, res): Promise<void
 
 router.put(
   "/employees/:id/categories",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const employeeId = parseInt(req.params.id as string, 10);
     const { categories } = req.body as {

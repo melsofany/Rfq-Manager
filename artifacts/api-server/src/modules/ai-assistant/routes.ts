@@ -1,14 +1,14 @@
 /**
  * AI Assistant — admin routes.
  *
- * All endpoints are restricted to admin/manager (requireRole). They manage the
+ * All endpoints are restricted by the ai-assistant page permission. They manage the
  * allowlisted WhatsApp numbers and the assistant settings, plus a diagnostics
  * endpoint so the operator can confirm configuration without guessing.
  */
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import { db, aiAssistantUsersTable, aiAssistantSettingsTable, employeesTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import { requireRole } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import {
   loadSettings,
@@ -40,9 +40,13 @@ import {
   deriveDocumentFormats,
   resetOrgProfilesCache,
 } from "./org-profiles";
+import { guardFor, requirePermission } from "../../shared/permissions";
 
 const router = Router();
-const guard = requireRole("admin", "manager");
+router.use("/ai-assistant", guardFor("/ai-assistant"));
+router.use("/ai-assistant", guardFor("/ai-assistant"));
+
+const guard = requirePermission("ai-assistant");
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const sessionOf = (req: any) =>

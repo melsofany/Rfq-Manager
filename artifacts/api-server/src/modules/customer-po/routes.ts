@@ -1,3 +1,4 @@
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -10,10 +11,14 @@ import {
   purchaseOrderItemsTable,
 } from "@workspace/db";
 import { eq, count, inArray, desc, sql, and, isNotNull, ne } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { lockItemRows } from "../rfq/attribution";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/customer-po", guardFor("/customer-po"));
+router.use("/customer-po", guardFor("/customer-po"));
+
 
 // Generate internal customer-PO number: CPO-YYYY-NNNNNN.
 // Uses MAX of existing numbers (not COUNT) so deletions never cause collisions.
@@ -935,7 +940,6 @@ type HighlightColor = (typeof HIGHLIGHT_COLORS)[number];
 // `{clear: true}` to remove the highlight.
 router.patch(
   "/customer-po/items/:itemId/highlight",
-  requireRole("admin", "accountant", "manager"),
   async (req, res): Promise<void> => {
     const raw = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
     const itemId = parseInt(raw, 10);

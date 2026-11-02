@@ -22,15 +22,27 @@ const ALL_PAGES = [
 const ADMIN_ONLY_FOR_NON_ADMIN = ["employees", "hr", "audit", "integrations", "ai-assistant", "backup"];
 const ITEMS_TABS = ["items:search", "items:analysis", "items:sheet", "items:categories"];
 
+/** Pages whose write actions are controlled by a `${page}:edit` key (mirror of the portal). */
+const EDIT_PAGES = [
+  "customers", "rfq", "suppliers", "items", "purchase-orders", "accounts", "whatsapp",
+  "employees", "hr", "integrations", "ai-assistant", "backup",
+];
+const editKeysOf = (pages: string[]): string[] =>
+  pages.filter((k) => EDIT_PAGES.includes(k)).map((k) => `${k}:edit`);
+const PURCHASING_PAGES = ALL_PAGES.filter((k) => !ADMIN_ONLY_FOR_NON_ADMIN.includes(k));
+
 export const ROLE_DEFAULTS: Record<string, string[]> = {
-  manager: [...ALL_PAGES, "customer-rfq:edit", "customer-rfq:price", "customer-po:edit", ...ITEMS_TABS, "rfq:assign"],
+  manager: [
+    ...ALL_PAGES, ...editKeysOf(ALL_PAGES), "customer-rfq:edit", "customer-rfq:price", "customer-po:edit",
+    ...ITEMS_TABS, "rfq:assign",
+  ],
   purchasing: [
-    ...ALL_PAGES.filter((k) => !ADMIN_ONLY_FOR_NON_ADMIN.includes(k)),
+    ...PURCHASING_PAGES, ...editKeysOf(PURCHASING_PAGES.filter((k) => k !== "accounts")),
     "customer-rfq:edit", "customer-po:edit", ...ITEMS_TABS, "rfq:assign",
   ],
   data_entry: ["dashboard", "customers", "customer-rfq", "customer-po", "mailbox", "customer-rfq:edit", "customer-po:edit"],
   // Legacy backend-only role (not in the portal). Kept so accounting staff keep the accounts API.
-  accountant: ["dashboard", "accounts", "mailbox", "accounts:records", "accounts:expenses", "accounts:posting"],
+  accountant: ["dashboard", "accounts", "accounts:edit", "mailbox", "customer-po", "customer-po:edit", "accounts:records", "accounts:expenses", "accounts:posting"],
 };
 
 export interface Access {
@@ -115,4 +127,41 @@ export function guardByMethod(read: string[], write: string[]) {
     const method = req.method.toUpperCase();
     (method === "GET" || method === "HEAD" ? onRead : onWrite)(req, res, next);
   };
+}
+
+const RFQ_READ = ["rfq", "purchase-orders", "customer-rfq", "customer-po", "accounts", "dashboard"];
+
+/** Page guards per API prefix: reads need any of `read`, writes any of `write`. */
+export const ROUTE_GUARDS: Record<string, { read: string[]; write: string[] }> = {
+  "/suppliers": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers:edit"] },
+  "/categories": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers:edit"] },
+  "/customers": { read: ["customers", "customer-rfq", "customer-po", "dashboard"], write: ["customers:edit"] },
+  "/representatives": { read: ["employees", "customers", "customer-rfq", "customer-po"], write: ["employees:edit"] },
+  "/employees": { read: ["employees", "rfq", "customer-rfq", "customer-po", "purchase-orders", "dashboard"], write: ["employees:edit"] },
+  "/items": { read: ["items", "rfq", "customer-rfq", "customer-po", "purchase-orders", "analytics", "dashboard"], write: ["items:edit"] },
+  "/item-categories": { read: ["items", "rfq", "customer-rfq"], write: ["items:edit"] },
+  "/offers": { read: RFQ_READ, write: ["rfq:edit"] },
+  "/offer": { read: RFQ_READ, write: ["rfq:edit"] },
+  "/rfq": { read: RFQ_READ, write: ["rfq:edit"] },
+  "/customer-rfq": { read: ["customer-rfq", "rfq", "customer-po", "dashboard"], write: ["customer-rfq:edit"] },
+  "/customer-po": { read: ["customer-po", "customer-rfq", "dashboard"], write: ["customer-po:edit"] },
+  "/po": { read: ["purchase-orders", "rfq", "accounts", "dashboard"], write: ["purchase-orders:edit"] },
+  "/accounts": { read: ["accounts", "dashboard"], write: ["accounts:edit"] },
+  "/expenses": { read: ["accounts", "accounts:expenses"], write: ["accounts:edit", "accounts:expenses"] },
+  "/collections": { read: ["accounts", "dashboard"], write: ["accounts:edit"] },
+  "/analytics": { read: ["analytics", "dashboard"], write: ["analytics"] },
+  "/sync": { read: ["analytics"], write: ["analytics"] },
+  "/audit": { read: ["audit"], write: ["audit"] },
+  "/whatsapp": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp:edit", "whatsapp:chats"] },
+  "/chatwoot": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp:edit", "whatsapp:chats"] },
+  "/ai-assistant": { read: ["ai-assistant"], write: ["ai-assistant:edit"] },
+  "/integrations": { read: ["integrations"], write: ["integrations:edit"] },
+  "/backup": { read: ["backup"], write: ["backup:edit"] },
+};
+
+/** Router-level guard for one API prefix, from ROUTE_GUARDS. */
+export function guardFor(prefix: string) {
+  const g = ROUTE_GUARDS[prefix];
+  if (!g) throw new Error(`No page guard for ${prefix}`);
+  return guardByMethod(g.read, g.write);
 }

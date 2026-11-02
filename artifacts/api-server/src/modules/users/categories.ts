@@ -1,3 +1,4 @@
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import { db } from "@workspace/db";
 import {
@@ -6,10 +7,14 @@ import {
   itemCategoriesTable,
 } from "@workspace/db";
 import { eq, asc, count, or, ilike, and, isNotNull } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/categories", guardFor("/categories"));
+router.use("/categories", guardFor("/categories"));
+
 
 router.get("/categories", requireAuth, async (_req, res): Promise<void> => {
   const rows = await db
@@ -19,7 +24,7 @@ router.get("/categories", requireAuth, async (_req, res): Promise<void> => {
   res.json(rows.map((r) => ({ id: r.id, name: r.name, parentId: r.parentId ?? null })));
 });
 
-router.post("/categories", requireRole("admin"), async (req, res): Promise<void> => {
+router.post("/categories", async (req, res): Promise<void> => {
   const { name, parentId } = req.body as { name?: string; parentId?: number | null };
   if (!name?.trim()) {
     res.status(400).json({ error: "Name required" });
@@ -75,7 +80,7 @@ router.post("/categories", requireRole("admin"), async (req, res): Promise<void>
   res.status(201).json({ id: row.id, name: row.name, parentId: row.parentId ?? null });
 });
 
-router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<void> => {
+router.patch("/categories/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
   const { name, parentId } = req.body as { name?: string; parentId?: number | null };
 
@@ -150,7 +155,7 @@ router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<
   res.json({ id: row.id, name: row.name, parentId: row.parentId ?? null });
 });
 
-router.delete("/categories/:id", requireRole("admin"), async (req, res): Promise<void> => {
+router.delete("/categories/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
 
   const [category] = await db

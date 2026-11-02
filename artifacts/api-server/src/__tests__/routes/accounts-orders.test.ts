@@ -98,7 +98,7 @@ beforeAll(async () => {
   testApp.use(express.json());
   testApp.use((req: any, _res: any, next: any) => {
     req.log = { error: () => {}, warn: () => {}, info: () => {}, debug: () => {} };
-    req.session = { employeeId: 7 };
+    req.session = { employeeId: 7, role: "admin" };
     next();
   });
   testApp.use("/api", ordersRouter);

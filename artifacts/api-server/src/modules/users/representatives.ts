@@ -1,8 +1,11 @@
 import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db, representativesTable } from "@workspace/db";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/representatives", guardFor("/representatives"));
+
 
 function normalizeDigits(value: string): string {
   return value

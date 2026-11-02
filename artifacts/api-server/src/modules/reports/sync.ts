@@ -1,8 +1,13 @@
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { runFullSync, getSyncStatus } from "../../shared/sheet-sync";
+import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+router.use("/sync", guardFor("/sync"));
+router.use("/sync", guardFor("/sync"));
+
 
 /** GET /api/sync/status — current sync status */
 router.get("/sync/status", requireAuth, (_req, res): void => {
@@ -13,7 +18,6 @@ router.get("/sync/status", requireAuth, (_req, res): void => {
 router.post(
   "/sync/sheet",
   requireAuth,
-  requireRole("admin", "manager"),
   async (_req, res): Promise<void> => {
     const status = getSyncStatus();
     if (status.inProgress) {
