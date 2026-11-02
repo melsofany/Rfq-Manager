@@ -59,6 +59,7 @@ export async function initDb(): Promise<void> {
       CREATE TABLE IF NOT EXISTS supplier_categories (
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
+        parent_id INTEGER REFERENCES supplier_categories(id) ON DELETE SET NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE TABLE IF NOT EXISTS supplier_category_links (
@@ -513,6 +514,10 @@ export async function initDb(): Promise<void> {
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS iban TEXT;
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS swift_code TEXT;
       ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS bank_branch TEXT;
+    `);
+
+    await client.query(`
+      ALTER TABLE supplier_categories ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES supplier_categories(id) ON DELETE SET NULL;
     `);
 
     // استكمال بيانات المورد — the stamp left when the SUPPLIER himself confirmed

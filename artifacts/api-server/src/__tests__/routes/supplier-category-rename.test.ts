@@ -162,7 +162,7 @@ describe("supplier-category rename propagates to suppliers.category", () => {
     // supplier under the new name while every supplier still shows the old one.
     const res = await request(testApp).patch("/categories/1").send({ name: "كهرباء" });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ id: 1, name: "كهرباء" });
+    expect(res.body).toEqual({ id: 1, name: "كهرباء", parentId: null });
 
     // The rename helper must have run a raw UPDATE against `suppliers`.
     const supplierRewrite = executeCalls.find((q) =>

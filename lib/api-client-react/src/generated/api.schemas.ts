@@ -113,10 +113,14 @@ export interface EmployeeUpdate {
 export interface SupplierCategory {
   id: number;
   name: string;
+  /** @nullable */
+  parentId?: number | null;
 }
 
 export interface CategoryInput {
   name: string;
+  /** @nullable */
+  parentId?: number | null;
 }
 
 export interface Supplier {

@@ -44,8 +44,10 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
   });
 
   const [newName, setNewName] = useState("");
+  const [newParentId, setNewParentId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
+  const [editParentId, setEditParentId] = useState<number | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteErrors, setDeleteErrors] = useState<Record<number, string>>({});
@@ -55,6 +57,7 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
         setNewName("");
+        setNewParentId(null);
         setAddError(null);
       },
       onError: (err: unknown) => {
@@ -100,16 +103,17 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     if (!newName.trim()) return;
     setAddError(null);
-    createMutation.mutate({ data: { name: newName.trim() } });
+    createMutation.mutate({ data: { name: newName.trim(), parentId: newParentId } });
   };
 
-  const startEdit = (id: number, name: string) => {
-    setEditingId(id);
-    setEditName(name);
+  const startEdit = (cat: { id: number; name: string; parentId?: number | null }) => {
+    setEditingId(cat.id);
+    setEditName(cat.name);
+    setEditParentId(cat.parentId ?? null);
     setEditError(null);
     setDeleteErrors((prev) => {
       const next = { ...prev };
-      delete next[id];
+      delete next[cat.id];
       return next;
     });
   };
@@ -117,8 +121,11 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
   const saveEdit = (id: number) => {
     if (!editName.trim()) return;
     setEditError(null);
-    updateMutation.mutate({ id, data: { name: editName.trim() } });
+    updateMutation.mutate({ id, data: { name: editName.trim(), parentId: editParentId } });
   };
+
+  const rootCategories = categories.filter((c) => !c.parentId);
+  const getSubcategories = (parentId: number) => categories.filter((c) => c.parentId === parentId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -131,7 +138,7 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="p-5 space-y-4">
-          <form onSubmit={handleAdd} className="space-y-1.5">
+          <form onSubmit={handleAdd} className="space-y-2">
             <div className="flex gap-2">
               <Input
                 value={newName}
@@ -139,9 +146,21 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
                   setNewName(e.target.value);
                   setAddError(null);
                 }}
-                placeholder="New category name..."
-                className="h-8 text-sm"
+                placeholder="Category name..."
+                className="h-8 text-sm flex-1"
               />
+              <select
+                value={newParentId ?? ""}
+                onChange={(e) => setNewParentId(e.target.value ? Number(e.target.value) : null)}
+                className="h-8 text-xs bg-background border border-input rounded px-2 text-foreground"
+              >
+                <option value="">-- تصنيف رئيسي (بدون أب) --</option>
+                {rootCategories.map((rc) => (
+                  <option key={rc.id} value={rc.id}>
+                    {rc.name}
+                  </option>
+                ))}
+              </select>
               <Button
                 type="submit"
                 size="sm"
@@ -159,89 +178,180 @@ function ManageCategoriesDialog({ onClose }: { onClose: () => void }) {
             )}
           </form>
 
-          <div className="space-y-1 max-h-72 overflow-y-auto">
+          <div className="space-y-1.5 max-h-72 overflow-y-auto">
             {isLoading ? (
               <p className="text-muted-foreground text-sm text-center py-4">Loading...</p>
             ) : categories.length === 0 ? (
               <p className="text-muted-foreground text-sm text-center py-4">No categories yet</p>
             ) : (
-              categories.map((cat) => (
-                <div key={cat.id} className="space-y-0.5">
-                  <div className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted/30">
-                    {editingId === cat.id ? (
-                      <>
-                        <Input
-                          value={editName}
-                          onChange={(e) => {
-                            setEditName(e.target.value);
-                            setEditError(null);
-                          }}
-                          className="h-7 text-sm flex-1"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") saveEdit(cat.id);
-                            if (e.key === "Escape") setEditingId(null);
-                          }}
-                        />
-                        <button
-                          onClick={() => saveEdit(cat.id)}
-                          className="text-green-600 hover:text-green-700 p-0.5"
-                          disabled={updateMutation.isPending}
-                        >
-                          <Check size={15} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setEditingId(null);
-                            setEditError(null);
-                          }}
-                          className="text-muted-foreground hover:text-foreground p-0.5"
-                        >
-                          <X size={15} />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="flex-1 text-sm text-foreground capitalize">
-                          {cat.name}
-                        </span>
-                        <button
-                          onClick={() => startEdit(cat.id, cat.name)}
-                          className="text-muted-foreground hover:text-foreground p-0.5"
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setDeleteErrors((prev) => {
-                              const next = { ...prev };
-                              delete next[cat.id];
-                              return next;
-                            });
-                            deleteMutation.mutate({ id: cat.id });
-                          }}
-                          className="text-muted-foreground hover:text-destructive p-0.5"
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </>
+              rootCategories.map((rc) => {
+                const subs = getSubcategories(rc.id);
+                return (
+                  <div key={rc.id} className="space-y-1">
+                    {/* Root Category */}
+                    <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-muted/20 hover:bg-muted/40 font-medium">
+                      {editingId === rc.id ? (
+                        <>
+                          <Input
+                            value={editName}
+                            onChange={(e) => {
+                              setEditName(e.target.value);
+                              setEditError(null);
+                            }}
+                            className="h-7 text-sm flex-1"
+                            autoFocus
+                          />
+                          <select
+                            value={editParentId ?? ""}
+                            onChange={(e) =>
+                              setEditParentId(e.target.value ? Number(e.target.value) : null)
+                            }
+                            className="h-7 text-xs bg-background border border-input rounded px-1 text-foreground"
+                          >
+                            <option value="">-- تصنيف رئيسي --</option>
+                            {categories
+                              .filter((c) => c.id !== rc.id)
+                              .map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                          </select>
+                          <button
+                            onClick={() => saveEdit(rc.id)}
+                            className="text-green-600 hover:text-green-700 p-0.5"
+                            disabled={updateMutation.isPending}
+                          >
+                            <Check size={15} />
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="text-muted-foreground hover:text-foreground p-0.5"
+                          >
+                            <X size={15} />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex-1 text-sm text-foreground capitalize">
+                            {rc.name}{" "}
+                            <span className="text-xs font-normal text-muted-foreground">(عام)</span>
+                          </span>
+                          <button
+                            onClick={() => startEdit(rc)}
+                            className="text-muted-foreground hover:text-foreground p-0.5"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setDeleteErrors((prev) => {
+                                const next = { ...prev };
+                                delete next[rc.id];
+                                return next;
+                              });
+                              deleteMutation.mutate({ id: rc.id });
+                            }}
+                            className="text-muted-foreground hover:text-destructive p-0.5"
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {deleteErrors[rc.id] && (
+                      <div className="flex items-center gap-1.5 text-xs text-destructive px-2">
+                        <AlertCircle size={12} />
+                        <span>{deleteErrors[rc.id]}</span>
+                      </div>
                     )}
+
+                    {/* Subcategories */}
+                    {subs.map((sc) => (
+                      <div
+                        key={sc.id}
+                        className="flex items-center gap-2 pl-6 pr-2 py-1 rounded hover:bg-muted/30"
+                      >
+                        {editingId === sc.id ? (
+                          <>
+                            <Input
+                              value={editName}
+                              onChange={(e) => {
+                                setEditName(e.target.value);
+                                setEditError(null);
+                              }}
+                              className="h-7 text-sm flex-1"
+                              autoFocus
+                            />
+                            <select
+                              value={editParentId ?? ""}
+                              onChange={(e) =>
+                                setEditParentId(e.target.value ? Number(e.target.value) : null)
+                              }
+                              className="h-7 text-xs bg-background border border-input rounded px-1 text-foreground"
+                            >
+                              <option value="">-- تصنيف رئيسي --</option>
+                              {categories
+                                .filter((c) => c.id !== sc.id)
+                                .map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.name}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              onClick={() => saveEdit(sc.id)}
+                              className="text-green-600 hover:text-green-700 p-0.5"
+                              disabled={updateMutation.isPending}
+                            >
+                              <Check size={15} />
+                            </button>
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="text-muted-foreground hover:text-foreground p-0.5"
+                            >
+                              <X size={15} />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="flex-1 text-xs text-muted-foreground capitalize flex items-center gap-1.5">
+                              <span className="text-muted-foreground/60">↳</span> {sc.name}
+                            </span>
+                            <button
+                              onClick={() => startEdit(sc)}
+                              className="text-muted-foreground hover:text-foreground p-0.5"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDeleteErrors((prev) => {
+                                  const next = { ...prev };
+                                  delete next[sc.id];
+                                  return next;
+                                });
+                                deleteMutation.mutate({ id: sc.id });
+                              }}
+                              className="text-muted-foreground hover:text-destructive p-0.5"
+                              disabled={deleteMutation.isPending}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </>
+                        )}
+                        {deleteErrors[sc.id] && (
+                          <div className="flex items-center gap-1.5 text-xs text-destructive px-2 w-full">
+                            <AlertCircle size={12} />
+                            <span>{deleteErrors[sc.id]}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  {editingId === cat.id && editError && (
-                    <div className="flex items-center gap-1.5 text-xs text-destructive px-2">
-                      <AlertCircle size={12} />
-                      <span>{editError}</span>
-                    </div>
-                  )}
-                  {deleteErrors[cat.id] && (
-                    <div className="flex items-center gap-1.5 text-xs text-destructive px-2">
-                      <AlertCircle size={12} />
-                      <span>{deleteErrors[cat.id]}</span>
-                    </div>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

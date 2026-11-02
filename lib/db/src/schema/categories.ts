@@ -4,6 +4,7 @@ import { suppliersTable } from "./suppliers";
 export const supplierCategoriesTable = pgTable("supplier_categories", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
+  parentId: integer("parent_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -134,7 +134,8 @@ export const UpdateEmployeeResponse = zod.object({
  */
 export const ListCategoriesResponseItem = zod.object({
   "id": zod.number(),
-  "name": zod.string()
+  "name": zod.string(),
+  "parentId": zod.number().nullish()
 })
 export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem)
 
@@ -143,12 +144,14 @@ export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem)
  * @summary Create supplier category
  */
 export const CreateCategoryBody = zod.object({
-  "name": zod.string()
+  "name": zod.string(),
+  "parentId": zod.number().nullish()
 })
 
 export const CreateCategoryResponse = zod.object({
   "id": zod.number(),
-  "name": zod.string()
+  "name": zod.string(),
+  "parentId": zod.number().nullish()
 })
 
 
@@ -160,12 +163,14 @@ export const UpdateCategoryParams = zod.object({
 })
 
 export const UpdateCategoryBody = zod.object({
-  "name": zod.string()
+  "name": zod.string(),
+  "parentId": zod.number().nullish()
 })
 
 export const UpdateCategoryResponse = zod.object({
   "id": zod.number(),
-  "name": zod.string()
+  "name": zod.string(),
+  "parentId": zod.number().nullish()
 })
 
 

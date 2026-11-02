@@ -8,4 +8,6 @@
 
 export interface CategoryInput {
   name: string;
+  /** @nullable */
+  parentId?: number | null;
 }

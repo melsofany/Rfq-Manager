@@ -16,14 +16,26 @@ router.get("/categories", requireAuth, async (_req, res): Promise<void> => {
     .select()
     .from(supplierCategoriesTable)
     .orderBy(asc(supplierCategoriesTable.name));
-  res.json(rows.map((r) => ({ id: r.id, name: r.name })));
+  res.json(rows.map((r) => ({ id: r.id, name: r.name, parentId: r.parentId ?? null })));
 });
 
 router.post("/categories", requireRole("admin"), async (req, res): Promise<void> => {
-  const { name } = req.body as { name?: string };
+  const { name, parentId } = req.body as { name?: string; parentId?: number | null };
   if (!name?.trim()) {
     res.status(400).json({ error: "Name required" });
     return;
+  }
+
+  const pId = parentId ? Number(parentId) : null;
+  if (pId) {
+    const [parent] = await db
+      .select()
+      .from(supplierCategoriesTable)
+      .where(eq(supplierCategoriesTable.id, pId));
+    if (!parent) {
+      res.status(400).json({ error: "Parent category not found" });
+      return;
+    }
   }
 
   const existing = await db
@@ -35,7 +47,10 @@ router.post("/categories", requireRole("admin"), async (req, res): Promise<void>
     return;
   }
 
-  const [row] = await db.insert(supplierCategoriesTable).values({ name: name.trim() }).returning();
+  const [row] = await db
+    .insert(supplierCategoriesTable)
+    .values({ name: name.trim(), parentId: pId })
+    .returning();
   // Mirror into the item categories ONLY when the name is already a CANONICAL
   // item category (it carries a code). A free-text supplier-category spelling
   // must never create a junk functional domain that classifies no item and owns
@@ -57,16 +72,12 @@ router.post("/categories", requireRole("admin"), async (req, res): Promise<void>
   } catch {
     // best-effort — the startup mirror in init-db.ts re-syncs on the next boot.
   }
-  res.status(201).json({ id: row.id, name: row.name });
+  res.status(201).json({ id: row.id, name: row.name, parentId: row.parentId ?? null });
 });
 
 router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<void> => {
   const id = parseInt(req.params.id as string, 10);
-  const { name } = req.body as { name?: string };
-  if (!name?.trim()) {
-    res.status(400).json({ error: "Name required" });
-    return;
-  }
+  const { name, parentId } = req.body as { name?: string; parentId?: number | null };
 
   const [current] = await db
     .select()
@@ -77,10 +88,38 @@ router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<
     return;
   }
 
+  const newName = name !== undefined ? name.trim() : current.name;
+  if (!newName) {
+    res.status(400).json({ error: "Name required" });
+    return;
+  }
+
+  const pId = parentId !== undefined ? (parentId ? Number(parentId) : null) : current.parentId;
+  if (pId === id) {
+    res.status(400).json({ error: "Category cannot be its own parent" });
+    return;
+  }
+  if (pId) {
+    // check circular reference
+    let curr: number | null = pId;
+    while (curr) {
+      if (curr === id) {
+        res.status(400).json({ error: "Circular parent reference not allowed" });
+        return;
+      }
+      const [par] = await db
+        .select({ parentId: supplierCategoriesTable.parentId })
+        .from(supplierCategoriesTable)
+        .where(eq(supplierCategoriesTable.id, curr));
+      if (!par) break;
+      curr = par.parentId ?? null;
+    }
+  }
+
   const existing = await db
     .select()
     .from(supplierCategoriesTable)
-    .where(eq(supplierCategoriesTable.name, name.trim()));
+    .where(eq(supplierCategoriesTable.name, newName));
   if (existing.length > 0 && existing[0].id !== id) {
     res.status(409).json({ error: "Category already exists" });
     return;
@@ -88,7 +127,7 @@ router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<
 
   const [row] = await db
     .update(supplierCategoriesTable)
-    .set({ name: name.trim() })
+    .set({ name: newName, parentId: pId })
     .where(eq(supplierCategoriesTable.id, id))
     .returning();
   if (!row) {
@@ -97,20 +136,18 @@ router.patch("/categories/:id", requireRole("admin"), async (req, res): Promise<
   }
   // Keep the item categories in step with the supplier categories (the SAME
   // list). The OLD name is the key — a rename moves the item category too.
-  try {
-    await db
-      .update(itemCategoriesTable)
-      .set({ name: row.name })
-      .where(eq(itemCategoriesTable.name, current.name));
-  } catch {
-    // best-effort — the startup mirror in init-db.ts re-syncs on the next boot.
+  if (newName !== current.name) {
+    try {
+      await db
+        .update(itemCategoriesTable)
+        .set({ name: row.name })
+        .where(eq(itemCategoriesTable.name, current.name));
+    } catch {
+      // best-effort — the startup mirror in init-db.ts re-syncs on the next boot.
+    }
+    await rewriteSupplierCategoryName(current.name, row.name);
   }
-  // `suppliers.category` stores category NAMES as free text (not an FK), so the
-  // rename must also rewrite it — otherwise the supplier-list filter (which
-  // matches on the NAME) finds no supplier under the new name and every supplier
-  // still shows the OLD one.
-  await rewriteSupplierCategoryName(current.name, row.name);
-  res.json({ id: row.id, name: row.name });
+  res.json({ id: row.id, name: row.name, parentId: row.parentId ?? null });
 });
 
 router.delete("/categories/:id", requireRole("admin"), async (req, res): Promise<void> => {
@@ -122,6 +159,16 @@ router.delete("/categories/:id", requireRole("admin"), async (req, res): Promise
     .where(eq(supplierCategoriesTable.id, id));
   if (!category) {
     res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  // Check if category has subcategories
+  const [{ subCount }] = await db
+    .select({ subCount: count() })
+    .from(supplierCategoriesTable)
+    .where(eq(supplierCategoriesTable.parentId, id));
+  if (subCount > 0) {
+    res.status(409).json({ error: `Cannot delete: category has ${subCount} sub-category(ies)` });
     return;
   }
 
