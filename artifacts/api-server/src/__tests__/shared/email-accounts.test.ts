@@ -85,3 +85,20 @@ describe("extractBody", () => {
     expect(body).toBe("Hello you");
   });
 });
+
+describe("collectAttachments", () => {
+  it("finds named attachments nested inside multipart messages", async () => {
+    const { collectAttachments } = await import("../../modules/email-accounts/gmail");
+    const found = collectAttachments({
+      mimeType: "multipart/mixed",
+      parts: [
+        { mimeType: "multipart/alternative", parts: [{ mimeType: "text/plain", body: { data: "x" } }] },
+        { mimeType: "application/pdf", filename: "invoice.pdf", body: { attachmentId: "ANGjdJ8abc123", size: 2048 } },
+        { mimeType: "image/png", filename: "", body: { data: "inline" } },
+      ],
+    });
+    expect(found).toEqual([
+      { attachmentId: "ANGjdJ8abc123", filename: "invoice.pdf", mimeType: "application/pdf", size: 2048 },
+    ]);
+  });
+});

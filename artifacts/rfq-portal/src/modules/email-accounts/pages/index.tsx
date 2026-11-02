@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
-import { Mail, AlertCircle, Inbox, ArrowLeft } from "lucide-react";
+import { Mail, AlertCircle, Inbox, ArrowLeft, Paperclip } from "lucide-react";
 
 interface AccountRow {
   email: string;
@@ -41,9 +41,23 @@ interface MessageSummary {
   unread: boolean;
 }
 
+interface AttachmentInfo {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
 interface MessageDetail extends MessageSummary {
   to: string;
   body: string;
+  attachments: AttachmentInfo[];
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -53,19 +67,52 @@ async function getJson<T>(url: string): Promise<T> {
   return body as T;
 }
 
+const FOLDER_LABELS: Record<string, string> = {
+  INBOX: "الوارد",
+  STARRED: "المميزة بنجمة",
+  IMPORTANT: "المهمة",
+  SENT: "المرسلة",
+  DRAFT: "المسودات",
+  SPAM: "البريد العشوائي",
+  TRASH: "سلة المهملات",
+};
+
+interface LabelInfo {
+  id: string;
+  name: string;
+  type: "system" | "user";
+}
+
+interface MessagePageResponse {
+  messages: MessageSummary[];
+  nextPageToken?: string;
+}
+
 function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: () => void }) {
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [folder, setFolder] = useState<string>("INBOX");
   const [q, setQ] = useState("");
   const [submitted, setSubmitted] = useState("");
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  const list = useQuery({
-    queryKey: ["email-messages", mailbox, submitted],
-    queryFn: () =>
-      getJson<{ messages: MessageSummary[] }>(
-        `/api/email-accounts/${encodeURIComponent(mailbox)}/messages?max=20${
-          submitted ? `&q=${encodeURIComponent(submitted)}` : ""
-        }`,
+  const labels = useQuery({
+    queryKey: ["email-labels", mailbox],
+    queryFn: () => getJson<{ labels: LabelInfo[] }>(
+      `/api/email-accounts/${encodeURIComponent(mailbox)}/labels`,
+    ),
+    retry: false,
+  });
+
+  const messages = useInfiniteQuery({
+    queryKey: ["email-messages", mailbox, folder, submitted],
+    initialPageParam: "" as string,
+    queryFn: ({ pageParam }) =>
+      getJson<MessagePageResponse>(
+        `/api/email-accounts/${encodeURIComponent(mailbox)}/messages?max=25` +
+          (folder ? `&label=${encodeURIComponent(folder)}` : "") +
+          (submitted ? `&q=${encodeURIComponent(submitted)}` : "") +
+          (pageParam ? `&pageToken=${encodeURIComponent(pageParam)}` : ""),
       ),
+    getNextPageParam: (last) => last.nextPageToken ?? undefined,
     retry: false,
   });
 
@@ -78,6 +125,9 @@ function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: () => vo
     enabled: !!openId,
     retry: false,
   });
+
+  const folderName = (l: LabelInfo) => (l.type === "system" ? FOLDER_LABELS[l.id] ?? l.name : l.name);
+  const allMessages = messages.data?.pages.flatMap((p) => p.messages) ?? [];
 
   return (
     <div className="bg-card border border-border rounded-lg p-4 space-y-3">
@@ -111,58 +161,123 @@ function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: () => vo
               <pre className="whitespace-pre-wrap text-sm text-foreground bg-muted/20 rounded p-3 font-sans">
                 {detail.data.body || "(لا يوجد نص)"}
               </pre>
+              {detail.data.attachments.length > 0 && (
+                <div className="space-y-1 pt-2">
+                  <p className="text-xs font-semibold text-foreground">
+                    المرفقات ({detail.data.attachments.length})
+                  </p>
+                  <ul className="space-y-1">
+                    {detail.data.attachments.map((a) => (
+                      <li key={a.attachmentId}>
+                        <a
+                          href={`/api/email-accounts/${encodeURIComponent(mailbox)}/messages/${openId}/attachments/${encodeURIComponent(a.attachmentId)}`}
+                          className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded border border-border text-xs text-foreground hover:bg-muted/30"
+                        >
+                          <Paperclip size={13} />
+                          <span>{a.filename}</span>
+                          <span className="text-muted-foreground">({formatSize(a.size)})</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </div>
       ) : (
-        <>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              setSubmitted(q.trim());
-            }}
-            className="flex gap-2"
-          >
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="بحث (مثل: from:supplier أو subject:فاتورة)"
-              className="flex-1 h-8 px-2 text-sm rounded border border-border bg-background"
-            />
-            <button type="submit" className="h-8 px-3 text-xs rounded bg-primary text-primary-foreground">
-              بحث
+        <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
+          <nav className="space-y-0.5">
+            <button
+              onClick={() => setFolder("")}
+              className={`w-full text-start px-2.5 py-1.5 rounded text-sm ${
+                folder === ""
+                  ? "bg-primary text-primary-foreground"
+                  : "text-foreground hover:bg-muted/40"
+              }`}
+            >
+              كل الرسايل
             </button>
-          </form>
+            {labels.isLoading && <p className="text-xs text-muted-foreground">Loading...</p>}
+            {labels.error && (
+              <p className="text-xs text-destructive">{(labels.error as Error).message}</p>
+            )}
+            {labels.data?.labels.map((l) => (
+              <button
+                key={l.id}
+                onClick={() => setFolder(l.id)}
+                className={`w-full text-start px-2.5 py-1.5 rounded text-sm ${
+                  folder === l.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-foreground hover:bg-muted/40"
+                }`}
+              >
+                {folderName(l)}
+              </button>
+            ))}
+            {labels.data && labels.data.labels.some((l) => l.type === "user") && (
+              <p className="text-[11px] text-muted-foreground px-2.5 pt-3">التصنيفات</p>
+            )}
+          </nav>
 
-          {list.isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
-          {list.error && (
-            <p className="text-sm text-destructive">{(list.error as Error).message}</p>
-          )}
-          {list.data && list.data.messages.length === 0 && (
-            <p className="text-sm text-muted-foreground">لا توجد رسائل</p>
-          )}
-          {list.data && list.data.messages.length > 0 && (
-            <ul className="divide-y divide-border">
-              {list.data.messages.map((m) => (
-                <li key={m.id}>
-                  <button
-                    onClick={() => setOpenId(m.id)}
-                    className="w-full text-start py-2 hover:bg-muted/20 px-2 rounded"
-                  >
-                    <div className="flex justify-between gap-2">
-                      <span className={`text-sm truncate ${m.unread ? "font-semibold" : ""} text-foreground`}>
-                        {m.subject}
-                      </span>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">{m.date}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{m.from}</p>
-                    <p className="text-xs text-muted-foreground truncate">{m.snippet}</p>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
+          <div className="space-y-3 min-w-0">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setSubmitted(q.trim());
+              }}
+              className="flex gap-2"
+            >
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="بحث في كل الرسايل (مثل: from:supplier أو subject:فاتورة)"
+                className="flex-1 h-8 px-2 text-sm rounded border border-border bg-background"
+              />
+              <button type="submit" className="h-8 px-3 text-xs rounded bg-primary text-primary-foreground">
+                بحث
+              </button>
+            </form>
+
+            {messages.isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
+            {messages.error && (
+              <p className="text-sm text-destructive">{(messages.error as Error).message}</p>
+            )}
+            {!messages.isLoading && !messages.error && allMessages.length === 0 && (
+              <p className="text-sm text-muted-foreground">لا توجد رسائل</p>
+            )}
+            {allMessages.length > 0 && (
+              <ul className="divide-y divide-border">
+                {allMessages.map((m) => (
+                  <li key={m.id}>
+                    <button
+                      onClick={() => setOpenId(m.id)}
+                      className="w-full text-start py-2 hover:bg-muted/20 px-2 rounded"
+                    >
+                      <div className="flex justify-between gap-2">
+                        <span className={`text-sm truncate ${m.unread ? "font-semibold" : ""} text-foreground`}>
+                          {m.subject}
+                        </span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">{m.date}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{m.from}</p>
+                      <p className="text-xs text-muted-foreground truncate">{m.snippet}</p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {messages.hasNextPage && (
+              <button
+                onClick={() => messages.fetchNextPage()}
+                disabled={messages.isFetchingNextPage}
+                className="w-full py-2 text-xs rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-50"
+              >
+                {messages.isFetchingNextPage ? "جاري التحميل..." : "تحميل المزيد"}
+              </button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
