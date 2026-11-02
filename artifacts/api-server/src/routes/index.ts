@@ -30,6 +30,7 @@ import integrationsModule from "../modules/integrations/index";
 import chatwootModule from "../modules/chatwoot/index";
 import backupModule from "../modules/backup/index";
 import hrModule from "../modules/hr/index";
+import emailAccountsModule from "../modules/email-accounts/index";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,6 @@ router.use(chatwootModule); // chatwoot SSO bridge for the /whatsapp inbox
 router.use(integrationsModule); // ERP integrations (Odoo · SAP · Oracle · Google Sheets)
 router.use(backupModule); // daily DB backup → Google Drive
 router.use(hrModule); // HR · employees · fingerprint attendance (ADMS)
+router.use(emailAccountsModule); // Google Workspace mailboxes per employee (read-only)
 
 export default router;
