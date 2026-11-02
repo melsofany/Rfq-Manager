@@ -435,8 +435,13 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
   const conditions = [];
   if (category) {
     // Filter through the LINK table — the authoritative relationship. A supplier
-    // matches when it is linked to a category with this exact name, so a rename
-    // moves every supplier automatically (no textual match on the legacy column).
+    // matches when it is linked to a category with this exact name, OR to one of
+    // its direct subcategories: filtering on «كهرباء» must also list the suppliers
+    // filed under «كابلات» / «سلك» / …, so a parent is a superset of its children.
+    const parentIdsByName = db
+      .select({ id: supplierCategoriesTable.id })
+      .from(supplierCategoriesTable)
+      .where(eq(supplierCategoriesTable.name, category));
     const linkedSupplierIds = db
       .select({ supplierId: supplierCategoryLinksTable.supplierId })
       .from(supplierCategoryLinksTable)
@@ -444,7 +449,12 @@ router.get("/suppliers", requireAuth, async (req, res): Promise<void> => {
         supplierCategoriesTable,
         eq(supplierCategoryLinksTable.categoryId, supplierCategoriesTable.id),
       )
-      .where(eq(supplierCategoriesTable.name, category));
+      .where(
+        or(
+          eq(supplierCategoriesTable.name, category),
+          inArray(supplierCategoriesTable.parentId, parentIdsByName),
+        ),
+      );
     conditions.push(inArray(suppliersTable.id, linkedSupplierIds));
   }
   if (search)

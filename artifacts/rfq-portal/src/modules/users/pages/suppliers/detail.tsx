@@ -1,3 +1,4 @@
+import { orderCategoryTree } from "@/lib/category-tree";
 import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -690,7 +691,7 @@ export default function SupplierDetailPage() {
                     </span>
                   </Label>
                   <div className="flex flex-wrap gap-2">
-                    {mergedCategories.map((c) => {
+                    {orderCategoryTree(mergedCategories).map((c) => {
                       const active = selectedCats.has(c.name);
                       return (
                         <button
@@ -703,6 +704,7 @@ export default function SupplierDetailPage() {
                               : "bg-muted text-muted-foreground border-border hover:border-primary/50"
                           }`}
                         >
+                          {c.depth > 0 ? "↳ " : ""}
                           {c.name}
                         </button>
                       );

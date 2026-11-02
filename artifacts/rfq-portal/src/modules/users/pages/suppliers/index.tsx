@@ -28,6 +28,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { filterTabs } from "@/lib/permissions";
 import ImportSuppliersTab from "./import-tab";
+import { orderCategoryTree } from "@/lib/category-tree";
 
 function parseCategories(cat: string | null | undefined): string[] {
   if (!cat) return [];
@@ -445,7 +446,7 @@ function SuppliersListTab() {
             >
               all
             </button>
-            {categories.map((c) => (
+            {orderCategoryTree(categories).map((c) => (
               <button
                 key={c.id}
                 onClick={() => setCategory(c.name)}
@@ -455,6 +456,7 @@ function SuppliersListTab() {
                     : "bg-muted text-muted-foreground hover:text-foreground"
                 }`}
               >
+                {c.depth > 0 ? "↳ " : ""}
                 {c.name}
               </button>
             ))}

@@ -1,3 +1,4 @@
+import { orderCategoryTree } from "@/lib/category-tree";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -280,7 +281,7 @@ export default function NewSupplierPage() {
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {categories.map((c) => {
+                {orderCategoryTree(categories).map((c) => {
                   const active = selectedCats.has(c.name);
                   return (
                     <button
@@ -293,6 +294,7 @@ export default function NewSupplierPage() {
                           : "bg-muted text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
                       }`}
                     >
+                      {c.depth > 0 ? "↳ " : ""}
                       {c.name}
                     </button>
                   );
