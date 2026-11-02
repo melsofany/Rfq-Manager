@@ -1,18 +1,14 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
-import { useAuth } from "@/contexts/AuthContext";
 import { MailboxPanel } from "../components/MailboxPanel";
 import { getJson } from "../lib/api";
 
 /**
- * صندوق البريد — read-only viewer for the mailboxes this employee may open.
- * Admins see every company mailbox; other employees see only the ones granted
- * to them in the email settings page.
+ * صندوق البريد — read-only viewer. Shows only the employee's own company
+ * mailbox and the mailboxes an admin granted them. The server enforces the same.
  */
 export default function MailboxPage() {
-  const { employee } = useAuth();
-  const isAdmin = employee?.role === "admin";
   const [selected, setSelected] = useState<string | null>(null);
 
   const granted = useQuery({
@@ -21,19 +17,7 @@ export default function MailboxPage() {
     retry: false,
   });
 
-  const domain = useQuery({
-    queryKey: ["email-accounts"],
-    queryFn: () => getJson<{ accounts: Array<{ email: string }> }>("/api/email-accounts"),
-    enabled: isAdmin,
-    retry: false,
-  });
-
-  const mailboxes = Array.from(
-    new Set([
-      ...(granted.data?.mailboxes ?? []),
-      ...(isAdmin ? (domain.data?.accounts.map((a) => a.email) ?? []) : []),
-    ]),
-  );
+  const mailboxes = granted.data?.mailboxes ?? [];
 
   return (
     <Layout>
@@ -43,7 +27,7 @@ export default function MailboxPage() {
           <p className="text-muted-foreground text-sm">قراءة فقط</p>
         </div>
 
-        {(granted.isLoading || domain.isLoading) && (
+        {granted.isLoading && (
           <p className="text-sm text-muted-foreground">Loading...</p>
         )}
         {granted.error && (
@@ -52,7 +36,7 @@ export default function MailboxPage() {
 
         {!granted.isLoading && mailboxes.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            مفيش صناديق متاحة ليك. اطلب من الأدمن يمنحك صلاحية.
+            مفيش صناديق متاحة ليك. بريدك على الدومين أو الصناديق اللي الأدمن منحهالك هتظهر هنا.
           </p>
         )}
 
