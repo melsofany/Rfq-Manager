@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
-import { Mail, AlertCircle, Inbox, ArrowLeft } from "lucide-react";
+import { Mail, AlertCircle, Inbox, ArrowLeft, Paperclip } from "lucide-react";
 
 interface AccountRow {
   email: string;
@@ -41,9 +41,23 @@ interface MessageSummary {
   unread: boolean;
 }
 
+interface AttachmentInfo {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
 interface MessageDetail extends MessageSummary {
   to: string;
   body: string;
+  attachments: AttachmentInfo[];
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -111,6 +125,27 @@ function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: () => vo
               <pre className="whitespace-pre-wrap text-sm text-foreground bg-muted/20 rounded p-3 font-sans">
                 {detail.data.body || "(لا يوجد نص)"}
               </pre>
+              {detail.data.attachments.length > 0 && (
+                <div className="space-y-1 pt-2">
+                  <p className="text-xs font-semibold text-foreground">
+                    المرفقات ({detail.data.attachments.length})
+                  </p>
+                  <ul className="space-y-1">
+                    {detail.data.attachments.map((a) => (
+                      <li key={a.attachmentId}>
+                        <a
+                          href={`/api/email-accounts/${encodeURIComponent(mailbox)}/messages/${openId}/attachments/${encodeURIComponent(a.attachmentId)}`}
+                          className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded border border-border text-xs text-foreground hover:bg-muted/30"
+                        >
+                          <Paperclip size={13} />
+                          <span>{a.filename}</span>
+                          <span className="text-muted-foreground">({formatSize(a.size)})</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </div>

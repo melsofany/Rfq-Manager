@@ -22,9 +22,17 @@ export interface MessageSummary {
   unread: boolean;
 }
 
+export interface AttachmentInfo {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
 export interface MessageDetail extends MessageSummary {
   to: string;
   body: string;
+  attachments: AttachmentInfo[];
 }
 
 function gmailFor(mailbox: string): gmail_v1.Gmail {
@@ -90,7 +98,51 @@ export async function getMessage(mailbox: string, id: string): Promise<MessageDe
     ...summary,
     to: header(res.data.payload?.headers, "To"),
     body: extractBody(res.data.payload),
+    attachments: collectAttachments(res.data.payload),
   };
+}
+
+/**
+ * Download one attachment's bytes. The attachment is looked up in the message
+ * first, so only attachments that really belong to this message can be read.
+ */
+export async function getAttachment(
+  mailbox: string,
+  messageId: string,
+  attachmentId: string,
+): Promise<{ filename: string; mimeType: string; data: Buffer } | null> {
+  const gmail = gmailFor(mailbox);
+  const msg = await gmail.users.messages.get({ userId: mailbox, id: messageId, format: "full" });
+  const info = collectAttachments(msg.data.payload).find((a) => a.attachmentId === attachmentId);
+  if (!info) return null;
+  const res = await gmail.users.messages.attachments.get({
+    userId: mailbox,
+    messageId,
+    id: attachmentId,
+  });
+  return {
+    filename: info.filename,
+    mimeType: info.mimeType,
+    data: Buffer.from(res.data.data ?? "", "base64url"),
+  };
+}
+
+/** Every named, downloadable part of a message (nested parts included). */
+export function collectAttachments(
+  part?: gmail_v1.Schema$MessagePart | null,
+  out: AttachmentInfo[] = [],
+): AttachmentInfo[] {
+  if (!part) return out;
+  if (part.filename && part.body?.attachmentId) {
+    out.push({
+      attachmentId: part.body.attachmentId,
+      filename: part.filename,
+      mimeType: part.mimeType || "application/octet-stream",
+      size: part.body.size ?? 0,
+    });
+  }
+  for (const child of part.parts ?? []) collectAttachments(child, out);
+  return out;
 }
 
 /** Gmail's base64url → UTF-8 text. */
