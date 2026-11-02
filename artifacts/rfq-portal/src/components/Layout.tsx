@@ -23,7 +23,7 @@ import {
   DatabaseBackup,
   Mail,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { cn } from "@/lib/utils";
 import { canAccessPath } from "@/lib/permissions";
 
@@ -38,34 +38,40 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const role = employee?.role;
   const perms = employee?.permissions;
 
-  const mainNavItems = [
+  type NavItem = {
+    href: string;
+    label: string;
+    icon: typeof LayoutDashboard;
+    /** Section title shown above the first item of a group. */
+    groupLabel?: string;
+    /** Indented under its group. */
+    nested?: boolean;
+  };
+
+  const mainNavItems: NavItem[] = [
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
-    { href: "/customers", label: t("nav.customers"), icon: UserRound },
-    { href: "/customer-rfq", label: t("nav.customerRfq"), icon: FileText },
-    { href: "/customer-po", label: t("nav.customerPo"), icon: ShoppingCart },
-    { href: "/rfq", label: t("nav.rfq"), icon: FileText },
-    { href: "/suppliers", label: t("nav.suppliers"), icon: Users },
-    { href: "/mailbox", label: t("nav.mailbox"), icon: Mail },
-    { href: "/email-settings", label: t("nav.emailSettings"), icon: Mail },
-    { href: "/items", label: t("nav.items"), icon: Package },
-    { href: "/purchase-orders", label: t("nav.purchaseOrders"), icon: ShoppingCart },
+    { href: "/customers", label: t("nav.customersList"), icon: UserRound, groupLabel: t("nav.customers"), nested: true },
+    { href: "/customer-rfq", label: t("nav.customerRfq"), icon: FileText, nested: true },
+    { href: "/customer-po", label: t("nav.customerPo"), icon: ShoppingCart, nested: true },
+    { href: "/suppliers", label: t("nav.suppliersList"), icon: Users, groupLabel: t("nav.suppliers"), nested: true },
+    { href: "/rfq", label: t("nav.supplierRfq"), icon: FileText, nested: true },
+    { href: "/purchase-orders", label: t("nav.supplierPo"), icon: ShoppingCart, nested: true },
     { href: "/accounts", label: t("nav.accounts"), icon: Calculator },
     { href: "/hr", label: t("nav.hr"), icon: IdCard },
+    { href: "/items", label: t("nav.items"), icon: Package },
+    { href: "/whatsapp", label: t("nav.whatsapp"), icon: MessageSquare, groupLabel: t("nav.communications"), nested: true },
+    { href: "/mailbox", label: t("nav.mailbox"), icon: Mail, nested: true },
     { href: "/analytics", label: t("nav.analytics"), icon: BarChart3 },
-    { href: "/whatsapp", label: t("nav.whatsapp"), icon: MessageSquare },
+    { href: "/integrations", label: t("nav.integrations"), icon: Plug, groupLabel: t("nav.itSystems"), nested: true },
+    { href: "/backup", label: t("nav.backup"), icon: DatabaseBackup, nested: true },
+    { href: "/ai-assistant", label: t("nav.aiAssistant"), icon: Bot, nested: true },
+    { href: "/employees", label: t("nav.sidebarUsers"), icon: UserCog, nested: true },
+    { href: "/audit", label: t("nav.auditLog"), icon: ClipboardList, nested: true },
+    { href: "/email-settings", label: t("nav.emailSettings"), icon: Mail, nested: true },
   ];
 
-  const adminNavItems = [
-    { href: "/ai-assistant", label: t("nav.aiAssistant"), icon: Bot },
-    { href: "/backup", label: t("nav.backup"), icon: DatabaseBackup },
-    { href: "/employees", label: t("nav.employees"), icon: UserCog },
-    { href: "/audit", label: t("nav.auditLog"), icon: ClipboardList },
-    { href: "/integrations", label: t("nav.integrations"), icon: Plug },
-  ];
-
-  // Filter both groups by the employee's effective permissions.
+  // Filter by the employee's effective permissions.
   const visibleMain = mainNavItems.filter((i) => canAccessPath(role, perms, i.href));
-  const visibleAdmin = adminNavItems.filter((i) => canAccessPath(role, perms, i.href));
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -153,11 +159,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
           {visibleMain.map((item) => {
             const active = location === item.href || location.startsWith(item.href + "/");
+            const expanded = sidebarOpen || mobile;
             return (
-              <Link key={item.href} href={item.href}>
+              <Fragment key={item.href}>
+              {item.groupLabel && expanded && (
+                <p className="text-sidebar-foreground/30 text-xs px-2 pt-3 pb-1 uppercase tracking-wider">
+                  {item.groupLabel}
+                </p>
+              )}
+              <Link href={item.href}>
                 <a
                   className={cn(
                     "flex items-center gap-3 px-2 py-2.5 rounded text-sm font-medium transition-colors",
+                    item.nested && expanded && "pr-7",
                     active
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
@@ -179,36 +193,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   )}
                 </a>
               </Link>
+              </Fragment>
             );
           })}
-
-          {visibleAdmin.length > 0 && (
-            <>
-              {(sidebarOpen || mobile) && (
-                <p className="text-sidebar-foreground/30 text-xs px-2 pt-3 pb-1 uppercase tracking-wider">
-                  {t("nav.admin")}
-                </p>
-              )}
-              {visibleAdmin.map((item) => {
-                const active = location === item.href || location.startsWith(item.href + "/");
-                return (
-                  <Link key={item.href} href={item.href}>
-                    <a
-                      className={cn(
-                        "flex items-center gap-3 px-2 py-2.5 rounded text-sm font-medium transition-colors",
-                        active
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
-                      )}
-                    >
-                      <item.icon size={18} className="flex-shrink-0" />
-                      {(sidebarOpen || mobile) && <span className="truncate">{item.label}</span>}
-                    </a>
-                  </Link>
-                );
-              })}
-            </>
-          )}
         </nav>
 
         {/* User + Language Toggle */}
