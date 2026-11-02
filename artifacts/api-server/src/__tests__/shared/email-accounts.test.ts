@@ -60,3 +60,28 @@ describe("buildEmailAccountsView", () => {
     expect(view.accounts[0].displayName).toBe("info");
   });
 });
+
+describe("extractBody", () => {
+  const b64url = (s: string) => Buffer.from(s, "utf8").toString("base64url");
+
+  it("prefers the text/plain part of a multipart message", async () => {
+    const { extractBody } = await import("../../modules/email-accounts/gmail");
+    const body = extractBody({
+      mimeType: "multipart/alternative",
+      parts: [
+        { mimeType: "text/html", body: { data: b64url("<p>html</p>") } },
+        { mimeType: "text/plain", body: { data: b64url("plain text مرحبا") } },
+      ],
+    });
+    expect(body).toBe("plain text مرحبا");
+  });
+
+  it("falls back to stripped HTML when there is no plain part", async () => {
+    const { extractBody } = await import("../../modules/email-accounts/gmail");
+    const body = extractBody({
+      mimeType: "text/html",
+      body: { data: b64url("<div>Hello&nbsp;<b>you</b></div><script>x()</script>") },
+    });
+    expect(body).toBe("Hello you");
+  });
+});

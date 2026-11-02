@@ -20,7 +20,7 @@ interface ServiceAccountJson {
   private_key?: string;
 }
 
-function loadServiceAccount(): ServiceAccountJson | null {
+export function loadServiceAccount(): ServiceAccountJson | null {
   const b64 = process.env.GOOGLE_MAIL_SERVICE_ACCOUNT_BASE_64 || process.env.GOOGLE_ACCOUNT_BASE_64;
   if (!b64) return null;
   try {
