@@ -45,6 +45,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/customer-po", label: t("nav.customerPo"), icon: ShoppingCart },
     { href: "/rfq", label: t("nav.rfq"), icon: FileText },
     { href: "/suppliers", label: t("nav.suppliers"), icon: Users },
+    { href: "/mailboxes", label: "الصناديق المشتركة", icon: Mail },
     { href: "/items", label: t("nav.items"), icon: Package },
     { href: "/purchase-orders", label: t("nav.purchaseOrders"), icon: ShoppingCart },
     { href: "/accounts", label: t("nav.accounts"), icon: Calculator },

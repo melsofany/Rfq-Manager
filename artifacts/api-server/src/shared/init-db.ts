@@ -520,6 +520,17 @@ export async function initDb(): Promise<void> {
       ALTER TABLE supplier_categories ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES supplier_categories(id) ON DELETE SET NULL;
     `);
 
+    // Employees allowed to READ a company mailbox in the app (read-only grant).
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS mailbox_access (
+        id SERIAL PRIMARY KEY,
+        mailbox TEXT NOT NULL,
+        employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS mailbox_access_unique ON mailbox_access (mailbox, employee_id);
+    `);
+
     // استكمال بيانات المورد — the stamp left when the SUPPLIER himself confirmed
     // his data through the one-time registration link. Its own statement: a
     // sibling failure in a shared literal would roll this ALTER back silently.
