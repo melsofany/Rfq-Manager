@@ -45,7 +45,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/customer-po", label: t("nav.customerPo"), icon: ShoppingCart },
     { href: "/rfq", label: t("nav.rfq"), icon: FileText },
     { href: "/suppliers", label: t("nav.suppliers"), icon: Users },
-    { href: "/mailbox", label: "صندوق البريد", icon: Mail },
+    { href: "/mailbox", label: t("nav.mailbox"), icon: Mail },
+    { href: "/email-settings", label: t("nav.emailSettings"), icon: Mail },
     { href: "/items", label: t("nav.items"), icon: Package },
     { href: "/purchase-orders", label: t("nav.purchaseOrders"), icon: ShoppingCart },
     { href: "/accounts", label: t("nav.accounts"), icon: Calculator },
@@ -60,10 +61,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/employees", label: t("nav.employees"), icon: UserCog },
     { href: "/audit", label: t("nav.auditLog"), icon: ClipboardList },
     { href: "/integrations", label: t("nav.integrations"), icon: Plug },
-    // Admin-only: the path is not in the permission catalog, so gate it by role here.
-    ...(role === "admin"
-      ? [{ href: "/email-settings", label: "إعدادات البريد", icon: Mail }]
-      : []),
   ];
 
   // Filter both groups by the employee's effective permissions.

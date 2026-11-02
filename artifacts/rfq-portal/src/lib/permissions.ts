@@ -122,6 +122,10 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
   { key: "hr", href: "/hr", labelKey: "nav.hr" },
   { key: "audit", href: "/audit", labelKey: "nav.auditLog" },
   { key: "integrations", href: "/integrations", labelKey: "nav.integrations" },
+  // Email: the mailbox viewer is open to every employee (each still only sees
+  // their own address and grants). Email settings is admin by default.
+  { key: "mailbox", href: "/mailbox", labelKey: "nav.mailbox" },
+  { key: "email-settings", href: "/email-settings", labelKey: "nav.emailSettings" },
   {
     key: "ai-assistant",
     href: "/ai-assistant",
@@ -172,6 +176,12 @@ export const ASSIGN_PERM = {
 const ITEMS_TABS = ["items:search", "items:analysis", "items:sheet", "items:categories"] as const;
 
 /**
+ * Pages that are NOT granted to non-admin roles by default. An admin can still
+ * grant them to a specific employee in the permissions editor.
+ */
+export const ADMIN_ONLY_PAGES: string[] = ["email-settings"];
+
+/**
  * Role defaults used when an employee has no explicit `permissions` map.
  * `admin` is always granted everything (handled separately, not listed).
  *
@@ -182,7 +192,7 @@ const ITEMS_TABS = ["items:search", "items:analysis", "items:sheet", "items:cate
  */
 export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
   manager: [
-    ...PAGE_KEYS,
+    ...PAGE_KEYS.filter((k) => !ADMIN_ONLY_PAGES.includes(k)),
     "customer-rfq:edit",
     "customer-rfq:price",
     "customer-po:edit",
@@ -197,7 +207,8 @@ export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
         k !== "audit" &&
         k !== "integrations" &&
         k !== "ai-assistant" &&
-        k !== "backup",
+        k !== "backup" &&
+        !ADMIN_ONLY_PAGES.includes(k),
     ),
     "customer-rfq:edit",
     "customer-po:edit",
@@ -209,6 +220,7 @@ export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
     "customers",
     "customer-rfq",
     "customer-po",
+    "mailbox",
     "customer-rfq:edit",
     "customer-po:edit",
   ],

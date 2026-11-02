@@ -1,7 +1,7 @@
 /**
  * Email accounts module — read-only view of Workspace mailboxes per employee.
  *
- * Routes mounted (all admin only, all read-only):
+ * Routes mounted (all read-only; gated by page permission):
  *   GET /email-accounts                          directory + employee links
  *   GET /email-accounts/:mailbox/labels          folders and user labels
  *   GET /email-accounts/:mailbox/messages        messages (metadata, paged)
@@ -10,10 +10,17 @@
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { eq } from "drizzle-orm";
 import { db, employeesTable, mailboxAccessTable } from "@workspace/db";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { buildEmailAccountsView, type EmployeeRef } from "./accounts";
-import { canReadMailbox, mailboxesFor, type Session } from "./access";
+import {
+  canReadMailbox,
+  EMAIL_SETTINGS_PAGE,
+  hasPagePermission,
+  MAILBOX_PAGE,
+  mailboxesFor,
+  type Session,
+} from "./access";
 import { DirectoryNotConfiguredError, listDomainUsers, workspaceDomain } from "./directory";
 import {
   getAttachment,
@@ -50,6 +57,26 @@ function handleMailError(err: unknown, res: import("express").Response, what: st
  * Gate for every route that reads one mailbox: an admin, or an employee the
  * admin granted this mailbox. Read-only either way.
  */
+/** Gate a route on one page permission (admin always passes). */
+function requirePage(key: string) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const session = (req as Request & { session?: Session }).session;
+      if (!session?.employeeId) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      if (!(await hasPagePermission(session.employeeId, key))) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
 async function requireMailboxReader(
   req: Request,
   res: Response,
@@ -65,6 +92,10 @@ async function requireMailboxReader(
     res.status(400).json({ error: "Mailbox must be an address on the company domain" });
     return;
   }
+  if (!(await hasPagePermission(session.employeeId, MAILBOX_PAGE))) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
   if (!(await canReadMailbox(session, mailbox))) {
     res.status(403).json({ error: "No access to this mailbox" });
     return;
@@ -72,7 +103,7 @@ async function requireMailboxReader(
   next();
 }
 
-router.get("/email-accounts", requireRole("admin"), async (_req, res): Promise<void> => {
+router.get("/email-accounts", requirePage(EMAIL_SETTINGS_PAGE), async (_req, res): Promise<void> => {
   const employees: EmployeeRef[] = await db
     .select({
       id: employeesTable.id,
@@ -217,11 +248,15 @@ router.get("/my-mailboxes", requireAuth, async (req, res): Promise<void> => {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+  if (!(await hasPagePermission(session.employeeId, MAILBOX_PAGE))) {
+    res.json({ mailboxes: [] });
+    return;
+  }
   res.json({ mailboxes: await mailboxesFor(session.employeeId) });
 });
 
 /** Admin: current read grants and the employee list to pick from. */
-router.get("/mailbox-access", requireRole("admin"), async (_req, res): Promise<void> => {
+router.get("/mailbox-access", requirePage(EMAIL_SETTINGS_PAGE), async (_req, res): Promise<void> => {
   const rows = await db
     .select({
       id: mailboxAccessTable.id,
@@ -242,7 +277,7 @@ router.get("/mailbox-access", requireRole("admin"), async (_req, res): Promise<v
 });
 
 /** Admin: grant an employee read access to a mailbox. */
-router.post("/mailbox-access", requireRole("admin"), async (req, res): Promise<void> => {
+router.post("/mailbox-access", requirePage(EMAIL_SETTINGS_PAGE), async (req, res): Promise<void> => {
   const mailbox = domainMailbox(String((req.body as { mailbox?: unknown })?.mailbox ?? ""));
   const employeeId = Number((req.body as { employeeId?: unknown })?.employeeId);
   if (!mailbox) {
@@ -270,7 +305,7 @@ router.post("/mailbox-access", requireRole("admin"), async (req, res): Promise<v
 });
 
 /** Admin: remove a read grant. */
-router.delete("/mailbox-access/:id", requireRole("admin"), async (req, res): Promise<void> => {
+router.delete("/mailbox-access/:id", requirePage(EMAIL_SETTINGS_PAGE), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isInteger(id) || id <= 0) {
     res.status(400).json({ error: "Invalid id" });
