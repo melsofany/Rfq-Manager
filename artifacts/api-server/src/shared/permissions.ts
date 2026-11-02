@@ -22,15 +22,27 @@ const ALL_PAGES = [
 const ADMIN_ONLY_FOR_NON_ADMIN = ["employees", "hr", "audit", "integrations", "ai-assistant", "backup"];
 const ITEMS_TABS = ["items:search", "items:analysis", "items:sheet", "items:categories"];
 
+/** Pages whose write actions are controlled by a `${page}:edit` key (mirror of the portal). */
+const EDIT_PAGES = [
+  "customers", "rfq", "suppliers", "items", "purchase-orders", "accounts", "whatsapp",
+  "employees", "hr", "integrations", "ai-assistant", "backup",
+];
+const editKeysOf = (pages: string[]): string[] =>
+  pages.filter((k) => EDIT_PAGES.includes(k)).map((k) => `${k}:edit`);
+const PURCHASING_PAGES = ALL_PAGES.filter((k) => !ADMIN_ONLY_FOR_NON_ADMIN.includes(k));
+
 export const ROLE_DEFAULTS: Record<string, string[]> = {
-  manager: [...ALL_PAGES, "customer-rfq:edit", "customer-rfq:price", "customer-po:edit", ...ITEMS_TABS, "rfq:assign"],
+  manager: [
+    ...ALL_PAGES, ...editKeysOf(ALL_PAGES), "customer-rfq:edit", "customer-rfq:price", "customer-po:edit",
+    ...ITEMS_TABS, "rfq:assign",
+  ],
   purchasing: [
-    ...ALL_PAGES.filter((k) => !ADMIN_ONLY_FOR_NON_ADMIN.includes(k)),
+    ...PURCHASING_PAGES, ...editKeysOf(PURCHASING_PAGES.filter((k) => k !== "accounts")),
     "customer-rfq:edit", "customer-po:edit", ...ITEMS_TABS, "rfq:assign",
   ],
   data_entry: ["dashboard", "customers", "customer-rfq", "customer-po", "mailbox", "customer-rfq:edit", "customer-po:edit"],
   // Legacy backend-only role (not in the portal). Kept so accounting staff keep the accounts API.
-  accountant: ["dashboard", "accounts", "mailbox", "customer-po", "accounts:records", "accounts:expenses", "accounts:posting"],
+  accountant: ["dashboard", "accounts", "accounts:edit", "mailbox", "customer-po", "customer-po:edit", "accounts:records", "accounts:expenses", "accounts:posting"],
 };
 
 export interface Access {
@@ -121,30 +133,30 @@ const RFQ_READ = ["rfq", "purchase-orders", "customer-rfq", "customer-po", "acco
 
 /** Page guards per API prefix: reads need any of `read`, writes any of `write`. */
 export const ROUTE_GUARDS: Record<string, { read: string[]; write: string[] }> = {
-  "/suppliers": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers"] },
-  "/categories": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers"] },
-  "/customers": { read: ["customers", "customer-rfq", "customer-po", "dashboard"], write: ["customers"] },
-  "/representatives": { read: ["employees", "customers", "customer-rfq", "customer-po"], write: ["employees"] },
-  "/employees": { read: ["employees", "rfq", "customer-rfq", "customer-po", "purchase-orders", "dashboard"], write: ["employees"] },
-  "/items": { read: ["items", "rfq", "customer-rfq", "customer-po", "purchase-orders", "analytics", "dashboard"], write: ["items"] },
-  "/item-categories": { read: ["items", "rfq", "customer-rfq"], write: ["items"] },
-  "/offers": { read: RFQ_READ, write: ["rfq"] },
-  "/offer": { read: RFQ_READ, write: ["rfq"] },
-  "/rfq": { read: RFQ_READ, write: ["rfq"] },
-  "/customer-rfq": { read: ["customer-rfq", "rfq", "customer-po", "dashboard"], write: ["customer-rfq"] },
-  "/customer-po": { read: ["customer-po", "customer-rfq", "dashboard"], write: ["customer-po"] },
-  "/po": { read: ["purchase-orders", "rfq", "accounts", "dashboard"], write: ["purchase-orders"] },
-  "/accounts": { read: ["accounts", "dashboard"], write: ["accounts"] },
-  "/expenses": { read: ["accounts", "accounts:expenses"], write: ["accounts", "accounts:expenses"] },
-  "/collections": { read: ["accounts", "dashboard"], write: ["accounts"] },
+  "/suppliers": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers:edit"] },
+  "/categories": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers:edit"] },
+  "/customers": { read: ["customers", "customer-rfq", "customer-po", "dashboard"], write: ["customers:edit"] },
+  "/representatives": { read: ["employees", "customers", "customer-rfq", "customer-po"], write: ["employees:edit"] },
+  "/employees": { read: ["employees", "rfq", "customer-rfq", "customer-po", "purchase-orders", "dashboard"], write: ["employees:edit"] },
+  "/items": { read: ["items", "rfq", "customer-rfq", "customer-po", "purchase-orders", "analytics", "dashboard"], write: ["items:edit"] },
+  "/item-categories": { read: ["items", "rfq", "customer-rfq"], write: ["items:edit"] },
+  "/offers": { read: RFQ_READ, write: ["rfq:edit"] },
+  "/offer": { read: RFQ_READ, write: ["rfq:edit"] },
+  "/rfq": { read: RFQ_READ, write: ["rfq:edit"] },
+  "/customer-rfq": { read: ["customer-rfq", "rfq", "customer-po", "dashboard"], write: ["customer-rfq:edit"] },
+  "/customer-po": { read: ["customer-po", "customer-rfq", "dashboard"], write: ["customer-po:edit"] },
+  "/po": { read: ["purchase-orders", "rfq", "accounts", "dashboard"], write: ["purchase-orders:edit"] },
+  "/accounts": { read: ["accounts", "dashboard"], write: ["accounts:edit"] },
+  "/expenses": { read: ["accounts", "accounts:expenses"], write: ["accounts:edit", "accounts:expenses"] },
+  "/collections": { read: ["accounts", "dashboard"], write: ["accounts:edit"] },
   "/analytics": { read: ["analytics", "dashboard"], write: ["analytics"] },
   "/sync": { read: ["analytics"], write: ["analytics"] },
   "/audit": { read: ["audit"], write: ["audit"] },
-  "/whatsapp": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp", "whatsapp:chats"] },
-  "/chatwoot": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp", "whatsapp:chats"] },
-  "/ai-assistant": { read: ["ai-assistant"], write: ["ai-assistant"] },
-  "/integrations": { read: ["integrations"], write: ["integrations"] },
-  "/backup": { read: ["backup"], write: ["backup"] },
+  "/whatsapp": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp:edit", "whatsapp:chats"] },
+  "/chatwoot": { read: ["whatsapp", "whatsapp:chats"], write: ["whatsapp:edit", "whatsapp:chats"] },
+  "/ai-assistant": { read: ["ai-assistant"], write: ["ai-assistant:edit"] },
+  "/integrations": { read: ["integrations"], write: ["integrations:edit"] },
+  "/backup": { read: ["backup"], write: ["backup:edit"] },
 };
 
 /** Router-level guard for one API prefix, from ROUTE_GUARDS. */

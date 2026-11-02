@@ -11,7 +11,7 @@
  *   GET    /employees/:id/categories           — categories an employee owns
  *   PUT    /employees/:id/categories           — replace (admin/manager)
  */
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -30,7 +30,7 @@ import { rewriteSupplierCategoryName } from "../../shared/category-rename";
 import { guardFor } from "../../shared/permissions";
 
 const router = Router();
-router.use("/item-categories", guardByMethod(["items", "rfq", "customer-rfq"], ["items"]));
+router.use("/item-categories", guardFor("/item-categories"));
 router.use("/item-categories", guardFor("/item-categories"));
 router.use("/employees", guardFor("/employees"));
 

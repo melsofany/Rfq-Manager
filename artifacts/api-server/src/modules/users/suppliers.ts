@@ -1,4 +1,4 @@
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -27,7 +27,7 @@ import {
 import { guardFor } from "../../shared/permissions";
 
 const router = Router();
-router.use("/suppliers", guardByMethod(["suppliers", "rfq", "purchase-orders"], ["suppliers"]));
+router.use("/suppliers", guardFor("/suppliers"));
 router.use("/suppliers", guardFor("/suppliers"));
 
 

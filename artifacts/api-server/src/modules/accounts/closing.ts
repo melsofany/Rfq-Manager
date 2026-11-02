@@ -11,7 +11,7 @@
  *   POST   /accounts/closings        → lock a month (accountant/manager/admin)
  *   DELETE /accounts/closings/:id    → unlock a month (admin only, audited)
  */
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { requirePermission } from "../../shared/permissions";
 import { Router } from "express";
 import { db, accountingClosingsTable, journalEntriesTable, auditLogTable } from "@workspace/db";
@@ -20,7 +20,7 @@ import { requireAuth } from "../../middlewares/auth";
 import { guardFor, requirePermission } from "../../shared/permissions";
 
 const router = Router();
-router.use("/accounts", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/accounts", guardFor("/accounts"));
 router.use("/accounts", guardFor("/accounts"));
 
 

@@ -20,7 +20,7 @@
  *   POST   /accounts/sales-invoices/:id/void
  *   GET    /accounts/sales-invoices/:id/pdf     → branded PDF
  */
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -43,7 +43,7 @@ import { num as toNum, formatNum, loadTaxSettings } from "./helpers";
 import { guardFor } from "../../shared/permissions";
 
 const router = Router();
-router.use("/accounts", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/accounts", guardFor("/accounts"));
 router.use("/accounts", guardFor("/accounts"));
 
 

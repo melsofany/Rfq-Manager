@@ -17,7 +17,7 @@
  *   GET    /expenses/attachments/:id/download → download an attachment
  *   DELETE /expenses/attachments/:id        → delete an attachment
  */
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import multer from "multer";
 import { db, operatingExpensesTable, expenseAttachmentsTable, auditLogTable } from "@workspace/db";
@@ -29,7 +29,7 @@ import { expenseAccountFor, cashAccountFor } from "../accounts/integration";
 import { guardFor } from "../../shared/permissions";
 
 const router = Router();
-router.use("/expenses", guardByMethod(["accounts", "accounts:expenses"], ["accounts", "accounts:expenses"]));
+router.use("/expenses", guardFor("/expenses"));
 router.use("/expenses", guardFor("/expenses"));
 
 

@@ -1,11 +1,11 @@
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { runFullSync, getSyncStatus } from "../../shared/sheet-sync";
 import { guardFor } from "../../shared/permissions";
 
 const router = Router();
-router.use("/sync", guardByMethod(["analytics"], ["analytics"]));
+router.use("/sync", guardFor("/sync"));
 router.use("/sync", guardFor("/sync"));
 
 

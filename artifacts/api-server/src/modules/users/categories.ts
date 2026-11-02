@@ -1,4 +1,4 @@
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import { db } from "@workspace/db";
 import {
@@ -12,7 +12,7 @@ import { rewriteSupplierCategoryName } from "../../shared/category-rename";
 import { guardFor } from "../../shared/permissions";
 
 const router = Router();
-router.use("/categories", guardByMethod(["suppliers", "rfq", "purchase-orders"], ["suppliers"]));
+router.use("/categories", guardFor("/categories"));
 router.use("/categories", guardFor("/categories"));
 
 

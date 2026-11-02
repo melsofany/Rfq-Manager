@@ -24,7 +24,7 @@
  *   GET    /accounts/balance-sheet               → الميزانية العمومية
  *   GET    /accounts/dashboard                   → accountant dashboard summary
  */
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { requirePermission } from "../../shared/permissions";
 import { Router } from "express";
 import {
@@ -59,7 +59,7 @@ import {
 import { guardFor, requirePermission } from "../../shared/permissions";
 
 const router = Router();
-router.use("/accounts", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/accounts", guardFor("/accounts"));
 router.use("/accounts", guardFor("/accounts"));
 
 

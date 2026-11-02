@@ -6,7 +6,7 @@
  *   GET  /backup/settings        → alert recipients + retention/schedule
  *   PUT  /backup/settings        → update settings (admin/manager)
  */
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { Router, type IRouter } from "express";
 import { db, auditLogTable, type BackupRecipient } from "@workspace/db";
 import { requireAuth } from "../../middlewares/auth";
@@ -22,7 +22,7 @@ import { loadBackupSettings, updateBackupSettings } from "./store";
 import { guardFor } from "../../shared/permissions";
 
 const router: IRouter = Router();
-router.use("/backup", guardByMethod(["backup"], ["backup"]));
+router.use("/backup", guardFor("/backup"));
 router.use("/backup", guardFor("/backup"));
 
 

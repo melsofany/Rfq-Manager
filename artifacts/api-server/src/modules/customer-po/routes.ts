@@ -1,4 +1,4 @@
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -16,7 +16,7 @@ import { lockItemRows } from "../rfq/attribution";
 import { guardFor } from "../../shared/permissions";
 
 const router = Router();
-router.use("/customer-po", guardByMethod(["customer-po", "customer-rfq", "dashboard"], ["customer-po"]));
+router.use("/customer-po", guardFor("/customer-po"));
 router.use("/customer-po", guardFor("/customer-po"));
 
 

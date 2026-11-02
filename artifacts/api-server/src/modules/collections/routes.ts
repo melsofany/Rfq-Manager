@@ -24,7 +24,7 @@
  *   PATCH  /collections/payments/:id        → edit a payment
  *   DELETE /collections/payments/:id        → delete a payment
  */
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -46,7 +46,7 @@ import { cashAccountFor } from "../accounts/integration";
 import { guardFor } from "../../shared/permissions";
 
 const router = Router();
-router.use("/collections", guardByMethod(["accounts", "dashboard"], ["accounts"]));
+router.use("/collections", guardFor("/collections"));
 router.use("/collections", guardFor("/collections"));
 
 

@@ -3,14 +3,14 @@
  * /api/integrations/*
  */
 
-import { guardByMethod } from "../../shared/permissions";
+import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import * as svc from "./service";
 import { guardFor } from "../../shared/permissions";
 
 const router = Router();
-router.use("/integrations", guardByMethod(["integrations"], ["integrations"]));
+router.use("/integrations", guardFor("/integrations"));
 router.use("/integrations", guardFor("/integrations"));
 
 
