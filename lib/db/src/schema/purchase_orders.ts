@@ -1,3 +1,4 @@
+import { offerItemsTable } from "./offers";
 import { pgTable, text, serial, timestamp, integer, numeric, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -44,6 +45,10 @@ export const purchaseOrderItemsTable = pgTable("purchase_order_items", {
   // realized-margin computation (selling price − actual cost). Nullable for
   // legacy/sheet-only POs with no customer PO origin.
   customerPoItemId: integer("customer_po_item_id").references(() => customerPoItemsTable.id, {
+    onDelete: "set null",
+  }),
+  // The supplier offer line this PO line was priced from (price origin).
+  offerItemId: integer("offer_item_id").references(() => offerItemsTable.id, {
     onDelete: "set null",
   }),
   // Receipt summary — rolled up from po_item_receipts so the UI can render a

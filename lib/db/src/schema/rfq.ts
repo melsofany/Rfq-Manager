@@ -1,3 +1,4 @@
+import { customerRfqsTable } from "./customer_rfqs";
 import { pgTable, text, serial, timestamp, integer, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -8,6 +9,10 @@ export const rfqTable = pgTable("rfq", {
   id: serial("id").primaryKey(),
   internalRfqNo: text("internal_rfq_no").notNull().unique(),
   customerRfqNo: text("customer_rfq_no").notNull(),
+  // Real link to the customer RFQ header (customerRfqNo stays for display).
+  customerRfqId: integer("customer_rfq_id").references(() => customerRfqsTable.id, {
+    onDelete: "set null",
+  }),
   customerRfqDate: text("customer_rfq_date"),
   requiredResponseDate: text("required_response_date"),
   status: text("status").notNull().default("DRAFT"),

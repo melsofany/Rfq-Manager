@@ -14,6 +14,11 @@ import {
   workOrderAssignmentsTable,
   customerPosTable,
   customerPoItemsTable,
+  customerPosTable,
+  customerRfqsTable,
+  offerItemsTable,
+  offersTable,
+  suppliersTable,
   poItemReceiptsTable,
   WORK_ORDER_KIND,
 } from "@workspace/db";
@@ -213,6 +218,8 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
       rfqNumber?: string | null;
       /** Explicit RFQ line id, when the PO is created from an RFQ screen. */
       rfqItemId?: number | null;
+      /** Supplier offer line this PO line was priced from (price origin). */
+      offerItemId?: number | null;
     }>;
   };
 
@@ -234,6 +241,21 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
 
       const internalPoNo = await generateInternalPoNoInTx(tx);
 
+      // Link to the supplier RFQ: explicit rfqId, else derived from the first
+      // line that names an RFQ line. Without this the PO has no RFQ link.
+      let resolvedRfqId: number | null = rfqId ?? null;
+      if (resolvedRfqId == null) {
+        const lineRfqItemId = validItems.find((it) => it.rfqItemId)?.rfqItemId;
+        if (lineRfqItemId) {
+          const [line] = await tx
+            .select({ rfqId: rfqItemsTable.rfqId })
+            .from(rfqItemsTable)
+            .where(eq(rfqItemsTable.id, lineRfqItemId))
+            .limit(1);
+          resolvedRfqId = line?.rfqId ?? null;
+        }
+      }
+
       const [po] = await tx
         .insert(purchaseOrdersTable)
         .values({
@@ -244,6 +266,7 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
           status: "draft",
           employeeId: req.session.employeeId,
           notes: notes || null,
+          rfqId: resolvedRfqId,
         })
         .returning();
 
@@ -254,6 +277,7 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
             poId: po.id,
             itemId: it.itemId || null,
             customerPoItemId: it.customerPoItemId ?? null,
+            offerItemId: it.offerItemId ?? null,
             lineItem: it.lineItem || null,
             partNo: it.partNo || null,
             description: it.description.trim(),
@@ -282,12 +306,12 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
       });
 
       // If linked to an RFQ, mark it as SUCCESS
-      if (rfqId) {
-        await tx.update(rfqTable).set({ status: "SUCCESS" }).where(eq(rfqTable.id, rfqId));
+      if (resolvedRfqId) {
+        await tx.update(rfqTable).set({ status: "SUCCESS" }).where(eq(rfqTable.id, resolvedRfqId));
         await tx.insert(auditLogTable).values({
           action: "rfq.success",
           entityType: "rfq",
-          entityId: rfqId,
+          entityId: resolvedRfqId,
           employeeId: req.session.employeeId,
           description: `RFQ marked SUCCESS — PO ${internalPoNo} created`,
           ipAddress: req.ip,
@@ -1611,6 +1635,65 @@ router.post("/po/items/:poItemId/rfq-allocations", requireAuth, async (req, res)
     confidence: "confirmed",
   });
   res.status(201).json({ poItemId, rfqItemId, status: "linked" });
+});
+
+/** Document chain of one supplier PO: its RFQ, customer RFQ, customer POs and offers. */
+router.get("/po/:id/chain", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const [po] = await db
+    .select({ id: purchaseOrdersTable.id, internalPoNo: purchaseOrdersTable.internalPoNo, status: purchaseOrdersTable.status, rfqId: purchaseOrdersTable.rfqId })
+    .from(purchaseOrdersTable)
+    .where(eq(purchaseOrdersTable.id, id));
+  if (!po) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const items = await db
+    .select({ customerPoItemId: purchaseOrderItemsTable.customerPoItemId, offerItemId: purchaseOrderItemsTable.offerItemId })
+    .from(purchaseOrderItemsTable)
+    .where(eq(purchaseOrderItemsTable.poId, id));
+  const [rfq] = po.rfqId
+    ? await db
+        .select({ id: rfqTable.id, internalRfqNo: rfqTable.internalRfqNo, status: rfqTable.status, customerRfqId: rfqTable.customerRfqId })
+        .from(rfqTable)
+        .where(eq(rfqTable.id, po.rfqId))
+    : [undefined];
+  const [customerRfq] = rfq?.customerRfqId
+    ? await db
+        .select({ id: customerRfqsTable.id, customerRfqNo: customerRfqsTable.customerRfqNo, status: customerRfqsTable.status })
+        .from(customerRfqsTable)
+        .where(eq(customerRfqsTable.id, rfq.customerRfqId))
+    : [undefined];
+  const customerPoItemIds = items.map((i) => i.customerPoItemId).filter((x): x is number => x != null);
+  const customerPoIds = customerPoItemIds.length
+    ? [...new Set((await db.select({ customerPoId: customerPoItemsTable.customerPoId }).from(customerPoItemsTable).where(inArray(customerPoItemsTable.id, customerPoItemIds))).map((r) => r.customerPoId))]
+    : [];
+  const customerPos = customerPoIds.length
+    ? await db
+        .select({ id: customerPosTable.id, customerPoNo: customerPosTable.customerPoNo, status: customerPosTable.status })
+        .from(customerPosTable)
+        .where(inArray(customerPosTable.id, customerPoIds))
+    : [];
+  const offerItemIds = items.map((i) => i.offerItemId).filter((x): x is number => x != null);
+  const offers = offerItemIds.length
+    ? await db
+        .select({ id: offersTable.id, supplierId: offersTable.supplierId, supplierName: suppliersTable.name })
+        .from(offerItemsTable)
+        .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
+        .innerJoin(suppliersTable, eq(offersTable.supplierId, suppliersTable.id))
+        .where(inArray(offerItemsTable.id, offerItemIds))
+    : [];
+  res.json({
+    purchaseOrder: po,
+    supplierRfq: rfq ? { id: rfq.id, internalRfqNo: rfq.internalRfqNo, status: rfq.status } : null,
+    customerRfq: customerRfq ?? null,
+    customerPos,
+    offers: [...new Map(offers.map((o) => [o.id, o])).values()],
+  });
 });
 
 export default router;
