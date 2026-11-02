@@ -10,7 +10,7 @@ import {
   purchaseOrderItemsTable,
 } from "@workspace/db";
 import { eq, count, inArray, desc, sql, and, isNotNull, ne } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { lockItemRows } from "../rfq/attribution";
 
 const router = Router();
@@ -935,7 +935,6 @@ type HighlightColor = (typeof HIGHLIGHT_COLORS)[number];
 // `{clear: true}` to remove the highlight.
 router.patch(
   "/customer-po/items/:itemId/highlight",
-  requireRole("admin", "accountant", "manager"),
   async (req, res): Promise<void> => {
     const raw = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
     const itemId = parseInt(raw, 10);

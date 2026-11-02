@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { runFullSync, getSyncStatus } from "../../shared/sheet-sync";
 
 const router = Router();
@@ -13,7 +13,6 @@ router.get("/sync/status", requireAuth, (_req, res): void => {
 router.post(
   "/sync/sheet",
   requireAuth,
-  requireRole("admin", "manager"),
   async (_req, res): Promise<void> => {
     const status = getSyncStatus();
     if (status.inProgress) {

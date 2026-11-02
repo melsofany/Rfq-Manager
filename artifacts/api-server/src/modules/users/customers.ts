@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, customersTable } from "@workspace/db";
 import { eq, ilike, or, and, ne, sql } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { isForeignKeyViolation } from "../../shared/pg-errors";
 
 const router = Router();
@@ -162,7 +162,6 @@ router.patch("/customers/:id", requireAuth, async (req, res): Promise<void> => {
 // DELETE /customers/:id — حذف عميل (admin/manager فقط)
 router.delete(
   "/customers/:id",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const id = parseInt(raw, 10);

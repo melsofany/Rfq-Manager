@@ -31,7 +31,7 @@ import {
   salesInvoicesTable,
 } from "@workspace/db";
 import { eq, sql, and, desc, gte, lte } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { rateOf, round2, vatOnNet, marginOf } from "./tax";
 import { numOrZero as toNum, formatNum, loadTaxSettings } from "./helpers";
 import { supplierLineByCustomerItem } from "../../shared/po-links";
@@ -587,7 +587,6 @@ router.get("/accounts/tax-settings", requireAuth, async (_req, res): Promise<voi
 
 router.put(
   "/accounts/tax-settings",
-  requireRole("admin", "manager"),
   async (req, res): Promise<void> => {
     const body = (req.body ?? {}) as {
       companyName?: string | null;

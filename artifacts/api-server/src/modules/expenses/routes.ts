@@ -21,7 +21,7 @@ import { Router } from "express";
 import multer from "multer";
 import { db, operatingExpensesTable, expenseAttachmentsTable, auditLogTable } from "@workspace/db";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import type { Request } from "express";
 import { postJournalEntry } from "../accounts/posting";
 import { expenseAccountFor, cashAccountFor } from "../accounts/integration";
@@ -316,7 +316,7 @@ router.patch("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 // DELETE /expenses/:id — delete (cascade removes attachments).
-router.delete("/expenses/:id", requireRole("admin", "manager"), async (req, res): Promise<void> => {
+router.delete("/expenses/:id", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (!isFinite(id)) {
     res.status(400).json({ error: "معرّف غير صالح" });

@@ -8,7 +8,7 @@
  */
 import { Router, type IRouter } from "express";
 import { db, auditLogTable, type BackupRecipient } from "@workspace/db";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import {
   getBackupStatus,
   isBackupConfigured,
@@ -33,14 +33,13 @@ router.get("/backup/status", requireAuth, async (_req, res) => {
 router.post(
   "/backup/test-connection",
   requireAuth,
-  requireRole("admin", "manager"),
   async (_req, res) => {
     const result = await testBackupConnection();
     res.status(result.ok ? 200 : 502).json(result);
   },
 );
 
-router.post("/backup/run", requireAuth, requireRole("admin", "manager"), async (_req, res) => {
+router.post("/backup/run", requireAuth, async (_req, res) => {
   if (!isBackupConfigured()) {
     res.status(400).json({
       error: `النسخ الاحتياطي غير مُفعَّل: ${backupConfigProblems().join("، ")}`,
@@ -78,7 +77,7 @@ router.get("/backup/settings", requireAuth, async (_req, res) => {
   }
 });
 
-router.put("/backup/settings", requireAuth, requireRole("admin", "manager"), async (req, res) => {
+router.put("/backup/settings", requireAuth, async (req, res) => {
   try {
     const body = req.body ?? {};
     const patch: {

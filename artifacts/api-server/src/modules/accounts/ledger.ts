@@ -24,6 +24,7 @@
  *   GET    /accounts/balance-sheet               → الميزانية العمومية
  *   GET    /accounts/dashboard                   → accountant dashboard summary
  */
+import { requirePermission } from "../../shared/permissions";
 import { Router } from "express";
 import {
   db,
@@ -39,7 +40,7 @@ import {
   ACCOUNT_CODES,
 } from "@workspace/db";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
-import { requireAuth, requireRole } from "../../middlewares/auth";
+import { requireAuth } from "../../middlewares/auth";
 import { round2 } from "./tax";
 import { postJournalEntry, nextEntryNo, accountBalance } from "./posting";
 import { monthOf, assertMonthOpen } from "./closing";
@@ -78,7 +79,6 @@ router.get("/accounts/coa", requireAuth, async (_req, res): Promise<void> => {
 
 router.post(
   "/accounts/coa",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const body = (req.body ?? {}) as {
       code: string;
@@ -121,7 +121,6 @@ router.post(
 
 router.patch(
   "/accounts/coa/:id",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     const body = (req.body ?? {}) as {
@@ -146,7 +145,6 @@ router.patch(
 
 router.delete(
   "/accounts/coa/:id",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     await db
@@ -253,7 +251,6 @@ router.get("/accounts/journal/:id", requireAuth, async (req, res): Promise<void>
 // accountant+ role).
 router.post(
   "/accounts/journal",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const body = (req.body ?? {}) as {
       entryDate: string;
@@ -313,7 +310,6 @@ router.post(
 // Edit a DRAFT entry (replace lines). Posted entries are immutable.
 router.patch(
   "/accounts/journal/:id",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     const [entry] = await db
@@ -395,7 +391,6 @@ router.patch(
 // Review (approve) a draft entry — records reviewer + timestamp.
 router.post(
   "/accounts/journal/:id/review",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
@@ -428,7 +423,6 @@ router.post(
 // Post a reviewed draft entry → immutable, updates GL.
 router.post(
   "/accounts/journal/:id/post",
-  requireRole("accountant", "manager", "admin"),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     const [entry] = await db
@@ -477,7 +471,7 @@ router.post(
 
 // Void a posted entry (creates a reversal-style flag — keeps the original for
 // audit, marks it void so it no longer contributes to GL balances).
-router.post("/accounts/journal/:id/void", requireRole("admin"), async (req, res): Promise<void> => {
+router.post("/accounts/journal/:id/void", requirePermission("accounts:posting"), async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   const [entry] = await db.select().from(journalEntriesTable).where(eq(journalEntriesTable.id, id));
   if (!entry) {
