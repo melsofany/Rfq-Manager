@@ -27,9 +27,7 @@ export default function MailboxPage() {
           <p className="text-muted-foreground text-sm">قراءة فقط</p>
         </div>
 
-        {granted.isLoading && (
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        )}
+        {granted.isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
         {granted.error && (
           <p className="text-sm text-destructive">{(granted.error as Error).message}</p>
         )}

@@ -26,12 +26,10 @@ import { requireAuth } from "../../middlewares/auth";
 import type { Request } from "express";
 import { postJournalEntry } from "../accounts/posting";
 import { expenseAccountFor, cashAccountFor } from "../accounts/integration";
-import { guardFor } from "../../shared/permissions";
 
 const router = Router();
 router.use("/expenses", guardFor("/expenses"));
 router.use("/expenses", guardFor("/expenses"));
-
 
 function toNum(v: unknown): number | null {
   if (v == null || v === "") return null;

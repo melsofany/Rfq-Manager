@@ -49,7 +49,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/whatsapp", guardFor("/whatsapp"));
 
-
 const WA_TOKEN = process.env.WHATSAPP_TOKEN;
 const WA_PHONE_ID = PHONE_NUMBER_ID;
 const WA_API_VERSION = "v22.0";

@@ -52,7 +52,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/analytics", guardFor("/analytics"));
 
-
 function fmt(n: number | null): number | null {
   return n == null ? null : round2(n);
 }

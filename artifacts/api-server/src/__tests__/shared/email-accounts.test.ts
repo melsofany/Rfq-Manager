@@ -30,7 +30,11 @@ describe("buildEmailAccountsView", () => {
           primaryEmail: "sales@cortoba-supplies.com",
           suspended: false,
           isAdmin: false,
-          aliases: ["info@cortoba-supplies.com", "SALES@cortoba-supplies.com", "info@cortoba-supplies.com"],
+          aliases: [
+            "info@cortoba-supplies.com",
+            "SALES@cortoba-supplies.com",
+            "info@cortoba-supplies.com",
+          ],
         },
       ],
       [],
@@ -53,7 +57,14 @@ describe("buildEmailAccountsView", () => {
   it("keeps workspace accounts that match no employee, with employee null", () => {
     const view = buildEmailAccountsView(
       "cortoba-supplies.com",
-      [{ primaryEmail: "info@cortoba-supplies.com", suspended: false, isAdmin: false, aliases: [] }],
+      [
+        {
+          primaryEmail: "info@cortoba-supplies.com",
+          suspended: false,
+          isAdmin: false,
+          aliases: [],
+        },
+      ],
       [],
     );
     expect(view.accounts[0].employee).toBeNull();
@@ -92,13 +103,25 @@ describe("collectAttachments", () => {
     const found = collectAttachments({
       mimeType: "multipart/mixed",
       parts: [
-        { mimeType: "multipart/alternative", parts: [{ mimeType: "text/plain", body: { data: "x" } }] },
-        { mimeType: "application/pdf", filename: "invoice.pdf", body: { attachmentId: "ANGjdJ8abc123", size: 2048 } },
+        {
+          mimeType: "multipart/alternative",
+          parts: [{ mimeType: "text/plain", body: { data: "x" } }],
+        },
+        {
+          mimeType: "application/pdf",
+          filename: "invoice.pdf",
+          body: { attachmentId: "ANGjdJ8abc123", size: 2048 },
+        },
         { mimeType: "image/png", filename: "", body: { data: "inline" } },
       ],
     });
     expect(found).toEqual([
-      { attachmentId: "ANGjdJ8abc123", filename: "invoice.pdf", mimeType: "application/pdf", size: 2048 },
+      {
+        attachmentId: "ANGjdJ8abc123",
+        filename: "invoice.pdf",
+        mimeType: "application/pdf",
+        size: 2048,
+      },
     ]);
   });
 });

@@ -2955,7 +2955,9 @@ export async function initDb(): Promise<void> {
          FROM (SELECT DISTINCT ON (customer_rfq_no) id, customer_rfq_no FROM customer_rfqs ORDER BY customer_rfq_no, id) c
         WHERE r.customer_rfq_id IS NULL AND r.customer_rfq_no = c.customer_rfq_no`,
     );
-    await client.query(`CREATE INDEX IF NOT EXISTS rfq_customer_rfq_id_idx ON rfq (customer_rfq_id)`);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS rfq_customer_rfq_id_idx ON rfq (customer_rfq_id)`,
+    );
     await client.query(
       `CREATE INDEX IF NOT EXISTS po_items_offer_item_id_idx ON purchase_order_items (offer_item_id)`,
     );

@@ -60,9 +60,8 @@ export function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: (
 
   const labels = useQuery({
     queryKey: ["email-labels", mailbox],
-    queryFn: () => getJson<{ labels: LabelInfo[] }>(
-      `/api/email-accounts/${encodeURIComponent(mailbox)}/labels`,
-    ),
+    queryFn: () =>
+      getJson<{ labels: LabelInfo[] }>(`/api/email-accounts/${encodeURIComponent(mailbox)}/labels`),
     retry: false,
   });
 
@@ -90,7 +89,8 @@ export function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: (
     retry: false,
   });
 
-  const folderName = (l: LabelInfo) => (l.type === "system" ? FOLDER_LABELS[l.id] ?? l.name : l.name);
+  const folderName = (l: LabelInfo) =>
+    l.type === "system" ? (FOLDER_LABELS[l.id] ?? l.name) : l.name;
   const allMessages = messages.data?.pages.flatMap((p) => p.messages) ?? [];
 
   return (
@@ -200,7 +200,10 @@ export function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: (
                 placeholder="بحث في كل الرسايل (مثل: from:supplier أو subject:فاتورة)"
                 className="flex-1 h-8 px-2 text-sm rounded border border-border bg-background"
               />
-              <button type="submit" className="h-8 px-3 text-xs rounded bg-primary text-primary-foreground">
+              <button
+                type="submit"
+                className="h-8 px-3 text-xs rounded bg-primary text-primary-foreground"
+              >
                 بحث
               </button>
             </form>
@@ -221,10 +224,14 @@ export function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: (
                       className="w-full text-start py-2 hover:bg-muted/20 px-2 rounded"
                     >
                       <div className="flex justify-between gap-2">
-                        <span className={`text-sm truncate ${m.unread ? "font-semibold" : ""} text-foreground`}>
+                        <span
+                          className={`text-sm truncate ${m.unread ? "font-semibold" : ""} text-foreground`}
+                        >
                           {m.subject}
                         </span>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">{m.date}</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {m.date}
+                        </span>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">{m.from}</p>
                       <p className="text-xs text-muted-foreground truncate">{m.snippet}</p>
@@ -248,5 +255,3 @@ export function MailboxPanel({ mailbox, onClose }: { mailbox: string; onClose: (
     </div>
   );
 }
-
-

@@ -43,12 +43,10 @@ import { requireAuth } from "../../middlewares/auth";
 import { postJournalEntry } from "../accounts/posting";
 import { ACCOUNT_CODES } from "@workspace/db";
 import { cashAccountFor } from "../accounts/integration";
-import { guardFor } from "../../shared/permissions";
 
 const router = Router();
 router.use("/collections", guardFor("/collections"));
 router.use("/collections", guardFor("/collections"));
-
 
 function toNum(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -569,35 +567,32 @@ router.patch("/collections/payments/:id", requireAuth, async (req, res): Promise
 });
 
 // DELETE /collections/payments/:id — delete a payment.
-router.delete(
-  "/collections/payments/:id",
-  async (req, res): Promise<void> => {
-    const id = parseInt(String(req.params.id), 10);
-    if (!isFinite(id)) {
-      res.status(400).json({ error: "معرّف غير صالح" });
-      return;
-    }
-    const [existing] = await db
-      .select()
-      .from(customerPoPaymentsTable)
-      .where(eq(customerPoPaymentsTable.id, id));
-    if (!existing) {
-      res.status(404).json({ error: "الدفعة غير موجودة" });
-      return;
-    }
-    await db.delete(customerPoPaymentsTable).where(eq(customerPoPaymentsTable.id, id));
-    await db.insert(auditLogTable).values({
-      action: "collection.payment.deleted",
-      entityType: "customer_po",
-      entityId: existing.customerPoId,
-      employeeId: req.session.employeeId,
-      description: `Deleted payment ${id} for customer PO ${existing.customerPoId}`,
-      ipAddress: req.ip,
-      userAgent: req.get("user-agent"),
-    });
-    res.json({ ok: true });
-  },
-);
+router.delete("/collections/payments/:id", async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (!isFinite(id)) {
+    res.status(400).json({ error: "معرّف غير صالح" });
+    return;
+  }
+  const [existing] = await db
+    .select()
+    .from(customerPoPaymentsTable)
+    .where(eq(customerPoPaymentsTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "الدفعة غير موجودة" });
+    return;
+  }
+  await db.delete(customerPoPaymentsTable).where(eq(customerPoPaymentsTable.id, id));
+  await db.insert(auditLogTable).values({
+    action: "collection.payment.deleted",
+    entityType: "customer_po",
+    entityId: existing.customerPoId,
+    employeeId: req.session.employeeId,
+    description: `Deleted payment ${id} for customer PO ${existing.customerPoId}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+  res.json({ ok: true });
+});
 
 export { computeStatus, STATUS_LABEL, STATUS_TONE };
 export default router;

@@ -19,12 +19,10 @@ import {
   BackupAlreadyDoneToday,
 } from "./service";
 import { loadBackupSettings, updateBackupSettings } from "./store";
-import { guardFor } from "../../shared/permissions";
 
 const router: IRouter = Router();
 router.use("/backup", guardFor("/backup"));
 router.use("/backup", guardFor("/backup"));
-
 
 router.get("/backup/status", requireAuth, async (_req, res) => {
   try {
@@ -35,14 +33,10 @@ router.get("/backup/status", requireAuth, async (_req, res) => {
   }
 });
 
-router.post(
-  "/backup/test-connection",
-  requireAuth,
-  async (_req, res) => {
-    const result = await testBackupConnection();
-    res.status(result.ok ? 200 : 502).json(result);
-  },
-);
+router.post("/backup/test-connection", requireAuth, async (_req, res) => {
+  const result = await testBackupConnection();
+  res.status(result.ok ? 200 : 502).json(result);
+});
 
 router.post("/backup/run", requireAuth, async (_req, res) => {
   if (!isBackupConfigured()) {

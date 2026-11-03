@@ -6,7 +6,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/representatives", guardFor("/representatives"));
 
-
 function normalizeDigits(value: string): string {
   return value
     .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))

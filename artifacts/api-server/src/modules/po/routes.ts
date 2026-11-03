@@ -14,11 +14,7 @@ import {
   workOrderAssignmentsTable,
   customerPosTable,
   customerPoItemsTable,
-  customerPosTable,
   customerRfqsTable,
-  offerItemsTable,
-  offersTable,
-  suppliersTable,
   poItemReceiptsTable,
   WORK_ORDER_KIND,
 } from "@workspace/db";
@@ -46,7 +42,6 @@ import { guardFor } from "../../shared/permissions";
 
 const router = Router();
 router.use("/po", guardFor("/po"));
-
 
 export function normalizePhone(phone: string): string {
   // Shared with every send path: a field holding several numbers resolves to the
@@ -219,8 +214,6 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
       rfqNumber?: string | null;
       /** Explicit RFQ line id, when the PO is created from an RFQ screen. */
       rfqItemId?: number | null;
-      /** Supplier offer line this PO line was priced from (price origin). */
-      offerItemId?: number | null;
     }>;
   };
 
@@ -458,7 +451,11 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
 
   // Search by description (case-insensitive) first
   const byDesc = await db
-    .select({ offerItemId: offerItemsTable.id, price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
+    .select({
+      offerItemId: offerItemsTable.id,
+      price: offerItemsTable.price,
+      taxIncluded: offerItemsTable.taxIncluded,
+    })
     .from(offerItemsTable)
     .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
     .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
@@ -483,7 +480,11 @@ router.get("/po/supplier-price", requireAuth, async (req, res): Promise<void> =>
   // Fallback: search by part number if provided
   if (partNo && partNo.trim()) {
     const byPart = await db
-      .select({ offerItemId: offerItemsTable.id, price: offerItemsTable.price, taxIncluded: offerItemsTable.taxIncluded })
+      .select({
+        offerItemId: offerItemsTable.id,
+        price: offerItemsTable.price,
+        taxIncluded: offerItemsTable.taxIncluded,
+      })
       .from(offerItemsTable)
       .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
       .innerJoin(rfqItemsTable, eq(offerItemsTable.rfqItemId, rfqItemsTable.id))
@@ -1653,7 +1654,12 @@ router.get("/po/:id/chain", async (req, res): Promise<void> => {
     return;
   }
   const [po] = await db
-    .select({ id: purchaseOrdersTable.id, internalPoNo: purchaseOrdersTable.internalPoNo, status: purchaseOrdersTable.status, rfqId: purchaseOrdersTable.rfqId })
+    .select({
+      id: purchaseOrdersTable.id,
+      internalPoNo: purchaseOrdersTable.internalPoNo,
+      status: purchaseOrdersTable.status,
+      rfqId: purchaseOrdersTable.rfqId,
+    })
     .from(purchaseOrdersTable)
     .where(eq(purchaseOrdersTable.id, id));
   if (!po) {
@@ -1661,35 +1667,71 @@ router.get("/po/:id/chain", async (req, res): Promise<void> => {
     return;
   }
   const items = await db
-    .select({ customerPoItemId: purchaseOrderItemsTable.customerPoItemId, offerItemId: purchaseOrderItemsTable.offerItemId })
+    .select({
+      customerPoItemId: purchaseOrderItemsTable.customerPoItemId,
+      offerItemId: purchaseOrderItemsTable.offerItemId,
+    })
     .from(purchaseOrderItemsTable)
     .where(eq(purchaseOrderItemsTable.poId, id));
   const [rfq] = po.rfqId
     ? await db
-        .select({ id: rfqTable.id, internalRfqNo: rfqTable.internalRfqNo, status: rfqTable.status, customerRfqId: rfqTable.customerRfqId })
+        .select({
+          id: rfqTable.id,
+          internalRfqNo: rfqTable.internalRfqNo,
+          status: rfqTable.status,
+          customerRfqId: rfqTable.customerRfqId,
+        })
         .from(rfqTable)
         .where(eq(rfqTable.id, po.rfqId))
     : [undefined];
   const [customerRfq] = rfq?.customerRfqId
     ? await db
-        .select({ id: customerRfqsTable.id, customerRfqNo: customerRfqsTable.customerRfqNo, status: customerRfqsTable.status })
+        .select({
+          id: customerRfqsTable.id,
+          customerRfqNo: customerRfqsTable.customerRfqNo,
+          status: customerRfqsTable.status,
+        })
         .from(customerRfqsTable)
         .where(eq(customerRfqsTable.id, rfq.customerRfqId))
     : [undefined];
-  const customerPoItemIds = items.map((i) => i.customerPoItemId).filter((x): x is number => x != null);
+  const customerPoItemIds = items
+    .map((i) => i.customerPoItemId)
+    .filter((x): x is number => x != null);
   const customerPoIds = customerPoItemIds.length
-    ? [...new Set((await db.select({ customerPoId: customerPoItemsTable.customerPoId }).from(customerPoItemsTable).where(inArray(customerPoItemsTable.id, customerPoItemIds))).map((r) => r.customerPoId))]
+    ? [
+        ...new Set(
+          (
+            await db
+              .select({ customerPoId: customerPoItemsTable.customerPoId })
+              .from(customerPoItemsTable)
+              .where(inArray(customerPoItemsTable.id, customerPoItemIds))
+          ).map((r) => r.customerPoId),
+        ),
+      ]
     : [];
   const customerPos = customerPoIds.length
     ? await db
-        .select({ id: customerPosTable.id, customerPoNo: customerPosTable.customerPoNo, status: customerPosTable.status })
+        .select({
+          id: customerPosTable.id,
+          customerPoNo: customerPosTable.customerPoNo,
+          status: customerPosTable.status,
+        })
         .from(customerPosTable)
-        .where(inArray(customerPosTable.id, customerPoIds))
+        .where(
+          inArray(
+            customerPosTable.id,
+            customerPoIds.filter((x): x is number => x != null),
+          ),
+        )
     : [];
   const offerItemIds = items.map((i) => i.offerItemId).filter((x): x is number => x != null);
   const offers = offerItemIds.length
     ? await db
-        .select({ id: offersTable.id, supplierId: offersTable.supplierId, supplierName: suppliersTable.name })
+        .select({
+          id: offersTable.id,
+          supplierId: offersTable.supplierId,
+          supplierName: suppliersTable.name,
+        })
         .from(offerItemsTable)
         .innerJoin(offersTable, eq(offerItemsTable.offerId, offersTable.id))
         .innerJoin(suppliersTable, eq(offersTable.supplierId, suppliersTable.id))

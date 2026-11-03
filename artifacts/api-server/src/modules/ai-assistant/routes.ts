@@ -40,7 +40,7 @@ import {
   deriveDocumentFormats,
   resetOrgProfilesCache,
 } from "./org-profiles";
-import { guardFor, requirePermission } from "../../shared/permissions";
+import { requirePermission } from "../../shared/permissions";
 
 const router = Router();
 router.use("/ai-assistant", guardFor("/ai-assistant"));

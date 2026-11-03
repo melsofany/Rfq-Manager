@@ -134,7 +134,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.emp.procAccount": "Procurement account (production incentive)",
     "hr.emp.procNone": "— not linked —",
     "hr.emp.keepFixed": "Exception: keep the fixed contract incentive",
-    "hr.emp.keepFixedHint": "Only for employees without a procurement account. Otherwise their incentive is 0 without KPI data.",
+    "hr.emp.keepFixedHint":
+      "Only for employees without a procurement account. Otherwise their incentive is 0 without KPI data.",
     "hr.emp.bankIncomplete":
       "To change the bank account, fill bank name, account holder and account number.",
     "hr.emp.iban": "IBAN (optional)",
@@ -962,7 +963,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.emp.procAccount": "حساب المشتريات (لحافز الإنتاج)",
     "hr.emp.procNone": "— غير مرتبط —",
     "hr.emp.keepFixed": "استثناء: يحتفظ بالحافز الثابت من العقد",
-    "hr.emp.keepFixedHint": "للموظف غير المربوط بحساب مشتريات فقط. غير كده حافزه 0 لأنه مفيش بيانات KPI.",
+    "hr.emp.keepFixedHint":
+      "للموظف غير المربوط بحساب مشتريات فقط. غير كده حافزه 0 لأنه مفيش بيانات KPI.",
     "hr.emp.bankIncomplete": "عشان تغيّر الحساب البنكي، املا اسم البنك وصاحب الحساب ورقم الحساب.",
     "hr.emp.iban": "الآيبان (اختياري)",
     "hr.tab.payroll": "الرواتب",

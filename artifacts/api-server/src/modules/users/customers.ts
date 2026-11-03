@@ -4,12 +4,10 @@ import { db, customersTable } from "@workspace/db";
 import { eq, ilike, or, and, ne, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { isForeignKeyViolation } from "../../shared/pg-errors";
-import { guardFor } from "../../shared/permissions";
 
 const router = Router();
 router.use("/customers", guardFor("/customers"));
 router.use("/customers", guardFor("/customers"));
-
 
 // ─── Routes ────────────────────────────────────────────────────────────────
 
@@ -165,35 +163,29 @@ router.patch("/customers/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 // DELETE /customers/:id — حذف عميل (admin/manager فقط)
-router.delete(
-  "/customers/:id",
-  async (req, res): Promise<void> => {
-    const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const id = parseInt(raw, 10);
-    try {
-      const [deleted] = await db
-        .delete(customersTable)
-        .where(eq(customersTable.id, id))
-        .returning();
-      if (!deleted) {
-        res.status(404).json({ error: "Not found" });
-        return;
-      }
-      res.status(204).end();
-    } catch (err: unknown) {
-      // Drizzle hides the Postgres error text in `err.cause`, so a
-      // `message.includes(...)` check never fires — see shared/pg-errors.ts.
-      if (isForeignKeyViolation(err)) {
-        res.status(409).json({
-          error:
-            "لا يمكن حذف هذا العميل لوجود طلبات تسعير أو أوامر شراء مرتبطة به. يمكنك تعطيله بدلاً من حذفه.",
-        });
-        return;
-      }
-      throw err;
+router.delete("/customers/:id", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  try {
+    const [deleted] = await db.delete(customersTable).where(eq(customersTable.id, id)).returning();
+    if (!deleted) {
+      res.status(404).json({ error: "Not found" });
+      return;
     }
-  },
-);
+    res.status(204).end();
+  } catch (err: unknown) {
+    // Drizzle hides the Postgres error text in `err.cause`, so a
+    // `message.includes(...)` check never fires — see shared/pg-errors.ts.
+    if (isForeignKeyViolation(err)) {
+      res.status(409).json({
+        error:
+          "لا يمكن حذف هذا العميل لوجود طلبات تسعير أو أوامر شراء مرتبطة به. يمكنك تعطيله بدلاً من حذفه.",
+      });
+      return;
+    }
+    throw err;
+  }
+});
 
 function serializeCustomer(c: typeof customersTable.$inferSelect) {
   return {

@@ -70,7 +70,9 @@ export function GrantsPanel({ mailboxes }: { mailboxes: string[] }) {
         >
           <option value="">اختر الصندوق</option>
           {mailboxes.map((m) => (
-            <option key={m} value={m}>{m}</option>
+            <option key={m} value={m}>
+              {m}
+            </option>
           ))}
         </select>
         <select
@@ -80,7 +82,9 @@ export function GrantsPanel({ mailboxes }: { mailboxes: string[] }) {
         >
           <option value="">اختر الموظف</option>
           {grants.data?.employees.map((e) => (
-            <option key={e.id} value={e.id}>{e.name}</option>
+            <option key={e.id} value={e.id}>
+              {e.name}
+            </option>
           ))}
         </select>
         <button

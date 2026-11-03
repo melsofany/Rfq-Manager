@@ -50,19 +50,43 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const mainNavItems: NavItem[] = [
     { href: "/dashboard", label: t("nav.dashboard"), icon: LayoutDashboard },
-    { href: "/customers", label: t("nav.customersList"), icon: UserRound, groupLabel: t("nav.customers"), nested: true },
+    {
+      href: "/customers",
+      label: t("nav.customersList"),
+      icon: UserRound,
+      groupLabel: t("nav.customers"),
+      nested: true,
+    },
     { href: "/customer-rfq", label: t("nav.customerRfq"), icon: FileText, nested: true },
     { href: "/customer-po", label: t("nav.customerPo"), icon: ShoppingCart, nested: true },
-    { href: "/suppliers", label: t("nav.suppliersList"), icon: Users, groupLabel: t("nav.suppliers"), nested: true },
+    {
+      href: "/suppliers",
+      label: t("nav.suppliersList"),
+      icon: Users,
+      groupLabel: t("nav.suppliers"),
+      nested: true,
+    },
     { href: "/rfq", label: t("nav.supplierRfq"), icon: FileText, nested: true },
     { href: "/purchase-orders", label: t("nav.supplierPo"), icon: ShoppingCart, nested: true },
     { href: "/accounts", label: t("nav.accounts"), icon: Calculator },
     { href: "/hr", label: t("nav.hr"), icon: IdCard },
     { href: "/items", label: t("nav.items"), icon: Package },
-    { href: "/whatsapp", label: t("nav.whatsapp"), icon: MessageSquare, groupLabel: t("nav.communications"), nested: true },
+    {
+      href: "/whatsapp",
+      label: t("nav.whatsapp"),
+      icon: MessageSquare,
+      groupLabel: t("nav.communications"),
+      nested: true,
+    },
     { href: "/mailbox", label: t("nav.mailbox"), icon: Mail, nested: true },
     { href: "/analytics", label: t("nav.analytics"), icon: BarChart3 },
-    { href: "/integrations", label: t("nav.integrations"), icon: Plug, groupLabel: t("nav.itSystems"), nested: true },
+    {
+      href: "/integrations",
+      label: t("nav.integrations"),
+      icon: Plug,
+      groupLabel: t("nav.itSystems"),
+      nested: true,
+    },
     { href: "/backup", label: t("nav.backup"), icon: DatabaseBackup, nested: true },
     { href: "/ai-assistant", label: t("nav.aiAssistant"), icon: Bot, nested: true },
     { href: "/employees", label: t("nav.sidebarUsers"), icon: UserCog, nested: true },
@@ -163,41 +187,44 @@ export function Layout({ children }: { children: React.ReactNode }) {
             const prev = index > 0 ? visibleMain[index - 1] : undefined;
             // A divider starts each group, and each standalone item that follows a group.
             const startsSection =
-              index > 0 && (item.groupLabel !== undefined || (!item.nested && prev?.nested === true));
+              index > 0 &&
+              (item.groupLabel !== undefined || (!item.nested && prev?.nested === true));
             return (
               <Fragment key={item.href}>
-              {startsSection && <div className="my-2 mx-2 border-t border-sidebar-border" />}
-              {item.groupLabel && expanded && (
-                <p className="text-sidebar-foreground/30 text-xs px-2 pt-3 pb-1 uppercase tracking-wider">
-                  {item.groupLabel}
-                </p>
-              )}
-              <Link href={item.href}>
-                <a
-                  className={cn(
-                    "flex items-center gap-3 px-2 py-2.5 rounded text-sm font-medium transition-colors",
-                    item.nested && expanded && "pr-7",
-                    active
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
-                  )}
-                >
-                  <div className="relative flex-shrink-0">
-                    <item.icon size={18} />
-                    {item.href === "/whatsapp" && waUnread > 0 && !sidebarOpen && !mobile && (
-                      <span className="absolute -top-1.5 -right-1.5 bg-green-500 text-white text-[9px] rounded-full min-w-[14px] h-[14px] flex items-center justify-center font-bold px-0.5 leading-none">
+                {startsSection && <div className="my-2 mx-2 border-t border-sidebar-border" />}
+                {item.groupLabel && expanded && (
+                  <p className="text-sidebar-foreground/30 text-xs px-2 pt-3 pb-1 uppercase tracking-wider">
+                    {item.groupLabel}
+                  </p>
+                )}
+                <Link href={item.href}>
+                  <a
+                    className={cn(
+                      "flex items-center gap-3 px-2 py-2.5 rounded text-sm font-medium transition-colors",
+                      item.nested && expanded && "pr-7",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50",
+                    )}
+                  >
+                    <div className="relative flex-shrink-0">
+                      <item.icon size={18} />
+                      {item.href === "/whatsapp" && waUnread > 0 && !sidebarOpen && !mobile && (
+                        <span className="absolute -top-1.5 -right-1.5 bg-green-500 text-white text-[9px] rounded-full min-w-[14px] h-[14px] flex items-center justify-center font-bold px-0.5 leading-none">
+                          {waUnread > 99 ? "99+" : waUnread}
+                        </span>
+                      )}
+                    </div>
+                    {(sidebarOpen || mobile) && (
+                      <span className="truncate flex-1">{item.label}</span>
+                    )}
+                    {(sidebarOpen || mobile) && item.href === "/whatsapp" && waUnread > 0 && (
+                      <span className="bg-green-500 text-white text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center font-bold px-1 flex-shrink-0">
                         {waUnread > 99 ? "99+" : waUnread}
                       </span>
                     )}
-                  </div>
-                  {(sidebarOpen || mobile) && <span className="truncate flex-1">{item.label}</span>}
-                  {(sidebarOpen || mobile) && item.href === "/whatsapp" && waUnread > 0 && (
-                    <span className="bg-green-500 text-white text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center font-bold px-1 flex-shrink-0">
-                      {waUnread > 99 ? "99+" : waUnread}
-                    </span>
-                  )}
-                </a>
-              </Link>
+                  </a>
+                </Link>
               </Fragment>
             );
           })}

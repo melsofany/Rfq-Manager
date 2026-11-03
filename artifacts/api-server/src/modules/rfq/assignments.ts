@@ -38,7 +38,6 @@ const router = Router();
 router.use("/rfq", guardFor("/rfq"));
 router.use("/customer-rfq", guardFor("/customer-rfq"));
 
-
 const ASSIGN_PERM_KEY = "rfq:assign";
 // Mirrors the portal's ROLE_DEFAULTS: manager + purchasing own the decision.
 const ASSIGN_ROLE_DEFAULT: Record<string, boolean> = { manager: true, purchasing: true };

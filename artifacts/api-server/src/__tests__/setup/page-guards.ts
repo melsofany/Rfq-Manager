@@ -8,7 +8,8 @@ import { vi } from "vitest";
 vi.mock("../../shared/permissions", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../shared/permissions")>();
   type Req = { method: string; session?: { employeeId?: number; role?: string } };
-  const gate = (keys: string[]) =>
+  const gate =
+    (keys: string[]) =>
     (req: Req, res: any, next: any): void => {
       const s = req.session;
       // Tests whose auth mock is a no-op carry no session: the page policy

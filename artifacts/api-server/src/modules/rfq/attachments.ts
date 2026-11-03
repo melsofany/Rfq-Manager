@@ -18,7 +18,6 @@ router.use("/rfq", guardFor("/rfq"));
 router.use("/offers", guardFor("/offers"));
 router.use("/offer", guardFor("/offer"));
 
-
 const ALLOWED_MIMES = new Set([
   "application/pdf",
   "image/jpeg",

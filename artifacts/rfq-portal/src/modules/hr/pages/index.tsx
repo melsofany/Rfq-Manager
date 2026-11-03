@@ -1480,7 +1480,9 @@ function EmployeesTab() {
                                 type="checkbox"
                                 className="mt-1"
                                 checked={draft.keepFixed}
-                                onChange={(e) => setDraft({ ...draft, keepFixed: e.target.checked })}
+                                onChange={(e) =>
+                                  setDraft({ ...draft, keepFixed: e.target.checked })
+                                }
                               />
                               <span>
                                 {t("hr.emp.keepFixed")}

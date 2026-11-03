@@ -46,7 +46,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/accounts", guardFor("/accounts"));
 
-
 /** Wrap an Odoo-backed handler so an unconfigured bridge answers 503. */
 function odooRoute(
   handler: (

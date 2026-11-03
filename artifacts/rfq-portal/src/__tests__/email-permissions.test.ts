@@ -17,7 +17,9 @@ describe("email pages in the permission catalog", () => {
 
   it("email settings can be granted explicitly to one employee", () => {
     expect(canAccessPath("data_entry", { "email-settings": true }, "/email-settings")).toBe(true);
-    expect(resolvePermissions("data_entry", { "email-settings": true }).has("email-settings")).toBe(true);
+    expect(resolvePermissions("data_entry", { "email-settings": true }).has("email-settings")).toBe(
+      true,
+    );
   });
 
   it("an explicit map without mailbox hides the mailbox page", () => {

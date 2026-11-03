@@ -24,12 +24,10 @@ import {
   loadSupplierCategoryMap,
   saveSupplierCategoryLinks,
 } from "../../shared/supplier-category-links";
-import { guardFor } from "../../shared/permissions";
 
 const router = Router();
 router.use("/suppliers", guardFor("/suppliers"));
 router.use("/suppliers", guardFor("/suppliers"));
-
 
 function toArray(cat: string | null | undefined): string[] {
   if (!cat) return [];
@@ -672,35 +670,29 @@ router.patch("/suppliers/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 // Only admin or manager can delete a supplier
-router.delete(
-  "/suppliers/:id",
-  async (req, res): Promise<void> => {
-    const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const id = parseInt(raw, 10);
-    try {
-      const [deleted] = await db
-        .delete(suppliersTable)
-        .where(eq(suppliersTable.id, id))
-        .returning();
-      if (!deleted) {
-        res.status(404).json({ error: "Not found" });
-        return;
-      }
-      res.status(204).end();
-    } catch (err: unknown) {
-      // Drizzle hides the Postgres error text in `err.cause`, so a
-      // `message.includes(...)` check never fires — see shared/pg-errors.ts.
-      if (isForeignKeyViolation(err)) {
-        res.status(409).json({
-          error:
-            "لا يمكن حذف هذا المورد لوجود سجلات مرتبطة به (عروض أسعار، أوامر شراء، فواتير موردين، أو محادثات واتساب). يمكنك تعطيله بدلاً من حذفه.",
-        });
-        return;
-      }
-      throw err;
+router.delete("/suppliers/:id", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  try {
+    const [deleted] = await db.delete(suppliersTable).where(eq(suppliersTable.id, id)).returning();
+    if (!deleted) {
+      res.status(404).json({ error: "Not found" });
+      return;
     }
-  },
-);
+    res.status(204).end();
+  } catch (err: unknown) {
+    // Drizzle hides the Postgres error text in `err.cause`, so a
+    // `message.includes(...)` check never fires — see shared/pg-errors.ts.
+    if (isForeignKeyViolation(err)) {
+      res.status(409).json({
+        error:
+          "لا يمكن حذف هذا المورد لوجود سجلات مرتبطة به (عروض أسعار، أوامر شراء، فواتير موردين، أو محادثات واتساب). يمكنك تعطيله بدلاً من حذفه.",
+      });
+      return;
+    }
+    throw err;
+  }
+});
 
 // GET /suppliers/:id/rfqs — طلبات التسعير المرسلة لهذا المورد
 router.get("/suppliers/:id/rfqs", requireAuth, async (req, res): Promise<void> => {

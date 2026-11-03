@@ -7,7 +7,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/audit", guardFor("/audit"));
 
-
 router.get("/audit", requireAuth, async (req, res): Promise<void> => {
   const { rfqId, employeeId, limit } = req.query as Record<string, string>;
 

@@ -16,7 +16,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/items", guardFor("/items"));
 
-
 // GET /items/search?q=...
 // Search rfq_items by description, part_no, or line_item and return full history
 router.get("/items/search", requireAuth, async (req, res): Promise<void> => {
