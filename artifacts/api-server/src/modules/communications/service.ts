@@ -98,9 +98,13 @@ export const SUPPLIER_REGISTRATION_MISMATCH_BODY =
 export const QUOTATION_OFFER_BODY =
   "السيد/{{1}} المحترم،\n\nيسر شركة قرطبة للتوريدات أن تقدم لسيادتكم عرض سعر رقم {{2}}، صالح حتى {{3}}.\n\nتجدون بالمستند المرفق تفاصيل البنود والأسعار، ونأمل أن تنال رضاكم.\n\nولأي استفسار يُرجى التواصل معنا على {{4}}.";
 
-/** Footer of `quotation_offer_ar` — the company's own address, so it is not a parameter. */
-export const QUOTATION_OFFER_FOOTER =
-  "قرطبة للتوريدات — ش.الإسكندرية، برج نجمة مطروح، الدور الرابع — مرسي مطروح";
+/**
+ * Footer of `quotation_offer_ar` — the company's own address, so it is not a
+ * parameter. Meta caps a template footer at **60 characters**; the full postal
+ * address is 73 and was rejected live (`error_subcode 2388040`), so the footer
+ * carries the short form.
+ */
+export const QUOTATION_OFFER_FOOTER = "قرطبة للتوريدات — مرسي مطروح — 432-972-587";
 
 const BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
 /** Meta app id — required only to auto-create templates that carry a document header. */

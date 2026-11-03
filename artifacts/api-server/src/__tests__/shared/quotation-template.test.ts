@@ -33,6 +33,10 @@ describe("quotation_offer_ar template body", () => {
     expect(QUOTATION_OFFER_BODY.trim().endsWith("}}")).toBe(false);
   });
 
+  it("keeps the body within Meta's 1024-character limit", () => {
+    expect(QUOTATION_OFFER_BODY.length).toBeLessThanOrEqual(1024);
+  });
+
   it("names the contact number as the last thing the customer reads", () => {
     expect(QUOTATION_OFFER_BODY).toContain("يُرجى التواصل معنا على {{4}}");
     expect(QUOTATION_OFFER_BODY.trim().endsWith(".")).toBe(true);
@@ -41,6 +45,13 @@ describe("quotation_offer_ar template body", () => {
   it("carries the company address in the footer", () => {
     expect(QUOTATION_OFFER_FOOTER).toContain("قرطبة للتوريدات");
     expect(QUOTATION_OFFER_FOOTER).toContain("مرسي مطروح");
+  });
+
+  it("keeps the footer within Meta's 60-character limit", () => {
+    // Live rejection: `error_subcode 2388040` — «لا يمكن أن يحتوي حقل Footer على
+    // أكثر من 60 حرفًا». The full postal address is 73 chars, so the footer must
+    // stay short or the whole template is refused.
+    expect(QUOTATION_OFFER_FOOTER.length).toBeLessThanOrEqual(60);
   });
 
   it("shows the published contact number as the {{4}} parameter value", () => {
