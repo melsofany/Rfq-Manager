@@ -35,6 +35,7 @@ import { classifyItem, normalizeText } from "../rfq/classification";
 import { loadClassifierVocabulary } from "../rfq/keywords";
 import { assignReviewGroup, resolveConflictItems, listReviewGroups } from "../rfq/review-groups";
 import { generateQuotationPdf } from "./quotation-pdf";
+import { computeValidityDate } from "./quotation-validity";
 import { sendQuotationEmail } from "../../shared/email";
 import { sendQuotationWhatsApp, isWhatsAppConfigured } from "../communications/service";
 
@@ -3333,6 +3334,26 @@ const DEFAULT_QUOTATION_TERMS = [
   "يرجى ذكر رقم المرجع عند الرد على هذا العرض.",
 ];
 
+/**
+ * Terms the operator edited on the print page, passed to the PDF download so the
+ * on-screen preview and the downloaded file agree. Each term is one URL-encoded
+ * `terms` query value (repeated for multiple lines).
+ */
+function parseTermsParam(value: unknown): string[] | null {
+  const raw = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+  const terms = raw
+    .filter((t): t is string => typeof t === "string")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  return terms.length ? terms : null;
+}
+
+/** Formats a YYYY-MM-DD date as DD/MM/YYYY (same as the PDF). */
+function formatQuotationDate(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return y && m && d ? `${d}/${m}/${y}` : iso;
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // GET /customer-rfq/:id/quotation.pdf?prices=0|1 — download the quotation PDF
@@ -3345,18 +3366,22 @@ router.get("/customer-rfq/:id/quotation.pdf", requireAuth, async (req, res): Pro
     return;
   }
   const showPrices = req.query.prices !== "0";
+  const terms = parseTermsParam(req.query.terms) ?? DEFAULT_QUOTATION_TERMS;
+  // The offer is valid for the period written in the terms, counted from today
+  // (the day it is issued) — one week when the terms state none.
+  const validityDate = computeValidityDate(new Date(), terms);
   const pdf = await generateQuotationPdf({
     quotationNo: data.rfq.internalNo,
     customerRfqNo: data.rfq.customerRfqNo,
     entryDate: data.rfq.entryDate,
-    expiryDate: data.rfq.expiryDate,
+    expiryDate: validityDate,
     customerName: data.rfq.customerName,
     customerAddress: data.customer?.address,
     customerPhone: data.customer?.phone,
     contactPerson: data.customer?.contactPerson ?? data.rfq.buyerName,
     showPrices,
     items: data.items,
-    terms: DEFAULT_QUOTATION_TERMS,
+    terms,
   });
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `inline; filename="Quotation-${data.rfq.internalNo}.pdf"`);
@@ -3408,12 +3433,17 @@ router.post("/customer-rfq/:id/quotation/send", requireAuth, async (req, res): P
     ? body.terms.filter((t): t is string => typeof t === "string")
     : DEFAULT_QUOTATION_TERMS;
 
+  // Validity: the period written in the terms, counted from the day the offer is
+  // sent; one week when the terms state none.
+  const validityDate = computeValidityDate(new Date(), terms);
+  const validityDisplay = formatQuotationDate(validityDate);
+
   const toName = contactPerson || data.rfq.customerName;
   const pdf = await generateQuotationPdf({
     quotationNo: data.rfq.internalNo,
     customerRfqNo: data.rfq.customerRfqNo,
     entryDate: data.rfq.entryDate,
-    expiryDate: data.rfq.expiryDate,
+    expiryDate: validityDate,
     customerName: data.rfq.customerName,
     customerAddress: data.customer?.address,
     customerPhone: data.customer?.phone,
@@ -3431,6 +3461,7 @@ router.post("/customer-rfq/:id/quotation/send", requireAuth, async (req, res): P
         phone,
         toName,
         quotationNo: data.rfq.internalNo,
+        validityDate: validityDisplay,
         pdfBuffer: pdf,
       });
       results.whatsapp = { sent: true, error: null };
