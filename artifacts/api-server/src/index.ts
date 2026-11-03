@@ -14,6 +14,7 @@ import {
   ensurePayslipTemplate,
   ensureSupplierRegistrationTemplate,
   ensureSupplierRegistrationMismatchTemplate,
+  ensureQuotationTemplate,
 } from "./modules/communications/service";
 import { scheduleDailyBackup } from "./modules/backup/service";
 import { verifySenderIdentity } from "./shared/mail-identity";
@@ -106,6 +107,7 @@ initDb()
       await ensurePayslipTemplate();
       await ensureSupplierRegistrationTemplate();
       await ensureSupplierRegistrationMismatchTemplate();
+      await ensureQuotationTemplate();
     } catch (err) {
       logger.warn({ err }, "WhatsApp template provisioning failed (non-fatal)");
     }

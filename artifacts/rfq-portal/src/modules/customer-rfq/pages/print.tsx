@@ -9,6 +9,7 @@ import { Printer, ArrowRight, Download, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { computeValidityDate } from "@/lib/quotation-validity";
 
 // Customer quotation (عرض سعر). On screen: controls for options and sending.
 // The controls are hidden when printing, so the browser's "Save as PDF" gives a
@@ -110,7 +111,14 @@ export default function CustomerRfqPrintPage() {
     .map((t) => t.trim())
     .filter(Boolean);
 
-  const pdfUrl = `/api/customer-rfq/${rfq.id}/quotation.pdf?prices=${showPrices ? "1" : "0"}`;
+  // The offer is valid for the period written in the terms, counted from today
+  // (the day it is issued) — one week when the terms state none. The server
+  // recomputes the same value on download/send, so this is a preview.
+  const validityDate = computeValidityDate(new Date(), termLines);
+
+  const pdfParams = new URLSearchParams({ prices: showPrices ? "1" : "0" });
+  termLines.forEach((t) => pdfParams.append("terms", t));
+  const pdfUrl = `/api/customer-rfq/${rfq.id}/quotation.pdf?${pdfParams.toString()}`;
 
   const canSend = (useWhatsapp || useEmail) && !sending;
 
@@ -275,6 +283,9 @@ export default function CustomerRfqPrintPage() {
           <p className="mt-1 text-xs text-slate-500">
             سطر لكل شرط. التعديل يظهر في الطباعة والإرسال، ولا يُحفظ في الطلب.
           </p>
+          <p className="mt-1 text-xs text-slate-500">
+            تاريخ «صالح حتى» = يوم الإرسال + المدة المكتوبة هنا (مثال: «صلاحية أسبوع»)، وإلا ٧ أيام.
+          </p>
         </div>
       </div>
 
@@ -304,7 +315,7 @@ export default function CustomerRfqPrintPage() {
             <Field label="رقم المرجع (الداخلي)" value={rfq.internalNo} />
             <Field label="رقم طلب العميل" value={rfq.customerRfqNo} />
             <Field label="تاريخ العرض" value={formatDate(rfq.entryDate)} />
-            <Field label="صالح حتى" value={formatDate(rfq.expiryDate)} />
+            <Field label="صالح حتى" value={formatDate(validityDate)} />
           </div>
         </div>
 

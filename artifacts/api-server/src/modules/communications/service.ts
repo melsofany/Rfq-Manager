@@ -22,6 +22,7 @@ import { logger } from "../../shared/logger";
 import { generateRfqPdf } from "../rfq/rfq-pdf";
 import { generatePoPdf } from "../po/po-pdf";
 import { generatePayslipPdf } from "../hr/payslip-pdf";
+import { generateQuotationPdf } from "../customer-rfq/quotation-pdf";
 
 // ─── Official WhatsApp Business (Meta) Cloud API client ──────────────────────
 // This module is built on top of the open-source "whatsapp-api-js" library
@@ -49,6 +50,8 @@ export const TEMPLATE_WORK_ORDER =
   process.env.WHATSAPP_TEMPLATE_WORK_ORDER || "representative_work_order_ar_v2";
 const TEMPLATE_PO_CANCEL = process.env.WHATSAPP_TEMPLATE_PO_CANCEL || "po_cancel_ar";
 const TEMPLATE_PO_CANCEL_ITEM = process.env.WHATSAPP_TEMPLATE_PO_CANCEL_ITEM || "po_cancel_item_ar";
+/** عرض سعر — DOCUMENT header + 4 body params + a call button. See ensureQuotationTemplate(). */
+const TEMPLATE_QUOTATION = process.env.WHATSAPP_TEMPLATE_QUOTATION || "quotation_offer_ar";
 /** استكمال بيانات المورد — the one-time self-registration link. */
 const TEMPLATE_SUPPLIER_REGISTRATION =
   process.env.WHATSAPP_TEMPLATE_SUPPLIER_REGISTRATION || "supplier_registration_ar";
@@ -75,6 +78,22 @@ export const SUPPLIER_REGISTRATION_BODY =
  */
 export const SUPPLIER_REGISTRATION_MISMATCH_BODY =
   "نأسف لإبلاغكم بأن البيانات التي أدخلتموها في المرة الثانية غير مطابقة لما أدخلتموه في المرة الأولى، ولذلك لم يتم تسجيلها.\n\nالمورد: {{1}}\nالحقول غير المطابقة: {{2}}\n\nيرجى إعادة الدخول على الرابط وإدخال البيانات بعناية مرتين متطابقتين، حتى يتسنى لنا سداد مستحقاتكم المالية.";
+
+/**
+ * Body of `quotation_offer_ar` — the covering message sent with the quotation
+ * PDF. The operator approved this wording, so it is a REQUIREMENT: Meta does not
+ * allow an approved template's body to be edited, so a wording change here means
+ * publishing a NEW template name.
+ *
+ * {{1}} customer / contact name · {{2}} quotation number ·
+ * {{3}} validity date · {{4}} company contact number
+ */
+export const QUOTATION_OFFER_BODY =
+  "السيد/{{1}} المحترم،\n\nيسر شركة قرطبة للتوريدات أن تقدم لسيادتكم عرض سعر رقم {{2}}، صالح حتى {{3}}.\n\nتجدون بالمستند المرفق تفاصيل البنود والأسعار، ونأمل أن تنال رضاكم.\n\nولأي استفسار يُرجى التواصل معنا على {{4}}.";
+
+/** Footer of `quotation_offer_ar` — the company's own address, so it is not a parameter. */
+export const QUOTATION_OFFER_FOOTER =
+  "قرطبة للتوريدات — ش.الإسكندرية، برج نجمة مطروح، الدور الرابع — مرسي مطروح";
 
 const BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
 /** Meta app id — required only to auto-create templates that carry a document header. */
@@ -1713,15 +1732,14 @@ export async function sendDeliveryRejectionReasonOptions(
 }
 
 // ─── Customer quotation (عرض سعر) via WhatsApp ───────────────────────────────
-// Needs a Meta-approved template with a DOCUMENT header and three body params:
-//   {{1}} customer / contact name, {{2}} quotation number, {{3}} company contact.
-// Name it with WHATSAPP_TEMPLATE_QUOTATION (default "quotation_pdf_ar").
-const TEMPLATE_QUOTATION = process.env.WHATSAPP_TEMPLATE_QUOTATION || "quotation_pdf_ar";
-
+// Sends the quotation PDF with the approved `quotation_offer_ar` template: a
+// DOCUMENT header, four body params ({{1}} customer name, {{2}} quotation
+// number, {{3}} validity date, {{4}} company contact) and a call button.
 export async function sendQuotationWhatsApp(opts: {
   phone: string;
   toName: string;
   quotationNo: string;
+  validityDate: string;
   pdfBuffer: Buffer;
 }): Promise<string | null> {
   requireConfigured();
@@ -1735,12 +1753,136 @@ export async function sendQuotationWhatsApp(opts: {
     new BodyComponent(
       new BodyParameter(sanitizeWaParam(opts.toName)),
       new BodyParameter(sanitizeWaParam(opts.quotationNo)),
-      new BodyParameter(sanitizeWaParam(`قرطبة للتوريدات — ${COMPANY_PHONE_DISPLAY}`)),
+      new BodyParameter(sanitizeWaParam(opts.validityDate)),
+      new BodyParameter(sanitizeWaParam(COMPANY_PHONE_DISPLAY)),
     ),
   );
   const waId = await sendTemplate(to, template);
-  logger.info({ to, quotationNo: opts.quotationNo, waId }, "Quotation sent via WhatsApp template");
+  logger.info(
+    { to, quotationNo: opts.quotationNo, validityDate: opts.validityDate, waId },
+    "Quotation sent via WhatsApp template",
+  );
   return waId || null;
 }
 
-const COMPANY_PHONE_DISPLAY = "432-972-587";
+/**
+ * The company's published contact number, shown on the quotation and used as the
+ * `{{4}}` body parameter. It is the number printed on every document
+ * (po-pdf / rfq-pdf / quotation-pdf), so it is a display number, not a dialable
+ * one — the template's call button therefore dials WHATSAPP_QUOTATION_CALL_NUMBER
+ * (see ensureQuotationTemplate).
+ */
+export const COMPANY_PHONE_DISPLAY = "432-972-587";
+
+/**
+ * Ensures the Meta template `quotation_offer_ar` exists — the covering message
+ * sent with a customer quotation PDF. A UTILITY template with a DOCUMENT header
+ * so the offer arrives as a file outside the 24-hour window.
+ *
+ * Idempotent: returns early when the template already exists. Creating a
+ * document-header template needs a real header sample, so this requires
+ * WHATSAPP_APP_ID; without it the template must be created once by hand in
+ * Business Manager (the exact definition is logged).
+ */
+export async function ensureQuotationTemplate(): Promise<void> {
+  if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
+    logger.warn(
+      "WhatsApp quotation template provisioning skipped: missing token or business account id",
+    );
+    return;
+  }
+  const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
+  const existing = await fetch(`${base}?name=${encodeURIComponent(TEMPLATE_QUOTATION)}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  if (!existing.ok)
+    throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
+  if (found.data?.some((t) => t.name === TEMPLATE_QUOTATION)) {
+    logger.info({ template: TEMPLATE_QUOTATION }, "WhatsApp quotation template already exists");
+    return;
+  }
+  if (!APP_ID) {
+    logger.warn(
+      { template: TEMPLATE_QUOTATION },
+      "WhatsApp quotation template NOT created: WHATSAPP_APP_ID is not set, so no document header sample can be uploaded. Create it once in Business Manager with a DOCUMENT header, the body in QUOTATION_OFFER_BODY, footer «" +
+        QUOTATION_OFFER_FOOTER +
+        "» and a call button.",
+    );
+    return;
+  }
+  const handle = await uploadTemplateHeaderSample(
+    await generateQuotationPdf({
+      quotationNo: "CRFQ-2026-000000",
+      customerRfqNo: "SAMPLE",
+      entryDate: new Date().toISOString().slice(0, 10),
+      expiryDate: new Date().toISOString().slice(0, 10),
+      customerName: "اسم العميل",
+      customerAddress: "عنوان العميل",
+      customerPhone: COMPANY_PHONE_DISPLAY,
+      contactPerson: "الشخص المسؤول",
+      showPrices: true,
+      items: [
+        {
+          partNo: "PN-0001",
+          lineItem: "1",
+          description: "وصف البند",
+          uom: "قطعة",
+          qty: 1,
+          unitPrice: 100,
+        },
+      ],
+      terms: ["الأسعار المذكورة بالجنيه المصري."],
+    }),
+  );
+  const response = await fetch(base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: TEMPLATE_QUOTATION,
+      language: TEMPLATE_LANG,
+      category: "UTILITY",
+      components: [
+        { type: "HEADER", format: "DOCUMENT", example: { header_handle: [handle] } },
+        {
+          type: "BODY",
+          text: QUOTATION_OFFER_BODY,
+          example: {
+            body_text: [["م. أحمد محمد", "CRFQ-2026-000123", "17/11/2026", COMPANY_PHONE_DISPLAY]],
+          },
+        },
+        { type: "FOOTER", text: QUOTATION_OFFER_FOOTER },
+        ...(QUOTATION_CALL_NUMBER
+          ? [
+              {
+                type: "BUTTONS",
+                buttons: [
+                  {
+                    type: "PHONE_NUMBER",
+                    text: "اتصال",
+                    phone_number: QUOTATION_CALL_NUMBER,
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
+    }),
+  });
+  if (!response.ok)
+    throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info(
+    { template: TEMPLATE_QUOTATION },
+    "WhatsApp quotation template submitted to Meta for approval",
+  );
+}
+
+/**
+ * The dialable number behind the quotation's call button. It defaults to the
+ * company's published contact number; override with
+ * WHATSAPP_QUOTATION_CALL_NUMBER when that display form is not the number the
+ * customer should dial (Meta wants the full international form, e.g. +20…).
+ * The button is only added when a number is available — a call button that
+ * dials nothing is worse than no button.
+ */
+const QUOTATION_CALL_NUMBER = process.env.WHATSAPP_QUOTATION_CALL_NUMBER || COMPANY_PHONE_DISPLAY;
