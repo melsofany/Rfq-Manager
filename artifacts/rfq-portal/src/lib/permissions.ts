@@ -169,6 +169,12 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
       { key: "backup:alerts", labelKey: "perm.backup.alerts" },
     ],
   },
+  {
+    key: "website",
+    href: "/website",
+    labelKey: "nav.website",
+    children: [{ key: "website:edit", labelKey: "perm.pageEdit" }],
+  },
 ];
 
 /** All permission keys flattened (pages + tabs). */
@@ -232,6 +238,7 @@ export const EDIT_PAGES: string[] = [
   "integrations",
   "ai-assistant",
   "backup",
+  "website",
 ];
 const editKeysOf = (pages: string[]): string[] =>
   pages.filter((k) => EDIT_PAGES.includes(k)).map((k) => `${k}:edit`);
@@ -244,6 +251,7 @@ const PURCHASING_PAGES = PAGE_KEYS.filter(
     k !== "integrations" &&
     k !== "ai-assistant" &&
     k !== "backup" &&
+    k !== "website" &&
     !ADMIN_ONLY_PAGES.includes(k),
 );
 

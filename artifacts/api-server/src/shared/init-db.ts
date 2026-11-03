@@ -2962,6 +2962,43 @@ export async function initDb(): Promise<void> {
       `CREATE INDEX IF NOT EXISTS po_items_offer_item_id_idx ON purchase_order_items (offer_item_id)`,
     );
 
+    // ── Company website content + publish log (each its own statement: statements
+    // in one client.query share an implicit transaction, so a sibling failure
+    // would roll this CREATE back silently). The site reads `website_settings`
+    // through GET /api/public/website, so an edit is live without a rebuild. ──
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS website_settings (
+        key TEXT PRIMARY KEY,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        maintenance_mode BOOLEAN NOT NULL DEFAULT false,
+        maintenance_message TEXT,
+        content JSONB NOT NULL DEFAULT '{}'::jsonb,
+        updated_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `INSERT INTO website_settings (key) VALUES ('default') ON CONFLICT (key) DO NOTHING`,
+    );
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS website_deploys (
+        id SERIAL PRIMARY KEY,
+        service_id TEXT NOT NULL,
+        render_deploy_id TEXT,
+        status TEXT NOT NULL DEFAULT 'requested',
+        trigger TEXT NOT NULL DEFAULT 'manual',
+        commit_sha TEXT,
+        message TEXT,
+        error TEXT,
+        requested_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS website_deploys_created_idx ON website_deploys (created_at DESC)`,
+    );
+
     logger.info("initDb: seed complete");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");

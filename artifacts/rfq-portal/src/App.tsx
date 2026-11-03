@@ -46,6 +46,7 @@ import WhatsAppPage from "@/modules/communications/pages/index";
 import IntegrationsPage from "@/modules/integrations/pages/index";
 import AiAssistantPage from "@/modules/ai-assistant/pages/index";
 import BackupPage from "@/modules/backup/pages/index";
+import WebsitePage from "@/modules/website/pages/index";
 import ConnectPopupPage from "@/modules/integrations/pages/connect";
 
 // ── Module: Customers — العملاء ────────────────────────────────────────────
@@ -217,6 +218,11 @@ function Router() {
       {/* ── Module: Backup (admin/manager) ─────────────────────────────── */}
       <Route path="/backup">
         <ProtectedRoute component={BackupPage} />
+      </Route>
+
+      {/* ── Module: Website (admin/manager) ────────────────────────────── */}
+      <Route path="/website">
+        <ProtectedRoute component={WebsitePage} />
       </Route>
 
       {/* ── Module: Customers ──────────────────────────────────────────── */}

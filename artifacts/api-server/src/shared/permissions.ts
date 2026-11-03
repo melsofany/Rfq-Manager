@@ -33,6 +33,7 @@ const ALL_PAGES = [
   "mailbox",
   "ai-assistant",
   "backup",
+  "website",
 ];
 const ADMIN_ONLY_FOR_NON_ADMIN = [
   "employees",
@@ -41,6 +42,7 @@ const ADMIN_ONLY_FOR_NON_ADMIN = [
   "integrations",
   "ai-assistant",
   "backup",
+  "website",
 ];
 const ITEMS_TABS = ["items:search", "items:analysis", "items:sheet", "items:categories"];
 
@@ -58,6 +60,7 @@ const EDIT_PAGES = [
   "integrations",
   "ai-assistant",
   "backup",
+  "website",
 ];
 const editKeysOf = (pages: string[]): string[] =>
   pages.filter((k) => EDIT_PAGES.includes(k)).map((k) => `${k}:edit`);
@@ -250,6 +253,7 @@ export const ROUTE_GUARDS: Record<string, { read: string[]; write: string[] }> =
   "/ai-assistant": { read: ["ai-assistant"], write: ["ai-assistant:edit"] },
   "/integrations": { read: ["integrations"], write: ["integrations:edit"] },
   "/backup": { read: ["backup"], write: ["backup:edit"] },
+  "/website": { read: ["website"], write: ["website:edit"] },
 };
 
 /** Router-level guard for one API prefix, from ROUTE_GUARDS. */

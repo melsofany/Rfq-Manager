@@ -22,6 +22,7 @@ import {
   IdCard,
   DatabaseBackup,
   Mail,
+  Globe,
 } from "lucide-react";
 import { useState, useEffect, Fragment } from "react";
 import { cn } from "@/lib/utils";
@@ -88,6 +89,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       nested: true,
     },
     { href: "/backup", label: t("nav.backup"), icon: DatabaseBackup, nested: true },
+    { href: "/website", label: t("nav.website"), icon: Globe, nested: true },
     { href: "/ai-assistant", label: t("nav.aiAssistant"), icon: Bot, nested: true },
     { href: "/employees", label: t("nav.sidebarUsers"), icon: UserCog, nested: true },
     { href: "/audit", label: t("nav.auditLog"), icon: ClipboardList, nested: true },
