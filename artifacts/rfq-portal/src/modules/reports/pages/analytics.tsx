@@ -178,6 +178,7 @@ import { ItemKpiSection } from "./analytics-sections/item-kpi-section";
 import { AttributionAchievementSection } from "./analytics-sections/attribution-section";
 import { ProcurementPerformanceSection } from "./analytics-sections/procurement-section";
 import { DataEntryPerformanceSection } from "./analytics-sections/data-entry-section";
+import { RfqKpiSection } from "./analytics-sections/rfq-kpi-section";
 
 export default function AnalyticsPage() {
   const { data: stats, isLoading } = useGetDashboardStats({
@@ -1432,6 +1433,11 @@ export default function AnalyticsPage() {
                       )}
                     </div>
                   ) : null}
+                </section>
+
+                <section id="analytics-rfq-kpi">
+                  {/* ══════════════ RFQ PRICING KPIs (yearly + monthly) ══════════════ */}
+                  <RfqKpiSection />
                 </section>
 
                 <section id="analytics-item-kpi">
