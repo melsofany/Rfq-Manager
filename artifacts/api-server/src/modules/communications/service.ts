@@ -94,9 +94,13 @@ export const SUPPLIER_REGISTRATION_MISMATCH_BODY =
  *
  * {{1}} customer / contact name · {{2}} quotation number ·
  * {{3}} validity date · {{4}} company contact number
+ *
+ * Meta refuses a body whose LAST characters are a variable (`error_subcode
+ * 2388299` — «يجب ألا تكون المتغيرات في بداية القالب أو نهايته»), so the contact
+ * line is not last: the body closes with the closing sentence.
  */
 export const QUOTATION_OFFER_BODY =
-  "السيد/{{1}} المحترم،\n\nيسر شركة قرطبة للتوريدات أن تقدم لسيادتكم عرض سعر رقم {{2}}، صالح حتى {{3}}.\n\nتجدون بالمستند المرفق تفاصيل البنود والأسعار، ونأمل أن تنال رضاكم.\n\nولأي استفسار يُرجى التواصل معنا على {{4}}.";
+  "السيد/{{1}} المحترم،\n\nيسر شركة قرطبة للتوريدات أن تقدم لسيادتكم عرض سعر رقم {{2}}، صالح حتى {{3}}.\n\nلأي استفسار يُرجى التواصل معنا على {{4}}.\n\nتجدون بالمستند المرفق تفاصيل البنود والأسعار، ونأمل أن تنال رضاكم.";
 
 /**
  * Footer of `quotation_offer_ar` — the company's own address, so it is not a

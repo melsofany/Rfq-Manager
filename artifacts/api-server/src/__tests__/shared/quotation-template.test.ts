@@ -33,13 +33,22 @@ describe("quotation_offer_ar template body", () => {
     expect(QUOTATION_OFFER_BODY.trim().endsWith("}}")).toBe(false);
   });
 
+  it("never lets a variable sit in the trailing punctuation run (Meta rejects that)", () => {
+    // Live rejection: `error_subcode 2388299` — «يجب ألا تكون المتغيرات في بداية
+    // القالب أو نهايته». A trailing full stop does NOT satisfy Meta: the earlier
+    // wording ended «… على {{4}}.» and was refused. The body must close on real
+    // words, so strip trailing punctuation/whitespace and require no variable.
+    const tail = QUOTATION_OFFER_BODY.replace(/[\s.,!؟?،؛;:]+$/u, "");
+    expect(/\{\{\d+\}\}$/.test(tail)).toBe(false);
+  });
+
   it("keeps the body within Meta's 1024-character limit", () => {
     expect(QUOTATION_OFFER_BODY.length).toBeLessThanOrEqual(1024);
   });
 
-  it("names the contact number as the last thing the customer reads", () => {
+  it("names the contact number and closes on the closing sentence", () => {
     expect(QUOTATION_OFFER_BODY).toContain("يُرجى التواصل معنا على {{4}}");
-    expect(QUOTATION_OFFER_BODY.trim().endsWith(".")).toBe(true);
+    expect(QUOTATION_OFFER_BODY.trim().endsWith("ونأمل أن تنال رضاكم.")).toBe(true);
   });
 
   it("carries the company address in the footer", () => {
