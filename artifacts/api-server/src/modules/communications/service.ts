@@ -34,6 +34,13 @@ import { generateQuotationPdf } from "../customer-rfq/quotation-pdf";
 export const PHONE_NUMBER_ID =
   process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_NUMBER || "";
 const TOKEN = process.env.WHATSAPP_TOKEN || "";
+/**
+ * The company's dialable number in international form (e.g. +2010…), taken from
+ * the WhatsApp sender. Meta accepts a template's call button only for a number
+ * in this form — the display number printed on documents («432-972-587») is
+ * rejected with `(#192) … is not a valid phone number`.
+ */
+const COMPANY_WHATSAPP_NUMBER = process.env.WHATSAPP_PHONE_NUMBER || "";
 // Optional but recommended: enables verification of Meta's X-Hub-Signature-256
 // header on incoming webhooks. Without it the client runs in "insecure" mode
 // (still functional, just skips signature verification).
@@ -1878,11 +1885,36 @@ export async function ensureQuotationTemplate(): Promise<void> {
 }
 
 /**
- * The dialable number behind the quotation's call button. It defaults to the
- * company's published contact number; override with
- * WHATSAPP_QUOTATION_CALL_NUMBER when that display form is not the number the
- * customer should dial (Meta wants the full international form, e.g. +20…).
- * The button is only added when a number is available — a call button that
- * dials nothing is worse than no button.
+ * The dialable number behind the quotation's call button, in the international
+ * form Meta requires (`+20…`). `COMPANY_PHONE_DISPLAY` (432-972-587) is a
+ * document form and is REJECTED by Meta (`(#192) … is not a valid phone
+ * number`), so it must never be used here. Resolution order:
+ *   1. WHATSAPP_QUOTATION_CALL_NUMBER (explicit override);
+ *   2. the WhatsApp sender number (WHATSAPP_PHONE_NUMBER) — a real dialable line.
+ * When neither is a valid international number the button is omitted rather than
+ * failing the whole template.
  */
-const QUOTATION_CALL_NUMBER = process.env.WHATSAPP_QUOTATION_CALL_NUMBER || COMPANY_PHONE_DISPLAY;
+const QUOTATION_CALL_NUMBER = normalizeIntlPhone(
+  process.env.WHATSAPP_QUOTATION_CALL_NUMBER || COMPANY_WHATSAPP_NUMBER,
+);
+
+/**
+ * Normalises a number to the form Meta accepts on a template button
+ * (`+` followed by 10–15 digits), or returns "" when it is not a dialable
+ * international number.
+ *
+ * An explicit international marker (`+` or `00`) is REQUIRED: a bare
+ * document/local number must never be sent as if it were dialable. The company's
+ * document number `432-972-587` is exactly that trap — Meta answered
+ * `(#192) … phone_number is not a valid phone number`.
+ */
+export function normalizeIntlPhone(value: string): string {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return "";
+  let digits: string;
+  if (trimmed.startsWith("+")) digits = trimmed.replace(/[^0-9]/g, "");
+  else if (trimmed.startsWith("00")) digits = trimmed.slice(2).replace(/[^0-9]/g, "");
+  else return "";
+  if (digits.length < 10 || digits.length > 15) return "";
+  return `+${digits}`;
+}

@@ -3,6 +3,7 @@ import {
   QUOTATION_OFFER_BODY,
   QUOTATION_OFFER_FOOTER,
   COMPANY_PHONE_DISPLAY,
+  normalizeIntlPhone,
 } from "../../modules/communications/service";
 
 /**
@@ -44,5 +45,28 @@ describe("quotation_offer_ar template body", () => {
 
   it("shows the published contact number as the {{4}} parameter value", () => {
     expect(COMPANY_PHONE_DISPLAY).toBe("432-972-587");
+  });
+});
+
+/**
+ * Meta rejects a template's call button when its number is not in international
+ * form — live: `(#192) Param components[3]['buttons'][0]['phone_number'] is not
+ * a valid phone number` for the document number 432-972-587. The button must
+ * therefore carry a real dialable number, or be omitted.
+ */
+describe("quotation call-button number", () => {
+  it("accepts an international number and normalises it", () => {
+    expect(normalizeIntlPhone("+201234567890")).toBe("+201234567890");
+    expect(normalizeIntlPhone("00201234567890")).toBe("+201234567890");
+    expect(normalizeIntlPhone("+20 123 456 7890")).toBe("+201234567890");
+  });
+
+  it("rejects the document display number that Meta refused", () => {
+    // No international marker -> never treated as dialable, whatever its length.
+    expect(normalizeIntlPhone(COMPANY_PHONE_DISPLAY)).toBe("");
+    expect(normalizeIntlPhone("201234567890")).toBe("");
+    expect(normalizeIntlPhone("")).toBe("");
+    expect(normalizeIntlPhone("123")).toBe("");
+    expect(normalizeIntlPhone("+1234567890123456")).toBe("");
   });
 });

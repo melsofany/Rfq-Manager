@@ -100,16 +100,22 @@ initDb()
       { engine: engineName(), env: process.env.AI_AGENT_ENGINE ?? null },
       "AI assistant: agent engine selected",
     );
-    try {
-      await ensureWorkOrderTemplate();
-      await ensurePoCancelTemplate();
-      await ensurePoCancelItemTemplate();
-      await ensurePayslipTemplate();
-      await ensureSupplierRegistrationTemplate();
-      await ensureSupplierRegistrationMismatchTemplate();
-      await ensureQuotationTemplate();
-    } catch (err) {
-      logger.warn({ err }, "WhatsApp template provisioning failed (non-fatal)");
+    // Each template is provisioned independently: one failing (e.g. Meta
+    // rejecting a call-button number) must not skip the ones after it.
+    for (const [name, ensure] of [
+      ["work_order", ensureWorkOrderTemplate],
+      ["po_cancel", ensurePoCancelTemplate],
+      ["po_cancel_item", ensurePoCancelItemTemplate],
+      ["payslip", ensurePayslipTemplate],
+      ["supplier_registration", ensureSupplierRegistrationTemplate],
+      ["supplier_registration_mismatch", ensureSupplierRegistrationMismatchTemplate],
+      ["quotation", ensureQuotationTemplate],
+    ] as const) {
+      try {
+        await ensure();
+      } catch (err) {
+        logger.warn({ err, template: name }, "WhatsApp template provisioning failed (non-fatal)");
+      }
     }
   })
   .catch((err) => {
