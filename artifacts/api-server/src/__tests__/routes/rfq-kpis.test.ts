@@ -37,6 +37,9 @@ const fixtureRow = {
   supplier_rfq_month: "8",
   supplier_po_month: "4",
   supplier_priced_month: "15",
+  customer_po_month: "3",
+  priced_month: "20",
+  won_month: "5",
 };
 
 describe("GET /api/analytics/rfq-kpis", () => {
@@ -61,7 +64,12 @@ describe("GET /api/analytics/rfq-kpis", () => {
   it("computes monthly figures and supplier rates", async () => {
     const res = await request(buildApp()).get("/api/analytics/rfq-kpis?year=2026&month=11");
     expect(res.body.monthly).toEqual({
+      totalItems: 60,
       rfqCount: 5,
+      customerPoCount: 3,
+      pricedItems: 20,
+      pricingRate: 33.33, // 20 / 60
+      poWinRate: 25, // 5 / 20
       firstSeenItems: 30,
       itemsToPrice: 60,
       supplierRfqCount: 8,

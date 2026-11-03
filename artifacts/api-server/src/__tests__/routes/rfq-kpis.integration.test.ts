@@ -103,7 +103,12 @@ describe.skipIf(!TEST_URL)("GET /api/analytics/rfq-kpis (real Postgres)", () => 
       poWinRate: 100,
     });
     expect(res.body.monthly).toEqual({
+      totalItems: 2,
       rfqCount: 1,
+      customerPoCount: 1,
+      pricedItems: 1,
+      pricingRate: 50,
+      poWinRate: 100,
       firstSeenItems: 1, // customer 1 + "a1" was first seen in October
       itemsToPrice: 2,
       supplierRfqCount: 1,

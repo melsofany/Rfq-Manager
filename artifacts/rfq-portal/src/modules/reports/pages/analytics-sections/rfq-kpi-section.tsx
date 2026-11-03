@@ -15,7 +15,12 @@ interface RfqKpiResponse {
     poWinRate: number;
   };
   monthly: {
+    totalItems: number;
     rfqCount: number;
+    customerPoCount: number;
+    pricedItems: number;
+    pricingRate: number;
+    poWinRate: number;
     firstSeenItems: number;
     itemsToPrice: number;
     supplierRfqCount: number;
@@ -205,23 +210,49 @@ export function RfqKpiSection() {
             <SectionTitle>
               شهر {MONTHS_AR[data.month - 1]} {data.year}
             </SectionTitle>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               <KpiCard
-                label="طلبات التسعير (العملاء)"
+                label="إجمالي البنود"
+                value={data.monthly.totalItems}
+                definition={d.monthTotalItems ?? ""}
+                tone="border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+              />
+              <KpiCard
+                label="طلبات التسعير"
                 value={data.monthly.rfqCount}
                 definition={d.monthRfqCount ?? ""}
                 tone="border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
               />
               <KpiCard
-                label="بنود دخلت لأول مرة"
-                value={data.monthly.firstSeenItems}
-                definition={d.monthFirstSeenItems ?? ""}
+                label="أوامر الشراء من العملاء"
+                value={data.monthly.customerPoCount}
+                definition={d.monthCustomerPoCount ?? ""}
                 tone="border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
               />
               <KpiCard
-                label="إجمالي البنود المطلوب تسعيرها"
-                value={data.monthly.itemsToPrice}
-                definition={d.monthItemsToPrice ?? ""}
+                label="البنود المسعّرة"
+                value={data.monthly.pricedItems}
+                definition={d.monthPricedItems ?? ""}
+                tone="border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+              />
+              <KpiCard
+                label="نسبة التسعير"
+                value={data.monthly.pricingRate}
+                suffix="%"
+                definition={d.monthPricingRate ?? ""}
+                tone="border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100"
+              />
+              <KpiCard
+                label="نسبة الفوز بالـ PO"
+                value={data.monthly.poWinRate}
+                suffix="%"
+                definition={d.monthPoWinRate ?? ""}
+                tone="border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+              />
+              <KpiCard
+                label="بنود دخلت لأول مرة"
+                value={data.monthly.firstSeenItems}
+                definition={d.monthFirstSeenItems ?? ""}
                 tone="border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
               />
               <KpiCard
