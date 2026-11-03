@@ -34,6 +34,9 @@ import { approveCustomerItem } from "../rfq/customer-assignment";
 import { classifyItem, normalizeText } from "../rfq/classification";
 import { loadClassifierVocabulary } from "../rfq/keywords";
 import { assignReviewGroup, resolveConflictItems, listReviewGroups } from "../rfq/review-groups";
+import { generateQuotationPdf } from "./quotation-pdf";
+import { sendQuotationEmail } from "../../shared/email";
+import { sendQuotationWhatsApp, isWhatsAppConfigured } from "../communications/service";
 
 const router = Router();
 router.use("/customer-rfq", guardFor("/customer-rfq"));
@@ -3299,6 +3302,164 @@ router.get("/customer-rfq/:id/chain", async (req, res): Promise<void> => {
         .where(inArray(purchaseOrdersTable.id, poIds))
     : [];
   res.json({ customerRfq, supplierRfqs, customerPos, purchaseOrders });
+});
+
+// ─── Customer quotation (عرض سعر) ─────────────────────────────────────────────
+// Builds the quotation PDF for one customer RFQ, and sends it by WhatsApp,
+// email, or both. The quotation number is the internal RFQ number.
+
+async function loadQuotationData(id: number) {
+  const [rfq] = await db.select().from(customerRfqsTable).where(eq(customerRfqsTable.id, id));
+  if (!rfq) return null;
+  const [customer] = rfq.customerId
+    ? await db.select().from(customersTable).where(eq(customersTable.id, rfq.customerId))
+    : [undefined];
+  const items = await db
+    .select()
+    .from(customerRfqItemsTable)
+    .where(
+      and(
+        eq(customerRfqItemsTable.customerRfqId, id),
+        eq(customerRfqItemsTable.isCancelled, false),
+      ),
+    )
+    .orderBy(customerRfqItemsTable.id);
+  return { rfq, customer, items };
+}
+
+const DEFAULT_QUOTATION_TERMS = [
+  "الأسعار المذكورة بالجنيه المصري.",
+  "الأسعار سارية حتى تاريخ انتهاء الطلب المذكور أعلاه.",
+  "يرجى ذكر رقم المرجع عند الرد على هذا العرض.",
+];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// GET /customer-rfq/:id/quotation.pdf?prices=0|1 — download the quotation PDF
+router.get("/customer-rfq/:id/quotation.pdf", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  const data = Number.isInteger(id) ? await loadQuotationData(id) : null;
+  if (!data) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const showPrices = req.query.prices !== "0";
+  const pdf = await generateQuotationPdf({
+    quotationNo: data.rfq.internalNo,
+    customerRfqNo: data.rfq.customerRfqNo,
+    entryDate: data.rfq.entryDate,
+    expiryDate: data.rfq.expiryDate,
+    customerName: data.rfq.customerName,
+    customerAddress: data.customer?.address,
+    customerPhone: data.customer?.phone,
+    contactPerson: data.customer?.contactPerson ?? data.rfq.buyerName,
+    showPrices,
+    items: data.items,
+    terms: DEFAULT_QUOTATION_TERMS,
+  });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="Quotation-${data.rfq.internalNo}.pdf"`);
+  res.send(pdf);
+});
+
+// POST /customer-rfq/:id/quotation/send
+// body: { channels: ["whatsapp"|"email"], phone?, email?, contactPerson?, showPrices?, terms? }
+router.post("/customer-rfq/:id/quotation/send", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  const data = Number.isInteger(id) ? await loadQuotationData(id) : null;
+  if (!data) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const body = (req.body ?? {}) as {
+    channels?: unknown;
+    phone?: unknown;
+    email?: unknown;
+    contactPerson?: unknown;
+    showPrices?: unknown;
+    terms?: unknown;
+  };
+  const channels = Array.isArray(body.channels)
+    ? body.channels.filter((c): c is "whatsapp" | "email" => c === "whatsapp" || c === "email")
+    : [];
+  if (channels.length === 0) {
+    res.status(400).json({ error: "اختر واتساب أو إيميل أو الاثنين" });
+    return;
+  }
+  const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  const contactPerson =
+    typeof body.contactPerson === "string" && body.contactPerson.trim()
+      ? body.contactPerson.trim()
+      : (data.customer?.contactPerson ?? data.rfq.buyerName ?? null);
+  if (channels.includes("whatsapp") && phone.replace(/\D/g, "").length < 8) {
+    res.status(400).json({ error: "رقم الواتساب غير صحيح" });
+    return;
+  }
+  if (channels.includes("email") && !EMAIL_RE.test(email)) {
+    res.status(400).json({ error: "البريد الإلكتروني غير صحيح" });
+    return;
+  }
+  const showPrices = body.showPrices !== false;
+  const terms = Array.isArray(body.terms)
+    ? body.terms.filter((t): t is string => typeof t === "string")
+    : DEFAULT_QUOTATION_TERMS;
+
+  const toName = contactPerson || data.rfq.customerName;
+  const pdf = await generateQuotationPdf({
+    quotationNo: data.rfq.internalNo,
+    customerRfqNo: data.rfq.customerRfqNo,
+    entryDate: data.rfq.entryDate,
+    expiryDate: data.rfq.expiryDate,
+    customerName: data.rfq.customerName,
+    customerAddress: data.customer?.address,
+    customerPhone: data.customer?.phone,
+    contactPerson,
+    showPrices,
+    items: data.items,
+    terms,
+  });
+
+  const results: Record<string, { sent: boolean; error: string | null }> = {};
+  if (channels.includes("whatsapp")) {
+    try {
+      if (!isWhatsAppConfigured) throw new Error("WhatsApp not configured");
+      await sendQuotationWhatsApp({
+        phone,
+        toName,
+        quotationNo: data.rfq.internalNo,
+        pdfBuffer: pdf,
+      });
+      results.whatsapp = { sent: true, error: null };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      req.log.error({ err, customerRfqId: id }, "Quotation WhatsApp failed");
+      results.whatsapp = { sent: false, error: msg };
+    }
+  }
+  if (channels.includes("email")) {
+    try {
+      await sendQuotationEmail({
+        to: email,
+        toName,
+        quotationNo: data.rfq.internalNo,
+        contactName: contactPerson,
+        contactPhone: null,
+        pdfBuffer: pdf,
+      });
+      results.email = { sent: true, error: null };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      req.log.error({ err, customerRfqId: id }, "Quotation email failed");
+      results.email = { sent: false, error: msg };
+    }
+  }
+
+  req.log.info({ customerRfqId: id, results }, "Quotation dispatch finished");
+  res.json({ results });
 });
 
 export default router;
