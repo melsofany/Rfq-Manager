@@ -40,11 +40,14 @@ export const RFQ_KPI_DEFINITIONS = {
   monthItemsToPrice: "إجمالي البنود المطلوب تسعيرها للعميل في الشهر",
   monthSupplierRfqCount: "عدد طلبات التسعير المرسلة للموردين في الشهر",
   monthSupplierPoCount: "عدد أوامر الشراء المرسلة للموردين في الشهر",
-  monthSupplierPoRate: "نسبة أوامر الشراء للموردين = أوامر الشراء المرسلة ÷ طلبات التسعير المرسلة للموردين",
-  monthOpenCustomerRequests: "الطلبات المفتوحة للعملاء حالياً (بنود بدون سعر وتاريخ إغلاقها لم يمر)",
+  monthSupplierPoRate:
+    "نسبة أوامر الشراء للموردين = أوامر الشراء المرسلة ÷ طلبات التسعير المرسلة للموردين",
+  monthOpenCustomerRequests:
+    "الطلبات المفتوحة للعملاء حالياً (بنود بدون سعر وتاريخ إغلاقها لم يمر)",
   monthOpenCustomerItems: "البنود المطلوب تسعيرها للعملاء حالياً (بدون سعر وتاريخ إغلاقها لم يمر)",
   monthItemsWithSupplierPrice: "بنود الشهر اللي ليها سعر مورد معتمد",
-  monthSupplierPriceRate: "نسبة البنود اللي ليها سعر مورد = بنود الشهر بسعر مورد ÷ إجمالي بنود الشهر",
+  monthSupplierPriceRate:
+    "نسبة البنود اللي ليها سعر مورد = بنود الشهر بسعر مورد ÷ إجمالي بنود الشهر",
 } as const;
 
 function num(v: unknown): number {

@@ -82,7 +82,15 @@ describe("GET /api/analytics/rfq-kpis", () => {
 
   it("returns zero rates when the denominators are zero (no division by zero)", async () => {
     executeMock.mockResolvedValue({
-      rows: [{ ...fixtureRow, items_year: "0", priced_year: "0", items_month: "0", supplier_rfq_month: "0" }],
+      rows: [
+        {
+          ...fixtureRow,
+          items_year: "0",
+          priced_year: "0",
+          items_month: "0",
+          supplier_rfq_month: "0",
+        },
+      ],
     });
     const res = await request(buildApp()).get("/api/analytics/rfq-kpis?year=2026&month=11");
     expect(res.body.yearly.pricingRate).toBe(0);
