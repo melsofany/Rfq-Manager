@@ -77,7 +77,7 @@ router.get("/analytics/rfq-kpis", requireAuth, async (req, res): Promise<void> =
       SELECT
         cri.id,
         cri.unit_price,
-        NULLIF(cr.entry_date, '')::date AS d,
+        CASE WHEN cr.entry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN cr.entry_date::date END AS d,
         cr.expiry_date,
         lower(trim(coalesce(cri.line_item, ''))) AS li,
         coalesce(cr.customer_id::text, lower(trim(cr.customer_name))) AS cust
@@ -110,10 +110,10 @@ router.get("/analytics/rfq-kpis", requireAuth, async (req, res): Promise<void> =
       -- ── Yearly ──
       (SELECT count(*) FROM base WHERE extract(year FROM d) = ${year}) AS items_year,
       (SELECT count(*) FROM customer_rfqs
-         WHERE extract(year FROM NULLIF(entry_date, '')::date) = ${year}) AS rfq_year,
+         WHERE extract(year FROM CASE WHEN entry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN entry_date::date END) = ${year}) AS rfq_year,
       (SELECT count(*) FROM customer_pos
          WHERE status = 'sent'
-           AND extract(year FROM NULLIF(po_date, '')::date) = ${year}) AS customer_po_year,
+           AND extract(year FROM CASE WHEN po_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN po_date::date END) = ${year}) AS customer_po_year,
       (SELECT count(*) FROM base
          WHERE unit_price IS NOT NULL AND extract(year FROM d) = ${year}) AS priced_year,
       (SELECT count(*) FROM base b
@@ -122,16 +122,16 @@ router.get("/analytics/rfq-kpis", requireAuth, async (req, res): Promise<void> =
 
       -- ── Monthly: customer side ──
       (SELECT count(*) FROM customer_rfqs
-         WHERE extract(year FROM NULLIF(entry_date, '')::date) = ${year}
-           AND extract(month FROM NULLIF(entry_date, '')::date) = ${month}) AS rfq_month,
+         WHERE extract(year FROM CASE WHEN entry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN entry_date::date END) = ${year}
+           AND extract(month FROM CASE WHEN entry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN entry_date::date END) = ${month}) AS rfq_month,
       (SELECT count(*) FROM first_seen
          WHERE rn = 1 AND extract(year FROM d) = ${year} AND extract(month FROM d) = ${month}) AS first_seen_month,
       (SELECT count(*) FROM base
          WHERE extract(year FROM d) = ${year} AND extract(month FROM d) = ${month}) AS items_month,
       (SELECT count(*) FROM base
-         WHERE unit_price IS NULL AND NULLIF(expiry_date, '')::date >= CURRENT_DATE) AS open_items_now,
+         WHERE unit_price IS NULL AND CASE WHEN expiry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN expiry_date::date END >= CURRENT_DATE) AS open_items_now,
       (SELECT count(DISTINCT cust || '|' || expiry_date) FROM base
-         WHERE unit_price IS NULL AND NULLIF(expiry_date, '')::date >= CURRENT_DATE) AS open_requests_now,
+         WHERE unit_price IS NULL AND CASE WHEN expiry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN expiry_date::date END >= CURRENT_DATE) AS open_requests_now,
 
       -- ── Monthly: supplier side ──
       (SELECT count(*) FROM rfq
