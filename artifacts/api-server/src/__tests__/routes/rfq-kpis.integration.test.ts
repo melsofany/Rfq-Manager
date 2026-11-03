@@ -47,13 +47,15 @@ describe.skipIf(!TEST_URL)("GET /api/analytics/rfq-kpis (real Postgres)", () => 
       (1, 1, NULL, '2026-11-02', '2099-01-01'),
       (2, 1, NULL, '2026-10-05', '2099-01-01'),
       (3, NULL, 'Acme', '2026-03-10', '2000-01-01'),
-      (4, 1, NULL, 'not-a-date', 'not-a-date');
+      (4, 1, NULL, 'not-a-date', 'not-a-date'),
+      (5, 1, NULL, '2026-14-09', '2026-02-31');
     INSERT INTO customer_rfq_items (id, customer_rfq_id, line_item, unit_price, is_cancelled) VALUES
       (1, 1, 'A1', 100, false),
       (2, 1, 'A2', NULL, false),
       (3, 2, 'A1', NULL, false),
       (4, 3, 'B1', 50, true),
-      (5, 4, 'C1', NULL, false);
+      (5, 4, 'C1', NULL, false),
+      (6, 5, 'D1', NULL, false);
     INSERT INTO customer_pos (id, status, po_date) VALUES
       (1, 'sent', '2026-11-10'),
       (2, 'draft', '2026-11-11');
