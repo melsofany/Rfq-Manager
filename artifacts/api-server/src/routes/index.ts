@@ -30,6 +30,7 @@ import aiAssistantModule from "../modules/ai-assistant/index";
 import integrationsModule from "../modules/integrations/index";
 import chatwootModule from "../modules/chatwoot/index";
 import backupModule from "../modules/backup/index";
+import websiteModule from "../modules/website/index";
 import hrModule from "../modules/hr/index";
 import emailAccountsModule from "../modules/email-accounts/index";
 
@@ -74,6 +75,7 @@ router.use("/chatwoot", guardFor("/chatwoot"));
 router.use("/ai-assistant", guardFor("/ai-assistant"));
 router.use("/integrations", guardFor("/integrations"));
 router.use("/backup", guardFor("/backup"));
+router.use("/website", guardFor("/website"));
 
 // Business modules
 router.use(usersModule); // auth · suppliers · categories · customers
@@ -94,6 +96,7 @@ router.use(aiAssistantModule); // AI assistant (admin/manager WhatsApp agent)
 router.use(chatwootModule); // chatwoot SSO bridge for the /whatsapp inbox
 router.use(integrationsModule); // ERP integrations (Odoo · SAP · Oracle · Google Sheets)
 router.use(backupModule); // daily DB backup → Google Drive
+router.use(websiteModule); // company website content + publish
 router.use(hrModule); // HR · employees · fingerprint attendance (ADMS)
 router.use(emailAccountsModule); // Google Workspace mailboxes per employee (read-only)
 

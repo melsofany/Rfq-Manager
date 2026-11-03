@@ -15,6 +15,7 @@ import {
   ASSIGN_PERM,
   EXPLICIT_ONLY_PERMS,
   hasCustomPermissions,
+  ADMIN_ONLY_PAGES,
 } from "@/lib/permissions";
 
 describe("customer edit permissions catalog", () => {
@@ -47,6 +48,23 @@ describe("customer edit permissions catalog", () => {
     expect(ROLE_DEFAULTS.manager).toContain(PRICE_PERM.customerRfq);
     expect(ROLE_DEFAULTS.purchasing).not.toContain(PRICE_PERM.customerRfq);
     expect(ROLE_DEFAULTS.data_entry).not.toContain(PRICE_PERM.customerRfq);
+  });
+});
+
+describe("website management page permissions", () => {
+  it("registers the website page with an edit child", () => {
+    const node = PERMISSION_CATALOG.find((n) => n.key === "website");
+    expect(node?.href).toBe("/website");
+    expect(node?.children?.map((c) => c.key)).toContain("website:edit");
+    expect(ALL_PERMISSION_KEYS).toContain("website");
+    expect(ALL_PERMISSION_KEYS).toContain("website:edit");
+  });
+
+  it("grants website to manager only by default, not lower roles", () => {
+    expect(ROLE_DEFAULTS.manager).toContain("website");
+    expect(ROLE_DEFAULTS.manager).toContain("website:edit");
+    expect(ROLE_DEFAULTS.purchasing).not.toContain("website");
+    expect(ROLE_DEFAULTS.data_entry).not.toContain("website");
   });
 });
 
