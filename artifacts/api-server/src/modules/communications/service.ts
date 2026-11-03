@@ -1711,3 +1711,36 @@ export async function sendDeliveryRejectionReasonOptions(
   }
   return result.messages?.[0]?.id ?? null;
 }
+
+// ─── Customer quotation (عرض سعر) via WhatsApp ───────────────────────────────
+// Needs a Meta-approved template with a DOCUMENT header and three body params:
+//   {{1}} customer / contact name, {{2}} quotation number, {{3}} company contact.
+// Name it with WHATSAPP_TEMPLATE_QUOTATION (default "quotation_pdf_ar").
+const TEMPLATE_QUOTATION = process.env.WHATSAPP_TEMPLATE_QUOTATION || "quotation_pdf_ar";
+
+export async function sendQuotationWhatsApp(opts: {
+  phone: string;
+  toName: string;
+  quotationNo: string;
+  pdfBuffer: Buffer;
+}): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(opts.phone);
+  const filename = `Quotation-${opts.quotationNo}.pdf`;
+  const mediaId = await uploadWhatsAppMedia(opts.pdfBuffer, filename, "application/pdf");
+  const template = new Template(
+    TEMPLATE_QUOTATION,
+    new Language(TEMPLATE_LANG),
+    new HeaderComponent(new HeaderParameter(new WADocument(mediaId, true, undefined, filename))),
+    new BodyComponent(
+      new BodyParameter(sanitizeWaParam(opts.toName)),
+      new BodyParameter(sanitizeWaParam(opts.quotationNo)),
+      new BodyParameter(sanitizeWaParam(`قرطبة للتوريدات — ${COMPANY_PHONE_DISPLAY}`)),
+    ),
+  );
+  const waId = await sendTemplate(to, template);
+  logger.info({ to, quotationNo: opts.quotationNo, waId }, "Quotation sent via WhatsApp template");
+  return waId || null;
+}
+
+const COMPANY_PHONE_DISPLAY = "432-972-587";

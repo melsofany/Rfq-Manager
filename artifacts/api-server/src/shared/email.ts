@@ -520,3 +520,75 @@ Cortoba Supplies — ش.الاسكندرية - برج نجمة مطروح الد
     transporter.close();
   }
 }
+
+/**
+ * Customer-facing quotation (عرض سعر) email with the PDF attached.
+ */
+export async function sendQuotationEmail(opts: {
+  to: string;
+  toName: string;
+  quotationNo: string;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  pdfBuffer: Buffer;
+}): Promise<void> {
+  assertCanSend();
+  const transporter = await createTransporter();
+  const senderEmail = senderIdentity().email.toLowerCase();
+  const who = opts.contactName?.trim() ? ` | ${opts.contactName.trim()}` : "";
+  const phone = opts.contactPhone?.trim() ? ` | ${opts.contactPhone.trim()}` : "";
+
+  const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;font-family:Arial,Tahoma,sans-serif;background:#f3f4f6">
+  <div style="max-width:620px;margin:32px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+    <div style="background:#1a3a5c;padding:20px 28px;border-bottom:3px solid #c8a84b">
+      <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700">قرطبة للتوريدات</h1>
+      <p style="margin:4px 0 0;color:#c0d8f0;font-size:12px">CORTOBA SUPPLIES</p>
+    </div>
+    <div style="padding:28px;color:#374151;font-size:15px;line-height:1.8">
+      <p style="margin:0 0 12px">السيد/ة <strong>${opts.toName}</strong> المحترم/ة،</p>
+      <p style="margin:0 0 12px">مرفق مع هذا البريد عرض السعر الخاص بكم.</p>
+      <p style="margin:0 0 12px"><strong>رقم المرجع:</strong> ${opts.quotationNo}</p>
+      <p style="margin:0 0 12px">برجاء ذكر رقم المرجع عند الرد على هذا العرض.</p>
+    </div>
+    <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 28px;font-size:12px;color:#6b7280">
+      <div>${senderEmail}${who}${phone}</div>
+      <div>ش.الإسكندرية - برج نجمة مطروح، الدور الرابع - مرسي مطروح | ت: 432-972-587</div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = [
+    `السيد/ة ${opts.toName} المحترم/ة،`,
+    "مرفق مع هذا البريد عرض السعر الخاص بكم.",
+    `رقم المرجع: ${opts.quotationNo}`,
+    "",
+    "قرطبة للتوريدات - CORTOBA SUPPLIES",
+    "ت: 432-972-587",
+  ].join("\n");
+
+  try {
+    await transporter.sendMail({
+      from: fromHeader(),
+      replyTo: replyToHeader(),
+      to: `"${opts.toName}" <${opts.to}>`,
+      subject: `عرض سعر ${opts.quotationNo} - قرطبة للتوريدات`,
+      text,
+      html,
+      attachments: [
+        {
+          filename: `Quotation-${opts.quotationNo}.pdf`,
+          content: opts.pdfBuffer,
+          contentType: "application/pdf",
+        },
+      ],
+    });
+    logger.info({ to: opts.to, quotationNo: opts.quotationNo }, "Quotation email sent");
+  } finally {
+    transporter.close();
+  }
+}
