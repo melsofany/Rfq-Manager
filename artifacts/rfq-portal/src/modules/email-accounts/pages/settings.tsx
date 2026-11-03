@@ -32,11 +32,9 @@ async function fetchEmailAccounts(): Promise<EmailAccountsView> {
   return body as EmailAccountsView;
 }
 
-
 function permissionCount(perms: Record<string, boolean> | null): number {
   return perms ? Object.values(perms).filter(Boolean).length : 0;
 }
-
 
 export default function EmailSettingsPage() {
   const { data, isLoading, error } = useQuery({
@@ -70,12 +68,22 @@ export default function EmailSettingsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/30 border-b border-border text-left">
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Mailbox</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Employee</th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                      Mailbox
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">
+                      Employee
+                    </th>
                     <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium">Role</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Addresses</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Permissions</th>
-                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">Status</th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      Addresses
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      Permissions
+                    </th>
+                    <th className="px-4 py-2.5 text-muted-foreground text-xs font-medium text-center">
+                      Status
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -95,7 +103,11 @@ export default function EmailSettingsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-foreground">
-                        {a.employee ? a.employee.name : <span className="text-muted-foreground">—</span>}
+                        {a.employee ? (
+                          a.employee.name
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs">
                         {a.employee?.role ?? "—"}
@@ -143,4 +155,3 @@ export default function EmailSettingsPage() {
     </Layout>
   );
 }
-

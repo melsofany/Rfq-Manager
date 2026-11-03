@@ -27,13 +27,11 @@ import { eq, and, asc, inArray, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { isUniqueViolation } from "../../shared/pg-errors";
 import { rewriteSupplierCategoryName } from "../../shared/category-rename";
-import { guardFor } from "../../shared/permissions";
 
 const router = Router();
 router.use("/item-categories", guardFor("/item-categories"));
 router.use("/item-categories", guardFor("/item-categories"));
 router.use("/employees", guardFor("/employees"));
-
 
 const PRIMARY_CONFLICT_MESSAGE = "لا يمكن تعيين أكثر من مسؤول أساسي لنفس التصنيف";
 
@@ -116,135 +114,126 @@ router.get("/item-categories/:id/keywords", requireAuth, async (req, res): Promi
   res.json(rows.map(serializeKeyword));
 });
 
-router.post(
-  "/item-categories/:id/keywords",
-  async (req, res): Promise<void> => {
-    const categoryId = parseInt(req.params.id as string, 10);
-    const { keyword, weight, language } = req.body as {
-      keyword?: string;
-      weight?: number;
-      language?: string | null;
-    };
-    const term = keyword?.trim();
-    if (!term) {
-      res.status(400).json({ error: "keyword required" });
+router.post("/item-categories/:id/keywords", async (req, res): Promise<void> => {
+  const categoryId = parseInt(req.params.id as string, 10);
+  const { keyword, weight, language } = req.body as {
+    keyword?: string;
+    weight?: number;
+    language?: string | null;
+  };
+  const term = keyword?.trim();
+  if (!term) {
+    res.status(400).json({ error: "keyword required" });
+    return;
+  }
+  try {
+    const [created] = await db
+      .insert(itemCategoryKeywordsTable)
+      .values({
+        categoryId,
+        keyword: term,
+        weight: Number.isFinite(weight) ? Number(weight) : 0,
+        language: language ?? null,
+      })
+      .returning();
+    await db.insert(auditLogTable).values({
+      action: "item_category.keyword_added",
+      entityType: "item_category",
+      entityId: categoryId,
+      employeeId: req.session.employeeId,
+      description: `Category ${categoryId} keyword added: ${term}`,
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+    });
+    res.status(201).json(serializeKeyword(created));
+  } catch (err) {
+    // UNIQUE(category_id, keyword) — the DB is the real guard.
+    if (isUniqueViolation(err)) {
+      res.status(409).json({ error: "الكلمة موجودة بالفعل في هذا التصنيف" });
       return;
     }
-    try {
-      const [created] = await db
-        .insert(itemCategoryKeywordsTable)
-        .values({
-          categoryId,
-          keyword: term,
-          weight: Number.isFinite(weight) ? Number(weight) : 0,
-          language: language ?? null,
-        })
-        .returning();
-      await db.insert(auditLogTable).values({
-        action: "item_category.keyword_added",
-        entityType: "item_category",
-        entityId: categoryId,
-        employeeId: req.session.employeeId,
-        description: `Category ${categoryId} keyword added: ${term}`,
-        ipAddress: req.ip,
-        userAgent: req.get("user-agent"),
-      });
-      res.status(201).json(serializeKeyword(created));
-    } catch (err) {
-      // UNIQUE(category_id, keyword) — the DB is the real guard.
-      if (isUniqueViolation(err)) {
-        res.status(409).json({ error: "الكلمة موجودة بالفعل في هذا التصنيف" });
-        return;
-      }
-      throw err;
-    }
-  },
-);
+    throw err;
+  }
+});
 
-router.patch(
-  "/item-categories/:id/keywords/:keywordId",
-  async (req, res): Promise<void> => {
-    const categoryId = parseInt(req.params.id as string, 10);
-    const keywordId = parseInt(req.params.keywordId as string, 10);
-    const { keyword, weight, language, enabled } = req.body as {
-      keyword?: string;
-      weight?: number;
-      language?: string | null;
-      enabled?: boolean;
-    };
-    const patch: Record<string, unknown> = {};
-    if (keyword != null) {
-      const term = keyword.trim();
-      if (!term) {
-        res.status(400).json({ error: "keyword cannot be empty" });
-        return;
-      }
-      patch.keyword = term;
+router.patch("/item-categories/:id/keywords/:keywordId", async (req, res): Promise<void> => {
+  const categoryId = parseInt(req.params.id as string, 10);
+  const keywordId = parseInt(req.params.keywordId as string, 10);
+  const { keyword, weight, language, enabled } = req.body as {
+    keyword?: string;
+    weight?: number;
+    language?: string | null;
+    enabled?: boolean;
+  };
+  const patch: Record<string, unknown> = {};
+  if (keyword != null) {
+    const term = keyword.trim();
+    if (!term) {
+      res.status(400).json({ error: "keyword cannot be empty" });
+      return;
     }
-    if (weight != null) patch.weight = Number(weight);
-    if (language !== undefined) patch.language = language;
-    if (enabled != null) patch.enabled = !!enabled;
+    patch.keyword = term;
+  }
+  if (weight != null) patch.weight = Number(weight);
+  if (language !== undefined) patch.language = language;
+  if (enabled != null) patch.enabled = !!enabled;
 
-    try {
-      const [updated] = await db
-        .update(itemCategoryKeywordsTable)
-        .set(patch)
-        .where(
-          and(
-            eq(itemCategoryKeywordsTable.id, keywordId),
-            eq(itemCategoryKeywordsTable.categoryId, categoryId),
-          ),
-        )
-        .returning();
-      if (!updated) {
-        res.status(404).json({ error: "الكلمة غير موجودة" });
-        return;
-      }
-      await db.insert(auditLogTable).values({
-        action: "item_category.keyword_updated",
-        entityType: "item_category",
-        entityId: categoryId,
-        employeeId: req.session.employeeId,
-        description: `Category ${categoryId} keyword ${keywordId} updated: ${JSON.stringify(patch)}`,
-        ipAddress: req.ip,
-        userAgent: req.get("user-agent"),
-      });
-      res.json(serializeKeyword(updated));
-    } catch (err) {
-      if (isUniqueViolation(err)) {
-        res.status(409).json({ error: "الكلمة موجودة بالفعل في هذا التصنيف" });
-        return;
-      }
-      throw err;
-    }
-  },
-);
-
-router.delete(
-  "/item-categories/:id/keywords/:keywordId",
-  async (req, res): Promise<void> => {
-    const categoryId = parseInt(req.params.id as string, 10);
-    const keywordId = parseInt(req.params.keywordId as string, 10);
-    await db
-      .delete(itemCategoryKeywordsTable)
+  try {
+    const [updated] = await db
+      .update(itemCategoryKeywordsTable)
+      .set(patch)
       .where(
         and(
           eq(itemCategoryKeywordsTable.id, keywordId),
           eq(itemCategoryKeywordsTable.categoryId, categoryId),
         ),
-      );
+      )
+      .returning();
+    if (!updated) {
+      res.status(404).json({ error: "الكلمة غير موجودة" });
+      return;
+    }
     await db.insert(auditLogTable).values({
-      action: "item_category.keyword_deleted",
+      action: "item_category.keyword_updated",
       entityType: "item_category",
       entityId: categoryId,
       employeeId: req.session.employeeId,
-      description: `Category ${categoryId} keyword ${keywordId} deleted`,
+      description: `Category ${categoryId} keyword ${keywordId} updated: ${JSON.stringify(patch)}`,
       ipAddress: req.ip,
       userAgent: req.get("user-agent"),
     });
-    res.json({ ok: true });
-  },
-);
+    res.json(serializeKeyword(updated));
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      res.status(409).json({ error: "الكلمة موجودة بالفعل في هذا التصنيف" });
+      return;
+    }
+    throw err;
+  }
+});
+
+router.delete("/item-categories/:id/keywords/:keywordId", async (req, res): Promise<void> => {
+  const categoryId = parseInt(req.params.id as string, 10);
+  const keywordId = parseInt(req.params.keywordId as string, 10);
+  await db
+    .delete(itemCategoryKeywordsTable)
+    .where(
+      and(
+        eq(itemCategoryKeywordsTable.id, keywordId),
+        eq(itemCategoryKeywordsTable.categoryId, categoryId),
+      ),
+    );
+  await db.insert(auditLogTable).values({
+    action: "item_category.keyword_deleted",
+    entityType: "item_category",
+    entityId: categoryId,
+    employeeId: req.session.employeeId,
+    description: `Category ${categoryId} keyword ${keywordId} deleted`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+  res.json({ ok: true });
+});
 
 // GET /item-categories — the trade-category catalogue.
 //
@@ -270,182 +259,174 @@ router.get("/item-categories", requireAuth, async (_req, res): Promise<void> => 
   res.json(rows.map((c) => serializeCategory(c, aliases.get(c.id) ?? [])));
 });
 
-router.post(
-  "/item-categories",
-  async (req, res): Promise<void> => {
-    const { name, code, sortOrder, kind, parentId, aliases } = req.body as {
-      name?: string;
-      code?: string | null;
-      sortOrder?: number;
-      kind?: string | null;
-      parentId?: number | null;
-      aliases?: string[];
-    };
-    if (!name?.trim()) {
+router.post("/item-categories", async (req, res): Promise<void> => {
+  const { name, code, sortOrder, kind, parentId, aliases } = req.body as {
+    name?: string;
+    code?: string | null;
+    sortOrder?: number;
+    kind?: string | null;
+    parentId?: number | null;
+    aliases?: string[];
+  };
+  if (!name?.trim()) {
+    res.status(400).json({ error: "اسم التصنيف مطلوب" });
+    return;
+  }
+  const trimmed = name.trim();
+  const kindValue = kind?.trim() || "functional";
+  if (!CATEGORY_KINDS.has(kindValue)) {
+    res.status(400).json({ error: "نوع التصنيف غير صالح (functional/subcategory/brand)" });
+    return;
+  }
+  // A subcategory must point at a FUNCTIONAL domain — a brand or another
+  // subcategory cannot be its parent.
+  if (kindValue === "subcategory") {
+    if (!parentId || !(await assertOwnableCategory(Number(parentId)))) {
+      res.status(400).json({ error: "التخصص الفرعي يجب أن يتبع مجالًا وظيفيًا صالحًا" });
+      return;
+    }
+  }
+  const [existing] = await db
+    .select({ id: itemCategoriesTable.id })
+    .from(itemCategoriesTable)
+    .where(eq(itemCategoriesTable.name, trimmed))
+    .limit(1);
+  if (existing) {
+    res.status(409).json({ error: "التصنيف موجود بالفعل" });
+    return;
+  }
+  const [row] = await db
+    .insert(itemCategoriesTable)
+    .values({
+      name: trimmed,
+      code: code?.trim() || null,
+      sortOrder: Number.isFinite(sortOrder) ? Number(sortOrder) : 0,
+      kind: kindValue,
+      parentId: kindValue === "subcategory" ? Number(parentId) : null,
+    })
+    .returning();
+  const added = await saveAliases(row.id, aliases);
+  // Mirror a new FUNCTIONAL domain onto `/suppliers`, so the two lists stay
+  // equal between deploys. The startup reconciliation in `init-db.ts` would
+  // otherwise be the only thing restoring equality — meaning a category the
+  // operator adds here would be missing from `/suppliers` until the next
+  // release, which is exactly the «تنقص» they forbade. A subcategory/brand is
+  // not a trade category, so it is deliberately NOT mirrored. Best-effort: a
+  // mirror failure must never fail the create — the next boot reconciles.
+  if (kindValue === "functional") {
+    try {
+      await db.insert(supplierCategoriesTable).values({ name: row.name }).onConflictDoNothing();
+    } catch {
+      // best-effort
+    }
+  }
+  await db.insert(auditLogTable).values({
+    action: "item_category.created",
+    entityType: "item_category",
+    entityId: row.id,
+    employeeId: req.session.employeeId,
+    description: `Item category created: ${row.name} (${kindValue})`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+  res.status(201).json(serializeCategory(row, added));
+});
+
+router.patch("/item-categories/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  const { name, code, isActive, sortOrder, kind, parentId, aliases } = req.body as {
+    name?: string;
+    code?: string | null;
+    isActive?: boolean;
+    sortOrder?: number;
+    kind?: string | null;
+    parentId?: number | null;
+    aliases?: string[];
+  };
+
+  const updates: Record<string, unknown> = {};
+  if (name !== undefined) {
+    if (!name.trim()) {
       res.status(400).json({ error: "اسم التصنيف مطلوب" });
       return;
     }
-    const trimmed = name.trim();
+    updates.name = name.trim();
+  }
+  if (code !== undefined) updates.code = code?.trim() || null;
+  if (isActive !== undefined) updates.isActive = !!isActive;
+  if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder) || 0;
+  if (kind !== undefined) {
     const kindValue = kind?.trim() || "functional";
     if (!CATEGORY_KINDS.has(kindValue)) {
       res.status(400).json({ error: "نوع التصنيف غير صالح (functional/subcategory/brand)" });
       return;
     }
-    // A subcategory must point at a FUNCTIONAL domain — a brand or another
-    // subcategory cannot be its parent.
-    if (kindValue === "subcategory") {
-      if (!parentId || !(await assertOwnableCategory(Number(parentId)))) {
-        res.status(400).json({ error: "التخصص الفرعي يجب أن يتبع مجالًا وظيفيًا صالحًا" });
-        return;
-      }
+    updates.kind = kindValue;
+  }
+  if (parentId !== undefined) {
+    if (parentId != null && !(await assertOwnableCategory(Number(parentId)))) {
+      res.status(400).json({ error: "المجال الأب يجب أن يكون تصنيفًا وظيفيًا" });
+      return;
     }
-    const [existing] = await db
-      .select({ id: itemCategoriesTable.id })
+    updates.parentId = parentId == null ? null : Number(parentId);
+  }
+
+  // The OLD name is needed to rewrite `suppliers.category` (free text, not an
+  // FK) after a rename — otherwise suppliers keep the old spelling and the
+  // supplier-list filter finds none under the new name.
+  let previousName: string | null = null;
+  if (name !== undefined) {
+    const [prev] = await db
+      .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
       .from(itemCategoriesTable)
-      .where(eq(itemCategoriesTable.name, trimmed))
-      .limit(1);
-    if (existing) {
-      res.status(409).json({ error: "التصنيف موجود بالفعل" });
-      return;
-    }
-    const [row] = await db
-      .insert(itemCategoriesTable)
-      .values({
-        name: trimmed,
-        code: code?.trim() || null,
-        sortOrder: Number.isFinite(sortOrder) ? Number(sortOrder) : 0,
-        kind: kindValue,
-        parentId: kindValue === "subcategory" ? Number(parentId) : null,
-      })
-      .returning();
-    const added = await saveAliases(row.id, aliases);
-    // Mirror a new FUNCTIONAL domain onto `/suppliers`, so the two lists stay
-    // equal between deploys. The startup reconciliation in `init-db.ts` would
-    // otherwise be the only thing restoring equality — meaning a category the
-    // operator adds here would be missing from `/suppliers` until the next
-    // release, which is exactly the «تنقص» they forbade. A subcategory/brand is
-    // not a trade category, so it is deliberately NOT mirrored. Best-effort: a
-    // mirror failure must never fail the create — the next boot reconciles.
-    if (kindValue === "functional") {
-      try {
-        await db.insert(supplierCategoriesTable).values({ name: row.name }).onConflictDoNothing();
-      } catch {
-        // best-effort
-      }
-    }
-    await db.insert(auditLogTable).values({
-      action: "item_category.created",
-      entityType: "item_category",
-      entityId: row.id,
-      employeeId: req.session.employeeId,
-      description: `Item category created: ${row.name} (${kindValue})`,
-      ipAddress: req.ip,
-      userAgent: req.get("user-agent"),
-    });
-    res.status(201).json(serializeCategory(row, added));
-  },
-);
-
-router.patch(
-  "/item-categories/:id",
-  async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
-    const { name, code, isActive, sortOrder, kind, parentId, aliases } = req.body as {
-      name?: string;
-      code?: string | null;
-      isActive?: boolean;
-      sortOrder?: number;
-      kind?: string | null;
-      parentId?: number | null;
-      aliases?: string[];
-    };
-
-    const updates: Record<string, unknown> = {};
-    if (name !== undefined) {
-      if (!name.trim()) {
-        res.status(400).json({ error: "اسم التصنيف مطلوب" });
-        return;
-      }
-      updates.name = name.trim();
-    }
-    if (code !== undefined) updates.code = code?.trim() || null;
-    if (isActive !== undefined) updates.isActive = !!isActive;
-    if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder) || 0;
-    if (kind !== undefined) {
-      const kindValue = kind?.trim() || "functional";
-      if (!CATEGORY_KINDS.has(kindValue)) {
-        res.status(400).json({ error: "نوع التصنيف غير صالح (functional/subcategory/brand)" });
-        return;
-      }
-      updates.kind = kindValue;
-    }
-    if (parentId !== undefined) {
-      if (parentId != null && !(await assertOwnableCategory(Number(parentId)))) {
-        res.status(400).json({ error: "المجال الأب يجب أن يكون تصنيفًا وظيفيًا" });
-        return;
-      }
-      updates.parentId = parentId == null ? null : Number(parentId);
-    }
-
-    // The OLD name is needed to rewrite `suppliers.category` (free text, not an
-    // FK) after a rename — otherwise suppliers keep the old spelling and the
-    // supplier-list filter finds none under the new name.
-    let previousName: string | null = null;
-    if (name !== undefined) {
-      const [prev] = await db
-        .select({ id: itemCategoriesTable.id, name: itemCategoriesTable.name })
-        .from(itemCategoriesTable)
-        .where(eq(itemCategoriesTable.id, id))
-        .limit(1);
-      previousName = prev?.name ?? null;
-    }
-
-    const [row] = await db
-      .update(itemCategoriesTable)
-      .set(updates)
       .where(eq(itemCategoriesTable.id, id))
-      .returning();
-    if (!row) {
-      res.status(404).json({ error: "Not found" });
-      return;
+      .limit(1);
+    previousName = prev?.name ?? null;
+  }
+
+  const [row] = await db
+    .update(itemCategoriesTable)
+    .set(updates)
+    .where(eq(itemCategoriesTable.id, id))
+    .returning();
+  if (!row) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  // A subcategory must always resolve to a domain; keep the invariant even
+  // when only the kind changed.
+  if (row.kind === "subcategory" && row.parentId == null) {
+    res.status(400).json({ error: "التخصص الفرعي يجب أن يتبع مجالًا وظيفيًا" });
+    return;
+  }
+  if (previousName && previousName !== row.name) {
+    await rewriteSupplierCategoryName(previousName, row.name);
+  }
+  // Keep `/suppliers` in step with a kind/activation change, so the two lists
+  // never drift between deploys. Becoming a trade category registers the name;
+  // ceasing to be one removes it — but ONLY while no supplier links to it, since
+  // a linked category is a real trade that must never vanish. Best-effort.
+  try {
+    const nowTrade = (row.kind ?? "functional") === "functional" && row.isActive;
+    if (nowTrade) {
+      await db.insert(supplierCategoriesTable).values({ name: row.name }).onConflictDoNothing();
+    } else {
+      await db
+        .delete(supplierCategoriesTable)
+        .where(
+          and(
+            eq(supplierCategoriesTable.name, row.name),
+            sql`NOT EXISTS (SELECT 1 FROM supplier_category_links l WHERE l.category_id = ${supplierCategoriesTable.id})`,
+          ),
+        );
     }
-    // A subcategory must always resolve to a domain; keep the invariant even
-    // when only the kind changed.
-    if (row.kind === "subcategory" && row.parentId == null) {
-      res.status(400).json({ error: "التخصص الفرعي يجب أن يتبع مجالًا وظيفيًا" });
-      return;
-    }
-    if (previousName && previousName !== row.name) {
-      await rewriteSupplierCategoryName(previousName, row.name);
-    }
-    // Keep `/suppliers` in step with a kind/activation change, so the two lists
-    // never drift between deploys. Becoming a trade category registers the name;
-    // ceasing to be one removes it — but ONLY while no supplier links to it, since
-    // a linked category is a real trade that must never vanish. Best-effort.
-    try {
-      const nowTrade = (row.kind ?? "functional") === "functional" && row.isActive;
-      if (nowTrade) {
-        await db.insert(supplierCategoriesTable).values({ name: row.name }).onConflictDoNothing();
-      } else {
-        await db
-          .delete(supplierCategoriesTable)
-          .where(
-            and(
-              eq(supplierCategoriesTable.name, row.name),
-              sql`NOT EXISTS (SELECT 1 FROM supplier_category_links l WHERE l.category_id = ${supplierCategoriesTable.id})`,
-            ),
-          );
-      }
-    } catch {
-      // best-effort — the next boot reconciles
-    }
-    const added =
-      aliases !== undefined
-        ? await saveAliases(id, aliases)
-        : ((await loadAliases()).get(id) ?? []);
-    res.json(serializeCategory(row, added));
-  },
-);
+  } catch {
+    // best-effort — the next boot reconciles
+  }
+  const added =
+    aliases !== undefined ? await saveAliases(id, aliases) : ((await loadAliases()).get(id) ?? []);
+  res.json(serializeCategory(row, added));
+});
 
 /**
  * Replace a category's aliases (idempotent). Normalised and de-duplicated; a
@@ -514,67 +495,64 @@ router.get("/item-categories/:id/owners", requireAuth, async (req, res): Promise
   res.json(rows);
 });
 
-router.put(
-  "/item-categories/:id/owners",
-  async (req, res): Promise<void> => {
-    const categoryId = parseInt(req.params.id as string, 10);
-    const { owners } = req.body as {
-      owners?: Array<{ employeeId: number; isPrimary?: boolean }>;
-    };
-    if (!Array.isArray(owners)) {
-      res.status(400).json({ error: "owners must be an array" });
-      return;
-    }
-    // Only a FUNCTIONAL domain carries responsibility. Assigning an owner to a
-    // subcategory or a brand is refused — a brand must never own an item.
-    if (owners.length > 0 && !(await assertOwnableCategory(categoryId))) {
-      res.status(400).json({ error: "لا يمكن إسناد مسؤول إلا لمجال وظيفي" });
-      return;
-    }
-    // Exactly one primary owner, at most.
-    if (!assertAtMostOnePrimary(owners)) {
+router.put("/item-categories/:id/owners", async (req, res): Promise<void> => {
+  const categoryId = parseInt(req.params.id as string, 10);
+  const { owners } = req.body as {
+    owners?: Array<{ employeeId: number; isPrimary?: boolean }>;
+  };
+  if (!Array.isArray(owners)) {
+    res.status(400).json({ error: "owners must be an array" });
+    return;
+  }
+  // Only a FUNCTIONAL domain carries responsibility. Assigning an owner to a
+  // subcategory or a brand is refused — a brand must never own an item.
+  if (owners.length > 0 && !(await assertOwnableCategory(categoryId))) {
+    res.status(400).json({ error: "لا يمكن إسناد مسؤول إلا لمجال وظيفي" });
+    return;
+  }
+  // Exactly one primary owner, at most.
+  if (!assertAtMostOnePrimary(owners)) {
+    res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
+    return;
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(employeeCategoriesTable)
+        .where(eq(employeeCategoriesTable.categoryId, categoryId));
+      if (owners.length > 0) {
+        await tx.insert(employeeCategoriesTable).values(
+          owners.map((o) => ({
+            categoryId,
+            employeeId: o.employeeId,
+            isPrimary: !!o.isPrimary,
+          })),
+        );
+      }
+    });
+  } catch (err) {
+    // The DB partial unique index is the real guard (the payload check above is
+    // only a convenience). Surface a clean 400 instead of a 500.
+    if (isUniqueViolation(err)) {
       res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
       return;
     }
+    throw err;
+  }
 
-    try {
-      await db.transaction(async (tx) => {
-        await tx
-          .delete(employeeCategoriesTable)
-          .where(eq(employeeCategoriesTable.categoryId, categoryId));
-        if (owners.length > 0) {
-          await tx.insert(employeeCategoriesTable).values(
-            owners.map((o) => ({
-              categoryId,
-              employeeId: o.employeeId,
-              isPrimary: !!o.isPrimary,
-            })),
-          );
-        }
-      });
-    } catch (err) {
-      // The DB partial unique index is the real guard (the payload check above is
-      // only a convenience). Surface a clean 400 instead of a 500.
-      if (isUniqueViolation(err)) {
-        res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
-        return;
-      }
-      throw err;
-    }
+  await db.insert(auditLogTable).values({
+    action: "item_category.owners_updated",
+    entityType: "item_category",
+    entityId: categoryId,
+    employeeId: req.session.employeeId,
+    description: `Category ${categoryId} owners set to ${owners.map((o) => o.employeeId).join(",") || "(none)"}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
 
-    await db.insert(auditLogTable).values({
-      action: "item_category.owners_updated",
-      entityType: "item_category",
-      entityId: categoryId,
-      employeeId: req.session.employeeId,
-      description: `Category ${categoryId} owners set to ${owners.map((o) => o.employeeId).join(",") || "(none)"}`,
-      ipAddress: req.ip,
-      userAgent: req.get("user-agent"),
-    });
-
-    res.json({ ok: true, count: owners.length });
-  },
-);
+  res.json({ ok: true, count: owners.length });
+});
 
 // ── Categories owned by an employee ─────────────────────────────────────────
 router.get("/employees/:id/categories", requireAuth, async (req, res): Promise<void> => {
@@ -622,81 +600,78 @@ router.get("/employees/categories", requireAuth, async (_req, res): Promise<void
   res.json(byEmployee);
 });
 
-router.put(
-  "/employees/:id/categories",
-  async (req, res): Promise<void> => {
-    const employeeId = parseInt(req.params.id as string, 10);
-    const { categories } = req.body as {
-      categories?: Array<{ categoryId: number; isPrimary?: boolean }>;
-    };
-    if (!Array.isArray(categories)) {
-      res.status(400).json({ error: "categories must be an array" });
+router.put("/employees/:id/categories", async (req, res): Promise<void> => {
+  const employeeId = parseInt(req.params.id as string, 10);
+  const { categories } = req.body as {
+    categories?: Array<{ categoryId: number; isPrimary?: boolean }>;
+  };
+  if (!Array.isArray(categories)) {
+    res.status(400).json({ error: "categories must be an array" });
+    return;
+  }
+  // Only FUNCTIONAL domains may be owned: an employee's specialisation list
+  // must not contain a subcategory or a brand (a brand never owns work).
+  if (categories.length > 0) {
+    const ids = [...new Set(categories.map((c) => Number(c.categoryId)).filter(Number.isFinite))];
+    const rows = ids.length
+      ? await db
+          .select({ id: itemCategoriesTable.id, kind: itemCategoriesTable.kind })
+          .from(itemCategoriesTable)
+          .where(inArray(itemCategoriesTable.id, ids))
+      : [];
+    const functional = new Set(
+      rows.filter((r) => (r.kind ?? "functional") === "functional").map((r) => r.id),
+    );
+    if (ids.some((id) => !functional.has(id))) {
+      res.status(400).json({ error: "لا يمكن إسناد اختصاص إلا لمجال وظيفي" });
       return;
     }
-    // Only FUNCTIONAL domains may be owned: an employee's specialisation list
-    // must not contain a subcategory or a brand (a brand never owns work).
-    if (categories.length > 0) {
-      const ids = [...new Set(categories.map((c) => Number(c.categoryId)).filter(Number.isFinite))];
-      const rows = ids.length
-        ? await db
-            .select({ id: itemCategoriesTable.id, kind: itemCategoriesTable.kind })
-            .from(itemCategoriesTable)
-            .where(inArray(itemCategoriesTable.id, ids))
-        : [];
-      const functional = new Set(
-        rows.filter((r) => (r.kind ?? "functional") === "functional").map((r) => r.id),
-      );
-      if (ids.some((id) => !functional.has(id))) {
-        res.status(400).json({ error: "لا يمكن إسناد اختصاص إلا لمجال وظيفي" });
-        return;
+  }
+  // At most one primary for this employee's own list. The cross-employee
+  // "one primary per CATEGORY" rule is enforced by the DB index below — this
+  // payload check only catches the obvious in-request case.
+  if (!assertAtMostOnePrimary(categories)) {
+    res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
+    return;
+  }
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(employeeCategoriesTable)
+        .where(eq(employeeCategoriesTable.employeeId, employeeId));
+      if (categories.length > 0) {
+        await tx.insert(employeeCategoriesTable).values(
+          categories.map((c) => ({
+            employeeId,
+            categoryId: c.categoryId,
+            isPrimary: !!c.isPrimary,
+          })),
+        );
       }
-    }
-    // At most one primary for this employee's own list. The cross-employee
-    // "one primary per CATEGORY" rule is enforced by the DB index below — this
-    // payload check only catches the obvious in-request case.
-    if (!assertAtMostOnePrimary(categories)) {
+    });
+  } catch (err) {
+    // A second primary for a category already owned by another employee is
+    // rejected by the partial unique index — report it as a clear 400 rather
+    // than an opaque 500.
+    if (isUniqueViolation(err)) {
       res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
       return;
     }
+    throw err;
+  }
 
-    try {
-      await db.transaction(async (tx) => {
-        await tx
-          .delete(employeeCategoriesTable)
-          .where(eq(employeeCategoriesTable.employeeId, employeeId));
-        if (categories.length > 0) {
-          await tx.insert(employeeCategoriesTable).values(
-            categories.map((c) => ({
-              employeeId,
-              categoryId: c.categoryId,
-              isPrimary: !!c.isPrimary,
-            })),
-          );
-        }
-      });
-    } catch (err) {
-      // A second primary for a category already owned by another employee is
-      // rejected by the partial unique index — report it as a clear 400 rather
-      // than an opaque 500.
-      if (isUniqueViolation(err)) {
-        res.status(400).json({ error: PRIMARY_CONFLICT_MESSAGE });
-        return;
-      }
-      throw err;
-    }
+  await db.insert(auditLogTable).values({
+    action: "employee.categories_updated",
+    entityType: "employee",
+    entityId: employeeId,
+    employeeId: req.session.employeeId,
+    description: `Employee ${employeeId} categories set to ${categories.map((c) => c.categoryId).join(",") || "(none)"}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
 
-    await db.insert(auditLogTable).values({
-      action: "employee.categories_updated",
-      entityType: "employee",
-      entityId: employeeId,
-      employeeId: req.session.employeeId,
-      description: `Employee ${employeeId} categories set to ${categories.map((c) => c.categoryId).join(",") || "(none)"}`,
-      ipAddress: req.ip,
-      userAgent: req.get("user-agent"),
-    });
-
-    res.json({ ok: true, count: categories.length });
-  },
-);
+  res.json({ ok: true, count: categories.length });
+});
 
 export default router;

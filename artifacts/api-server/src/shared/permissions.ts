@@ -15,17 +15,49 @@ import { db, employeesTable } from "@workspace/db";
 type Session = { employeeId?: number; role?: string };
 
 const ALL_PAGES = [
-  "dashboard", "customers", "customer-rfq", "customer-po", "rfq", "suppliers", "items",
-  "purchase-orders", "accounts", "analytics", "whatsapp", "employees", "hr", "audit",
-  "integrations", "mailbox", "ai-assistant", "backup",
+  "dashboard",
+  "customers",
+  "customer-rfq",
+  "customer-po",
+  "rfq",
+  "suppliers",
+  "items",
+  "purchase-orders",
+  "accounts",
+  "analytics",
+  "whatsapp",
+  "employees",
+  "hr",
+  "audit",
+  "integrations",
+  "mailbox",
+  "ai-assistant",
+  "backup",
 ];
-const ADMIN_ONLY_FOR_NON_ADMIN = ["employees", "hr", "audit", "integrations", "ai-assistant", "backup"];
+const ADMIN_ONLY_FOR_NON_ADMIN = [
+  "employees",
+  "hr",
+  "audit",
+  "integrations",
+  "ai-assistant",
+  "backup",
+];
 const ITEMS_TABS = ["items:search", "items:analysis", "items:sheet", "items:categories"];
 
 /** Pages whose write actions are controlled by a `${page}:edit` key (mirror of the portal). */
 const EDIT_PAGES = [
-  "customers", "rfq", "suppliers", "items", "purchase-orders", "accounts", "whatsapp",
-  "employees", "hr", "integrations", "ai-assistant", "backup",
+  "customers",
+  "rfq",
+  "suppliers",
+  "items",
+  "purchase-orders",
+  "accounts",
+  "whatsapp",
+  "employees",
+  "hr",
+  "integrations",
+  "ai-assistant",
+  "backup",
 ];
 const editKeysOf = (pages: string[]): string[] =>
   pages.filter((k) => EDIT_PAGES.includes(k)).map((k) => `${k}:edit`);
@@ -33,16 +65,43 @@ const PURCHASING_PAGES = ALL_PAGES.filter((k) => !ADMIN_ONLY_FOR_NON_ADMIN.inclu
 
 export const ROLE_DEFAULTS: Record<string, string[]> = {
   manager: [
-    ...ALL_PAGES, ...editKeysOf(ALL_PAGES), "customer-rfq:edit", "customer-rfq:price", "customer-po:edit",
-    ...ITEMS_TABS, "rfq:assign",
+    ...ALL_PAGES,
+    ...editKeysOf(ALL_PAGES),
+    "customer-rfq:edit",
+    "customer-rfq:price",
+    "customer-po:edit",
+    ...ITEMS_TABS,
+    "rfq:assign",
   ],
   purchasing: [
-    ...PURCHASING_PAGES, ...editKeysOf(PURCHASING_PAGES.filter((k) => k !== "accounts")),
-    "customer-rfq:edit", "customer-po:edit", ...ITEMS_TABS, "rfq:assign",
+    ...PURCHASING_PAGES,
+    ...editKeysOf(PURCHASING_PAGES.filter((k) => k !== "accounts")),
+    "customer-rfq:edit",
+    "customer-po:edit",
+    ...ITEMS_TABS,
+    "rfq:assign",
   ],
-  data_entry: ["dashboard", "customers", "customer-rfq", "customer-po", "mailbox", "customer-rfq:edit", "customer-po:edit"],
+  data_entry: [
+    "dashboard",
+    "customers",
+    "customer-rfq",
+    "customer-po",
+    "mailbox",
+    "customer-rfq:edit",
+    "customer-po:edit",
+  ],
   // Legacy backend-only role (not in the portal). Kept so accounting staff keep the accounts API.
-  accountant: ["dashboard", "accounts", "accounts:edit", "mailbox", "customer-po", "customer-po:edit", "accounts:records", "accounts:expenses", "accounts:posting"],
+  accountant: [
+    "dashboard",
+    "accounts",
+    "accounts:edit",
+    "mailbox",
+    "customer-po",
+    "customer-po:edit",
+    "accounts:records",
+    "accounts:expenses",
+    "accounts:posting",
+  ],
 };
 
 export interface Access {
@@ -54,7 +113,9 @@ export interface Access {
 export function accessFor(role: string | undefined, permissions: unknown): Access {
   if (role === "admin") return { all: true, keys: new Set() };
   const explicit =
-    permissions && typeof permissions === "object" ? (permissions as Record<string, unknown>) : null;
+    permissions && typeof permissions === "object"
+      ? (permissions as Record<string, unknown>)
+      : null;
   if (explicit && Object.keys(explicit).length) {
     return { all: false, keys: new Set(Object.keys(explicit).filter((k) => explicit[k] === true)) };
   }
@@ -135,19 +196,51 @@ const RFQ_READ = ["rfq", "purchase-orders", "customer-rfq", "customer-po", "acco
 export const ROUTE_GUARDS: Record<string, { read: string[]; write: string[] }> = {
   "/suppliers": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers:edit"] },
   "/categories": { read: ["suppliers", "rfq", "purchase-orders"], write: ["suppliers:edit"] },
-  "/customers": { read: ["customers", "customer-rfq", "customer-po", "dashboard"], write: ["customers:edit"] },
-  "/representatives": { read: ["employees", "customers", "customer-rfq", "customer-po"], write: ["employees:edit"] },
-  "/employees": { read: ["employees", "rfq", "customer-rfq", "customer-po", "purchase-orders", "dashboard"], write: ["employees:edit"] },
-  "/items": { read: ["items", "rfq", "customer-rfq", "customer-po", "purchase-orders", "analytics", "dashboard"], write: ["items:edit"] },
+  "/customers": {
+    read: ["customers", "customer-rfq", "customer-po", "dashboard"],
+    write: ["customers:edit"],
+  },
+  "/representatives": {
+    read: ["employees", "customers", "customer-rfq", "customer-po"],
+    write: ["employees:edit"],
+  },
+  "/employees": {
+    read: ["employees", "rfq", "customer-rfq", "customer-po", "purchase-orders", "dashboard"],
+    write: ["employees:edit"],
+  },
+  "/items": {
+    read: [
+      "items",
+      "rfq",
+      "customer-rfq",
+      "customer-po",
+      "purchase-orders",
+      "analytics",
+      "dashboard",
+    ],
+    write: ["items:edit"],
+  },
   "/item-categories": { read: ["items", "rfq", "customer-rfq"], write: ["items:edit"] },
   "/offers": { read: RFQ_READ, write: ["rfq:edit"] },
   "/offer": { read: RFQ_READ, write: ["rfq:edit"] },
   "/rfq": { read: RFQ_READ, write: ["rfq:edit"] },
-  "/customer-rfq": { read: ["customer-rfq", "rfq", "customer-po", "dashboard"], write: ["customer-rfq:edit"] },
-  "/customer-po": { read: ["customer-po", "customer-rfq", "dashboard"], write: ["customer-po:edit"] },
-  "/po": { read: ["purchase-orders", "rfq", "accounts", "dashboard"], write: ["purchase-orders:edit"] },
+  "/customer-rfq": {
+    read: ["customer-rfq", "rfq", "customer-po", "dashboard"],
+    write: ["customer-rfq:edit"],
+  },
+  "/customer-po": {
+    read: ["customer-po", "customer-rfq", "dashboard"],
+    write: ["customer-po:edit"],
+  },
+  "/po": {
+    read: ["purchase-orders", "rfq", "accounts", "dashboard"],
+    write: ["purchase-orders:edit"],
+  },
   "/accounts": { read: ["accounts", "dashboard"], write: ["accounts:edit"] },
-  "/expenses": { read: ["accounts", "accounts:expenses"], write: ["accounts:edit", "accounts:expenses"] },
+  "/expenses": {
+    read: ["accounts", "accounts:expenses"],
+    write: ["accounts:edit", "accounts:expenses"],
+  },
   "/collections": { read: ["accounts", "dashboard"], write: ["accounts:edit"] },
   "/analytics": { read: ["analytics", "dashboard"], write: ["analytics"] },
   "/sync": { read: ["analytics"], write: ["analytics"] },

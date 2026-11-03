@@ -75,7 +75,6 @@ router.use("/ai-assistant", guardFor("/ai-assistant"));
 router.use("/integrations", guardFor("/integrations"));
 router.use("/backup", guardFor("/backup"));
 
-
 // Business modules
 router.use(usersModule); // auth · suppliers · categories · customers
 router.use(rfqModule); // rfq · offers · pricing · items

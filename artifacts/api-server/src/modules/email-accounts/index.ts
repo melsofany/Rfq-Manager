@@ -103,43 +103,51 @@ async function requireMailboxReader(
   next();
 }
 
-router.get("/email-accounts", requirePage(EMAIL_SETTINGS_PAGE), async (_req, res): Promise<void> => {
-  const employees: EmployeeRef[] = await db
-    .select({
-      id: employeesTable.id,
-      name: employeesTable.name,
-      email: employeesTable.email,
-      role: employeesTable.role,
-      isActive: employeesTable.isActive,
-      permissions: employeesTable.permissions,
-    })
-    .from(employeesTable);
+router.get(
+  "/email-accounts",
+  requirePage(EMAIL_SETTINGS_PAGE),
+  async (_req, res): Promise<void> => {
+    const employees: EmployeeRef[] = await db
+      .select({
+        id: employeesTable.id,
+        name: employeesTable.name,
+        email: employeesTable.email,
+        role: employeesTable.role,
+        isActive: employeesTable.isActive,
+        permissions: employeesTable.permissions,
+      })
+      .from(employeesTable);
 
-  try {
-    const users = await listDomainUsers();
-    res.json(buildEmailAccountsView(workspaceDomain(), users, employees));
-  } catch (err) {
-    if (err instanceof DirectoryNotConfiguredError) {
-      res.status(503).json({ error: err.message });
+    try {
+      const users = await listDomainUsers();
+      res.json(buildEmailAccountsView(workspaceDomain(), users, employees));
+    } catch (err) {
+      if (err instanceof DirectoryNotConfiguredError) {
+        res.status(503).json({ error: err.message });
+        return;
+      }
+      logger.error({ err }, "email-accounts: Google Directory request failed");
+      res.status(502).json({ error: "Google Directory request failed" });
+    }
+  },
+);
+
+router.get(
+  "/email-accounts/:mailbox/labels",
+  requireMailboxReader,
+  async (req, res): Promise<void> => {
+    const mailbox = domainMailbox(String(req.params.mailbox));
+    if (!mailbox) {
+      res.status(400).json({ error: "Mailbox must be an address on the company domain" });
       return;
     }
-    logger.error({ err }, "email-accounts: Google Directory request failed");
-    res.status(502).json({ error: "Google Directory request failed" });
-  }
-});
-
-router.get("/email-accounts/:mailbox/labels", requireMailboxReader, async (req, res): Promise<void> => {
-  const mailbox = domainMailbox(String(req.params.mailbox));
-  if (!mailbox) {
-    res.status(400).json({ error: "Mailbox must be an address on the company domain" });
-    return;
-  }
-  try {
-    res.json({ mailbox, labels: await listLabels(mailbox) });
-  } catch (err) {
-    handleMailError(err, res, "list labels");
-  }
-});
+    try {
+      res.json({ mailbox, labels: await listLabels(mailbox) });
+    } catch (err) {
+      handleMailError(err, res, "list labels");
+    }
+  },
+);
 
 router.get(
   "/email-accounts/:mailbox/messages",
@@ -190,7 +198,10 @@ router.get(
       res.status(400).json({ error: "Invalid message id" });
       return;
     }
-    logger.info({ by: actorId(req), mailbox, messageId: id, action: "open" }, "email-accounts: mailbox read");
+    logger.info(
+      { by: actorId(req), mailbox, messageId: id, action: "open" },
+      "email-accounts: mailbox read",
+    );
     try {
       res.json(await getMessage(mailbox, id));
     } catch (err) {
@@ -256,71 +267,89 @@ router.get("/my-mailboxes", requireAuth, async (req, res): Promise<void> => {
 });
 
 /** Admin: current read grants and the employee list to pick from. */
-router.get("/mailbox-access", requirePage(EMAIL_SETTINGS_PAGE), async (_req, res): Promise<void> => {
-  const rows = await db
-    .select({
-      id: mailboxAccessTable.id,
-      mailbox: mailboxAccessTable.mailbox,
-      employeeId: mailboxAccessTable.employeeId,
-      employeeName: employeesTable.name,
-      employeeEmail: employeesTable.email,
-    })
-    .from(mailboxAccessTable)
-    .innerJoin(employeesTable, eq(mailboxAccessTable.employeeId, employeesTable.id))
-    .orderBy(mailboxAccessTable.mailbox);
-  const employees = await db
-    .select({ id: employeesTable.id, name: employeesTable.name, email: employeesTable.email })
-    .from(employeesTable)
-    .where(eq(employeesTable.isActive, true))
-    .orderBy(employeesTable.name);
-  res.json({ grants: rows, employees });
-});
+router.get(
+  "/mailbox-access",
+  requirePage(EMAIL_SETTINGS_PAGE),
+  async (_req, res): Promise<void> => {
+    const rows = await db
+      .select({
+        id: mailboxAccessTable.id,
+        mailbox: mailboxAccessTable.mailbox,
+        employeeId: mailboxAccessTable.employeeId,
+        employeeName: employeesTable.name,
+        employeeEmail: employeesTable.email,
+      })
+      .from(mailboxAccessTable)
+      .innerJoin(employeesTable, eq(mailboxAccessTable.employeeId, employeesTable.id))
+      .orderBy(mailboxAccessTable.mailbox);
+    const employees = await db
+      .select({ id: employeesTable.id, name: employeesTable.name, email: employeesTable.email })
+      .from(employeesTable)
+      .where(eq(employeesTable.isActive, true))
+      .orderBy(employeesTable.name);
+    res.json({ grants: rows, employees });
+  },
+);
 
 /** Admin: grant an employee read access to a mailbox. */
-router.post("/mailbox-access", requirePage(EMAIL_SETTINGS_PAGE), async (req, res): Promise<void> => {
-  const mailbox = domainMailbox(String((req.body as { mailbox?: unknown })?.mailbox ?? ""));
-  const employeeId = Number((req.body as { employeeId?: unknown })?.employeeId);
-  if (!mailbox) {
-    res.status(400).json({ error: "Mailbox must be an address on the company domain" });
-    return;
-  }
-  if (!Number.isInteger(employeeId) || employeeId <= 0) {
-    res.status(400).json({ error: "Invalid employee" });
-    return;
-  }
-  const [emp] = await db
-    .select({ id: employeesTable.id })
-    .from(employeesTable)
-    .where(eq(employeesTable.id, employeeId));
-  if (!emp) {
-    res.status(404).json({ error: "Employee not found" });
-    return;
-  }
-  await db
-    .insert(mailboxAccessTable)
-    .values({ mailbox, employeeId })
-    .onConflictDoNothing();
-  logger.info({ by: actorId(req), mailbox, employeeId, action: "grant-read" }, "email-accounts: access changed");
-  res.status(201).json({ ok: true });
-});
+router.post(
+  "/mailbox-access",
+  requirePage(EMAIL_SETTINGS_PAGE),
+  async (req, res): Promise<void> => {
+    const mailbox = domainMailbox(String((req.body as { mailbox?: unknown })?.mailbox ?? ""));
+    const employeeId = Number((req.body as { employeeId?: unknown })?.employeeId);
+    if (!mailbox) {
+      res.status(400).json({ error: "Mailbox must be an address on the company domain" });
+      return;
+    }
+    if (!Number.isInteger(employeeId) || employeeId <= 0) {
+      res.status(400).json({ error: "Invalid employee" });
+      return;
+    }
+    const [emp] = await db
+      .select({ id: employeesTable.id })
+      .from(employeesTable)
+      .where(eq(employeesTable.id, employeeId));
+    if (!emp) {
+      res.status(404).json({ error: "Employee not found" });
+      return;
+    }
+    await db.insert(mailboxAccessTable).values({ mailbox, employeeId }).onConflictDoNothing();
+    logger.info(
+      { by: actorId(req), mailbox, employeeId, action: "grant-read" },
+      "email-accounts: access changed",
+    );
+    res.status(201).json({ ok: true });
+  },
+);
 
 /** Admin: remove a read grant. */
-router.delete("/mailbox-access/:id", requirePage(EMAIL_SETTINGS_PAGE), async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
-  if (!Number.isInteger(id) || id <= 0) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
-  const removed = await db
-    .delete(mailboxAccessTable)
-    .where(eq(mailboxAccessTable.id, id))
-    .returning({ mailbox: mailboxAccessTable.mailbox, employeeId: mailboxAccessTable.employeeId });
-  if (removed.length === 0) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
-  logger.info({ by: actorId(req), ...removed[0], action: "revoke-read" }, "email-accounts: access changed");
-  res.status(204).end();
-});
+router.delete(
+  "/mailbox-access/:id",
+  requirePage(EMAIL_SETTINGS_PAGE),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: "Invalid id" });
+      return;
+    }
+    const removed = await db
+      .delete(mailboxAccessTable)
+      .where(eq(mailboxAccessTable.id, id))
+      .returning({
+        mailbox: mailboxAccessTable.mailbox,
+        employeeId: mailboxAccessTable.employeeId,
+      });
+    if (removed.length === 0) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    logger.info(
+      { by: actorId(req), ...removed[0], action: "revoke-read" },
+      "email-accounts: access changed",
+    );
+    res.status(204).end();
+  },
+);
 
 export default router;

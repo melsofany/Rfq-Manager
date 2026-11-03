@@ -62,7 +62,10 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     key: "rfq",
     href: "/rfq",
     labelKey: "nav.rfq",
-    children: [{ key: "rfq:edit", labelKey: "perm.pageEdit" }, { key: "rfq:assign", labelKey: "perm.rfq.assign" }],
+    children: [
+      { key: "rfq:edit", labelKey: "perm.pageEdit" },
+      { key: "rfq:assign", labelKey: "perm.rfq.assign" },
+    ],
   },
   {
     key: "suppliers",
@@ -161,7 +164,10 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     key: "backup",
     href: "/backup",
     labelKey: "nav.backup",
-    children: [{ key: "backup:edit", labelKey: "perm.pageEdit" }, { key: "backup:alerts", labelKey: "perm.backup.alerts" }],
+    children: [
+      { key: "backup:edit", labelKey: "perm.pageEdit" },
+      { key: "backup:alerts", labelKey: "perm.backup.alerts" },
+    ],
   },
 ];
 
@@ -214,8 +220,18 @@ export const ADMIN_ONLY_PAGES: string[] = ["email-settings"];
  */
 /** Pages whose write actions are controlled by a `${page}:edit` key. */
 export const EDIT_PAGES: string[] = [
-  "customers", "rfq", "suppliers", "items", "purchase-orders", "accounts", "whatsapp",
-  "employees", "hr", "integrations", "ai-assistant", "backup",
+  "customers",
+  "rfq",
+  "suppliers",
+  "items",
+  "purchase-orders",
+  "accounts",
+  "whatsapp",
+  "employees",
+  "hr",
+  "integrations",
+  "ai-assistant",
+  "backup",
 ];
 const editKeysOf = (pages: string[]): string[] =>
   pages.filter((k) => EDIT_PAGES.includes(k)).map((k) => `${k}:edit`);

@@ -10,7 +10,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/employees", guardFor("/employees"));
 
-
 // Per-IP ceiling (generous — a shared office NAT must not trip it) …
 const loginIpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

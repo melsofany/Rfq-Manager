@@ -289,8 +289,7 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
             ? productionByEmp.get(employeeId)!
             : employees.find((e) => e.id === employeeId)?.keepFixedIncentive
               ? num(c.incentive)
-              : 0) +
-          sumKind("incentive"),
+              : 0) + sumKind("incentive"),
         deductions: sumKind("deduction"),
         absenceDays: absence[employeeId],
         finesTotal,

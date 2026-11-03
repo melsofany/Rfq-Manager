@@ -15,9 +15,7 @@ import {
   customerPosTable,
   purchaseOrdersTable,
   purchaseOrderItemsTable,
-  customerPosTable,
   customerPoItemDeliveriesTable,
-  purchaseOrderItemsTable,
   itemCategoriesTable,
   employeeCategoriesTable,
   customerRfqItemCategoriesTable,
@@ -36,12 +34,10 @@ import { approveCustomerItem } from "../rfq/customer-assignment";
 import { classifyItem, normalizeText } from "../rfq/classification";
 import { loadClassifierVocabulary } from "../rfq/keywords";
 import { assignReviewGroup, resolveConflictItems, listReviewGroups } from "../rfq/review-groups";
-import { guardFor } from "../../shared/permissions";
 
 const router = Router();
 router.use("/customer-rfq", guardFor("/customer-rfq"));
 router.use("/customer-rfq", guardFor("/customer-rfq"));
-
 
 // VAT rate — must match the rfq module (used to normalize tax-inclusive
 // supplier prices to excl-tax for the margin check).
@@ -1874,71 +1870,59 @@ router.put(
 // POST /customer-rfq/items/classify — backfill: run the DeepSeek classifier over
 // every still-unclassified customer item (batched), then assign owners. Manager+
 // only, because it writes categories across the whole catalogue.
-router.post(
-  "/customer-rfq/items/classify",
-  requireAuth,
-  async (req, res): Promise<void> => {
-    const body = req.body as { limit?: unknown };
-    const limit = body.limit != null ? Number(body.limit) : undefined;
-    const result = await classifyUnclassifiedItems({
-      limit: Number.isFinite(limit) ? (limit as number) : undefined,
-    });
-    await db.insert(auditLogTable).values({
-      action: "customer_rfq.items_bulk_classified",
-      entityType: "customer_rfq_item",
-      employeeId: req.session.employeeId ?? null,
-      description: `Bulk AI classification: scanned ${result.scanned}, classified ${result.classified}`,
-      ipAddress: req.ip,
-      userAgent: req.get("user-agent"),
-    });
-    res.json(result);
-  },
-);
+router.post("/customer-rfq/items/classify", requireAuth, async (req, res): Promise<void> => {
+  const body = req.body as { limit?: unknown };
+  const limit = body.limit != null ? Number(body.limit) : undefined;
+  const result = await classifyUnclassifiedItems({
+    limit: Number.isFinite(limit) ? (limit as number) : undefined,
+  });
+  await db.insert(auditLogTable).values({
+    action: "customer_rfq.items_bulk_classified",
+    entityType: "customer_rfq_item",
+    employeeId: req.session.employeeId ?? null,
+    description: `Bulk AI classification: scanned ${result.scanned}, classified ${result.classified}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+  res.json(result);
+});
 
 // GET /customer-rfq/review-groups — unclassified items grouped by identical text,
 // so the manager decides once per text instead of once per item. Manager+ only.
-router.get(
-  "/customer-rfq/review-groups",
-  requireAuth,
-  async (_req, res): Promise<void> => {
-    const groups = await listReviewGroups();
-    res.json({ groups });
-  },
-);
+router.get("/customer-rfq/review-groups", requireAuth, async (_req, res): Promise<void> => {
+  const groups = await listReviewGroups();
+  res.json({ groups });
+});
 
 // POST /customer-rfq/review-groups/assign — one category for every item of a group.
 // Body: { key: string, categoryId: number }. Manager+ only.
-router.post(
-  "/customer-rfq/review-groups/assign",
-  requireAuth,
-  async (req, res): Promise<void> => {
-    const body = req.body as { key?: unknown; categoryId?: unknown };
-    const key = typeof body.key === "string" ? body.key : "";
-    const categoryId = Number(body.categoryId);
-    if (!key || !Number.isInteger(categoryId) || categoryId <= 0) {
-      res.status(400).json({ error: "المجموعة والتصنيف مطلوبان" });
-      return;
-    }
-    const result = await assignReviewGroup({
-      key,
-      categoryId,
-      decidedBy: req.session.employeeId ?? null,
-    });
-    if ("error" in result) {
-      res.status(result.status).json({ error: result.error });
-      return;
-    }
-    await db.insert(auditLogTable).values({
-      action: "customer_rfq.review_group_assigned",
-      entityType: "customer_rfq_item",
-      employeeId: req.session.employeeId ?? null,
-      description: `Group assign: ${result.assigned} items to category ${categoryId}`,
-      ipAddress: req.ip,
-      userAgent: req.get("user-agent"),
-    });
-    res.json(result);
-  },
-);
+router.post("/customer-rfq/review-groups/assign", requireAuth, async (req, res): Promise<void> => {
+  const body = req.body as { key?: unknown; categoryId?: unknown };
+  const key = typeof body.key === "string" ? body.key : "";
+  const categoryId = Number(body.categoryId);
+  if (!key || !Number.isInteger(categoryId) || categoryId <= 0) {
+    res.status(400).json({ error: "المجموعة والتصنيف مطلوبان" });
+    return;
+  }
+  const result = await assignReviewGroup({
+    key,
+    categoryId,
+    decidedBy: req.session.employeeId ?? null,
+  });
+  if ("error" in result) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  await db.insert(auditLogTable).values({
+    action: "customer_rfq.review_group_assigned",
+    entityType: "customer_rfq_item",
+    employeeId: req.session.employeeId ?? null,
+    description: `Group assign: ${result.assigned} items to category ${categoryId}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+  res.json(result);
+});
 
 // POST /customer-rfq/classification-conflicts/resolve — one decision for a whole
 // conflict group. Body: { itemIds: number[], categoryId: number }. Manager+ only.
@@ -2255,26 +2239,22 @@ router.get(
 // existing domain, else the deterministic classifier. Manager+ only (it writes
 // categories across the whole catalogue). Idempotent: a consistent item and a
 // merely-unclassified item are never touched.
-router.post(
-  "/customer-rfq/classification-repair",
-  requireAuth,
-  async (req, res): Promise<void> => {
-    const body = req.body as { limit?: unknown };
-    const limit = body.limit != null ? Number(body.limit) : undefined;
-    const result = await repairClassificationConsistency({
-      limit: Number.isFinite(limit) ? (limit as number) : undefined,
-    });
-    await db.insert(auditLogTable).values({
-      action: "customer_rfq.classification_repaired",
-      entityType: "customer_rfq_item",
-      employeeId: req.session.employeeId ?? null,
-      description: `Classification consistency repair: ${result.identities} identities unified, ${result.itemsFixed} items fixed`,
-      ipAddress: req.ip,
-      userAgent: req.get("user-agent"),
-    });
-    res.json(result);
-  },
-);
+router.post("/customer-rfq/classification-repair", requireAuth, async (req, res): Promise<void> => {
+  const body = req.body as { limit?: unknown };
+  const limit = body.limit != null ? Number(body.limit) : undefined;
+  const result = await repairClassificationConsistency({
+    limit: Number.isFinite(limit) ? (limit as number) : undefined,
+  });
+  await db.insert(auditLogTable).values({
+    action: "customer_rfq.classification_repaired",
+    entityType: "customer_rfq_item",
+    employeeId: req.session.employeeId ?? null,
+    description: `Classification consistency repair: ${result.identities} identities unified, ${result.itemsFixed} items fixed`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+  res.json(result);
+});
 
 // GET /customer-rfq/classification-review-queue — «بنود تحتاج مراجعة»: the items
 // the automatic classifier could NOT place, so a manager decides by hand.
@@ -2692,150 +2672,137 @@ router.post("/customer-rfq", requireAuth, async (req, res): Promise<void> => {
 //  - archive (view=archive): every active item is classified, assigned and
 //    approved (archiveReason "approved"), or its close date has passed
 //    (archiveReason "expired").
-router.get(
-  "/customer-rfq/pending-review",
-  requireAuth,
-  async (req, res): Promise<void> => {
-    const view = (req.query as Record<string, string>).view === "archive" ? "archive" : "active";
+router.get("/customer-rfq/pending-review", requireAuth, async (req, res): Promise<void> => {
+  const view = (req.query as Record<string, string>).view === "archive" ? "archive" : "active";
 
-    const headers = await db
-      .select({
-        id: customerRfqsTable.id,
-        customerRfqNo: customerRfqsTable.customerRfqNo,
-        customerName: customerRfqsTable.customerName,
-        expiryDate: customerRfqsTable.expiryDate,
-      })
-      .from(customerRfqsTable);
+  const headers = await db
+    .select({
+      id: customerRfqsTable.id,
+      customerRfqNo: customerRfqsTable.customerRfqNo,
+      customerName: customerRfqsTable.customerName,
+      expiryDate: customerRfqsTable.expiryDate,
+    })
+    .from(customerRfqsTable);
 
-    const items = await db
-      .select({
-        id: customerRfqItemsTable.id,
-        customerRfqId: customerRfqItemsTable.customerRfqId,
-        categoryId: customerRfqItemsTable.categoryId,
-      })
-      .from(customerRfqItemsTable)
-      .where(eq(customerRfqItemsTable.isCancelled, false));
+  const items = await db
+    .select({
+      id: customerRfqItemsTable.id,
+      customerRfqId: customerRfqItemsTable.customerRfqId,
+      categoryId: customerRfqItemsTable.categoryId,
+    })
+    .from(customerRfqItemsTable)
+    .where(eq(customerRfqItemsTable.isCancelled, false));
 
-    const asg = items.length
-      ? await db
-          .select({
-            customerRfqItemId: customerRfqItemAssignmentsTable.customerRfqItemId,
-            categoryId: customerRfqItemAssignmentsTable.categoryId,
-            employeeId: customerRfqItemAssignmentsTable.employeeId,
-            reviewStatus: customerRfqItemAssignmentsTable.reviewStatus,
-          })
-          .from(customerRfqItemAssignmentsTable)
-          .where(isNull(customerRfqItemAssignmentsTable.validTo))
-      : [];
-    const asgByItem = new Map(asg.map((a) => [a.customerRfqItemId, a]));
+  const asg = items.length
+    ? await db
+        .select({
+          customerRfqItemId: customerRfqItemAssignmentsTable.customerRfqItemId,
+          categoryId: customerRfqItemAssignmentsTable.categoryId,
+          employeeId: customerRfqItemAssignmentsTable.employeeId,
+          reviewStatus: customerRfqItemAssignmentsTable.reviewStatus,
+        })
+        .from(customerRfqItemAssignmentsTable)
+        .where(isNull(customerRfqItemAssignmentsTable.validTo))
+    : [];
+  const asgByItem = new Map(asg.map((a) => [a.customerRfqItemId, a]));
 
-    const stats = new Map<
-      number,
-      { total: number; pending: number; unclassified: number; unassigned: number; approved: number }
-    >();
-    for (const it of items) {
-      const st = stats.get(it.customerRfqId) ?? {
+  const stats = new Map<
+    number,
+    { total: number; pending: number; unclassified: number; unassigned: number; approved: number }
+  >();
+  for (const it of items) {
+    const st = stats.get(it.customerRfqId) ?? {
+      total: 0,
+      pending: 0,
+      unclassified: 0,
+      unassigned: 0,
+      approved: 0,
+    };
+    const a = asgByItem.get(it.id);
+    st.total += 1;
+    if (it.categoryId == null) st.unclassified += 1;
+    if (a?.reviewStatus === "pending" && a.categoryId != null) st.pending += 1;
+    if (a?.categoryId != null && a.employeeId == null) st.unassigned += 1;
+    if (a != null && a.categoryId != null && a.employeeId != null && a.reviewStatus === "approved")
+      st.approved += 1;
+    stats.set(it.customerRfqId, st);
+  }
+
+  const rows = headers
+    .map((h) => {
+      const st = stats.get(h.id) ?? {
         total: 0,
         pending: 0,
         unclassified: 0,
         unassigned: 0,
         approved: 0,
       };
-      const a = asgByItem.get(it.id);
-      st.total += 1;
-      if (it.categoryId == null) st.unclassified += 1;
-      if (a?.reviewStatus === "pending" && a.categoryId != null) st.pending += 1;
-      if (a?.categoryId != null && a.employeeId == null) st.unassigned += 1;
-      if (
-        a != null &&
-        a.categoryId != null &&
-        a.employeeId != null &&
-        a.reviewStatus === "approved"
-      )
-        st.approved += 1;
-      stats.set(it.customerRfqId, st);
-    }
+      const expired = hasExpired(h.expiryDate);
+      const fullyApproved = st.total > 0 && st.approved === st.total;
+      const archiveReason = expired ? "expired" : fullyApproved ? "approved" : null;
+      const needsWork = st.pending > 0 || st.unclassified > 0 || st.unassigned > 0;
+      return {
+        rfqId: h.id,
+        customerRfqNo: h.customerRfqNo,
+        customerName: h.customerName,
+        pendingCount: st.pending,
+        unclassifiedCount: st.unclassified,
+        unassignedCount: st.unassigned,
+        archiveReason,
+        inActive: archiveReason == null && needsWork,
+      };
+    })
+    .filter((r) => (view === "archive" ? r.archiveReason != null : r.inActive))
+    .map(({ inActive: _inActive, ...r }) => r)
+    .sort((a, b) => b.pendingCount - a.pendingCount);
+  res.json({ rows });
+});
 
-    const rows = headers
-      .map((h) => {
-        const st = stats.get(h.id) ?? {
-          total: 0,
-          pending: 0,
-          unclassified: 0,
-          unassigned: 0,
-          approved: 0,
-        };
-        const expired = hasExpired(h.expiryDate);
-        const fullyApproved = st.total > 0 && st.approved === st.total;
-        const archiveReason = expired ? "expired" : fullyApproved ? "approved" : null;
-        const needsWork = st.pending > 0 || st.unclassified > 0 || st.unassigned > 0;
-        return {
-          rfqId: h.id,
-          customerRfqNo: h.customerRfqNo,
-          customerName: h.customerName,
-          pendingCount: st.pending,
-          unclassifiedCount: st.unclassified,
-          unassignedCount: st.unassigned,
-          archiveReason,
-          inActive: archiveReason == null && needsWork,
-        };
-      })
-      .filter((r) => (view === "archive" ? r.archiveReason != null : r.inActive))
-      .map(({ inActive: _inActive, ...r }) => r)
-      .sort((a, b) => b.pendingCount - a.pendingCount);
-    res.json({ rows });
-  },
-);
-
-router.post(
-  "/customer-rfq/:id/approve-all",
-  requireAuth,
-  async (req, res): Promise<void> => {
-    const rfqId = parseInt(req.params.id as string, 10);
-    if (!Number.isFinite(rfqId)) {
-      res.status(400).json({ error: "معرّف الطلب غير صالح" });
-      return;
+router.post("/customer-rfq/:id/approve-all", requireAuth, async (req, res): Promise<void> => {
+  const rfqId = parseInt(req.params.id as string, 10);
+  if (!Number.isFinite(rfqId)) {
+    res.status(400).json({ error: "معرّف الطلب غير صالح" });
+    return;
+  }
+  const pending = await db
+    .select({ id: customerRfqItemAssignmentsTable.customerRfqItemId })
+    .from(customerRfqItemAssignmentsTable)
+    .innerJoin(
+      customerRfqItemsTable,
+      eq(customerRfqItemAssignmentsTable.customerRfqItemId, customerRfqItemsTable.id),
+    )
+    .where(
+      and(
+        eq(customerRfqItemsTable.customerRfqId, rfqId),
+        isNull(customerRfqItemAssignmentsTable.validTo),
+        eq(customerRfqItemAssignmentsTable.reviewStatus, "pending"),
+        isNotNull(customerRfqItemAssignmentsTable.categoryId),
+      ),
+    );
+  let approved = 0;
+  const failed: number[] = [];
+  for (const row of pending) {
+    try {
+      await approveCustomerItem({
+        customerRfqItemId: row.id,
+        approvedBy: req.session.employeeId ?? null,
+      });
+      approved += 1;
+    } catch {
+      failed.push(row.id);
     }
-    const pending = await db
-      .select({ id: customerRfqItemAssignmentsTable.customerRfqItemId })
-      .from(customerRfqItemAssignmentsTable)
-      .innerJoin(
-        customerRfqItemsTable,
-        eq(customerRfqItemAssignmentsTable.customerRfqItemId, customerRfqItemsTable.id),
-      )
-      .where(
-        and(
-          eq(customerRfqItemsTable.customerRfqId, rfqId),
-          isNull(customerRfqItemAssignmentsTable.validTo),
-          eq(customerRfqItemAssignmentsTable.reviewStatus, "pending"),
-          isNotNull(customerRfqItemAssignmentsTable.categoryId),
-        ),
-      );
-    let approved = 0;
-    const failed: number[] = [];
-    for (const row of pending) {
-      try {
-        await approveCustomerItem({
-          customerRfqItemId: row.id,
-          approvedBy: req.session.employeeId ?? null,
-        });
-        approved += 1;
-      } catch {
-        failed.push(row.id);
-      }
-    }
-    await db.insert(auditLogTable).values({
-      action: "customer_rfq.approved_all",
-      entityType: "customer_rfq",
-      entityId: rfqId,
-      employeeId: req.session.employeeId,
-      description: `Approved ${approved} pending item(s) of request ${rfqId}`,
-      ipAddress: req.ip,
-      userAgent: req.get("user-agent"),
-    });
-    res.json({ ok: true, approved, failed });
-  },
-);
+  }
+  await db.insert(auditLogTable).values({
+    action: "customer_rfq.approved_all",
+    entityType: "customer_rfq",
+    entityId: rfqId,
+    employeeId: req.session.employeeId,
+    description: `Approved ${approved} pending item(s) of request ${rfqId}`,
+    ipAddress: req.ip,
+    userAgent: req.get("user-agent"),
+  });
+  res.json({ ok: true, approved, failed });
+});
 
 router.get("/customer-rfq/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -3261,7 +3228,11 @@ router.get("/customer-rfq/:id/chain", async (req, res): Promise<void> => {
     return;
   }
   const [customerRfq] = await db
-    .select({ id: customerRfqsTable.id, customerRfqNo: customerRfqsTable.customerRfqNo, status: customerRfqsTable.status })
+    .select({
+      id: customerRfqsTable.id,
+      customerRfqNo: customerRfqsTable.customerRfqNo,
+      status: customerRfqsTable.status,
+    })
     .from(customerRfqsTable)
     .where(eq(customerRfqsTable.id, id));
   if (!customerRfq) {
@@ -3284,25 +3255,46 @@ router.get("/customer-rfq/:id/chain", async (req, res): Promise<void> => {
   ];
   const customerPos = customerPoIds.length
     ? await db
-        .select({ id: customerPosTable.id, customerPoNo: customerPosTable.customerPoNo, status: customerPosTable.status })
+        .select({
+          id: customerPosTable.id,
+          customerPoNo: customerPosTable.customerPoNo,
+          status: customerPosTable.status,
+        })
         .from(customerPosTable)
-        .where(inArray(customerPosTable.id, customerPoIds))
+        .where(
+          inArray(
+            customerPosTable.id,
+            customerPoIds.filter((x): x is number => x != null),
+          ),
+        )
     : [];
   const supplierRfqIds = supplierRfqs.map((r) => r.id);
   const poIdsFromRfq = supplierRfqIds.length
-    ? (await db.select({ id: purchaseOrdersTable.id }).from(purchaseOrdersTable).where(inArray(purchaseOrdersTable.rfqId, supplierRfqIds))).map((r) => r.id)
+    ? (
+        await db
+          .select({ id: purchaseOrdersTable.id })
+          .from(purchaseOrdersTable)
+          .where(inArray(purchaseOrdersTable.rfqId, supplierRfqIds))
+      ).map((r) => r.id)
     : [];
   const poIdsFromCustomerPo = (
     await db
       .select({ poId: purchaseOrderItemsTable.poId })
       .from(purchaseOrderItemsTable)
-      .innerJoin(customerPoItemsTable, eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id))
+      .innerJoin(
+        customerPoItemsTable,
+        eq(purchaseOrderItemsTable.customerPoItemId, customerPoItemsTable.id),
+      )
       .where(eq(customerPoItemsTable.customerRfqId, id))
   ).map((r) => r.poId);
   const poIds = [...new Set([...poIdsFromRfq, ...poIdsFromCustomerPo])];
   const purchaseOrders = poIds.length
     ? await db
-        .select({ id: purchaseOrdersTable.id, internalPoNo: purchaseOrdersTable.internalPoNo, status: purchaseOrdersTable.status })
+        .select({
+          id: purchaseOrdersTable.id,
+          internalPoNo: purchaseOrdersTable.internalPoNo,
+          status: purchaseOrdersTable.status,
+        })
         .from(purchaseOrdersTable)
         .where(inArray(purchaseOrdersTable.id, poIds))
     : [];

@@ -36,7 +36,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/po", guardFor("/po"));
 
-
 function formatQty(qty: string | null): string | null {
   if (qty == null) return null;
   const s = String(qty);

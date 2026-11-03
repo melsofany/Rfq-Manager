@@ -19,7 +19,6 @@ import { guardFor } from "../../shared/permissions";
 const router: IRouter = Router();
 router.use("/chatwoot", guardFor("/chatwoot"));
 
-
 const CHATWOOT_URL = process.env.CHATWOOT_URL?.replace(/\/$/, "") || "";
 const CHATWOOT_ACCOUNT_ID = process.env.CHATWOOT_ACCOUNT_ID || "";
 // Platform App access token (super-admin level) — used to provision users + mint SSO links.

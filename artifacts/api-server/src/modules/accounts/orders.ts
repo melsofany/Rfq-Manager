@@ -43,7 +43,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/accounts", guardFor("/accounts"));
 
-
 const DELIVERED_STATES = new Set(["delivered", "rejected", "cancelled"]);
 const RECEIVED_STATES = new Set(["fulfilled", "partial", "rejected"]);
 

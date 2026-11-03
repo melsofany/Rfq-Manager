@@ -64,7 +64,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/items", guardFor("/items"));
 
-
 // ── Tuning ───────────────────────────────────────────────────────────────────
 /** Matching rows examined per source. A cap exists so one query cannot exhaust
  *  memory; when it bites, the response says so (`truncated`). */

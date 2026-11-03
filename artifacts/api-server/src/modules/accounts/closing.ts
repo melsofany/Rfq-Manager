@@ -17,12 +17,10 @@ import { Router } from "express";
 import { db, accountingClosingsTable, journalEntriesTable, auditLogTable } from "@workspace/db";
 import { eq, desc, sql } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
-import { guardFor, requirePermission } from "../../shared/permissions";
 
 const router = Router();
 router.use("/accounts", guardFor("/accounts"));
 router.use("/accounts", guardFor("/accounts"));
-
 
 /** YYYY-MM from a date string (or full ISO). Returns null when unparseable。 */
 export function monthOf(date: string | null | undefined): string | null {
@@ -66,84 +64,85 @@ router.get("/accounts/closings", requireAuth, async (_req, res): Promise<void> =
   );
 });
 
-router.post(
-  "/accounts/closings",
-  async (req, res): Promise<void> => {
-    const body = (req.body ?? {}) as { period?: string; notes?: string | null };
-    const period = body.period?.trim() ?? "";
-    if (
-      !/^\d{4}-\d{2}$/.test(period) ||
-      parseInt(period.slice(5, 7), 10) < 1 ||
-      parseInt(period.slice(5, 7), 10) > 12
-    ) {
-      res.status(400).json({ error: "الفترة يجب أن تكون بصيغة YYYY-MM" });
-      return;
-    }
-    const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-    // Reject locking a month that still has UNPOSTED (draft) journal entries —
-    // posted/void entries are final and must not block the closing.
-    const openDrafts = await db
-      .select({ id: journalEntriesTable.id })
-      .from(journalEntriesTable)
-      .where(
-        sql`substr(${journalEntriesTable.entryDate}, 1, 7) = ${period} and ${journalEntriesTable.status} = 'draft'`,
-      )
-      .limit(1);
-    if (openDrafts.length) {
-      res
-        .status(400)
-        .json({ error: `يوجد قيود لم تُرحَّل بعد في شهر ${period} — راجعها ثم أعد المحاولة` });
-      return;
-    }
-    const [existing] = await db
-      .select()
-      .from(accountingClosingsTable)
-      .where(eq(accountingClosingsTable.period, period))
-      .limit(1);
-    if (existing) {
-      res.status(400).json({ error: `شهر ${period} مقفل بالفعل` });
-      return;
-    }
-    const [row] = await db
-      .insert(accountingClosingsTable)
-      .values({
-        period,
-        closedBy: session.employeeId ?? null,
-        closedByName: session.employeeName ?? null,
-        notes: body.notes ?? null,
-      })
-      .returning();
-    await db.insert(auditLogTable).values({
-      action: "closing.create",
-      entityType: "accounting_closings",
-      entityId: row?.id,
-      employeeId: session.employeeId,
-      description: `قفل شهر ${period}`,
-    });
-    res.status(201).json({ id: row?.id, period, closed: true });
-  },
-);
-
-router.delete("/accounts/closings/:id", requirePermission("accounts:posting"), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  const [lock] = await db
-    .select()
-    .from(accountingClosingsTable)
-    .where(eq(accountingClosingsTable.id, id));
-  if (!lock) {
-    res.status(404).json({ error: "القفل غير موجود" });
+router.post("/accounts/closings", async (req, res): Promise<void> => {
+  const body = (req.body ?? {}) as { period?: string; notes?: string | null };
+  const period = body.period?.trim() ?? "";
+  if (
+    !/^\d{4}-\d{2}$/.test(period) ||
+    parseInt(period.slice(5, 7), 10) < 1 ||
+    parseInt(period.slice(5, 7), 10) > 12
+  ) {
+    res.status(400).json({ error: "الفترة يجب أن تكون بصيغة YYYY-MM" });
     return;
   }
   const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
-  await db.delete(accountingClosingsTable).where(eq(accountingClosingsTable.id, id));
+  // Reject locking a month that still has UNPOSTED (draft) journal entries —
+  // posted/void entries are final and must not block the closing.
+  const openDrafts = await db
+    .select({ id: journalEntriesTable.id })
+    .from(journalEntriesTable)
+    .where(
+      sql`substr(${journalEntriesTable.entryDate}, 1, 7) = ${period} and ${journalEntriesTable.status} = 'draft'`,
+    )
+    .limit(1);
+  if (openDrafts.length) {
+    res
+      .status(400)
+      .json({ error: `يوجد قيود لم تُرحَّل بعد في شهر ${period} — راجعها ثم أعد المحاولة` });
+    return;
+  }
+  const [existing] = await db
+    .select()
+    .from(accountingClosingsTable)
+    .where(eq(accountingClosingsTable.period, period))
+    .limit(1);
+  if (existing) {
+    res.status(400).json({ error: `شهر ${period} مقفل بالفعل` });
+    return;
+  }
+  const [row] = await db
+    .insert(accountingClosingsTable)
+    .values({
+      period,
+      closedBy: session.employeeId ?? null,
+      closedByName: session.employeeName ?? null,
+      notes: body.notes ?? null,
+    })
+    .returning();
   await db.insert(auditLogTable).values({
-    action: "closing.delete",
+    action: "closing.create",
     entityType: "accounting_closings",
-    entityId: id,
+    entityId: row?.id,
     employeeId: session.employeeId,
-    description: `فتح شهر ${lock.period} (إلغاء الإقفال)`,
+    description: `قفل شهر ${period}`,
   });
-  res.json({ id, closed: false });
+  res.status(201).json({ id: row?.id, period, closed: true });
 });
+
+router.delete(
+  "/accounts/closings/:id",
+  requirePermission("accounts:posting"),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const [lock] = await db
+      .select()
+      .from(accountingClosingsTable)
+      .where(eq(accountingClosingsTable.id, id));
+    if (!lock) {
+      res.status(404).json({ error: "القفل غير موجود" });
+      return;
+    }
+    const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
+    await db.delete(accountingClosingsTable).where(eq(accountingClosingsTable.id, id));
+    await db.insert(auditLogTable).values({
+      action: "closing.delete",
+      entityType: "accounting_closings",
+      entityId: id,
+      employeeId: session.employeeId,
+      description: `فتح شهر ${lock.period} (إلغاء الإقفال)`,
+    });
+    res.json({ id, closed: false });
+  },
+);
 
 export default router;

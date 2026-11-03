@@ -7,12 +7,10 @@ import { guardFor } from "../../shared/permissions";
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import * as svc from "./service";
-import { guardFor } from "../../shared/permissions";
 
 const router = Router();
 router.use("/integrations", guardFor("/integrations"));
 router.use("/integrations", guardFor("/integrations"));
-
 
 /** GET /integrations — قائمة كل التكاملات */
 router.get("/integrations", requireAuth, async (_req, res): Promise<void> => {
@@ -53,109 +51,91 @@ router.post("/integrations", async (req, res): Promise<void> => {
 });
 
 /** PATCH /integrations/:id — تعديل تكامل */
-router.patch(
-  "/integrations/:id",
-  async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
-    const updated = await svc.updateIntegration(id, req.body);
-    if (!updated) {
-      res.status(404).json({ error: "التكامل غير موجود" });
-      return;
-    }
-    res.json(maskSecrets(updated));
-  },
-);
+router.patch("/integrations/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  const updated = await svc.updateIntegration(id, req.body);
+  if (!updated) {
+    res.status(404).json({ error: "التكامل غير موجود" });
+    return;
+  }
+  res.json(maskSecrets(updated));
+});
 
 /** DELETE /integrations/:id — حذف تكامل */
-router.delete(
-  "/integrations/:id",
-  async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
-    const deleted = await svc.deleteIntegration(id);
-    if (!deleted) {
-      res.status(404).json({ error: "التكامل غير موجود" });
-      return;
-    }
-    res.status(204).end();
-  },
-);
+router.delete("/integrations/:id", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  const deleted = await svc.deleteIntegration(id);
+  if (!deleted) {
+    res.status(404).json({ error: "التكامل غير موجود" });
+    return;
+  }
+  res.status(204).end();
+});
 
 /** POST /integrations/:id/test — اختبار الاتصال */
-router.post(
-  "/integrations/:id/test",
-  async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
-    const integration = await svc.getIntegration(id);
-    if (!integration) {
-      res.status(404).json({ error: "التكامل غير موجود" });
-      return;
-    }
-    const result = await svc.testConnection(integration);
-    res.json(result);
-  },
-);
+router.post("/integrations/:id/test", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  const integration = await svc.getIntegration(id);
+  if (!integration) {
+    res.status(404).json({ error: "التكامل غير موجود" });
+    return;
+  }
+  const result = await svc.testConnection(integration);
+  res.json(result);
+});
 
 /** POST /integrations/:id/sync — تشغيل المزامنة */
-router.post(
-  "/integrations/:id/sync",
-  async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
-    const integration = await svc.getIntegration(id);
-    if (!integration) {
-      res.status(404).json({ error: "التكامل غير موجود" });
-      return;
-    }
-    if (!integration.isActive) {
-      res.status(400).json({ error: "التكامل غير مفعّل" });
-      return;
-    }
+router.post("/integrations/:id/sync", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  const integration = await svc.getIntegration(id);
+  if (!integration) {
+    res.status(404).json({ error: "التكامل غير موجود" });
+    return;
+  }
+  if (!integration.isActive) {
+    res.status(400).json({ error: "التكامل غير مفعّل" });
+    return;
+  }
 
-    // ابدأ المزامنة في الخلفية واستجب فوراً
-    res.json({ message: "بدأت المزامنة", integrationId: id });
-    svc.runSync(id).catch((e) => {
-      // logged inside runSync
-      void e;
-    });
-  },
-);
+  // ابدأ المزامنة في الخلفية واستجب فوراً
+  res.json({ message: "بدأت المزامنة", integrationId: id });
+  svc.runSync(id).catch((e) => {
+    // logged inside runSync
+    void e;
+  });
+});
 
 /** POST /integrations/:id/sync-suppliers — استيراد الموردين فقط */
-router.post(
-  "/integrations/:id/sync-suppliers",
-  async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
-    const integration = await svc.getIntegration(id);
-    if (!integration) {
-      res.status(404).json({ error: "التكامل غير موجود" });
-      return;
-    }
-    try {
-      const stats = await svc.syncSuppliers(integration);
-      res.json({ success: true, ...stats });
-    } catch (e) {
-      res.status(500).json({ error: (e as Error).message });
-    }
-  },
-);
+router.post("/integrations/:id/sync-suppliers", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  const integration = await svc.getIntegration(id);
+  if (!integration) {
+    res.status(404).json({ error: "التكامل غير موجود" });
+    return;
+  }
+  try {
+    const stats = await svc.syncSuppliers(integration);
+    res.json({ success: true, ...stats });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
 
 /** POST /integrations/:id/export — تصدير البيانات للـ ERP */
-router.post(
-  "/integrations/:id/export",
-  async (req, res): Promise<void> => {
-    const id = parseInt(req.params.id as string, 10);
-    const integration = await svc.getIntegration(id);
-    if (!integration) {
-      res.status(404).json({ error: "التكامل غير موجود" });
-      return;
-    }
-    try {
-      const stats = await svc.syncToErp(integration);
-      res.json({ success: true, ...stats });
-    } catch (e) {
-      res.status(500).json({ error: (e as Error).message });
-    }
-  },
-);
+router.post("/integrations/:id/export", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  const integration = await svc.getIntegration(id);
+  if (!integration) {
+    res.status(404).json({ error: "التكامل غير موجود" });
+    return;
+  }
+  try {
+    const stats = await svc.syncToErp(integration);
+    res.json({ success: true, ...stats });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
 
 // ─── إخفاء البيانات الحساسة ─────────────────────────────────────────────────
 function maskSecrets(integration: svc.ErpIntegration): svc.ErpIntegration {

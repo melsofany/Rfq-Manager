@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import { Link } from "wouter";
 import { useLanguage } from "@/contexts/LanguageContext";
 
@@ -40,48 +40,73 @@ export function DocumentChain({ kind, id }: { kind: "customer-rfq" | "po"; id: n
 
   const Item = ({ href, label }: { href: string; label: string }) => (
     <Link href={href}>
-      <a className="inline-block rounded border border-border px-2 py-1 text-xs hover:bg-muted">{label}</a>
+      <a className="inline-block rounded border border-border px-2 py-1 text-xs hover:bg-muted">
+        {label}
+      </a>
     </Link>
   );
 
-  const rows: { title: string; items: JSX.Element[] }[] = [];
+  const rows: { title: string; items: ReactElement[] }[] = [];
   if (kind === "customer-rfq") {
     rows.push({
       title: t("chain.supplierRfq"),
-      items: (chain.supplierRfqs ?? []).map((r) => <Item key={r.id} href={`/rfq/${r.id}`} label={r.internalRfqNo} />),
+      items: (chain.supplierRfqs ?? []).map((r) => (
+        <Item key={r.id} href={`/rfq/${r.id}`} label={r.internalRfqNo} />
+      )),
     });
     rows.push({
       title: t("chain.customerPo"),
-      items: (chain.customerPos ?? []).map((p) => <Item key={p.id} href={`/customer-po/${p.id}`} label={p.customerPoNo} />),
+      items: (chain.customerPos ?? []).map((p) => (
+        <Item key={p.id} href={`/customer-po/${p.id}`} label={p.customerPoNo} />
+      )),
     });
     rows.push({
       title: t("chain.purchaseOrder"),
-      items: (chain.purchaseOrders ?? []).map((p) => <Item key={p.id} href={`/purchase-orders/${p.id}`} label={p.internalPoNo} />),
+      items: (chain.purchaseOrders ?? []).map((p) => (
+        <Item key={p.id} href={`/purchase-orders/${p.id}`} label={p.internalPoNo} />
+      )),
     });
   } else {
     if (chain.customerRfq) {
       rows.push({
         title: t("chain.customerRfq"),
-        items: [<Item key="cr" href={`/customer-rfq/${chain.customerRfq.id}`} label={chain.customerRfq.customerRfqNo} />],
+        items: [
+          <Item
+            key="cr"
+            href={`/customer-rfq/${chain.customerRfq.id}`}
+            label={chain.customerRfq.customerRfqNo}
+          />,
+        ],
       });
     }
     if (chain.supplierRfq) {
       rows.push({
         title: t("chain.supplierRfq"),
-        items: [<Item key="sr" href={`/rfq/${chain.supplierRfq.id}`} label={chain.supplierRfq.internalRfqNo} />],
+        items: [
+          <Item
+            key="sr"
+            href={`/rfq/${chain.supplierRfq.id}`}
+            label={chain.supplierRfq.internalRfqNo}
+          />,
+        ],
       });
     }
     if ((chain.customerPos ?? []).length) {
       rows.push({
         title: t("chain.customerPo"),
-        items: (chain.customerPos ?? []).map((p) => <Item key={p.id} href={`/customer-po/${p.id}`} label={p.customerPoNo} />),
+        items: (chain.customerPos ?? []).map((p) => (
+          <Item key={p.id} href={`/customer-po/${p.id}`} label={p.customerPoNo} />
+        )),
       });
     }
     if ((chain.offers ?? []).length) {
       rows.push({
         title: t("chain.offers"),
         items: (chain.offers ?? []).map((o) => (
-          <span key={o.id} className="inline-block rounded border border-border px-2 py-1 text-xs text-muted-foreground">
+          <span
+            key={o.id}
+            className="inline-block rounded border border-border px-2 py-1 text-xs text-muted-foreground"
+          >
             {o.supplierName}
           </span>
         )),

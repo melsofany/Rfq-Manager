@@ -33,7 +33,6 @@ import { guardFor } from "../../shared/permissions";
 const router = Router();
 router.use("/analytics", guardFor("/analytics"));
 
-
 const VALID_TYPES = new Set(["supplier_rfq", "customer_rfq", "supplier_po", "customer_po"]);
 
 /** POST /data-entry-sessions — record that the operator opened a "new" form. */
