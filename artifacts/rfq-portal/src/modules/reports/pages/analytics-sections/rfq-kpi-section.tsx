@@ -88,13 +88,20 @@ export function RfqKpiSection() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      setError("السنة لازم تكون بين 2000 و 2100");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/analytics/rfq-kpis?year=${year}&month=${month}`, {
         credentials: "include",
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? `تعذر تحميل المؤشرات (HTTP ${res.status})`);
+      }
       setData((await res.json()) as RfqKpiResponse);
     } catch (e) {
       setError(e instanceof Error ? e.message : "تعذر تحميل المؤشرات");

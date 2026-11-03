@@ -81,6 +81,7 @@ router.get("/analytics/rfq-kpis", requireAuth, async (req, res): Promise<void> =
         cri.id,
         cri.unit_price,
         CASE WHEN cr.entry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN cr.entry_date::date END AS d,
+        cr.id AS customer_rfq_id,
         cr.expiry_date,
         lower(trim(coalesce(cri.line_item, ''))) AS li,
         coalesce(cr.customer_id::text, lower(trim(cr.customer_name))) AS cust
@@ -133,7 +134,7 @@ router.get("/analytics/rfq-kpis", requireAuth, async (req, res): Promise<void> =
          WHERE extract(year FROM d) = ${year} AND extract(month FROM d) = ${month}) AS items_month,
       (SELECT count(*) FROM base
          WHERE unit_price IS NULL AND CASE WHEN expiry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN expiry_date::date END >= CURRENT_DATE) AS open_items_now,
-      (SELECT count(DISTINCT cust || '|' || expiry_date) FROM base
+      (SELECT count(DISTINCT customer_rfq_id) FROM base
          WHERE unit_price IS NULL AND CASE WHEN expiry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN expiry_date::date END >= CURRENT_DATE) AS open_requests_now,
 
       -- ── Monthly: supplier side ──
