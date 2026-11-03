@@ -31,13 +31,13 @@ router.use("/analytics", guardFor("/analytics"));
 export const RFQ_KPI_DEFINITIONS = {
   totalItems: "إجمالي بنود طلبات العملاء (غير الملغية) التي دخلت في السنة",
   rfqCount: "عدد طلبات التسعير الواردة من العملاء في السنة",
-  customerPoCount: "عدد أوامر الشراء الصادرة من العملاء (حالة مُرسَلة) في السنة",
+  customerPoCount: "عدد أوامر الشراء الصادرة من العملاء (مُرسَلة أو مسودة) في السنة",
   pricedItems: "البنود التي تم إرسال سعر لها للعميل في السنة",
   pricingRate: "نسبة التسعير = البنود المسعّرة ÷ إجمالي البنود",
   poWinRate: "نسبة الفوز بالـ PO = البنود المسعّرة اللي جالها أمر شراء من العميل ÷ البنود المسعّرة",
   monthTotalItems: "إجمالي بنود طلبات العملاء (غير الملغية) التي دخلت في الشهر",
   monthRfqCount: "عدد طلبات التسعير الواردة من العملاء في الشهر",
-  monthCustomerPoCount: "عدد أوامر الشراء الصادرة من العملاء (حالة مُرسَلة) في الشهر",
+  monthCustomerPoCount: "عدد أوامر الشراء الصادرة من العملاء (مُرسَلة أو مسودة) في الشهر",
   monthPricedItems: "البنود اللي اتبعت لها سعر للعميل في الشهر",
   monthPricingRate: "نسبة التسعير للشهر = البنود المسعّرة في الشهر ÷ إجمالي بنود الشهر",
   monthPoWinRate:
@@ -113,7 +113,7 @@ router.get("/analytics/rfq-kpis", requireAuth, async (req, res): Promise<void> =
       FROM customer_po_items cpi
       JOIN customer_pos cp ON cp.id = cpi.customer_po_id
       WHERE cpi.customer_rfq_item_id IS NOT NULL
-        AND cp.status = 'sent'
+        AND cp.status IN ('sent', 'draft')
         AND cpi.delivery_status <> 'cancelled'
     )
     SELECT
@@ -122,7 +122,7 @@ router.get("/analytics/rfq-kpis", requireAuth, async (req, res): Promise<void> =
       (SELECT count(*) FROM customer_rfqs
          WHERE extract(year FROM CASE WHEN entry_date ~ '^\\d{4}-\\d{2}-\\d{2}$' AND pg_input_is_valid(entry_date, 'date') THEN entry_date::date END) = ${year}) AS rfq_year,
       (SELECT count(*) FROM customer_pos
-         WHERE status = 'sent'
+         WHERE status IN ('sent', 'draft')
            AND extract(year FROM CASE WHEN po_date ~ '^\\d{4}-\\d{2}-\\d{2}$' AND pg_input_is_valid(po_date, 'date') THEN po_date::date END) = ${year}) AS customer_po_year,
       (SELECT count(*) FROM base
          WHERE unit_price IS NOT NULL AND extract(year FROM d) = ${year}) AS priced_year,
@@ -132,7 +132,7 @@ router.get("/analytics/rfq-kpis", requireAuth, async (req, res): Promise<void> =
 
       -- ── Monthly: customer side ──
       (SELECT count(*) FROM customer_pos
-         WHERE status = 'sent'
+         WHERE status IN ('sent', 'draft')
            AND extract(year FROM CASE WHEN po_date ~ '^\\d{4}-\\d{2}-\\d{2}$' AND pg_input_is_valid(po_date, 'date') THEN po_date::date END) = ${year}
            AND extract(month FROM CASE WHEN po_date ~ '^\\d{4}-\\d{2}-\\d{2}$' AND pg_input_is_valid(po_date, 'date') THEN po_date::date END) = ${month}) AS customer_po_month,
       (SELECT count(*) FROM base

@@ -97,7 +97,7 @@ describe.skipIf(!TEST_URL)("GET /api/analytics/rfq-kpis (real Postgres)", () => 
     expect(res.body.yearly).toEqual({
       totalItems: 3, // cancelled + undated items excluded
       rfqCount: 3, // undated RFQ excluded
-      customerPoCount: 1, // draft PO excluded
+      customerPoCount: 2, // draft PO excluded
       pricedItems: 1,
       pricingRate: 33.33,
       poWinRate: 100,
@@ -105,7 +105,7 @@ describe.skipIf(!TEST_URL)("GET /api/analytics/rfq-kpis (real Postgres)", () => 
     expect(res.body.monthly).toEqual({
       totalItems: 2,
       rfqCount: 1,
-      customerPoCount: 1,
+      customerPoCount: 2,
       pricedItems: 1,
       pricingRate: 50,
       poWinRate: 100,
