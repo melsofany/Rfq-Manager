@@ -25,6 +25,7 @@ import {
   Lock,
   CheckCircle2,
   UserCog,
+  Printer,
 } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
@@ -354,6 +355,11 @@ export default function CustomerRfqDetailPage() {
             </h1>
             <p className="text-muted-foreground text-sm">{rfq.customerName}</p>
           </div>
+          <Link href={`/customer-rfq/${rfq.id}/print`}>
+            <a className="mr-auto inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted">
+              <Printer size={14} /> طباعة الطلب
+            </a>
+          </Link>
         </div>
 
         {showAutoNumberWarning && (

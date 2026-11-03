@@ -55,6 +55,7 @@ import CustomerDetailPage from "@/modules/customers/pages/detail";
 import CustomerRfqPage from "@/modules/customer-rfq/pages/index";
 import NewCustomerRfqPage from "@/modules/customer-rfq/pages/new";
 import CustomerRfqDetailPage from "@/modules/customer-rfq/pages/detail";
+import CustomerRfqPrintPage from "@/modules/customer-rfq/pages/print";
 import CustomerPoPage from "@/modules/customer-po/pages/index";
 import NewCustomerPoPage from "@/modules/customer-po/pages/new";
 import CustomerPoDetailPage from "@/modules/customer-po/pages/detail";
@@ -231,6 +232,9 @@ function Router() {
       </Route>
       <Route path="/customer-rfq/new">
         <ProtectedRoute component={NewCustomerRfqPage} />
+      </Route>
+      <Route path="/customer-rfq/:id/print">
+        <ProtectedRoute component={CustomerRfqPrintPage} />
       </Route>
       <Route path="/customer-rfq/:id">
         <ProtectedRoute component={CustomerRfqDetailPage} />
