@@ -169,6 +169,9 @@ export default function PurchaseOrdersListPage() {
                           PO No.
                         </th>
                         <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
+                          الموردون
+                        </th>
+                        <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
                           Employee
                         </th>
                         <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
@@ -202,6 +205,23 @@ export default function PurchaseOrdersListPage() {
                           </td>
                           <td className="px-4 py-3 text-foreground font-mono text-xs">
                             {po.sheetPoNo}
+                          </td>
+                          <td className="px-4 py-3">
+                            {po.suppliers && po.suppliers.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 max-w-[240px]">
+                                {po.suppliers.map((s) => (
+                                  <span
+                                    key={s.id}
+                                    title={s.name}
+                                    className="inline-flex items-center max-w-full px-1.5 py-0.5 rounded bg-muted text-[11px] text-foreground"
+                                  >
+                                    <span className="truncate">{s.name}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground/40 text-xs">—</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-muted-foreground text-xs">
                             {po.employeeName ?? "-"}
