@@ -114,6 +114,30 @@ router.get("/po", requireAuth, async (req, res): Promise<void> => {
       : [];
   const itemMap = Object.fromEntries(itemCounts.map((r) => [r.poId, r.cnt]));
 
+  // Suppliers per PO, so the list shows who each order goes to without opening
+  // it. One batched query for every visible PO — never one query per row.
+  const supplierRows =
+    poIds.length > 0
+      ? await db
+          .select({
+            poId: purchaseOrderItemsTable.poId,
+            supplierId: purchaseOrderItemsTable.supplierId,
+            supplierName: suppliersTable.name,
+          })
+          .from(purchaseOrderItemsTable)
+          .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
+          .where(inArray(purchaseOrderItemsTable.poId, poIds))
+      : [];
+  const suppliersByPo = new Map<number, { id: number; name: string }[]>();
+  for (const row of supplierRows) {
+    if (row.supplierId == null) continue;
+    const list = suppliersByPo.get(row.poId) ?? [];
+    if (!list.some((s) => s.id === row.supplierId)) {
+      list.push({ id: row.supplierId, name: row.supplierName ?? `#${row.supplierId}` });
+    }
+    suppliersByPo.set(row.poId, list);
+  }
+
   res.json(
     filtered.map((r) => ({
       id: r.po.id,
@@ -126,6 +150,7 @@ router.get("/po", requireAuth, async (req, res): Promise<void> => {
       employeeName: r.employeeName,
       notes: r.po.notes,
       itemCount: itemMap[r.po.id] ?? 0,
+      suppliers: suppliersByPo.get(r.po.id) ?? [],
       createdAt: r.po.createdAt.toISOString(),
       updatedAt: r.po.updatedAt.toISOString(),
     })),

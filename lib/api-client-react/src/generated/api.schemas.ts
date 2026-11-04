@@ -1019,6 +1019,11 @@ export interface SentLogEntry {
   createdAt: string;
 }
 
+export interface PurchaseOrderSupplierRef {
+  id: number;
+  name: string;
+}
+
 export interface PurchaseOrder {
   id: number;
   internalPoNo: string;
@@ -1034,6 +1039,8 @@ export interface PurchaseOrder {
   /** @nullable */
   notes?: string | null;
   itemCount?: number;
+  /** الموردون في أمر الشراء — اسم كل مورد مرة واحدة */
+  suppliers?: PurchaseOrderSupplierRef[];
   createdAt: string;
   updatedAt?: string;
 }

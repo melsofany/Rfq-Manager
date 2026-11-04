@@ -5,6 +5,7 @@
  * RFQ Management System API for Cortoba Supplies
  * OpenAPI spec version: 0.1.0
  */
+import type { PurchaseOrderSupplierRef } from './purchaseOrderSupplierRef';
 
 export interface PurchaseOrder {
   id: number;
@@ -21,6 +22,8 @@ export interface PurchaseOrder {
   /** @nullable */
   notes?: string | null;
   itemCount?: number;
+  /** الموردون في أمر الشراء — اسم كل مورد مرة واحدة */
+  suppliers?: PurchaseOrderSupplierRef[];
   createdAt: string;
   updatedAt?: string;
 }

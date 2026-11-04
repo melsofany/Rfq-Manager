@@ -1685,6 +1685,10 @@ export const ListPurchaseOrdersResponseItem = zod.object({
   "employeeName": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
+  "suppliers": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})).optional().describe('الموردون في أمر الشراء — اسم كل مورد مرة واحدة'),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 })
@@ -1728,6 +1732,10 @@ export const CreatePurchaseOrderResponse = zod.object({
   "employeeName": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
+  "suppliers": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})).optional().describe('الموردون في أمر الشراء — اسم كل مورد مرة واحدة'),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 })
@@ -1751,6 +1759,10 @@ export const GetPurchaseOrderResponse = zod.object({
   "employeeName": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
+  "suppliers": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})).optional().describe('الموردون في أمر الشراء — اسم كل مورد مرة واحدة'),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 })
@@ -1801,6 +1813,10 @@ export const UpdatePurchaseOrderResponse = zod.object({
   "employeeName": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "itemCount": zod.number().optional(),
+  "suppliers": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})).optional().describe('الموردون في أمر الشراء — اسم كل مورد مرة واحدة'),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
 })

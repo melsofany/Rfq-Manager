@@ -100,6 +100,7 @@ export * from './purchaseOrder';
 export * from './purchaseOrderInput';
 export * from './purchaseOrderItem';
 export * from './purchaseOrderItemInput';
+export * from './purchaseOrderSupplierRef';
 export * from './purchaseOrderUpdateInput';
 export * from './reportsData';
 export * from './reportsDataEmployeeStatsItem';

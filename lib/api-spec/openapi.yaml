@@ -2896,9 +2896,23 @@ components:
           type: ["string", "null"]
         itemCount:
           type: integer
+        suppliers:
+          type: array
+          description: "الموردون في أمر الشراء — اسم كل مورد مرة واحدة"
+          items:
+            $ref: "#/components/schemas/PurchaseOrderSupplierRef"
         createdAt:
           type: string
         updatedAt:
+          type: string
+
+    PurchaseOrderSupplierRef:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
           type: string
 
     PurchaseOrderInput:
