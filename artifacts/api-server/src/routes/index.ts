@@ -23,6 +23,7 @@ import accountsBridgeModule from "../modules/accounts-bridge/index";
 import accountsModule from "../modules/accounts/index";
 import expensesModule from "../modules/expenses/index";
 import collectionsModule from "../modules/collections/index";
+import financeModule from "../modules/finance/index";
 import usersModule from "../modules/users/index";
 import reportsModule from "../modules/reports/index";
 import communicationsModule from "../modules/communications/index";
@@ -66,6 +67,7 @@ router.use("/po", guardFor("/po"));
 router.use("/accounts", guardFor("/accounts"));
 router.use("/expenses", guardFor("/expenses"));
 router.use("/collections", guardFor("/collections"));
+router.use("/finance", guardFor("/finance"));
 router.use("/analytics", guardFor("/analytics"));
 router.use("/sync", guardFor("/sync"));
 router.use("/audit", guardFor("/audit"));
@@ -88,6 +90,7 @@ router.use(accountsBridgeModule); // Odoo bridge — sync status + Odoo reads
 router.use(accountsModule); // DEPRECATED ledger · realized margins · Egyptian tax
 router.use(expensesModule); // operating expenses
 router.use(collectionsModule); // customer collection tracking
+router.use(financeModule); // supplier payment requests (الماليات)
 router.use(reportsModule); // analytics · audit · sync
 router.use(communicationsModule); // whatsapp (legacy — kept read-only as backup)
 router.use(aiAssistantModule); // AI assistant (admin/manager WhatsApp agent)

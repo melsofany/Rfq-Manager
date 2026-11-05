@@ -359,6 +359,47 @@ export function mapCustomerPaymentToPayment(input: CustomerPaymentInput): OdooDo
   };
 }
 
+// ─── Supplier payment → payment entry (outbound) ────────────────────────────
+
+export interface SupplierPaymentInput {
+  paymentId: number;
+  poId: number | null;
+  internalPoNo: string;
+  supplierName: string;
+  paymentDate: string;
+  amount: number;
+  method?: string | null;
+  /** Odoo ids resolved by the caller. */
+  partnerId?: number | null;
+  journalId?: number | null;
+  payableAccountId?: number | null;
+}
+
+/**
+ * A supplier payment becomes an Odoo PAYMENT (account.payment, OUTBOUND) —
+ * money leaving the company to settle what the purchase order owes. The mirror
+ * of `mapCustomerPaymentToPayment`, which is inbound.
+ */
+export function mapSupplierPaymentToPayment(input: SupplierPaymentInput): OdooDocument {
+  const ref = `RFQ-SPAY-${input.paymentId}`;
+  return {
+    odooModel: "account.payment",
+    values: {
+      payment_type: "outbound",
+      partner_type: "supplier",
+      partner_id: input.partnerId ?? false,
+      amount: round2(input.amount),
+      date: input.paymentDate,
+      journal_id: input.journalId ?? false,
+      ref,
+      payment_reference: `${input.internalPoNo} — ${input.supplierName}`,
+      memo: `سداد للمورد ${input.supplierName} (${input.internalPoNo})`,
+    },
+    odooRef: ref,
+    summary: `دفعة مورد ${input.internalPoNo}: ${round2(input.amount)}`,
+  };
+}
+
 // ─── Cancellation / rejection → credit note ─────────────────────────────────
 
 export interface CancellationInput {

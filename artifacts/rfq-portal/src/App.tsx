@@ -60,6 +60,7 @@ import CustomerPoPage from "@/modules/customer-po/pages/index";
 import NewCustomerPoPage from "@/modules/customer-po/pages/new";
 import CustomerPoDetailPage from "@/modules/customer-po/pages/detail";
 import AccountsPage from "@/modules/accounts/pages/index";
+import FinancePage from "@/modules/finance/pages/index";
 
 // ── Module: HR — الموارد البشرية ────────────────────────────────────────
 import HrPage from "@/modules/hr/pages/index";
@@ -253,6 +254,9 @@ function Router() {
       </Route>
       <Route path="/accounts">
         <ProtectedRoute component={AccountsPage} />
+      </Route>
+      <Route path="/finance">
+        <ProtectedRoute component={FinancePage} />
       </Route>
 
       {/* ── Module: HR ─────────────────────────────────────────────────── */}
