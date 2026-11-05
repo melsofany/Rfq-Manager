@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import { resolve, dirname } from "path";
 import { rtlSlotX } from "./pdf-layout";
+import { rtl, rtlLabelValue } from "./rtl-text";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 
@@ -47,18 +48,6 @@ export interface PaymentOrderOptions {
   notes?: string | null;
   /** The employee who recorded the payment. */
   preparedBy?: string | null;
-}
-
-const ARABIC_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
-
-/** PDFKit does not shape Arabic: reverse word order for right-to-left display. */
-function rtl(text: string): string {
-  if (!text) return text;
-  const trimmed = text.trim();
-  if (!ARABIC_RE.test(trimmed)) return trimmed;
-  const words = trimmed.split(/\s+/);
-  if (words.length <= 1) return trimmed;
-  return words.reverse().join(" ");
 }
 
 function formatDate(d?: string | null): string {
@@ -218,7 +207,7 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       doc
         .fontSize(8)
         .fillColor("#dfe9f5")
-        .text(`${rtl("ت:")} ${COMPANY_PHONE}   |   ${COMPANY_EMAIL}`, M + 76, 70, {
+        .text(rtlLabelValue("ت:", `${COMPANY_PHONE}   |   ${COMPANY_EMAIL}`), M + 76, 70, {
           width: 320,
           align: "left",
           lineBreak: false,
@@ -244,7 +233,7 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       doc
         .fontSize(9)
         .fillColor("#aaccee")
-        .text(`${rtl("رقم:")} ${opts.paymentNo}`, PAGE_W - M - 200, 64, {
+        .text(rtlLabelValue("رقم:", opts.paymentNo), PAGE_W - M - 200, 64, {
           width: 200,
           align: "right",
           lineBreak: false,
@@ -309,9 +298,10 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       doc.fontSize(9);
       shown.forEach(([label, value], i) => {
         const rowY = y + 40 + i * 11;
-        // Account numbers are Latin/digits: they are never passed through the
-        // Arabic word-reverser, so the digits keep their own order.
-        doc.fillColor("#111111").text(String(value), M + 8, rowY, {
+        // A Latin/digit value (account number, IBAN, SWIFT) has no Arabic words
+        // to reorder, so rtl() leaves it untouched; an Arabic bank name or
+        // branch is laid out right-to-left like every other value.
+        doc.fillColor("#111111").text(rtl(String(value)), M + 8, rowY, {
           width: CW - LABEL_W - 24,
           align: "right",
           lineBreak: false,
@@ -345,7 +335,7 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       doc
         .fontSize(26)
         .fillColor("#ffffff")
-        .text(`${money(opts.amount)} ${rtl("ج.م")}`, M, y + 26, {
+        .text(rtl(`${money(opts.amount)} ج.م`), M, y + 26, {
           width: CW,
           align: "center",
         });
@@ -375,7 +365,7 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       });
       doc.fontSize(11).fillColor("#111111");
       ctxRows.forEach(([, value], i) => {
-        doc.text(value, rtlSlotX(i, ctxRows.length, M, CW), y + 26, {
+        doc.text(rtl(value), rtlSlotX(i, ctxRows.length, M, CW), y + 26, {
           width: CW / 3,
           align: "center",
           lineBreak: false,
@@ -386,7 +376,7 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       if (opts.reference || opts.notes) {
         doc.fontSize(9).fillColor("#444444");
         if (opts.reference) {
-          doc.text(`${rtl("المرجع:")} ${opts.reference}`, M, y, {
+          doc.text(rtlLabelValue("المرجع:", opts.reference), M, y, {
             width: CW,
             align: "right",
             lineBreak: false,
@@ -394,7 +384,7 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
           y += 14;
         }
         if (opts.notes) {
-          doc.text(`${rtl("ملاحظات:")} ${rtl(opts.notes)}`, M, y, {
+          doc.text(rtlLabelValue("ملاحظات:", opts.notes), M, y, {
             width: CW,
             align: "right",
           });
@@ -455,7 +445,7 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
         .fontSize(8)
         .fillColor(GOLD)
         .text(
-          `${rtl("أمر دفع رقم")} ${opts.paymentNo} — ${formatDate(opts.paymentDate)}`,
+          rtlLabelValue("أمر دفع رقم", `${opts.paymentNo} — ${formatDate(opts.paymentDate)}`),
           M,
           fy + 28,
           {

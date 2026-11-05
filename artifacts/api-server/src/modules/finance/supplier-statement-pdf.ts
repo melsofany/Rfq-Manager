@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import { resolve, dirname } from "path";
 import { rtlColumnX, rtlSlotX } from "./pdf-layout";
+import { rtl, rtlLabelValue } from "./rtl-text";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 
@@ -40,18 +41,6 @@ export interface SupplierStatementOptions {
   totals: { due: number; paid: number; remaining: number };
   /** The employee who printed the statement. */
   preparedBy?: string | null;
-}
-
-const ARABIC_RE = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/;
-
-/** PDFKit does not shape Arabic: reverse word order for right-to-left display. */
-function rtl(text: string): string {
-  if (!text) return text;
-  const trimmed = text.trim();
-  if (!ARABIC_RE.test(trimmed)) return trimmed;
-  const words = trimmed.split(/\s+/);
-  if (words.length <= 1) return trimmed;
-  return words.reverse().join(" ");
 }
 
 function formatDate(d?: string | null): string {
@@ -142,7 +131,7 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
         doc
           .fontSize(8)
           .fillColor("#dfe9f5")
-          .text(`${rtl("ت:")} ${COMPANY_PHONE}   |   ${COMPANY_EMAIL}`, M + 76, 70, {
+          .text(rtlLabelValue("ت:", `${COMPANY_PHONE}   |   ${COMPANY_EMAIL}`), M + 76, 70, {
             width: 320,
             align: "left",
             lineBreak: false,
@@ -167,7 +156,7 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
         doc
           .fontSize(9)
           .fillColor("#aaccee")
-          .text(`${rtl("رقم:")} ${opts.statementNo}`, PAGE_W - M - 210, 62, {
+          .text(rtlLabelValue("رقم:", opts.statementNo), PAGE_W - M - 210, 62, {
             width: 210,
             align: "right",
             lineBreak: false,
@@ -212,7 +201,7 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
         doc.fontSize(8.5);
         shown.forEach(([label, value], i) => {
           const rowY = y + i * 11;
-          doc.fillColor("#111111").text(String(value), M, rowY, {
+          doc.fillColor("#111111").text(rtl(String(value)), M, rowY, {
             width: CW - BANK_LABEL_W - 10,
             align: "right",
             lineBreak: false,
@@ -280,12 +269,12 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
       doc.rect(M, y, CW, 24).fill(BLUE);
       doc.fontSize(10).fillColor("#ffffff");
       const totalCells: string[] = [
-        `${rtl("إجمالي المستحق:")} ${money(opts.totals.due)}`,
-        `${rtl("إجمالي المسدد:")} ${money(opts.totals.paid)}`,
-        `${rtl("إجمالي المتبقي:")} ${money(opts.totals.remaining)}`,
+        rtlLabelValue("إجمالي المستحق:", money(opts.totals.due)),
+        rtlLabelValue("إجمالي المسدد:", money(opts.totals.paid)),
+        rtlLabelValue("إجمالي المتبقي:", money(opts.totals.remaining)),
       ];
       totalCells.forEach((text, i) => {
-        doc.text(rtl(text), rtlSlotX(i, 3, M, CW), y + 8, {
+        doc.text(text, rtlSlotX(i, 3, M, CW), y + 8, {
           width: CW / 3,
           align: "center",
           lineBreak: false,
@@ -358,7 +347,10 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
           .fontSize(8)
           .fillColor(GOLD)
           .text(
-            `${rtl("كشف حساب رقم")} ${opts.statementNo} — ${rtl("صفحة")} ${i - range.start + 1} ${rtl("من")} ${range.count}`,
+            rtlLabelValue(
+              "كشف حساب رقم",
+              `${opts.statementNo} — صفحة ${i - range.start + 1} من ${range.count}`,
+            ),
             M,
             fy + 28,
             { width: CW, align: "center", lineBreak: false },
