@@ -3004,6 +3004,7 @@ export async function initDb(): Promise<void> {
       `CREATE TABLE IF NOT EXISTS finance_payments (
          id SERIAL PRIMARY KEY,
          request_id INTEGER NOT NULL REFERENCES finance_payment_requests(id) ON DELETE CASCADE,
+         payment_no TEXT,
          amount NUMERIC(15,4) NOT NULL,
          payment_date TEXT NOT NULL,
          method TEXT NOT NULL,
@@ -3014,9 +3015,40 @@ export async function initDb(): Promise<void> {
          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
        )`,
     );
+    // The table already exists on any deployed database, where CREATE TABLE IF
+    // NOT EXISTS is a NO-OP — so the column is added by its own ALTER. The
+    // unique index below references it and MUST come after this statement.
+    await client.query(`ALTER TABLE finance_payments ADD COLUMN IF NOT EXISTS payment_no TEXT`);
     await client.query(
       `CREATE INDEX IF NOT EXISTS finance_payments_request_idx
          ON finance_payments (request_id)`,
+    );
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS finance_payments_no_uq
+         ON finance_payments (payment_no)`,
+    );
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS finance_supplier_statements (
+         id SERIAL PRIMARY KEY,
+         statement_no TEXT NOT NULL,
+         supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+         supplier_name TEXT NOT NULL,
+         total_due NUMERIC(15,4) NOT NULL DEFAULT 0,
+         total_paid NUMERIC(15,4) NOT NULL DEFAULT 0,
+         remaining NUMERIC(15,4) NOT NULL DEFAULT 0,
+         po_count INTEGER NOT NULL DEFAULT 0,
+         generated_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+         generated_by_name TEXT,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+       )`,
+    );
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS finance_supplier_statements_no_uq
+         ON finance_supplier_statements (statement_no)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS finance_supplier_statements_supplier_idx
+         ON finance_supplier_statements (supplier_id)`,
     );
 
     logger.info("initDb: seed complete");
