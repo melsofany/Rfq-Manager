@@ -171,4 +171,16 @@ describe("Arabic word order in the printable finance documents", () => {
       expect(contains(rtlLabelValue("المرجع:", "TRF-8891"))).toBe(true);
     });
   });
+
+  describe("supplier statement column headings", () => {
+    // The column holds purchase_orders.sheetPoNo — the number the CUSTOMER gave
+    // the order. Labelling it «رقم المورد» named the supplier, not the document,
+    // so the operator reading the statement was told the wrong thing about the
+    // number in front of them.
+    it("names the customer order number, not the supplier", async () => {
+      await generateSupplierStatementPdf(statement);
+      expect(contains(rtl("رقم أمر توريد العميل"))).toBe(true);
+      expect(contains(rtl("رقم المورد"))).toBe(false);
+    });
+  });
 });

@@ -245,6 +245,16 @@ describe("rows are measured, so a long value never overprints the next row", () 
     expect(name.y).toBeGreaterThanOrEqual(label.y + label.height - 0.5);
   });
 
+  it("fits every column heading on one line inside its own column", async () => {
+    // A heading longer than its column is silently clipped: the header row is a
+    // fixed-height bar drawn with lineBreak:false.
+    await generateSupplierStatementPdf(statement);
+    const heading = draws.find((d) => d.text === rtl("رقم أمر توريد العميل"));
+    expect(heading).toBeDefined();
+    expect(measure.fontSize(8.5).widthOfString(heading!.text)).toBeLessThanOrEqual(heading!.width);
+    expect(heading!.height).toBeLessThanOrEqual(oneLine(8.5) * 1.2);
+  });
+
   it("has no overlapping rows anywhere in the supplier statement", async () => {
     await generateSupplierStatementPdf(statement);
     expect(boxOverlaps()).toEqual([]);
