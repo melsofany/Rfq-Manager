@@ -28,6 +28,9 @@ import { ensureAssignmentsForRfqSafe } from "./assignment";
 import { guardFor } from "../../shared/permissions";
 
 const router = Router();
+
+/** Public path of the supplier pricing guide PDF (served from the portal's public/). */
+const SUPPLIER_GUIDE_PATH = "/supplier-pricing-guide.pdf";
 router.use("/rfq", guardFor("/rfq"));
 
 // Generate internal RFQ number: CRQ-YYYY-XXXXXX
@@ -970,6 +973,7 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           closeDate: closeDate || "To be confirmed",
           employeeName: employee?.name || "Procurement Team",
           employeePhone: employee?.phone,
+          guideUrl: `${baseUrl}${SUPPLIER_GUIDE_PATH}`,
         });
         emailStatus = "sent";
         req.log.info({ supplierId: supplier.id, email: supplier.email }, "RFQ send: email OK");
