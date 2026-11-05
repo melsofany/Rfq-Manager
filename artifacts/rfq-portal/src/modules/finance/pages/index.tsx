@@ -20,6 +20,8 @@ import {
   Trash2,
   Receipt,
   History,
+  Printer,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
@@ -29,6 +31,8 @@ import { canConfirmPayment } from "@/lib/permissions";
 
 interface PaymentRow {
   id: number;
+  /** `PAY-YYYY-NNNNNN` — the printed payment order's reference. */
+  paymentNo: string | null;
   amount: string | null;
   paymentDate: string;
   method: string;
@@ -278,6 +282,29 @@ export default function FinancePage() {
     );
   });
 
+  /**
+   * The PDFs are served by the API, not built in the browser, so the print
+   * dialog gets the exact document the server generated. The tab is opened
+   * first (a synchronous response to the click) so the pop-up blocker does not
+   * swallow it, then pointed at the URL.
+   */
+  function openPdfTab(url: string) {
+    const tab = window.open("", "_blank");
+    if (!tab) {
+      toast.error("المتصفح منع فتح نافذة الطباعة — اسمح بالنوافذ المنبثقة");
+      return;
+    }
+    tab.location.href = url;
+  }
+
+  function printPaymentOrder(paymentId: number) {
+    openPdfTab(`/api/finance/payments/${paymentId}/pdf`);
+  }
+
+  function printStatement(supplierId: number) {
+    openPdfTab(`/api/finance/suppliers/${supplierId}/statement.pdf`);
+  }
+
   return (
     <Layout>
       <div className="space-y-5 p-1">
@@ -390,34 +417,51 @@ export default function FinancePage() {
                       {r.payments.map((p) => (
                         <div
                           key={p.id}
-                          className="flex items-center justify-between rounded border bg-background px-2 py-1 text-xs"
+                          className="flex items-center justify-between gap-2 rounded border bg-background px-2 py-1 text-xs"
                         >
+                          <span dir="ltr" className="font-mono text-[11px] text-primary">
+                            {p.paymentNo ?? "-"}
+                          </span>
                           <span dir="ltr">{p.paymentDate}</span>
                           <span className="font-medium">{money(p.amount)}</span>
                           <span className="text-muted-foreground">{p.method}</span>
                           <span className="text-muted-foreground">{p.employeeName ?? "-"}</span>
-                          {mayConfirm && r.status !== "paid" && (
+                          <span className="ms-auto flex items-center gap-1">
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-6 px-1 text-red-600"
-                              onClick={() => removePayment(r, p.id)}
+                              className="h-6 px-1"
+                              title="طباعة أمر الدفع"
+                              onClick={() => printPaymentOrder(p.id)}
                             >
-                              <Trash2 size={12} />
+                              <Printer size={12} />
                             </Button>
-                          )}
+                            {mayConfirm && r.status !== "paid" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-1 text-red-600"
+                                onClick={() => removePayment(r, p.id)}
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            )}
+                          </span>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {mayConfirm && r.status !== "paid" && (
                     <Button size="sm" onClick={() => openPay(r)}>
                       <Banknote size={14} className="me-1" /> تأكيد السداد
                     </Button>
                   )}
+                  <Button size="sm" variant="outline" onClick={() => printStatement(r.supplierId)}>
+                    <FileText size={14} className="me-1" /> كشف حساب المورد
+                  </Button>
                   {r.status === "paid" && (
                     <span className="text-xs text-emerald-700">
                       تم السداد بالكامل — لا يمكن السداد مرة أخرى

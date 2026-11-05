@@ -103,6 +103,12 @@ export const financePaymentsTable = pgTable(
     requestId: integer("request_id")
       .notNull()
       .references(() => financePaymentRequestsTable.id, { onDelete: "cascade" }),
+    /**
+     * The printed payment order's reference (`PAY-2026-000123`). Allocated at
+     * confirm time and never reused, so a payment order handed to the bank can
+     * always be traced back to the row that produced it.
+     */
+    paymentNo: text("payment_no"),
     amount: numeric("amount", { precision: 15, scale: 4 }).notNull(),
     paymentDate: text("payment_date").notNull(),
     method: text("method").notNull(),
@@ -114,7 +120,10 @@ export const financePaymentsTable = pgTable(
     employeeName: text("employee_name"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("finance_payments_request_idx").on(t.requestId)],
+  (t) => [
+    index("finance_payments_request_idx").on(t.requestId),
+    uniqueIndex("finance_payments_no_uq").on(t.paymentNo),
+  ],
 );
 
 export const insertFinancePaymentRequestSchema = createInsertSchema(
@@ -129,3 +138,34 @@ export const insertFinancePaymentSchema = createInsertSchema(financePaymentsTabl
 });
 export type InsertFinancePayment = z.infer<typeof insertFinancePaymentSchema>;
 export type FinancePayment = typeof financePaymentsTable.$inferSelect;
+
+/**
+ * A register of printed supplier statements (كشف حساب مورد). Printing is a
+ * reporting act, not a financial one — the rows are DERIVED from the open
+ * requests at print time and never stored — but a document the operator hands
+ * to a supplier needs a reference number, so each print run records one row.
+ */
+export const financeSupplierStatementsTable = pgTable(
+  "finance_supplier_statements",
+  {
+    id: serial("id").primaryKey(),
+    statementNo: text("statement_no").notNull(),
+    supplierId: integer("supplier_id")
+      .notNull()
+      .references(() => suppliersTable.id, { onDelete: "cascade" }),
+    supplierName: text("supplier_name").notNull(),
+    totalDue: numeric("total_due", { precision: 15, scale: 4 }).notNull().default("0"),
+    totalPaid: numeric("total_paid", { precision: 15, scale: 4 }).notNull().default("0"),
+    remaining: numeric("remaining", { precision: 15, scale: 4 }).notNull().default("0"),
+    poCount: integer("po_count").notNull().default(0),
+    generatedBy: integer("generated_by").references(() => employeesTable.id, {
+      onDelete: "set null",
+    }),
+    generatedByName: text("generated_by_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("finance_supplier_statements_no_uq").on(t.statementNo),
+    index("finance_supplier_statements_supplier_idx").on(t.supplierId),
+  ],
+);

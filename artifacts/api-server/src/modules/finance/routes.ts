@@ -20,6 +20,7 @@ import {
   db,
   financePaymentRequestsTable,
   financePaymentsTable,
+  financeSupplierStatementsTable,
   purchaseOrderItemsTable,
   purchaseOrdersTable,
   suppliersTable,
@@ -31,6 +32,9 @@ import { requireAuth } from "../../middlewares/auth";
 import { requirePermission } from "../../shared/permissions";
 import { logger } from "../../shared/logger";
 import { syncSupplierPayment } from "../accounts-bridge/events";
+import { insertWithDocNo } from "../accounts/doc-numbering";
+import { generatePaymentOrderPdf } from "./payment-order-pdf";
+import { generateSupplierStatementPdf } from "./supplier-statement-pdf";
 
 const router = Router();
 
@@ -123,6 +127,7 @@ function serialize(row: RequestRow, payments?: unknown[]) {
 function serializePayment(p: typeof financePaymentsTable.$inferSelect) {
   return {
     id: p.id,
+    paymentNo: p.paymentNo,
     amount: fmt(p.amount),
     paymentDate: p.paymentDate,
     method: p.method,
@@ -447,18 +452,31 @@ router.post(
     const settled = paid >= due - 0.0001;
     const nextStatus = settled ? FINANCE_REQUEST_STATUS[2] : FINANCE_REQUEST_STATUS[1];
 
-    const [payment] = await db
-      .insert(financePaymentsTable)
-      .values({
-        requestId: id,
-        amount: String(amount),
-        paymentDate: body.paymentDate,
-        method: body.method,
-        reference: body.reference ?? null,
-        notes: body.notes ?? null,
-        employeeId: session.employeeId ?? null,
-      })
-      .returning();
+    // The payment gets a real document number (`PAY-YYYY-NNNNNN`) so the printed
+    // أمر دفع handed to the bank traces back to this row. Allocation goes through
+    // `insertWithDocNo`, which serializes the series behind an advisory lock —
+    // two operators confirming at the same moment must never share a number.
+    const { docNo: paymentNo, row: payment } = await insertWithDocNo(
+      "PAY",
+      body.paymentDate,
+      async (no, tx) => {
+        const [row] = await tx
+          .insert(financePaymentsTable)
+          .values({
+            requestId: id,
+            paymentNo: no,
+            amount: String(amount),
+            paymentDate: body.paymentDate as string,
+            method: body.method as string,
+            reference: body.reference ?? null,
+            notes: body.notes ?? null,
+            employeeId: session.employeeId ?? null,
+            employeeName: session.employeeName ?? null,
+          })
+          .returning();
+        return row;
+      },
+    );
 
     await db
       .update(financePaymentRequestsTable)
@@ -495,7 +513,13 @@ router.post(
       .from(financePaymentRequestsTable)
       .where(eq(financePaymentRequestsTable.id, id));
 
-    res.status(201).json({ ok: true, settled, request: serialize(updated ?? row) });
+    res.status(201).json({
+      ok: true,
+      settled,
+      paymentNo,
+      payment: serializePayment(payment),
+      request: serialize(updated ?? row),
+    });
   },
 );
 
@@ -632,5 +656,227 @@ router.get("/finance/po-status", requireAuth, async (req, res): Promise<void> =>
   }
   res.json(out);
 });
+
+// ─── payment order PDF (أمر دفع) ────────────────────────────────────────────
+
+/**
+ * GET /finance/payments/:id/pdf — the printable payment order.
+ *
+ * A payment order is an instruction to pay an AMOUNT against a purchase order,
+ * so it carries no line items: the purchase-order number, the amount (and its
+ * Arabic words, which is what catches a mistyped digit on a signed document),
+ * the supplier's bank account, and the أعدّه / راجعه / اعتمده signature block.
+ * The order's own total / already-paid / remaining make a PARTIAL payment
+ * legible as such rather than looking like the whole debt.
+ */
+router.get("/finance/payments/:id/pdf", requireAuth, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const [payment] = await db
+    .select()
+    .from(financePaymentsTable)
+    .where(eq(financePaymentsTable.id, id));
+  if (!payment) {
+    res.status(404).json({ error: "السداد غير موجود" });
+    return;
+  }
+  const [request] = await db
+    .select()
+    .from(financePaymentRequestsTable)
+    .where(eq(financePaymentRequestsTable.id, payment.requestId));
+  if (!request) {
+    res.status(404).json({ error: "طلب السداد غير موجود" });
+    return;
+  }
+
+  const amount = num(payment.amount);
+  const paidBefore = round2(num(request.paidAmount) - amount);
+
+  try {
+    const pdf = await generatePaymentOrderPdf({
+      paymentNo: payment.paymentNo ?? `PAY-${payment.id}`,
+      paymentDate: payment.paymentDate,
+      supplierName: request.supplierName,
+      internalPoNo: request.internalPoNo,
+      sheetPoNo: request.poNo,
+      bank: {
+        bankName: request.bankName,
+        bankAccountHolder: request.bankAccountHolder,
+        bankAccountNumber: request.bankAccountNumber,
+        iban: request.iban,
+        swiftCode: request.swiftCode,
+        bankBranch: request.bankBranch,
+      },
+      amount,
+      poTotal: num(request.dueAmount),
+      paidBefore: paidBefore > 0 ? paidBefore : 0,
+      remainingAfter: round2(num(request.dueAmount) - num(request.paidAmount)),
+      method: payment.method,
+      reference: payment.reference,
+      notes: payment.notes,
+      preparedBy: payment.employeeName,
+    });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="payment-order-${payment.paymentNo ?? payment.id}.pdf"`,
+    );
+    res.send(pdf);
+  } catch (err) {
+    logger.error({ err, paymentId: id }, "finance: payment order PDF failed");
+    res.status(500).json({ error: "تعذّر توليد أمر الدفع" });
+  }
+});
+
+// ─── supplier statement (كشف حساب مورد) ─────────────────────────────────────
+
+/** The open requests of one supplier, newest first, with their totals. */
+async function loadSupplierStatement(supplierId: number) {
+  const rows = await db
+    .select()
+    .from(financePaymentRequestsTable)
+    .where(eq(financePaymentRequestsTable.supplierId, supplierId))
+    .orderBy(desc(financePaymentRequestsTable.selectedAt));
+
+  const totalDue = round2(rows.reduce((s, r) => s + num(r.dueAmount), 0));
+  const totalPaid = round2(rows.reduce((s, r) => s + num(r.paidAmount), 0));
+  const remaining = round2(totalDue - totalPaid);
+  return { rows, totalDue, totalPaid, remaining };
+}
+
+/**
+ * GET /finance/suppliers/:supplierId/statement — the statement DATA.
+ *
+ * Derived from the supplier's requests at read time and never stored: the
+ * statement is a view of what is owed right now, not a financial record.
+ */
+router.get(
+  "/finance/suppliers/:supplierId/statement",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const supplierId = Number(req.params.supplierId);
+    const [supplier] = await db
+      .select()
+      .from(suppliersTable)
+      .where(eq(suppliersTable.id, supplierId));
+    if (!supplier) {
+      res.status(404).json({ error: "المورد غير موجود" });
+      return;
+    }
+    const { rows, totalDue, totalPaid, remaining } = await loadSupplierStatement(supplierId);
+    res.json({
+      supplier: {
+        id: supplier.id,
+        name: supplier.name,
+        bank: {
+          bankName: supplier.bankName,
+          bankAccountHolder: supplier.bankAccountHolder,
+          bankAccountNumber: supplier.bankAccountNumber,
+          iban: supplier.iban,
+          swiftCode: supplier.swiftCode,
+          bankBranch: supplier.bankBranch,
+        },
+        hasBankDetails: Boolean(supplier.bankAccountNumber || supplier.iban),
+      },
+      rows: rows.map((r) => ({
+        id: r.id,
+        internalPoNo: r.internalPoNo,
+        sheetPoNo: r.poNo,
+        selectedAt: r.selectedAt,
+        dueAmount: fmt(r.dueAmount),
+        paidAmount: fmt(r.paidAmount),
+        remainingAmount: fmt(num(r.dueAmount) - num(r.paidAmount)),
+        status: r.status,
+      })),
+      totals: { due: fmt(totalDue), paid: fmt(totalPaid), remaining: fmt(remaining) },
+      poCount: rows.length,
+    });
+  },
+);
+
+/**
+ * GET /finance/suppliers/:supplierId/statement.pdf — the printable statement.
+ *
+ * Printing records a `finance_supplier_statements` row so the document handed
+ * to the supplier has a reference number (`STM-YYYY-NNNNNN`). That register is
+ * a document log only — the figures themselves are always re-derived.
+ */
+router.get(
+  "/finance/suppliers/:supplierId/statement.pdf",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const supplierId = Number(req.params.supplierId);
+    const session = req.session as { employeeId?: number; employeeName?: string };
+    const [supplier] = await db
+      .select()
+      .from(suppliersTable)
+      .where(eq(suppliersTable.id, supplierId));
+    if (!supplier) {
+      res.status(404).json({ error: "المورد غير موجود" });
+      return;
+    }
+    const { rows, totalDue, totalPaid, remaining } = await loadSupplierStatement(supplierId);
+    const nowIso = new Date().toISOString();
+
+    // A number is allocated even for an empty statement: the operator may need
+    // to print a "nothing outstanding" statement, and a document without a
+    // reference is not filable.
+    let statementNo = "";
+    try {
+      const { docNo } = await insertWithDocNo("STM", nowIso, async (no, tx) => {
+        await tx.insert(financeSupplierStatementsTable).values({
+          statementNo: no,
+          supplierId,
+          supplierName: supplier.name,
+          totalDue: String(totalDue),
+          totalPaid: String(totalPaid),
+          remaining: String(remaining),
+          poCount: rows.length,
+          generatedBy: session.employeeId ?? null,
+          generatedByName: session.employeeName ?? null,
+        });
+        return no;
+      });
+      statementNo = docNo;
+    } catch (err) {
+      // The statement itself is derived data; a failed register write must not
+      // withhold the document. Fall back to an unregistered reference.
+      logger.warn({ err, supplierId }, "finance: statement register write failed");
+      statementNo = `STM-${nowIso.slice(0, 4)}-${supplierId}`;
+    }
+
+    try {
+      const pdf = await generateSupplierStatementPdf({
+        statementNo,
+        generatedAt: nowIso,
+        supplierName: supplier.name,
+        bank: {
+          bankName: supplier.bankName,
+          bankAccountHolder: supplier.bankAccountHolder,
+          bankAccountNumber: supplier.bankAccountNumber,
+          iban: supplier.iban,
+          swiftCode: supplier.swiftCode,
+          bankBranch: supplier.bankBranch,
+        },
+        rows: rows.map((r) => ({
+          internalPoNo: r.internalPoNo,
+          sheetPoNo: r.poNo,
+          selectedAt: r.selectedAt ? new Date(r.selectedAt).toISOString() : null,
+          dueAmount: num(r.dueAmount),
+          paidAmount: num(r.paidAmount),
+          remainingAmount: round2(num(r.dueAmount) - num(r.paidAmount)),
+          status: r.status,
+        })),
+        totals: { due: totalDue, paid: totalPaid, remaining },
+        preparedBy: session.employeeName ?? null,
+      });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="statement-${statementNo}.pdf"`);
+      res.send(pdf);
+    } catch (err) {
+      logger.error({ err, supplierId }, "finance: supplier statement PDF failed");
+      res.status(500).json({ error: "تعذّر توليد كشف الحساب" });
+    }
+  },
+);
 
 export default router;
