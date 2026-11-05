@@ -393,6 +393,8 @@ export async function sendRfqEmail(opts: {
   closeDate: string;
   employeeName: string;
   employeePhone?: string | null;
+  /** Public URL of the supplier pricing guide PDF (see the portal's public/). */
+  guideUrl?: string | null;
 }): Promise<void> {
   assertCanSend();
   const transporter = await createTransporter();
@@ -456,7 +458,16 @@ export async function sendRfqEmail(opts: {
       <p style="font-size:12px;color:#6b7280;text-align:center;margin-top:16px">
         This link is unique to your company. Please do not share it.<br>
         The link expires on <strong>${opts.closeDate}</strong>.
-      </p>
+      </p>${
+        opts.guideUrl
+          ? `
+      <p style="font-size:13px;color:#374151;text-align:center;margin-top:20px">
+        <strong>New to our portal?</strong>
+        <a href="${opts.guideUrl}" style="color:#1e3a5f;font-weight:600">دليل التسعير خطوة بخطوة (PDF)</a>
+        — a step-by-step guide to submitting your quotation.
+      </p>`
+          : ""
+      }
     </div>
     <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px">
       <p style="margin:0 0 4px;font-size:13px;color:#6b7280">
@@ -495,7 +506,13 @@ ${opts.pricingUrl}
 
 This link is unique to your company. Please do not share it.
 It expires on ${opts.closeDate}.
-
+${
+  opts.guideUrl
+    ? `
+Step-by-step pricing guide (PDF): ${opts.guideUrl}
+`
+    : ""
+}
 ---
 ${opts.employeeName}${opts.employeePhone ? " | " + opts.employeePhone : ""}
 ${senderEmail}

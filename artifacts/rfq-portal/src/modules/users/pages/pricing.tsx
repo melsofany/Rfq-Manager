@@ -8,7 +8,7 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Clock, AlertTriangle, Lock } from "lucide-react";
+import { CheckCircle2, Clock, AlertTriangle, Lock, FileText } from "lucide-react";
 
 /** Row shown in the read-only submitted view */
 interface SubmittedRow {
@@ -243,6 +243,15 @@ export default function PricingPage() {
                 الشخص المسؤول: <strong>{data.contactPerson}</strong>
               </span>
             )}
+            <a
+              href="/supplier-pricing-guide.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-md bg-white/10 hover:bg-white/20 px-2.5 py-1 font-medium text-white transition-colors"
+            >
+              <FileText size={14} />
+              دليل التسعير (PDF)
+            </a>
           </div>
         </div>
       </div>
