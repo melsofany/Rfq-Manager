@@ -36,6 +36,8 @@ vi.mock("../../modules/accounts-bridge/events", () => ({
 const H = vi.hoisted(() => {
   const requestsTbl = "financeRequests";
   const paymentsTbl = "financePayments";
+  const allocationsTbl = "financeAllocations";
+  const bulkPaymentsTbl = "financeBulkPayments";
   const poTbl = "purchaseOrders";
   const poItemsTbl = "purchaseOrderItems";
   const suppliersTbl = "suppliers";
@@ -54,12 +56,15 @@ const H = vi.hoisted(() => {
     supplierRows: [],
     existingRequestRows: [],
     paymentRows: [],
+    allocationRows: [],
+    bulkPaymentRows: [],
     requestRow: null as any,
     inserted: [] as any[],
     updated: [] as any[],
     deleted: [] as any[],
     syncSupplierPayment: null as any,
     confirmAllowed: true,
+    nextId: 99,
   };
 
   function rowsFor(table: any): any[] {
@@ -74,6 +79,10 @@ const H = vi.hoisted(() => {
         return state.requestRow ? [state.requestRow] : state.existingRequestRows;
       case paymentsTbl:
         return state.paymentRows;
+      case allocationsTbl:
+        return state.allocationRows;
+      case bulkPaymentsTbl:
+        return state.bulkPaymentRows;
       default:
         return [];
     }
@@ -109,8 +118,11 @@ const H = vi.hoisted(() => {
       values: vi.fn((values: any) => {
         state.inserted.push({ table, values });
         const rows = Array.isArray(values) ? values : [values];
-        const result = rows.map((v: any, i: number) => ({
-          id: 100 + i,
+        // A GLOBAL counter, not a per-call index: ids must be unique across
+        // inserts or a bulk payment's document row and its per-order rows would
+        // all share id 100 and the allocation assertions would prove nothing.
+        const result = rows.map((v: any) => ({
+          id: ++state.nextId,
           paidAmount: "0",
           status: "unpaid",
           selectedAt: new Date(),
@@ -139,6 +151,8 @@ const H = vi.hoisted(() => {
   return {
     requestsTbl,
     paymentsTbl,
+    allocationsTbl,
+    bulkPaymentsTbl,
     statementsTbl,
     poTbl,
     poItemsTbl,
@@ -158,6 +172,8 @@ const H = vi.hoisted(() => {
 const {
   requestsTbl,
   paymentsTbl,
+  allocationsTbl,
+  bulkPaymentsTbl,
   statementsTbl,
   poTbl,
   poItemsTbl,
@@ -171,6 +187,8 @@ vi.mock("@workspace/db", () => ({
   db: H.dbMock,
   financePaymentRequestsTable: H.requestsTbl,
   financePaymentsTable: H.paymentsTbl,
+  financePaymentAllocationsTable: H.allocationsTbl,
+  financeBulkPaymentsTable: H.bulkPaymentsTbl,
   financeSupplierStatementsTable: "financeStatements",
   purchaseOrdersTable: H.poTbl,
   purchaseOrderItemsTable: H.poItemsTbl,
@@ -204,7 +222,10 @@ beforeEach(() => {
   state.supplierRows = [];
   state.existingRequestRows = [];
   state.paymentRows = [];
+  state.allocationRows = [];
+  state.bulkPaymentRows = [];
   state.requestRow = null;
+  state.nextId = 99;
   state.inserted.length = 0;
   state.updated.length = 0;
   state.deleted.length = 0;
@@ -565,5 +586,278 @@ describe("finance — payment numbering", () => {
     const inserted = state.inserted.find((i: any) => i.table === paymentsTbl);
     expect(inserted.values.paymentNo).toBe("PAY-2026-000042");
     expect(res.body.payment.paymentNo).toBe("PAY-2026-000042");
+  });
+});
+
+describe("finance — سداد إجمالي للمورد (bulk payment)", () => {
+  // Three open orders for one supplier: 100 (oldest), 200, 300.
+  function threeOpenOrders() {
+    state.existingRequestRows = [
+      {
+        id: 11,
+        poId: 1,
+        supplierId: 7,
+        supplierName: "Sinamix",
+        internalPoNo: "PO-1",
+        poNo: "P26E001",
+        dueAmount: "100",
+        paidAmount: "0",
+        status: "unpaid",
+        selectedAt: new Date("2026-01-01T00:00:00Z"),
+      },
+      {
+        id: 12,
+        poId: 2,
+        supplierId: 7,
+        supplierName: "Sinamix",
+        internalPoNo: "PO-2",
+        poNo: "P26E002",
+        dueAmount: "200",
+        paidAmount: "0",
+        status: "unpaid",
+        selectedAt: new Date("2026-01-02T00:00:00Z"),
+      },
+      {
+        id: 13,
+        poId: 3,
+        supplierId: 7,
+        supplierName: "Sinamix",
+        internalPoNo: "PO-3",
+        poNo: "P26E003",
+        dueAmount: "300",
+        paidAmount: "0",
+        status: "unpaid",
+        selectedAt: new Date("2026-01-03T00:00:00Z"),
+      },
+    ];
+  }
+
+  it("settles several orders with ONE document number", async () => {
+    threeOpenOrders();
+
+    const res = await request(buildApp())
+      .post("/finance/suppliers/7/bulk-payment")
+      .send({ amount: 250, paymentDate: "2026-11-03", method: "تحويل بنكي" });
+
+    expect(res.status).toBe(201);
+    // ONE number for the whole transfer — that is the point of the feature.
+    expect(res.body.paymentNo).toMatch(/^PAY-2026-\d{6}$/);
+    expect(res.body.orderCount).toBe(2);
+    // FIFO: the oldest order cleared, the next took the remainder.
+    expect(res.body.allocations).toEqual([
+      { requestId: 11, internalPoNo: "PO-1", poNo: "P26E001", amount: "100" },
+      { requestId: 12, internalPoNo: "PO-2", poNo: "P26E002", amount: "150" },
+    ]);
+
+    // The document row carries the number ONCE.
+    const bulkInserts = state.inserted.filter((i: any) => i.table === bulkPaymentsTbl);
+    expect(bulkInserts).toHaveLength(1);
+    expect(bulkInserts[0].values.paymentNo).toBe(res.body.paymentNo);
+    expect(bulkInserts[0].values.amount).toBe("250");
+    expect(bulkInserts[0].values.orderCount).toBe(2);
+
+    // The per-order rows must NOT reuse the number: `finance_payments` has a
+    // UNIQUE index on payment_no, so writing it twice would fail the insert.
+    const paymentInserts = state.inserted.filter((i: any) => i.table === paymentsTbl);
+    expect(paymentInserts).toHaveLength(2);
+    for (const p of paymentInserts) {
+      expect(p.values.paymentNo).toBeNull();
+    }
+  });
+
+  it("records one allocation per order and sums to the transfer", async () => {
+    threeOpenOrders();
+
+    await request(buildApp())
+      .post("/finance/suppliers/7/bulk-payment")
+      .send({ amount: 250, paymentDate: "2026-11-03", method: "شيك" });
+
+    const allocs = state.inserted.filter((i: any) => i.table === allocationsTbl);
+    expect(allocs).toHaveLength(2);
+    const total = allocs.reduce((s: number, a: any) => s + Number(a.values.amount), 0);
+    expect(total).toBe(250);
+    // Each allocation points at the payment row it produced, so deleting that
+    // payment also removes the line.
+    for (const a of allocs) {
+      expect(a.values.paymentId).toBeTruthy();
+      expect(a.values.bulkPaymentId).toBeTruthy();
+    }
+  });
+
+  it("settles the oldest order and leaves the newer ones open", async () => {
+    threeOpenOrders();
+
+    await request(buildApp())
+      .post("/finance/suppliers/7/bulk-payment")
+      .send({ amount: 100, paymentDate: "2026-11-03", method: "نقدية" });
+
+    const updates = state.updated.filter((u: any) => u.table === requestsTbl);
+    const byPaid = updates.map((u: any) => [u.values.paidAmount, u.values.status]);
+    expect(byPaid).toContainEqual(["100", "paid"]);
+    // Orders 12 and 13 were not touched at all — no phantom zero-payment rows.
+    expect(updates).toHaveLength(1);
+  });
+
+  it("clears EVERY order when the total equals the outstanding balance", async () => {
+    threeOpenOrders();
+
+    const res = await request(buildApp())
+      .post("/finance/suppliers/7/bulk-payment")
+      .send({ amount: 600, paymentDate: "2026-11-03", method: "تحويل بنكي" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.orderCount).toBe(3);
+    const updates = state.updated.filter((u: any) => u.table === requestsTbl);
+    expect(updates).toHaveLength(3);
+    for (const u of updates) expect(u.values.status).toBe("paid");
+  });
+
+  it("refuses a total above what is outstanding instead of overpaying", async () => {
+    threeOpenOrders();
+
+    const res = await request(buildApp())
+      .post("/finance/suppliers/7/bulk-payment")
+      .send({ amount: 1000, paymentDate: "2026-11-03", method: "تحويل بنكي" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.totalOutstanding).toBe("600");
+    // Nothing was written — a refused payment must leave no trace.
+    expect(state.inserted.filter((i: any) => i.table === bulkPaymentsTbl)).toHaveLength(0);
+    expect(state.updated.filter((u: any) => u.table === requestsTbl)).toHaveLength(0);
+  });
+
+  it("refuses when the supplier has nothing outstanding", async () => {
+    state.existingRequestRows = [
+      {
+        id: 11,
+        supplierId: 7,
+        supplierName: "Sinamix",
+        dueAmount: "100",
+        paidAmount: "100",
+        status: "paid",
+        selectedAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    ];
+
+    const res = await request(buildApp())
+      .post("/finance/suppliers/7/bulk-payment")
+      .send({ amount: 50, paymentDate: "2026-11-03", method: "شيك" });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("refuses a non-positive amount", async () => {
+    threeOpenOrders();
+
+    const res = await request(buildApp())
+      .post("/finance/suppliers/7/bulk-payment")
+      .send({ amount: 0, paymentDate: "2026-11-03", method: "شيك" });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("requires the confirm permission, not just the select one", async () => {
+    threeOpenOrders();
+    state.confirmAllowed = false;
+
+    const res = await request(buildApp())
+      .post("/finance/suppliers/7/bulk-payment")
+      .send({ amount: 100, paymentDate: "2026-11-03", method: "شيك" });
+
+    expect(res.status).toBe(403);
+    expect(state.inserted).toHaveLength(0);
+  });
+
+  it("syncs each per-order payment so the ledger bridge still sees them", async () => {
+    threeOpenOrders();
+
+    await request(buildApp())
+      .post("/finance/suppliers/7/bulk-payment")
+      .send({ amount: 600, paymentDate: "2026-11-03", method: "تحويل بنكي" });
+
+    expect(state.syncSupplierPayment).toHaveBeenCalledTimes(3);
+  });
+
+  it("refuses to delete ONE line of a bulk document", async () => {
+    // The transfer is one instruction: deleting a line would leave a printed
+    // document claiming to have cleared an order it no longer did.
+    state.paymentRows = [{ id: 55, requestId: 11, amount: "100", paymentDate: "2026-11-03" }];
+    state.allocationRows = [
+      { id: 1, bulkPaymentId: 77, paymentId: 55, requestId: 11, amount: "100" },
+    ];
+
+    const res = await request(buildApp()).delete("/finance/payments/55");
+
+    expect(res.status).toBe(400);
+    expect(res.body.bulkPaymentId).toBe(77);
+    // Nothing was removed — the refusal must leave the document intact.
+    expect(state.deleted.filter((d: any) => d.table === paymentsTbl)).toHaveLength(0);
+  });
+
+  it("still deletes a standalone payment", async () => {
+    // The bulk guard must not block the ordinary path.
+    state.paymentRows = [{ id: 56, requestId: 11, amount: "100", paymentDate: "2026-11-03" }];
+    state.allocationRows = [];
+    state.requestRow = {
+      id: 11,
+      supplierId: 7,
+      supplierName: "Sinamix",
+      dueAmount: "500",
+      paidAmount: "100",
+      status: "partial",
+    };
+
+    const res = await request(buildApp()).delete("/finance/payments/56");
+
+    expect(res.status).toBe(200);
+    expect(state.deleted.some((d: any) => d.table === paymentsTbl)).toBe(true);
+  });
+
+  it("reverses every order when the bulk document is deleted", async () => {
+    state.bulkPaymentRows = [{ id: 77, paymentNo: "PAY-2026-000042", supplierName: "Sinamix" }];
+    state.allocationRows = [
+      { id: 1, bulkPaymentId: 77, paymentId: 55, requestId: 11, amount: "100" },
+      { id: 2, bulkPaymentId: 77, paymentId: 56, requestId: 12, amount: "150" },
+    ];
+    state.requestRow = {
+      id: 11,
+      supplierId: 7,
+      supplierName: "Sinamix",
+      dueAmount: "100",
+      paidAmount: "100",
+      status: "paid",
+    };
+
+    const res = await request(buildApp()).delete("/finance/bulk-payments/77");
+
+    expect(res.status).toBe(200);
+    expect(res.body.ordersReversed).toBe(2);
+    // Both per-order rows, the allocation lines and the document are removed.
+    const deletedTables = state.deleted.map((d: any) => d.table);
+    expect(deletedTables).toContain(paymentsTbl);
+    expect(deletedTables).toContain(allocationsTbl);
+    expect(deletedTables).toContain(bulkPaymentsTbl);
+    // Both affected orders are recomputed back to unpaid.
+    const updates = state.updated.filter((u: any) => u.table === requestsTbl);
+    expect(updates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("404s when the bulk document does not exist", async () => {
+    state.bulkPaymentRows = [];
+    const res = await request(buildApp()).delete("/finance/bulk-payments/999");
+    expect(res.status).toBe(404);
+  });
+
+  it("previews the FIFO split before the operator commits", async () => {
+    threeOpenOrders();
+
+    const res = await request(buildApp()).get("/finance/suppliers/7/open-orders");
+
+    expect(res.status).toBe(200);
+    expect(res.body.totalOutstanding).toBe("600");
+    // The preview must order by selection date and expose what each order owes,
+    // so the dialog can show the split before any money is recorded.
+    expect(res.body.orders.map((o: any) => o.requestId)).toEqual([11, 12, 13]);
+    expect(res.body.orders[0].remainingAmount).toBe("100");
   });
 });

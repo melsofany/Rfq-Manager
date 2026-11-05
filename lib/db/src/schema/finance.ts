@@ -132,6 +132,77 @@ export const insertFinancePaymentRequestSchema = createInsertSchema(
 export type InsertFinancePaymentRequest = z.infer<typeof insertFinancePaymentRequestSchema>;
 export type FinancePaymentRequest = typeof financePaymentRequestsTable.$inferSelect;
 
+/**
+ * أمر دفع إجمالي — ONE document settling SEVERAL purchase orders.
+ *
+ * A single bank transfer to a supplier often clears every open order at once,
+ * but a printed أمر دفع per order would hand the bank several instructions for
+ * one transfer. This table is the document (one row = one `PAY-…` number, one
+ * amount, one transfer reference); `finance_payment_allocations` below records
+ * how that amount was split across the orders, which is what the printed
+ * breakdown shows.
+ *
+ * The document is NOT a duplicate of the payments it produces: each allocation
+ * still writes its own `finance_payments` row so the per-order ledger, the
+ * status recomputation and the Odoo sync keep working unchanged.
+ */
+export const financeBulkPaymentsTable = pgTable(
+  "finance_bulk_payments",
+  {
+    id: serial("id").primaryKey(),
+    paymentNo: text("payment_no").notNull(),
+    supplierId: integer("supplier_id")
+      .notNull()
+      .references(() => suppliersTable.id, { onDelete: "cascade" }),
+    supplierName: text("supplier_name").notNull(),
+    /** The whole transfer, equal to the sum of its allocations. */
+    amount: numeric("amount", { precision: 15, scale: 4 }).notNull(),
+    paymentDate: text("payment_date").notNull(),
+    method: text("method").notNull(),
+    reference: text("reference"),
+    notes: text("notes"),
+    /** How many orders this one transfer cleared. */
+    orderCount: integer("order_count").notNull().default(0),
+    employeeId: integer("employee_id").references(() => employeesTable.id, {
+      onDelete: "set null",
+    }),
+    employeeName: text("employee_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("finance_bulk_payments_no_uq").on(t.paymentNo),
+    index("finance_bulk_payments_supplier_idx").on(t.supplierId),
+  ],
+);
+
+/**
+ * One line of the bulk document's breakdown: how much of the transfer went to
+ * ONE purchase order. `paymentId` points at the `finance_payments` row this
+ * allocation produced, so deleting that payment also removes its line and the
+ * document can never claim a split it no longer made.
+ */
+export const financePaymentAllocationsTable = pgTable(
+  "finance_payment_allocations",
+  {
+    id: serial("id").primaryKey(),
+    bulkPaymentId: integer("bulk_payment_id")
+      .notNull()
+      .references(() => financeBulkPaymentsTable.id, { onDelete: "cascade" }),
+    requestId: integer("request_id")
+      .notNull()
+      .references(() => financePaymentRequestsTable.id, { onDelete: "cascade" }),
+    paymentId: integer("payment_id").references(() => financePaymentsTable.id, {
+      onDelete: "cascade",
+    }),
+    amount: numeric("amount", { precision: 15, scale: 4 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("finance_payment_allocations_bulk_idx").on(t.bulkPaymentId),
+    index("finance_payment_allocations_request_idx").on(t.requestId),
+  ],
+);
+
 export const insertFinancePaymentSchema = createInsertSchema(financePaymentsTable).omit({
   id: true,
   createdAt: true,

@@ -3050,6 +3050,52 @@ export async function initDb(): Promise<void> {
       `CREATE INDEX IF NOT EXISTS finance_supplier_statements_supplier_idx
          ON finance_supplier_statements (supplier_id)`,
     );
+    // أمر دفع إجمالي: ONE document settling SEVERAL orders. Each statement is
+    // its own client.query — statements in one call share an implicit
+    // transaction, so a sibling failure would roll the CREATE back silently.
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS finance_bulk_payments (
+         id SERIAL PRIMARY KEY,
+         payment_no TEXT NOT NULL,
+         supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+         supplier_name TEXT NOT NULL,
+         amount NUMERIC(15,4) NOT NULL,
+         payment_date TEXT NOT NULL,
+         method TEXT NOT NULL,
+         reference TEXT,
+         notes TEXT,
+         order_count INTEGER NOT NULL DEFAULT 0,
+         employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+         employee_name TEXT,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+       )`,
+    );
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS finance_bulk_payments_no_uq
+         ON finance_bulk_payments (payment_no)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS finance_bulk_payments_supplier_idx
+         ON finance_bulk_payments (supplier_id)`,
+    );
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS finance_payment_allocations (
+         id SERIAL PRIMARY KEY,
+         bulk_payment_id INTEGER NOT NULL REFERENCES finance_bulk_payments(id) ON DELETE CASCADE,
+         request_id INTEGER NOT NULL REFERENCES finance_payment_requests(id) ON DELETE CASCADE,
+         payment_id INTEGER REFERENCES finance_payments(id) ON DELETE CASCADE,
+         amount NUMERIC(15,4) NOT NULL,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+       )`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS finance_payment_allocations_bulk_idx
+         ON finance_payment_allocations (bulk_payment_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS finance_payment_allocations_request_idx
+         ON finance_payment_allocations (request_id)`,
+    );
 
     logger.info("initDb: seed complete");
   } catch (err) {

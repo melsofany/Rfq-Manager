@@ -22,6 +22,7 @@ import {
   History,
   Printer,
   FileText,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api-error";
@@ -33,6 +34,9 @@ interface PaymentRow {
   id: number;
   /** `PAY-YYYY-NNNNNN` — the printed payment order's reference. */
   paymentNo: string | null;
+  /** Set when this payment was part of a bulk transfer to the supplier. */
+  bulkPaymentId: number | null;
+  isBulk: boolean;
   amount: string | null;
   paymentDate: string;
   method: string;
@@ -40,6 +44,24 @@ interface PaymentRow {
   notes: string | null;
   employeeName: string | null;
   createdAt: string;
+}
+
+/** One open order as the bulk-payment dialog sees it. */
+interface OpenOrder {
+  requestId: number;
+  internalPoNo: string | null;
+  poNo: string | null;
+  dueAmount: string;
+  paidAmount: string;
+  remainingAmount: string;
+  selectedAt: string;
+}
+
+interface OpenOrdersResponse {
+  supplierId: number;
+  supplierName: string | null;
+  orders: OpenOrder[];
+  totalOutstanding: string;
 }
 
 interface FinanceRequest {
@@ -86,6 +108,36 @@ const STATUS_FILTERS = [
 ];
 
 const PAYMENT_METHODS = ["تحويل بنكي", "شيك", "نقدية", "محفظة إلكترونية", "أخرى"];
+
+/**
+ * The FIFO split, mirrored from the server so the dialog can show it live as
+ * the operator types.
+ *
+ * Deliberately the same rule as `allocation.ts` — oldest debt first. This is a
+ * PREVIEW only: the server recomputes it and that is what gets written. If the
+ * two ever disagree the preview is wrong, never the payment.
+ */
+function previewFifo(orders: OpenOrder[], total: number): { requestId: number; amount: number }[] {
+  if (!(total > 0)) return [];
+  const open = orders
+    .map((o) => ({
+      ...o,
+      remaining: Math.max(0, Math.round((Number(o.remainingAmount) + Number.EPSILON) * 100) / 100),
+    }))
+    .filter((o) => o.remaining > 0)
+    .sort((a, b) => new Date(a.selectedAt).getTime() - new Date(b.selectedAt).getTime());
+
+  const out: { requestId: number; amount: number }[] = [];
+  let left = total;
+  for (const o of open) {
+    if (left <= 0) break;
+    const amount = Math.round((Math.min(o.remaining, left) + Number.EPSILON) * 100) / 100;
+    if (amount <= 0) continue;
+    out.push({ requestId: o.requestId, amount });
+    left = Math.round((left - amount + Number.EPSILON) * 100) / 100;
+  }
+  return out;
+}
 
 function statusBadge(status: string) {
   switch (status) {
@@ -164,6 +216,19 @@ export default function FinancePage() {
   });
   const [saving, setSaving] = useState(false);
 
+  // bulk payment dialog (سداد إجمالي للمورد)
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkSupplier, setBulkSupplier] = useState<{ id: number; name: string } | null>(null);
+  const [bulkOrders, setBulkOrders] = useState<OpenOrder[]>([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkForm, setBulkForm] = useState({
+    paymentDate: new Date().toISOString().slice(0, 10),
+    amount: "",
+    method: PAYMENT_METHODS[0],
+    reference: "",
+    notes: "",
+  });
+
   async function load() {
     setLoading(true);
     try {
@@ -236,6 +301,95 @@ export default function FinancePage() {
     }
   }
 
+  async function openBulk(row: FinanceRequest) {
+    setBulkSupplier({ id: row.supplierId, name: row.supplierName });
+    setBulkOrders([]);
+    setBulkForm({
+      paymentDate: new Date().toISOString().slice(0, 10),
+      amount: row.remainingAmount,
+      method: PAYMENT_METHODS[0],
+      reference: "",
+      notes: "",
+    });
+    setBulkOpen(true);
+    setBulkLoading(true);
+    try {
+      const r = await fetch(`/api/finance/suppliers/${row.supplierId}/open-orders`, {
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error("فشل تحميل أوامر المورد");
+      const body: OpenOrdersResponse = await r.json();
+      setBulkOrders(body.orders);
+      // Default to the whole outstanding balance — paying a supplier in full is
+      // the common case; a partial total is typed over it.
+      setBulkForm((f) => ({ ...f, amount: body.totalOutstanding }));
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, "فشل تحميل أوامر المورد"));
+      setBulkOpen(false);
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  async function submitBulk() {
+    if (!bulkSupplier) return;
+    const amount = Number(bulkForm.amount);
+    if (!(amount > 0)) {
+      toast.error("أدخل مبلغًا صحيحًا");
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/finance/suppliers/${bulkSupplier.id}/bulk-payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          amount,
+          paymentDate: bulkForm.paymentDate,
+          method: bulkForm.method,
+          reference: bulkForm.reference || null,
+          notes: bulkForm.notes || null,
+        }),
+      });
+      if (!r.ok) {
+        const b = await r.json().catch(() => ({}));
+        throw new Error(b.error ?? "فشل تسجيل السداد الإجمالي");
+      }
+      const body = await r.json();
+      toast.success(`تم تسجيل أمر دفع ${body.paymentNo} يغطي ${body.orderCount} أمر توريد`);
+      setBulkOpen(false);
+      load();
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, "فشل تسجيل السداد الإجمالي"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
+   * Undoing a bulk transfer removes the WHOLE document — its per-order rows go
+   * with it, because one bank instruction cannot be cancelled a line at a time.
+   */
+  async function removeBulkPayment(bulkPaymentId: number) {
+    if (!confirm("حذف أمر الدفع الإجمالي كاملًا وعكس أثره على كل الأوامر؟")) return;
+    try {
+      const r = await fetch(`/api/finance/bulk-payments/${bulkPaymentId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!r.ok) {
+        const b = await r.json().catch(() => ({}));
+        throw new Error(b.error ?? "فشل حذف أمر الدفع");
+      }
+      const body = await r.json();
+      toast.success(`تم حذف أمر الدفع ${body.paymentNo} وعكس أثره على ${body.ordersReversed} أمر`);
+      load();
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, "فشل حذف أمر الدفع"));
+    }
+  }
+
   async function removePayment(row: FinanceRequest, paymentId: number) {
     if (!confirm("حذف هذا السداد؟")) return;
     try {
@@ -299,6 +453,11 @@ export default function FinancePage() {
 
   function printPaymentOrder(paymentId: number) {
     openPdfTab(`/api/finance/payments/${paymentId}/pdf`);
+  }
+
+  /** A bulk payment's document lives on its own endpoint — one per transfer. */
+  function printBulkPayment(bulkPaymentId: number) {
+    openPdfTab(`/api/finance/bulk-payments/${bulkPaymentId}/pdf`);
   }
 
   function printStatement(supplierId: number) {
@@ -422,6 +581,11 @@ export default function FinancePage() {
                           <span dir="ltr" className="font-mono text-[11px] text-primary">
                             {p.paymentNo ?? "-"}
                           </span>
+                          {p.isBulk && (
+                            <span className="rounded bg-indigo-100 px-1 text-[10px] font-medium text-indigo-800">
+                              سداد إجمالي
+                            </span>
+                          )}
                           <span dir="ltr">{p.paymentDate}</span>
                           <span className="font-medium">{money(p.amount)}</span>
                           <span className="text-muted-foreground">{p.method}</span>
@@ -432,11 +596,26 @@ export default function FinancePage() {
                               variant="ghost"
                               className="h-6 px-1"
                               title="طباعة أمر الدفع"
-                              onClick={() => printPaymentOrder(p.id)}
+                              onClick={() =>
+                                p.isBulk && p.bulkPaymentId
+                                  ? printBulkPayment(p.bulkPaymentId)
+                                  : printPaymentOrder(p.id)
+                              }
                             >
                               <Printer size={12} />
                             </Button>
-                            {mayConfirm && r.status !== "paid" && (
+                            {mayConfirm && p.isBulk && p.bulkPaymentId && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-1 text-red-600"
+                                title="حذف أمر الدفع الإجمالي وعكس أثره على كل الأوامر"
+                                onClick={() => removeBulkPayment(p.bulkPaymentId!)}
+                              >
+                                <Trash2 size={12} />
+                              </Button>
+                            )}
+                            {mayConfirm && !p.isBulk && r.status !== "paid" && (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -462,6 +641,17 @@ export default function FinancePage() {
                   <Button size="sm" variant="outline" onClick={() => printStatement(r.supplierId)}>
                     <FileText size={14} className="me-1" /> كشف حساب المورد
                   </Button>
+                  {mayConfirm && r.status !== "paid" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-emerald-400 text-emerald-700"
+                      onClick={() => openBulk(r)}
+                      title="سداد كل مستحقات المورد بأمر دفع واحد"
+                    >
+                      <Layers size={14} className="me-1" /> سداد إجمالي للمورد
+                    </Button>
+                  )}
                   {r.status === "paid" && (
                     <span className="text-xs text-emerald-700">
                       تم السداد بالكامل — لا يمكن السداد مرة أخرى
@@ -547,6 +737,142 @@ export default function FinancePage() {
             </Button>
             <Button onClick={submitPayment} disabled={saving}>
               {saving ? "جارٍ الحفظ..." : "تأكيد السداد"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* سداد إجمالي للمورد — one transfer, one document, several orders */}
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>سداد إجمالي — {bulkSupplier?.name}</DialogTitle>
+          </DialogHeader>
+          {bulkLoading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              جارٍ تحميل أوامر المورد...
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="rounded-md bg-muted/40 p-2 text-sm">
+                <span className="text-muted-foreground">إجمالي المستحق للمورد: </span>
+                <span className="font-bold">
+                  {money(bulkOrders.reduce((s, o) => s + Number(o.remainingAmount), 0).toString())}
+                </span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  — {bulkOrders.length} أمر توريد مفتوح
+                </span>
+              </div>
+
+              <div>
+                <Label>المبلغ الإجمالي المحوَّل</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={bulkForm.amount}
+                  onChange={(e) => setBulkForm({ ...bulkForm, amount: e.target.value })}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  يُوزَّع على الأوامر من الأقدم إلى الأحدث تلقائيًا. أدخل مبلغًا أقل لسداد جزئي.
+                </p>
+              </div>
+
+              {/* The split the operator is about to commit, shown BEFORE saving. */}
+              {(() => {
+                const total = Number(bulkForm.amount) || 0;
+                const preview = previewFifo(bulkOrders, total);
+                if (preview.length === 0) return null;
+                return (
+                  <div className="rounded-md border">
+                    <div className="border-b bg-muted/40 px-2 py-1 text-xs font-medium">
+                      توزيع المبلغ على الأوامر (الأقدم أولًا)
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/20">
+                          <tr>
+                            <th className="px-2 py-1 text-start">أمر الشراء</th>
+                            <th className="px-2 py-1 text-start">رقم أمر توريد العميل</th>
+                            <th className="px-2 py-1 text-end">المتبقي</th>
+                            <th className="px-2 py-1 text-end">المخصص</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {preview.map((a) => {
+                            const o = bulkOrders.find((x) => x.requestId === a.requestId);
+                            return (
+                              <tr key={a.requestId} className="border-t">
+                                <td className="px-2 py-1" dir="ltr">
+                                  {o?.internalPoNo ?? "-"}
+                                </td>
+                                <td className="px-2 py-1" dir="ltr">
+                                  {o?.poNo ?? "-"}
+                                </td>
+                                <td className="px-2 py-1 text-end">
+                                  {money(o?.remainingAmount ?? "0")}
+                                </td>
+                                <td className="px-2 py-1 text-end font-medium">
+                                  {money(a.amount.toString())}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>تاريخ السداد</Label>
+                  <Input
+                    type="date"
+                    value={bulkForm.paymentDate}
+                    onChange={(e) => setBulkForm({ ...bulkForm, paymentDate: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>طريقة السداد</Label>
+                  <select
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    value={bulkForm.method}
+                    onChange={(e) => setBulkForm({ ...bulkForm, method: e.target.value })}
+                  >
+                    {PAYMENT_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <Label>المرجع (اختياري)</Label>
+                <Input
+                  value={bulkForm.reference}
+                  onChange={(e) => setBulkForm({ ...bulkForm, reference: e.target.value })}
+                  placeholder="رقم الحوالة / الشيك"
+                />
+              </div>
+              <div>
+                <Label>ملاحظات (اختياري)</Label>
+                <Textarea
+                  value={bulkForm.notes}
+                  onChange={(e) => setBulkForm({ ...bulkForm, notes: e.target.value })}
+                  rows={2}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={submitBulk} disabled={saving || bulkLoading}>
+              {saving ? "جارٍ الحفظ..." : "تأكيد السداد الإجمالي"}
             </Button>
           </DialogFooter>
         </DialogContent>

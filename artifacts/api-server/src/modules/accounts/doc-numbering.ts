@@ -15,6 +15,7 @@ import {
   supplierInvoicesTable,
   supplierPaymentsTable,
   financePaymentsTable,
+  financeBulkPaymentsTable,
   financeSupplierStatementsTable,
 } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -32,24 +33,35 @@ import { isUniqueViolation } from "../../shared/pg-errors";
  * dereferences a `@workspace/db` table binding, so building them all at once
  * would force every caller (and every partially-mocked route test) to provide
  * the whole accounting schema — finance only ever issues `PAY`/`STM`.
+ *
+ * A prefix maps to a LIST because `PAY` is ONE series held by TWO tables: the
+ * per-order payment orders (`finance_payments`) and the bulk payment order that
+ * settles several orders at once (`finance_bulk_payments`). Reading only one of
+ * them would let the other hand out a number the first already used — two
+ * different documents sharing `PAY-2026-000007`.
  */
-function seriesFor(prefix: string): { table: PgTable; column: AnyPgColumn } | undefined {
+function seriesFor(prefix: string): Array<{ table: PgTable; column: AnyPgColumn }> | undefined {
   switch (prefix) {
     case "JE":
-      return { table: journalEntriesTable, column: journalEntriesTable.entryNo };
+      return [{ table: journalEntriesTable, column: journalEntriesTable.entryNo }];
     case "INV":
-      return { table: salesInvoicesTable, column: salesInvoicesTable.invoiceNo };
+      return [{ table: salesInvoicesTable, column: salesInvoicesTable.invoiceNo }];
     case "SI":
-      return { table: supplierInvoicesTable, column: supplierInvoicesTable.invoiceNo };
+      return [{ table: supplierInvoicesTable, column: supplierInvoicesTable.invoiceNo }];
     case "SP":
-      return { table: supplierPaymentsTable, column: supplierPaymentsTable.paymentNo };
+      return [{ table: supplierPaymentsTable, column: supplierPaymentsTable.paymentNo }];
     case "PAY":
-      return { table: financePaymentsTable, column: financePaymentsTable.paymentNo };
+      return [
+        { table: financePaymentsTable, column: financePaymentsTable.paymentNo },
+        { table: financeBulkPaymentsTable, column: financeBulkPaymentsTable.paymentNo },
+      ];
     case "STM":
-      return {
-        table: financeSupplierStatementsTable,
-        column: financeSupplierStatementsTable.statementNo,
-      };
+      return [
+        {
+          table: financeSupplierStatementsTable,
+          column: financeSupplierStatementsTable.statementNo,
+        },
+      ];
     default:
       return undefined;
   }
@@ -63,6 +75,7 @@ function seriesFor(prefix: string): { table: PgTable; column: AnyPgColumn } | un
 export interface DbLike {
   select: (...args: any[]) => any;
   insert: (...args: any[]) => any;
+  update: (...args: any[]) => any;
   execute: (...args: any[]) => any;
 }
 
@@ -74,14 +87,18 @@ export async function nextEntryNo(
   const series = seriesFor(prefix);
   if (!series) throw new Error(`Unknown document series: ${prefix}`);
   const pattern = `${prefix}-${year}-`;
-  const rows = await handle
-    .select({ no: series.column })
-    .from(series.table)
-    .where(sql`${series.column} like ${pattern + "%"}`);
   let max = 0;
-  for (const r of rows) {
-    const n = parseInt(String(r.no).slice(pattern.length), 10);
-    if (!isNaN(n) && n > max) max = n;
+  // Every table holding this series must be read: a number is free only if
+  // NEITHER table uses it.
+  for (const s of series) {
+    const rows = await handle
+      .select({ no: s.column })
+      .from(s.table)
+      .where(sql`${s.column} like ${pattern + "%"}`);
+    for (const r of rows) {
+      const n = parseInt(String(r.no).slice(pattern.length), 10);
+      if (!isNaN(n) && n > max) max = n;
+    }
   }
   return `${pattern}${String(max + 1).padStart(6, "0")}`;
 }
