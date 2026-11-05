@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit";
 import { resolve, dirname } from "path";
-import { rtlColumnX, rtlSlotX } from "./pdf-layout";
+import { rtlColumnX, rtlSlotX, flowRows, type FlowRow } from "./pdf-layout";
 import { rtl, rtlLabelValue } from "./rtl-text";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
@@ -167,25 +167,24 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
       let y = HDR_H + 16;
 
       // ── Supplier + bank block ──
-      doc.rect(M, y, CW, 30).fill(LGREY);
-      doc
-        .font("Amiri")
-        .fontSize(12)
-        .fillColor("#111111")
-        .text(rtl(opts.supplierName), M + 8, y + 9, {
-          width: CW - 130,
-          align: "right",
-          lineBreak: false,
-        });
+      // Measured, not fixed: a long supplier name must not spill out of its band.
+      doc.font("Amiri").fontSize(12);
+      const supplierName = rtl(opts.supplierName);
+      const bandH = Math.max(30, doc.heightOfString(supplierName, { width: CW - 130 }) + 14);
+      doc.rect(M, y, CW, bandH).fill(LGREY);
+      doc.fillColor("#111111").text(supplierName, M + 8, y + 7, {
+        width: CW - 130,
+        align: "right",
+      });
       doc
         .fontSize(9)
         .fillColor("#555555")
-        .text(formatDate(opts.generatedAt), M + 8, y + 11, {
+        .text(formatDate(opts.generatedAt), M + 8, y + 9, {
           width: 120,
           align: "left",
           lineBreak: false,
         });
-      y += 38;
+      y += bandH + 8;
 
       const bankRows: Array<[string, string | null | undefined]> = [
         ["البنك", opts.bank.bankName],
@@ -199,20 +198,28 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
       const BANK_LABEL_W = 150;
       if (shown.length) {
         doc.fontSize(8.5);
-        shown.forEach(([label, value], i) => {
-          const rowY = y + i * 11;
-          doc.fillColor("#111111").text(rtl(String(value)), M, rowY, {
+        const rows: FlowRow[] = shown.map(([label, value]) => ({
+          value: rtl(String(value)),
+          label: rtl(label),
+        }));
+        // Rows are measured, not stepped: a long account holder name wraps and
+        // must push the rows below it down instead of overprinting them.
+        const flow = flowRows(doc, rows, {
+          top: y,
+          valueWidth: CW - BANK_LABEL_W - 10,
+          labelWidth: BANK_LABEL_W,
+        });
+        rows.forEach((row, i) => {
+          doc.fillColor("#111111").text(row.value, M, flow.ys[i], {
             width: CW - BANK_LABEL_W - 10,
             align: "right",
-            lineBreak: false,
           });
-          doc.fillColor("#666666").text(rtl(label), M + CW - BANK_LABEL_W, rowY, {
+          doc.fillColor("#666666").text(row.label, M + CW - BANK_LABEL_W, flow.ys[i], {
             width: BANK_LABEL_W,
             align: "right",
-            lineBreak: false,
           });
         });
-        y += shown.length * 11 + 12;
+        y = flow.nextY + 12;
       }
 
       // ── Orders table ──
@@ -299,6 +306,15 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
         ["اعتمده", null],
       ];
       const colW = CW / 3;
+      doc.font("Amiri").fontSize(10);
+      const labelH = doc.heightOfString(rtl("أعدّه"), { width: colW });
+      doc.fontSize(8.5);
+      const maxNameH = Math.max(
+        0,
+        ...sigCols.map(([, v]) => (v ? doc.heightOfString(rtl(v), { width: colW }) : 0)),
+      );
+      const sigGap = labelH + 4;
+      const ruleY = sigY + sigGap + maxNameH + 8;
       sigCols.forEach(([label, value], i) => {
         const x = rtlSlotX(i, sigCols.length, M, CW);
         doc
@@ -309,18 +325,18 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
           doc
             .fontSize(8.5)
             .fillColor("#333333")
-            .text(rtl(value), x, sigY + 14, { width: colW, align: "center", lineBreak: false });
+            .text(rtl(value), x, sigY + sigGap, { width: colW, align: "center" });
         }
         doc
-          .moveTo(x + 14, sigY + 52)
-          .lineTo(x + colW - 14, sigY + 52)
+          .moveTo(x + 14, ruleY)
+          .lineTo(x + colW - 14, ruleY)
           .strokeColor("#999999")
           .lineWidth(0.6)
           .stroke();
         doc
           .fontSize(7.5)
           .fillColor("#888888")
-          .text(rtl("التوقيع"), x, sigY + 56, {
+          .text(rtl("التوقيع"), x, ruleY + 4, {
             width: colW,
             align: "center",
             lineBreak: false,

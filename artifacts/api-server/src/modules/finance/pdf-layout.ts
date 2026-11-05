@@ -20,3 +20,40 @@ export function rtlColumnX(widths: number[], index: number, left: number): numbe
 export function rtlSlotX(index: number, count: number, left: number, totalWidth: number): number {
   return left + totalWidth - (index + 1) * (totalWidth / count);
 }
+
+/** The slice of pdfkit `flowRows` needs, so the geometry is testable on its own. */
+export interface Measurer {
+  heightOfString(text: string, options?: { width?: number }): number;
+}
+
+/** One label/value row of a flowing block. Both strings arrive pre-`rtl()`ed. */
+export interface FlowRow {
+  value: string;
+  label: string;
+}
+
+/**
+ * `y` of every row in a label/value block that flows downwards, plus the `y`
+ * just past the last one.
+ *
+ * A fixed per-row step is only correct while every value fits on ONE line. A
+ * bank account holder's registered name is long enough to wrap, and with a
+ * constant step its second line is drawn straight over the row beneath — so
+ * every row is MEASURED and the next one starts below it.
+ */
+export function flowRows(
+  doc: Measurer,
+  rows: FlowRow[],
+  options: { top: number; valueWidth: number; labelWidth: number },
+): { ys: number[]; nextY: number } {
+  const ys: number[] = [];
+  let y = options.top;
+  for (const row of rows) {
+    ys.push(y);
+    y += Math.max(
+      doc.heightOfString(row.value, { width: options.valueWidth }),
+      doc.heightOfString(row.label, { width: options.labelWidth }),
+    );
+  }
+  return { ys, nextY: y };
+}

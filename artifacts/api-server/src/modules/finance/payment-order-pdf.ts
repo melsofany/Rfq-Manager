@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit";
 import { resolve, dirname } from "path";
-import { rtlSlotX } from "./pdf-layout";
+import { rtlSlotX, flowRows, type FlowRow } from "./pdf-layout";
 import { rtl, rtlLabelValue } from "./rtl-text";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
@@ -249,43 +249,30 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       ];
       const LABEL_W = 170;
       doc.font("Amiri").fontSize(10).fillColor("#111111");
-      refRows.forEach(([label, value], i) => {
-        const rowY = y + i * 16;
-        doc.fillColor("#111111").text(rtl(value), M, rowY, {
+      const refItems: FlowRow[] = refRows.map(([label, value]) => ({
+        value: rtl(value),
+        label: rtl(label),
+      }));
+      // Measured, not stepped: a value that wraps must push the next row down.
+      const refFlow = flowRows(doc, refItems, {
+        top: y,
+        valueWidth: CW - LABEL_W - 10,
+        labelWidth: LABEL_W,
+      });
+      refItems.forEach((row, i) => {
+        doc.fillColor("#111111").text(row.value, M, refFlow.ys[i], {
           width: CW - LABEL_W - 10,
           align: "right",
-          lineBreak: false,
         });
-        doc.fillColor("#555555").text(rtl(label), M + CW - LABEL_W, rowY, {
+        doc.fillColor("#555555").text(row.label, M + CW - LABEL_W, refFlow.ys[i], {
           width: LABEL_W,
           align: "right",
-          lineBreak: false,
         });
       });
       doc.fillColor("#111111");
-      y += refRows.length * 16 + 12;
+      y = refFlow.nextY + 12;
 
       // ── Supplier + bank block ──
-      const boxH = 104;
-      doc.rect(M, y, CW, boxH).fill(LGREY);
-      doc
-        .font("Amiri")
-        .fontSize(9)
-        .fillColor(BLUE)
-        .text(rtl("يُدفع إلى:"), M + 8, y + 6, {
-          width: CW - 16,
-          align: "right",
-          lineBreak: false,
-        });
-      doc
-        .fontSize(12)
-        .fillColor("#111111")
-        .text(rtl(opts.supplierName), M + 8, y + 20, {
-          width: CW - 16,
-          align: "right",
-          lineBreak: false,
-        });
-
       const bankRows: Array<[string, string | null | undefined]> = [
         ["البنك", opts.bank.bankName],
         ["اسم صاحب الحساب", opts.bank.bankAccountHolder],
@@ -295,21 +282,56 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
         ["الفرع", opts.bank.bankBranch],
       ];
       const shown = bankRows.filter(([, v]) => v);
+      const title = rtl("يُدفع إلى:");
+      const supplierName = rtl(opts.supplierName);
+      const rows: FlowRow[] = shown.map(([label, value]) => ({
+        value: rtl(String(value)),
+        label: rtl(label),
+      }));
+
+      // The box is drawn BEHIND its text, so its height must be known first.
+      // Rows are measured, not stepped: a long account holder name wraps and
+      // must push the rows below it down instead of overprinting them.
+      doc.font("Amiri").fontSize(9);
+      const titleH = doc.heightOfString(title, { width: CW - 16 });
+      doc.fontSize(12);
+      const nameH = doc.heightOfString(supplierName, { width: CW - 16 });
       doc.fontSize(9);
-      shown.forEach(([label, value], i) => {
-        const rowY = y + 40 + i * 11;
+      const titleY = y + 6;
+      const nameY = titleY + titleH + 6;
+      const flow = flowRows(doc, rows, {
+        top: nameY + nameH + 6,
+        valueWidth: CW - LABEL_W - 24,
+        labelWidth: LABEL_W,
+      });
+      const boxH = Math.max(104, flow.nextY - y + 10);
+
+      doc.rect(M, y, CW, boxH).fill(LGREY);
+      doc.fillColor(BLUE).text(title, M + 8, titleY, {
+        width: CW - 16,
+        align: "right",
+        lineBreak: false,
+      });
+      doc
+        .fillColor("#111111")
+        .fontSize(12)
+        .text(supplierName, M + 8, nameY, {
+          width: CW - 16,
+          align: "right",
+        });
+
+      doc.fontSize(9);
+      rows.forEach((row, i) => {
         // A Latin/digit value (account number, IBAN, SWIFT) has no Arabic words
         // to reorder, so rtl() leaves it untouched; an Arabic bank name or
         // branch is laid out right-to-left like every other value.
-        doc.fillColor("#111111").text(rtl(String(value)), M + 8, rowY, {
+        doc.fillColor("#111111").text(row.value, M + 8, flow.ys[i], {
           width: CW - LABEL_W - 24,
           align: "right",
-          lineBreak: false,
         });
-        doc.fillColor("#666666").text(rtl(label), M + CW - LABEL_W, rowY, {
+        doc.fillColor("#666666").text(row.label, M + CW - LABEL_W, flow.ys[i], {
           width: LABEL_W,
           align: "right",
-          lineBreak: false,
         });
       });
       if (shown.length === 0) {
@@ -325,27 +347,35 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       y += boxH + 16;
 
       // ── Amount block — the reason the document exists ──
-      const amtH = 92;
+      // Measured, not fixed: the words-of-amount line wraps for a large sum and
+      // must grow the block rather than overprint the amount above it.
+      doc.font("Amiri").fontSize(9);
+      const amtTitleH = doc.heightOfString(rtl("المبلغ المطلوب سداده"), { width: CW });
+      const amountText = rtl(`${money(opts.amount)} ج.م`);
+      doc.fontSize(26);
+      const amountH = doc.heightOfString(amountText, { width: CW });
+      const wordsText = rtl(amountInArabicWords(opts.amount));
+      doc.fontSize(8.5);
+      const wordsH = doc.heightOfString(wordsText, { width: CW - 20 });
+
+      const amtTitleY = y + 10;
+      const amountY = amtTitleY + amtTitleH + 6;
+      const wordsY = amountY + amountH + 6;
+      const amtH = Math.max(92, wordsY + wordsH - y + 8);
+
       doc.rect(M, y, CW, amtH).fill(BLUE);
-      doc
-        .font("Amiri")
-        .fontSize(9)
-        .fillColor("#aaccee")
-        .text(rtl("المبلغ المطلوب سداده"), M, y + 10, { width: CW, align: "center" });
+      doc.fontSize(9).fillColor("#aaccee").text(rtl("المبلغ المطلوب سداده"), M, amtTitleY, {
+        width: CW,
+        align: "center",
+      });
       doc
         .fontSize(26)
         .fillColor("#ffffff")
-        .text(rtl(`${money(opts.amount)} ج.م`), M, y + 26, {
-          width: CW,
-          align: "center",
-        });
+        .text(amountText, M, amountY, { width: CW, align: "center" });
       doc
         .fontSize(8.5)
         .fillColor(GOLD)
-        .text(rtl(amountInArabicWords(opts.amount)), M + 10, y + 62, {
-          width: CW - 20,
-          align: "center",
-        });
+        .text(wordsText, M + 10, wordsY, { width: CW - 20, align: "center" });
       y += amtH + 14;
 
       // ── Order money context — what makes a PARTIAL payment legible ──
@@ -376,12 +406,9 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       if (opts.reference || opts.notes) {
         doc.fontSize(9).fillColor("#444444");
         if (opts.reference) {
-          doc.text(rtlLabelValue("المرجع:", opts.reference), M, y, {
-            width: CW,
-            align: "right",
-            lineBreak: false,
-          });
-          y += 14;
+          const refText = rtlLabelValue("المرجع:", opts.reference);
+          doc.text(refText, M, y, { width: CW, align: "right" });
+          y += doc.heightOfString(refText, { width: CW });
         }
         if (opts.notes) {
           doc.text(rtlLabelValue("ملاحظات:", opts.notes), M, y, {
@@ -400,6 +427,15 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
         ["اعتمده", null],
       ];
       const colW = CW / 3;
+      doc.font("Amiri").fontSize(10);
+      const labelH = doc.heightOfString(rtl("أعدّه"), { width: colW });
+      doc.fontSize(8.5);
+      const maxNameH = Math.max(
+        0,
+        ...sigCols.map(([, v]) => (v ? doc.heightOfString(rtl(v), { width: colW }) : 0)),
+      );
+      const sigGap = labelH + 4;
+      const ruleY = sigY + sigGap + maxNameH + 8;
       sigCols.forEach(([label, value], i) => {
         const x = rtlSlotX(i, sigCols.length, M, CW);
         doc
@@ -410,18 +446,18 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
           doc
             .fontSize(8.5)
             .fillColor("#333333")
-            .text(rtl(value), x, sigY + 14, { width: colW, align: "center", lineBreak: false });
+            .text(rtl(value), x, sigY + sigGap, { width: colW, align: "center" });
         }
         doc
-          .moveTo(x + 14, sigY + 52)
-          .lineTo(x + colW - 14, sigY + 52)
+          .moveTo(x + 14, ruleY)
+          .lineTo(x + colW - 14, ruleY)
           .strokeColor("#999999")
           .lineWidth(0.6)
           .stroke();
         doc
           .fontSize(7.5)
           .fillColor("#888888")
-          .text(rtl("التوقيع"), x, sigY + 56, {
+          .text(rtl("التوقيع"), x, ruleY + 4, {
             width: colW,
             align: "center",
             lineBreak: false,
