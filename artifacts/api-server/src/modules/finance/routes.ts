@@ -20,6 +20,8 @@ import {
   db,
   financePaymentRequestsTable,
   financePaymentsTable,
+  financePaymentAllocationsTable,
+  financeBulkPaymentsTable,
   financeSupplierStatementsTable,
   purchaseOrderItemsTable,
   purchaseOrdersTable,
@@ -35,6 +37,7 @@ import { syncSupplierPayment } from "../accounts-bridge/events";
 import { insertWithDocNo } from "../accounts/doc-numbering";
 import { generatePaymentOrderPdf } from "./payment-order-pdf";
 import { generateSupplierStatementPdf } from "./supplier-statement-pdf";
+import { allocateFifo, remainingOf, totalOutstanding } from "./allocation";
 
 const router = Router();
 
@@ -124,10 +127,18 @@ function serialize(row: RequestRow, payments?: unknown[]) {
   };
 }
 
-function serializePayment(p: typeof financePaymentsTable.$inferSelect) {
+function serializePayment(
+  p: typeof financePaymentsTable.$inferSelect,
+  bulk?: { id: number; paymentNo: string } | null,
+) {
   return {
     id: p.id,
-    paymentNo: p.paymentNo,
+    // A bulk payment's rows carry no number of their own — the transfer is ONE
+    // document — so they report the document's number. Without this the history
+    // would show "—" for money that demonstrably moved.
+    paymentNo: p.paymentNo ?? bulk?.paymentNo ?? null,
+    bulkPaymentId: bulk?.id ?? null,
+    isBulk: Boolean(bulk),
     amount: fmt(p.amount),
     paymentDate: p.paymentDate,
     method: p.method,
@@ -136,6 +147,46 @@ function serializePayment(p: typeof financePaymentsTable.$inferSelect) {
     employeeName: p.employeeName,
     createdAt: p.createdAt,
   };
+}
+
+/**
+ * Map each payment to the bulk document it belongs to (if any).
+ *
+ * Resolved in ONE query for a whole page — a per-payment lookup would make the
+ * finance list an N+1 the moment a supplier had a few bulk transfers.
+ */
+async function loadBulkNumbers(
+  payments: (typeof financePaymentsTable.$inferSelect)[],
+): Promise<Map<number, { id: number; paymentNo: string }>> {
+  const out = new Map<number, { id: number; paymentNo: string }>();
+  const ids = payments.map((p) => p.id);
+  if (ids.length === 0) return out;
+
+  const allocs = await db
+    .select({
+      paymentId: financePaymentAllocationsTable.paymentId,
+      bulkPaymentId: financePaymentAllocationsTable.bulkPaymentId,
+    })
+    .from(financePaymentAllocationsTable)
+    .where(inArray(financePaymentAllocationsTable.paymentId, ids));
+  if (allocs.length === 0) return out;
+
+  const bulkIds = [...new Set(allocs.map((a) => a.bulkPaymentId))];
+  const bulks = await db
+    .select({
+      id: financeBulkPaymentsTable.id,
+      paymentNo: financeBulkPaymentsTable.paymentNo,
+    })
+    .from(financeBulkPaymentsTable)
+    .where(inArray(financeBulkPaymentsTable.id, bulkIds));
+  const byBulkId = new Map(bulks.map((b) => [b.id, b]));
+
+  for (const a of allocs) {
+    if (a.paymentId == null) continue;
+    const bulk = byBulkId.get(a.bulkPaymentId);
+    if (bulk) out.set(a.paymentId, bulk);
+  }
+  return out;
 }
 
 // ─── select POs for payment ─────────────────────────────────────────────────
@@ -332,7 +383,15 @@ router.get("/finance/requests", requireAuth, async (req, res): Promise<void> => 
     byRequest.set(p.requestId, list);
   }
 
-  res.json(rows.map((r) => serialize(r, (byRequest.get(r.id) ?? []).map(serializePayment))));
+  const bulkByPayment = await loadBulkNumbers(payments);
+  res.json(
+    rows.map((r) =>
+      serialize(
+        r,
+        (byRequest.get(r.id) ?? []).map((p) => serializePayment(p, bulkByPayment.get(p.id))),
+      ),
+    ),
+  );
 });
 
 /** GET /finance/summary — headline figures for the page header. */
@@ -381,7 +440,13 @@ router.get("/finance/requests/:id", requireAuth, async (req, res): Promise<void>
     .from(financePaymentsTable)
     .where(eq(financePaymentsTable.requestId, id))
     .orderBy(desc(financePaymentsTable.paymentDate));
-  res.json(serialize(row, payments.map(serializePayment)));
+  const bulkByPayment = await loadBulkNumbers(payments);
+  res.json(
+    serialize(
+      row,
+      payments.map((p) => serializePayment(p, bulkByPayment.get(p.id))),
+    ),
+  );
 });
 
 // ─── pay ────────────────────────────────────────────────────────────────────
@@ -548,6 +613,22 @@ router.delete(
       res.status(404).json({ error: "السداد غير موجود" });
       return;
     }
+
+    // A bulk payment is ONE bank transfer, so its rows are not independent
+    // facts: removing one would leave a printed document claiming to have
+    // cleared an order it no longer did. The whole document is removed instead.
+    const [allocation] = await db
+      .select({ bulkPaymentId: financePaymentAllocationsTable.bulkPaymentId })
+      .from(financePaymentAllocationsTable)
+      .where(eq(financePaymentAllocationsTable.paymentId, id));
+    if (allocation) {
+      res.status(400).json({
+        error: "هذا السداد جزء من أمر دفع إجمالي — احذف أمر الدفع كاملًا",
+        bulkPaymentId: allocation.bulkPaymentId,
+      });
+      return;
+    }
+
     const [row] = await db
       .select()
       .from(financePaymentRequestsTable)
@@ -729,6 +810,30 @@ router.get("/finance/payments/:id/pdf", requireAuth, async (req, res): Promise<v
 
 // ─── supplier statement (كشف حساب مورد) ─────────────────────────────────────
 
+// ─── bulk payment (سداد إجمالي للمورد) ──────────────────────────────────────
+
+/**
+ * The supplier's payable orders, OLDEST FIRST, with their remaining balance.
+ *
+ * Cancelled and already-settled rows are dropped here rather than filtered by
+ * each caller: every consumer of this list (the preview, the FIFO split, the
+ * ceiling check) must agree on what "open" means, and two copies of that rule
+ * is how a preview and a payment end up disagreeing.
+ */
+async function loadOpenOrders(supplierId: number) {
+  const rows = await db
+    .select()
+    .from(financePaymentRequestsTable)
+    .where(eq(financePaymentRequestsTable.supplierId, supplierId))
+    .orderBy(financePaymentRequestsTable.selectedAt);
+  return rows
+    .filter((r) => remainingOf(r) > 0)
+    .sort((a, b) => {
+      const d = new Date(a.selectedAt).getTime() - new Date(b.selectedAt).getTime();
+      return d !== 0 ? d : a.id - b.id;
+    });
+}
+
 /** The open requests of one supplier, newest first, with their totals. */
 async function loadSupplierStatement(supplierId: number) {
   const rows = await db
@@ -790,6 +895,409 @@ router.get(
       totals: { due: fmt(totalDue), paid: fmt(totalPaid), remaining: fmt(remaining) },
       poCount: rows.length,
     });
+  },
+);
+
+/**
+ * GET /finance/suppliers/:supplierId/open-orders — what a bulk payment would
+ * settle, and in what order.
+ *
+ * The dialog shows this BEFORE the operator commits, so the FIFO split is
+ * visible up front rather than discovered on the printed document. `allocated`
+ * is the split for the whole outstanding balance; the dialog recomputes it live
+ * for whatever total the operator types.
+ */
+router.get(
+  "/finance/suppliers/:supplierId/open-orders",
+  requireAuth,
+  async (req, res): Promise<void> => {
+    const supplierId = Number(req.params.supplierId);
+    if (!Number.isInteger(supplierId) || supplierId <= 0) {
+      res.status(400).json({ error: "رقم المورد غير صحيح" });
+      return;
+    }
+    const orders = await loadOpenOrders(supplierId);
+    res.json({
+      supplierId,
+      supplierName: orders[0]?.supplierName ?? null,
+      orders: orders.map((o) => ({
+        requestId: o.id,
+        internalPoNo: o.internalPoNo,
+        poNo: o.poNo,
+        dueAmount: fmt(o.dueAmount),
+        paidAmount: fmt(o.paidAmount),
+        remainingAmount: fmt(remainingOf(o)),
+        selectedAt: o.selectedAt,
+      })),
+      totalOutstanding: fmt(totalOutstanding(orders)),
+      allocated: allocateFifo(orders, totalOutstanding(orders)).map((a) => ({
+        requestId: a.requestId,
+        amount: fmt(a.amount),
+      })),
+    });
+  },
+);
+
+/**
+ * POST /finance/suppliers/:supplierId/bulk-payment — settle SEVERAL orders with
+ * ONE transfer.
+ *
+ * The operator types one total; the FIFO split decides how much each open order
+ * receives. What comes out is ONE document — one `PAY-…` number, one amount, one
+ * transfer reference — carrying a breakdown of which order got what, because a
+ * bank transfer is one instruction however many invoices it clears.
+ *
+ * The per-order rows are still written (`finance_payments`), so the existing
+ * status recomputation, the payment history and the Odoo sync keep working
+ * unchanged. The document and its allocations are what make them one payment.
+ *
+ * Refused when the total exceeds what is outstanding: allocating "as much as
+ * possible" would silently turn a mistaken amount into a real transfer.
+ */
+router.post(
+  "/finance/suppliers/:supplierId/bulk-payment",
+  requireAuth,
+  requirePermission(FINANCE_PERM.confirm),
+  async (req, res): Promise<void> => {
+    const supplierId = Number(req.params.supplierId);
+    if (!Number.isInteger(supplierId) || supplierId <= 0) {
+      res.status(400).json({ error: "رقم المورد غير صحيح" });
+      return;
+    }
+    const body = (req.body ?? {}) as {
+      amount?: unknown;
+      paymentDate?: string;
+      method?: string;
+      reference?: string | null;
+      notes?: string | null;
+    };
+    const amount = round2(num(body.amount));
+    if (!(amount > 0)) {
+      res.status(400).json({ error: "أدخل مبلغًا صحيحًا أكبر من صفر" });
+      return;
+    }
+    if (!body.paymentDate || !body.method) {
+      res.status(400).json({ error: "تاريخ السداد وطريقة السداد مطلوبان" });
+      return;
+    }
+    const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
+
+    const orders = await loadOpenOrders(supplierId);
+    if (orders.length === 0) {
+      res.status(400).json({ error: "لا توجد أوامر توريد مستحقة لهذا المورد" });
+      return;
+    }
+    const outstanding = totalOutstanding(orders);
+    if (amount > outstanding + 0.0001) {
+      res.status(400).json({
+        error: `المبلغ أكبر من إجمالي المستحق — المتبقي ${fmt(outstanding)}`,
+        totalOutstanding: fmt(outstanding),
+      });
+      return;
+    }
+
+    const allocations = allocateFifo(orders, amount);
+    if (allocations.length === 0) {
+      res.status(400).json({ error: "تعذّر توزيع المبلغ على الأوامر" });
+      return;
+    }
+    const byId = new Map(orders.map((o) => [o.id, o]));
+
+    const { docNo: paymentNo, row: result } = await insertWithDocNo(
+      "PAY",
+      body.paymentDate,
+      async (no, tx) => {
+        const [bulkRow] = await tx
+          .insert(financeBulkPaymentsTable)
+          .values({
+            paymentNo: no,
+            supplierId,
+            supplierName: byId.get(allocations[0].requestId)?.supplierName ?? "",
+            amount: String(amount),
+            paymentDate: body.paymentDate as string,
+            method: body.method as string,
+            reference: body.reference ?? null,
+            notes: body.notes ?? null,
+            orderCount: allocations.length,
+            employeeId: session.employeeId ?? null,
+            employeeName: session.employeeName ?? null,
+          })
+          .returning();
+
+        // The created rows are collected HERE, inside the transaction that
+        // created them. Re-reading them afterwards by number is impossible now
+        // that the number lives only on the document, and re-reading by
+        // request would also pick up unrelated earlier payments.
+        const paymentIds: number[] = [];
+
+        for (const a of allocations) {
+          const order = byId.get(a.requestId);
+          if (!order) continue;
+          // One `finance_payments` row per order keeps the per-order ledger,
+          // the status recomputation and the Odoo sync unchanged.
+          //
+          // `paymentNo` is deliberately NULL here: `finance_payments` holds a
+          // UNIQUE index on it, and a bulk transfer is ONE document, so several
+          // rows sharing `PAY-…` would violate it. The number lives on
+          // `finance_bulk_payments` and each row reaches it through its
+          // allocation, which is what keeps "one transfer, one number" true.
+          const [paymentRow] = await tx
+            .insert(financePaymentsTable)
+            .values({
+              requestId: a.requestId,
+              paymentNo: null,
+              amount: String(a.amount),
+              paymentDate: body.paymentDate as string,
+              method: body.method as string,
+              reference: body.reference ?? null,
+              notes: body.notes ?? null,
+              employeeId: session.employeeId ?? null,
+              employeeName: session.employeeName ?? null,
+            })
+            .returning();
+
+          await tx.insert(financePaymentAllocationsTable).values({
+            bulkPaymentId: bulkRow.id,
+            requestId: a.requestId,
+            paymentId: paymentRow.id,
+            amount: String(a.amount),
+          });
+          paymentIds.push(paymentRow.id);
+
+          const paid = round2(num(order.paidAmount) + a.amount);
+          const settled = paid >= num(order.dueAmount) - 0.0001;
+          await tx
+            .update(financePaymentRequestsTable)
+            .set({
+              paidAmount: String(paid),
+              status: settled ? FINANCE_REQUEST_STATUS[2] : FINANCE_REQUEST_STATUS[1],
+              paidAt: settled ? new Date() : null,
+              updatedAt: new Date(),
+            })
+            .where(eq(financePaymentRequestsTable.id, a.requestId));
+        }
+        return { bulkRow, paymentIds };
+      },
+    );
+
+    const { bulkRow: bulk, paymentIds } = result;
+
+    await db
+      .insert(auditLogTable)
+      .values({
+        action: "finance.bulk_paid",
+        entityType: "finance_bulk_payment",
+        entityId: bulk.id,
+        description: `سداد إجمالي ${fmt(amount)} للمورد ${bulk.supplierName} يغطي ${allocations.length} أمر توريد`,
+        employeeId: session.employeeId ?? null,
+      })
+      .catch((err: unknown) => {
+        logger.warn({ err }, "finance: audit write failed (non-fatal)");
+      });
+
+    // Best-effort, exactly like a single payment: the money has already moved,
+    // so a sync hiccup must not roll the document back. Each per-order payment
+    // syncs on its own, which is what the Odoo bridge expects.
+    for (const paymentId of paymentIds) {
+      syncSupplierPayment(paymentId).catch((err: unknown) => {
+        logger.warn({ err, paymentId }, "finance: supplier payment sync failed");
+      });
+    }
+
+    const updated = await loadOpenOrders(supplierId);
+    res.status(201).json({
+      ok: true,
+      paymentNo,
+      bulkPaymentId: bulk.id,
+      amount: fmt(amount),
+      orderCount: allocations.length,
+      allocations: allocations.map((a) => ({
+        requestId: a.requestId,
+        internalPoNo: byId.get(a.requestId)?.internalPoNo ?? null,
+        poNo: byId.get(a.requestId)?.poNo ?? null,
+        amount: fmt(a.amount),
+      })),
+      totalOutstanding: fmt(totalOutstanding(updated)),
+    });
+  },
+);
+
+/**
+ * GET /finance/bulk-payments/:id/pdf — the ONE document for a bulk transfer.
+ *
+ * Carries the breakdown table, because a single instruction settling several
+ * orders is only auditable if it says which order received how much and the
+ * lines add up to the transfer.
+ */
+router.get("/finance/bulk-payments/:id/pdf", requireAuth, async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const [bulk] = await db
+    .select()
+    .from(financeBulkPaymentsTable)
+    .where(eq(financeBulkPaymentsTable.id, id));
+  if (!bulk) {
+    res.status(404).json({ error: "أمر الدفع الإجمالي غير موجود" });
+    return;
+  }
+  const [supplier] = await db
+    .select()
+    .from(suppliersTable)
+    .where(eq(suppliersTable.id, bulk.supplierId));
+
+  const allocs = await db
+    .select()
+    .from(financePaymentAllocationsTable)
+    .where(eq(financePaymentAllocationsTable.bulkPaymentId, id));
+
+  const requestIds = allocs.map((a) => a.requestId);
+  const requestRows =
+    requestIds.length > 0
+      ? await db
+          .select()
+          .from(financePaymentRequestsTable)
+          .where(inArray(financePaymentRequestsTable.id, requestIds))
+      : [];
+  const byId = new Map(requestRows.map((r) => [r.id, r]));
+
+  // FIFO order, so the printed breakdown matches the order the money was
+  // applied in — an operator re-deriving the split must reach the same answer.
+  const allocations = allocs
+    .slice()
+    .sort((a, b) => {
+      const ra = byId.get(a.requestId);
+      const rb = byId.get(b.requestId);
+      const d = new Date(ra?.selectedAt ?? 0).getTime() - new Date(rb?.selectedAt ?? 0).getTime();
+      return d !== 0 ? d : a.requestId - b.requestId;
+    })
+    .map((a) => ({
+      internalPoNo: byId.get(a.requestId)?.internalPoNo ?? null,
+      sheetPoNo: byId.get(a.requestId)?.poNo ?? null,
+      amount: num(a.amount),
+    }));
+
+  const outstanding = await loadOpenOrders(bulk.supplierId);
+
+  try {
+    const pdf = await generatePaymentOrderPdf({
+      paymentNo: bulk.paymentNo,
+      paymentDate: bulk.paymentDate,
+      supplierName: bulk.supplierName,
+      bank: {
+        bankName: supplier?.bankName,
+        bankAccountHolder: supplier?.bankAccountHolder,
+        bankAccountNumber: supplier?.bankAccountNumber,
+        iban: supplier?.iban,
+        swiftCode: supplier?.swiftCode,
+        bankBranch: supplier?.bankBranch,
+      },
+      amount: num(bulk.amount),
+      allocations,
+      totalOutstandingAfter: totalOutstanding(outstanding),
+      method: bulk.method,
+      reference: bulk.reference,
+      notes: bulk.notes,
+      preparedBy: bulk.employeeName,
+    });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="payment-${bulk.paymentNo}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    logger.error({ err, bulkPaymentId: id }, "finance: bulk payment order PDF failed");
+    res.status(500).json({ error: "تعذّر توليد أمر الدفع" });
+  }
+});
+
+/**
+ * DELETE /finance/bulk-payments/:id — undo a mistaken bulk transfer.
+ *
+ * Removes the document, its allocation lines and every per-order payment it
+ * created, then recomputes each affected order's status. Reversing the
+ * ALLOCATIONS rather than re-deriving the balances is what keeps the books
+ * consistent: each order loses exactly the amount the document gave it, so an
+ * order that was already partially paid beforehand returns to that exact state.
+ */
+router.delete(
+  "/finance/bulk-payments/:id",
+  requireAuth,
+  requirePermission(FINANCE_PERM.confirm),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const session = req.session as { employeeId?: number; role?: string; employeeName?: string };
+
+    const [bulk] = await db
+      .select()
+      .from(financeBulkPaymentsTable)
+      .where(eq(financeBulkPaymentsTable.id, id));
+    if (!bulk) {
+      res.status(404).json({ error: "أمر الدفع الإجمالي غير موجود" });
+      return;
+    }
+
+    const allocs = await db
+      .select()
+      .from(financePaymentAllocationsTable)
+      .where(eq(financePaymentAllocationsTable.bulkPaymentId, id));
+
+    // Every order that lost money to this document, so each is recomputed.
+    const affectedRequestIds = [...new Set(allocs.map((a) => a.requestId))];
+    const paymentIds = allocs.map((a) => a.paymentId).filter((v): v is number => v != null);
+
+    // The per-order payments are deleted first: the allocations reference them,
+    // and the recomputation below must not count a row that is going away.
+    if (paymentIds.length > 0) {
+      await db.delete(financePaymentsTable).where(inArray(financePaymentsTable.id, paymentIds));
+    }
+    await db
+      .delete(financePaymentAllocationsTable)
+      .where(eq(financePaymentAllocationsTable.bulkPaymentId, id));
+    await db.delete(financeBulkPaymentsTable).where(eq(financeBulkPaymentsTable.id, id));
+
+    // Recompute each order from the payments that REMAIN — the same rule the
+    // single-payment delete uses, so both paths agree on what "paid" means.
+    for (const requestId of affectedRequestIds) {
+      const [row] = await db
+        .select()
+        .from(financePaymentRequestsTable)
+        .where(eq(financePaymentRequestsTable.id, requestId));
+      if (!row) continue;
+
+      const remaining = await db
+        .select({ amount: financePaymentsTable.amount })
+        .from(financePaymentsTable)
+        .where(eq(financePaymentsTable.requestId, requestId));
+      const paid = round2(remaining.reduce((s, p) => s + num(p.amount), 0));
+      const nextStatus =
+        paid <= 0
+          ? FINANCE_REQUEST_STATUS[0]
+          : paid >= num(row.dueAmount) - 0.0001
+            ? FINANCE_REQUEST_STATUS[2]
+            : FINANCE_REQUEST_STATUS[1];
+
+      await db
+        .update(financePaymentRequestsTable)
+        .set({
+          paidAmount: String(paid),
+          status: nextStatus,
+          paidAt: nextStatus === FINANCE_REQUEST_STATUS[2] ? new Date() : null,
+          updatedAt: new Date(),
+        })
+        .where(eq(financePaymentRequestsTable.id, requestId));
+    }
+
+    await db
+      .insert(auditLogTable)
+      .values({
+        action: "finance.bulk_payment_deleted",
+        entityType: "finance_bulk_payment",
+        entityId: id,
+        description: `حذف أمر دفع إجمالي ${bulk.paymentNo} للمورد ${bulk.supplierName} (${affectedRequestIds.length} أمر)`,
+        employeeId: session.employeeId ?? null,
+      })
+      .catch((err: unknown) => {
+        logger.warn({ err }, "finance: audit write failed (non-fatal)");
+      });
+
+    res.json({ ok: true, paymentNo: bulk.paymentNo, ordersReversed: affectedRequestIds.length });
   },
 );
 

@@ -39,10 +39,26 @@ export interface PaymentOrderOptions {
   };
   /** What is being paid on THIS document. */
   amount: number;
-  /** The order's own money, so a partial payment is visible as such. */
-  poTotal: number;
-  paidBefore: number;
-  remainingAfter: number;
+  /**
+   * The order's own money, so a partial payment is visible as such. Omitted on
+   * a BULK payment order, which settles several orders at once — there the
+   * `allocations` breakdown takes this block's place.
+   */
+  poTotal?: number;
+  paidBefore?: number;
+  remainingAfter?: number;
+  /**
+   * أمر دفع إجمالي: one transfer covering SEVERAL orders. Each line says which
+   * order received how much, and the lines sum to `amount` exactly — that is
+   * what lets one bank instruction be reconciled against several debts.
+   */
+  allocations?: Array<{
+    internalPoNo?: string | null;
+    sheetPoNo?: string | null;
+    amount: number;
+  }>;
+  /** Totals for the supplier as a whole, shown instead of the order context. */
+  totalOutstandingAfter?: number;
   method: string;
   reference?: string | null;
   notes?: string | null;
@@ -241,12 +257,20 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
 
       // ── Reference block ──
       let y = HDR_H + 16;
-      const refRows: Array<[string, string]> = [
-        ["رقم أمر الشراء", opts.internalPoNo || "—"],
-        ["رقم أمر الشراء (المورد)", opts.sheetPoNo || "—"],
-        ["تاريخ أمر الدفع", formatDate(opts.paymentDate)],
-        ["طريقة السداد", opts.method],
-      ];
+      const isBulk = Array.isArray(opts.allocations) && opts.allocations.length > 0;
+      const refRows: Array<[string, string]> = isBulk
+        ? [
+            ["نوع السداد", "سداد إجمالي لعدة أوامر توريد"],
+            ["عدد أوامر التوريد", String(opts.allocations!.length)],
+            ["تاريخ أمر الدفع", formatDate(opts.paymentDate)],
+            ["طريقة السداد", opts.method],
+          ]
+        : [
+            ["رقم أمر الشراء", opts.internalPoNo || "—"],
+            ["رقم أمر الشراء (المورد)", opts.sheetPoNo || "—"],
+            ["تاريخ أمر الدفع", formatDate(opts.paymentDate)],
+            ["طريقة السداد", opts.method],
+          ];
       const LABEL_W = 170;
       doc.font("Amiri").fontSize(10).fillColor("#111111");
       const refItems: FlowRow[] = refRows.map(([label, value]) => ({
@@ -379,29 +403,104 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       y += amtH + 14;
 
       // ── Order money context — what makes a PARTIAL payment legible ──
-      const ctxRows: Array<[string, string]> = [
-        ["إجمالي أمر الشراء", `${money(opts.poTotal)} ج.م`],
-        ["المسدد قبل أمر الدفع", `${money(opts.paidBefore)} ج.م`],
-        ["المتبقي بعد أمر الدفع", `${money(opts.remainingAfter)} ج.م`],
-      ];
-      doc.rect(M, y, CW, 20).fill(BLUE);
-      doc.fontSize(9).fillColor("#ffffff");
-      ctxRows.forEach(([label], i) => {
-        doc.text(rtl(label), rtlSlotX(i, ctxRows.length, M, CW), y + 6, {
-          width: CW / 3,
+      // On a BULK order this block is replaced by the breakdown: the money is
+      // split across several orders, so "the order's total / paid before /
+      // remaining" has no single answer.
+      if (isBulk) {
+        const rows = opts.allocations!;
+        const COL = { po: CW * 0.34, sheet: CW * 0.33, amount: CW * 0.33 };
+        const headY = y;
+        doc.rect(M, headY, CW, 20).fill(BLUE);
+        doc.fontSize(9).fillColor("#ffffff");
+        doc.text(rtl("أمر الشراء"), M + CW - COL.po, headY + 6, {
+          width: COL.po,
           align: "center",
           lineBreak: false,
         });
-      });
-      doc.fontSize(11).fillColor("#111111");
-      ctxRows.forEach(([, value], i) => {
-        doc.text(rtl(value), rtlSlotX(i, ctxRows.length, M, CW), y + 26, {
-          width: CW / 3,
+        doc.text(rtl("رقم أمر توريد العميل"), M + CW - COL.po - COL.sheet, headY + 6, {
+          width: COL.sheet,
           align: "center",
           lineBreak: false,
         });
-      });
-      y += 20 + 22 + 12;
+        doc.text(rtl("المبلغ المخصص"), M, headY + 6, {
+          width: COL.amount,
+          align: "center",
+          lineBreak: false,
+        });
+        y = headY + 20;
+
+        doc.fontSize(9).fillColor("#111111");
+        rows.forEach((a, i) => {
+          const rowY = y + i * 16;
+          if (i % 2 === 1) doc.rect(M, rowY, CW, 16).fill(LGREY);
+          doc.fillColor("#111111");
+          doc.text(rtl(a.internalPoNo || "—"), M + CW - COL.po, rowY + 4, {
+            width: COL.po,
+            align: "center",
+            lineBreak: false,
+          });
+          doc.text(rtl(a.sheetPoNo || "—"), M + CW - COL.po - COL.sheet, rowY + 4, {
+            width: COL.sheet,
+            align: "center",
+            lineBreak: false,
+          });
+          doc.text(rtl(`${money(a.amount)} ج.م`), M, rowY + 4, {
+            width: COL.amount,
+            align: "center",
+            lineBreak: false,
+          });
+        });
+        const totalY = y + rows.length * 16;
+        doc.rect(M, totalY, CW, 20).fill(GOLD);
+        doc.fontSize(9).fillColor("#111111");
+        doc.text(rtl("الإجمالي"), M, totalY + 5, {
+          width: COL.amount + COL.sheet,
+          align: "center",
+          lineBreak: false,
+        });
+        doc.text(rtl(`${money(opts.amount)} ج.م`), M + CW - COL.po, totalY + 5, {
+          width: COL.po,
+          align: "center",
+          lineBreak: false,
+        });
+        y = totalY + 20 + 14;
+
+        if (opts.totalOutstandingAfter != null) {
+          const afterText = rtlLabelValue(
+            "إجمالي المتبقي للمورد بعد هذا السداد:",
+            `${money(opts.totalOutstandingAfter)} ج.م`,
+          );
+          doc.fontSize(9).fillColor("#444444").text(afterText, M, y, {
+            width: CW,
+            align: "right",
+          });
+          y = doc.y + 12;
+        }
+      } else {
+        const ctxRows: Array<[string, string]> = [
+          ["إجمالي أمر الشراء", `${money(opts.poTotal ?? 0)} ج.م`],
+          ["المسدد قبل أمر الدفع", `${money(opts.paidBefore ?? 0)} ج.م`],
+          ["المتبقي بعد أمر الدفع", `${money(opts.remainingAfter ?? 0)} ج.م`],
+        ];
+        doc.rect(M, y, CW, 20).fill(BLUE);
+        doc.fontSize(9).fillColor("#ffffff");
+        ctxRows.forEach(([label], i) => {
+          doc.text(rtl(label), rtlSlotX(i, ctxRows.length, M, CW), y + 6, {
+            width: CW / 3,
+            align: "center",
+            lineBreak: false,
+          });
+        });
+        doc.fontSize(11).fillColor("#111111");
+        ctxRows.forEach(([, value], i) => {
+          doc.text(rtl(value), rtlSlotX(i, ctxRows.length, M, CW), y + 26, {
+            width: CW / 3,
+            align: "center",
+            lineBreak: false,
+          });
+        });
+        y += 20 + 22 + 12;
+      }
 
       if (opts.reference || opts.notes) {
         doc.fontSize(9).fillColor("#444444");
