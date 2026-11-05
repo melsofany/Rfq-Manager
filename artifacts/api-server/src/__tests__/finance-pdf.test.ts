@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 import {
   generatePaymentOrderPdf,
   amountInArabicWords,
@@ -9,6 +12,7 @@ import {
   statementColumnWidths,
   type SupplierStatementOptions,
 } from "../modules/finance/supplier-statement-pdf";
+import { rtlColumnX, rtlSlotX } from "../modules/finance/pdf-layout";
 
 const bank = {
   bankName: "البنك الأهلي المصري",
@@ -193,5 +197,89 @@ describe("supplier statement PDF (كشف حساب مورد)", () => {
     const text = pdf.toString("latin1");
     expect(text).toContain("/Type /Page");
     expect((text.match(/\/Type \/Page[^s]/g) ?? []).length).toBeGreaterThan(1);
+  });
+});
+
+// ─── RTL geometry ───────────────────────────────────────────────────────────
+// The documents are Arabic: the first logical column must sit at the RIGHT
+// edge and each following one step leftwards. Laid out from the left margin
+// instead, the table reads mirrored — «أمر الشراء» (the order number, which
+// identifies the row) ends up on the left where «المتبقي» belongs.
+describe("RTL column geometry", () => {
+  it("places logical column 0 at the RIGHT edge", () => {
+    const widths = [100, 80, 60];
+    const left = 36;
+    const total = widths.reduce((a, b) => a + b, 0);
+    // column 0 starts where the block ends, minus its own width
+    expect(rtlColumnX(widths, 0, left)).toBe(left + total - widths[0]);
+    // the last column starts at the left margin
+    expect(rtlColumnX(widths, 2, left)).toBe(left);
+  });
+
+  it("keeps every column inside the block and in strictly decreasing X", () => {
+    const widths = [80, 70, 90, 60, 55, 65];
+    const left = 36;
+    const total = widths.reduce((a, b) => a + b, 0);
+    const xs = widths.map((_, i) => rtlColumnX(widths, i, left));
+    for (const x of xs) {
+      expect(x).toBeGreaterThanOrEqual(left);
+      expect(x).toBeLessThanOrEqual(left + total);
+    }
+    for (let i = 1; i < xs.length; i++) expect(xs[i]).toBeLessThan(xs[i - 1]);
+    // columns tile the block with no gap and no overlap
+    const right = rtlColumnX(widths, 0, left) + widths[0];
+    expect(right).toBe(left + total);
+    for (let i = 0; i < widths.length - 1; i++) {
+      expect(xs[i + 1] + widths[i + 1]).toBeCloseTo(xs[i], 5);
+    }
+  });
+
+  it("places equal-width slot 0 at the RIGHT edge", () => {
+    const left = 36;
+    const total = 300;
+    expect(rtlSlotX(0, 3, left, total)).toBeCloseTo(left + total - total / 3, 5);
+    expect(rtlSlotX(2, 3, left, total)).toBeCloseTo(left, 5);
+    // and the slots tile the full width
+    const xs = [0, 1, 2].map((i) => rtlSlotX(i, 3, left, total));
+    expect(Math.min(...xs)).toBeCloseTo(left, 5);
+    expect(Math.max(...xs) + total / 3).toBeCloseTo(left + total, 5);
+  });
+});
+
+// ─── the layouts must USE the RTL geometry ──────────────────────────────────
+// The helper above is only worth having if the documents call it. A column laid
+// out as `M + cols.po` sits on the LEFT, which is the mirror image of Arabic
+// reading order — that is the regression these guards pin.
+describe("finance documents lay their columns out right-to-left", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const read = (rel: string) => readFileSync(resolve(here, rel), "utf8");
+
+  it("the supplier statement positions its table through the RTL helper", () => {
+    const src = read("../modules/finance/supplier-statement-pdf.ts");
+    expect(src).toContain("rtlColumnX(colWArr");
+    expect(src).toContain("rtlSlotX(i, 3, M, CW)");
+    // the mirrored form must be gone
+    expect(src).not.toContain("M + cols.po,");
+    expect(src).not.toContain("M + cols.po + cols.sheet,");
+  });
+
+  it("the payment order positions its slots through the RTL helper", () => {
+    const src = read("../modules/finance/payment-order-pdf.ts");
+    expect(src).toContain("rtlSlotX(i, ctxRows.length, M, CW)");
+    expect(src).toContain("rtlSlotX(i, sigCols.length, M, CW)");
+    expect(src).not.toContain("M + (CW / 3) * i");
+  });
+
+  it("anchors each label at the RIGHT edge with its value beside it", () => {
+    // The label/value pairing is what reads as RTL: the label sits against the
+    // right edge and its value immediately to the left. A value pinned to the
+    // left margin instead reads as an unrelated column.
+    const pay = read("../modules/finance/payment-order-pdf.ts");
+    expect(pay).toContain("M + CW - LABEL_W");
+    expect(pay).not.toContain('width: CW / 2, align: "left"');
+
+    const stmt = read("../modules/finance/supplier-statement-pdf.ts");
+    expect(stmt).toContain("M + CW - BANK_LABEL_W");
+    expect(stmt).not.toContain("width: CW / 2 - 16");
   });
 });

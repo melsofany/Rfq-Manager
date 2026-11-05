@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { resolve, dirname } from "path";
+import { rtlSlotX } from "./pdf-layout";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 
@@ -257,17 +258,22 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
         ["تاريخ أمر الدفع", formatDate(opts.paymentDate)],
         ["طريقة السداد", opts.method],
       ];
+      const LABEL_W = 170;
       doc.font("Amiri").fontSize(10).fillColor("#111111");
       refRows.forEach(([label, value], i) => {
         const rowY = y + i * 16;
-        doc.text(rtl(value), M, rowY, { width: CW / 2, align: "left", lineBreak: false });
-        doc.fillColor("#555555").text(rtl(label), M + CW / 2, rowY, {
-          width: CW / 2,
+        doc.fillColor("#111111").text(rtl(value), M, rowY, {
+          width: CW - LABEL_W - 10,
           align: "right",
           lineBreak: false,
         });
-        doc.fillColor("#111111");
+        doc.fillColor("#555555").text(rtl(label), M + CW - LABEL_W, rowY, {
+          width: LABEL_W,
+          align: "right",
+          lineBreak: false,
+        });
       });
+      doc.fillColor("#111111");
       y += refRows.length * 16 + 12;
 
       // ── Supplier + bank block ──
@@ -303,13 +309,15 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       doc.fontSize(9);
       shown.forEach(([label, value], i) => {
         const rowY = y + 40 + i * 11;
-        // Account numbers are Latin/digits: keep them LTR so they are not
-        // reversed into an unreadable string.
-        doc
-          .fillColor("#111111")
-          .text(String(value), M + 8, rowY, { width: CW - 120, align: "left", lineBreak: false });
-        doc.fillColor("#666666").text(rtl(label), M + CW - 110, rowY, {
-          width: 102,
+        // Account numbers are Latin/digits: they are never passed through the
+        // Arabic word-reverser, so the digits keep their own order.
+        doc.fillColor("#111111").text(String(value), M + 8, rowY, {
+          width: CW - LABEL_W - 24,
+          align: "right",
+          lineBreak: false,
+        });
+        doc.fillColor("#666666").text(rtl(label), M + CW - LABEL_W, rowY, {
+          width: LABEL_W,
           align: "right",
           lineBreak: false,
         });
@@ -359,7 +367,7 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       doc.rect(M, y, CW, 20).fill(BLUE);
       doc.fontSize(9).fillColor("#ffffff");
       ctxRows.forEach(([label], i) => {
-        doc.text(rtl(label), M + (CW / 3) * i, y + 6, {
+        doc.text(rtl(label), rtlSlotX(i, ctxRows.length, M, CW), y + 6, {
           width: CW / 3,
           align: "center",
           lineBreak: false,
@@ -367,7 +375,7 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       });
       doc.fontSize(11).fillColor("#111111");
       ctxRows.forEach(([, value], i) => {
-        doc.text(value, M + (CW / 3) * i, y + 26, {
+        doc.text(value, rtlSlotX(i, ctxRows.length, M, CW), y + 26, {
           width: CW / 3,
           align: "center",
           lineBreak: false,
@@ -403,7 +411,7 @@ export function generatePaymentOrderPdf(opts: PaymentOrderOptions): Promise<Buff
       ];
       const colW = CW / 3;
       sigCols.forEach(([label, value], i) => {
-        const x = M + i * colW;
+        const x = rtlSlotX(i, sigCols.length, M, CW);
         doc
           .fontSize(10)
           .fillColor(BLUE)

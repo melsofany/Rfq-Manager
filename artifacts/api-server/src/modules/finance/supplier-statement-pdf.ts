@@ -1,5 +1,6 @@
 import PDFDocument from "pdfkit";
 import { resolve, dirname } from "path";
+import { rtlColumnX, rtlSlotX } from "./pdf-layout";
 import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 
@@ -206,17 +207,18 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
         ["الفرع", opts.bank.bankBranch],
       ];
       const shown = bankRows.filter(([, v]) => v);
+      const BANK_LABEL_W = 150;
       if (shown.length) {
         doc.fontSize(8.5);
         shown.forEach(([label, value], i) => {
           const rowY = y + i * 11;
-          doc.fillColor("#111111").text(String(value), M + 8, rowY, {
-            width: CW / 2 - 16,
-            align: "left",
+          doc.fillColor("#111111").text(String(value), M, rowY, {
+            width: CW - BANK_LABEL_W - 10,
+            align: "right",
             lineBreak: false,
           });
-          doc.fillColor("#666666").text(rtl(label), M + CW / 2, rowY, {
-            width: CW / 2 - 8,
+          doc.fillColor("#666666").text(rtl(label), M + CW - BANK_LABEL_W, rowY, {
+            width: BANK_LABEL_W,
             align: "right",
             lineBreak: false,
           });
@@ -226,19 +228,22 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
 
       // ── Orders table ──
       const cols = statementColumnWidths(CW);
+      // RTL column order: index 0 (أمر الشراء) sits at the RIGHT edge.
+      const colWArr = [cols.po, cols.sheet, cols.date, cols.due, cols.paid, cols.remaining];
 
       const drawTableHeader = () => {
         doc.rect(M, y, CW, 22).fill(BLUE);
         doc.font("Amiri").fontSize(8.5).fillColor("#ffffff");
-        const heads: Array<[string, number, number]> = [
-          ["أمر الشراء", M, cols.po],
-          ["رقم المورد", M + cols.po, cols.sheet],
-          ["التاريخ", M + cols.po + cols.sheet, cols.date],
-          ["المستحق", M + cols.po + cols.sheet + cols.date, cols.due],
-          ["المسدد", M + cols.po + cols.sheet + cols.date + cols.due, cols.paid],
-          ["المتبقي", M + cols.po + cols.sheet + cols.date + cols.due + cols.paid, cols.remaining],
+        const heads: Array<[string, number]> = [
+          ["أمر الشراء", cols.po],
+          ["رقم المورد", cols.sheet],
+          ["التاريخ", cols.date],
+          ["المستحق", cols.due],
+          ["المسدد", cols.paid],
+          ["المتبقي", cols.remaining],
         ];
-        heads.forEach(([label, x, w]) => {
+        heads.forEach(([label, w], i) => {
+          const x = rtlColumnX(colWArr, i, M);
           doc.text(rtl(label), x, y + 7, { width: w, align: "center", lineBreak: false });
         });
         y += 22;
@@ -255,26 +260,17 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
         }
         if (i % 2 === 1) doc.rect(M, y, CW, rowH).fill("#f6f9fc");
         doc.fontSize(8.5).fillColor("#111111");
-        const cells: Array<[string, number, number, "left" | "center" | "right"]> = [
-          [r.internalPoNo || "—", M, cols.po, "center"],
-          [r.sheetPoNo || "—", M + cols.po, cols.sheet, "center"],
-          [formatDate(r.selectedAt), M + cols.po + cols.sheet, cols.date, "center"],
-          [money(r.dueAmount), M + cols.po + cols.sheet + cols.date, cols.due, "center"],
-          [
-            money(r.paidAmount),
-            M + cols.po + cols.sheet + cols.date + cols.due,
-            cols.paid,
-            "center",
-          ],
-          [
-            money(r.remainingAmount),
-            M + cols.po + cols.sheet + cols.date + cols.due + cols.paid,
-            cols.remaining,
-            "center",
-          ],
+        const cells: Array<[string, number]> = [
+          [r.internalPoNo || "—", cols.po],
+          [r.sheetPoNo || "—", cols.sheet],
+          [formatDate(r.selectedAt), cols.date],
+          [money(r.dueAmount), cols.due],
+          [money(r.paidAmount), cols.paid],
+          [money(r.remainingAmount), cols.remaining],
         ];
-        cells.forEach(([text, x, w, align]) => {
-          doc.text(rtl(text), x, y + 6, { width: w, align, lineBreak: false });
+        cells.forEach(([text, w], i) => {
+          const x = rtlColumnX(colWArr, i, M);
+          doc.text(rtl(text), x, y + 6, { width: w, align: "center", lineBreak: false });
         });
         y += rowH;
       });
@@ -283,13 +279,17 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
       y += 6;
       doc.rect(M, y, CW, 24).fill(BLUE);
       doc.fontSize(10).fillColor("#ffffff");
-      const totalCells: Array<[string, number, number]> = [
-        [`${rtl("إجمالي المستحق:")} ${money(opts.totals.due)}`, M, CW / 3],
-        [`${rtl("إجمالي المسدد:")} ${money(opts.totals.paid)}`, M + CW / 3, CW / 3],
-        [`${rtl("إجمالي المتبقي:")} ${money(opts.totals.remaining)}`, M + (CW / 3) * 2, CW / 3],
+      const totalCells: string[] = [
+        `${rtl("إجمالي المستحق:")} ${money(opts.totals.due)}`,
+        `${rtl("إجمالي المسدد:")} ${money(opts.totals.paid)}`,
+        `${rtl("إجمالي المتبقي:")} ${money(opts.totals.remaining)}`,
       ];
-      totalCells.forEach(([text, x, w]) => {
-        doc.text(rtl(text), x, y + 8, { width: w, align: "center", lineBreak: false });
+      totalCells.forEach((text, i) => {
+        doc.text(rtl(text), rtlSlotX(i, 3, M, CW), y + 8, {
+          width: CW / 3,
+          align: "center",
+          lineBreak: false,
+        });
       });
       y += 34;
 
@@ -311,7 +311,7 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
       ];
       const colW = CW / 3;
       sigCols.forEach(([label, value], i) => {
-        const x = M + i * colW;
+        const x = rtlSlotX(i, sigCols.length, M, CW);
         doc
           .fontSize(10)
           .fillColor(BLUE)
