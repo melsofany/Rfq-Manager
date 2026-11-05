@@ -232,7 +232,7 @@ export function generateSupplierStatementPdf(opts: SupplierStatementOptions): Pr
         doc.font("Amiri").fontSize(8.5).fillColor("#ffffff");
         const heads: Array<[string, number]> = [
           ["أمر الشراء", cols.po],
-          ["رقم المورد", cols.sheet],
+          ["رقم أمر توريد العميل", cols.sheet],
           ["التاريخ", cols.date],
           ["المستحق", cols.due],
           ["المسدد", cols.paid],
