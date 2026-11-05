@@ -23,6 +23,8 @@ import {
   customersTable,
   operatingExpensesTable,
   customerPoPaymentsTable,
+  financePaymentsTable,
+  financePaymentRequestsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { syncEvent, type SyncResult } from "./service";
@@ -32,6 +34,7 @@ import {
   mapCustomerDeliveryToCogs,
   mapExpenseToJournalEntry,
   mapCustomerPaymentToPayment,
+  mapSupplierPaymentToPayment,
   mapCancellationToCreditNote,
 } from "./mapping";
 import { logger } from "../../shared/logger";
@@ -255,6 +258,46 @@ export async function syncCustomerPayment(paymentId: number): Promise<SyncResult
       customerPoId: payment.customerPoId,
       internalPoNo: po?.internalPoNo ?? String(payment.customerPoId),
       customerName,
+      paymentDate: payment.paymentDate,
+      amount: num(payment.amount),
+      method: payment.method,
+      partnerId,
+    });
+  });
+}
+
+// ─── Supplier payment → outbound payment entry ──────────────────────────────
+
+/**
+ * A supplier payment recorded in the Finance module (الماليات) becomes an
+ * OUTBOUND payment in Odoo, settling the vendor bill raised by the goods
+ * receipt. `finance_payments.id` is the source row, so the sync's UNIQUE event
+ * key guarantees at most one Odoo payment per recorded payment.
+ */
+export async function syncSupplierPayment(paymentId: number): Promise<SyncResult> {
+  return syncEvent("supplier_payment", "finance_payments", paymentId, async (ctx) => {
+    const [payment] = await db
+      .select()
+      .from(financePaymentsTable)
+      .where(eq(financePaymentsTable.id, paymentId))
+      .limit(1);
+    if (!payment) throw new Error(`finance_payments ${paymentId} not found`);
+    const [request] = await db
+      .select()
+      .from(financePaymentRequestsTable)
+      .where(eq(financePaymentRequestsTable.id, payment.requestId))
+      .limit(1);
+    const supplierName = request?.supplierName ?? "مورد";
+    const partnerId = await ctx.partner({
+      kind: "supplier",
+      rfqId: null,
+      name: supplierName,
+    });
+    return mapSupplierPaymentToPayment({
+      paymentId,
+      poId: request?.poId ?? null,
+      internalPoNo: request?.internalPoNo ?? String(request?.poId ?? ""),
+      supplierName,
       paymentDate: payment.paymentDate,
       amount: num(payment.amount),
       method: payment.method,

@@ -2962,6 +2962,63 @@ export async function initDb(): Promise<void> {
       `CREATE INDEX IF NOT EXISTS po_items_offer_item_id_idx ON purchase_order_items (offer_item_id)`,
     );
 
+    // ── Finance: supplier payment requests (الماليات) ──────────────────────
+    // Each CREATE / ALTER / INDEX is its OWN statement: statements inside one
+    // client.query share an implicit transaction, so a sibling failure would
+    // silently roll the whole block back and leave the tables missing.
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS finance_payment_requests (
+         id SERIAL PRIMARY KEY,
+         po_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+         supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+         po_no TEXT,
+         internal_po_no TEXT,
+         supplier_name TEXT NOT NULL,
+         due_amount NUMERIC(15,4) NOT NULL DEFAULT 0,
+         paid_amount NUMERIC(15,4) NOT NULL DEFAULT 0,
+         status TEXT NOT NULL DEFAULT 'unpaid',
+         bank_name TEXT,
+         bank_account_holder TEXT,
+         bank_account_number TEXT,
+         iban TEXT,
+         swift_code TEXT,
+         bank_branch TEXT,
+         notes TEXT,
+         selected_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+         selected_by_name TEXT,
+         selected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+         paid_at TIMESTAMPTZ,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+         updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+       )`,
+    );
+    await client.query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS finance_payment_requests_po_supplier_uq
+         ON finance_payment_requests (po_id, supplier_id)`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS finance_payment_requests_status_idx
+         ON finance_payment_requests (status)`,
+    );
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS finance_payments (
+         id SERIAL PRIMARY KEY,
+         request_id INTEGER NOT NULL REFERENCES finance_payment_requests(id) ON DELETE CASCADE,
+         amount NUMERIC(15,4) NOT NULL,
+         payment_date TEXT NOT NULL,
+         method TEXT NOT NULL,
+         reference TEXT,
+         notes TEXT,
+         employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+         employee_name TEXT,
+         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+       )`,
+    );
+    await client.query(
+      `CREATE INDEX IF NOT EXISTS finance_payments_request_idx
+         ON finance_payments (request_id)`,
+    );
+
     logger.info("initDb: seed complete");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");

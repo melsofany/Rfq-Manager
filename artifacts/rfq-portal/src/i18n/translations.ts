@@ -469,6 +469,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.customerPo": "Customer POs",
     "nav.expenses": "Operating Expenses",
     "nav.collections": "Collections",
+    "nav.finance": "Finance",
 
     // Permission editor + tab labels
     "perm.editorTitle": "Permissions",
@@ -496,6 +497,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "perm.accounts.records": "Completed transactions registry",
     "perm.accounts.expenses": "Expenses & costs",
     "perm.accounts.posting": "Accounting posting",
+    "perm.finance.select": "Select orders for payment",
+    "perm.finance.confirm": "Confirm supplier payment",
     "perm.aiAssistant.users": "Authorized numbers",
     "perm.aiAssistant.settings": "Assistant settings",
     "perm.backup.alerts": "Backup alerts",
@@ -1294,6 +1297,7 @@ const translations: Record<Lang, Record<string, string>> = {
     "nav.customerPo": "أوامر شراء العملاء",
     "nav.expenses": "المصروفات التشغيلية",
     "nav.collections": "تحصيل العملاء",
+    "nav.finance": "الماليات",
 
     // محرر الصلاحيات وأسماء التبويبات
     "perm.editorTitle": "الصلاحيات",
@@ -1321,6 +1325,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "perm.accounts.records": "سجل الحركات المكتملة",
     "perm.accounts.expenses": "المصاريف والتكاليف",
     "perm.accounts.posting": "الترحيل المحاسبي",
+    "perm.finance.select": "اختيار أوامر الشراء للسداد",
+    "perm.finance.confirm": "تأكيد سداد المورد",
     "perm.aiAssistant.users": "الأرقام المصرّح لها",
     "perm.aiAssistant.settings": "إعدادات المساعد",
     "perm.backup.alerts": "تنبيهات النسخ الاحتياطي",

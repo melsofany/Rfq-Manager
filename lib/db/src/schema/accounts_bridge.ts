@@ -36,6 +36,7 @@ export const BRIDGE_EVENT_TYPES = [
   "customer_delivery", // تسليم بند للعميل → customer invoice + COGS
   "expense", // مصروف تشغيلي → journal entry
   "customer_payment", // تحصيل من العميل → payment entry
+  "supplier_payment", // سداد لمورد (الماليات) → outbound payment entry
   "cancellation", // إلغاء / رفض → credit note
 ] as const;
 export type BridgeEventType = (typeof BRIDGE_EVENT_TYPES)[number];

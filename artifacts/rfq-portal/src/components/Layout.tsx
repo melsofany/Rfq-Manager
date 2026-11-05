@@ -18,6 +18,7 @@ import {
   Plug,
   UserRound,
   Calculator,
+  Banknote,
   Bot,
   IdCard,
   DatabaseBackup,
@@ -69,6 +70,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/rfq", label: t("nav.supplierRfq"), icon: FileText, nested: true },
     { href: "/purchase-orders", label: t("nav.supplierPo"), icon: ShoppingCart, nested: true },
     { href: "/accounts", label: t("nav.accounts"), icon: Calculator },
+    { href: "/finance", label: t("nav.finance"), icon: Banknote },
     { href: "/hr", label: t("nav.hr"), icon: IdCard },
     { href: "/items", label: t("nav.items"), icon: Package },
     {

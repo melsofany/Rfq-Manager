@@ -110,6 +110,15 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
       { key: "accounts:posting", labelKey: "perm.accounts.posting" },
     ],
   },
+  {
+    key: "finance",
+    href: "/finance",
+    labelKey: "nav.finance",
+    children: [
+      { key: "finance:select", labelKey: "perm.finance.select" },
+      { key: "finance:confirm", labelKey: "perm.finance.confirm" },
+    ],
+  },
   { key: "analytics", href: "/analytics", labelKey: "nav.analytics" },
   {
     key: "whatsapp",
@@ -247,6 +256,17 @@ const PURCHASING_PAGES = PAGE_KEYS.filter(
     !ADMIN_ONLY_PAGES.includes(k),
 );
 
+/**
+ * Action-permission keys for the Finance page (الماليات).
+ *   select  — queue a PO for payment / remove a queued one;
+ *   confirm — record money leaving the company (pay / undo a payment).
+ * Declared before ROLE_DEFAULTS because that map references it at module load.
+ */
+export const FINANCE_PERM = {
+  select: "finance:select",
+  confirm: "finance:confirm",
+} as const;
+
 export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
   manager: [
     ...PAGE_KEYS.filter((k) => !ADMIN_ONLY_PAGES.includes(k)),
@@ -256,6 +276,8 @@ export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
     "customer-po:edit",
     ...ITEMS_TABS,
     ASSIGN_PERM.itemAssign,
+    FINANCE_PERM.select,
+    FINANCE_PERM.confirm,
   ],
   purchasing: [
     ...PURCHASING_PAGES,
@@ -265,6 +287,9 @@ export const ROLE_DEFAULTS: Record<Exclude<Role, "admin">, string[]> = {
     "customer-po:edit",
     ...ITEMS_TABS,
     ASSIGN_PERM.itemAssign,
+    // May choose what is to be paid; confirming the transfer is granted
+    // explicitly (tick `finance:confirm`), never by default.
+    FINANCE_PERM.select,
   ],
   data_entry: [
     "dashboard",
@@ -297,9 +322,13 @@ export const PRICE_PERM = {
  * Action keys that a PAGE-level checkbox must NOT grant implicitly — they are
  * granted only by ticking them individually. Pricing exposes the supplier cost
  * (the margin floor derives from it), so ticking the «customer-rfq» page must
- * never hand it out by accident.
+ * never hand it out by accident. Same for confirming a supplier payment.
  */
-export const EXPLICIT_ONLY_PERMS: string[] = [PRICE_PERM.customerRfq, ASSIGN_PERM.itemAssign];
+export const EXPLICIT_ONLY_PERMS: string[] = [
+  PRICE_PERM.customerRfq,
+  ASSIGN_PERM.itemAssign,
+  FINANCE_PERM.confirm,
+];
 
 export type PermissionMap = Record<string, boolean> | null | undefined;
 
@@ -368,6 +397,12 @@ export function canEditCustomerDoc(
 export function canAssignItems(role: string | undefined, permissions: PermissionMap): boolean {
   if (role === "admin") return true;
   return resolvePermissions(role, permissions).has(ASSIGN_PERM.itemAssign);
+}
+
+/** Whether the employee may CONFIRM a supplier payment (money leaving). */
+export function canConfirmPayment(role: string | undefined, permissions: PermissionMap): boolean {
+  if (role === "admin") return true;
+  return resolvePermissions(role, permissions).has(FINANCE_PERM.confirm);
 }
 
 /**

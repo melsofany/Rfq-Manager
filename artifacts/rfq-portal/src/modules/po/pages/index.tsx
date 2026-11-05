@@ -6,9 +6,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, ShoppingCart, Ban } from "lucide-react";
+import { Plus, Search, ShoppingCart, Ban, Banknote } from "lucide-react";
+import { toast } from "sonner";
+import { getApiErrorMessage } from "@/lib/api-error";
 import { useAuth } from "@/contexts/AuthContext";
-import { filterTabs } from "@/lib/permissions";
+import { filterTabs, hasPermission, FINANCE_PERM } from "@/lib/permissions";
 import GoodsReceiptPage from "./receipts";
 
 const STATUSES = ["all", "draft", "sent", "cancelled"];
@@ -21,14 +23,29 @@ interface PoProgress {
   rejected: number;
 }
 
+interface PoFinanceStatus {
+  queued: boolean;
+  settled: boolean;
+  statuses: string[];
+}
+
 export default function PurchaseOrdersListPage() {
   const [, navigate] = useLocation();
   const { employee } = useAuth();
   const allowedTabs = filterTabs(employee?.role, employee?.permissions, "purchase-orders", PO_TABS);
+  const maySelectForPayment = hasPermission(
+    employee?.role,
+    employee?.permissions,
+    FINANCE_PERM.select,
+  );
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [tab, setTab] = useState<string>(allowedTabs[0] ?? "orders");
   const [progress, setProgress] = useState<Record<number, PoProgress>>({});
+  // Selection for «إضافة للماليات» + which POs are already queued/settled.
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [financeStatus, setFinanceStatus] = useState<Record<number, PoFinanceStatus>>({});
+  const [adding, setAdding] = useState(false);
 
   const { data: purchaseOrders, isLoading } = useListPurchaseOrders(
     { status: status !== "all" ? status : undefined, search: search || undefined },
@@ -72,6 +89,67 @@ export default function PurchaseOrdersListPage() {
       es.close();
     };
   }, [purchaseOrders]);
+
+  // Which POs already have finance rows (queued or settled). Refreshed whenever
+  // the list changes so a PO added moments ago shows its new state.
+  useEffect(() => {
+    const ids = (purchaseOrders ?? []).map((po) => po.id);
+    if (ids.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/finance/po-status?poIds=${ids.join(",")}`, {
+          credentials: "include",
+        });
+        if (!r.ok) return;
+        const data: Record<string, PoFinanceStatus> = await r.json();
+        if (cancelled) return;
+        setFinanceStatus(data);
+      } catch {
+        /* non-critical */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [purchaseOrders]);
+
+  /** Add the ticked orders to الماليات. Only dispatched, un-queued POs count. */
+  async function addToFinance() {
+    const poIds = [...selected];
+    if (poIds.length === 0) return;
+    setAdding(true);
+    try {
+      const r = await fetch("/api/finance/requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ poIds }),
+      });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.error ?? "فشل الإضافة للماليات");
+      const created = Array.isArray(body.created) ? body.created.length : 0;
+      const skipped = Array.isArray(body.skipped) ? body.skipped.length : 0;
+      toast.success(
+        created > 0
+          ? `تمت إضافة ${created} بند للماليات${skipped ? ` — تم تخطي ${skipped}` : ""}`
+          : "لا يوجد جديد للإضافة (الأوامر مضافة بالفعل أو غير قابلة للسداد)",
+      );
+      setSelected(new Set());
+      const ids = (purchaseOrders ?? []).map((po) => po.id);
+      if (ids.length) {
+        const s = await fetch(`/api/finance/po-status?poIds=${ids.join(",")}`, {
+          credentials: "include",
+        });
+        if (s.ok) setFinanceStatus(await s.json());
+      }
+      navigate("/finance");
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, "فشل الإضافة للماليات"));
+    } finally {
+      setAdding(false);
+    }
+  }
 
   return (
     <Layout>
@@ -140,6 +218,17 @@ export default function PurchaseOrdersListPage() {
                   </button>
                 ))}
               </div>
+              {maySelectForPayment && (
+                <Button
+                  size="sm"
+                  className="gap-1.5 self-start"
+                  disabled={selected.size === 0 || adding}
+                  onClick={addToFinance}
+                >
+                  <Banknote size={15} />
+                  {adding ? "جارٍ الإضافة..." : `إضافة للماليات (${selected.size})`}
+                </Button>
+              )}
             </div>
 
             <div className="bg-card border border-border rounded-lg overflow-hidden">
@@ -162,6 +251,25 @@ export default function PurchaseOrdersListPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border bg-muted/30 text-left">
+                        {maySelectForPayment && (
+                          <th className="px-3 py-3 text-muted-foreground text-xs font-medium w-8">
+                            <input
+                              type="checkbox"
+                              aria-label="تحديد الكل"
+                              checked={
+                                (purchaseOrders?.length ?? 0) > 0 &&
+                                (purchaseOrders ?? []).every((po) => selected.has(po.id))
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelected(new Set((purchaseOrders ?? []).map((po) => po.id)));
+                                } else {
+                                  setSelected(new Set());
+                                }
+                              }}
+                            />
+                          </th>
+                        )}
                         <th className="px-4 py-3 text-muted-foreground text-xs font-medium">
                           Internal No.
                         </th>
@@ -198,6 +306,21 @@ export default function PurchaseOrdersListPage() {
                           onClick={() => navigate(`/purchase-orders/${po.id}`)}
                           className="border-b border-border last:border-0 hover:bg-muted/20 cursor-pointer"
                         >
+                          {maySelectForPayment && (
+                            <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                aria-label={`تحديد ${po.internalPoNo}`}
+                                checked={selected.has(po.id)}
+                                onChange={(e) => {
+                                  const next = new Set(selected);
+                                  if (e.target.checked) next.add(po.id);
+                                  else next.delete(po.id);
+                                  setSelected(next);
+                                }}
+                              />
+                            </td>
+                          )}
                           <td className="px-4 py-3">
                             <span className="font-mono text-xs text-primary font-medium">
                               {po.internalPoNo}
@@ -233,6 +356,23 @@ export default function PurchaseOrdersListPage() {
                           </td>
                           <td className="px-4 py-3">
                             <StatusBadge status={po.status} />
+                            {financeStatus[po.id]?.queued && (
+                              <span
+                                title={
+                                  financeStatus[po.id].settled
+                                    ? "تم السداد بالكامل"
+                                    : "مضاف إلى الماليات"
+                                }
+                                className={`ms-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                                  financeStatus[po.id].settled
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-sky-100 text-sky-800"
+                                }`}
+                              >
+                                <Banknote size={10} />
+                                {financeStatus[po.id].settled ? "مسدَّد" : "في الماليات"}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {(() => {

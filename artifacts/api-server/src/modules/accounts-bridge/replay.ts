@@ -12,6 +12,7 @@ import {
   syncCustomerDelivery,
   syncExpense,
   syncCustomerPayment,
+  syncSupplierPayment,
 } from "./events";
 import type { SyncResult } from "./service";
 
@@ -32,6 +33,8 @@ export async function replayEvent(
       return syncExpense(sourceId);
     case "customer_payment":
       return syncCustomerPayment(sourceId);
+    case "supplier_payment":
+      return syncSupplierPayment(sourceId);
     case "cancellation":
       return {
         eventKey: `${eventType}:${sourceTable}:${sourceId}`,
