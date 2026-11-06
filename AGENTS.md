@@ -4398,6 +4398,20 @@ ATEF HASSAN MOHAMED AND HIS PARTNERS`)، فيلتفّ على سطرين، وال
   `.prettierignore` مع `**/generated/**`.
 - **`-dontwarn com.google.api.client.http.**` و `org.joda.time.**` لازمان
   أيضاً** لنفس السبب: مراجع ترجمة فقط داخل Tink.
+- **تدرّج الشعار في `drawable/ic_cortoba_*.xml` يرفض قيمة توقّف خارج `0..1` أو
+  غير تصاعدية.** الملفات مولّدة من الرسم المتتبَّع، وقد خرجت `1.30` (والمقصود
+  `0.82`) *قبل* `1.00`، فيُسقط Skia التدرّج بالكامل ويظهر الشعار **وأيقونة
+  التطبيق** فارغين — والبناء ينجح بلا تحذير. `BrandVectorTest` يحمي هذا الآن:
+  يفشل إذا خرجت قيمة عن `0..1` أو لم تكن تصاعدية، أو خرج الشعار عن منطقة أمان
+  الأيقونة التكيفية.
+- **WorkManager لا يُهيّأ مرتين.** وجود `HiltWorkerFactory` في
+  `Configuration.Provider` لا يكفي: مُهيّئ المكتبة عبر `InitializationProvider`
+  يسبق `Application` فيُتجاهل الإعداد ويفقد `SyncWorker` تبعياته المحقونة. لازم
+  `<meta-data android:name="androidx.work.WorkManagerInitializer" tools:node="remove"/>`.
+- **فشل `EncryptedSharedPreferences` يُسقط التطبيق عند الإقلاع** إن أُبطل مفتاح
+  الـ Keystore (استعادة على جهاز جديد، ترقية نظام، مفتاح تالف). `SessionStore`
+  يعيد بناء المخزن مرة واحدة ثم يكتفي بالذاكرة فقط — **ولا يكتب الرمز غير
+  مشفّر** كبديل: فشل المخزن يعني إعادة تسجيل دخول لا تسريب جلسة.
 
 ### النشر
 
