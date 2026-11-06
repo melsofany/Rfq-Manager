@@ -28,6 +28,16 @@ export const hrEmployeesTable = pgTable("hr_employees", {
   biometricPin: text("biometric_pin").unique(),
   phone: text("phone"),
   notes: text("notes"),
+  // ── Field-operations mobile access ────────────────────────────────────────
+  // Mobile access is granted per employee WITHOUT deleting the HR record, so
+  // revoking app access never touches employment history. The password is
+  // bcrypt-hashed; being `active` in HR is NOT by itself permission to use the
+  // app — that comes from an active row in `hr_field_assignments`.
+  mobileAccessEnabled: boolean("mobile_access_enabled").notNull().default(false),
+  mobilePasswordHash: text("mobile_password_hash"),
+  mobileLastLoginAt: timestamp("mobile_last_login_at", { withTimezone: true }),
+  /** Firebase Cloud Messaging device token; null until push is configured. */
+  fcmToken: text("fcm_token"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

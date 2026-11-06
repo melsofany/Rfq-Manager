@@ -19,6 +19,16 @@ export const workOrderAssignmentsTable = pgTable("work_order_assignments", {
   representativeId: integer("representative_id").references(() => representativesTable.id),
   representativeName: text("representative_name").notNull(),
   representativePhone: text("representative_phone").notNull(),
+  // ── HR linkage (field operations) ─────────────────────────────────────────
+  // The responsible HR employee (hr_employees.id). Nullable: legacy WhatsApp
+  // assignments carry only the phone-based representative above. Kept in sync
+  // with representativePhone so the mobile app and the rep bot address the
+  // same task without either side losing its view.
+  hrEmployeeId: integer("hr_employee_id"),
+  // The HR employee who ACTUALLY executed the task — differs from hrEmployeeId
+  // when the task was temporarily delegated to a purchasing employee. Both are
+  // preserved so responsibility stays auditable.
+  performedByHrEmployeeId: integer("performed_by_hr_employee_id"),
   status: text("status").notNull().default("sent"),
   pendingAction: text("pending_action"),
   waMessageId: text("wa_message_id"),

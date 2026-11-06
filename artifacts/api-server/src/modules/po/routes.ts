@@ -16,9 +16,12 @@ import {
   customerPoItemsTable,
   customerRfqsTable,
   poItemReceiptsTable,
+  hrEmployeesTable,
+  hrFieldAssignmentsTable,
+  mobileNotificationsTable,
   WORK_ORDER_KIND,
 } from "@workspace/db";
-import { eq, count, inArray, sql, and, ilike, ne, desc } from "drizzle-orm";
+import { eq, count, inArray, sql, and, ilike, ne, desc, or } from "drizzle-orm";
 import { linkNewPoItemsToRfq, createAllocation, getRfqItemQuantities } from "./rfq-allocations";
 import { requireAuth } from "../../middlewares/auth";
 import { lookupPoFromSheet, listSheetPoNumbers } from "../../shared/google-sheets";
@@ -217,12 +220,26 @@ router.get("/po/progress", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/po", requireAuth, async (req, res): Promise<void> => {
-  const { sheetPoNo, receiverName, receiverPhone, notes, items, rfqId } = req.body as {
+  const {
+    sheetPoNo,
+    receiverName,
+    receiverPhone,
+    notes,
+    items,
+    rfqId,
+    representativeHrEmployeeId,
+  } = req.body as {
     sheetPoNo?: string;
     receiverName?: string;
     receiverPhone?: string;
     notes?: string;
     rfqId?: number | null;
+    /**
+     * HR employee chosen as the field representative. Optional: the legacy
+     * free-hand receiver still works, but only an HR employee linked here
+     * produces a task in the mobile app.
+     */
+    representativeHrEmployeeId?: number | null;
     items?: Array<{
       itemId?: string | null;
       customerPoItemId?: number | null;
@@ -250,6 +267,32 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
   if (validItems.length === 0) {
     res.status(400).json({ error: "At least one item is required" });
     return;
+  }
+
+  // A representative may only be a real, ACTIVE HR employee — never an arbitrary
+  // id. The mobile task is created against the HR record, so an invalid link
+  // would produce a task no one can see.
+  let repHrEmployeeId: number | null = null;
+  if (representativeHrEmployeeId != null && Number(representativeHrEmployeeId) > 0) {
+    const [hrEmp] = await db
+      .select({
+        id: hrEmployeesTable.id,
+        status: hrEmployeesTable.status,
+        fullName: hrEmployeesTable.fullName,
+        phone: hrEmployeesTable.phone,
+        employeeNo: hrEmployeesTable.employeeNo,
+      })
+      .from(hrEmployeesTable)
+      .where(eq(hrEmployeesTable.id, Number(representativeHrEmployeeId)));
+    if (!hrEmp) {
+      res.status(400).json({ error: "المندوب المحدد غير موجود في الموارد البشرية" });
+      return;
+    }
+    if (hrEmp.status !== "active") {
+      res.status(400).json({ error: "لا يمكن إسناد أمر الشراء لموظف غير نشط" });
+      return;
+    }
+    repHrEmployeeId = hrEmp.id;
   }
 
   try {
@@ -282,6 +325,7 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
           sheetPoNo,
           receiverName: receiverName || null,
           receiverPhone: receiverPhone || null,
+          representativeHrEmployeeId: repHrEmployeeId,
           status: "draft",
           employeeId: req.session.employeeId,
           notes: notes || null,
@@ -432,6 +476,67 @@ router.get("/po/sheets/po-numbers", requireAuth, async (req, res): Promise<void>
 // Customer PO numbers feed the purchase-order combobox. The actual item
 // lookup is handled by /po/lookup/:poNo above (which prefers a matching
 // customer PO and falls back to Google Sheets automatically).
+
+// GET /api/po/representatives — active HR employees eligible as field
+// representatives, for the PO form's representative picker. Searchable by name,
+// employee number and employee id, and enriched with the current assignment
+// state so the operator sees who is already a representative.
+router.get("/po/representatives", requireAuth, async (req, res): Promise<void> => {
+  const q = String(req.query.q ?? "").trim();
+  const rows = await db
+    .select({
+      id: hrEmployeesTable.id,
+      employeeNo: hrEmployeesTable.employeeNo,
+      fullName: hrEmployeesTable.fullName,
+      fullNameEn: hrEmployeesTable.fullNameEn,
+      jobTitle: hrEmployeesTable.jobTitle,
+      department: hrEmployeesTable.department,
+      phone: hrEmployeesTable.phone,
+      status: hrEmployeesTable.status,
+      mobileAccessEnabled: hrEmployeesTable.mobileAccessEnabled,
+      fieldAssignmentId: hrFieldAssignmentsTable.id,
+      fieldAssignmentStatus: hrFieldAssignmentsTable.status,
+    })
+    .from(hrEmployeesTable)
+    .leftJoin(
+      hrFieldAssignmentsTable,
+      and(
+        eq(hrFieldAssignmentsTable.employeeId, hrEmployeesTable.id),
+        eq(hrFieldAssignmentsTable.status, "active"),
+      ),
+    )
+    .where(
+      q
+        ? and(
+            eq(hrEmployeesTable.status, "active"),
+            or(
+              ilike(hrEmployeesTable.fullName, `%${q}%`),
+              ilike(hrEmployeesTable.employeeNo, `%${q}%`),
+              sql`CAST(${hrEmployeesTable.id} AS TEXT) ILIKE ${`%${q}%`}`,
+            ),
+          )
+        : eq(hrEmployeesTable.status, "active"),
+    )
+    .orderBy(hrEmployeesTable.employeeNo)
+    .limit(100);
+
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      employeeNo: r.employeeNo,
+      fullName: r.fullName,
+      fullNameEn: r.fullNameEn,
+      jobTitle: r.jobTitle,
+      department: r.department,
+      phone: r.phone,
+      isFieldRepresentative: r.fieldAssignmentId != null,
+      mobileAccessEnabled: r.mobileAccessEnabled,
+      // Only an active field representative can receive a mobile task; the
+      // picker shows everyone active but marks who is actually eligible.
+      eligibleForMobileTask: r.fieldAssignmentId != null,
+    })),
+  );
+});
 
 // GET /api/po/customer-po-numbers — list customer PO numbers for the combobox.
 router.get("/po/customer-po-numbers", requireAuth, async (_req, res): Promise<void> => {
@@ -597,6 +702,78 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
   const receiverName = poRow.po.receiverName ?? null;
   const receiverPhone = poRow.po.receiverPhone ?? null;
   const notes = poRow.po.notes ?? null;
+  // The HR representative chosen when the PO was created. When present, the
+  // receipt assignments are linked to this employee so the task appears in the
+  // mobile app — no manual task creation anywhere.
+  const repHrEmployeeId = poRow.po.representativeHrEmployeeId ?? null;
+  // An HR employee may be linked even when no phone-based receiver was typed,
+  // so the mobile task is created independently of the WhatsApp receiver.
+  const hasMobileRep = repHrEmployeeId != null;
+
+  // ── Automatic mobile-task creation (Rule 1) ────────────────────────────────
+  // When the PO names an HR representative, every pending line gets a receipt
+  // assignment linked to that employee's HR id, so the task is visible in the
+  // mobile app the moment the PO is dispatched. This runs BEFORE the supplier
+  // loop so the mobile task does not depend on the WhatsApp send succeeding —
+  // the previous ordering (assignment created inside the send loop) meant a
+  // rate-limited WhatsApp send silently left the rep with no task at all.
+  let mobileTasksCreated = 0;
+  if (hasMobileRep) {
+    const allPending = itemRows.filter(
+      (r) => r.item.lineStatus !== "fulfilled" && r.item.lineStatus !== "rejected",
+    );
+    for (const r of allPending) {
+      const [existing] = await db
+        .select({
+          id: workOrderAssignmentsTable.id,
+          hrEmployeeId: workOrderAssignmentsTable.hrEmployeeId,
+        })
+        .from(workOrderAssignmentsTable)
+        .where(
+          and(
+            eq(workOrderAssignmentsTable.poItemId, r.item.id),
+            eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+            ne(workOrderAssignmentsTable.status, "received"),
+            ne(workOrderAssignmentsTable.status, "rejected"),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        // Backfill the HR link on an assignment created before the rep was known.
+        if (existing.hrEmployeeId == null) {
+          await db
+            .update(workOrderAssignmentsTable)
+            .set({ hrEmployeeId: repHrEmployeeId })
+            .where(eq(workOrderAssignmentsTable.id, existing.id));
+        }
+        continue;
+      }
+      try {
+        await db.insert(workOrderAssignmentsTable).values({
+          poId: id,
+          poItemId: r.item.id,
+          representativeName: receiverName?.trim() || "مندوب ميداني",
+          representativePhone: receiverPhone ? normalizePhone(receiverPhone) : "",
+          hrEmployeeId: repHrEmployeeId,
+          status: "sent",
+          kind: WORK_ORDER_KIND.RECEIPT,
+        });
+        mobileTasksCreated++;
+      } catch (err) {
+        req.log.warn({ err, poItemId: r.item.id }, "Mobile receipt task insert failed");
+      }
+    }
+    if (mobileTasksCreated > 0) {
+      await db.insert(mobileNotificationsTable).values({
+        hrEmployeeId: repHrEmployeeId!,
+        kind: "task_assigned",
+        title: "تم إسناد أمر شراء إليك",
+        body: `أمر الشراء ${poNo} يحتوي على ${mobileTasksCreated} بند للاستلام`,
+        entityType: "po",
+        entityId: id,
+      });
+    }
+  }
 
   for (const [supplierId, { supplier, items }] of bySupplier) {
     // ── The registration gate ────────────────────────────────────────────
@@ -809,7 +986,10 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
         // (so re-dispatching doesn't pile up duplicate rows).
         for (const r of pending) {
           const [existing] = await db
-            .select({ id: workOrderAssignmentsTable.id })
+            .select({
+              id: workOrderAssignmentsTable.id,
+              hrEmployeeId: workOrderAssignmentsTable.hrEmployeeId,
+            })
             .from(workOrderAssignmentsTable)
             .where(
               and(
@@ -820,13 +1000,24 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
               ),
             )
             .limit(1);
-          if (existing) continue;
+          if (existing) {
+            // Link the WhatsApp assignment to the HR representative too, so the
+            // rep bot and the mobile app address the SAME task.
+            if (existing.hrEmployeeId == null && repHrEmployeeId != null) {
+              await db
+                .update(workOrderAssignmentsTable)
+                .set({ hrEmployeeId: repHrEmployeeId })
+                .where(eq(workOrderAssignmentsTable.id, existing.id));
+            }
+            continue;
+          }
           try {
             await db.insert(workOrderAssignmentsTable).values({
               poId: id,
               poItemId: r.item.id,
               representativeName: repName,
               representativePhone: repPhone,
+              hrEmployeeId: repHrEmployeeId,
               status: "sent",
               kind: WORK_ORDER_KIND.RECEIPT,
             });
@@ -1298,6 +1489,7 @@ router.get("/po/:id", requireAuth, async (req, res): Promise<void> => {
     sheetPoNo: row.po.sheetPoNo,
     receiverName: row.po.receiverName,
     receiverPhone: row.po.receiverPhone,
+    representativeHrEmployeeId: row.po.representativeHrEmployeeId ?? null,
     status: row.po.status,
     employeeId: row.po.employeeId,
     employeeName: row.employeeName,
@@ -1316,12 +1508,22 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
 
-  const { sheetPoNo, receiverName, receiverPhone, notes, employeeId, items } = req.body as {
+  const {
+    sheetPoNo,
+    receiverName,
+    receiverPhone,
+    notes,
+    employeeId,
+    items,
+    representativeHrEmployeeId,
+  } = req.body as {
     sheetPoNo?: string;
     receiverName?: string;
     receiverPhone?: string;
     notes?: string;
     employeeId?: number | null;
+    /** HR employee chosen as the field representative (hr_employees.id). */
+    representativeHrEmployeeId?: number | null;
     items?: Array<{
       itemId?: string | null;
       customerPoItemId?: number | null;
@@ -1362,6 +1564,28 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  // Validate the representative against HR (active only), same rule as create.
+  let repHrEmployeeId: number | null = existing.representativeHrEmployeeId ?? null;
+  if (representativeHrEmployeeId !== undefined) {
+    if (representativeHrEmployeeId == null || Number(representativeHrEmployeeId) <= 0) {
+      repHrEmployeeId = null;
+    } else {
+      const [hrEmp] = await db
+        .select({ id: hrEmployeesTable.id, status: hrEmployeesTable.status })
+        .from(hrEmployeesTable)
+        .where(eq(hrEmployeesTable.id, Number(representativeHrEmployeeId)));
+      if (!hrEmp) {
+        res.status(400).json({ error: "المندوب المحدد غير موجود في الموارد البشرية" });
+        return;
+      }
+      if (hrEmp.status !== "active") {
+        res.status(400).json({ error: "لا يمكن إسناد أمر الشراء لموظف غير نشط" });
+        return;
+      }
+      repHrEmployeeId = hrEmp.id;
+    }
+  }
+
   try {
     const updated = await db.transaction(async (tx) => {
       const [po] = await tx
@@ -1370,6 +1594,7 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
           sheetPoNo: sheetPoNo.trim(),
           receiverName: receiverName?.trim() || null,
           receiverPhone: receiverPhone?.trim() || null,
+          representativeHrEmployeeId: repHrEmployeeId,
           notes: notes?.trim() || null,
           employeeId: employeeId ?? null,
           updatedAt: new Date(),

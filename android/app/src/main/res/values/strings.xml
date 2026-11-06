@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">قرطبة للتوريدات</string>
+    <string name="app_name_full">العمليات الميدانية – قرطبة للتوريدات</string>
+    <string name="employee_no">الرقم الوظيفي</string>
+    <string name="password">كلمة المرور</string>
+    <string name="login">تسجيل الدخول</string>
+    <string name="forgot_password">نسيت كلمة المرور</string>
+    <string name="show_password">إظهار كلمة المرور</string>
+    <string name="hide_password">إخفاء كلمة المرور</string>
+    <string name="welcome_title">أهلاً وسهلاً</string>
+    <string name="welcome_subtitle">مرحباً بك في نظام العمليات الميدانية – قرطبة للتوريدات</string>
+    <string name="pickups">الاستلامات</string>
+    <string name="deliveries">التسليمات</string>
+    <string name="financial_custody">العهدة المالية</string>
+    <string name="coming_soon">قريباً</string>
+    <string name="confirm_receipt">تأكيد الاستلام</string>
+    <string name="confirm_delivery">تأكيد التسليم</string>
+    <string name="notifications">الإشعارات</string>
+    <string name="profile">الملف الشخصي</string>
+    <string name="settings">الإعدادات</string>
+    <string name="logout">تسجيل الخروج</string>
+    <string name="synced">تمت المزامنة</string>
+    <string name="pending_sync">في انتظار المزامنة</string>
+    <string name="saved_locally">محفوظ محلياً</string>
+    <string name="sync_failed">فشلت المزامنة</string>
+</resources>

@@ -75,7 +75,10 @@ function computePayloadHash(items: DeliveryInput[]): string {
  * Re-aggregate the delivery totals onto a customer_po_item and recompute its
  * deliveryStatus. Called after every insert/update/delete of a delivery row.
  */
-async function recomputeItemTotals(customerPoItemId: number): Promise<void> {
+export async function recomputeItemTotals(customerPoItemId: number): Promise<void> {
+  // Re-aggregate delivery totals onto the customer PO line and recompute its
+  // status. Exported so the mobile delivery path updates the line through the
+  // SAME function as the portal — two implementations would eventually drift.
   // Voided rows keep their history but never count toward the totals.
   const rows = await db
     .select()

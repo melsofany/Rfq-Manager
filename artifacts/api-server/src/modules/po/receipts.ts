@@ -57,7 +57,7 @@ export const REJECTION_REASONS = ["تالف", "خطأ في الصنف", "متأ�
  * Re-aggregate the receipt totals onto a purchase_order_item and recompute its
  * lineStatus. Called after every insert/update/delete of a receipt row.
  */
-async function recomputeItemTotals(poItemId: number): Promise<void> {
+export async function recomputeItemTotals(poItemId: number): Promise<void> {
   const rows = await db
     .select()
     .from(poItemReceiptsTable)

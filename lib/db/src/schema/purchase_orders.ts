@@ -13,6 +13,13 @@ export const purchaseOrdersTable = pgTable("purchase_orders", {
   sheetPoNo: text("sheet_po_no").notNull(),
   receiverName: text("receiver_name"),
   receiverPhone: text("receiver_phone"),
+  /**
+   * The HR employee selected as this PO's field representative (hr_employees.id).
+   * Null for legacy POs whose receiver was typed free-hand. When set, the
+   * dispatch path links every receipt assignment to this employee so the task
+   * appears in the mobile app, not only in the WhatsApp rep bot.
+   */
+  representativeHrEmployeeId: integer("representative_hr_employee_id"),
   status: text("status").notNull().default("draft"),
   employeeId: integer("employee_id").references(() => employeesTable.id),
   rfqId: integer("rfq_id").references(() => rfqTable.id),

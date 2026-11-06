@@ -33,6 +33,7 @@ import chatwootModule from "../modules/chatwoot/index";
 import backupModule from "../modules/backup/index";
 import hrModule from "../modules/hr/index";
 import emailAccountsModule from "../modules/email-accounts/index";
+import fieldOpsModule from "../modules/field-ops/index";
 
 const router: IRouter = Router();
 
@@ -99,5 +100,6 @@ router.use(integrationsModule); // ERP integrations (Odoo · SAP · Oracle · Go
 router.use(backupModule); // daily DB backup → Google Drive
 router.use(hrModule); // HR · employees · fingerprint attendance (ADMS)
 router.use(emailAccountsModule); // Google Workspace mailboxes per employee (read-only)
+router.use(fieldOpsModule); // mobile app API + HR field-representative administration
 
 export default router;

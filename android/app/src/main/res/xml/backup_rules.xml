@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Never back up the token store or the local operational cache: both hold
+         credentials or customer data and must not leave the device. -->
+    <exclude domain="sharedpref" path="cortoba_secure_prefs.xml" />
+    <exclude domain="database" path="cortoba_field_ops.db" />
+    <exclude domain="file" path="datastore/" />
+</full-backup-content>

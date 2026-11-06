@@ -29,6 +29,18 @@ export const poItemReceiptsTable = pgTable("po_item_receipts", {
   // received | partial | rejected
   receiptStatus: text("receipt_status").notNull().default("received"),
   receivedBy: text("received_by"),
+  // ── Field operations ─────────────────────────────────────────────────────
+  // HR employee who actually executed the receipt (differs from the assignee
+  // when the task was temporarily delegated). `receivedBy` keeps the display
+  // name for the existing WhatsApp/portal views.
+  receivedByHrEmployeeId: integer("received_by_hr_employee_id"),
+  gpsLat: numeric("gps_lat", { precision: 9, scale: 6 }),
+  gpsLng: numeric("gps_lng", { precision: 9, scale: 6 }),
+  // Idempotency — mirrors the delivery table so an offline retry is a no-op
+  // instead of a second receipt row.
+  operationKey: text("operation_key"),
+  payloadHash: text("payload_hash"),
+  clientUuid: text("client_uuid"),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -58,6 +70,13 @@ export const customerPoItemDeliveriesTable = pgTable("customer_po_item_deliverie
   // delivered | partial | rejected
   deliveryStatus: text("delivery_status").notNull().default("delivered"),
   deliveredBy: text("delivered_by"),
+  // HR employee who actually executed the delivery; the recipient's name and
+  // signature live in `mobile_attachments` + `recipient_name`.
+  deliveredByHrEmployeeId: integer("delivered_by_hr_employee_id"),
+  /** Name of the person who accepted the goods on the customer's side. */
+  recipientName: text("recipient_name"),
+  gpsLat: numeric("gps_lat", { precision: 9, scale: 6 }),
+  gpsLng: numeric("gps_lng", { precision: 9, scale: 6 }),
   deliveredAt: timestamp("delivered_at", { withTimezone: true }).notNull().defaultNow(),
   // ── Idempotency ──────────────────────────────────────────────────────────
   // `idempotencyKey` is the per-question token from WhatsApp (or a client UUID
