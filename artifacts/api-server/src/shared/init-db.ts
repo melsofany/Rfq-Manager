@@ -53,6 +53,11 @@ export async function initDb(): Promise<void> {
         bank_branch TEXT,
         category TEXT NOT NULL DEFAULT 'general',
         is_active BOOLEAN NOT NULL DEFAULT true,
+        -- الترحيب بالمورد: the contact we last addressed him on (see the ALTERs
+        -- below — those are what add these to an existing table).
+        greeted_phone TEXT,
+        greeted_email TEXT,
+        greeted_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
@@ -537,6 +542,16 @@ export async function initDb(): Promise<void> {
     await client.query(
       `ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS registration_verified_at TIMESTAMPTZ`,
     );
+
+    // الترحيب بالمورد — the contact we last addressed the supplier on. Its own
+    // statement for the same reason as above: a CREATE TABLE IF NOT EXISTS is a
+    // no-op on an existing table, so these ALTERs are the only thing that adds
+    // the columns on a database that already has `suppliers`.
+    await client.query(`
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS greeted_phone TEXT;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS greeted_email TEXT;
+      ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS greeted_at TIMESTAMPTZ;
+    `);
 
     // طلبات استكمال بيانات المورد — one row per registration link sent to a
     // supplier who has no bank data (a PO cannot be paid without it, so it is

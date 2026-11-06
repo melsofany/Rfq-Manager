@@ -19,8 +19,16 @@ import { requireAuth } from "../../middlewares/auth";
 import { generateToken } from "../../shared/token";
 import { generateOffersPdf } from "./offers-pdf.js";
 import { generateDispatchReportPdf } from "../reports/dispatch-pdf.js";
-import { sendRfqEmail } from "../../shared/email";
-import { sendRfqWhatsApp } from "../communications/service";
+import { sendRfqEmail, sendSupplierGreetingEmail } from "../../shared/email";
+import { sendRfqWhatsApp, sendSupplierGreetingWhatsApp } from "../communications/service";
+import {
+  GREETING_REASON_LABEL,
+  GREETING_TIER_LABEL,
+  greetingChannels,
+  greetingReasonFor,
+  greetingTier,
+} from "../../shared/supplier-greeting";
+import { loadSupplierGuide, supplierGuideUrl } from "../../shared/supplier-guide";
 import { resolvePublicBaseUrl } from "../../shared/base-url";
 import { whatsappChatsTable } from "@workspace/db";
 import { lookupRfqFromSheet, listSheetRfqNumbers, listSheetTabs } from "../../shared/google-sheets";
@@ -846,6 +854,14 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
     reason: string | null;
     email?: { status: string; error: string | null };
     whatsapp?: { status: string; error: string | null };
+    greeting?: {
+      sent: boolean;
+      tier: string | null;
+      reason: string | null;
+      whatsapp: string;
+      email: string;
+      error: string | null;
+    } | null;
   }> = [];
   let sent = 0;
   let skipped = 0;
@@ -949,6 +965,137 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
       },
       "RFQ send: processing supplier",
     );
+
+    // ── الترحيب بالمورد ──────────────────────────────────────────────────────
+    // First contact, or his phone/email changed since the last time we addressed
+    // him. The comparison is against the contact we LAST USED (greetedPhone /
+    // greetedEmail), not against the row's current values — comparing with
+    // itself would make the reason undecidable.
+    //
+    // Deliberately FIRST, so the welcome introduces the company before the
+    // request arrives — and best-effort: a greeting failure must never turn a
+    // delivered RFQ into a failed send, so it is caught and only recorded. The
+    // contact columns are stamped only for channels that actually succeeded, so
+    // a supplier whose greeting failed is welcomed on the next attempt instead
+    // of silently never being welcomed.
+    const greetReason = greetingReasonFor(
+      supplier.greetedAt ? { phone: supplier.greetedPhone, email: supplier.greetedEmail } : null,
+      { phone: supplier.phone, email: supplier.email },
+    );
+    let greeting: {
+      sent: boolean;
+      tier: string | null;
+      reason: string | null;
+      whatsapp: string;
+      email: string;
+      error: string | null;
+    } | null = null;
+
+    // Only the CHANGED channel carries the re-welcome (see greetingChannels); a
+    // first contact uses every channel we hold. A reason with no reachable
+    // channel is not a greeting at all — recording one would put a non-event in
+    // the audit trail.
+    const greetChannels = greetReason
+      ? greetingChannels(greetReason, { phone: supplier.phone, email: supplier.email })
+      : { whatsapp: false, email: false };
+
+    if (greetReason && (greetChannels.whatsapp || greetChannels.email)) {
+      const tier = greetingTier(supplier);
+      const guide = loadSupplierGuide();
+      const channels = greetChannels;
+      let waStatus = channels.whatsapp ? "failed" : "not_applicable";
+      let mailStatus = channels.email ? "failed" : "not_applicable";
+      const greetingErrors: string[] = [];
+
+      if (channels.whatsapp && supplier.phone) {
+        try {
+          const picked = pickSendablePhone(supplier.phone);
+          await sendSupplierGreetingWhatsApp({
+            phone: picked.phone ?? supplier.phone,
+            name: supplier.contactPerson || supplier.name,
+            tier,
+            guideAttached: Boolean(guide),
+          });
+          waStatus = "sent";
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          greetingErrors.push(`whatsapp: ${msg}`);
+          req.log.warn(
+            { err, supplierId: supplier.id },
+            "RFQ send: supplier greeting WhatsApp FAILED",
+          );
+        }
+      }
+
+      if (channels.email && supplier.email) {
+        try {
+          await sendSupplierGreetingEmail({
+            to: supplier.email,
+            toName: supplier.contactPerson || supplier.name,
+            tier,
+            tierLabel: GREETING_TIER_LABEL[tier],
+            guide,
+            guideUrl: supplierGuideUrl(baseUrl),
+            employeeName: employee?.name || "Procurement Team",
+            employeePhone: employee?.phone,
+          });
+          mailStatus = "sent";
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          greetingErrors.push(`email: ${msg}`);
+          req.log.warn(
+            { err, supplierId: supplier.id },
+            "RFQ send: supplier greeting email FAILED",
+          );
+        }
+      }
+
+      const delivered = waStatus === "sent" || mailStatus === "sent";
+      if (delivered) {
+        // Stamp the contact we actually reached him on, so the NEXT send compares
+        // against it. Only the successful channels are stamped: stamping a
+        // channel that failed would suppress the greeting he never received.
+        await db
+          .update(suppliersTable)
+          .set({
+            ...(waStatus === "sent" ? { greetedPhone: supplier.phone } : {}),
+            ...(mailStatus === "sent" ? { greetedEmail: supplier.email } : {}),
+            greetedAt: new Date(),
+          })
+          .where(eq(suppliersTable.id, supplier.id));
+      }
+
+      greeting = {
+        sent: delivered,
+        tier,
+        reason: greetReason,
+        whatsapp: waStatus,
+        email: mailStatus,
+        error: greetingErrors.length ? greetingErrors.join(" | ") : null,
+      };
+
+      await db.insert(auditLogTable).values({
+        action: "supplier.greeted",
+        entityType: "supplier",
+        entityId: supplier.id,
+        employeeId: req.session.employeeId,
+        description: `ترحيب المورد ${supplier.name} (${GREETING_REASON_LABEL[greetReason]}) — ${GREETING_TIER_LABEL[tier]}: واتساب ${waStatus}، بريد ${mailStatus}`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+
+      req.log.info(
+        {
+          supplierId: supplier.id,
+          reason: greetReason,
+          tier,
+          waStatus,
+          mailStatus,
+          guideAttached: Boolean(guide),
+        },
+        "RFQ send: supplier greeted",
+      );
+    }
 
     const rfqItems = items.map((i) => ({
       lineItem: i.lineItem,
@@ -1080,6 +1227,7 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
       reason: null,
       email: { status: emailStatus, error: emailError },
       whatsapp: { status: whatsappStatus, error: whatsappError },
+      greeting,
     });
   }
 

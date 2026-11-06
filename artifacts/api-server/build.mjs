@@ -14,6 +14,7 @@ async function buildAll() {
   await rm(distDir, { recursive: true, force: true });
 
   await copyFonts(distDir);
+  await copySupplierGuide(distDir);
 
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/index.ts")],
@@ -146,6 +147,29 @@ async function copyFonts(distDir) {
     if (s && s.isFile()) {
       await copyFile(srcPath, path.join(destAssets, file));
     }
+  }
+}
+
+/**
+ * Copy the published supplier pricing guide into the bundle.
+ *
+ * The greeting templates carry it as their DOCUMENT header and the greeting
+ * email attaches it, both of which read it at RUNTIME from `assets/`. The
+ * single source of truth is the portal's `public/` copy (the same file the
+ * portal serves at /supplier-pricing-guide.pdf); copying it here keeps ONE
+ * committed copy instead of a second 2.5 MB duplicate that would drift.
+ */
+async function copySupplierGuide(distDir) {
+  const src = path.resolve(artifactDir, "..", "rfq-portal", "public", "supplier-pricing-guide.pdf");
+  const destDir = path.resolve(distDir, "assets");
+  await mkdir(destDir, { recursive: true });
+  try {
+    await copyFile(src, path.join(destDir, "supplier-pricing-guide.pdf"));
+  } catch (err) {
+    // Not fatal: the greeting still sends, without its document header.
+    console.warn(
+      `supplier pricing guide not copied (${err.code || err.message}) — the greeting will send without the attachment`,
+    );
   }
 }
 

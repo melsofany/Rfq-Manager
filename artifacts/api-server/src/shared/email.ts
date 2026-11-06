@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { promises as dns } from "dns";
 import { logger } from "./logger";
 import { assertCanSend, fromHeader, replyToHeader, senderIdentity } from "./mail-identity";
+import { renderGreetingBody, type GreetingTier } from "./supplier-greeting";
 
 const SMTP_TIMEOUT_MS = 10000;
 
@@ -288,6 +289,123 @@ Cortoba Supplies — ش.الاسكندرية - برج نجمة مطروح الد
       html,
     });
     logger.info({ to: opts.to, supplierName: opts.supplierName }, "Registration email sent");
+  } finally {
+    transporter.close();
+  }
+}
+
+/**
+ * الترحيب بالمورد — the email twin of the WhatsApp greeting.
+ *
+ * It carries the SAME wording (built from `shared/supplier-greeting.ts`, not
+ * retyped here) because the supplier may open either channel first, and two
+ * different greetings about the same relationship read as two different
+ * messages. The pricing guide is attached as a real file so the mail is useful
+ * even when the supplier never taps a link.
+ */
+export async function sendSupplierGreetingEmail(opts: {
+  to: string;
+  toName: string;
+  /** «مورد مسجَّل» / «مورد مبدئي» — from greetingTier(). */
+  tier: GreetingTier;
+  tierLabel: string;
+  guide: Buffer | null;
+  guideUrl: string;
+  employeeName: string;
+  employeePhone?: string | null;
+}): Promise<void> {
+  assertCanSend();
+  const transporter = await createTransporter();
+  const senderEmail = senderIdentity().email.toLowerCase();
+  const guideAttached = Boolean(opts.guide);
+
+  const tierSentence =
+    opts.tier === "registered"
+      ? `يسرّنا أن نحيطكم علمًا بأنه قد تم تسجيلكم لدينا كـ<strong>${opts.tierLabel}</strong>، ونبارك لكم إتمام استكمال بياناتكم.`
+      : `يسرّنا أن نحيطكم علمًا بأنه قد تم ترحيبكم وتسجيلكم مبدئيًا كـ<strong>${opts.tierLabel}</strong>، ونرجو استكمال بيانات التسجيل لدينا.`;
+
+  const guideLine = guideAttached
+    ? `تجدون بالمستند المرفق «<strong>دليل التسعير خطوة بخطوة</strong>»، وهو يشرح كيفية تسعير بنود طلبات التسعير عبر واتساب أو البريد الإلكتروني.`
+    : `ولمعرفة كيفية تسعير بنود طلبات التسعير عبر واتساب أو البريد الإلكتروني، يُرجى التواصل مع فريق المشتريات.`;
+
+  const ambition =
+    opts.tier === "registered"
+      ? "نبارك لكم انضمامكم إلى قاعدة موردي قرطبة للتوريدات، ونطمح إلى تعزيز العمل معكم."
+      : "ونطمح إلى تعزيز العمل معكم، ونتطلع إلى استكمال بياناتكم لنكون سعداء بالتعامل معكم كمورد مسجَّل.";
+
+  const html = `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ترحيب قرطبة للتوريدات</title></head>
+<body style="margin:0;padding:0;font-family:Arial,Tahoma,sans-serif;background:#f3f4f6">
+  <div style="max-width:700px;margin:32px auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+    <div style="background:#1e3a5f;padding:20px 32px">
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700">Cortoba Supplies</h1>
+      <p style="margin:4px 0 0;color:#93c5fd;font-size:13px">قرطبة للتوريدات — ترحيب بمورد</p>
+    </div>
+    <div style="padding:32px">
+      <p style="margin:0 0 16px;font-size:17px;color:#111827;font-weight:600">
+        ${opts.tier === "registered" ? `مرحبًا ${opts.toName}،` : `مرحبًا بكم في قرطبة للتوريدات ${opts.toName}،`}
+      </p>
+      <p style="margin:0 0 16px;font-size:15px;color:#374151">${tierSentence}</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#374151">${guideLine}</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#374151">${ambition}</p>
+      ${
+        guideAttached
+          ? `<div style="text-align:center;margin:24px 0">
+        <a href="${opts.guideUrl}"
+           style="background:#1e3a5f;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:600;display:inline-block">
+          دليل التسعير (PDF)
+        </a>
+      </div>`
+          : ""
+      }
+    </div>
+    <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px">
+      <p style="margin:0 0 4px;font-size:13px;color:#6b7280">
+        للتواصل: <strong>${opts.employeeName}</strong>${opts.employeePhone ? " &nbsp;|&nbsp; " + opts.employeePhone : ""}
+        &nbsp;|&nbsp; <a href="mailto:${senderEmail}" style="color:#1e3a5f">${senderEmail}</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  // Built from the SAME pure renderer the WhatsApp body uses, so the two
+  // channels cannot drift apart.
+  const text = [
+    renderGreetingBody(opts.tier, guideAttached),
+    "",
+    "---",
+    `${opts.employeeName}${opts.employeePhone ? " | " + opts.employeePhone : ""}`,
+    senderEmail,
+    "Cortoba Supplies — ش.الاسكندرية - برج نجمة مطروح الدور الرابع - مرسي مطروح",
+  ]
+    .join("\n")
+    .trim();
+
+  try {
+    await transporter.sendMail({
+      from: fromHeader(),
+      replyTo: replyToHeader(),
+      to: `"${opts.toName}" <${opts.to}>`,
+      subject: "ترحيب قرطبة للتوريدات — دليل التسعير للموردين",
+      text,
+      html,
+      ...(guideAttached
+        ? {
+            attachments: [
+              {
+                filename: "supplier-pricing-guide.pdf",
+                content: opts.guide as Buffer,
+                contentType: "application/pdf",
+              },
+            ],
+          }
+        : {}),
+    });
+    logger.info({ to: opts.to, tier: opts.tier, guideAttached }, "Supplier greeting email sent");
   } finally {
     transporter.close();
   }

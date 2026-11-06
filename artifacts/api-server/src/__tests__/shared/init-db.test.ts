@@ -501,4 +501,19 @@ describe("init-db migrations", () => {
     // resolution unambiguous.
     expect(literal).toContain("employee_id INTEGER NOT NULL UNIQUE");
   });
+  it("adds the supplier greeting contact columns via ALTER, not only the CREATE", () => {
+    // `CREATE TABLE IF NOT EXISTS suppliers` is a NO-OP on a database that
+    // already has the table, so the ALTERs are the only thing that adds these
+    // columns on Render. Without them the greeting trigger reads undefined
+    // greetedAt and re-welcomes every supplier on every send.
+    for (const col of ["greeted_phone", "greeted_email", "greeted_at"]) {
+      expect(source).toContain(`ADD COLUMN IF NOT EXISTS ${col}`);
+    }
+    const alterIdx = source.indexOf("ADD COLUMN IF NOT EXISTS greeted_phone");
+    const before = source.lastIndexOf("await client.query(", alterIdx);
+    const literal = source.slice(before, source.indexOf("`);", alterIdx));
+    // Its own statement: a sibling failure in a shared literal would roll the
+    // ALTER back silently (the recorded migration-rollback incident).
+    expect(literal).not.toContain("CREATE TABLE");
+  });
 });

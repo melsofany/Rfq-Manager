@@ -23,6 +23,13 @@ import { generateRfqPdf } from "../rfq/rfq-pdf";
 import { generatePoPdf } from "../po/po-pdf";
 import { generatePayslipPdf } from "../hr/payslip-pdf";
 import { generateQuotationPdf } from "../customer-rfq/quotation-pdf";
+import {
+  GREETING_TIER_LABEL,
+  type GreetingTier,
+  SUPPLIER_GREETING_BODY_PRELIMINARY,
+  SUPPLIER_GREETING_BODY_REGISTERED,
+} from "../../shared/supplier-greeting";
+import { loadSupplierGuide } from "../../shared/supplier-guide";
 
 // ─── Official WhatsApp Business (Meta) Cloud API client ──────────────────────
 // This module is built on top of the open-source "whatsapp-api-js" library
@@ -65,6 +72,16 @@ const TEMPLATE_SUPPLIER_REGISTRATION =
 const TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH =
   process.env.WHATSAPP_TEMPLATE_SUPPLIER_REGISTRATION_MISMATCH ||
   "supplier_registration_mismatch_ar";
+/**
+ * الترحيب بالمورد — the welcome that accompanies the pricing guide. TWO approved
+ * templates, because Meta does not allow an approved body to be edited and the
+ * registered/preliminary distinction changes the wording. See
+ * `supplier-greeting.ts` for the decision and the exact text.
+ */
+const TEMPLATE_SUPPLIER_GREETING =
+  process.env.WHATSAPP_TEMPLATE_SUPPLIER_GREETING || "supplier_greeting_ar";
+const TEMPLATE_SUPPLIER_GREETING_PRELIMINARY =
+  process.env.WHATSAPP_TEMPLATE_SUPPLIER_GREETING_PRELIMINARY || "supplier_greeting_preliminary_ar";
 const TEMPLATE_LANG = process.env.WHATSAPP_TEMPLATE_LANG || "ar";
 
 /**
@@ -425,15 +442,98 @@ export async function ensureSupplierRegistrationMismatchTemplate(): Promise<void
 }
 
 /**
- * Upload a sample payslip to Meta and return its header handle, which the
+ * The two greeting templates share everything but the body, so they share one
+ * provisioner. `name` + `body` are the only differences — duplicating the
+ * function would let the two drift in the DOCUMENT header or the button, which
+ * is the half that makes the guide arrive at all.
+ *
+ * Both carry the pricing guide as a DOCUMENT header so the supplier receives the
+ * guide as a file he can keep, and a UTILITY category so the message is
+ * deliverable outside the 24-hour window (a plain document send is accepted by
+ * the API but never delivered).
+ */
+async function provisionGreetingTemplate(name: string, body: string): Promise<void> {
+  if (!TOKEN || !BUSINESS_ACCOUNT_ID) {
+    logger.warn(
+      "WhatsApp supplier_greeting template provisioning skipped: missing token or business account id",
+    );
+    return;
+  }
+  const base = `https://graph.facebook.com/v22.0/${BUSINESS_ACCOUNT_ID}/message_templates`;
+  const existing = await fetch(`${base}?name=${encodeURIComponent(name)}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  if (!existing.ok)
+    throw new Error(`Template lookup failed: ${existing.status} ${await existing.text()}`);
+  const found = (await existing.json()) as { data?: Array<{ name?: string; status?: string }> };
+  if (found.data?.some((t) => t.name === name)) {
+    logger.info({ template: name }, "WhatsApp supplier_greeting template already exists");
+    return;
+  }
+  // A DOCUMENT header needs a REAL sample to upload; without the app id (or the
+  // bundled guide) Meta cannot accept the template, so say exactly what to do
+  // rather than failing the boot.
+  const guide = loadSupplierGuide();
+  if (!APP_ID || !guide) {
+    logger.warn(
+      { template: name, hasAppId: Boolean(APP_ID), hasGuide: Boolean(guide) },
+      "WhatsApp supplier_greeting template NOT created: a DOCUMENT header needs both WHATSAPP_APP_ID and the bundled supplier-pricing-guide.pdf. Create it once in Business Manager with a DOCUMENT header (the guide) and the body from shared/supplier-greeting.ts.",
+    );
+    return;
+  }
+  const handle = await uploadTemplateHeaderSample(guide, "supplier-pricing-guide.pdf");
+  const response = await fetch(base, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name,
+      language: TEMPLATE_LANG,
+      category: "UTILITY",
+      components: [
+        { type: "HEADER", format: "DOCUMENT", example: { header_handle: [handle] } },
+        {
+          type: "BODY",
+          text: body,
+          example: { body_text: [["شركة النور للتوريدات", "مورد مسجَّل"]] },
+        },
+      ],
+    }),
+  });
+  if (!response.ok)
+    throw new Error(`Template creation failed: ${response.status} ${await response.text()}`);
+  logger.info({ template: name }, "WhatsApp supplier_greeting template submitted to Meta");
+}
+
+/** الترحيب بمورد مسجَّل — carries the pricing guide as its document header. */
+export async function ensureSupplierGreetingTemplate(): Promise<void> {
+  await provisionGreetingTemplate(TEMPLATE_SUPPLIER_GREETING, SUPPLIER_GREETING_BODY_REGISTERED);
+}
+
+/** الترحيب بمورد مبدئي — same shape, different wording. */
+export async function ensureSupplierGreetingPreliminaryTemplate(): Promise<void> {
+  await provisionGreetingTemplate(
+    TEMPLATE_SUPPLIER_GREETING_PRELIMINARY,
+    SUPPLIER_GREETING_BODY_PRELIMINARY,
+  );
+}
+
+/**
+ * Upload a sample document to Meta and return its header handle, which the
  * template-create call needs for a DOCUMENT header. Two steps, as Meta's own
  * SDK does: open a resumable upload session against the app, then push the
  * bytes to the returned session id.
+ *
+ * `fileName` is a parameter because the greeting template carries the pricing
+ * guide while the payslip template carries a sample payslip — a hardcoded name
+ * would make Meta report the guide under a payslip's name.
  */
-async function uploadTemplateHeaderSample(pdf: Buffer): Promise<string> {
+async function uploadTemplateHeaderSample(
+  pdf: Buffer,
+  fileName = "payslip-sample.pdf",
+): Promise<string> {
   const start = await fetch(
     `https://graph.facebook.com/v22.0/${APP_ID}/uploads` +
-      `?file_name=${encodeURIComponent("payslip-sample.pdf")}` +
+      `?file_name=${encodeURIComponent(fileName)}` +
       `&file_length=${pdf.length}&file_type=application/pdf`,
     { method: "POST", headers: { Authorization: `OAuth ${TOKEN}` } },
   );
@@ -1079,6 +1179,66 @@ export interface SendSupplierRegistrationOpts {
   requiredFields: string[];
   /** Human-readable expiry, e.g. "2026-11-01". */
   expiresAt: string;
+}
+
+/**
+ * الترحيب بالمورد — sends the welcome with the pricing guide as its document
+ * header. Throws on failure, for the same reason the registration send does: a
+ * direct message outside the 24-hour window is accepted and never delivered.
+ *
+ * The guide bytes are re-uploaded per send so the header always matches the
+ * published guide. Meta allows a media id or a link; the bytes are used because
+ * the send must not depend on our own portal being reachable from Meta's side.
+ */
+export interface SendSupplierGreetingOpts {
+  phone: string;
+  /** Contact person when we know it, otherwise the company name. */
+  name: string;
+  tier: GreetingTier;
+  /** Whether the guide is really attached — decides the body's wording. */
+  guideAttached: boolean;
+}
+
+export async function sendSupplierGreetingWhatsApp(
+  opts: SendSupplierGreetingOpts,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(opts.phone);
+  const templateName =
+    opts.tier === "registered"
+      ? TEMPLATE_SUPPLIER_GREETING
+      : TEMPLATE_SUPPLIER_GREETING_PRELIMINARY;
+  const components: (HeaderComponent | BodyComponent)[] = [
+    new BodyComponent(
+      new BodyParameter(sanitizeWaParam(opts.name)), // {{1}} supplier / contact name
+      new BodyParameter(GREETING_TIER_LABEL[opts.tier]), // {{2}} «مورد مسجَّل» / «مورد مبدئي»
+    ),
+  ];
+
+  // The header is optional in the send call but MANDATORY when the approved
+  // template declares one — omitting it fails with a parameter-count mismatch,
+  // so it is attached whenever we actually have the file.
+  const guide = loadSupplierGuide();
+  if (guide) {
+    const filename = "supplier-pricing-guide.pdf";
+    const mediaId = await uploadWhatsAppMedia(guide, filename, "application/pdf");
+    components.unshift(
+      new HeaderComponent(new HeaderParameter(new WADocument(mediaId, true, undefined, filename))),
+    );
+  } else {
+    logger.warn(
+      { to },
+      "Supplier greeting: guide file is missing — the greeting is sent without its document header, so the body must not promise one",
+    );
+  }
+
+  const template = new Template(templateName, new Language(TEMPLATE_LANG), ...components);
+  const waId = await sendTemplate(to, template);
+  logger.info(
+    { to, tier: opts.tier, template: templateName, guideAttached: Boolean(guide), waId },
+    "Supplier greeting sent via WhatsApp",
+  );
+  return waId || null;
 }
 
 /**
