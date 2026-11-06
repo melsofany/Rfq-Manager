@@ -307,6 +307,16 @@ async function resolveAssignee(id: unknown, res: import("express").Response) {
     res.status(400).json({ error: "لا يمكن إسناد مهمة لموظف غير نشط" });
     return null;
   }
+  // Mobile access is a separate switch from employment status: an operator can
+  // keep the HR record active while cutting the app off (lost phone, leave).
+  // Login already refuses such an account, so assigning to it would create a
+  // task the representative can never open.
+  if (!emp.mobileAccessEnabled) {
+    res.status(400).json({
+      error: "تطبيق الميداني موقوف لهذا الموظف — فعِّل وصول التطبيق أولاً",
+    });
+    return null;
+  }
   const [assignment] = await db
     .select({ id: hrFieldAssignmentsTable.id })
     .from(hrFieldAssignmentsTable)

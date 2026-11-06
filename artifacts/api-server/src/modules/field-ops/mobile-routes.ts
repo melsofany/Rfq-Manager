@@ -29,7 +29,7 @@ import {
   hrEmployeesTable,
   WORK_ORDER_KIND,
 } from "@workspace/db";
-import { requireMobileAuth, actorOf } from "./mobile-auth";
+import { requireMobileAuth, requireMobileOperationsEnabled, actorOf } from "./mobile-auth";
 import {
   authorizeTaskExecution,
   checkReceiptQuantities,
@@ -55,6 +55,7 @@ import { logger } from "../../shared/logger";
 
 const router = Router();
 router.use(requireMobileAuth);
+router.use(requireMobileOperationsEnabled);
 
 function toNum(v: unknown): number | null {
   if (v == null || v === "") return null;

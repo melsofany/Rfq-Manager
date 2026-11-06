@@ -313,6 +313,37 @@ def main() -> int:
     audits = sql("SELECT count(*) FROM audit_log WHERE action LIKE 'mobile.%';")
     check("mobile audit rows were written", int(audits) > 0, f"rows={audits}")
 
+    print("\n[13] maintenance mode freezes operations but not the account")
+    sql(
+        """
+        INSERT INTO hr_settings (key, value) VALUES ('field_ops_app',
+          '{"maintenanceMode": true}'::jsonb)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+        """
+    )
+    status, body = api("GET", "/api/mobile/pickups", token)
+    check("operations are refused with 503 during maintenance", status == 503, f"status={status}")
+    check("the refusal carries a machine-readable code",
+          isinstance(body, dict) and body.get("code") == "MAINTENANCE_MODE",
+          f"body={body}")
+    # The account surface must stay reachable so a locked rep can read the flag
+    # and sign out — otherwise the app would look broken with no way to recover.
+    status, me = api("GET", "/api/mobile/me", token)
+    check("the account surface still answers during maintenance", status == 200, f"status={status}")
+    check("the app is told maintenance is on",
+          isinstance(me, dict) and me.get("app", {}).get("maintenanceMode") is True,
+          f"me={me if not isinstance(me, dict) else me.get('app')}")
+
+    sql(
+        """
+        INSERT INTO hr_settings (key, value) VALUES ('field_ops_app',
+          '{"maintenanceMode": false}'::jsonb)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+        """
+    )
+    status, _ = api("GET", "/api/mobile/pickups", token)
+    check("operations resume once maintenance is switched off", status == 200, f"status={status}")
+
     return report()
 
 
