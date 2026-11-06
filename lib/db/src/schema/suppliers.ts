@@ -39,6 +39,15 @@ export const suppliersTable = pgTable("suppliers", {
   // not a permission. The link itself dies on completion; this stamp is what
   // the supplier page shows as «مؤكَّد من المورد».
   registrationVerifiedAt: timestamp("registration_verified_at", { withTimezone: true }),
+  // The phone/email we last ADDRESSED this supplier on, and when. The operator's
+  // rule is that a supplier is welcomed when we first contact him or when his
+  // phone/email changes; these two columns are what make "first" and "changed"
+  // decidable. `greetedPhone`/`greetedEmail` are set on every send, so the
+  // comparison is against the contact we actually used, not against whatever the
+  // supplier row happens to hold now.
+  greetedPhone: text("greeted_phone"),
+  greetedEmail: text("greeted_email"),
+  greetedAt: timestamp("greeted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

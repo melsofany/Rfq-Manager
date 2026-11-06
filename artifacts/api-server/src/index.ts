@@ -14,6 +14,8 @@ import {
   ensurePayslipTemplate,
   ensureSupplierRegistrationTemplate,
   ensureSupplierRegistrationMismatchTemplate,
+  ensureSupplierGreetingTemplate,
+  ensureSupplierGreetingPreliminaryTemplate,
   ensureQuotationTemplate,
 } from "./modules/communications/service";
 import { scheduleDailyBackup } from "./modules/backup/service";
@@ -109,6 +111,8 @@ initDb()
       ["payslip", ensurePayslipTemplate],
       ["supplier_registration", ensureSupplierRegistrationTemplate],
       ["supplier_registration_mismatch", ensureSupplierRegistrationMismatchTemplate],
+      ["supplier_greeting", ensureSupplierGreetingTemplate],
+      ["supplier_greeting_preliminary", ensureSupplierGreetingPreliminaryTemplate],
       ["quotation", ensureQuotationTemplate],
     ] as const) {
       try {
