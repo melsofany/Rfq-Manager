@@ -24,17 +24,37 @@ import javax.inject.Singleton
 class SessionStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private val prefs: SharedPreferences by lazy {
+    private val prefs: SharedPreferences? by lazy { openSecurePrefs() }
+
+    private fun createEncrypted(): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
-        EncryptedSharedPreferences.create(
+        return EncryptedSharedPreferences.create(
             context,
             PREFS_NAME,
             masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
         )
+    }
+
+    /**
+     * Open the encrypted store, recovering from an unreadable one.
+     *
+     * The master key lives in the Android Keystore and can be invalidated (the
+     * app restored onto a new device, an OS upgrade, or a corrupted key), which
+     * makes `create` throw. Letting that escape would crash the app on launch —
+     * unusable for a representative standing at a supplier. Instead the corrupt
+     * file is discarded and rebuilt once; if the keystore is still unusable the
+     * session degrades to in-memory only. A token is never written in cleartext
+     * as a fallback, so a failed keystore costs a re-login, not a leaked session.
+     */
+    private fun openSecurePrefs(): SharedPreferences? = try {
+        createEncrypted()
+    } catch (t: Throwable) {
+        runCatching { context.deleteSharedPreferences(PREFS_NAME) }
+        runCatching { createEncrypted() }.getOrNull()
     }
 
     private val _token = MutableStateFlow<String?>(null)
@@ -50,27 +70,27 @@ class SessionStore @Inject constructor(
     init {
         // Restore the last session synchronously: a cold start must not flash the
         // login screen for a representative who is already signed in.
-        val stored = prefs.getString(KEY_TOKEN, null)
+        val stored = prefs?.getString(KEY_TOKEN, null)
         _token.value = stored
         _signedIn.value = stored != null
-        _displayName.value = prefs.getString(KEY_NAME, null)
+        _displayName.value = prefs?.getString(KEY_NAME, null)
     }
 
     fun currentToken(): String? = _token.value
 
     fun saveSession(token: String, fullName: String?, employeeNo: String?) {
-        prefs.edit()
-            .putString(KEY_TOKEN, token)
-            .putString(KEY_NAME, fullName)
-            .putString(KEY_EMPLOYEE_NO, employeeNo)
-            .apply()
+        prefs?.edit()
+            ?.putString(KEY_TOKEN, token)
+            ?.putString(KEY_NAME, fullName)
+            ?.putString(KEY_EMPLOYEE_NO, employeeNo)
+            ?.apply()
         _token.value = token
         _displayName.value = fullName
         _signedIn.value = true
     }
 
     fun clear() {
-        prefs.edit().clear().apply()
+        prefs?.edit()?.clear()?.apply()
         _token.value = null
         _displayName.value = null
         _signedIn.value = false

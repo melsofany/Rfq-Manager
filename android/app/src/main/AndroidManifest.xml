@@ -36,11 +36,20 @@
             </intent-filter>
         </activity>
 
-        <!-- Sync worker: retries queued offline operations when connectivity returns. -->
+        <!-- Sync worker: retries queued offline operations when connectivity returns.
+             The Application supplies a Hilt worker factory through
+             Configuration.Provider, so WorkManager must NOT be initialised by the
+             library's default startup initializer: that would call
+             WorkManager.initialize() first and the app's own configuration would be
+             ignored, leaving SyncWorker without its dependencies. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
             android:exported="false"
-            tools:node="merge" />
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                tools:node="remove" />
+        </provider>
     </application>
 </manifest>
