@@ -210,6 +210,9 @@ export default function NewPurchaseOrderPage() {
   const [lookupQuery, setLookupQuery] = useState("");
   const [receiverName, setReceiverName] = useState("");
   const [receiverPhone, setReceiverPhone] = useState("");
+  // HR employee id of the chosen representative. Null means "typed by hand" —
+  // the server then creates no mobile task, which the field above warns about.
+  const [representativeHrEmployeeId, setRepresentativeHrEmployeeId] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
 
   const [isLookingUp, setIsLookingUp] = useState(false);
@@ -407,6 +410,7 @@ export default function NewPurchaseOrderPage() {
         sheetPoNo,
         receiverName: receiverName || undefined,
         receiverPhone: receiverPhone || undefined,
+        representativeHrEmployeeId: representativeHrEmployeeId ?? undefined,
         notes: notes || undefined,
         items: chosen.map((i) => ({
           itemId: i.itemId || undefined,
@@ -642,18 +646,30 @@ export default function NewPurchaseOrderPage() {
               <div className="bg-card border border-border rounded-lg p-4 grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>
-                    Receiver representative name{" "}
-                    <span className="text-xs text-muted-foreground">(select or type manually)</span>
+                    المندوب المسؤول{" "}
+                    <span className="text-xs text-muted-foreground">
+                      (من الموارد البشرية — يُنشأ أمر الاستلام تلقائياً)
+                    </span>
                   </Label>
                   <RepresentativeNameInput
                     value={receiverName}
                     onChange={setReceiverName}
-                    onSelect={(representative) => setReceiverPhone(representative.phone)}
+                    onSelect={(representative) => {
+                      setRepresentativeHrEmployeeId(representative.id);
+                      if (representative.phone) setReceiverPhone(representative.phone);
+                    }}
+                    onClear={() => setRepresentativeHrEmployeeId(null)}
                     representatives={representatives}
                   />
+                  {representativeHrEmployeeId == null && receiverName.trim() !== "" && (
+                    <p className="text-xs text-amber-600">
+                      اكتب اسماً أو اختر مندوباً من القائمة. بدون اختيار موظف من الموارد البشرية لن
+                      يُنشأ أمر استلام في تطبيق الميدان.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Receiver representative phone</Label>
+                  <Label>هاتف المندوب</Label>
                   <Input
                     value={receiverPhone}
                     onChange={(e) => setReceiverPhone(e.target.value)}

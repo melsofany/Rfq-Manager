@@ -1680,6 +1680,7 @@ export const ListPurchaseOrdersResponseItem = zod.object({
   "sheetPoNo": zod.string(),
   "receiverName": zod.string().nullish(),
   "receiverPhone": zod.string().nullish(),
+  "representativeHrEmployeeId": zod.number().nullish().describe('الموظف الممثل للمندوب الميداني من الموارد البشرية'),
   "status": zod.string(),
   "employeeId": zod.number().optional(),
   "employeeName": zod.string().nullish(),
@@ -1705,6 +1706,7 @@ export const CreatePurchaseOrderBody = zod.object({
   "sheetPoNo": zod.string(),
   "receiverName": zod.string().optional(),
   "receiverPhone": zod.string().optional(),
+  "representativeHrEmployeeId": zod.number().nullish().describe('Field representative, chosen from the existing HR employees module. Only an active HR employee is accepted; the server ignores anyone else. Setting this creates the supplier pickup task automatically.\n'),
   "notes": zod.string().optional(),
   "items": zod.array(zod.object({
   "itemId": zod.string().optional(),
@@ -1727,6 +1729,7 @@ export const CreatePurchaseOrderResponse = zod.object({
   "sheetPoNo": zod.string(),
   "receiverName": zod.string().nullish(),
   "receiverPhone": zod.string().nullish(),
+  "representativeHrEmployeeId": zod.number().nullish().describe('الموظف الممثل للمندوب الميداني من الموارد البشرية'),
   "status": zod.string(),
   "employeeId": zod.number().optional(),
   "employeeName": zod.string().nullish(),
@@ -1754,6 +1757,7 @@ export const GetPurchaseOrderResponse = zod.object({
   "sheetPoNo": zod.string(),
   "receiverName": zod.string().nullish(),
   "receiverPhone": zod.string().nullish(),
+  "representativeHrEmployeeId": zod.number().nullish().describe('الموظف الممثل للمندوب الميداني من الموارد البشرية'),
   "status": zod.string(),
   "employeeId": zod.number().optional(),
   "employeeName": zod.string().nullish(),
@@ -1785,6 +1789,7 @@ export const UpdatePurchaseOrderBody = zod.object({
   "sheetPoNo": zod.string(),
   "receiverName": zod.string().nullish(),
   "receiverPhone": zod.string().nullish(),
+  "representativeHrEmployeeId": zod.number().nullish().describe('Field representative from HR. Changing it re-points the mobile pickup task and notifies the new representative.\n'),
   "notes": zod.string().nullish(),
   "employeeId": zod.number().nullish().describe('Responsible employee (المندوب \/ المسؤول)'),
   "items": zod.array(zod.object({
@@ -1808,6 +1813,7 @@ export const UpdatePurchaseOrderResponse = zod.object({
   "sheetPoNo": zod.string(),
   "receiverName": zod.string().nullish(),
   "receiverPhone": zod.string().nullish(),
+  "representativeHrEmployeeId": zod.number().nullish().describe('الموظف الممثل للمندوب الميداني من الموارد البشرية'),
   "status": zod.string(),
   "employeeId": zod.number().optional(),
   "employeeName": zod.string().nullish(),
@@ -1861,6 +1867,26 @@ export const ListPurchaseOrderItemsResponseItem = zod.object({
   "taxIncluded": zod.boolean().optional()
 })
 export const ListPurchaseOrderItemsResponse = zod.array(ListPurchaseOrderItemsResponseItem)
+
+
+/**
+ * Reassigns the field representative. Only still-pending supplier pickup tasks are re-pointed, so a completed pickup keeps the employee who performed it. The new representative must be an active HR employee.
+ * @summary Change the field representative of a purchase order
+ */
+export const ChangePurchaseOrderRepresentativeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ChangePurchaseOrderRepresentativeBody = zod.object({
+  "representativeHrEmployeeId": zod.number().nullable().describe('HR employee id, or null to remove the assignment.')
+})
+
+export const ChangePurchaseOrderRepresentativeResponse = zod.object({
+  "ok": zod.boolean(),
+  "id": zod.number(),
+  "representativeHrEmployeeId": zod.number().nullish(),
+  "createdTasks": zod.number().optional()
+})
 
 
 /**

@@ -48,6 +48,8 @@ interface PoDetail {
   sheetPoNo: string;
   receiverName: string | null;
   receiverPhone: string | null;
+  /** HR employee id of the assigned field representative, if any. */
+  representativeHrEmployeeId: number | null;
   status: string;
   employeeId: number | null;
   employeeName: string | null;
@@ -200,7 +202,18 @@ export default function PurchaseOrderDetailPage() {
   const [editSheetPoNo, setEditSheetPoNo] = useState("");
   const [editReceiverName, setEditReceiverName] = useState("");
   const [editReceiverPhone, setEditReceiverPhone] = useState("");
+  // HR employee id of the field representative. Null means no representative is
+  // linked, so no mobile pickup task is created or kept for this order.
+  const [editRepresentativeHrEmployeeId, setEditRepresentativeHrEmployeeId] = useState<
+    number | null
+  >(null);
   const [editNotes, setEditNotes] = useState("");
+  // Reassignment state, used only for dispatched orders (see the reassign card).
+  const [reassignName, setReassignName] = useState("");
+  const [reassignHrEmployeeId, setReassignHrEmployeeId] = useState<number | null>(null);
+  const [reassignSaving, setReassignSaving] = useState(false);
+  const [reassignError, setReassignError] = useState<string | null>(null);
+  const [reassignDone, setReassignDone] = useState(false);
   const [editEmployeeId, setEditEmployeeId] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -215,6 +228,7 @@ export default function PurchaseOrderDetailPage() {
     setEditSheetPoNo(po.sheetPoNo ?? "");
     setEditReceiverName(po.receiverName ?? "");
     setEditReceiverPhone(po.receiverPhone ?? "");
+    setEditRepresentativeHrEmployeeId(po.representativeHrEmployeeId ?? null);
     setEditNotes(po.notes ?? "");
     setEditEmployeeId(po.employeeId != null ? String(po.employeeId) : "");
     setEditItems(
@@ -323,6 +337,7 @@ export default function PurchaseOrderDetailPage() {
           sheetPoNo: editSheetPoNo.trim(),
           receiverName: editReceiverName || null,
           receiverPhone: editReceiverPhone || null,
+          representativeHrEmployeeId: editRepresentativeHrEmployeeId,
           notes: editNotes || null,
           employeeId: editEmployeeId ? parseInt(editEmployeeId, 10) : null,
           items: validItems.map((i) => ({
@@ -353,6 +368,60 @@ export default function PurchaseOrderDetailPage() {
       setSaveError("خطأ في الشبكة — تعذّر الوصول للخادم");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Change the field representative on a dispatched order. The server re-points
+  // only the still-pending pickup tasks, so a completed pickup keeps the
+  // employee who performed it.
+  const handleReassign = async () => {
+    if (reassignHrEmployeeId == null) return;
+    setReassignSaving(true);
+    setReassignError(null);
+    setReassignDone(false);
+    try {
+      const res = await fetch(`/api/po/${id}/representative`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ representativeHrEmployeeId: reassignHrEmployeeId }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "تعذّر تحديث المندوب");
+      }
+      setReassignDone(true);
+      await queryClient.invalidateQueries({ queryKey: ["po", id] });
+    } catch (err) {
+      setReassignError(err instanceof Error ? err.message : "تعذّر تحديث المندوب");
+    } finally {
+      setReassignSaving(false);
+    }
+  };
+
+  const handleUnassign = async () => {
+    setReassignSaving(true);
+    setReassignError(null);
+    setReassignDone(false);
+    try {
+      const res = await fetch(`/api/po/${id}/representative`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ representativeHrEmployeeId: null }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "تعذّر إزالة الإسناد");
+      }
+      setReassignName("");
+      setReassignHrEmployeeId(null);
+      setReassignDone(true);
+      await queryClient.invalidateQueries({ queryKey: ["po", id] });
+    } catch (err) {
+      setReassignError(err instanceof Error ? err.message : "تعذّر إزالة الإسناد");
+    } finally {
+      setReassignSaving(false);
     }
   };
 
@@ -678,9 +747,74 @@ export default function PurchaseOrderDetailPage() {
               </p>
             </div>
             <div>
+              <p className="text-xs text-muted-foreground mb-0.5">المندوب الميداني</p>
+              <p className="font-medium">
+                {representatives.find((r) => r.id === po.representativeHrEmployeeId)?.fullName ??
+                  (po.representativeHrEmployeeId != null
+                    ? `موظف #${po.representativeHrEmployeeId}`
+                    : "— غير محدد —")}
+              </p>
+              {po.representativeHrEmployeeId == null && (
+                <p className="text-xs text-amber-600 mt-0.5">
+                  لا يوجد مندوب — لن يظهر أمر استلام في تطبيق الميدان
+                </p>
+              )}
+            </div>
+            <div>
               <p className="text-xs text-muted-foreground mb-0.5">ملاحظات</p>
               <p className="font-medium">{po.notes ?? "—"}</p>
             </div>
+          </div>
+        )}
+
+        {/* Reassigning the representative is allowed after dispatch — a rep going
+            on leave or resigning is exactly when this is needed, and the draft-only
+            edit form above cannot reach it. */}
+        {!editMode && po.status !== "draft" && po.status !== "cancelled" && (
+          <div className="bg-card border border-border rounded-lg p-4 space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">تغيير المندوب الميداني</Label>
+              {reassignDone && (
+                <span className="text-xs text-emerald-600">
+                  <CheckCircle2 size={13} className="inline ml-1 -mt-0.5" />
+                  تم تحديث الإسناد وإشعار المندوب
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2 items-start">
+              <div className="flex-1">
+                <RepresentativeNameInput
+                  value={reassignName}
+                  onChange={setReassignName}
+                  onSelect={(rep) => setReassignName(rep.fullName)}
+                  onClear={() => setReassignHrEmployeeId(null)}
+                  representatives={representatives}
+                />
+              </div>
+              <Button
+                size="sm"
+                disabled={reassignHrEmployeeId == null || reassignSaving}
+                onClick={handleReassign}
+              >
+                {reassignSaving ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Save size={14} />
+                )}
+                <span className="mr-1">حفظ</span>
+              </Button>
+            </div>
+            {reassignError && <p className="text-xs text-destructive">{reassignError}</p>}
+            {po.representativeHrEmployeeId != null && (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline"
+                disabled={reassignSaving}
+                onClick={handleUnassign}
+              >
+                إزالة الإسناد (لن يستلم المندوب مهام هذا الأمر)
+              </button>
+            )}
           </div>
         )}
 
@@ -719,16 +853,23 @@ export default function PurchaseOrderDetailPage() {
                 </select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">اسم المستلم</Label>
+                <Label className="text-xs">المندوب الميداني (من الموارد البشرية)</Label>
                 <RepresentativeNameInput
                   value={editReceiverName}
                   onChange={setEditReceiverName}
                   onSelect={(rep) => {
-                    setEditReceiverName(rep.name);
+                    setEditReceiverName(rep.fullName);
+                    setEditRepresentativeHrEmployeeId(rep.id);
                     if (rep.phone) setEditReceiverPhone(rep.phone);
                   }}
+                  onClear={() => setEditRepresentativeHrEmployeeId(null)}
                   representatives={representatives}
                 />
+                {editRepresentativeHrEmployeeId == null && editReceiverName.trim() !== "" && (
+                  <p className="text-xs text-amber-600">
+                    بدون اختيار موظف من الموارد البشرية لن يُنشأ أمر استلام في تطبيق الميدان.
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">هاتف المستلم</Label>

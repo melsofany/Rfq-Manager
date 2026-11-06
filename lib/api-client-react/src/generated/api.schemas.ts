@@ -1032,6 +1032,11 @@ export interface PurchaseOrder {
   receiverName?: string | null;
   /** @nullable */
   receiverPhone?: string | null;
+  /**
+     * الموظف الممثل للمندوب الميداني من الموارد البشرية
+     * @nullable
+     */
+  representativeHrEmployeeId?: number | null;
   status: string;
   employeeId?: number;
   /** @nullable */
@@ -1074,6 +1079,11 @@ export interface PurchaseOrderInput {
   sheetPoNo: string;
   receiverName?: string;
   receiverPhone?: string;
+  /**
+     * Field representative, chosen from the existing HR employees module. Only an active HR employee is accepted; the server ignores anyone else. Setting this creates the supplier pickup task automatically.
+     * @nullable
+     */
+  representativeHrEmployeeId?: number | null;
   notes?: string;
   /** @minItems 1 */
   items: PurchaseOrderItemInput[];
@@ -1085,6 +1095,11 @@ export interface PurchaseOrderUpdateInput {
   receiverName?: string | null;
   /** @nullable */
   receiverPhone?: string | null;
+  /**
+     * Field representative from HR. Changing it re-points the mobile pickup task and notifies the new representative.
+     * @nullable
+     */
+  representativeHrEmployeeId?: number | null;
   /** @nullable */
   notes?: string | null;
   /**
@@ -1732,6 +1747,22 @@ search?: string;
 export type DeletePurchaseOrder200 = {
   ok?: boolean;
   id?: number;
+};
+
+export type ChangePurchaseOrderRepresentativeBody = {
+  /**
+     * HR employee id, or null to remove the assignment.
+     * @nullable
+     */
+  representativeHrEmployeeId: number | null;
+};
+
+export type ChangePurchaseOrderRepresentative200 = {
+  ok: boolean;
+  id: number;
+  /** @nullable */
+  representativeHrEmployeeId?: number | null;
+  createdTasks?: number;
 };
 
 export type ListSheetPoNumbersParams = {

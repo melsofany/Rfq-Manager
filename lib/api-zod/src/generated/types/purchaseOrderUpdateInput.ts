@@ -13,6 +13,11 @@ export interface PurchaseOrderUpdateInput {
   receiverName?: string | null;
   /** @nullable */
   receiverPhone?: string | null;
+  /**
+     * Field representative from HR. Changing it re-points the mobile pickup task and notifies the new representative.
+     * @nullable
+     */
+  representativeHrEmployeeId?: number | null;
   /** @nullable */
   notes?: string | null;
   /**

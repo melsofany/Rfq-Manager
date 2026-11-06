@@ -27,6 +27,8 @@ import type {
   BulkImportSuppliersInput,
   BulkImportSuppliersResult,
   CategoryInput,
+  ChangePurchaseOrderRepresentative200,
+  ChangePurchaseOrderRepresentativeBody,
   Customer,
   CustomerInput,
   CustomerPo,
@@ -4773,6 +4775,79 @@ export function useListPurchaseOrderItems<TData = Awaited<ReturnType<typeof list
 
 
 
+
+export const getChangePurchaseOrderRepresentativeUrl = (id: number,) => {
+
+
+
+
+  return `/api/po/${id}/representative`
+}
+
+/**
+ * Reassigns the field representative. Only still-pending supplier pickup tasks are re-pointed, so a completed pickup keeps the employee who performed it. The new representative must be an active HR employee.
+ * @summary Change the field representative of a purchase order
+ */
+export const changePurchaseOrderRepresentative = async (id: number,
+    changePurchaseOrderRepresentativeBody: ChangePurchaseOrderRepresentativeBody, options?: RequestInit): Promise<ChangePurchaseOrderRepresentative200> => {
+
+  return customFetch<ChangePurchaseOrderRepresentative200>(getChangePurchaseOrderRepresentativeUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(changePurchaseOrderRepresentativeBody)
+  }
+);}
+
+
+
+
+
+export const getChangePurchaseOrderRepresentativeMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changePurchaseOrderRepresentative>>, TError,{id: number;data: BodyType<ChangePurchaseOrderRepresentativeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof changePurchaseOrderRepresentative>>, TError,{id: number;data: BodyType<ChangePurchaseOrderRepresentativeBody>}, TContext> => {
+
+const mutationKey = ['changePurchaseOrderRepresentative'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof changePurchaseOrderRepresentative>>, {id: number;data: BodyType<ChangePurchaseOrderRepresentativeBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  changePurchaseOrderRepresentative(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ChangePurchaseOrderRepresentativeMutationResult = NonNullable<Awaited<ReturnType<typeof changePurchaseOrderRepresentative>>>
+    export type ChangePurchaseOrderRepresentativeMutationBody = BodyType<ChangePurchaseOrderRepresentativeBody>
+    export type ChangePurchaseOrderRepresentativeMutationError = ErrorType<void>
+
+    /**
+ * @summary Change the field representative of a purchase order
+ */
+export const useChangePurchaseOrderRepresentative = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof changePurchaseOrderRepresentative>>, TError,{id: number;data: BodyType<ChangePurchaseOrderRepresentativeBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof changePurchaseOrderRepresentative>>,
+        TError,
+        {id: number;data: BodyType<ChangePurchaseOrderRepresentativeBody>},
+        TContext
+      > => {
+      return useMutation(getChangePurchaseOrderRepresentativeMutationOptions(options));
+    }
 
 export const getLookupPoFromSheetUrl = (poNo: string,) => {
 

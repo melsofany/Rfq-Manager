@@ -15,6 +15,11 @@ export interface PurchaseOrder {
   receiverName?: string | null;
   /** @nullable */
   receiverPhone?: string | null;
+  /**
+     * الموظف الممثل للمندوب الميداني من الموارد البشرية
+     * @nullable
+     */
+  representativeHrEmployeeId?: number | null;
   status: string;
   employeeId?: number;
   /** @nullable */
