@@ -60,4 +60,28 @@ class BrandVectorTest {
         val right = (translateX ?: 0f) + drawnWidth
         assertTrue("mark overflows the 108dp canvas (right=$right)", right <= 108f)
     }
+
+    @Test
+    fun `no resource string exceeds the aapt2 limit`() {
+        // aapt2 silently rewrites any string longer than 32767 UTF-8 bytes as the
+        // literal "STRING_TOO_LARGE" and the build still succeeds. The traced logo
+        // hit this: its second path was 44963 chars, so the compiled drawable held
+        // an invalid path and the app crashed the moment the logo was drawn.
+        // Nothing in the toolchain reports it, so it is asserted here.
+        val limit = 32767
+        val resDir = File("src/main/res")
+        val offenders = mutableListOf<String>()
+        resDir.walkTopDown().filter { it.extension == "xml" }.forEach { file ->
+            Regex("=\"([^\"]+)\"").findAll(file.readText()).forEach { m ->
+                if (m.groupValues[1].length > limit) {
+                    offenders += "${file.path} (${m.groupValues[1].length} chars)"
+                }
+            }
+        }
+        assertTrue(
+            "resource strings exceed aapt2's ${limit}-char cap and will be " +
+                "rewritten as STRING_TOO_LARGE: $offenders",
+            offenders.isEmpty(),
+        )
+    }
 }
