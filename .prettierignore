@@ -8,3 +8,7 @@ pnpm-lock.yaml
 *.svg
 zipFile.zip
 AGENTS.md
+
+# Room writes this schema export in its own canonical format on every build;
+# reformatting it would be undone by the next compile.
+android/app/schemas/
