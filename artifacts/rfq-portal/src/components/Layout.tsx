@@ -23,6 +23,7 @@ import {
   IdCard,
   DatabaseBackup,
   Mail,
+  Smartphone,
 } from "lucide-react";
 import { useState, useEffect, Fragment } from "react";
 import { cn } from "@/lib/utils";
@@ -72,6 +73,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/accounts", label: t("nav.accounts"), icon: Calculator },
     { href: "/finance", label: t("nav.finance"), icon: Banknote },
     { href: "/hr", label: t("nav.hr"), icon: IdCard },
+    { href: "/field-ops", label: t("nav.fieldOps"), icon: Smartphone },
     { href: "/items", label: t("nav.items"), icon: Package },
     {
       href: "/whatsapp",

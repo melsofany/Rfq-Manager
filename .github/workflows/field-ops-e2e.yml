@@ -1,0 +1,100 @@
+name: Field Ops E2E (Docker)
+
+# Verifies the two things a unit test cannot: that the production image builds
+# and boots, and that the receiving → delivery guarantees hold when the real
+# server talks to a real Postgres. The e2e script seeds the brief's own example
+# (one contactor across three supplier POs allocated to three customer POs) and
+# drives the HTTP API, so a regression in consolidation, quantity gating or
+# idempotency fails here rather than in the field.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "scripts/verify-field-ops-e2e.py"
+      - "artifacts/api-server/**"
+      - "lib/**"
+      - ".github/workflows/field-ops-e2e.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "scripts/verify-field-ops-e2e.py"
+      - "artifacts/api-server/**"
+      - "lib/**"
+      - ".github/workflows/field-ops-e2e.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: field-ops-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Build image & run end-to-end
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cortoba
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: rfq
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cortoba"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the production image
+        run: docker build -t cortoba-rfq:ci .
+
+      - name: Start the server container
+        run: |
+          docker run -d --name cortoba-app --network host \
+            -e NODE_ENV=production \
+            -e PORT=8080 \
+            -e DATABASE_URL="postgres://cortoba:testpass@127.0.0.1:5432/rfq" \
+            -e SESSION_SECRET="ci-session-secret-not-used-in-production" \
+            cortoba-rfq:ci
+
+      - name: Wait for the health endpoint
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/api/healthz >/dev/null 2>&1; then
+              echo "server is healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server did not become healthy in time — container logs:"
+          docker logs cortoba-app
+          exit 1
+
+      - name: Verify the container reports healthy
+        run: |
+          for i in $(seq 1 20); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' cortoba-app)
+            echo "health: $status"
+            [ "$status" = "healthy" ] && exit 0
+            sleep 5
+          done
+          docker logs cortoba-app
+          exit 1
+
+      - name: Run the end-to-end field-operations checks
+        env:
+          # No DB container to exec into here — reach the service over TCP.
+          PSQL_CMD: "psql postgresql://cortoba:testpass@127.0.0.1:5432/rfq"
+        run: python3 scripts/verify-field-ops-e2e.py http://127.0.0.1:8080 cortoba-app
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs cortoba-app

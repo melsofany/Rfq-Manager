@@ -32,15 +32,18 @@ import {
 import { checkFieldAssignmentEligibility } from "../field-ops/assignment-logic";
 import { notify } from "../field-ops/service";
 import { requireAuth } from "../../middlewares/auth";
-import { requireHr } from "../hr/routes";
+import { requirePermission } from "../../shared/permissions";
 
 const router = Router();
 
 // HR administration is behind the same guard as the rest of the HR module, so
 // the staff who manage employees are exactly the staff who manage field reps.
-router.use("/hr/field-assignments", requireAuth, requireHr);
-router.use("/hr/delegations", requireAuth, requireHr);
-router.use("/hr/assignments", requireAuth, requireHr);
+// Field-representative administration belongs to the field-ops page; HR staff
+// keep access too, since they are the ones who own the employee records.
+const guard = [requireAuth, requirePermission("field-ops", "hr")];
+router.use("/hr/field-assignments", ...guard);
+router.use("/hr/delegations", ...guard);
+router.use("/hr/assignments", ...guard);
 
 function str(v: unknown, max = 500): string | null {
   if (typeof v !== "string") return null;

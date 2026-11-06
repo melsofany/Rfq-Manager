@@ -65,6 +65,9 @@ import FinancePage from "@/modules/finance/pages/index";
 // ── Module: HR — الموارد البشرية ────────────────────────────────────────
 import HrPage from "@/modules/hr/pages/index";
 
+// ── Module: Field Operations — تطبيق العمليات الميدانية ──────────────────
+import FieldOpsPage from "@/modules/field-ops/pages/index";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -262,6 +265,11 @@ function Router() {
       {/* ── Module: HR ─────────────────────────────────────────────────── */}
       <Route path="/hr">
         <ProtectedRoute component={HrPage} />
+      </Route>
+
+      {/* ── Module: Field Operations ───────────────────────────────────── */}
+      <Route path="/field-ops">
+        <ProtectedRoute component={FieldOpsPage} />
       </Route>
 
       <Route component={NotFound} />

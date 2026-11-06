@@ -29,6 +29,7 @@ const ALL_PAGES = [
   "whatsapp",
   "employees",
   "hr",
+  "field-ops",
   "audit",
   "integrations",
   "mailbox",
@@ -38,6 +39,7 @@ const ALL_PAGES = [
 const ADMIN_ONLY_FOR_NON_ADMIN = [
   "employees",
   "hr",
+  "field-ops",
   "audit",
   "integrations",
   "ai-assistant",
@@ -56,6 +58,7 @@ const EDIT_PAGES = [
   "whatsapp",
   "employees",
   "hr",
+  "field-ops",
   "integrations",
   "ai-assistant",
   "backup",

@@ -148,6 +148,12 @@ export const PERMISSION_CATALOG: PermissionNode[] = [
     labelKey: "nav.hr",
     children: [{ key: "hr:edit", labelKey: "perm.pageEdit" }],
   },
+  {
+    key: "field-ops",
+    href: "/field-ops",
+    labelKey: "nav.fieldOps",
+    children: [{ key: "field-ops:edit", labelKey: "perm.pageEdit" }],
+  },
   { key: "audit", href: "/audit", labelKey: "nav.auditLog" },
   {
     key: "integrations",
@@ -238,6 +244,7 @@ export const EDIT_PAGES: string[] = [
   "whatsapp",
   "employees",
   "hr",
+  "field-ops",
   "integrations",
   "ai-assistant",
   "backup",
@@ -249,6 +256,7 @@ const PURCHASING_PAGES = PAGE_KEYS.filter(
   (k) =>
     k !== "employees" &&
     k !== "hr" &&
+    k !== "field-ops" &&
     k !== "audit" &&
     k !== "integrations" &&
     k !== "ai-assistant" &&

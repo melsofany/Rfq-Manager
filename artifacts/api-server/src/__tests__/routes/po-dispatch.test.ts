@@ -81,6 +81,9 @@ const tables = {
   auditLogTable: { _: "audit" },
   whatsappChatsTable: { _: "wa" },
   workOrderAssignmentsTable: { _: "woa" },
+  // Read by loadFieldOpsSettings during dispatch; an empty result means "use
+  // defaults", which is exactly what these tests expect.
+  hrSettingsTable: { _: "hrSettings" },
 };
 
 // Queue of result-sets returned by successive db.select(...).where() calls.

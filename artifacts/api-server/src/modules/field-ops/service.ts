@@ -10,6 +10,7 @@ import {
   db,
   hrEmployeesTable,
   hrFieldAssignmentsTable,
+  hrSettingsTable,
   workOrderAssignmentsTable,
   workOrderDelegationsTable,
   mobileNotificationsTable,
@@ -17,6 +18,83 @@ import {
   FIELD_ASSIGNMENT_STATUS,
   WORK_ORDER_KIND,
 } from "@workspace/db";
+
+/** The settings row the control page writes. */
+export const FIELD_OPS_SETTINGS_KEY = "field_ops_app";
+
+export interface FieldOpsAppSettings {
+  appNameAr: string;
+  appNameEn: string;
+  welcomeMessageAr: string;
+  supportPhone: string;
+  /** Mobile session lifetime, in days. */
+  sessionDays: number;
+  autoAssignOnDispatch: boolean;
+  notifyOnAssignment: boolean;
+  notifyOnDeliveryAvailable: boolean;
+  maintenanceMode: boolean;
+}
+
+export const FIELD_OPS_DEFAULT_SETTINGS: FieldOpsAppSettings = {
+  appNameAr: "قرطبة للتوريدات",
+  appNameEn: "Cortoba Supplies",
+  welcomeMessageAr: "مرحباً بك في نظام العمليات الميدانية – قرطبة للتوريدات",
+  supportPhone: "",
+  sessionDays: 30,
+  autoAssignOnDispatch: true,
+  notifyOnAssignment: true,
+  notifyOnDeliveryAvailable: true,
+  maintenanceMode: false,
+};
+
+/**
+ * Coerce arbitrary JSON into valid settings: every field is clamped to its
+ * allowed range and unknown/ill-typed values fall back to the default. Pure, so
+ * it is the single place both the loader and the settings PUT agree on.
+ */
+export function normaliseFieldOpsSettings(raw: unknown): FieldOpsAppSettings {
+  const src = (raw ?? {}) as Record<string, unknown>;
+  const out = { ...FIELD_OPS_DEFAULT_SETTINGS };
+  if (typeof src.appNameAr === "string" && src.appNameAr.trim())
+    out.appNameAr = src.appNameAr.slice(0, 60);
+  if (typeof src.appNameEn === "string" && src.appNameEn.trim())
+    out.appNameEn = src.appNameEn.slice(0, 60);
+  if (typeof src.welcomeMessageAr === "string" && src.welcomeMessageAr.trim())
+    out.welcomeMessageAr = src.welcomeMessageAr.slice(0, 300);
+  if (typeof src.supportPhone === "string") out.supportPhone = src.supportPhone.slice(0, 30);
+  if (typeof src.sessionDays === "number" && Number.isFinite(src.sessionDays)) {
+    out.sessionDays = Math.min(365, Math.max(1, Math.round(src.sessionDays)));
+  }
+  for (const k of [
+    "autoAssignOnDispatch",
+    "notifyOnAssignment",
+    "notifyOnDeliveryAvailable",
+    "maintenanceMode",
+  ] as const) {
+    if (typeof src[k] === "boolean") out[k] = src[k] as boolean;
+  }
+  return out;
+}
+
+/**
+ * Read the field-operations app settings, falling back to defaults for any
+ * missing or malformed field. A missing row is normal (fresh install), so this
+ * never throws — the app must keep working with sane values.
+ */
+export async function loadFieldOpsSettings(): Promise<FieldOpsAppSettings> {
+  // Settings are an overlay on core behaviour, never a dependency of it: a
+  // missing table (older deployment) or a malformed row must degrade to the
+  // defaults rather than fail the caller — dispatch must not hinge on config.
+  try {
+    const [row] = await db
+      .select()
+      .from(hrSettingsTable)
+      .where(eq(hrSettingsTable.key, FIELD_OPS_SETTINGS_KEY));
+    return normaliseFieldOpsSettings(row?.value);
+  } catch {
+    return { ...FIELD_OPS_DEFAULT_SETTINGS };
+  }
+}
 
 /** Does this HR employee hold an ACTIVE field assignment right now? */
 export async function hasActiveFieldAssignment(hrEmployeeId: number): Promise<boolean> {

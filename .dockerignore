@@ -1,0 +1,32 @@
+# Keep the build context small and avoid leaking local state into the image.
+# node_modules is excluded because the Dockerfile installs from the lockfile,
+# and host binaries (native addons built for another libc) must never be copied.
+node_modules
+**/node_modules
+
+# Build output is produced inside the image, not shipped from the host.
+dist
+**/dist
+*.tsbuildinfo
+
+# Local-only configuration and secrets.
+.env
+.env.*
+android/local.properties
+
+# The Android app is not part of the server image.
+android
+.gradle
+**/build
+
+# VCS, editor and OS noise.
+.git
+.gitignore
+.github
+.vscode
+.idea
+.DS_Store
+
+# Test and coverage artefacts.
+coverage
+**/coverage

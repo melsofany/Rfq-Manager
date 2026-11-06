@@ -757,6 +757,7 @@ export async function ensureDeliveryAssignment(
       repName: workOrderAssignmentsTable.representativeName,
       repPhone: workOrderAssignmentsTable.representativePhone,
       repId: workOrderAssignmentsTable.representativeId,
+      hrEmployeeId: workOrderAssignmentsTable.hrEmployeeId,
     })
     .from(workOrderAssignmentsTable)
     .where(
@@ -773,6 +774,10 @@ export async function ensureDeliveryAssignment(
     representativeId: receiptAssign.repId,
     representativeName: receiptAssign.repName,
     representativePhone: receiptAssign.repPhone,
+    // Carry the HR link across. Without it the delivery task has no owner, so
+    // the mobile app (which keys visibility on hr_employee_id) shows the rep
+    // nothing to deliver even though the goods were received.
+    hrEmployeeId: receiptAssign.hrEmployeeId,
     status: "sent",
     kind: WORK_ORDER_KIND.DELIVERY,
     customerPoId: cpi.customerPoId,

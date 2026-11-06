@@ -39,13 +39,21 @@ export function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-/** Issue a fresh opaque token. Returns the raw token (shown once) + its hash. */
-export function issueToken(): { token: string; tokenHash: string; expiresAt: Date } {
+/**
+ * Issue a fresh opaque token. Returns the raw token (shown once) + its hash.
+ * `ttlMs` lets the caller apply the administrator's configured session length;
+ * it defaults to the module constant so existing callers are unaffected.
+ */
+export function issueToken(ttlMs: number = MOBILE_SESSION_TTL_MS): {
+  token: string;
+  tokenHash: string;
+  expiresAt: Date;
+} {
   const token = crypto.randomBytes(32).toString("base64url");
   return {
     token,
     tokenHash: hashToken(token),
-    expiresAt: new Date(Date.now() + MOBILE_SESSION_TTL_MS),
+    expiresAt: new Date(Date.now() + ttlMs),
   };
 }
 

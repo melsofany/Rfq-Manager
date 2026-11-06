@@ -1,6 +1,7 @@
 package com.cortoba.fieldops.ui.components
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,9 +31,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.cortoba.fieldops.R
 import com.cortoba.fieldops.ui.theme.CortobaBrown
 import com.cortoba.fieldops.ui.theme.CortobaCoral
 import com.cortoba.fieldops.ui.theme.CortobaCream
@@ -319,4 +323,33 @@ fun OutlineActionButton(
         }
         Text(text, style = MaterialTheme.typography.bodyLarge)
     }
+}
+
+/**
+ * The Cortoba brand lockup — the traced mark and wordmark, rendered from the
+ * bundled vector so it stays crisp at any size.
+ */
+@Composable
+fun CortobaLogo(
+    modifier: Modifier = Modifier,
+) {
+    Image(
+        painter = painterResource(R.drawable.ic_cortoba_logo),
+        contentDescription = "قرطبة للتوريدات",
+        contentScale = ContentScale.Fit,
+        modifier = modifier,
+    )
+}
+
+/** The mark alone, for tight spaces such as an app bar or a list avatar. */
+@Composable
+fun CortobaMark(
+    modifier: Modifier = Modifier,
+) {
+    Image(
+        painter = painterResource(R.drawable.ic_cortoba_mark),
+        contentDescription = "قرطبة للتوريدات",
+        contentScale = ContentScale.Fit,
+        modifier = modifier,
+    )
 }
