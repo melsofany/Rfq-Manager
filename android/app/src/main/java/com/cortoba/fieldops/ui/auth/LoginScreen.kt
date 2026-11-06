@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cortoba.fieldops.ui.components.CortobaMark
 import com.cortoba.fieldops.ui.components.ErrorBanner
 import com.cortoba.fieldops.ui.theme.CortobaBrown
 import com.cortoba.fieldops.ui.theme.CortobaCream
@@ -219,18 +220,15 @@ fun LoginScreen(
 /** The wordmark: initials in the brand palette, no bitmap asset needed. */
 @Composable
 private fun BrandMark() {
+    // A cream plate behind the mark keeps the logo legible on the brown header
+    // while preserving the brand's own colours (the vector is not tinted).
     Box(
         modifier = Modifier
-            .size(96.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(CortobaBrown),
+            .size(112.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(CortobaCream),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = "قرطبة",
-            style = MaterialTheme.typography.headlineSmall,
-            color = CortobaCream,
-            fontWeight = FontWeight.Bold,
-        )
+        CortobaMark(modifier = Modifier.size(84.dp))
     }
 }

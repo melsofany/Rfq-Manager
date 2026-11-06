@@ -42,6 +42,7 @@ import {
 } from "../../shared/supplier-registration";
 import { createRegistrationRequest } from "../users/supplier-registration";
 import { guardFor } from "../../shared/permissions";
+import { loadFieldOpsSettings } from "../field-ops/service";
 
 const router = Router();
 router.use("/po", guardFor("/po"));
@@ -722,8 +723,12 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
   // loop so the mobile task does not depend on the WhatsApp send succeeding —
   // the previous ordering (assignment created inside the send loop) meant a
   // rate-limited WhatsApp send silently left the rep with no task at all.
+  // Honour the control page's "auto-assign on dispatch" switch: when an
+  // administrator turns it off they want tasks created by hand, so the dispatch
+  // path must not quietly keep creating them.
+  const fieldOpsSettings = await loadFieldOpsSettings();
   let mobileTasksCreated = 0;
-  if (hasMobileRep) {
+  if (hasMobileRep && fieldOpsSettings.autoAssignOnDispatch) {
     const allPending = itemRows.filter(
       (r) => r.item.lineStatus !== "fulfilled" && r.item.lineStatus !== "rejected",
     );
@@ -768,7 +773,7 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
         req.log.warn({ err, poItemId: r.item.id }, "Mobile receipt task insert failed");
       }
     }
-    if (mobileTasksCreated > 0) {
+    if (mobileTasksCreated > 0 && fieldOpsSettings.notifyOnAssignment) {
       await db.insert(mobileNotificationsTable).values({
         hrEmployeeId: repHrEmployeeId!,
         kind: "task_assigned",
@@ -1007,8 +1012,14 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
             .limit(1);
           if (existing) {
             // Link the WhatsApp assignment to the HR representative too, so the
-            // rep bot and the mobile app address the SAME task.
-            if (existing.hrEmployeeId == null && repHrEmployeeId != null) {
+            // rep bot and the mobile app address the SAME task — but only while
+            // auto-assignment is on. With it off, the operator wants tasks
+            // created by hand, so the WhatsApp row must stay off the app.
+            if (
+              fieldOpsSettings.autoAssignOnDispatch &&
+              existing.hrEmployeeId == null &&
+              repHrEmployeeId != null
+            ) {
               await db
                 .update(workOrderAssignmentsTable)
                 .set({ hrEmployeeId: repHrEmployeeId })
@@ -1022,7 +1033,9 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
               poItemId: r.item.id,
               representativeName: repName,
               representativePhone: repPhone,
-              hrEmployeeId: repHrEmployeeId,
+              // Null means "not a mobile task": the row still drives the
+              // WhatsApp conversation, it just does not appear in the app.
+              hrEmployeeId: fieldOpsSettings.autoAssignOnDispatch ? repHrEmployeeId : null,
               status: "sent",
               kind: WORK_ORDER_KIND.RECEIPT,
             });

@@ -16,6 +16,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db, hrEmployeesTable, mobileSessionsTable, auditLogTable } from "@workspace/db";
 import { checkLoginEligibility } from "./assignment-logic";
 import { issueToken, requireMobileAuth, actorOf } from "./mobile-auth";
+import { loadFieldOpsSettings } from "./service";
 import { hasActiveFieldAssignment, findHrEmployeeByNo } from "./service";
 import { logger } from "../../shared/logger";
 
@@ -101,7 +102,8 @@ router.post("/auth/login", loginIpLimiter, loginAccountLimiter, async (req, res)
     return;
   }
 
-  const { token, tokenHash, expiresAt } = issueToken();
+  const settings = await loadFieldOpsSettings();
+  const { token, tokenHash, expiresAt } = issueToken(settings.sessionDays * 24 * 60 * 60 * 1000);
   await db.insert(mobileSessionsTable).values({
     hrEmployeeId: employee!.id,
     tokenHash,
@@ -145,6 +147,7 @@ router.post("/auth/logout", requireMobileAuth, async (req, res): Promise<void> =
 
 router.get("/me", requireMobileAuth, async (req, res): Promise<void> => {
   const actor = actorOf(req);
+  const settings = await loadFieldOpsSettings();
   res.json({
     hrEmployeeId: actor.hrEmployeeId,
     employeeNo: actor.employeeNo,
@@ -154,6 +157,13 @@ router.get("/me", requireMobileAuth, async (req, res): Promise<void> => {
     department: actor.department,
     phone: actor.phone,
     isFieldRepresentative: await hasActiveFieldAssignment(actor.hrEmployeeId),
+    app: {
+      appNameAr: settings.appNameAr,
+      appNameEn: settings.appNameEn,
+      welcomeMessageAr: settings.welcomeMessageAr,
+      supportPhone: settings.supportPhone,
+      maintenanceMode: settings.maintenanceMode,
+    },
   });
 });
 

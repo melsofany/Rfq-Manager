@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db, hrEmployeesTable, mobileSessionsTable } from "@workspace/db";
+import { loadFieldOpsSettings } from "./service";
 
 /** Session lifetime. Long enough for a working day plus offline gaps. */
 export const MOBILE_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -39,13 +40,21 @@ export function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-/** Issue a fresh opaque token. Returns the raw token (shown once) + its hash. */
-export function issueToken(): { token: string; tokenHash: string; expiresAt: Date } {
+/**
+ * Issue a fresh opaque token. Returns the raw token (shown once) + its hash.
+ * `ttlMs` lets the caller apply the administrator's configured session length;
+ * it defaults to the module constant so existing callers are unaffected.
+ */
+export function issueToken(ttlMs: number = MOBILE_SESSION_TTL_MS): {
+  token: string;
+  tokenHash: string;
+  expiresAt: Date;
+} {
   const token = crypto.randomBytes(32).toString("base64url");
   return {
     token,
     tokenHash: hashToken(token),
-    expiresAt: new Date(Date.now() + MOBILE_SESSION_TTL_MS),
+    expiresAt: new Date(Date.now() + ttlMs),
   };
 }
 
@@ -125,6 +134,36 @@ export async function requireMobileAuth(
       return;
     }
     req.mobileActor = actor;
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * Middleware for the mobile OPERATION surface (pickups, deliveries, dashboard):
+ * refuse work while the administrator has maintenance mode on.
+ *
+ * Maintenance has to be enforced here, not only reported by `/me`, because a
+ * representative with an offline queue will otherwise keep confirming receipts
+ * against a system the operator believes is frozen. Account-level routes
+ * (logout, change-password, me) deliberately do NOT use this gate — a locked
+ * user must still be able to read the flag and sign out.
+ */
+export async function requireMobileOperationsEnabled(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const settings = await loadFieldOpsSettings();
+    if (settings.maintenanceMode) {
+      res.status(503).json({
+        error: "النظام في وضع الصيانة حالياً. برجاء المحاولة لاحقاً",
+        code: "MAINTENANCE_MODE",
+      });
+      return;
+    }
     next();
   } catch (err) {
     next(err);

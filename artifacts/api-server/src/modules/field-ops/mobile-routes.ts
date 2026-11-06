@@ -14,7 +14,7 @@
  */
 import { Router } from "express";
 import crypto from "node:crypto";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   db,
   purchaseOrdersTable,
@@ -29,7 +29,7 @@ import {
   hrEmployeesTable,
   WORK_ORDER_KIND,
 } from "@workspace/db";
-import { requireMobileAuth, actorOf } from "./mobile-auth";
+import { requireMobileAuth, requireMobileOperationsEnabled, actorOf } from "./mobile-auth";
 import {
   authorizeTaskExecution,
   checkReceiptQuantities,
@@ -42,17 +42,20 @@ import {
   visibleAssignmentsFor,
   notify,
   auditFieldOperation,
+  loadFieldOpsSettings,
 } from "./service";
 import { recomputeItemTotals } from "../po/receipts";
 import {
   acceptedQtyFromSupplier,
   recomputeItemTotals as recomputeDeliveryTotals,
 } from "../customer-po/deliveries";
-import { applyDeliverySideEffects } from "../communications/routes";
+import { applyDeliverySideEffects, applyReceiptSideEffects } from "../communications/routes";
 import { workOrderDelegationsTable } from "@workspace/db";
+import { logger } from "../../shared/logger";
 
 const router = Router();
 router.use(requireMobileAuth);
+router.use(requireMobileOperationsEnabled);
 
 function toNum(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -194,6 +197,62 @@ async function buildPickupGroups(assignmentIds: number[]) {
     ...g,
     customerPoNos: customerPoNosOf(g),
   }));
+}
+
+/**
+ * After a receipt, tell the representative(s) who own the delivery tasks for the
+ * customer lines that were just fulfilled. Only tasks that actually became
+ * deliverable (accepted qty > 0 on a linked customer line) are notified, so a
+ * rejected-only receipt never produces a phantom "ready to deliver" message.
+ */
+async function notifyDeliveryAvailability(
+  assignment: { poId: number },
+  executorName: string,
+  enabled: boolean,
+): Promise<void> {
+  if (!enabled) return;
+  // Customer lines fulfilled by this supplier PO's received items.
+  const lines = await db
+    .select({ customerPoItemId: purchaseOrderItemsTable.customerPoItemId })
+    .from(purchaseOrderItemsTable)
+    .where(
+      and(
+        eq(purchaseOrderItemsTable.poId, assignment.poId),
+        isNotNull(purchaseOrderItemsTable.customerPoItemId),
+      ),
+    );
+  const customerItemIds = lines
+    .map((l) => l.customerPoItemId)
+    .filter((x): x is number => x != null);
+  if (!customerItemIds.length) return;
+
+  const deliveryTasks = await db
+    .select({
+      id: workOrderAssignmentsTable.id,
+      hrEmployeeId: workOrderAssignmentsTable.hrEmployeeId,
+      status: workOrderAssignmentsTable.status,
+    })
+    .from(workOrderAssignmentsTable)
+    .where(
+      and(
+        eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.DELIVERY),
+        inArray(workOrderAssignmentsTable.customerPoItemId, customerItemIds),
+        inArray(workOrderAssignmentsTable.status, ["sent", "assigned", "pending"]),
+      ),
+    );
+
+  const notified = new Set<number>();
+  for (const t of deliveryTasks) {
+    if (!t.hrEmployeeId || notified.has(t.hrEmployeeId)) continue;
+    notified.add(t.hrEmployeeId);
+    await notify(t.hrEmployeeId, {
+      kind: "delivery_available",
+      title: "أصبح هناك بند متاح للتسليم",
+      body: `تم استلام بند من المورد بواسطة ${executorName} وأصبح متاحاً للتسليم للعميل`,
+      entityType: "assignment",
+      entityId: t.id,
+    });
+  }
 }
 
 router.get("/pickups", async (req, res): Promise<void> => {
@@ -512,6 +571,24 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
     userAgent: req.get("user-agent"),
   });
 
+  // Rule 4: receiving is what makes a quantity deliverable, so the receipt must
+  // also create the delivery task for the linked customer line. This is the
+  // same side-effect the portal and the WhatsApp bot apply — without it a rep
+  // who receives through the app would never see the goods to deliver.
+  for (const p of prepared) {
+    if (p.acceptedQty <= 0) continue;
+    const [line] = await db
+      .select({ lineStatus: purchaseOrderItemsTable.lineStatus })
+      .from(purchaseOrderItemsTable)
+      .where(eq(purchaseOrderItemsTable.id, p.poItemId));
+    try {
+      await applyReceiptSideEffects(assignment.poId, p.poItemId, line?.lineStatus ?? "pending");
+    } catch (err) {
+      // Never block a confirmed receipt on a downstream chaining failure.
+      logger.warn({ err, poItemId: p.poItemId }, "mobile receipt side-effects failed");
+    }
+  }
+
   // Tell the responsible rep if someone else executed it.
   if (assignment.hrEmployeeId && assignment.hrEmployeeId !== actor.hrEmployeeId) {
     await notify(assignment.hrEmployeeId, {
@@ -521,6 +598,18 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
       entityType: "assignment",
       entityId: assignment.id,
     });
+  }
+
+  // Rule 4: receiving is what makes a quantity deliverable. When the confirmed
+  // receipt unlocks a delivery task, the rep who owns that task is told so —
+  // gated by the control page's notification switch.
+  const settings = await loadFieldOpsSettings();
+  if (settings.notifyOnDeliveryAvailable && prepared.some((p) => p.acceptedQty > 0)) {
+    await notifyDeliveryAvailability(
+      assignment,
+      actor.fullName,
+      settings.notifyOnDeliveryAvailable,
+    );
   }
 
   res.json({

@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cortoba.fieldops.ui.components.CortobaMark
 import com.cortoba.fieldops.ui.components.ErrorBanner
 import com.cortoba.fieldops.ui.components.LoadingBox
 import com.cortoba.fieldops.ui.theme.CortobaBrown
@@ -245,18 +246,34 @@ private fun WelcomeCard(
         color = CortobaBrown,
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                text = "أهلاً وسهلاً، $name",
-                style = MaterialTheme.typography.headlineSmall,
-                color = CortobaCream,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = "مرحباً بك في نظام العمليات الميدانية – قرطبة للتوريدات",
-                style = MaterialTheme.typography.bodyMedium,
-                color = CortobaCream.copy(alpha = 0.9f),
-                modifier = Modifier.padding(top = 6.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // The mark sits on a cream chip so the brand colours survive on
+                // the brown card; the greeting is the first thing read, so it
+                // stays on the same line as the logo.
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(CortobaCream),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CortobaMark(modifier = Modifier.size(38.dp))
+                }
+                Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(
+                        text = "أهلاً وسهلاً، $name",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = CortobaCream,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "مرحباً بك في نظام العمليات الميدانية – قرطبة للتوريدات",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = CortobaCream.copy(alpha = 0.9f),
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
 
             Spacer(Modifier.height(14.dp))
 

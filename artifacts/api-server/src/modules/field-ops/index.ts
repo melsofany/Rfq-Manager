@@ -12,6 +12,7 @@ import mobileAuthRouter from "./mobile-auth-routes";
 import mobileRoutes from "./mobile-routes";
 import mobileDashboardRouter from "./mobile-dashboard-routes";
 import hrFieldAssignmentRouter from "./hr-field-assignment-routes";
+import controlRouter from "./control-routes";
 
 const router: IRouter = Router();
 
@@ -21,9 +22,10 @@ router.use("/mobile", mobileAuthRouter);
 router.use("/mobile", mobileRoutes);
 router.use("/mobile", mobileDashboardRouter);
 
-// HR-side administration. Mounted at the root of the HR permission surface:
-// the HR module's own `requireAuth + requireHr` guard is applied by the HR
-// router, and this router is mounted AFTER it in modules/hr/index.ts.
+// HR-side administration. These routers apply their own `requireAuth +
+// requireHr` guard, so they can be mounted here without leaking into the
+// public mobile surface.
 router.use(hrFieldAssignmentRouter);
+router.use(controlRouter);
 
 export default router;

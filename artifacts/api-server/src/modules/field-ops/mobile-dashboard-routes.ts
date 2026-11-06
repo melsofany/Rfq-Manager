@@ -21,13 +21,14 @@ import {
   FIELD_ASSIGNMENT_STATUS,
   WORK_ORDER_KIND,
 } from "@workspace/db";
-import { requireMobileAuth, actorOf } from "./mobile-auth";
+import { requireMobileAuth, requireMobileOperationsEnabled, actorOf } from "./mobile-auth";
 import { dashboardCounts, hasActiveFieldAssignment, visibleAssignmentsFor } from "./service";
 import { authorizeTaskExecution } from "./assignment-logic";
 import { workOrderDelegationsTable } from "@workspace/db";
 
 const router = Router();
 router.use(requireMobileAuth);
+router.use(requireMobileOperationsEnabled);
 
 router.get("/dashboard", async (req, res): Promise<void> => {
   const actor = actorOf(req);

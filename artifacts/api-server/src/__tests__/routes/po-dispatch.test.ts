@@ -81,6 +81,11 @@ const tables = {
   auditLogTable: { _: "audit" },
   whatsappChatsTable: { _: "wa" },
   workOrderAssignmentsTable: { _: "woa" },
+  // Written by the early mobile-task block when notifyOnAssignment is on.
+  mobileNotificationsTable: { _: "mobileNotifs" },
+  // Read by loadFieldOpsSettings during dispatch; an empty result means "use
+  // defaults", which is exactly what these tests expect.
+  hrSettingsTable: { _: "hrSettings" },
 };
 
 // Queue of result-sets returned by successive db.select(...).where() calls.
@@ -527,5 +532,104 @@ describe("POST /api/po/:id/dispatch — the supplier-registration gate", () => {
     expect(sendPoWhatsAppMock).toHaveBeenCalledTimes(1);
     expect(res.body.results[0].registrationRequired).toBe(false);
     expect(res.body.poDelivered).toBe(true);
+  });
+});
+
+describe("POST /api/po/:id/dispatch — honouring the auto-assignment switch", () => {
+  // The dispatch handler creates mobile tasks in TWO places: an early block
+  // guarded by `autoAssignOnDispatch`, and a later block that rides along with
+  // the WhatsApp send. The later one used to ignore the setting, so an operator
+  // who turned auto-assignment OFF still got mobile tasks the moment a PO had a
+  // receiver name and phone — exactly the manual-only mode they asked for.
+  const poRow = {
+    po: {
+      id: 1,
+      internalPoNo: "CPO-2025-000042",
+      createdAt: new Date("2025-01-01"),
+      receiverName: "Ahmed",
+      receiverPhone: "201000000000",
+      notes: null,
+      status: "draft",
+      employeeId: null,
+      representativeHrEmployeeId: 99,
+    },
+    employeeName: "Sara",
+    employeePhone: null,
+  };
+
+  const registeredSupplier = {
+    id: 7,
+    name: "Acme",
+    phone: "201111111111",
+    email: "acme@example.com",
+    contactPerson: "Hassan",
+    address: "Cairo",
+    commercialRegister: "12345",
+    taxRegistration: "67890",
+    bankName: "NBE",
+    bankAccountHolder: "Acme Co",
+    bankAccountNumber: "1234567890",
+    iban: "EG380019000500000000263180002",
+    swiftCode: "NBEGEGCX",
+    bankBranch: "Cairo",
+  };
+
+  function items() {
+    return [
+      {
+        item: {
+          id: 50,
+          lineItem: "1",
+          description: "Widget",
+          qty: "5.0000",
+          uom: "pcs",
+          lineStatus: "pending",
+          supplierId: 7,
+        },
+        supplier: registeredSupplier,
+      },
+    ];
+  }
+
+  /** Settings row as `loadFieldOpsSettings` reads it. */
+  function settingsRow(over: Record<string, unknown>) {
+    return [{ key: "field_ops_app", value: { autoAssignOnDispatch: true, ...over } }];
+  }
+
+  it("creates NO mobile-visible task when auto-assignment is off", async () => {
+    selectQueue = [[poRow], items(), settingsRow({ autoAssignOnDispatch: false })];
+
+    const res = await request(testApp).post("/api/po/1/dispatch");
+
+    expect(res.status).toBe(200);
+    // The WhatsApp message still goes out — the rep bot is not the app.
+    expect(sendRepDispatchMock).toHaveBeenCalledTimes(1);
+    // But every assignment row must be app-invisible (hrEmployeeId null).
+    const woaInserts = insertCalls.filter((c) => c.table === "woa");
+    expect(woaInserts).toHaveLength(1);
+    expect(woaInserts[0].vals.hrEmployeeId).toBeNull();
+  });
+
+  it("links the WhatsApp task to the representative when auto-assignment is on", async () => {
+    // Select order: poRow, items, settings, the early block's existing-check,
+    // then the later block's existing-check. The mock cannot see its own
+    // inserts, so the second check is told the task already exists — which is
+    // what the real query finds, and what keeps dispatch from double-inserting.
+    selectQueue = [
+      [poRow],
+      items(),
+      settingsRow({ autoAssignOnDispatch: true }),
+      [],
+      [{ id: 1, hrEmployeeId: 99 }],
+    ];
+
+    const res = await request(testApp).post("/api/po/1/dispatch");
+
+    expect(res.status).toBe(200);
+    // The early block creates the app-visible task; the WhatsApp path finds it
+    // and does not create a second one.
+    const woaInserts = insertCalls.filter((c) => c.table === "woa");
+    expect(woaInserts).toHaveLength(1);
+    expect(woaInserts[0].vals.hrEmployeeId).toBe(99);
   });
 });
