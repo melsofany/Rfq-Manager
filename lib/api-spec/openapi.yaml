@@ -1441,6 +1441,54 @@ paths:
                 items:
                   $ref: "#/components/schemas/PurchaseOrderItem"
 
+  /po/{id}/representative:
+    patch:
+      operationId: changePurchaseOrderRepresentative
+      tags: [po]
+      summary: Change the field representative of a purchase order
+      description: >
+        Reassigns the field representative. Only still-pending supplier pickup
+        tasks are re-pointed, so a completed pickup keeps the employee who
+        performed it. The new representative must be an active HR employee.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [representativeHrEmployeeId]
+              properties:
+                representativeHrEmployeeId:
+                  type: ["integer", "null"]
+                  description: HR employee id, or null to remove the assignment.
+      responses:
+        "200":
+          description: The representative was changed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, id]
+                properties:
+                  ok:
+                    type: boolean
+                  id:
+                    type: integer
+                  representativeHrEmployeeId:
+                    type: ["integer", "null"]
+                  createdTasks:
+                    type: integer
+        "400":
+          description: Unknown or inactive HR employee, or missing body field.
+        "404":
+          description: Purchase order not found.
+
   /po/lookup/{poNo}:
     get:
       operationId: lookupPoFromSheet
@@ -2886,6 +2934,9 @@ components:
           type: ["string", "null"]
         receiverPhone:
           type: ["string", "null"]
+        representativeHrEmployeeId:
+          type: ["integer", "null"]
+          description: "الموظف الممثل للمندوب الميداني من الموارد البشرية"
         status:
           type: string
         employeeId:
@@ -2925,6 +2976,12 @@ components:
           type: string
         receiverPhone:
           type: string
+        representativeHrEmployeeId:
+          type: ["integer", "null"]
+          description: >
+            Field representative, chosen from the existing HR employees module.
+            Only an active HR employee is accepted; the server ignores anyone
+            else. Setting this creates the supplier pickup task automatically.
         notes:
           type: string
         items:
@@ -2973,6 +3030,11 @@ components:
           type: ["string", "null"]
         receiverPhone:
           type: ["string", "null"]
+        representativeHrEmployeeId:
+          type: ["integer", "null"]
+          description: >
+            Field representative from HR. Changing it re-points the mobile
+            pickup task and notifies the new representative.
         notes:
           type: ["string", "null"]
         employeeId:

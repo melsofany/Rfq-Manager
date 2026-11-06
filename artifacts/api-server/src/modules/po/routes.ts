@@ -148,6 +148,7 @@ router.get("/po", requireAuth, async (req, res): Promise<void> => {
       sheetPoNo: r.po.sheetPoNo,
       receiverName: r.po.receiverName,
       receiverPhone: r.po.receiverPhone,
+      representativeHrEmployeeId: r.po.representativeHrEmployeeId ?? null,
       status: r.po.status,
       employeeId: r.po.employeeId,
       employeeName: r.employeeName,
@@ -392,6 +393,7 @@ router.post("/po", requireAuth, async (req, res): Promise<void> => {
       sheetPoNo: created.po.sheetPoNo,
       receiverName: created.po.receiverName,
       receiverPhone: created.po.receiverPhone,
+      representativeHrEmployeeId: created.po.representativeHrEmployeeId ?? null,
       status: created.po.status,
       employeeId: created.po.employeeId,
       employeeName: null,
@@ -517,7 +519,10 @@ router.get("/po/representatives", requireAuth, async (req, res): Promise<void> =
           )
         : eq(hrEmployeesTable.status, "active"),
     )
-    .orderBy(hrEmployeesTable.employeeNo)
+    // Active field representatives first: assigning to anyone else creates a
+    // pickup task that employee can never open in the app, so the eligible
+    // choices should be the ones an operator sees without scrolling.
+    .orderBy(sql`${hrFieldAssignmentsTable.id} IS NULL`, hrEmployeesTable.employeeNo)
     .limit(100);
 
   res.json(
@@ -1666,6 +1671,7 @@ router.put("/po/:id", requireAuth, async (req, res): Promise<void> => {
       sheetPoNo: updated.sheetPoNo,
       receiverName: updated.receiverName,
       receiverPhone: updated.receiverPhone,
+      representativeHrEmployeeId: updated.representativeHrEmployeeId ?? null,
       status: updated.status,
       employeeId: updated.employeeId,
       employeeName,
@@ -1726,6 +1732,158 @@ router.delete("/po/:id", requireAuth, async (req, res): Promise<void> => {
     req.log.error({ err, id }, "Failed to delete purchase order");
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: "Failed to delete purchase order", details: message });
+  }
+});
+
+// PATCH /api/po/:id/representative — reassign the field representative.
+//
+// Separate from PUT /po/:id because that route is draft-only, while a
+// representative can change at any time — including after dispatch, which is
+// exactly when a rep goes on leave or resigns (section 3B). Only still-pending
+// receipt tasks move: received and rejected ones keep the employee who actually
+// performed them, because Rule 7 forbids rewriting history.
+router.patch("/po/:id/representative", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const { representativeHrEmployeeId } = req.body as {
+    representativeHrEmployeeId?: number | null;
+  };
+  if (representativeHrEmployeeId === undefined) {
+    res.status(400).json({ error: "representativeHrEmployeeId required (null to unassign)" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(purchaseOrdersTable)
+    .where(eq(purchaseOrdersTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "Purchase order not found" });
+    return;
+  }
+
+  // A representative must be a real, ACTIVE HR employee — the same gate as
+  // creation, so a resigned employee can never be handed new work.
+  let newRepId: number | null = null;
+  if (representativeHrEmployeeId != null && Number(representativeHrEmployeeId) > 0) {
+    const [hrEmp] = await db
+      .select({ id: hrEmployeesTable.id, status: hrEmployeesTable.status })
+      .from(hrEmployeesTable)
+      .where(eq(hrEmployeesTable.id, Number(representativeHrEmployeeId)));
+    if (!hrEmp) {
+      res.status(400).json({ error: "المندوب المحدد غير موجود في الموارد البشرية" });
+      return;
+    }
+    if (hrEmp.status !== "active") {
+      res.status(400).json({ error: "لا يمكن إسناد أمر الشراء لموظف غير نشط" });
+      return;
+    }
+    newRepId = hrEmp.id;
+  }
+
+  try {
+    const updated = await db.transaction(async (tx) => {
+      const [po] = await tx
+        .update(purchaseOrdersTable)
+        .set({ representativeHrEmployeeId: newRepId, updatedAt: new Date() })
+        .where(eq(purchaseOrdersTable.id, id))
+        .returning();
+
+      await tx
+        .update(workOrderAssignmentsTable)
+        .set({ hrEmployeeId: newRepId })
+        .where(
+          and(
+            eq(workOrderAssignmentsTable.poId, id),
+            eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+            ne(workOrderAssignmentsTable.status, "received"),
+            ne(workOrderAssignmentsTable.status, "rejected"),
+          ),
+        );
+
+      await tx.insert(auditLogTable).values({
+        action: "po.representative_changed",
+        entityType: "po",
+        entityId: id,
+        employeeId: req.session.employeeId,
+        description: `Field representative of ${existing.internalPoNo} changed from ${
+          existing.representativeHrEmployeeId ?? "none"
+        } to ${newRepId ?? "none"}`,
+        ipAddress: req.ip,
+        userAgent: req.get("user-agent"),
+      });
+
+      return po;
+    });
+
+    // Pending lines that were never linked to anyone (a PO dispatched with no
+    // representative) still need a task, otherwise the new rep sees nothing.
+    let createdTasks = 0;
+    if (newRepId != null) {
+      const linked = new Set(
+        (
+          await db
+            .select({ poItemId: workOrderAssignmentsTable.poItemId })
+            .from(workOrderAssignmentsTable)
+            .where(
+              and(
+                eq(workOrderAssignmentsTable.poId, id),
+                eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+                ne(workOrderAssignmentsTable.status, "received"),
+                ne(workOrderAssignmentsTable.status, "rejected"),
+              ),
+            )
+        ).map((r) => r.poItemId),
+      );
+      const missing = (
+        await db
+          .select({ id: purchaseOrderItemsTable.id })
+          .from(purchaseOrderItemsTable)
+          .where(eq(purchaseOrderItemsTable.poId, id))
+      ).filter((r) => !linked.has(r.id));
+
+      if (missing.length > 0) {
+        await db.insert(workOrderAssignmentsTable).values(
+          missing.map((r) => ({
+            poId: id,
+            poItemId: r.id,
+            representativeName: updated.receiverName?.trim() || "مندوب ميداني",
+            representativePhone: updated.receiverPhone
+              ? normalizeSinglePhone(updated.receiverPhone)
+              : "",
+            hrEmployeeId: newRepId,
+            status: "sent",
+            kind: WORK_ORDER_KIND.RECEIPT,
+          })),
+        );
+        createdTasks = missing.length;
+      }
+
+      await db.insert(mobileNotificationsTable).values({
+        hrEmployeeId: newRepId,
+        kind: "task_assigned",
+        title: "تم إسناد أمر شراء إليك",
+        body: `أمر الشراء ${updated.sheetPoNo} أصبح ضمن مهامك`,
+        entityType: "po",
+        entityId: id,
+      });
+    }
+
+    res.json({
+      ok: true,
+      id,
+      representativeHrEmployeeId: newRepId,
+      createdTasks,
+    });
+  } catch (err) {
+    req.log.error({ err, id }, "Failed to change purchase order representative");
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: "Failed to change representative", details: message });
   }
 });
 

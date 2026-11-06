@@ -11,6 +11,11 @@ export interface PurchaseOrderInput {
   sheetPoNo: string;
   receiverName?: string;
   receiverPhone?: string;
+  /**
+     * Field representative, chosen from the existing HR employees module. Only an active HR employee is accepted; the server ignores anyone else. Setting this creates the supplier pickup task automatically.
+     * @nullable
+     */
+  representativeHrEmployeeId?: number | null;
   notes?: string;
   /** @minItems 1 */
   items: PurchaseOrderItemInput[];

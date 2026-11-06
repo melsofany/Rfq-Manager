@@ -3,11 +3,26 @@ import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { ChevronDown } from "lucide-react";
 
+/**
+ * Field representative, loaded from the HR employees module.
+ *
+ * `id` is the HR employee id — the value the server stores on the purchase
+ * order. It is never the legacy `representatives` table id.
+ */
 export type RepresentativeOption = {
   id: number;
-  name: string;
-  phone: string;
-  isActive: boolean;
+  employeeNo: string;
+  fullName: string;
+  fullNameEn?: string | null;
+  jobTitle?: string | null;
+  department?: string | null;
+  phone?: string | null;
+  /** An active field assignment exists, so this employee can receive mobile tasks. */
+  isFieldRepresentative: boolean;
+  /** Mobile access has been switched on for this employee by an administrator. */
+  mobileAccessEnabled: boolean;
+  /** Only an active field representative can be given a mobile pickup task. */
+  eligibleForMobileTask: boolean;
 };
 
 export interface PoItemRow {
@@ -28,15 +43,22 @@ export interface PoItemRow {
   rfqNumber: string;
 }
 
+/**
+ * Eligible field representatives, from the HR employees module.
+ *
+ * The server decides eligibility (active HR employee, current field assignment)
+ * rather than the client, so a representative revoked a minute ago cannot be
+ * picked from a stale cache.
+ */
 export function useRepresentatives() {
   return useQuery<RepresentativeOption[]>({
-    queryKey: ["representatives"],
+    queryKey: ["po", "representatives"],
     queryFn: async () => {
-      const res = await fetch("/api/representatives", { credentials: "include" });
+      const res = await fetch("/api/po/representatives", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch representatives");
       return res.json();
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60 * 1000,
   });
 }
 
@@ -44,23 +66,30 @@ export function RepresentativeNameInput({
   value,
   onChange,
   onSelect,
+  onClear,
   representatives,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSelect: (representative: RepresentativeOption) => void;
+  onClear: () => void;
   representatives: RepresentativeOption[];
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value);
   const containerRef = useRef<HTMLDivElement>(null);
-  const activeRepresentatives = representatives.filter((rep) => rep.isActive);
+
+  // Search by name, employee number, or employee id — the three keys section 3A
+  // requires.
+  const needle = query.trim().toLowerCase();
   const filtered = (
-    query.trim()
-      ? activeRepresentatives.filter((rep) =>
-          `${rep.name} ${rep.phone}`.toLowerCase().includes(query.trim().toLowerCase()),
+    needle
+      ? representatives.filter((rep) =>
+          [rep.fullName, rep.fullNameEn, rep.employeeNo, String(rep.id)]
+            .filter(Boolean)
+            .some((field) => String(field).toLowerCase().includes(needle)),
         )
-      : activeRepresentatives
+      : representatives
   ).slice(0, 50);
 
   useEffect(() => {
@@ -78,9 +107,9 @@ export function RepresentativeNameInput({
   }, []);
 
   const selectRepresentative = (representative: RepresentativeOption) => {
-    onChange(representative.name);
+    onChange(representative.fullName);
     onSelect(representative);
-    setQuery(representative.name);
+    setQuery(representative.fullName);
     setOpen(false);
   };
 
@@ -111,7 +140,7 @@ export function RepresentativeNameInput({
         <div className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto bg-popover border border-border rounded-md shadow-lg">
           {filtered.length === 0 ? (
             <div className="px-3 py-2 text-sm text-muted-foreground">
-              No saved representatives. You can keep typing manually.
+              لا يوجد موظف مطابق. المندوب يجب أن يكون موظفاً نشطاً في الموارد البشرية.
             </div>
           ) : (
             filtered.map((representative) => (
@@ -122,8 +151,25 @@ export function RepresentativeNameInput({
                 onClick={() => selectRepresentative(representative)}
                 className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground border-b border-border/50 last:border-0"
               >
-                <span className="block font-medium">{representative.name}</span>
-                <span className="block text-xs text-muted-foreground">{representative.phone}</span>
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{representative.fullName}</span>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {representative.employeeNo}
+                  </span>
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {[representative.department, representative.jobTitle].filter(Boolean).join(" · ")}
+                </span>
+                {representative.phone && (
+                  <span className="block text-xs text-muted-foreground" dir="ltr">
+                    {representative.phone}
+                  </span>
+                )}
+                {!representative.eligibleForMobileTask && (
+                  <span className="block text-xs text-amber-600">
+                    ليس مندوباً ميدانياً مُسنداً — لن يُنشأ له أمر استلام
+                  </span>
+                )}
               </button>
             ))
           )}
