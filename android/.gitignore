@@ -1,0 +1,24 @@
+# Android / Gradle
+# `local.properties` holds the machine-specific SDK path and must never be
+# committed — a CI runner resolves its own SDK.
+local.properties
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+output-metadata.json
+
+# Keystores and signing material
+*.jks
+*.keystore
+keystore.properties
+
+# Kotlin / IntelliJ
+.kotlin/
+*.hprof

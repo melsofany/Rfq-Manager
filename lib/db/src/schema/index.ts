@@ -38,5 +38,6 @@ export * from "./hr_attendance_exceptions";
 export * from "./hr_documents";
 export * from "./hr_production";
 export * from "./rfq_po_allocations";
+export * from "./field_operations";
 export * from "./finance";
 export * from "./mailbox_access";

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- HTTPS only. No cleartext exemption is declared, so a downgrade to plain
+         HTTP fails closed rather than silently sending credentials in the clear. -->
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

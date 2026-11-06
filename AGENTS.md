@@ -4364,3 +4364,44 @@ ATEF HASSAN MOHAMED AND HIS PARTNERS`)، فيلتفّ على سطرين، وال
   التحقق فعليًا).
 - **الاختبارات**: 2092 اختبار api-server يمر (كان 2090)؛ tsc نظيف؛ prettier على
   كل المستودع نظيف.
+
+## العمليات الميدانية — التطبيق لا يملك قاعدة بيانات، والقواعد ليست في الواجهة (feat/field-ops-android)
+
+- **التجميع عرضٌ فقط.** المندوب يرى صفاً واحداً للصنف، لكن الخادم هو من يجمّع
+  (`classificationIdentityKey`) ويعيد `allocations[]` — بند لكل `poItemId`
+  أصلي. لو جمّعنا في قاعدة البيانات لضاع التتبع بين المورد وأمر العميل، وهو
+  بالضبط ما تمنعه القاعدة 2.
+- **بند بلا هوية لا يُدمج أبداً.** أولوية المطابقة `itemId` ← `partNo` ← بصمة
+  الوصف، وأي بند يفشل في الثلاثة يأخذ مفتاحاً فريداً خاصاً به. «لا تدمج صنفين
+  لتشابه الوصف» ليست نصيحة، بل مسار مُختبَر في `field-ops-consolidation.test.ts`.
+- **الكميات تُتحقق على الخادم.** `checkDeliveryQuantities` يمنع التسليم قبل
+  الاستلام الفعلي، ويمنع تجاوز المستلم، ويمنع انتقال كمية بين أوامر عملاء
+  مختلفين. الواجهة تخفي، والخادم يمنع — لو اكتفينا بالواجهة لكان أي عميل
+  مُعدَّل قادراً على تجاوز القواعد.
+- **`clientUuid` + فهرس فريد `(employeeId, clientUuid)`.** إعادة الإرسال بعد
+  انقطاع شبكة لا تُنشئ استلاماً ثانياً. رفض 4xx لا يُعاد المحاولة فيه من
+  WorkManager — يُعرض الخطأ للمندوب بدل استنزاف البطارية.
+
+### بناء الأندرويد — العثرات التي كلّفت وقتاً
+
+- **`LocalNavBackStackEntry` لم يعد موجوداً في navigation-compose 2.8.4.**
+  الحل: تمرير `assignmentId` كوسيط تنقّل صريح
+  (`navArgument("assignmentId"){ type = NavType.IntType }`) بدل قراءته من
+  `backStackEntry`. أي محاولة لاستخدام الـ helper القديم لا تُترجم.
+- **R8 يفشل على تعليقات Error Prone التي تجلبها `androidx.security-crypto`.**
+  Tink يشير إلى `com.google.errorprone.annotations.*` وهي للترجمة فقط وغير
+  موجودة وقت التشغيل. بغير `-dontwarn com.google.errorprone.annotations.**`
+  يفشل `bundleRelease` — لا وقت التشغيل، بل البناء. `assembleDebug` ينجح
+  دائماً، لذا العطل لا يظهر إلا في الإصدار.
+- **Room يعيد كتابة `android/app/schemas/**.json` بترتيبه الخاص في كل بناء.**
+  إصلاح تنسيقه بـ Prettier بلا معنى — البناء التالي يلغيه. الملف في
+  `.prettierignore` مع `**/generated/**`.
+- **`-dontwarn com.google.api.client.http.**` و `org.joda.time.**` لازمان
+  أيضاً** لنفس السبب: مراجع ترجمة فقط داخل Tink.
+
+### النشر
+
+- `deploy.yml` يعمل عبر `workflow_run` على نجاح **CI** على `main`، لا على
+  نجاح Android Build. أي فشل في Format Check يمنع النشر بصمت.
+- خدمة Render `cortoba-rfq` عليها `autoDeploy: no`، والنشر يمرّ حصراً عبر
+  الـ workflow — لذلك الفرع لا يُنشر قبل الدمج.

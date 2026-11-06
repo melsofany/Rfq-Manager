@@ -3113,6 +3113,188 @@ export async function initDb(): Promise<void> {
     );
 
     logger.info("initDb: seed complete");
+
+    // ── Field operations (تطبيق العمليات الميدانية) ──────────────────────────
+    // Everything below is additive and idempotent: new columns on existing
+    // tables (mobile access on HR employees, HR linkage + actual executor on
+    // assignments and receipts) plus new tables. No existing column, table or
+    // relationship is renamed or dropped, so the portal and the WhatsApp rep
+    // bot keep working unchanged.
+    await client.query(`
+      ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS mobile_access_enabled BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS mobile_password_hash TEXT;
+      ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS mobile_last_login_at TIMESTAMPTZ;
+      ALTER TABLE hr_employees ADD COLUMN IF NOT EXISTS fcm_token TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE work_order_assignments ADD COLUMN IF NOT EXISTS hr_employee_id INTEGER;
+      ALTER TABLE work_order_assignments ADD COLUMN IF NOT EXISTS performed_by_hr_employee_id INTEGER;
+    `);
+    await client.query(`
+      ALTER TABLE po_item_receipts ADD COLUMN IF NOT EXISTS received_by_hr_employee_id INTEGER;
+      ALTER TABLE po_item_receipts ADD COLUMN IF NOT EXISTS gps_lat NUMERIC(9,6);
+      ALTER TABLE po_item_receipts ADD COLUMN IF NOT EXISTS gps_lng NUMERIC(9,6);
+      ALTER TABLE po_item_receipts ADD COLUMN IF NOT EXISTS operation_key TEXT;
+      ALTER TABLE po_item_receipts ADD COLUMN IF NOT EXISTS payload_hash TEXT;
+      ALTER TABLE po_item_receipts ADD COLUMN IF NOT EXISTS client_uuid TEXT;
+    `);
+    await client.query(`
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS delivered_by_hr_employee_id INTEGER;
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS recipient_name TEXT;
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS gps_lat NUMERIC(9,6);
+      ALTER TABLE customer_po_item_deliveries ADD COLUMN IF NOT EXISTS gps_lng NUMERIC(9,6);
+    `);
+    await client.query(`
+      ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS representative_hr_employee_id INTEGER;
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS hr_field_assignments (
+        id SERIAL PRIMARY KEY,
+        employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        assignment_type TEXT NOT NULL DEFAULT 'FIELD_REPRESENTATIVE',
+        status TEXT NOT NULL DEFAULT 'active',
+        assigned_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        assigned_by_name TEXT,
+        assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        revoked_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        revoked_by_name TEXT,
+        revoked_at TIMESTAMPTZ,
+        revoke_reason TEXT,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    // One ACTIVE assignment per employee — enforced by the database so no write
+    // path (API, script, or future import) can create a second active row.
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS hr_field_assignments_employee_idx
+        ON hr_field_assignments (employee_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS hr_field_assignments_one_active_uq
+        ON hr_field_assignments (employee_id) WHERE status = 'active';
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS work_order_delegations (
+        id SERIAL PRIMARY KEY,
+        assignment_id INTEGER NOT NULL REFERENCES work_order_assignments(id) ON DELETE CASCADE,
+        from_hr_employee_id INTEGER REFERENCES hr_employees(id) ON DELETE SET NULL,
+        to_hr_employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        scope TEXT NOT NULL DEFAULT 'both',
+        issued_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        issued_by_name TEXT,
+        reason TEXT,
+        starts_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ends_at TIMESTAMPTZ,
+        status TEXT NOT NULL DEFAULT 'active',
+        revoked_by INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+        revoked_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS work_order_delegations_assignment_idx
+        ON work_order_delegations (assignment_id);
+      CREATE INDEX IF NOT EXISTS work_order_delegations_to_employee_idx
+        ON work_order_delegations (to_hr_employee_id);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS mobile_notifications (
+        id SERIAL PRIMARY KEY,
+        hr_employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT,
+        entity_type TEXT,
+        entity_id INTEGER,
+        read_at TIMESTAMPTZ,
+        fcm_message_id TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS mobile_notifications_employee_idx
+        ON mobile_notifications (hr_employee_id, created_at);
+      CREATE INDEX IF NOT EXISTS mobile_notifications_unread_idx
+        ON mobile_notifications (hr_employee_id) WHERE read_at IS NULL;
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS mobile_attachments (
+        id SERIAL PRIMARY KEY,
+        operation_type TEXT NOT NULL,
+        operation_id INTEGER NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'photo',
+        original_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        uploaded_by_hr_employee_id INTEGER REFERENCES hr_employees(id) ON DELETE SET NULL,
+        client_id TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS mobile_attachments_operation_idx
+        ON mobile_attachments (operation_type, operation_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS mobile_attachments_client_uq
+        ON mobile_attachments (client_id) WHERE client_id IS NOT NULL;
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS mobile_sync_operations (
+        id SERIAL PRIMARY KEY,
+        hr_employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        client_uuid TEXT NOT NULL,
+        operation_type TEXT NOT NULL,
+        payload_hash TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        result_id INTEGER,
+        error TEXT,
+        request_payload JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    // A retried offline submission (same employee + same client UUID) is a
+    // no-op, never a second operation.
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS mobile_sync_operations_employee_uuid_uq
+        ON mobile_sync_operations (hr_employee_id, client_uuid);
+      CREATE INDEX IF NOT EXISTS mobile_sync_operations_status_idx
+        ON mobile_sync_operations (hr_employee_id, status);
+    `);
+    // Idempotency for receipts — own statement, AFTER the columns exist (a
+    // unique index on a column created in the same batch would fail on a
+    // database whose table predates the column, and initDb aborts on the first
+    // failing statement, silently skipping every later migration).
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS po_item_receipts_client_uuid_uq
+        ON po_item_receipts (client_uuid) WHERE client_uuid IS NOT NULL;
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS mobile_sessions (
+        id SERIAL PRIMARY KEY,
+        hr_employee_id INTEGER NOT NULL REFERENCES hr_employees(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL,
+        device_info TEXT,
+        fcm_token TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL,
+        revoked_at TIMESTAMPTZ
+      );
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS mobile_sessions_token_uq
+        ON mobile_sessions (token_hash);
+      CREATE INDEX IF NOT EXISTS mobile_sessions_employee_idx
+        ON mobile_sessions (hr_employee_id);
+    `);
+
+    logger.info("initDb: field operations schema ready");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");
     throw err;

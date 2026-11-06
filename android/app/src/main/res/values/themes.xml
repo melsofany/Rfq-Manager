@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CortobaFieldOps" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/cortoba_brown</item>
+        <item name="android:navigationBarColor">@color/cortoba_cream</item>
+        <item name="android:windowBackground">@color/cortoba_cream</item>
+    </style>
+</resources>
