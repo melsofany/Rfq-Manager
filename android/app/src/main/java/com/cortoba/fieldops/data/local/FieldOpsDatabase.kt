@@ -131,6 +131,9 @@ interface FieldOpsDao {
     @Query("DELETE FROM cached_pickup_tasks")
     suspend fun clearPickupTasks()
 
+    @Query("DELETE FROM cached_pickup_detail WHERE assignmentId = :id")
+    suspend fun clearPickupDetail(id: Int)
+
     @Query("DELETE FROM cached_delivery_tasks")
     suspend fun clearDeliveryTasks()
 
