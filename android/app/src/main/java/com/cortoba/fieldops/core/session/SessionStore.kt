@@ -49,12 +49,38 @@ class SessionStore @Inject constructor(
      * file is discarded and rebuilt once; if the keystore is still unusable the
      * session degrades to in-memory only. A token is never written in cleartext
      * as a fallback, so a failed keystore costs a re-login, not a leaked session.
+     *
+     * `create` succeeding is NOT proof the store is readable: values are
+     * decrypted lazily, so a file written with a now-missing key only fails when
+     * a value is first read. That read is what must be guarded — a throw there
+     * would escape this class's constructor and take the whole launch down.
      */
-    private fun openSecurePrefs(): SharedPreferences? = try {
-        createEncrypted()
-    } catch (t: Throwable) {
+    private fun openSecurePrefs(): SharedPreferences? {
+        val first = runCatching { createEncrypted() }.getOrNull()
+        if (first != null && canRead(first)) return first
+        // Either creation failed or the existing file is undecryptable: discard
+        // and rebuild once. A token is never persisted in cleartext as a
+        // fallback, so a lost key costs a re-login rather than a leaked session.
         runCatching { context.deleteSharedPreferences(PREFS_NAME) }
-        runCatching { createEncrypted() }.getOrNull()
+        val rebuilt = runCatching { createEncrypted() }.getOrNull()
+        return rebuilt?.takeIf { canRead(it) }
+    }
+
+    /** True when every stored value can actually be decrypted. */
+    private fun canRead(prefs: SharedPreferences): Boolean =
+        runCatching { prefs.all }.isSuccess
+
+    /** A read that treats an undecryptable store as "no value" instead of crashing. */
+    private fun read(key: String): String? =
+        runCatching { prefs?.getString(key, null) }.getOrNull()
+
+    /** A write that never throws: losing a token is recoverable, a crash is not. */
+    private fun write(block: (SharedPreferences.Editor) -> Unit) {
+        runCatching {
+            val editor = prefs?.edit() ?: return
+            block(editor)
+            editor.apply()
+        }
     }
 
     private val _token = MutableStateFlow<String?>(null)
@@ -69,28 +95,30 @@ class SessionStore @Inject constructor(
 
     init {
         // Restore the last session synchronously: a cold start must not flash the
-        // login screen for a representative who is already signed in.
-        val stored = prefs?.getString(KEY_TOKEN, null)
+        // login screen for a representative who is already signed in. Every read
+        // goes through [read], which degrades to "no value" if the store cannot
+        // be decrypted rather than throwing out of this constructor.
+        val stored = read(KEY_TOKEN)
         _token.value = stored
         _signedIn.value = stored != null
-        _displayName.value = prefs?.getString(KEY_NAME, null)
+        _displayName.value = read(KEY_NAME)
     }
 
     fun currentToken(): String? = _token.value
 
     fun saveSession(token: String, fullName: String?, employeeNo: String?) {
-        prefs?.edit()
-            ?.putString(KEY_TOKEN, token)
-            ?.putString(KEY_NAME, fullName)
-            ?.putString(KEY_EMPLOYEE_NO, employeeNo)
-            ?.apply()
+        write {
+            it.putString(KEY_TOKEN, token)
+            it.putString(KEY_NAME, fullName)
+            it.putString(KEY_EMPLOYEE_NO, employeeNo)
+        }
         _token.value = token
         _displayName.value = fullName
         _signedIn.value = true
     }
 
     fun clear() {
-        prefs?.edit()?.clear()?.apply()
+        write { it.clear() }
         _token.value = null
         _displayName.value = null
         _signedIn.value = false
