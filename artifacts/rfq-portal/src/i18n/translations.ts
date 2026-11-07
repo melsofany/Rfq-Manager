@@ -458,7 +458,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.deduction.delete": "Delete",
     "hr.deduction.empty": "No deductions this month.",
     "hr.deduction.required": "Select an employee and enter an amount or days.",
-    "hr.deduction.hint": "A deduction applied to this month's payroll — either a fixed amount or days of basic pay.",
+    "hr.deduction.hint":
+      "A deduction applied to this month's payroll — either a fixed amount or days of basic pay.",
     "hr.reward.section": "Bonuses",
     "hr.reward.period": "Month",
     "hr.reward.byAmount": "Fixed amount",
@@ -471,7 +472,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.reward.delete": "Delete",
     "hr.reward.empty": "No bonuses this month.",
     "hr.reward.required": "Select an employee and enter an amount or days.",
-    "hr.reward.hint": "Day-based bonuses are worth days × (basic ÷ daily divisor in Settings), calculated when the payroll runs.",
+    "hr.reward.hint":
+      "Day-based bonuses are worth days × (basic ÷ daily divisor in Settings), calculated when the payroll runs.",
     "nav.auditLog": "Audit Log",
     "nav.integrations": "ERP Integrations",
     "nav.aiAssistant": "AI Assistant",
@@ -1409,7 +1411,8 @@ const translations: Record<Lang, Record<string, string>> = {
     "hr.reward.delete": "حذف",
     "hr.reward.empty": "مفيش مكافآت الشهر ده.",
     "hr.reward.required": "اختر موظف واكتب مبلغ أو عدد أيام.",
-    "hr.reward.hint": "المكافأة بالأيام = عدد الأيام × (الأساسي ÷ قاعدة اليوم في الإعدادات)، وبتتحسب وقت تشغيل المرتب.",
+    "hr.reward.hint":
+      "المكافأة بالأيام = عدد الأيام × (الأساسي ÷ قاعدة اليوم في الإعدادات)، وبتتحسب وقت تشغيل المرتب.",
     "nav.auditLog": "سجل المراجعة",
     "nav.integrations": "تكاملات ERP",
     "nav.aiAssistant": "المساعد الذكي",

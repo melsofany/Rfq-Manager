@@ -94,6 +94,11 @@ data class PickupTask(
     val poId: Int,
     val poNo: String,
     val status: String,
+    /**
+     * Settlement state for the supplier card — "unpaid" | "partial" | "paid".
+     * No amounts: the rep only needs to know whether the supplier was paid.
+     */
+    val paymentStatus: String = "unpaid",
     val poDate: String? = null,
     val notes: String? = null,
     val supplier: SupplierDto? = null,
@@ -135,6 +140,7 @@ data class PickupDetailResponse(
     val executorRole: String = "owner",
     val po: PoRef? = null,
     val supplier: SupplierDto? = null,
+    val paymentStatus: String = "unpaid",
     val items: List<ConsolidatedItem> = emptyList(),
     val responsibleEmployeeId: Int? = null,
     val representativeName: String? = null,

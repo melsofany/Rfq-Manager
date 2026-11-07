@@ -49,6 +49,7 @@ import {
   auditFieldOperation,
   loadFieldOpsSettings,
 } from "./service";
+import { paymentStatusByPair } from "./payment-status";
 import { recomputeItemTotals } from "../po/receipts";
 import {
   acceptedQtyFromSupplier,
@@ -321,6 +322,15 @@ router.get("/pickups", async (req, res): Promise<void> => {
   const supplierMap = new Map(supplierRows.map((s) => [s.id, s]));
 
   // One task per supplier PO that still has lines to receive.
+  const activePairs = activePoIds
+    .map((poId) => {
+      const groupLines = groups.flatMap((g) => g.allocations).filter((a) => a.poId === poId);
+      const supplierId = groupLines[0]?.supplierId ?? null;
+      return { poId, supplierId };
+    })
+    .filter((p): p is { poId: number; supplierId: number } => p.supplierId != null);
+  const paymentStatus = await paymentStatusByPair(activePairs);
+
   const tasks = activePoIds.map((poId) => {
     const po = poMap.get(poId);
     const groupLines = groups.flatMap((g) => g.allocations).filter((a) => a.poId === poId);
@@ -332,6 +342,11 @@ router.get("/pickups", async (req, res): Promise<void> => {
       poId,
       poNo: po?.poNo ?? "",
       status: assignments.find((a) => a.poId === poId)?.status ?? "sent",
+      // Settlement state only — deliberately no due/paid amounts. The
+      // representative needs to know "should I go to this supplier", not the
+      // company's ledger figures.
+      paymentStatus:
+        supplierId != null ? (paymentStatus.get(`${poId}:${supplierId}`) ?? "unpaid") : "unpaid",
       poDate: po?.createdAt?.toISOString() ?? null,
       notes: po?.notes ?? null,
       supplier: supplier
@@ -416,6 +431,13 @@ router.get("/pickups/:id", async (req, res): Promise<void> => {
         )[0]
       : null;
 
+  const paymentStatus =
+    supplierId != null
+      ? ((await paymentStatusByPair([{ poId: assignment.poId, supplierId }])).get(
+          `${assignment.poId}:${supplierId}`,
+        ) ?? "unpaid")
+      : "unpaid";
+
   res.json({
     assignmentId: assignment.id,
     status: assignment.status,
@@ -424,6 +446,7 @@ router.get("/pickups/:id", async (req, res): Promise<void> => {
       ? { id: po.id, poNo: po.poNo, notes: po.notes, poDate: po.createdAt.toISOString() }
       : null,
     supplier,
+    paymentStatus,
     items: groups,
     // The responsible representative, for the accountability banner.
     responsibleEmployeeId: assignment.hrEmployeeId,

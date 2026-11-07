@@ -58,6 +58,7 @@ import com.cortoba.fieldops.ui.components.InfoRow
 import com.cortoba.fieldops.ui.components.LoadingBox
 import com.cortoba.fieldops.ui.components.OfflineBanner
 import com.cortoba.fieldops.ui.components.OutlineActionButton
+import com.cortoba.fieldops.ui.components.PaymentStatusChip
 import com.cortoba.fieldops.ui.components.SectionTitle
 import com.cortoba.fieldops.ui.components.StatusChip
 import com.cortoba.fieldops.ui.theme.CortobaBrown
@@ -181,7 +182,11 @@ fun PickupListScreen(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
-                                        StatusChip(task.status)
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            StatusChip(task.status)
+                                            Spacer(Modifier.height(6.dp))
+                                            PaymentStatusChip(task.paymentStatus)
+                                        }
                                     }
 
                                     Spacer(Modifier.height(10.dp))
