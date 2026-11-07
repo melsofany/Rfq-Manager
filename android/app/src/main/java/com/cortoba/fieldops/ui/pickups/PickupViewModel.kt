@@ -236,6 +236,7 @@ class PickupViewModel @Inject constructor(
                         it.copy(
                             receivedQty = com.cortoba.fieldops.core.util.formatQty(it.requiredQty),
                             rejectedQty = "",
+                            rejectionReason = "",
                         )
                     } else {
                         it
@@ -251,7 +252,11 @@ class PickupViewModel @Inject constructor(
         _form.update { state ->
             state.copy(
                 entries = state.entries.map {
-                    if (it.groupKey == groupKey) it.copy(receivedQty = "0", rejectedQty = "") else it
+                    if (it.groupKey == groupKey) {
+                        it.copy(receivedQty = "0", rejectedQty = "", rejectionReason = "")
+                    } else {
+                        it
+                    }
                 },
                 error = null,
             )
