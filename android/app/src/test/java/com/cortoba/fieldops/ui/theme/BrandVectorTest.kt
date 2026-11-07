@@ -47,6 +47,30 @@ class BrandVectorTest {
     }
 
     @Test
+    fun `pathData is a plain attribute, never an aapt attr block`() {
+        // Compose reads a vector through XmlVectorParser, which expects
+        // android:pathData to be a *string*. Wrapping it in
+        // <aapt:attr name="android:pathData"><pathData android:value="..."/>
+        // compiles fine but aapt2 stores it as a reference to a generated
+        // resource, so the parser receives the string "res/drawable/..." and
+        // throws IllegalArgumentException("Unknown command for: r") the instant
+        // the drawable is drawn — a launch crash with no build-time signal.
+        // aapt:attr is only valid for complex values such as a gradient fillColor.
+        val offenders = mutableListOf<String>()
+        drawableDir.walkTopDown().filter { it.extension == "xml" }.forEach { file ->
+            val text = file.readText()
+            if (Regex("""<aapt:attr\s+name="android:pathData">""").containsMatchIn(text)) {
+                offenders += file.name
+            }
+        }
+        assertTrue(
+            "pathData must be an attribute; an aapt:attr block makes Compose " +
+                "read a resource name as path data and crash at launch: $offenders",
+            offenders.isEmpty(),
+        )
+    }
+
+    @Test
     fun `launcher foreground keeps the mark inside the adaptive icon safe zone`() {
         // The adaptive-icon safe zone is the inner 66dp of the 108dp canvas.
         val file = File(drawableDir, "ic_launcher_foreground.xml")
