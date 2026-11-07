@@ -21,6 +21,10 @@ jobs:
   build:
     name: Build & Test
     runs-on: ubuntu-latest
+    # The release step publishes the APK as a GitHub Release, which needs write
+    # access to repository contents (the default token is read-only).
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: android
