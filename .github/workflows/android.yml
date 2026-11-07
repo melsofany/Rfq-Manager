@@ -46,15 +46,39 @@ jobs:
       - name: Assemble debug APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Assemble release AAB (unsigned without secrets)
-        run: gradle :app:bundleRelease --no-daemon --stacktrace
-        continue-on-error: true
+      - name: Assemble release APK and AAB
+        run: gradle :app:assembleRelease :app:bundleRelease --no-daemon --stacktrace
+
+      # Guards the bug that made every previous fix look ineffective: Android
+      # refuses to install an update signed by a different certificate than the
+      # installed app (INSTALL_FAILED_UPDATE_INCOMPATIBLE). If the shared debug
+      # keystore is ever removed or replaced, the representative silently keeps
+      # the old build and reports "still broken". Fail the build instead.
+      - name: Verify APK signing certificate is the shared one
+        run: |
+          expected="3f39ef7fb8796ecc216c742f87aeeaf161f05d5ae214a60c9ba6b85a2ca55988"
+          for apk in app/build/outputs/apk/release/*.apk app/build/outputs/apk/debug/*.apk; do
+            actual=$("${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --print-certs "$apk" \
+              | awk '/SHA-256 digest/ {print $NF; exit}')
+            echo "$apk -> $actual"
+            if [ "$actual" != "$expected" ]; then
+              echo "::error file=$apk::APK is not signed with the shared key; updates will be rejected."
+              exit 1
+            fi
+          done
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: cortoba-field-ops-debug-apk
           path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: cortoba-field-ops-release-apk
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
 
       - name: Upload release AAB
