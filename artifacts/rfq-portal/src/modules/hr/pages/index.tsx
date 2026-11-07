@@ -2731,9 +2731,7 @@ function DisciplineTab() {
             <select
               className={input}
               value={rewardDraft.employeeId}
-              onChange={(e) =>
-                setRewardDraft({ ...rewardDraft, employeeId: e.target.value })
-              }
+              onChange={(e) => setRewardDraft({ ...rewardDraft, employeeId: e.target.value })}
             >
               <option value="">{t("hr.leave.pickEmployee")}</option>
               {employees
@@ -2758,22 +2756,16 @@ function DisciplineTab() {
               className={`${input} w-28`}
               inputMode="decimal"
               placeholder={
-                rewardDraft.mode === "days"
-                  ? t("hr.reward.days")
-                  : t("hr.reward.amount")
+                rewardDraft.mode === "days" ? t("hr.reward.days") : t("hr.reward.amount")
               }
               value={rewardDraft.value}
-              onChange={(e) =>
-                setRewardDraft({ ...rewardDraft, value: e.target.value })
-              }
+              onChange={(e) => setRewardDraft({ ...rewardDraft, value: e.target.value })}
             />
             <input
               className={`${input} flex-1 min-w-40`}
               placeholder={t("hr.reward.reason")}
               value={rewardDraft.reason}
-              onChange={(e) =>
-                setRewardDraft({ ...rewardDraft, reason: e.target.value })
-              }
+              onChange={(e) => setRewardDraft({ ...rewardDraft, reason: e.target.value })}
             />
             <Button size="sm" type="button" onClick={addReward}>
               {t("hr.reward.add")}
@@ -2784,13 +2776,9 @@ function DisciplineTab() {
               <li key={x.id} className="flex items-center gap-2">
                 <span>
                   {name(x.employeeId)} —{" "}
-                  {x.days !== null
-                    ? `${Number(x.days)} ${t("hr.reward.daysUnit")}`
-                    : x.amount}
+                  {x.days !== null ? `${Number(x.days)} ${t("hr.reward.daysUnit")}` : x.amount}
                 </span>
-                {x.reason && (
-                  <span className="text-muted-foreground">· {x.reason}</span>
-                )}
+                {x.reason && <span className="text-muted-foreground">· {x.reason}</span>}
                 <Button
                   size="sm"
                   variant="outline"
@@ -2827,9 +2815,7 @@ function DisciplineTab() {
             <select
               className={input}
               value={deductionDraft.employeeId}
-              onChange={(e) =>
-                setDeductionDraft({ ...deductionDraft, employeeId: e.target.value })
-              }
+              onChange={(e) => setDeductionDraft({ ...deductionDraft, employeeId: e.target.value })}
             >
               <option value="">{t("hr.leave.pickEmployee")}</option>
               {employees
@@ -2857,22 +2843,16 @@ function DisciplineTab() {
               className={`${input} w-28`}
               inputMode="decimal"
               placeholder={
-                deductionDraft.mode === "days"
-                  ? t("hr.deduction.days")
-                  : t("hr.deduction.amount")
+                deductionDraft.mode === "days" ? t("hr.deduction.days") : t("hr.deduction.amount")
               }
               value={deductionDraft.value}
-              onChange={(e) =>
-                setDeductionDraft({ ...deductionDraft, value: e.target.value })
-              }
+              onChange={(e) => setDeductionDraft({ ...deductionDraft, value: e.target.value })}
             />
             <input
               className={`${input} flex-1 min-w-40`}
               placeholder={t("hr.deduction.reason")}
               value={deductionDraft.reason}
-              onChange={(e) =>
-                setDeductionDraft({ ...deductionDraft, reason: e.target.value })
-              }
+              onChange={(e) => setDeductionDraft({ ...deductionDraft, reason: e.target.value })}
             />
             <Button size="sm" type="button" onClick={addDeduction}>
               {t("hr.deduction.add")}
@@ -2883,13 +2863,9 @@ function DisciplineTab() {
               <li key={x.id} className="flex items-center gap-2">
                 <span>
                   {name(x.employeeId)} —{" "}
-                  {x.days !== null
-                    ? `${Number(x.days)} ${t("hr.deduction.daysUnit")}`
-                    : x.amount}
+                  {x.days !== null ? `${Number(x.days)} ${t("hr.deduction.daysUnit")}` : x.amount}
                 </span>
-                {x.reason && (
-                  <span className="text-muted-foreground">· {x.reason}</span>
-                )}
+                {x.reason && <span className="text-muted-foreground">· {x.reason}</span>}
                 <Button
                   size="sm"
                   variant="outline"
