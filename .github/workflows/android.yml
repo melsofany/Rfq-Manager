@@ -57,9 +57,10 @@ jobs:
       - name: Verify APK signing certificate is the shared one
         run: |
           expected="3f39ef7fb8796ecc216c742f87aeeaf161f05d5ae214a60c9ba6b85a2ca55988"
+          apksigner=$(ls "${ANDROID_HOME}"/build-tools/*/apksigner | sort -V | tail -1)
+          echo "using $apksigner"
           for apk in app/build/outputs/apk/release/*.apk app/build/outputs/apk/debug/*.apk; do
-            actual=$("${ANDROID_HOME}/build-tools/35.0.0/apksigner" verify --print-certs "$apk" \
-              | awk '/SHA-256 digest/ {print $NF; exit}')
+            actual=$("$apksigner" verify --print-certs "$apk" | awk '/SHA-256 digest/ {print $NF; exit}')
             echo "$apk -> $actual"
             if [ "$actual" != "$expected" ]; then
               echo "::error file=$apk::APK is not signed with the shared key; updates will be rejected."
