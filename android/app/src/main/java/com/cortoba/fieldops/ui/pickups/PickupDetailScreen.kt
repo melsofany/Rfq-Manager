@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -51,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -366,6 +368,46 @@ fun PickupDetailScreen(
     }
 }
 
+/** Selected state of one item in the receiving form. */
+private enum class ReceiptMode { FULL, PARTIAL, REJECT }
+
+/**
+ * A full / partial / reject action button with a visible selected state: the
+ * active mode is filled, the others stay outlined, so a tap gives immediate
+ * feedback instead of silently changing numbers elsewhere on the screen.
+ */
+@Composable
+private fun RowScope.ReceiptModeButton(
+    text: String,
+    selected: Boolean,
+    color: Color,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(10.dp)
+    val padding = PaddingValues(horizontal = 4.dp)
+    if (selected) {
+        Button(
+            onClick = onClick,
+            shape = shape,
+            colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White),
+            contentPadding = padding,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(text, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            shape = shape,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
+            contentPadding = padding,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(text, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
 /** One consolidated item in the receiving form with full / partial / reject. */
 @Composable
 private fun ReceiptGroupCard(
@@ -380,6 +422,17 @@ private fun ReceiptGroupCard(
     var showPartial by remember { mutableStateOf(false) }
     var showDistribution by remember { mutableStateOf(false) }
     val entryByPoItemId = entries.associateBy { it.poItemId }
+
+    // The single source of truth for the item's state is the form entries.
+    // Deriving the selected mode from them (instead of a second flag) keeps the
+    // highlight and the typed quantities from drifting apart.
+    val receivedTotal = entries.sumOf { it.receivedQty.toDoubleOrNull() ?: 0.0 }
+    val requiredTotal = group.totalRemainingQty
+    val mode = when {
+        receivedTotal <= 1e-6 -> ReceiptMode.REJECT
+        receivedTotal >= requiredTotal - 1e-6 -> ReceiptMode.FULL
+        else -> ReceiptMode.PARTIAL
+    }
 
     CreamCard(modifier = Modifier.animateContentSize()) {
         Column {
@@ -417,31 +470,39 @@ private fun ReceiptGroupCard(
             Spacer(Modifier.height(8.dp))
 
             InfoRow("المستلم سابقاً", formatQty(group.totalAcceptedQty))
+            InfoRow(
+                "الكمية المستلمة الآن",
+                "${formatQty(receivedTotal)} / ${formatQty(requiredTotal)}",
+                emphasize = true,
+            )
 
             Spacer(Modifier.height(8.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = onFull,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("استلام كلي", color = StatusGreen)
-                }
-                OutlinedButton(
-                    onClick = { showPartial = !showPartial },
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("استلام جزئي", color = StatusBlue)
-                }
-                OutlinedButton(
-                    onClick = onReject,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("رفض", color = StatusAmber)
-                }
+                ReceiptModeButton(
+                    text = "استلام كلي",
+                    selected = !showPartial && mode == ReceiptMode.FULL,
+                    color = StatusGreen,
+                    onClick = {
+                        showPartial = false
+                        onFull()
+                    },
+                )
+                ReceiptModeButton(
+                    text = "استلام جزئي",
+                    selected = showPartial || mode == ReceiptMode.PARTIAL,
+                    color = StatusBlue,
+                    onClick = { showPartial = true },
+                )
+                ReceiptModeButton(
+                    text = "رفض",
+                    selected = !showPartial && mode == ReceiptMode.REJECT,
+                    color = StatusAmber,
+                    onClick = {
+                        showPartial = false
+                        onReject()
+                    },
+                )
             }
 
             if (showPartial) {
