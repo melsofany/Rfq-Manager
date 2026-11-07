@@ -149,3 +149,53 @@ export function hasOutstandingQty(orderedQty: number | null, acceptedQty: number
 export function supplierPoCount(group: ConsolidatedGroup): number {
   return new Set(group.allocations.map((a) => a.poNo)).size;
 }
+
+/** One customer and the distinct purchase orders that carry delivery work. */
+export interface CustomerDeliveryGroup {
+  customerId: number;
+  customerName: string | null;
+  customerPoIds: number[];
+  status: "delivered" | "pending";
+}
+
+/**
+ * Collapse delivery assignments onto ONE row per customer.
+ *
+ * A customer with three purchase orders must appear as a single square, not
+ * three cards that look like three different customers. The customer id is the
+ * only identity used — a customer PO with no customer id cannot be grouped and
+ * is dropped, because guessing would merge unrelated work.
+ *
+ * `status` is "delivered" only when EVERY assignment for the customer is
+ * delivered; one outstanding order keeps the customer in progress.
+ */
+export function groupAssignmentsByCustomer(
+  assignments: {
+    customerPoId: number | null;
+    status: string;
+    customerId: number | null;
+    customerName: string | null;
+  }[],
+): CustomerDeliveryGroup[] {
+  const byCustomer = new Map<number, { poIds: Set<number>; statuses: Set<string>; name: string | null }>();
+  for (const a of assignments) {
+    if (a.customerPoId == null || a.customerId == null) continue;
+    const entry = byCustomer.get(a.customerId) ?? {
+      poIds: new Set<number>(),
+      statuses: new Set<string>(),
+      name: a.customerName,
+    };
+    entry.poIds.add(a.customerPoId);
+    entry.statuses.add(a.status);
+    byCustomer.set(a.customerId, entry);
+  }
+  return [...byCustomer.entries()].map(([customerId, entry]) => ({
+    customerId,
+    customerName: entry.name,
+    customerPoIds: [...entry.poIds],
+    status:
+      entry.statuses.size > 0 && [...entry.statuses].every((s) => s === "delivered")
+        ? "delivered"
+        : "pending",
+  }));
+}

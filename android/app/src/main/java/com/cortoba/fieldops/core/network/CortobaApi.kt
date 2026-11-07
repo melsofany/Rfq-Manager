@@ -2,6 +2,7 @@ package com.cortoba.fieldops.core.network
 
 import com.cortoba.fieldops.core.network.dto.AppVersionDto
 import com.cortoba.fieldops.core.network.dto.ChangePasswordRequest
+import com.cortoba.fieldops.core.network.dto.CustomerDeliveryDetailResponse
 import com.cortoba.fieldops.core.network.dto.DashboardResponse
 import com.cortoba.fieldops.core.network.dto.DeliveryConfirmRequest
 import com.cortoba.fieldops.core.network.dto.DeliveryConfirmResponse
@@ -59,6 +60,9 @@ interface CortobaApi {
 
     @GET("api/mobile/deliveries")
     suspend fun deliveries(): Response<DeliveryListResponse>
+
+    @GET("api/mobile/deliveries/customer/{id}")
+    suspend fun customerDelivery(@Path("id") customerId: Int): Response<CustomerDeliveryDetailResponse>
 
     @GET("api/mobile/deliveries/{id}")
     suspend fun delivery(@Path("id") assignmentId: Int): Response<DeliveryDetailResponse>

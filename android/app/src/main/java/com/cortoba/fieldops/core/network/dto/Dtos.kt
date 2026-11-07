@@ -201,15 +201,15 @@ data class DeliverySummary(
 )
 
 data class DeliveryTask(
-    val assignmentId: Int,
-    val customerPoId: Int,
-    val customerPoNo: String,
+    val customerId: Int,
     val customerName: String? = null,
-    val poDate: String? = null,
-    val notes: String? = null,
-    val status: String = "",
+    val phone: String? = null,
+    val address: String? = null,
+    val contactPerson: String? = null,
+    val poCount: Int = 0,
     val distinctItemCount: Int = 0,
     val availableQty: Double = 0.0,
+    val status: String = "",
 )
 
 data class CustomerDto(
@@ -250,6 +250,25 @@ data class DeliveryItem(
     val deliveredQty: Double = 0.0,
     val availableQty: Double = 0.0,
     val deliveryStatus: String = "",
+)
+
+data class CustomerDeliveryPo(
+    val assignmentId: Int? = null,
+    val customerPoId: Int,
+    val customerPoNo: String,
+    val customerName: String? = null,
+    val poDate: String? = null,
+    val notes: String? = null,
+    val status: String = "",
+    val items: List<DeliveryItem> = emptyList(),
+)
+
+data class CustomerDeliveryDetailResponse(
+    val customerId: Int,
+    val customer: CustomerDto? = null,
+    val purchaseOrders: List<CustomerDeliveryPo> = emptyList(),
+    val responsibleEmployeeId: Int? = null,
+    val representativeName: String? = null,
 )
 
 data class DeliveryItemRequest(

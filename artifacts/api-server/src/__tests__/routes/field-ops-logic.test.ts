@@ -216,10 +216,10 @@ describe("checkReceiptQuantities", () => {
   it("rejects negative quantities", () => {
     expect(checkReceiptQuantities({ ...ok, receivedQty: -1, acceptedQty: -1 }).ok).toBe(false);
   });
-  it("rejects an empty submission", () => {
+  it("allows a deliberate refusal (zero received, zero rejected)", () => {
     expect(
       checkReceiptQuantities({ ...ok, receivedQty: 0, acceptedQty: 0, rejectedQty: 0 }).ok,
-    ).toBe(false);
+    ).toBe(true);
   });
   it("allows a pure rejection with no accepted qty", () => {
     expect(

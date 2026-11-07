@@ -39,6 +39,7 @@ import {
 import {
   consolidatePickupLines,
   customerPoNosOf,
+  groupAssignmentsByCustomer,
   hasOutstandingQty,
   type PickupLine,
 } from "./consolidation";
@@ -627,7 +628,7 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
       return;
     }
     const receiptStatus =
-      rejectedQty > 0 && acceptedQty === 0
+      acceptedQty === 0
         ? "rejected"
         : acceptedQty < receivedQty
           ? "partial"
@@ -808,22 +809,68 @@ router.get("/deliveries", async (req, res): Promise<void> => {
     : [];
   const cpoMap = new Map(cpoRows.map((c) => [c.id, c]));
 
-  const tasks = [];
-  for (const a of assignments) {
-    if (a.customerPoId == null) continue;
-    const cpo = cpoMap.get(a.customerPoId);
-    if (!cpo) continue;
-    const items = await deliveryItemsFor(a);
+  const customerIds = [
+    ...new Set(cpoRows.map((c) => c.customerId).filter((x): x is number => x != null)),
+  ];
+  const customerRows = customerIds.length
+    ? await db
+        .select({
+          id: customersTable.id,
+          name: customersTable.name,
+          phone: customersTable.phone,
+          address: customersTable.address,
+          contactPerson: customersTable.contactPerson,
+        })
+        .from(customersTable)
+        .where(inArray(customersTable.id, customerIds))
+    : [];
+  const customerMap = new Map(customerRows.map((c) => [c.id, c]));
+
+  // One card per CUSTOMER (not per PO). A customer with several purchase orders
+  // collapses onto a single square instead of scattering across several cards.
+  const grouped = groupAssignmentsByCustomer(
+    assignments.map((a) => {
+      const cpo = a.customerPoId != null ? cpoMap.get(a.customerPoId) : undefined;
+      return {
+        customerPoId: a.customerPoId,
+        status: a.status,
+        customerId: cpo?.customerId ?? null,
+        customerName: cpo?.customerName ?? null,
+      };
+    }),
+  );
+
+  const tasks: {
+    customerId: number;
+    customerName: string;
+    phone: string | null;
+    address: string | null;
+    contactPerson: string | null;
+    poCount: number;
+    distinctItemCount: number;
+    availableQty: number;
+    status: string;
+  }[] = [];
+
+  for (const g of grouped) {
+    const customer = customerMap.get(g.customerId);
+    let distinctItemCount = 0;
+    let availableQty = 0;
+    for (const poId of g.customerPoIds) {
+      const items = await deliveryItemsFor({ customerPoId: poId, customerPoItemId: null });
+      distinctItemCount += items.length;
+      availableQty += items.reduce((s, i) => s + i.availableQty, 0);
+    }
     tasks.push({
-      assignmentId: a.id,
-      customerPoId: a.customerPoId,
-      customerPoNo: cpo.customerPoNo,
-      customerName: cpo.customerName,
-      poDate: cpo.poDate,
-      notes: cpo.notes,
-      status: a.status,
-      distinctItemCount: items.length,
-      availableQty: Math.round(items.reduce((s, i) => s + i.availableQty, 0) * 10000) / 10000,
+      customerId: g.customerId,
+      customerName: customer?.name ?? g.customerName ?? "عميل غير محدد",
+      phone: customer?.phone ?? null,
+      address: customer?.address ?? null,
+      contactPerson: customer?.contactPerson ?? null,
+      poCount: g.customerPoIds.length,
+      distinctItemCount,
+      availableQty: Math.round(availableQty * 10000) / 10000,
+      status: g.status,
     });
   }
 
@@ -887,6 +934,107 @@ async function deliveryItemsFor(assignment: {
   }
   return out;
 }
+
+router.get("/deliveries/customer/:customerId", async (req, res): Promise<void> => {
+  const actor = actorOf(req);
+  const customerId = Number(req.params.customerId);
+  if (!Number.isInteger(customerId)) {
+    res.status(400).json({ error: "معرّف غير صالح" });
+    return;
+  }
+
+  // The rep may open only a customer they actually have delivery work for.
+  const { assignmentIds } = await visibleAssignmentsFor(actor.hrEmployeeId, "delivery");
+  const assignments = assignmentIds.length
+    ? await db
+        .select()
+        .from(workOrderAssignmentsTable)
+        .where(inArray(workOrderAssignmentsTable.id, assignmentIds))
+    : [];
+  const customerPoIds = assignments
+    .map((a) => a.customerPoId)
+    .filter((x): x is number => x != null);
+  const cpoRows = customerPoIds.length
+    ? await db
+        .select({
+          id: customerPosTable.id,
+          customerPoNo: customerPosTable.customerPoNo,
+          customerId: customerPosTable.customerId,
+          customerName: customerPosTable.customerName,
+          poDate: customerPosTable.poDate,
+          notes: customerPosTable.notes,
+          status: customerPosTable.status,
+        })
+        .from(customerPosTable)
+        .where(inArray(customerPosTable.id, customerPoIds))
+    : [];
+
+  const ownedPoRows = cpoRows.filter((c) => c.customerId === customerId);
+  if (!ownedPoRows.length) {
+    res.status(404).json({ error: "العميل غير موجود أو لا توجد لك مهام تسليم له" });
+    return;
+  }
+
+  const customer =
+    ((
+      await db
+        .select({
+          id: customersTable.id,
+          name: customersTable.name,
+          phone: customersTable.phone,
+          address: customersTable.address,
+          contactPerson: customersTable.contactPerson,
+        })
+        .from(customersTable)
+        .where(eq(customersTable.id, customerId))
+    )[0] ?? null);
+
+  const assignmentByPo = new Map<number, number>();
+  for (const a of assignments) {
+    if (a.customerPoId != null && !assignmentByPo.has(a.customerPoId)) {
+      assignmentByPo.set(a.customerPoId, a.id);
+    }
+  }
+
+  const purchaseOrders = [];
+  for (const cpo of ownedPoRows) {
+    const items = await deliveryItemsFor({ customerPoId: cpo.id, customerPoItemId: null });
+    const assignmentId = assignmentByPo.get(cpo.id);
+    const assignment = assignments.find((a) => a.id === assignmentId);
+    purchaseOrders.push({
+      assignmentId,
+      customerPoId: cpo.id,
+      customerPoNo: cpo.customerPoNo,
+      customerName: cpo.customerName,
+      poDate: cpo.poDate,
+      notes: cpo.notes,
+      status: assignment?.status ?? cpo.status ?? "pending",
+      items,
+    });
+  }
+
+  res.json({
+    customerId,
+    customer: customer
+      ? {
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          address: customer.address,
+          contactPerson: customer.contactPerson,
+        }
+      : {
+          id: customerId,
+          name: ownedPoRows[0]?.customerName ?? null,
+          phone: null,
+          address: null,
+          contactPerson: null,
+        },
+    purchaseOrders,
+    responsibleEmployeeId: assignments[0]?.hrEmployeeId ?? null,
+    representativeName: assignments[0]?.representativeName ?? null,
+  });
+});
 
 router.get("/deliveries/:id", async (req, res): Promise<void> => {
   const actor = actorOf(req);

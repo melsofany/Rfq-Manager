@@ -3,6 +3,7 @@ package com.cortoba.fieldops.ui.deliveries
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cortoba.fieldops.core.network.ApiException
+import com.cortoba.fieldops.core.network.dto.CustomerDeliveryDetailResponse
 import com.cortoba.fieldops.core.network.dto.DeliveryConfirmRequest
 import com.cortoba.fieldops.core.network.dto.DeliveryDetailResponse
 import com.cortoba.fieldops.core.network.dto.DeliveryItemRequest
@@ -27,6 +28,14 @@ data class DeliveryListUiState(
 data class DeliveryDetailUiState(
     val loading: Boolean = true,
     val data: DeliveryDetailResponse? = null,
+    val error: String? = null,
+    val fromCache: Boolean = false,
+    val cachedAt: Long? = null,
+)
+
+data class CustomerDeliveryDetailUiState(
+    val loading: Boolean = true,
+    val data: CustomerDeliveryDetailResponse? = null,
     val error: String? = null,
     val fromCache: Boolean = false,
     val cachedAt: Long? = null,
@@ -77,6 +86,9 @@ class DeliveryViewModel @Inject constructor(
     private val _detail = MutableStateFlow(DeliveryDetailUiState())
     val detail: StateFlow<DeliveryDetailUiState> = _detail.asStateFlow()
 
+    private val _customerDetail = MutableStateFlow(CustomerDeliveryDetailUiState())
+    val customerDetail: StateFlow<CustomerDeliveryDetailUiState> = _customerDetail.asStateFlow()
+
     private val _form = MutableStateFlow(DeliveryFormState())
     val form: StateFlow<DeliveryFormState> = _form.asStateFlow()
 
@@ -115,6 +127,29 @@ class DeliveryViewModel @Inject constructor(
                 seedForm(assignmentId, result.value)
             } catch (e: ApiException) {
                 _detail.update { it.copy(loading = false, error = e.userMessage) }
+            }
+        }
+    }
+
+    /**
+     * Load one customer with all of their purchase orders. The list screen shows
+     * a square per customer, so this is the drill-down before the per-PO detail.
+     */
+    fun loadCustomerDetail(customerId: Int) {
+        _customerDetail.update { it.copy(loading = it.data == null, error = null) }
+        viewModelScope.launch {
+            try {
+                val result = repository.customerDeliveryDetail(customerId)
+                _customerDetail.update {
+                    it.copy(
+                        loading = false,
+                        data = result.value,
+                        fromCache = result.fromCache,
+                        cachedAt = result.cachedAt,
+                    )
+                }
+            } catch (e: ApiException) {
+                _customerDetail.update { it.copy(loading = false, error = e.userMessage) }
             }
         }
     }
