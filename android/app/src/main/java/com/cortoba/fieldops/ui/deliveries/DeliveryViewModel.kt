@@ -34,10 +34,7 @@ data class DeliveryDetailUiState(
 
 data class DeliveryFormState(
     val entries: List<DeliveryEntry> = emptyList(),
-    val recipientName: String = "",
     val notes: String = "",
-    /** True once the recipient has signed on screen. */
-    val signed: Boolean = false,
     val submitting: Boolean = false,
     val error: String? = null,
     val result: DeliverySubmitResult? = null,
@@ -192,9 +189,7 @@ class DeliveryViewModel @Inject constructor(
         }
     }
 
-    fun onRecipientNameChange(value: String) = _form.update { it.copy(recipientName = value) }
     fun onNotesChange(value: String) = _form.update { it.copy(notes = value) }
-    fun onSigned() = _form.update { it.copy(signed = true) }
 
     fun markFullQuantity(customerPoItemId: Int) {
         _form.update { state ->
@@ -245,10 +240,6 @@ class DeliveryViewModel @Inject constructor(
             _form.update { it.copy(error = "لا توجد أصناف للتسليم") }
             return
         }
-        if (state.recipientName.isBlank()) {
-            _form.update { it.copy(error = "أدخل اسم المستلم") }
-            return
-        }
 
         for (entry in entries) {
             val delivered = entry.deliveredQty.toDoubleOrNull()
@@ -291,7 +282,6 @@ class DeliveryViewModel @Inject constructor(
                         )
                     },
                     clientUuid = java.util.UUID.randomUUID().toString(),
-                    recipientName = state.recipientName.trim(),
                     gps = com.cortoba.fieldops.core.location.LocationProvider.lastKnown(),
                 )
                 val outcome = repository.confirmDelivery(assignmentId, request)

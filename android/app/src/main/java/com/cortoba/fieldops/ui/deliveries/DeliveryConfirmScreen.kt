@@ -56,14 +56,13 @@ import com.cortoba.fieldops.ui.components.InfoRow
 import com.cortoba.fieldops.ui.components.LoadingBox
 import com.cortoba.fieldops.ui.components.OfflineBanner
 import com.cortoba.fieldops.ui.components.SectionTitle
-import com.cortoba.fieldops.ui.components.SignaturePad
 import com.cortoba.fieldops.ui.theme.CortobaBrown
 import com.cortoba.fieldops.ui.theme.CortobaCream
 import com.cortoba.fieldops.ui.theme.StatusBlue
 import com.cortoba.fieldops.ui.theme.StatusGreen
 
 /**
- * Delivery quantities, recipient name, signature and evidence.
+ * Delivery quantities and evidence.
  *
  * The available quantity is the hard ceiling on every line: it is what the
  * supplier actually delivered and the customer's order accepted, so the rep can
@@ -168,34 +167,13 @@ fun DeliveryConfirmScreen(
 
                         item {
                             CreamCard {
-                                Column {
-                                    Text(
-                                        text = "بيانات المستلم",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = CortobaBrown,
-                                    )
-                                    OutlinedTextField(
-                                        value = form.recipientName,
-                                        onValueChange = viewModel::onRecipientNameChange,
-                                        label = { Text("اسم المستلم") },
-                                        singleLine = true,
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                    )
-                                    OutlinedTextField(
-                                        value = form.notes,
-                                        onValueChange = viewModel::onNotesChange,
-                                        label = { Text("ملاحظات") },
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                    )
-                                }
-                            }
-                        }
-
-                        item {
-                            CreamCard {
-                                SignaturePad(onSigned = viewModel::onSigned)
+                                OutlinedTextField(
+                                    value = form.notes,
+                                    onValueChange = viewModel::onNotesChange,
+                                    label = { Text("ملاحظات") },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
                             }
                         }
 
@@ -240,7 +218,6 @@ fun DeliveryConfirmScreen(
                     InfoRow("إجمالي المتاح", formatQty(summary.totalAvailable))
                     InfoRow("إجمالي المسلّم", formatQty(summary.totalDelivered), emphasize = true)
                     InfoRow("المرفوض من العميل", formatQty(summary.totalRejected))
-                    InfoRow("المستلم", form.recipientName.ifBlank { "—" })
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = "سيتم تسجيل العملية باسمك ووقتها. " +
