@@ -366,7 +366,9 @@ router.get("/pickups", async (req, res): Promise<void> => {
     const assignmentId =
       pairAllocations
         .map((a) => assignmentByItem.get(a.poItemId))
-        .find((id): id is number => id != null) ?? wholePoAssignment.get(poId) ?? null;
+        .find((id): id is number => id != null) ??
+      wholePoAssignment.get(poId) ??
+      null;
     return {
       assignmentId,
       poId,
@@ -388,8 +390,7 @@ router.get("/pickups", async (req, res): Promise<void> => {
           }
         : null,
       distinctItemCount: poGroups.length,
-      totalRequiredQty:
-        Math.round(pairAllocations.reduce((s, a) => s + a.qty, 0) * 10000) / 10000,
+      totalRequiredQty: Math.round(pairAllocations.reduce((s, a) => s + a.qty, 0) * 10000) / 10000,
     };
   });
 
