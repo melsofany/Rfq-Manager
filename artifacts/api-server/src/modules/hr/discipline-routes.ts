@@ -226,7 +226,7 @@ router.post("/hr/pay-adjustments", async (req, res): Promise<void> => {
   const employeeId = Number(req.body?.employeeId);
   const kind = req.body?.kind;
   const period = req.body?.period;
-  // A bonus can be a fixed amount, or a number of days of basic pay (converted at payroll time).
+  // A bonus or deduction can be a fixed amount, or a number of days of basic pay (converted at payroll time).
   const daysRaw = req.body?.days;
   const days =
     daysRaw === undefined || daysRaw === null || daysRaw === "" ? null : parseDays(daysRaw);
@@ -234,8 +234,8 @@ router.post("/hr/pay-adjustments", async (req, res): Promise<void> => {
     res.status(400).json({ error: "عدد الأيام يجب أن يكون بين 0.5 و 31 (بنصف يوم كحد أدنى)" });
     return;
   }
-  if (days !== null && kind !== "bonus") {
-    res.status(400).json({ error: "عدد الأيام يُستخدم للمكافآت فقط" });
+  if (days !== null && kind !== "bonus" && kind !== "deduction") {
+    res.status(400).json({ error: "عدد الأيام يُستخدم للمكافآت والخصومات فقط" });
     return;
   }
   const amount = days !== null ? 0 : parseMoney(req.body?.amount);
