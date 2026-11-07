@@ -19,6 +19,7 @@ import { issueToken, requireMobileAuth, actorOf } from "./mobile-auth";
 import { loadFieldOpsSettings } from "./service";
 import { hasActiveFieldAssignment, findHrEmployeeByNo } from "./service";
 import { logger } from "../../shared/logger";
+import { fetchLatestAppVersion } from "./mobile-version";
 
 const router = Router();
 
@@ -218,6 +219,16 @@ router.post("/auth/change-password", requireMobileAuth, async (req, res): Promis
 /** GET /api/mobile/auth/health — unauthenticated liveness for the app. */
 router.get("/auth/health", (_req, res: Response): void => {
   res.json({ ok: true });
+});
+
+/** GET /api/mobile/version — latest published app version for in-place updates. */
+router.get("/version", async (_req, res): Promise<void> => {
+  try {
+    res.json(await fetchLatestAppVersion());
+  } catch (err) {
+    logger.warn({ err }, "mobile version check failed");
+    res.json({ versionCode: 0, versionName: "", downloadUrl: null });
+  }
 });
 
 export default router;

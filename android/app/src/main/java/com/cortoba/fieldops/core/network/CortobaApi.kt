@@ -1,5 +1,6 @@
 package com.cortoba.fieldops.core.network
 
+import com.cortoba.fieldops.core.network.dto.AppVersionDto
 import com.cortoba.fieldops.core.network.dto.ChangePasswordRequest
 import com.cortoba.fieldops.core.network.dto.DashboardResponse
 import com.cortoba.fieldops.core.network.dto.DeliveryConfirmRequest
@@ -37,6 +38,9 @@ interface CortobaApi {
 
     @POST("api/mobile/auth/change-password")
     suspend fun changePassword(@Body body: ChangePasswordRequest): Response<Unit>
+
+    @GET("api/mobile/version")
+    suspend fun latestVersion(): Response<AppVersionDto>
 
     @GET("api/mobile/dashboard")
     suspend fun dashboard(): Response<DashboardResponse>
