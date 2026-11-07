@@ -1,79 +1,62 @@
 package com.cortoba.fieldops.ui.pickups
 
-import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cortoba.fieldops.core.network.dto.ConsolidatedItem
-import com.cortoba.fieldops.core.network.dto.PickupAllocation
-import com.cortoba.fieldops.core.util.dialPhone
+import com.cortoba.fieldops.core.network.dto.PickupTask
 import com.cortoba.fieldops.core.util.formatQty
-import com.cortoba.fieldops.core.util.openMap
-import com.cortoba.fieldops.ui.components.BrandActionButton
 import com.cortoba.fieldops.ui.components.CreamCard
 import com.cortoba.fieldops.ui.components.EmptyState
 import com.cortoba.fieldops.ui.components.ErrorBanner
 import com.cortoba.fieldops.ui.components.InfoRow
 import com.cortoba.fieldops.ui.components.LoadingBox
 import com.cortoba.fieldops.ui.components.OfflineBanner
-import com.cortoba.fieldops.ui.components.OutlineActionButton
-import com.cortoba.fieldops.ui.components.PaymentStatusChip
 import com.cortoba.fieldops.ui.components.SectionTitle
 import com.cortoba.fieldops.ui.components.StatusChip
 import com.cortoba.fieldops.ui.theme.CortobaBrown
-import com.cortoba.fieldops.ui.theme.CortobaCoral
 import com.cortoba.fieldops.ui.theme.CortobaCream
 
 /**
  * All supplier pickups assigned to the signed-in representative.
  *
- * Two views, because they answer two different questions:
- *  • «أوامر الشراء» — one card per supplier PO: where do I go, and to whom.
- *  • «الأصناف الموحّدة» — the same product across several POs collapsed into one
- *    line with its total, expandable to the original PO allocation. This is the
- *    consolidation requirement: the rep reads 6 units once, and can still prove
- *    it is 2 + 3 + 1 against three different customer orders.
+ * The list is a grid of supplier squares — one tap answers «where do I go and to
+ * whom». The detail screen carries the items, payment state and receiving form.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,7 +66,6 @@ fun PickupListScreen(
     viewModel: PickupViewModel = hiltViewModel(),
 ) {
     val state by viewModel.list.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     LaunchedEffect(Unit) { viewModel.loadList() }
 
@@ -121,16 +103,18 @@ fun PickupListScreen(
 
                 else -> {
                     val data = state.data!!
-                    LazyColumn(
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         if (state.fromCache) {
-                            item { OfflineBanner(state.cachedAt) }
+                            item(span = { GridItemSpan(maxLineSpan) }) { OfflineBanner(state.cachedAt) }
                         }
 
-                        item {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             CreamCard {
                                 Column {
                                     Text(
@@ -139,7 +123,7 @@ fun PickupListScreen(
                                         color = CortobaBrown,
                                     )
                                     InfoRow("عدد أوامر الشراء", "${data.summary.taskCount}")
-                                    InfoRow("عدد الأصناف (موحّدة)", "${data.summary.distinctItems}")
+                                    InfoRow("عدد الأصناف", "${data.summary.distinctItems}")
                                     InfoRow(
                                         "إجمالي الكميات المتبقية",
                                         formatQty(data.summary.totalRemainingQty),
@@ -150,7 +134,7 @@ fun PickupListScreen(
                         }
 
                         if (data.tasks.isEmpty()) {
-                            item {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
                                 EmptyState(
                                     title = "لا توجد استلامات مسندة إليك",
                                     subtitle = "سيظهر هنا أي أمر شراء يتم إسناده لك من إدارة الموارد البشرية",
@@ -159,75 +143,14 @@ fun PickupListScreen(
                         }
 
                         if (data.tasks.isNotEmpty()) {
-                            item { SectionTitle("أوامر الشراء المطلوب استلامها") }
+                            item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("الموردون") }
                         }
 
                         items(data.tasks, key = { "task-${it.poId}-${it.supplier?.id ?: "nosup"}" }) { task ->
-                            CreamCard {
-                                Column {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text(
-                                                text = task.supplier?.name ?: "مورد غير محدد",
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                            )
-                                            Text(
-                                                text = "أمر شراء: ${task.poNo}",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                        Column(horizontalAlignment = Alignment.End) {
-                                            StatusChip(task.status)
-                                            Spacer(Modifier.height(6.dp))
-                                            PaymentStatusChip(task.paymentStatus)
-                                        }
-                                    }
-
-                                    Spacer(Modifier.height(10.dp))
-
-                                    InfoRow("عدد الأصناف", "${task.distinctItemCount}")
-                                    InfoRow("إجمالي الكميات", formatQty(task.totalRequiredQty))
-                                    InfoRow("هاتف المورد", task.supplier?.phone)
-                                    InfoRow("العنوان", task.supplier?.address)
-
-                                    Spacer(Modifier.height(10.dp))
-
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        OutlineActionButton(
-                                            text = "الاتصال بالمورد",
-                                            icon = Icons.Default.Call,
-                                            onClick = { dialPhone(context, task.supplier?.phone) },
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        OutlineActionButton(
-                                            text = "الموقع",
-                                            icon = Icons.Default.LocationOn,
-                                            onClick = { openMap(context, task.supplier?.address) },
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                    }
-
-                                    Spacer(Modifier.height(8.dp))
-
-                                    BrandActionButton(
-                                        text = "عرض الأصناف والاستلام",
-                                        onClick = { onOpen(task.assignmentId ?: task.poId) },
-                                    )
-                                }
-                            }
-                        }
-
-                        if (data.consolidatedItems.isNotEmpty()) {
-                            item { SectionTitle("الأصناف الموحّدة (مجمّعة من كل أوامر الشراء)") }
-                            items(data.consolidatedItems, key = { "grp-${it.groupKey}" }) { group ->
-                                ConsolidatedItemCard(group)
-                            }
+                            SupplierSquare(
+                                task = task,
+                                onClick = { onOpen(task.assignmentId ?: task.poId) },
+                            )
                         }
                     }
                 }
@@ -236,135 +159,41 @@ fun PickupListScreen(
     }
 }
 
-/**
- * One consolidated product. The header shows the TOTAL the rep must collect; the
- * expansion shows every original supplier PO → customer PO → quantity, which is
- * what keeps the grouping traceable rather than merely convenient.
- */
+/** A compact supplier tile. The details (items, payment, receiving) live on the detail screen. */
 @Composable
-fun ConsolidatedItemCard(group: ConsolidatedItem, modifier: Modifier = Modifier) {
-    var expanded by remember { mutableStateOf(false) }
-
-    CreamCard(modifier = modifier.animateContentSize()) {
-        Column {
-            Row(verticalAlignment = Alignment.Top) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = group.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    if (!group.partNo.isNullOrBlank()) {
-                        Text(
-                            text = "رقم القطعة: ${group.partNo}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (group.allocations.size > 1) {
-                        Text(
-                            text = "مجمّع من ${group.allocations.size} أوامر شراء",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = CortobaCoral,
-                        )
-                    }
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "الإجمالي المطلوب",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "${formatQty(group.totalRemainingQty)} ${group.uom ?: ""}".trim(),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = CortobaBrown,
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            InfoRow("المستلم سابقاً", formatQty(group.totalAcceptedQty))
-            if (group.customerPoNos.isNotEmpty()) {
-                InfoRow("أوامر العملاء المرتبطة", group.customerPoNos.joinToString("، "))
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(CortobaCream, RoundedCornerShape(10.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = if (expanded) {
-                        "إخفاء التوزيع على أوامر الشراء"
-                    } else {
-                        "عرض التوزيع على أوامر الشراء"
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = CortobaBrown,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(
-                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = null,
-                    tint = CortobaBrown,
-                )
-            }
-
-            if (expanded) {
-                Spacer(Modifier.height(8.dp))
-                group.allocations.forEach { allocation ->
-                    AllocationRow(allocation)
-                }
-            }
-        }
-    }
-}
-
-/** `SPO-001 → P26E001 → 2 وحدة` — the traceability line, verbatim. */
-@Composable
-private fun AllocationRow(allocation: PickupAllocation) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+fun SupplierSquare(task: PickupTask, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        shadowElevation = 1.dp,
     ) {
-        Text(
-            text = allocation.poNo,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = CortobaBrown,
-            modifier = Modifier.width(84.dp),
-        )
-        Text(text = "←", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            text = allocation.customerPoNos.joinToString("، ").ifBlank { "غير مرتبط" },
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f).padding(start = 8.dp),
-        )
-        Column(horizontalAlignment = Alignment.End) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
             Text(
-                text = formatQty(allocation.remainingQty),
+                text = task.supplier?.name ?: "مورد غير محدد",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            if (allocation.acceptedQty > 0) {
-                Text(
-                    text = "تم استلام ${formatQty(allocation.acceptedQty)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "أمر شراء ${task.poNo}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            StatusChip(task.status)
         }
     }
 }
