@@ -45,6 +45,7 @@ import com.cortoba.fieldops.ui.components.InfoRow
 import com.cortoba.fieldops.ui.components.LoadingBox
 import com.cortoba.fieldops.ui.components.OfflineBanner
 import com.cortoba.fieldops.ui.components.OutlineActionButton
+import com.cortoba.fieldops.ui.components.PaymentStatusChip
 import com.cortoba.fieldops.ui.components.SectionTitle
 import com.cortoba.fieldops.ui.components.StatusChip
 import com.cortoba.fieldops.ui.theme.CortobaBrown
@@ -115,7 +116,11 @@ fun PickupDetailScreen(
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.weight(1f),
                                     )
-                                    StatusChip(data.status)
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        StatusChip(data.status)
+                                        Spacer(Modifier.height(6.dp))
+                                        PaymentStatusChip(data.paymentStatus)
+                                    }
                                 }
                                 Spacer(Modifier.height(8.dp))
                                 InfoRow("أمر الشراء", data.po?.poNo)

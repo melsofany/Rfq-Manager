@@ -175,6 +175,27 @@ fun StatusChip(status: String, modifier: Modifier = Modifier) {
     }
 }
 
+/** Settlement state for the supplier card — labels only, never amounts. */
+fun paymentStatusPresentation(status: String): Pair<String, Color> = when (status) {
+    "paid" -> "مسدد" to StatusGreen
+    "partial" -> "سداد جزئي" to StatusAmber
+    "unpaid" -> "غير مسدد" to StatusRed
+    else -> status to StatusGrey
+}
+
+@Composable
+fun PaymentStatusChip(status: String, modifier: Modifier = Modifier) {
+    val (label, color) = paymentStatusPresentation(status)
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = 0.15f))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = color)
+    }
+}
+
 @Composable
 fun SyncStatusChip(status: String, modifier: Modifier = Modifier) {
     val (label, color) = when (status) {
