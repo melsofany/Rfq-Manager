@@ -264,10 +264,13 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
     const mine = adjustments.filter((a) => a.employeeId === employeeId);
     const sumKind = (kind: string) =>
       mine.filter((a) => a.kind === kind).reduce((acc, a) => acc + num(a.amount), 0);
-    // Day-based bonuses are worth days × (basic ÷ divisor), at the rate of this payroll month.
+    // Day-based bonuses and deductions are worth days × (basic ÷ divisor), at the rate of this payroll month.
     const dailyRate = round2(num(c.basicSalary) / settings.absence!.dailyDivisor);
     const daysBonus = mine
       .filter((a) => a.kind === "bonus" && a.days !== null)
+      .reduce((acc, a) => acc + num(a.days), 0);
+    const daysDeduction = mine
+      .filter((a) => a.kind === "deduction" && a.days !== null)
       .reduce((acc, a) => acc + num(a.days), 0);
     const finesTotal = cases
       .filter(
@@ -290,7 +293,7 @@ router.post("/hr/payroll/runs", async (req, res): Promise<void> => {
             : employees.find((e) => e.id === employeeId)?.keepFixedIncentive
               ? num(c.incentive)
               : 0) + sumKind("incentive"),
-        deductions: sumKind("deduction"),
+        deductions: sumKind("deduction") + round2(daysDeduction * dailyRate),
         absenceDays: absence[employeeId],
         finesTotal,
       },
