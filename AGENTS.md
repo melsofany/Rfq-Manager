@@ -4526,3 +4526,43 @@ Postgres حقيقي.
 - **Lesson**: a build that compiles says nothing about a resource that parses.
   `aapt2` also silently rewrites any resource string over 32767 bytes as the
   literal `STRING_TOO_LARGE`, so a long vector path needs a test, not a build.
+
+## Field ops: the receipt screen that said «لا توجد أصناف للاستلام»
+
+- **Symptom**: at receipt confirmation there was no partial option, a full
+  receipt answered «لا توجد أصناف للاستلام», and the item stayed on the list.
+- **Root cause 1 — a race, not a data bug.** The screen fired two calls side by
+  side:
+
+  ```kotlin
+  LaunchedEffect(id) {
+      viewModel.loadDetail(id)  // suspend, launches in viewModelScope
+      viewModel.prepareForm()   // reads _detail.value RIGHT NOW
+  }
+  ```
+
+  `prepareForm()` read the detail state while the network call was still in
+  flight, found it empty, and returned without seeding a single row. The task
+  then rendered with zero items, and because the submit handler rejects an empty
+  submission, the rep could never complete it. **Seeding must be a consequence
+  of the load finishing** — it now happens inside `loadDetail`, and `seededFor`
+  makes it idempotent so a recomposition cannot wipe typed quantities.
+- **Root cause 2 — a partial receipt closed the task.** The handler always wrote
+  `status = "received"`, so a short receipt removed the task from the rep's view
+  and the outstanding quantity became unreachable. It is now
+  `partially_received` while any submitted line is below its ordered quantity.
+- **Root cause 3 — completed lines were never filtered.** `buildPickupGroups`
+  returned every line, so a fully received task stayed on the list forever. The
+  list now hides lines with nothing left; the *detail* screen keeps them
+  (`includeCompleted`) because it doubles as the receipt history.
+- **One rule, one place**: `hasOutstandingQty(ordered, accepted)` in
+  `consolidation.ts` decides both the list filter and the partial/closed status.
+  Two copies of that comparison is how the two ends drift apart.
+- **The server owns the status.** The confirm response returns
+  `assignmentStatus`; the client must not infer it from the quantities it
+  happens to see, because it cannot see sibling lines.
+- **Lesson**: `advanceUntilIdle()` returns before a real HTTP round trip — a
+  test that only advances virtual time asserts against a race. The regression
+  test interleaves scheduler advancement with a real wait, and drives the real
+  ViewModel, repository, Room DB and a MockWebServer. A mock would have hidden
+  exactly this defect.

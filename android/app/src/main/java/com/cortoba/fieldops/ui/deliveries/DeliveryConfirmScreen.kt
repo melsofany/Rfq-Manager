@@ -81,8 +81,10 @@ fun DeliveryConfirmScreen(
     val form by viewModel.form.collectAsStateWithLifecycle()
 
     LaunchedEffect(assignmentId) {
+        // loadDetail seeds the form itself once the task has arrived. Calling a
+        // separate prepareForm() here would read the still-empty detail state
+        // and leave the screen with no rows to deliver.
         viewModel.loadDetail(assignmentId)
-        viewModel.prepareForm()
     }
 
     var showSummary by remember { mutableStateOf(false) }

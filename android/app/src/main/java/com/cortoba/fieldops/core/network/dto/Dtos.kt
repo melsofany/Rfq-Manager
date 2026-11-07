@@ -171,6 +171,8 @@ data class ReceiptConfirmResponse(
     val success: Boolean,
     val receiptIds: List<Int> = emptyList(),
     val duplicate: Boolean = false,
+    /** Server-authoritative task status after this receipt (partial vs closed). */
+    val assignmentStatus: String? = null,
     val deliverableNow: List<DeliverableQty> = emptyList(),
 )
 

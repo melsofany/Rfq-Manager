@@ -131,6 +131,20 @@ export function customerPoNosOf(group: ConsolidatedGroup): string[] {
   return [...new Set(group.allocations.flatMap((a) => a.customerPoNos))];
 }
 
+/**
+ * Whether a line still has something left to receive.
+ *
+ * A line is outstanding while its accepted quantity is below the ordered one.
+ * This single rule drives two behaviours that must never disagree: the mobile
+ * list hides completed lines, and the receipt handler decides between
+ * `received` and `partially_received`. Duplicating the comparison in either
+ * place is how a confirmed task ends up looking outstanding forever.
+ */
+export function hasOutstandingQty(orderedQty: number | null, acceptedQty: number): boolean {
+  const ordered = orderedQty ?? 0;
+  return acceptedQty < ordered - 1e-6;
+}
+
 /** How many distinct supplier POs a group spans. */
 export function supplierPoCount(group: ConsolidatedGroup): number {
   return new Set(group.allocations.map((a) => a.poNo)).size;

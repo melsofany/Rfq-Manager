@@ -41,6 +41,8 @@ data class ReceiptFormState(
     val error: String? = null,
     /** Non-null once the server (or the outbox) accepted the submission. */
     val result: ReceiptSubmitResult? = null,
+    /** Assignment the entries were seeded from — makes seeding idempotent. */
+    val seededFor: Int? = null,
 )
 
 data class ReceiptSubmitResult(
@@ -48,6 +50,8 @@ data class ReceiptSubmitResult(
     val duplicate: Boolean,
     val acceptedQty: Double,
     val missingQty: Double,
+    /** True when the server recorded less than the ordered quantity. */
+    val partial: Boolean = false,
 )
 
 @HiltViewModel
@@ -96,9 +100,32 @@ class PickupViewModel @Inject constructor(
                         cachedAt = result.cachedAt,
                     )
                 }
+                seedForm(assignmentId, result.value)
             } catch (e: ApiException) {
                 _detail.update { it.copy(loading = false, error = e.userMessage) }
             }
+        }
+    }
+
+    /**
+     * Seed the receiving form from the loaded task.
+     *
+     * Called from [loadDetail] once the task has actually arrived, never from a
+     * sibling call in the screen: `loadDetail` is asynchronous, so a separate
+     * `prepareForm()` fired alongside it reads `_detail` while it is still empty
+     * and leaves the form with zero rows — the representative then sees
+     * «لا توجد أصناف للاستلام» and can never confirm anything.
+     */
+    private fun seedForm(assignmentId: Int, detail: PickupDetailResponse) {
+        _form.update { current ->
+            // Re-seeding would discard quantities the rep has already typed.
+            if (current.seededFor == assignmentId && current.entries.isNotEmpty()) return@update current
+            current.copy(
+                entries = detail.items.flatMap { group -> group.toEntries() },
+                error = null,
+                result = null,
+                seededFor = assignmentId,
+            )
         }
     }
 
@@ -134,18 +161,6 @@ class PickupViewModel @Inject constructor(
     }
 
     // ── Receiving form ────────────────────────────────────────────────────
-
-    /** Seed the form from the loaded task: one entry per ORIGINAL PO line. */
-    fun prepareForm() {
-        val items = _detail.value.data?.items ?: return
-        _form.update {
-            it.copy(
-                entries = items.flatMap { group -> group.toEntries() },
-                error = null,
-                result = null,
-            )
-        }
-    }
 
     fun onReceivedQtyChange(poItemId: Int, value: String) {
         _form.update { state ->
@@ -275,6 +290,13 @@ class PickupViewModel @Inject constructor(
                             duplicate = outcome.value.duplicate,
                             acceptedQty = summary.totalAccepted,
                             missingQty = summary.totalMissing,
+                            // Trust the server's status: it knows the accepted
+                            // quantities AND the sibling lines the client cannot
+                            // see. Falling back to the local shortfall keeps an
+                            // offline queue (no server status) sensible.
+                            partial = outcome.value.assignmentStatus
+                                ?.equals("partially_received", ignoreCase = true)
+                                ?: (summary.totalMissing > 0.0),
                         ),
                     )
                 }

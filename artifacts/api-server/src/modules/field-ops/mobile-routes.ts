@@ -36,7 +36,7 @@ import {
   checkDeliveryQuantities,
   type DelegationRow,
 } from "./assignment-logic";
-import { consolidatePickupLines, customerPoNosOf, type PickupLine } from "./consolidation";
+import { consolidatePickupLines, customerPoNosOf, hasOutstandingQty, type PickupLine } from "./consolidation";
 import {
   hasActiveFieldAssignment,
   visibleAssignmentsFor,
@@ -116,7 +116,10 @@ async function authorize(
 // ── Pickups ─────────────────────────────────────────────────────────────────
 
 /** Build consolidated pickup groups for the given assignments. */
-async function buildPickupGroups(assignmentIds: number[]) {
+async function buildPickupGroups(
+  assignmentIds: number[],
+  opts: { includeCompleted?: boolean } = {},
+) {
   if (!assignmentIds.length) return [];
   const assignments = await db
     .select()
@@ -152,9 +155,18 @@ async function buildPickupGroups(assignmentIds: number[]) {
     .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
     .where(inArray(purchaseOrderItemsTable.id, poItemIds));
 
+  // A line whose ordered quantity is fully accepted has nothing left to receive.
+  // Keeping it in the list left a confirmed task looking outstanding forever,
+  // so the rep could re-open it and be told there was nothing to receive. The
+  // assignment row is untouched — history and the detail screen still see it.
+  const activeLines = opts.includeCompleted
+    ? lines
+    : lines.filter((l) => hasOutstandingQty(toNum(l.qty), toNum(l.accepted) ?? 0));
+  if (!activeLines.length) return [];
+
   // Resolve the customer PO numbers for the linked customer PO items, so the
   // allocation line shows «SPO-001 → P26E001 → 2» without extra round-trips.
-  const customerPoItemIds = lines
+  const customerPoItemIds = activeLines
     .map((l) => l.customerPoItemId)
     .filter((x): x is number => x != null);
   const cpMap = new Map<number, string>();
@@ -170,7 +182,7 @@ async function buildPickupGroups(assignmentIds: number[]) {
     for (const r of rows) cpMap.set(r.id, r.poNo);
   }
 
-  const pickupLines: PickupLine[] = lines.map((l) => {
+  const pickupLines: PickupLine[] = activeLines.map((l) => {
     const qty = toNum(l.qty) ?? 0;
     const accepted = toNum(l.accepted) ?? 0;
     const cpNo = l.customerPoItemId != null ? cpMap.get(l.customerPoItemId) : undefined;
@@ -282,6 +294,11 @@ router.get("/pickups", async (req, res): Promise<void> => {
     : [];
   const poMap = new Map(poRows.map((p) => [p.id, p]));
 
+  // Only POs that still have something to receive become tasks. A PO whose
+  // lines are all fully accepted has nothing left to collect, so showing it
+  // again sent the rep back to a screen with no rows to fill.
+  const activePoIds = [...new Set(groups.flatMap((g) => g.allocations).map((a) => a.poId))];
+
   const supplierIds = [...new Set(assignments.map((a) => a.representativePhone).filter(Boolean))];
   void supplierIds;
 
@@ -298,8 +315,8 @@ router.get("/pickups", async (req, res): Promise<void> => {
     : [];
   const supplierMap = new Map(supplierRows.map((s) => [s.id, s]));
 
-  // One task per supplier PO the rep must visit.
-  const tasks = poIds.map((poId) => {
+  // One task per supplier PO that still has lines to receive.
+  const tasks = activePoIds.map((poId) => {
     const po = poMap.get(poId);
     const groupLines = groups.flatMap((g) => g.allocations).filter((a) => a.poId === poId);
     const supplierId = groupLines[0]?.supplierId ?? null;
@@ -363,7 +380,9 @@ router.get("/pickups/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const groups = await buildPickupGroups([assignment.id]);
+  // includeCompleted: the detail screen is also the receipt history — a fully
+  // received line must stay visible there even though the list hides it.
+  const groups = await buildPickupGroups([assignment.id], { includeCompleted: true });
   const [po] = await db
     .select({
       id: purchaseOrdersTable.id,
@@ -552,10 +571,33 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
 
   // Mark the assignment received and record the ACTUAL executor (which differs
   // from the responsible rep when the task was delegated).
+  //
+  // A partial receipt must NOT close the task. If it did, the rep could never
+  // come back for the outstanding quantity — and the outstanding quantity is
+  // exactly what a second visit is for. It becomes PARTIALLY_RECEIVED and stays
+  // visible until every line in this submission is fully accepted.
+  //
+  // The check is scoped to the lines just submitted, not to the whole PO: an
+  // assignment covers one supplier line, so a sibling line still outstanding on
+  // the same PO must not keep this task open.
+  const lineStates = await db
+    .select({
+      id: purchaseOrderItemsTable.id,
+      qty: purchaseOrderItemsTable.qty,
+      accepted: purchaseOrderItemsTable.totalAcceptedQty,
+    })
+    .from(purchaseOrderItemsTable)
+    .where(
+      inArray(
+        purchaseOrderItemsTable.id,
+        prepared.map((p) => p.poItemId),
+      ),
+    );
+  const anyOutstanding = lineStates.some((l) => hasOutstandingQty(toNum(l.qty), toNum(l.accepted) ?? 0));
   await db
     .update(workOrderAssignmentsTable)
     .set({
-      status: "received",
+      status: anyOutstanding ? "partially_received" : "received",
       performedByHrEmployeeId: actor.hrEmployeeId,
       updatedAt: new Date(),
     })
@@ -615,6 +657,11 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
   res.json({
     success: true,
     receiptIds: createdIds,
+    // The authoritative task status. The client must not infer it: "fully
+    // received" depends on accepted quantities and on sibling lines the client
+    // cannot see, so a client-side guess would show a closed task for work that
+    // is still outstanding.
+    assignmentStatus: anyOutstanding ? "partially_received" : "received",
     // Only the quantity that was actually ACCEPTED becomes deliverable; the
     // delivery side recomputes this from the same source, so the two can never
     // disagree.

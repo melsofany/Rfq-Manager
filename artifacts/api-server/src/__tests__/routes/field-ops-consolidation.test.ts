@@ -3,6 +3,7 @@ import {
   consolidatePickupLines,
   groupKeyFor,
   customerPoNosOf,
+  hasOutstandingQty,
   supplierPoCount,
   type PickupLine,
 } from "../../modules/field-ops/consolidation";
@@ -134,5 +135,32 @@ describe("consolidatePickupLines", () => {
 
   it("returns an empty list for no lines", () => {
     expect(consolidatePickupLines([])).toEqual([]);
+  });
+});
+
+/**
+ * The rule that decides both whether a task stays on the mobile list and
+ * whether a receipt closes it or leaves it partially received. One function so
+ * the two can never drift apart — the reported defect was a task that had been
+ * fully received yet still showed as outstanding.
+ */
+describe("hasOutstandingQty", () => {
+  it("is true while accepted is below ordered", () => {
+    expect(hasOutstandingQty(6, 4)).toBe(true);
+    expect(hasOutstandingQty(6, 0)).toBe(true);
+  });
+
+  it("is false once accepted reaches ordered", () => {
+    expect(hasOutstandingQty(6, 6)).toBe(false);
+    expect(hasOutstandingQty(6, 7)).toBe(false);
+  });
+
+  it("tolerates float dust so a full receipt is not seen as short", () => {
+    // 0.1 + 0.2 stored as decimals can land a hair below the ordered value.
+    expect(hasOutstandingQty(0.3, 0.1 + 0.2)).toBe(false);
+  });
+
+  it("treats a line with no ordered quantity as complete", () => {
+    expect(hasOutstandingQty(null, 0)).toBe(false);
   });
 });
