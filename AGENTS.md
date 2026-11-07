@@ -4527,6 +4527,29 @@ Postgres حقيقي.
   `aapt2` also silently rewrites any resource string over 32767 bytes as the
   literal `STRING_TOO_LARGE`, so a long vector path needs a test, not a build.
 
+## فرع متباعد عن main: ادمج، لا تُعِد التأسيس (field-ops)
+
+`main` يستوعب الفروع بصيغة **squash** (كل التزامات الفرع تصير التزاماً واحداً
+جديداً على main). لذلك الفرع الذي رُفع قبلاً يبدو «متباعداً» رغم أن تغييراته
+موجودة في main فعلاً.
+
+إعادة التأسيس في هذه الحالة (`git rebase --onto main <old-base>`) **تُسقط
+الالتزامات التي لم تدخل main**. حدث هذا فعلاً: أسقطت ثمانية التزامات — مفتاح
+التوقيع المشترك، تحصين `SessionStore`، واختبارات الإقلاع — وبدا الناتج نظيفاً
+لأن `git status` لا يشتكي. العلامة الوحيدة كانت فرقاً في إحصاءات الملفات.
+
+الصحيح: **الدمج** (`git merge main`). الدمج يحفظ التزامات الطرفين ويُظهر
+التعارضات الحقيقية فقط (كانت في `build.gradle.kts` وحده)، فيبقى كل ما في الفرع
+وكل ما في main.
+
+كيف تكتشف الفرق قبل أن تتصرف:
+
+    git merge-base --is-ancestor origin/main HEAD   # هل main داخل الفرع؟
+    git diff --stat origin/main HEAD                # ماذا ينقص الفرع فعلاً؟
+
+لو أظهر الفرق حذف ملفات (`D`) أو اختفاء اختبارات، فإعادة التأسيس خطأ.
+`git diff --name-status` يُظهر `D` و`A` صراحةً — راجعها قبل الدفع.
+
 ## Field ops: the receipt screen that said «لا توجد أصناف للاستلام»
 
 - **Symptom**: at receipt confirmation there was no partial option, a full
