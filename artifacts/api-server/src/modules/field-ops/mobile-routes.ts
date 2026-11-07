@@ -569,15 +569,24 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
   }
 
   // Idempotency: a retried offline submission (same client UUID) is a no-op.
+  // The check is scoped to THIS assignment's lines, and the guard is per line —
+  // the unique index is (client_uuid, po_item_id), so a multi-line submission
+  // (one row per line, all sharing the uuid) inserts cleanly and a genuine
+  // replay of the whole submission is still rejected as a duplicate.
   const clientUuid = body.clientUuid ? String(body.clientUuid) : null;
   if (clientUuid) {
-    const [existing] = await db
+    const existing = await db
       .select({ id: poItemReceiptsTable.id })
       .from(poItemReceiptsTable)
-      .where(eq(poItemReceiptsTable.clientUuid, clientUuid))
+      .where(
+        and(
+          eq(poItemReceiptsTable.clientUuid, clientUuid),
+          eq(poItemReceiptsTable.assignmentId, assignment.id),
+        ),
+      )
       .limit(1);
-    if (existing) {
-      res.json({ success: true, duplicate: true, receiptIds: [existing.id] });
+    if (existing.length) {
+      res.json({ success: true, duplicate: true, receiptIds: [existing[0].id] });
       return;
     }
   }
@@ -628,11 +637,7 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
       return;
     }
     const receiptStatus =
-      acceptedQty === 0
-        ? "rejected"
-        : acceptedQty < receivedQty
-          ? "partial"
-          : "received";
+      acceptedQty === 0 ? "rejected" : acceptedQty < receivedQty ? "partial" : "received";
     prepared.push({
       poItemId,
       receivedQty,
@@ -841,7 +846,8 @@ router.get("/deliveries", async (req, res): Promise<void> => {
   );
 
   const tasks: {
-    customerId: number;
+    key: string;
+    customerId: number | null;
     customerName: string;
     phone: string | null;
     address: string | null;
@@ -853,7 +859,7 @@ router.get("/deliveries", async (req, res): Promise<void> => {
   }[] = [];
 
   for (const g of grouped) {
-    const customer = customerMap.get(g.customerId);
+    const customer = g.customerId != null ? customerMap.get(g.customerId) : undefined;
     let distinctItemCount = 0;
     let availableQty = 0;
     for (const poId of g.customerPoIds) {
@@ -861,9 +867,13 @@ router.get("/deliveries", async (req, res): Promise<void> => {
       distinctItemCount += items.length;
       availableQty += items.reduce((s, i) => s + i.availableQty, 0);
     }
+    const name = customer?.name ?? g.customerName ?? "عميل غير محدد";
     tasks.push({
+      // A stable handle the app navigates with. A name-only customer (the
+      // portal allows one) has no id, so the name is the fallback identity.
+      key: g.customerId != null ? `id:${g.customerId}` : `name:${name}`,
       customerId: g.customerId,
-      customerName: customer?.name ?? g.customerName ?? "عميل غير محدد",
+      customerName: name,
       phone: customer?.phone ?? null,
       address: customer?.address ?? null,
       contactPerson: customer?.contactPerson ?? null,
@@ -935,10 +945,19 @@ async function deliveryItemsFor(assignment: {
   return out;
 }
 
-router.get("/deliveries/customer/:customerId", async (req, res): Promise<void> => {
+router.get("/deliveries/customer", async (req, res): Promise<void> => {
   const actor = actorOf(req);
-  const customerId = Number(req.params.customerId);
-  if (!Number.isInteger(customerId)) {
+  // Identify the customer by id, or — for a name-only customer PO, which the
+  // portal allows — by name. Query params keep the name free of URL encoding.
+  const rawId = req.query.id != null && String(req.query.id) !== "" ? String(req.query.id) : null;
+  const rawName =
+    req.query.name != null && String(req.query.name).trim() !== "" ? String(req.query.name) : null;
+  if (rawId == null && rawName == null) {
+    res.status(400).json({ error: "معرّف العميل مطلوب" });
+    return;
+  }
+  const customerId = rawId != null ? Number(rawId) : null;
+  if (rawId != null && !Number.isInteger(customerId)) {
     res.status(400).json({ error: "معرّف غير صالح" });
     return;
   }
@@ -969,25 +988,31 @@ router.get("/deliveries/customer/:customerId", async (req, res): Promise<void> =
         .where(inArray(customerPosTable.id, customerPoIds))
     : [];
 
-  const ownedPoRows = cpoRows.filter((c) => c.customerId === customerId);
+  const ownedPoRows = cpoRows.filter((c) =>
+    customerId != null
+      ? c.customerId === customerId
+      : c.customerId == null && c.customerName === rawName,
+  );
   if (!ownedPoRows.length) {
     res.status(404).json({ error: "العميل غير موجود أو لا توجد لك مهام تسليم له" });
     return;
   }
 
   const customer =
-    ((
-      await db
-        .select({
-          id: customersTable.id,
-          name: customersTable.name,
-          phone: customersTable.phone,
-          address: customersTable.address,
-          contactPerson: customersTable.contactPerson,
-        })
-        .from(customersTable)
-        .where(eq(customersTable.id, customerId))
-    )[0] ?? null);
+    customerId != null
+      ? ((
+          await db
+            .select({
+              id: customersTable.id,
+              name: customersTable.name,
+              phone: customersTable.phone,
+              address: customersTable.address,
+              contactPerson: customersTable.contactPerson,
+            })
+            .from(customersTable)
+            .where(eq(customersTable.id, customerId))
+        )[0] ?? null)
+      : null;
 
   const assignmentByPo = new Map<number, number>();
   for (const a of assignments) {
@@ -1024,7 +1049,7 @@ router.get("/deliveries/customer/:customerId", async (req, res): Promise<void> =
           contactPerson: customer.contactPerson,
         }
       : {
-          id: customerId,
+          id: null,
           name: ownedPoRows[0]?.customerName ?? null,
           phone: null,
           address: null,

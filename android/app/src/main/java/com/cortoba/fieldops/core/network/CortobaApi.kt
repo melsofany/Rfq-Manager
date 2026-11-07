@@ -24,6 +24,7 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 /**
  * The mobile API surface. Every endpoint here exists on the server; nothing is
@@ -61,8 +62,11 @@ interface CortobaApi {
     @GET("api/mobile/deliveries")
     suspend fun deliveries(): Response<DeliveryListResponse>
 
-    @GET("api/mobile/deliveries/customer/{id}")
-    suspend fun customerDelivery(@Path("id") customerId: Int): Response<CustomerDeliveryDetailResponse>
+    @GET("api/mobile/deliveries/customer")
+    suspend fun customerDelivery(
+        @Query("id") customerId: Int? = null,
+        @Query("name") customerName: String? = null,
+    ): Response<CustomerDeliveryDetailResponse>
 
     @GET("api/mobile/deliveries/{id}")
     suspend fun delivery(@Path("id") assignmentId: Int): Response<DeliveryDetailResponse>

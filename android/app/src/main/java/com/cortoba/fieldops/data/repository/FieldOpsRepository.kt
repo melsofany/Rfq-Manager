@@ -190,13 +190,14 @@ class FieldOpsRepository @Inject constructor(
         }
     }
 
-    suspend fun customerDeliveryDetail(customerId: Int): Cached<CustomerDeliveryDetailResponse> {
-        // Keep customer-detail rows in a distinct key space from the assignment
-        // detail rows (both share `cached_delivery_detail`), so the two payload
-        // shapes never overwrite each other.
-        val cacheKey = CUSTOMER_DETAIL_KEY_BASE - customerId
+    suspend fun customerDeliveryDetail(key: String): Cached<CustomerDeliveryDetailResponse> {
+        // The key is `id:<customerId>` or `name:<name>`. Customer rows live in
+        // the negative range below WHOLE_LIST_KEY (-1) and the positive
+        // assignment ids, so the two payload shapes never collide.
+        val cacheKey = -(2 + (key.hashCode() and 0x3FFFFFFF))
+        val (id, name) = parseCustomerKey(key)
         return try {
-            val fresh = apiCall { api.customerDelivery(customerId) }
+            val fresh = apiCall { api.customerDelivery(customerId = id, customerName = name) }
             dao.cacheDeliveryDetail(
                 CachedDeliveryDetailEntity(cacheKey, gson.toJson(fresh), System.currentTimeMillis()),
             )
@@ -207,6 +208,13 @@ class FieldOpsRepository @Inject constructor(
                 ?: throw ApiException(0, "لا يوجد اتصال، ولا توجد نسخة محفوظة لهذا العميل")
             Cached(gson.fromJson(cached.payloadJson, CustomerDeliveryDetailResponse::class.java), true, cached.cachedAt)
         }
+    }
+
+    /** Split `id:<n>` / `name:<s>` into the API's `id` / `name` query params. */
+    private fun parseCustomerKey(key: String): Pair<Int?, String?> = when {
+        key.startsWith("id:") -> key.removePrefix("id:").toIntOrNull() to null
+        key.startsWith("name:") -> null to key.removePrefix("name:")
+        else -> key.toIntOrNull() to null
     }
 
     suspend fun deliveryDetail(assignmentId: Int): Cached<DeliveryDetailResponse> {
@@ -306,8 +314,5 @@ class FieldOpsRepository @Inject constructor(
          * full payload is cached once and read back as one object.
          */
         const val WHOLE_LIST_KEY = -1
-
-        /** Offset for customer-detail rows so they never collide with assignment rows. */
-        const val CUSTOMER_DETAIL_KEY_BASE = -100_000
     }
 }

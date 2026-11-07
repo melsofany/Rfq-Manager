@@ -3265,13 +3265,16 @@ export async function initDb(): Promise<void> {
       CREATE INDEX IF NOT EXISTS mobile_sync_operations_status_idx
         ON mobile_sync_operations (hr_employee_id, status);
     `);
-    // Idempotency for receipts — own statement, AFTER the columns exist (a
-    // unique index on a column created in the same batch would fail on a
-    // database whose table predates the column, and initDb aborts on the first
-    // failing statement, silently skipping every later migration).
+    // Idempotency for receipts. The key is (client_uuid, po_item_id), NOT
+    // client_uuid alone: one submission covers several lines and writes one row
+    // per line, all sharing the same client_uuid. A uuid-only unique index
+    // rejected the SECOND line of every multi-line receipt with a duplicate-key
+    // 500 — which is exactly how a rep who received one line and rejected
+    // another ended up unable to record either.
     await client.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS po_item_receipts_client_uuid_uq
-        ON po_item_receipts (client_uuid) WHERE client_uuid IS NOT NULL;
+      DROP INDEX IF EXISTS po_item_receipts_client_uuid_uq;
+      CREATE UNIQUE INDEX IF NOT EXISTS po_item_receipts_client_uuid_item_uq
+        ON po_item_receipts (client_uuid, po_item_id) WHERE client_uuid IS NOT NULL;
     `);
 
     await client.query(`

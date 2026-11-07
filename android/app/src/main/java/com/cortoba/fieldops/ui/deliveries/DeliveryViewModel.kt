@@ -134,12 +134,13 @@ class DeliveryViewModel @Inject constructor(
     /**
      * Load one customer with all of their purchase orders. The list screen shows
      * a square per customer, so this is the drill-down before the per-PO detail.
+     * `key` is `id:<customerId>` or `name:<name>`.
      */
-    fun loadCustomerDetail(customerId: Int) {
+    fun loadCustomerDetail(key: String) {
         _customerDetail.update { it.copy(loading = it.data == null, error = null) }
         viewModelScope.launch {
             try {
-                val result = repository.customerDeliveryDetail(customerId)
+                val result = repository.customerDeliveryDetail(key)
                 _customerDetail.update {
                     it.copy(
                         loading = false,

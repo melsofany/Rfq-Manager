@@ -161,6 +161,16 @@ describe("init-db migrations", () => {
     expect(source).toContain("customer_po_item_deliveries_wa_uq");
   });
 
+  it("scopes the receipt idempotency index to (client_uuid, po_item_id)", () => {
+    // One submission writes one receipt row per line, all sharing the same
+    // client_uuid. A uuid-only unique index made the SECOND line of every
+    // multi-line receipt fail with a duplicate-key error, so a rep who received
+    // one line and rejected another could record neither.
+    expect(source).toContain("po_item_receipts_client_uuid_item_uq");
+    expect(source).toContain("(client_uuid, po_item_id)");
+    expect(source).toContain("DROP INDEX IF EXISTS po_item_receipts_client_uuid_uq");
+  });
+
   it("adds the customer-item attribution columns and the delivery void columns", () => {
     for (const col of [
       "attribution_first_po_at",

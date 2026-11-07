@@ -64,7 +64,7 @@ import com.cortoba.fieldops.ui.theme.CortobaCream
 @Composable
 fun DeliveryListScreen(
     onBack: () -> Unit,
-    onOpenCustomer: (Int) -> Unit,
+    onOpenCustomer: (String) -> Unit,
     viewModel: DeliveryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.list.collectAsStateWithLifecycle()
@@ -146,10 +146,10 @@ fun DeliveryListScreen(
                             item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("العملاء") }
                         }
 
-                        items(data.tasks, key = { "customer-${it.customerId}" }) { task ->
+                        items(data.tasks, key = { "customer-${it.key}" }) { task ->
                             CustomerSquare(
                                 task = task,
-                                onClick = { onOpenCustomer(task.customerId) },
+                                onClick = { onOpenCustomer(task.key) },
                             )
                         }
                     }

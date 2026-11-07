@@ -26,6 +26,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:18080"
 DB = sys.argv[2] if len(sys.argv) > 2 else "cortoba-pg"
@@ -240,42 +241,63 @@ def main() -> int:
     deliverable = sum(float(t.get("availableQty", 0)) for t in tasks)
     check("exactly 4 units are deliverable", abs(deliverable - 4) < 1e-6,
           f"got {deliverable} across {len(tasks)} task(s)")
+    # Each task is now ONE CUSTOMER carrying their purchase orders. The customer
+    # behind P26E021 must not appear at all — its only line was never received.
     check("the unreceived SPO-009 customer line is NOT deliverable",
-          all(t["customerPoNo"] != "P26E021" for t in tasks),
-          f"customer POs offered: {[t['customerPoNo'] for t in tasks]}")
+          all(t["customerName"] != "عميل 3" for t in tasks),
+          f"customers offered: {[t['customerName'] for t in tasks]}")
+    check("each card is one customer with their PO count",
+          all(t.get("poCount", 0) >= 1 for t in tasks),
+          f"poCounts: {[t.get('poCount') for t in tasks]}")
 
     print("\n[8] a partial delivery leaves the remainder, and history is preserved")
-    target = next((t for t in tasks if t["customerPoNo"] == "P26E014"), None)
-    check("the P26E014 delivery task exists", target is not None)
+    # The customer carrying P26E014 (عميل 2) is the target. Open the customer
+    # screen, then its PO detail — the rep drills customer → PO.
+    target = next((t for t in tasks if t["customerName"] == "عميل 2"), None)
+    check("the عميل 2 customer card exists", target is not None)
     cpi_id = None
+    assignment_id = None
     if target:
-        detail_status, detail = api("GET", f"/api/mobile/deliveries/{target['assignmentId']}",
-                                    token)
-        check("delivery detail loads", detail_status == 200, f"status={detail_status}")
-        d_items = detail.get("items", [])
-        check("the line reports 2 available of 3 ordered",
-              bool(d_items) and abs(float(d_items[0]["availableQty"]) - 2) < 1e-6,
-              f"items={d_items}")
-        if d_items:
-            cpi_id = d_items[0]["customerPoItemId"]
-            status, body = api("POST", f"/api/mobile/deliveries/{target['assignmentId']}/confirm",
-                               token, {"items": [{"customerPoItemId": cpi_id, "deliveredQty": 1}],
-                                       "recipientName": "مستلم اختبار",
-                                       "operationKey": "e2e-delivery-1"})
-            check("partial delivery accepted", status == 200, f"status={status} body={body}")
+        # The seed creates name-only customers (no customer id), so the card's
+        # key is `name:<name>` and the detail is fetched by name.
+        key = target["key"]
+        kind, _, value = key.partition(":")
+        query = f"id={value}" if kind == "id" else f"name={quote(value)}"
+        detail_status, cdetail = api(
+            "GET", f"/api/mobile/deliveries/customer?{query}", token)
+        check("customer detail loads", detail_status == 200, f"status={detail_status}")
+        pos = cdetail.get("purchaseOrders", [])
+        po = next((p for p in pos if p["customerPoNo"] == "P26E014"), None)
+        check("the customer carries the P26E014 purchase order", po is not None,
+              f"POs={[p['customerPoNo'] for p in pos]}")
+        if po:
+            assignment_id = po["assignmentId"]
+            check("the purchase order carries a delivery assignment",
+                  assignment_id is not None)
+            d_items = po.get("items", [])
+            check("the line reports 2 available of 3 ordered",
+                  bool(d_items) and abs(float(d_items[0]["availableQty"]) - 2) < 1e-6,
+                  f"items={d_items}")
+            if d_items and assignment_id is not None:
+                cpi_id = d_items[0]["customerPoItemId"]
+                status, body = api("POST", f"/api/mobile/deliveries/{assignment_id}/confirm",
+                                   token, {"items": [{"customerPoItemId": cpi_id, "deliveredQty": 1}],
+                                           "recipientName": "مستلم اختبار",
+                                           "operationKey": "e2e-delivery-1"})
+                check("partial delivery accepted", status == 200, f"status={status} body={body}")
 
-            status, d2 = api("GET", "/api/mobile/deliveries", token)
-            remaining = sum(float(x.get("availableQty", 0)) for x in d2.get("tasks", []))
-            check("remaining deliverable quantity is 3", abs(remaining - 3) < 1e-6,
-                  f"got {remaining}")
-            rows = sql("SELECT count(*) FROM customer_po_item_deliveries "
-                       "WHERE delivered_qty > 0;")
-            check("the first delivery row still exists (history not overwritten)",
-                  int(rows) >= 1, f"rows={rows}")
+                status, d2 = api("GET", "/api/mobile/deliveries", token)
+                remaining = sum(float(x.get("availableQty", 0)) for x in d2.get("tasks", []))
+                check("remaining deliverable quantity is 3", abs(remaining - 3) < 1e-6,
+                      f"got {remaining}")
+                rows = sql("SELECT count(*) FROM customer_po_item_deliveries "
+                           "WHERE delivered_qty > 0;")
+                check("the first delivery row still exists (history not overwritten)",
+                      int(rows) >= 1, f"rows={rows}")
 
     print("\n[9] a duplicate confirmation is idempotent, not double-counted")
-    if target and cpi_id:
-        api("POST", f"/api/mobile/deliveries/{target['assignmentId']}/confirm",
+    if target and cpi_id and assignment_id is not None:
+        api("POST", f"/api/mobile/deliveries/{assignment_id}/confirm",
             token, {"items": [{"customerPoItemId": cpi_id, "deliveredQty": 1}],
                     "operationKey": "e2e-delivery-1"})
         _, d3 = api("GET", "/api/mobile/deliveries", token)
@@ -349,6 +371,65 @@ def main() -> int:
         check("the detail lists BOTH lines (not just one)",
               len(multi_detail.get("items", [])) == 2,
               f"items={multi_detail.get('items')}")
+
+    print("\n[12c] rejecting one line does not block the rest of the submission")
+    # The reported defect: a rep who rejects ONE line (quantity 0) had the WHOLE
+    # submission refused with «أدخل الكمية المستلمة أو المرفوضة», so the lines
+    # they did receive could never be recorded. Rejecting one line must record it
+    # as rejected and let the accepted lines through.
+    rej_po = sql(
+        "INSERT INTO purchase_orders (internal_po_no, sheet_po_no, status) "
+        "VALUES ('SPO-REJECT', 'SPO-REJECT', 'draft') RETURNING id;"
+    )
+    cpo_rej = sql(
+        "INSERT INTO customer_pos (internal_po_no, customer_po_no, customer_name, status) "
+        "VALUES ('CPO-REJ', 'P26E-REJ', 'عميل الرفض', 'confirmed') RETURNING id;"
+    )
+    rej_items = []
+    for idx3, label in enumerate(("بند مقبول", "بند مرفوض"), start=1):
+        cpi = sql(
+            f"INSERT INTO customer_po_items (customer_po_id, description, qty, uom) "
+            f"VALUES ({cpo_rej}, '{label}', 5, 'قطعة') RETURNING id;"
+        )
+        item_id = sql(
+            f"INSERT INTO purchase_order_items "
+            f"(po_id, line_item, description, qty, uom, supplier_id, line_status, "
+            f" customer_po_item_id) "
+            f"VALUES ({rej_po}, '{idx3}', '{label}', 5, 'قطعة', {supplier}, 'pending', "
+            f"{cpi}) RETURNING id;"
+        )
+        sql(
+            f"INSERT INTO work_order_assignments "
+            f"(po_id, po_item_id, customer_po_id, customer_po_item_id, kind, status, "
+            f" hr_employee_id, representative_name, representative_phone) "
+            f"VALUES ({rej_po}, {item_id}, {cpo_rej}, {cpi}, 'receipt', 'sent', "
+            f"{emp}, 'مندوب اختبار', '201000000001');"
+        )
+        rej_items.append(int(item_id))
+    status, p4 = api("GET", "/api/mobile/pickups", token)
+    rej_task = next((t for t in p4.get("tasks", []) if t["poNo"] == "SPO-REJECT"), None)
+    check("the rejection PO appears as a supplier card", rej_task is not None,
+          f"tasks={[t['poNo'] for t in p4.get('tasks', [])]}")
+    if rej_task:
+        # Accept line 1 in full, reject line 2 with quantity 0.
+        status, body = api(
+            "POST", f"/api/mobile/pickups/{rej_task['assignmentId']}/confirm", token,
+            {"items": [{"poItemId": rej_items[0], "receivedQty": 5},
+                       {"poItemId": rej_items[1], "receivedQty": 0, "rejectedQty": 0}],
+             "clientUuid": "e2e-receipt-reject"})
+        check("a submission mixing an accepted and a rejected line is accepted",
+              status == 200, f"status={status} body={body}")
+        if status == 200:
+            accepted = sql(
+                "SELECT total_accepted_qty FROM purchase_order_items "
+                f"WHERE id = {rej_items[0]};")
+            rejected_row = sql(
+                "SELECT receipt_status FROM po_item_receipts "
+                f"WHERE po_item_id = {rej_items[1]} ORDER BY id DESC LIMIT 1;")
+            check("the accepted line records its full quantity",
+                  abs(float(accepted) - 5) < 1e-6, f"accepted={accepted}")
+            check("the zero-quantity line records as rejected, not dropped",
+                  rejected_row == "rejected", f"status={rejected_row}")
 
     print("\n[13] maintenance mode freezes operations but not the account")
     sql(

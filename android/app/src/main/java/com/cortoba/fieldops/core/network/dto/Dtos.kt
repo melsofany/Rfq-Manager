@@ -201,7 +201,9 @@ data class DeliverySummary(
 )
 
 data class DeliveryTask(
-    val customerId: Int,
+    /** Stable handle the app navigates with: `id:<customerId>` or `name:<name>`. */
+    val key: String = "",
+    val customerId: Int? = null,
     val customerName: String? = null,
     val phone: String? = null,
     val address: String? = null,
@@ -264,7 +266,7 @@ data class CustomerDeliveryPo(
 )
 
 data class CustomerDeliveryDetailResponse(
-    val customerId: Int,
+    val customerId: Int? = null,
     val customer: CustomerDto? = null,
     val purchaseOrders: List<CustomerDeliveryPo> = emptyList(),
     val responsibleEmployeeId: Int? = null,

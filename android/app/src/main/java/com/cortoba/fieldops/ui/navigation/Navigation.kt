@@ -30,7 +30,7 @@ object Routes {
     const val DELIVERIES = "deliveries"
     const val DELIVERY_DETAIL = "deliveries/{assignmentId}"
     const val DELIVERY_CONFIRM = "deliveries/{assignmentId}/confirm"
-    const val DELIVERY_CUSTOMER = "deliveries/customer/{customerId}"
+    const val DELIVERY_CUSTOMER = "deliveries/customer/{customerKey}"
     const val NOTIFICATIONS = "notifications"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
@@ -39,7 +39,8 @@ object Routes {
     fun pickupDetail(assignmentId: Int) = "pickups/$assignmentId"
     fun deliveryDetail(assignmentId: Int) = "deliveries/$assignmentId"
     fun deliveryConfirm(assignmentId: Int) = "deliveries/$assignmentId/confirm"
-    fun deliveryCustomer(customerId: Int) = "deliveries/customer/$customerId"
+    fun deliveryCustomer(customerKey: String) =
+        "deliveries/customer/${java.net.URLEncoder.encode(customerKey, "UTF-8")}"
 }
 
 /**
@@ -117,11 +118,11 @@ fun CortobaNavHost(
 
         composable(
             route = Routes.DELIVERY_CUSTOMER,
-            arguments = listOf(navArgument("customerId") { type = NavType.IntType }),
+            arguments = listOf(navArgument("customerKey") { type = NavType.StringType }),
         ) { entry ->
-            val customerId = entry.arguments?.getInt("customerId") ?: 0
+            val customerKey = entry.arguments?.getString("customerKey") ?: ""
             CustomerDeliveryDetailScreen(
-                customerId = customerId,
+                customerKey = customerKey,
                 onBack = { navController.popBackStack() },
                 onOpenPo = { navController.navigate(Routes.deliveryDetail(it)) },
             )

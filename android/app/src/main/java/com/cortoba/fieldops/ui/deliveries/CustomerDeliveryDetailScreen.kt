@@ -59,7 +59,7 @@ import com.cortoba.fieldops.ui.theme.CortobaCream
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomerDeliveryDetailScreen(
-    customerId: Int,
+    customerKey: String,
     onBack: () -> Unit,
     onOpenPo: (Int) -> Unit,
     viewModel: DeliveryViewModel = hiltViewModel(),
@@ -67,7 +67,7 @@ fun CustomerDeliveryDetailScreen(
     val state by viewModel.customerDetail.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(customerId) { viewModel.loadCustomerDetail(customerId) }
+    LaunchedEffect(customerKey) { viewModel.loadCustomerDetail(customerKey) }
 
     Scaffold(
         containerColor = CortobaCream,

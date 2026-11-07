@@ -205,10 +205,30 @@ describe("groupAssignmentsByCustomer", () => {
     expect(allDone[0].status).toBe("delivered");
   });
 
-  it("does not merge assignments whose customer is unknown", () => {
+  it("groups a name-only customer by name so their work never disappears", () => {
+    // The portal allows a customer PO with a name but no customer id. Those rows
+    // must still collapse together, or a real delivery would vanish from the list.
+    const groups = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "sent", customerId: null, customerName: "شركة الفجر" },
+      { customerPoId: 11, status: "sent", customerId: null, customerName: "شركة الفجر" },
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].customerId).toBeNull();
+    expect(groups[0].customerName).toBe("شركة الفجر");
+    expect(groups[0].customerPoIds.sort()).toEqual([10, 11]);
+  });
+
+  it("keeps two name-only customers with different names apart", () => {
     const groups = groupAssignmentsByCustomer([
       { customerPoId: 10, status: "sent", customerId: null, customerName: "أ" },
       { customerPoId: 11, status: "sent", customerId: null, customerName: "ب" },
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+
+  it("drops an assignment with neither a customer id nor a name", () => {
+    const groups = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "sent", customerId: null, customerName: null },
     ]);
     expect(groups).toEqual([]);
   });

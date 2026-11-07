@@ -152,7 +152,8 @@ export function supplierPoCount(group: ConsolidatedGroup): number {
 
 /** One customer and the distinct purchase orders that carry delivery work. */
 export interface CustomerDeliveryGroup {
-  customerId: number;
+  /** Customer id when known, otherwise null. */
+  customerId: number | null;
   customerName: string | null;
   customerPoIds: number[];
   status: "delivered" | "pending";
@@ -162,9 +163,13 @@ export interface CustomerDeliveryGroup {
  * Collapse delivery assignments onto ONE row per customer.
  *
  * A customer with three purchase orders must appear as a single square, not
- * three cards that look like three different customers. The customer id is the
- * only identity used — a customer PO with no customer id cannot be grouped and
- * is dropped, because guessing would merge unrelated work.
+ * three cards that look like three different customers.
+ *
+ * Identity is the customer id. A customer PO entered without an id (the portal
+ * allows a name-only customer) falls back to its customer NAME so its work is
+ * still grouped — dropping it would make a real delivery vanish from the list.
+ * An assignment with neither id nor name cannot be grouped and is dropped,
+ * because guessing would merge unrelated customers.
  *
  * `status` is "delivered" only when EVERY assignment for the customer is
  * delivered; one outstanding order keeps the customer in progress.
@@ -177,20 +182,27 @@ export function groupAssignmentsByCustomer(
     customerName: string | null;
   }[],
 ): CustomerDeliveryGroup[] {
-  const byCustomer = new Map<number, { poIds: Set<number>; statuses: Set<string>; name: string | null }>();
+  const byKey = new Map<
+    string,
+    { customerId: number | null; name: string | null; poIds: Set<number>; statuses: Set<string> }
+  >();
   for (const a of assignments) {
-    if (a.customerPoId == null || a.customerId == null) continue;
-    const entry = byCustomer.get(a.customerId) ?? {
+    if (a.customerPoId == null) continue;
+    const name = a.customerName?.trim() || null;
+    if (a.customerId == null && name == null) continue;
+    const key = a.customerId != null ? `id:${a.customerId}` : `name:${name}`;
+    const entry = byKey.get(key) ?? {
+      customerId: a.customerId,
+      name,
       poIds: new Set<number>(),
       statuses: new Set<string>(),
-      name: a.customerName,
     };
     entry.poIds.add(a.customerPoId);
     entry.statuses.add(a.status);
-    byCustomer.set(a.customerId, entry);
+    byKey.set(key, entry);
   }
-  return [...byCustomer.entries()].map(([customerId, entry]) => ({
-    customerId,
+  return [...byKey.values()].map((entry) => ({
+    customerId: entry.customerId,
     customerName: entry.name,
     customerPoIds: [...entry.poIds],
     status:
