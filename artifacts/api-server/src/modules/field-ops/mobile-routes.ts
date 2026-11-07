@@ -474,11 +474,10 @@ router.get("/pickups/:id", async (req, res): Promise<void> => {
     siblingIds = siblingRows.map((r) => r.id);
   }
 
-  // includeCompleted: the detail screen is also the receipt history — a fully
-  // received line must stay visible there even though the list hides it.
-  const groups = await buildPickupGroups(siblingIds.length ? siblingIds : [assignment.id], {
-    includeCompleted: true,
-  });
+  // Only outstanding lines belong in the receiving screen: a fully received
+  // line (its ordered quantity already collected) must disappear, not linger
+  // with «required 0, received N» forever.
+  const groups = await buildPickupGroups(siblingIds.length ? siblingIds : [assignment.id]);
   const [po] = await db
     .select({
       id: purchaseOrdersTable.id,

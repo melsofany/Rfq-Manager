@@ -18,7 +18,6 @@ import com.cortoba.fieldops.ui.deliveries.DeliveryListScreen
 import com.cortoba.fieldops.ui.notifications.NotificationsScreen
 import com.cortoba.fieldops.ui.pickups.PickupDetailScreen
 import com.cortoba.fieldops.ui.pickups.PickupListScreen
-import com.cortoba.fieldops.ui.pickups.ReceiptConfirmScreen
 import com.cortoba.fieldops.ui.profile.ProfileScreen
 import com.cortoba.fieldops.ui.profile.SettingsScreen
 
@@ -27,7 +26,6 @@ object Routes {
     const val DASHBOARD = "dashboard"
     const val PICKUPS = "pickups"
     const val PICKUP_DETAIL = "pickups/{assignmentId}"
-    const val RECEIPT_CONFIRM = "pickups/{assignmentId}/confirm"
     const val DELIVERIES = "deliveries"
     const val DELIVERY_DETAIL = "deliveries/{assignmentId}"
     const val DELIVERY_CONFIRM = "deliveries/{assignmentId}/confirm"
@@ -37,7 +35,6 @@ object Routes {
     const val CUSTODY = "custody"
 
     fun pickupDetail(assignmentId: Int) = "pickups/$assignmentId"
-    fun receiptConfirm(assignmentId: Int) = "pickups/$assignmentId/confirm"
     fun deliveryDetail(assignmentId: Int) = "deliveries/$assignmentId"
     fun deliveryConfirm(assignmentId: Int) = "deliveries/$assignmentId/confirm"
 }
@@ -98,18 +95,6 @@ fun CortobaNavHost(
         ) { entry ->
             val assignmentId = entry.arguments?.getInt("assignmentId") ?: 0
             PickupDetailScreen(
-                assignmentId = assignmentId,
-                onBack = { navController.popBackStack() },
-                onConfirm = { navController.navigate(Routes.receiptConfirm(it)) },
-            )
-        }
-
-        composable(
-            route = Routes.RECEIPT_CONFIRM,
-            arguments = listOf(navArgument("assignmentId") { type = NavType.IntType }),
-        ) { entry ->
-            val assignmentId = entry.arguments?.getInt("assignmentId") ?: 0
-            ReceiptConfirmScreen(
                 assignmentId = assignmentId,
                 onBack = { navController.popBackStack() },
                 onDone = {
