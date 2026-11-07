@@ -2,6 +2,7 @@ package com.cortoba.fieldops.ui.pickups
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -166,7 +167,6 @@ fun PickupDetailScreen(
                                         }
                                     }
                                     Spacer(Modifier.height(8.dp))
-                                    InfoRow("أمر الشراء", data.po?.poNo)
                                     InfoRow("تاريخ الأمر", formatDate(data.po?.poDate))
                                     InfoRow("المسؤول", data.representativeName)
                                     if (data.executorRole == "delegate") {
@@ -465,6 +465,7 @@ private fun ReceiptGroupCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable { showDistribution = !showDistribution }
                     .background(CortobaCream, RoundedCornerShape(10.dp))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
