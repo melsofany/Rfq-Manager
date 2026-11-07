@@ -18,6 +18,12 @@ output-metadata.json
 *.jks
 *.keystore
 keystore.properties
+# Exception: the shared debug key is intentionally committed so every build —
+# local and CI — produces the SAME signature. Without it, Android rejects the
+# update over an installed build and the user silently keeps the old version.
+# It is a debug key with the public password "android"; never put a real
+# release key here.
+!app/keystore/fieldops-debug.jks
 
 # Kotlin / IntelliJ
 .kotlin/

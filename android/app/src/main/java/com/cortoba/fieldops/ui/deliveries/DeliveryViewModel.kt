@@ -41,6 +41,8 @@ data class DeliveryFormState(
     val submitting: Boolean = false,
     val error: String? = null,
     val result: DeliverySubmitResult? = null,
+    /** Assignment the entries were seeded from — makes seeding idempotent. */
+    val seededFor: Int? = null,
 )
 
 data class DeliverySubmitResult(
@@ -113,17 +115,27 @@ class DeliveryViewModel @Inject constructor(
                         cachedAt = result.cachedAt,
                     )
                 }
+                seedForm(assignmentId, result.value)
             } catch (e: ApiException) {
                 _detail.update { it.copy(loading = false, error = e.userMessage) }
             }
         }
     }
 
-    fun prepareForm() {
-        val items = _detail.value.data?.items ?: return
-        _form.update {
-            it.copy(
-                entries = items.map { item ->
+    /**
+     * Seed the delivery form from the loaded task.
+     *
+     * Called from [loadDetail] once the task has arrived, never from a sibling
+     * call in the screen: `loadDetail` is asynchronous, so a separate
+     * `prepareForm()` fired alongside it reads `_detail` while it is still empty
+     * and leaves the form with zero rows — the rep then sees no items to deliver.
+     */
+    private fun seedForm(assignmentId: Int, detail: DeliveryDetailResponse) {
+        _form.update { current ->
+            // Re-seeding would discard quantities the rep has already typed.
+            if (current.seededFor == assignmentId && current.entries.isNotEmpty()) return@update current
+            current.copy(
+                entries = detail.items.map { item ->
                     DeliveryEntry(
                         customerPoItemId = item.customerPoItemId,
                         displayName = item.description,
@@ -135,6 +147,7 @@ class DeliveryViewModel @Inject constructor(
                 },
                 error = null,
                 result = null,
+                seededFor = assignmentId,
             )
         }
     }

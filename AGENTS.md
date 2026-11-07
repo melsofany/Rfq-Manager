@@ -4483,3 +4483,109 @@ Postgres حقيقي.
 الدرس المتكرّر في هذا المستودع: **القاعدة غير المفروضة على الخادم ليست قاعدة.**
 الواجهة تخفي، والخادم يمنع — وأي إعداد يُقرأ في الواجهة ولا يُفحص في مسار
 التنفيذ هو ثغرة سلوكية لا ميزة.
+
+## Android: `aapt:attr` must not wrap `pathData` (field-ops launch crash)
+
+- **Symptom**: the Cortoba field-ops app closed immediately on launch, and the
+  logo never drew. Reported repeatedly as «نفس المشاكل» across 1.0.2–1.0.5.
+- **Two red herrings first**: a debug keystore regenerated per CI run
+  (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`, so the phone kept the old build), and an
+  unguarded `EncryptedSharedPreferences` read in `SessionStore`. Both were real
+  and worth fixing, but neither was this crash.
+- **Root cause**: all three brand vectors declared their path like this:
+
+  ```xml
+  <aapt:attr name="android:pathData">
+    <pathData android:value="M482.00 496.09C480.67 ..."/>
+  </aapt:attr>
+  ```
+
+  `aapt:attr` is for *complex* values (a gradient `fillColor`). Applied to a
+  plain string, aapt2 stores `pathData` as a reference to a generated resource
+  (`res/drawable/$ic_cortoba_logo__1.xml`). Compose's `XmlVectorParser` then
+  receives the resource **name** and parses it as path data:
+
+  ```
+  java.lang.IllegalArgumentException: Unknown command for: r
+    at PathParser.pathStringToNodes
+    at XmlVectorParser.parsePath
+    at loadVectorResourceInner   -> CortobaLogo(Common.kt) -> LoginScreen
+  ```
+
+  The `r` is the first letter of `res/drawable/…`. **A parser error naming a
+  single odd character is a strong hint the input is a resource name, not data.**
+- **Why the logo looked half-drawn**: the *second* path in `ic_cortoba_logo.xml`
+  used a normal `android:pathData` attribute and rendered; only the `aapt:attr`
+  path vanished.
+- **Fix**: move the data onto `<path android:pathData="…">`, leaving `aapt:attr`
+  for the gradient alone.
+- **Proof it is fixed**: `AppLaunchTest` failed with `Unknown command for: r` and
+  now passes. Restoring the broken file makes it fail again with the same
+  message — a negative control, which is what makes the green run meaningful.
+  A guard in `BrandVectorTest` rejects any `<aapt:attr name="android:pathData">`.
+- **Lesson**: a build that compiles says nothing about a resource that parses.
+  `aapt2` also silently rewrites any resource string over 32767 bytes as the
+  literal `STRING_TOO_LARGE`, so a long vector path needs a test, not a build.
+
+## فرع متباعد عن main: ادمج، لا تُعِد التأسيس (field-ops)
+
+`main` يستوعب الفروع بصيغة **squash** (كل التزامات الفرع تصير التزاماً واحداً
+جديداً على main). لذلك الفرع الذي رُفع قبلاً يبدو «متباعداً» رغم أن تغييراته
+موجودة في main فعلاً.
+
+إعادة التأسيس في هذه الحالة (`git rebase --onto main <old-base>`) **تُسقط
+الالتزامات التي لم تدخل main**. حدث هذا فعلاً: أسقطت ثمانية التزامات — مفتاح
+التوقيع المشترك، تحصين `SessionStore`، واختبارات الإقلاع — وبدا الناتج نظيفاً
+لأن `git status` لا يشتكي. العلامة الوحيدة كانت فرقاً في إحصاءات الملفات.
+
+الصحيح: **الدمج** (`git merge main`). الدمج يحفظ التزامات الطرفين ويُظهر
+التعارضات الحقيقية فقط (كانت في `build.gradle.kts` وحده)، فيبقى كل ما في الفرع
+وكل ما في main.
+
+كيف تكتشف الفرق قبل أن تتصرف:
+
+    git merge-base --is-ancestor origin/main HEAD   # هل main داخل الفرع؟
+    git diff --stat origin/main HEAD                # ماذا ينقص الفرع فعلاً؟
+
+لو أظهر الفرق حذف ملفات (`D`) أو اختفاء اختبارات، فإعادة التأسيس خطأ.
+`git diff --name-status` يُظهر `D` و`A` صراحةً — راجعها قبل الدفع.
+
+## Field ops: the receipt screen that said «لا توجد أصناف للاستلام»
+
+- **Symptom**: at receipt confirmation there was no partial option, a full
+  receipt answered «لا توجد أصناف للاستلام», and the item stayed on the list.
+- **Root cause 1 — a race, not a data bug.** The screen fired two calls side by
+  side:
+
+  ```kotlin
+  LaunchedEffect(id) {
+      viewModel.loadDetail(id)  // suspend, launches in viewModelScope
+      viewModel.prepareForm()   // reads _detail.value RIGHT NOW
+  }
+  ```
+
+  `prepareForm()` read the detail state while the network call was still in
+  flight, found it empty, and returned without seeding a single row. The task
+  then rendered with zero items, and because the submit handler rejects an empty
+  submission, the rep could never complete it. **Seeding must be a consequence
+  of the load finishing** — it now happens inside `loadDetail`, and `seededFor`
+  makes it idempotent so a recomposition cannot wipe typed quantities.
+- **Root cause 2 — a partial receipt closed the task.** The handler always wrote
+  `status = "received"`, so a short receipt removed the task from the rep's view
+  and the outstanding quantity became unreachable. It is now
+  `partially_received` while any submitted line is below its ordered quantity.
+- **Root cause 3 — completed lines were never filtered.** `buildPickupGroups`
+  returned every line, so a fully received task stayed on the list forever. The
+  list now hides lines with nothing left; the *detail* screen keeps them
+  (`includeCompleted`) because it doubles as the receipt history.
+- **One rule, one place**: `hasOutstandingQty(ordered, accepted)` in
+  `consolidation.ts` decides both the list filter and the partial/closed status.
+  Two copies of that comparison is how the two ends drift apart.
+- **The server owns the status.** The confirm response returns
+  `assignmentStatus`; the client must not infer it from the quantities it
+  happens to see, because it cannot see sibling lines.
+- **Lesson**: `advanceUntilIdle()` returns before a real HTTP round trip — a
+  test that only advances virtual time asserts against a race. The regression
+  test interleaves scheduler advancement with a real wait, and drives the real
+  ViewModel, repository, Room DB and a MockWebServer. A mock would have hidden
+  exactly this defect.

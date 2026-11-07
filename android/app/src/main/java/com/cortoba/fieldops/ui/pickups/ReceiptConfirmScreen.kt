@@ -81,8 +81,10 @@ fun ReceiptConfirmScreen(
     val form by viewModel.form.collectAsStateWithLifecycle()
 
     LaunchedEffect(assignmentId) {
+        // loadDetail seeds the form itself once the task has arrived. Calling a
+        // separate prepareForm() here would read the still-empty detail state
+        // and leave the screen with no rows to receive.
         viewModel.loadDetail(assignmentId)
-        viewModel.prepareForm()
     }
 
     var showSummary by remember { mutableStateOf(false) }
@@ -384,16 +386,30 @@ private fun ReceiptResultView(result: ReceiptSubmitResult, onDone: () -> Unit) {
                 modifier = Modifier.padding(top = 8.dp),
             )
         } else {
-            Icon(Icons.Default.CloudDone, contentDescription = null, tint = StatusGreen, modifier = Modifier.height(64.dp))
+            Icon(
+                imageVector = Icons.Default.CloudDone,
+                contentDescription = null,
+                tint = if (result.partial) StatusAmber else StatusGreen,
+                modifier = Modifier.height(64.dp),
+            )
             Text(
-                text = if (result.duplicate) "تمت معالجة هذه العملية مسبقاً" else "تم تأكيد الاستلام",
+                text = when {
+                    result.duplicate -> "تمت معالجة هذه العملية مسبقاً"
+                    result.partial -> "تم تسجيل استلام جزئي"
+                    else -> "تم تأكيد الاستلام"
+                },
                 style = MaterialTheme.typography.headlineSmall,
-                color = StatusGreen,
+                color = if (result.partial) StatusAmber else StatusGreen,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 12.dp),
             )
             Text(
-                text = "تم تسجيل الكميات المقبولة وأصبحت متاحة لتسليم العملاء.",
+                text = if (result.partial) {
+                    "تم تسجيل الكميات المقبولة، وتبقى الكميات الناقصة على نفس المهمة " +
+                        "لإتمام استلامها في زيارة أخرى."
+                } else {
+                    "تم تسجيل الكميات المقبولة وأصبحت متاحة لتسليم العملاء."
+                },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,

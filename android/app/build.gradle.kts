@@ -14,8 +14,8 @@ android {
         applicationId = "com.cortoba.fieldops"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.3"
+        versionCode = 7
+        versionName = "1.0.7"
         // The Render service URL. Overridable per build so a staging build does
         // not need a source edit.
         buildConfigField(
@@ -26,14 +26,43 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    /**
+     * A committed, shared signing key.
+     *
+     * Android refuses to install an update whose signature differs from the
+     * installed app (INSTALL_FAILED_UPDATE_INCOMPATIBLE). A CI runner starts with
+     * an empty ~/.android, so the auto-generated debug key was DIFFERENT on every
+     * run: each release was signed by a new certificate and could never be
+     * installed over the previous one. The representative kept running the old
+     * build, which is why fixed code appeared to change nothing.
+     *
+     * This key is a debug-only key with the public password "android" — the same
+     * security model as the AOSP debug keystore, which is also shipped in the
+     * clear. It exists so builds are reproducible, NOT to protect a release. A
+     * production key must be supplied through CI secrets and never committed.
+     */
+    signingConfigs {
+        create("fieldOpsDebug") {
+            storeFile = file("keystore/fieldops-debug.jks")
+            storePassword = "android"
+            keyAlias = "cortoba"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Signed with the same key as debug so an APK the representative
+            // already has can be updated in place. Swap for a CI-secret release
+            // key before publishing to a store.
+            signingConfig = signingConfigs.getByName("fieldOpsDebug")
         }
         debug {
             applicationIdSuffix = ".debug"
+            signingConfig = signingConfigs.getByName("fieldOpsDebug")
         }
     }
 
@@ -47,6 +76,14 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    testOptions {
+        unitTests {
+            // Robolectric needs the real merged resources to inflate the theme
+            // and resolve @font/@drawable references, which is exactly where a
+            // launch crash hides.
+            isIncludeAndroidResources = true
+        }
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -95,6 +132,10 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.test.runner)
+    testImplementation(libs.androidx.test.ext.junit)
 }
 
 ksp {
