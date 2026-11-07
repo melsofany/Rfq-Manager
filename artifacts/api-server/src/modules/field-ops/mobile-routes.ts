@@ -36,7 +36,12 @@ import {
   checkDeliveryQuantities,
   type DelegationRow,
 } from "./assignment-logic";
-import { consolidatePickupLines, customerPoNosOf, hasOutstandingQty, type PickupLine } from "./consolidation";
+import {
+  consolidatePickupLines,
+  customerPoNosOf,
+  hasOutstandingQty,
+  type PickupLine,
+} from "./consolidation";
 import {
   hasActiveFieldAssignment,
   visibleAssignmentsFor,
@@ -593,7 +598,9 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
         prepared.map((p) => p.poItemId),
       ),
     );
-  const anyOutstanding = lineStates.some((l) => hasOutstandingQty(toNum(l.qty), toNum(l.accepted) ?? 0));
+  const anyOutstanding = lineStates.some((l) =>
+    hasOutstandingQty(toNum(l.qty), toNum(l.accepted) ?? 0),
+  );
   await db
     .update(workOrderAssignmentsTable)
     .set({
