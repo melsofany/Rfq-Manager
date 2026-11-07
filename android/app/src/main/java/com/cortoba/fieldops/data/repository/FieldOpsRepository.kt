@@ -165,6 +165,10 @@ class FieldOpsRepository @Inject constructor(
         } catch (e: ApiException) {
             if (e.isUnauthorized || !e.isNetwork) throw e
             enqueue(SyncEngine.TYPE_RECEIPT, assignmentId, request)
+            // Offline too: drop this supplier's cached detail so the rep cannot
+            // reopen it and re-receive the same items before the queue syncs.
+            // The list cache stays so other suppliers remain visible offline.
+            dao.clearPickupDetail(assignmentId)
             Cached(ReceiptConfirmResponse(success = false, duplicate = false), fromCache = true)
         }
     }
