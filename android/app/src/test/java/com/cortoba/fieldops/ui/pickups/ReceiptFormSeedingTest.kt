@@ -262,6 +262,37 @@ class ReceiptFormSeedingTest {
         assertEquals(6.0, result.acceptedQty, 0.0001)
     }
 
+    /** «استلام الكل» fills every original PO line with its full quantity. */
+    @Test
+    fun receiveAllFillsEveryLineToItsFullRequiredQuantity() = runTest(dispatcher) {
+        enqueueJson(detailJson())
+        val viewModel = PickupViewModel(repository)
+        viewModel.loadDetail(7)
+        awaitUntil { viewModel.form.value.entries.isNotEmpty() }
+
+        viewModel.fillAllFullQuantity()
+
+        val entries = viewModel.form.value.entries
+        assertEquals(listOf("2", "3", "1"), entries.map { it.receivedQty })
+        assertEquals(listOf("", "", ""), entries.map { it.rejectedQty })
+    }
+
+    /** «رفض الكل» zeroes every line without rejecting anything. */
+    @Test
+    fun rejectAllZeroesEveryLine() = runTest(dispatcher) {
+        enqueueJson(detailJson())
+        val viewModel = PickupViewModel(repository)
+        viewModel.loadDetail(7)
+        awaitUntil { viewModel.form.value.entries.isNotEmpty() }
+
+        viewModel.fillAllFullQuantity()
+        viewModel.rejectAll()
+
+        val entries = viewModel.form.value.entries
+        assertEquals(listOf("0", "0", "0"), entries.map { it.receivedQty })
+        assertEquals(listOf("", "", ""), entries.map { it.rejectedQty })
+    }
+
     /**
      * Damaged units are recorded but never counted as accepted, so a receipt
      * that arrives short must still be reported as partial.

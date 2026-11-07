@@ -87,7 +87,7 @@ def api(method: str, path: str, token: str | None = None, body: dict | None = No
         return status, raw
 
 
-def seed() -> None:
+def seed() -> tuple[int, int]:
     print("\n[seed] resetting field-operations data")
     sql(
         """
@@ -155,11 +155,12 @@ def seed() -> None:
             f"{emp}, 'مندوب اختبار', '201000000001');"
         )
     print(f"[seed] representative id={emp}, supplier id={supplier}")
+    return int(emp), int(supplier)
 
 
 def main() -> int:
     print(f"Verifying {BASE}")
-    seed()
+    emp, supplier = seed()
 
     print("\n[1] login with employee number + password")
     status, body = api("POST", "/api/mobile/auth/login",
@@ -312,6 +313,42 @@ def main() -> int:
     print("\n[12] audit trail exists for the operations")
     audits = sql("SELECT count(*) FROM audit_log WHERE action LIKE 'mobile.%';")
     check("mobile audit rows were written", int(audits) > 0, f"rows={audits}")
+
+    print("\n[12b] a supplier PO with several lines shows all of them in its detail")
+    # The brief's consolidation example uses three POs of the SAME item. This
+    # check covers the other real shape: ONE supplier PO carrying several
+    # different items. Opening that PO's detail must list every line, not just
+    # the single line behind whichever assignment id the card happened to carry.
+    multi_po = sql(
+        "INSERT INTO purchase_orders (internal_po_no, sheet_po_no, status) "
+        "VALUES ('SPO-MULTI', 'SPO-MULTI', 'draft') RETURNING id;"
+    )
+    for idx2, label in enumerate(("كابل 3×2.5 نحاس", "قاطع 63 أمبير"), start=1):
+        multi_item = sql(
+            f"INSERT INTO purchase_order_items "
+            f"(po_id, line_item, description, qty, uom, supplier_id, line_status) "
+            f"VALUES ({multi_po}, '{idx2}', '{label}', 5, 'قطعة', "
+            f"{supplier}, 'pending') RETURNING id;"
+        )
+        sql(
+            f"INSERT INTO work_order_assignments "
+            f"(po_id, po_item_id, kind, status, hr_employee_id, "
+            f" representative_name, representative_phone) "
+            f"VALUES ({multi_po}, {multi_item}, 'receipt', 'sent', "
+            f"{emp}, 'مندوب اختبار', '201000000001');"
+        )
+    status, p3 = api("GET", "/api/mobile/pickups", token)
+    multi_task = next((t for t in p3.get("tasks", []) if t["poNo"] == "SPO-MULTI"), None)
+    check("the multi-line PO appears as one supplier card", multi_task is not None,
+          f"tasks={[t['poNo'] for t in p3.get('tasks', [])]}")
+    if multi_task:
+        status, multi_detail = api(
+            "GET", f"/api/mobile/pickups/{multi_task['assignmentId']}", token
+        )
+        check("detail loads for the multi-line PO", status == 200, f"status={status}")
+        check("the detail lists BOTH lines (not just one)",
+              len(multi_detail.get("items", [])) == 2,
+              f"items={multi_detail.get('items')}")
 
     print("\n[13] maintenance mode freezes operations but not the account")
     sql(

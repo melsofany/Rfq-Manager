@@ -227,6 +227,31 @@ class PickupViewModel @Inject constructor(
         }
     }
 
+    /** «استلام الكل»: fill every line with its full required quantity. */
+    fun fillAllFullQuantity() {
+        _form.update { state ->
+            state.copy(
+                entries = state.entries.map {
+                    it.copy(
+                        receivedQty = com.cortoba.fieldops.core.util.formatQty(it.requiredQty),
+                        rejectedQty = "",
+                    )
+                },
+                error = null,
+            )
+        }
+    }
+
+    /** «رفض الكل»: mark every line as not received. */
+    fun rejectAll() {
+        _form.update { state ->
+            state.copy(
+                entries = state.entries.map { it.copy(receivedQty = "0", rejectedQty = "") },
+                error = null,
+            )
+        }
+    }
+
     fun submit(assignmentId: Int) {
         val entries = _form.value.entries
         if (entries.isEmpty()) {
