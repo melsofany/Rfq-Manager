@@ -1,5 +1,24 @@
 # Rfq-Manager вЂљГ„Г® Repository Notes
 
+## Mobile app auto-update (OTA) — how to ship a new version
+
+- The Android app self-updates from the server; reps no longer receive a manual APK.
+- To release: bump `versionCode` (and `versionName`) in `android/app/build.gradle.kts`.
+  **You MUST bump versionCode, or existing installs won't be prompted.**
+- On merge to `main` with `android/**` changes, `.github/workflows/android.yml` builds
+  the APK and creates a GitHub Release tagged `v{versionCode}` (requires
+  `permissions.contents.write`, already set).
+- Backend `GET /api/mobile/version` (public, no auth) reads the latest GitHub Release
+  with a 10-min cache and returns `{ versionCode, versionName, downloadUrl }`. It
+  parses versionCode from the last number in the tag, so both `v11` and legacy
+  `field-ops-v1.0.11` work.
+- App check points: `DashboardViewModel` (startup) and `SettingsViewModel` (open) call
+  `repository.latestVersion()`, then `AppUpdater.downloadApk` + `install` via
+  `FileProvider` (authority `${applicationId}.fileprovider`, paths in
+  `res/xml/file_paths.xml`). Manifest holds `REQUEST_INSTALL_PACKAGES`.
+- Repo `melsofany/Rfq-Manager`; Render service `srv-d894ofmq1p3s73fh04vg`.
+
+
 ## The engine log line lied about which loop was running
 
 - The startup log printed `engine: "mastra"` whenever the vestigial enablement
