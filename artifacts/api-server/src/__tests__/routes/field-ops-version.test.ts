@@ -20,6 +20,18 @@ describe("parseAppVersion", () => {
     expect(info.downloadUrl).toBe("https://x/apk");
   });
 
+  it("reads versionCode from legacy field-ops-vX.Y.Z tags via the patch", () => {
+    const info = parseAppVersion({
+      tag_name: "field-ops-v1.0.10",
+      name: "Cortoba Field Ops v1.0.10",
+      assets: [
+        { name: "cortoba-field-ops-v1.0.10.apk", browser_download_url: "https://x/legacy.apk" },
+      ],
+    });
+    expect(info.versionCode).toBe(10);
+    expect(info.downloadUrl).toBe("https://x/legacy.apk");
+  });
+
   it("falls back to 0 and null when the release has no usable tag or APK", () => {
     const info = parseAppVersion({ tag_name: "not-a-version", assets: [] });
     expect(info.versionCode).toBe(0);

@@ -30,11 +30,16 @@ export function parseAppVersion(release: {
   name?: string;
   assets?: { name?: string; browser_download_url?: string }[];
 }): AppVersionInfo {
-  const versionCode = Number.parseInt((release.tag_name ?? "").replace(/^v/, ""), 10);
+  const tag = release.tag_name ?? "";
+  // versionCode is encoded as the last number in the tag: `v11` for the new
+  // automated releases, or the patch segment of legacy `field-ops-v1.0.11` tags.
+  const numbers = tag.match(/\d+/g);
+  const last = numbers?.[numbers.length - 1];
+  const versionCode = last ? Number.parseInt(last, 10) : 0;
   const apkAsset = (release.assets ?? []).find((a) => (a.name ?? "").endsWith(".apk"));
   return {
     versionCode: Number.isFinite(versionCode) ? versionCode : 0,
-    versionName: release.name ?? release.tag_name ?? "",
+    versionName: release.name ?? tag,
     downloadUrl: apkAsset?.browser_download_url ?? null,
   };
 }
