@@ -54,6 +54,7 @@ import com.cortoba.fieldops.ui.components.ErrorBanner
 import com.cortoba.fieldops.ui.components.InfoRow
 import com.cortoba.fieldops.ui.components.LoadingBox
 import com.cortoba.fieldops.ui.components.OfflineBanner
+import com.cortoba.fieldops.ui.components.OutlineActionButton
 import com.cortoba.fieldops.ui.components.SectionTitle
 import com.cortoba.fieldops.ui.theme.CortobaBrown
 import com.cortoba.fieldops.ui.theme.CortobaCream
@@ -149,6 +150,21 @@ fun ReceiptConfirmScreen(
                         }
 
                         item { SectionTitle("أدخل الكميات المستلمة") }
+
+                        item {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                BrandActionButton(
+                                    text = "استلام الكل",
+                                    onClick = viewModel::fillAllFullQuantity,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                OutlineActionButton(
+                                    text = "رفض الكل",
+                                    onClick = viewModel::rejectAll,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
 
                         items(form.entries, key = { it.poItemId }) { entry ->
                             ReceiptEntryCard(

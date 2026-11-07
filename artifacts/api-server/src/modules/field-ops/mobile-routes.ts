@@ -14,7 +14,7 @@
  */
 import { Router } from "express";
 import crypto from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 import {
   db,
   purchaseOrdersTable,
@@ -136,8 +136,26 @@ async function buildPickupGroups(
         inArray(workOrderAssignmentsTable.id, assignmentIds),
       ),
     );
+  // Per-item assignments carry po_item_id and identify exactly one line. Legacy
+  // whole-PO assignments carry po_item_id = NULL and represent every line of
+  // their PO, so those lines are loaded by po_id instead. Both shapes are
+  // legal in the schema and must both produce items.
   const poItemIds = assignments.map((a) => a.poItemId).filter((x): x is number => x != null);
-  if (!poItemIds.length) return [];
+  const wholePoIds = assignments
+    .filter((a) => a.poItemId == null)
+    .map((a) => a.poId)
+    .filter((x): x is number => x != null);
+  if (!poItemIds.length && !wholePoIds.length) return [];
+
+  const lineFilter =
+    poItemIds.length && wholePoIds.length
+      ? or(
+          inArray(purchaseOrderItemsTable.id, poItemIds),
+          inArray(purchaseOrderItemsTable.poId, wholePoIds),
+        )
+      : poItemIds.length
+        ? inArray(purchaseOrderItemsTable.id, poItemIds)
+        : inArray(purchaseOrderItemsTable.poId, wholePoIds);
 
   const lines = await db
     .select({
@@ -159,7 +177,7 @@ async function buildPickupGroups(
     .from(purchaseOrderItemsTable)
     .innerJoin(purchaseOrdersTable, eq(purchaseOrderItemsTable.poId, purchaseOrdersTable.id))
     .leftJoin(suppliersTable, eq(purchaseOrderItemsTable.supplierId, suppliersTable.id))
-    .where(inArray(purchaseOrderItemsTable.id, poItemIds));
+    .where(lineFilter);
 
   // A line whose ordered quantity is fully accepted has nothing left to receive.
   // Keeping it in the list left a confirmed task looking outstanding forever,
@@ -400,9 +418,33 @@ router.get("/pickups/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  // A supplier PO is one pickup visit, but the assignment model is per line
+  // item: one receipt assignment row exists for every PO line. The card the
+  // representative tapped represents the WHOLE PO, so the detail must show
+  // every line of that PO (consolidated), not the single line behind the one
+  // assignment id that happened to sit on the card. Restrict to the assignments
+  // this employee may act on (owned + delegated) so a delegate never sees a
+  // sibling line they were not given.
+  const { assignmentIds } = await visibleAssignmentsFor(actor.hrEmployeeId, "receipt");
+  const siblingIds = assignmentIds.length
+    ? (
+        await db
+          .select({ id: workOrderAssignmentsTable.id })
+          .from(workOrderAssignmentsTable)
+          .where(
+            and(
+              eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+              eq(workOrderAssignmentsTable.poId, assignment.poId),
+              inArray(workOrderAssignmentsTable.id, assignmentIds),
+            ),
+          )
+      ).map((r) => r.id)
+    : [];
   // includeCompleted: the detail screen is also the receipt history — a fully
   // received line must stay visible there even though the list hides it.
-  const groups = await buildPickupGroups([assignment.id], { includeCompleted: true });
+  const groups = await buildPickupGroups(siblingIds.length ? siblingIds : [assignment.id], {
+    includeCompleted: true,
+  });
   const [po] = await db
     .select({
       id: purchaseOrdersTable.id,
