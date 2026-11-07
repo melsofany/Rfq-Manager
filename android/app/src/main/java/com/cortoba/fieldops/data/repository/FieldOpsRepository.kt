@@ -154,6 +154,13 @@ class FieldOpsRepository @Inject constructor(
     ): Cached<ReceiptConfirmResponse> {
         return try {
             val fresh = apiCall { api.confirmReceipt(assignmentId, request) }
+            // The server recorded the receipt. Drop the stale list + detail caches
+            // so a rep who returns to the list (or reopens this supplier) never
+            // sees items that are already fully received — and cannot re-receive
+            // them on top of what the server already accepted.
+            dao.clearPickupDetail(WHOLE_LIST_KEY)
+            dao.clearPickupDetail(assignmentId)
+            dao.clearPickupTasks()
             Cached(fresh, fromCache = false)
         } catch (e: ApiException) {
             if (e.isUnauthorized || !e.isNetwork) throw e
