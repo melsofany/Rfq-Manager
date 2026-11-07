@@ -162,7 +162,7 @@ fun PickupListScreen(
                             item { SectionTitle("أوامر الشراء المطلوب استلامها") }
                         }
 
-                        items(data.tasks, key = { "task-${it.poId}" }) { task ->
+                        items(data.tasks, key = { "task-${it.poId}-${it.supplier?.id ?: "nosup"}" }) { task ->
                             CreamCard {
                                 Column {
                                     Row(
