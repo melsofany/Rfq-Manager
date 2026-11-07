@@ -318,13 +318,17 @@ router.get("/pickups", async (req, res): Promise<void> => {
     : [];
   const poMap = new Map(poRows.map((p) => [p.id, p]));
 
-  // Only POs that still have something to receive become tasks. A PO whose
-  // lines are all fully accepted has nothing left to collect, so showing it
-  // again sent the rep back to a screen with no rows to fill.
-  const activePoIds = [...new Set(groups.flatMap((g) => g.allocations).map((a) => a.poId))];
-
-  const supplierIds = [...new Set(assignments.map((a) => a.representativePhone).filter(Boolean))];
-  void supplierIds;
+  // One card per (supplier, PO) pair. A PO can carry lines from several
+  // suppliers; keying by PO alone collapsed them onto the first supplier's
+  // card and made the detail screen show another supplier's lines inside it.
+  const allAllocations = groups.flatMap((g) => g.allocations);
+  const pairMap = new Map<string, { poId: number; supplierId: number }>();
+  for (const a of allAllocations) {
+    if (a.supplierId == null) continue;
+    const key = `${a.poId}:${a.supplierId}`;
+    if (!pairMap.has(key)) pairMap.set(key, { poId: a.poId, supplierId: a.supplierId });
+  }
+  const activePairs = [...pairMap.values()];
 
   const supplierRows = groups.length
     ? await db
@@ -339,32 +343,39 @@ router.get("/pickups", async (req, res): Promise<void> => {
     : [];
   const supplierMap = new Map(supplierRows.map((s) => [s.id, s]));
 
-  // One task per supplier PO that still has lines to receive.
-  const activePairs = activePoIds
-    .map((poId) => {
-      const groupLines = groups.flatMap((g) => g.allocations).filter((a) => a.poId === poId);
-      const supplierId = groupLines[0]?.supplierId ?? null;
-      return { poId, supplierId };
-    })
-    .filter((p): p is { poId: number; supplierId: number } => p.supplierId != null);
+  // assignmentId must point at a line that belongs to this (po, supplier) pair,
+  // so the detail endpoint can scope itself to the same supplier.
+  const assignmentByItem = new Map<number, number>();
+  const wholePoAssignment = new Map<number, number>();
+  for (const a of assignments) {
+    if (a.poItemId != null) assignmentByItem.set(a.poItemId, a.id);
+    else if (!wholePoAssignment.has(a.poId)) wholePoAssignment.set(a.poId, a.id);
+  }
+
   const paymentStatus = await paymentStatusByPair(activePairs);
 
-  const tasks = activePoIds.map((poId) => {
+  const tasks = activePairs.map(({ poId, supplierId }) => {
     const po = poMap.get(poId);
-    const groupLines = groups.flatMap((g) => g.allocations).filter((a) => a.poId === poId);
-    const supplierId = groupLines[0]?.supplierId ?? null;
-    const supplier = supplierId != null ? supplierMap.get(supplierId) : undefined;
-    const poGroups = groups.filter((g) => g.allocations.some((a) => a.poId === poId));
+    const supplier = supplierMap.get(supplierId);
+    const pairAllocations = allAllocations.filter(
+      (a) => a.poId === poId && a.supplierId === supplierId,
+    );
+    const poGroups = groups.filter((g) =>
+      g.allocations.some((a) => a.poId === poId && a.supplierId === supplierId),
+    );
+    const assignmentId =
+      pairAllocations
+        .map((a) => assignmentByItem.get(a.poItemId))
+        .find((id): id is number => id != null) ?? wholePoAssignment.get(poId) ?? null;
     return {
-      assignmentId: assignments.find((a) => a.poId === poId)?.id ?? null,
+      assignmentId,
       poId,
       poNo: po?.poNo ?? "",
-      status: assignments.find((a) => a.poId === poId)?.status ?? "sent",
+      status: assignments.find((a) => a.id === assignmentId)?.status ?? "sent",
       // Settlement state only — deliberately no due/paid amounts. The
       // representative needs to know "should I go to this supplier", not the
       // company's ledger figures.
-      paymentStatus:
-        supplierId != null ? (paymentStatus.get(`${poId}:${supplierId}`) ?? "unpaid") : "unpaid",
+      paymentStatus: paymentStatus.get(`${poId}:${supplierId}`) ?? "unpaid",
       poDate: po?.createdAt?.toISOString() ?? null,
       notes: po?.notes ?? null,
       supplier: supplier
@@ -378,13 +389,7 @@ router.get("/pickups", async (req, res): Promise<void> => {
         : null,
       distinctItemCount: poGroups.length,
       totalRequiredQty:
-        Math.round(
-          poGroups.reduce(
-            (s, g) =>
-              s + g.allocations.filter((a) => a.poId === poId).reduce((x, a) => x + a.qty, 0),
-            0,
-          ) * 10000,
-        ) / 10000,
+        Math.round(pairAllocations.reduce((s, a) => s + a.qty, 0) * 10000) / 10000,
     };
   });
 
@@ -418,28 +423,56 @@ router.get("/pickups/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  // A supplier PO is one pickup visit, but the assignment model is per line
-  // item: one receipt assignment row exists for every PO line. The card the
-  // representative tapped represents the WHOLE PO, so the detail must show
-  // every line of that PO (consolidated), not the single line behind the one
-  // assignment id that happened to sit on the card. Restrict to the assignments
-  // this employee may act on (owned + delegated) so a delegate never sees a
-  // sibling line they were not given.
+  // The list card is per (supplier, PO), so the detail must stay scoped to that
+  // supplier. Determine the tapped line's supplier first, then load only that
+  // supplier's sibling lines — a multi-supplier PO must not leak another
+  // supplier's items into this card.
+  let tappedSupplierId: number | null = null;
+  if (assignment.poItemId != null) {
+    const [item] = await db
+      .select({ supplierId: purchaseOrderItemsTable.supplierId })
+      .from(purchaseOrderItemsTable)
+      .where(eq(purchaseOrderItemsTable.id, assignment.poItemId));
+    tappedSupplierId = item?.supplierId ?? null;
+  }
+
   const { assignmentIds } = await visibleAssignmentsFor(actor.hrEmployeeId, "receipt");
-  const siblingIds = assignmentIds.length
-    ? (
-        await db
-          .select({ id: workOrderAssignmentsTable.id })
-          .from(workOrderAssignmentsTable)
-          .where(
-            and(
-              eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
-              eq(workOrderAssignmentsTable.poId, assignment.poId),
-              inArray(workOrderAssignmentsTable.id, assignmentIds),
-            ),
-          )
-      ).map((r) => r.id)
+  const siblingRows = assignmentIds.length
+    ? await db
+        .select({ id: workOrderAssignmentsTable.id, poItemId: workOrderAssignmentsTable.poItemId })
+        .from(workOrderAssignmentsTable)
+        .where(
+          and(
+            eq(workOrderAssignmentsTable.kind, WORK_ORDER_KIND.RECEIPT),
+            eq(workOrderAssignmentsTable.poId, assignment.poId),
+            inArray(workOrderAssignmentsTable.id, assignmentIds),
+          ),
+        )
     : [];
+
+  let siblingIds: number[];
+  if (tappedSupplierId != null) {
+    const itemIds = siblingRows.map((r) => r.poItemId).filter((x): x is number => x != null);
+    const supplierItemIds = new Set<number>();
+    if (itemIds.length) {
+      const items = await db
+        .select({ id: purchaseOrderItemsTable.id })
+        .from(purchaseOrderItemsTable)
+        .where(
+          and(
+            inArray(purchaseOrderItemsTable.id, itemIds),
+            eq(purchaseOrderItemsTable.supplierId, tappedSupplierId),
+          ),
+        );
+      for (const it of items) supplierItemIds.add(it.id);
+    }
+    siblingIds = siblingRows
+      .filter((r) => r.poItemId != null && supplierItemIds.has(r.poItemId))
+      .map((r) => r.id);
+  } else {
+    siblingIds = siblingRows.map((r) => r.id);
+  }
+
   // includeCompleted: the detail screen is also the receipt history — a fully
   // received line must stay visible there even though the list hides it.
   const groups = await buildPickupGroups(siblingIds.length ? siblingIds : [assignment.id], {
