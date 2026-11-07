@@ -257,7 +257,6 @@ data class DeliveryItemRequest(
 data class DeliveryConfirmRequest(
     val items: List<DeliveryItemRequest>,
     val clientUuid: String,
-    val recipientName: String? = null,
     val gps: GpsPoint? = null,
 )
 
