@@ -227,6 +227,37 @@ class PickupViewModel @Inject constructor(
         }
     }
 
+    /** «استلام كلي» on one consolidated item: fill every line of that group. */
+    fun fillGroupFullQuantity(groupKey: String) {
+        _form.update { state ->
+            state.copy(
+                entries = state.entries.map {
+                    if (it.groupKey == groupKey) {
+                        it.copy(
+                            receivedQty = com.cortoba.fieldops.core.util.formatQty(it.requiredQty),
+                            rejectedQty = "",
+                        )
+                    } else {
+                        it
+                    }
+                },
+                error = null,
+            )
+        }
+    }
+
+    /** «رفض» on one consolidated item: zero received on every line of that group. */
+    fun rejectGroup(groupKey: String) {
+        _form.update { state ->
+            state.copy(
+                entries = state.entries.map {
+                    if (it.groupKey == groupKey) it.copy(receivedQty = "0", rejectedQty = "") else it
+                },
+                error = null,
+            )
+        }
+    }
+
     /** «استلام الكل»: fill every line with its full required quantity. */
     fun fillAllFullQuantity() {
         _form.update { state ->
