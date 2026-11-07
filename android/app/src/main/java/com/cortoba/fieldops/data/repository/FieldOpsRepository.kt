@@ -4,6 +4,7 @@ import com.cortoba.fieldops.core.network.ApiException
 import com.cortoba.fieldops.core.network.CortobaApi
 import com.cortoba.fieldops.core.network.apiCall
 import com.cortoba.fieldops.core.network.apiCallUnit
+import com.cortoba.fieldops.core.network.dto.AppVersionDto
 import com.cortoba.fieldops.core.network.dto.ChangePasswordRequest
 import com.cortoba.fieldops.core.network.dto.DashboardResponse
 import com.cortoba.fieldops.core.network.dto.DeliveryConfirmRequest
@@ -89,6 +90,9 @@ class FieldOpsRepository @Inject constructor(
     suspend fun profile(): ProfileResponse = apiCall { api.profile() }
 
     suspend fun history(): HistoryResponse = apiCall { api.history() }
+
+    /** Latest published version, used by the in-place update prompt. */
+    suspend fun latestVersion(): AppVersionDto = apiCall { api.latestVersion() }
 
     // ── Dashboard ─────────────────────────────────────────────────────────
 

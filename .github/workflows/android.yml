@@ -68,6 +68,24 @@ jobs:
             fi
           done
 
+      - name: Publish GitHub release (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)
+          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          TAG="v${VERSION_CODE}"
+          if gh release view "$TAG" --repo melsofany/Rfq-Manager >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists — skipping."
+          else
+            gh release create "$TAG" "$APK" \
+              --repo melsofany/Rfq-Manager \
+              --title "${VERSION_NAME}" \
+              --notes "تحديث تطبيق العمليات الميدانية ${VERSION_NAME}"
+          fi
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

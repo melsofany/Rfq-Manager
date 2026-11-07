@@ -362,5 +362,12 @@ data class HistoryDelivery(
     val description: String? = null,
 )
 
+/** Latest published app version, returned by GET /api/mobile/version. */
+data class AppVersionDto(
+    val versionCode: Int = 0,
+    val versionName: String = "",
+    val downloadUrl: String? = null,
+)
+
 /** Server error body: `{ "error": "..." }`. */
 data class ApiError(val error: String? = null)

@@ -48,6 +48,7 @@ import com.cortoba.fieldops.ui.components.SectionTitle
 import com.cortoba.fieldops.ui.theme.CortobaBrown
 import com.cortoba.fieldops.ui.theme.CortobaCream
 import com.cortoba.fieldops.ui.theme.StatusAmber
+import com.cortoba.fieldops.ui.theme.StatusGreen
 
 /** Settings: change password, app info, sign out. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -137,6 +138,46 @@ fun SettingsScreen(
                             InfoRow("التطبيق", "العمليات الميدانية – قرطبة للتوريدات")
                             InfoRow("الإصدار", state.versionName)
                             InfoRow("الخادم", state.baseUrl)
+                            Spacer(Modifier.height(10.dp))
+                            when (val u = state.updateState) {
+                                is UpdateState.Available -> {
+                                    Text(
+                                        text = "يوجد تحديث جديد: الإصدار ${u.versionName}",
+                                        color = StatusAmber,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    BrandActionButton(
+                                        text = "تحميل التحديث الآن",
+                                        onClick = { viewModel.downloadAndInstall(u.downloadUrl) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
+                                is UpdateState.Downloading -> Text(
+                                    text = "جارٍ تنزيل التحديث…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = StatusAmber,
+                                )
+                                is UpdateState.UpToDate -> Text(
+                                    text = "أنت على أحدث إصدار",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = StatusGreen,
+                                )
+                                is UpdateState.Failed -> ErrorBanner(u.message)
+                                UpdateState.Checking -> Text(
+                                    text = "يتم التحقق من التحديثات…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                UpdateState.Idle -> Unit
+                            }
+                            Spacer(Modifier.height(10.dp))
+                            OutlineActionButton(
+                                text = "التحقق من التحديثات",
+                                onClick = viewModel::checkForUpdate,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
                     }
                 }

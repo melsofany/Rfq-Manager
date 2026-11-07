@@ -27,12 +27,14 @@ import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -166,6 +168,55 @@ fun DashboardScreen(
             }
         }
     }
+
+    state.updatePrompt?.let { prompt ->
+        UpdateAvailableDialog(
+            versionName = prompt.versionName,
+            downloading = prompt.downloading,
+            error = prompt.error,
+            onDownload = viewModel::downloadAndInstall,
+            onDismiss = viewModel::dismissUpdate,
+        )
+    }
+}
+
+@Composable
+private fun UpdateAvailableDialog(
+    versionName: String,
+    downloading: Boolean,
+    error: String?,
+    onDownload: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { if (!downloading) onDismiss() },
+        title = { Text("يوجد تحديث جديد") },
+        text = {
+            Column {
+                Text("الإصدار $versionName متوفر. حمّله الآن للبقاء على أحدث نسخة.")
+                if (downloading) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("جارٍ التنزيل…")
+                    }
+                }
+                if (error != null) {
+                    Spacer(Modifier.height(8.dp))
+                    ErrorBanner(error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDownload, enabled = !downloading) {
+                Text(if (downloading) "جارٍ التنزيل…" else "تحميل", color = CortobaBrown)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !downloading) { Text("لاحقًا") }
+        },
+    )
 }
 
 @Composable
