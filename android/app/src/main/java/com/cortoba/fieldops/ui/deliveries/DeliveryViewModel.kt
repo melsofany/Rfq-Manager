@@ -271,10 +271,6 @@ class DeliveryViewModel @Inject constructor(
         }
     }
 
-    /** Lines of one PO currently held in the workbench form. */
-    fun entriesForPo(customerPoId: Int): List<DeliveryEntry> =
-        _form.value.entries.filter { it.customerPoId == customerPoId }
-
     /**
      * Seed the delivery form from the loaded task.
      *
@@ -502,18 +498,18 @@ class DeliveryViewModel @Inject constructor(
     }
 
     /**
-     * Confirm the whole customer workbench: every line is submitted through the
-     * assignment that owns its purchase order. Lines the rep left at their full
-     * quantity are delivered as-is; lines with quantity 0 are recorded as
-     * customer rejections (the server allows a zero delivery as a rejection).
+     * Confirm ONE purchase order: only the lines of that order are submitted,
+     * through the assignment that owns it. Lines left at their full quantity are
+     * delivered; a line at quantity 0 is a rejection and must carry a reason.
      *
-     * A rejection with no reason is refused here — the requirement is that a
-     * rejection is always explained.
+     * After the server accepts the order, the customer is reloaded so the rep
+     * sees the refreshed list (a completed order drops out, the rest remain)
+     * without re-entering anything.
      */
-    fun submitCustomer() {
-        val entries = _form.value.entries
+    fun submitPo(customerPoId: Int, customerKey: String?) {
+        val entries = _form.value.entries.filter { it.customerPoId == customerPoId }
         if (entries.isEmpty()) {
-            _form.update { it.copy(error = "لا توجد أصناف للتسليم") }
+            _form.update { it.copy(error = "لا توجد أصناف للتسليم في هذا الأمر") }
             return
         }
 
@@ -532,7 +528,6 @@ class DeliveryViewModel @Inject constructor(
                 }
                 return
             }
-            // A line with nothing delivered is a rejection and must carry a reason.
             if (delivered <= 1e-6 && entry.rejectionReason.isBlank()) {
                 _form.update {
                     it.copy(error = "اختر سبب رفض الصنف (${entry.displayName}) أو «أخرى» واكتب السبب")
@@ -541,60 +536,56 @@ class DeliveryViewModel @Inject constructor(
             }
         }
 
-        // One submission per assignment — a customer can have several POs, each
-        // owned by its own delivery assignment.
-        val byAssignment = entries
-            .filter { it.assignmentId != null }
-            .groupBy { it.assignmentId!! }
-        if (byAssignment.isEmpty()) {
-            _form.update { it.copy(error = "لا توجد مهام تسليم مرتبطة بأوامر هذا العميل") }
+        val assignmentId = entries.firstNotNullOfOrNull { it.assignmentId }
+        if (assignmentId == null) {
+            _form.update { it.copy(error = "لا توجد مهمة تسليم مرتبطة بهذا الأمر") }
             return
         }
 
-        val summary = deliverySummary()
+        val deliveredTotal = entries.sumOf { it.deliveredQty.toDoubleOrNull() ?: 0.0 }
+        val availableTotal = entries.sumOf { it.availableQty }
         _form.update { it.copy(submitting = true, error = null) }
 
         viewModelScope.launch {
             try {
-                var queuedOffline = false
-                for ((assignmentId, group) in byAssignment) {
-                    val request = DeliveryConfirmRequest(
-                        items = group.map { entry ->
-                            val delivered = entry.deliveredQty.toDoubleOrNull() ?: 0.0
-                            // A line with nothing delivered is a full rejection of
-                            // its remaining quantity, recorded with the reason so
-                            // the line settles and the order can close.
-                            val rejected = if (delivered <= 1e-6) entry.availableQty else 0.0
-                            DeliveryItemRequest(
-                                customerPoItemId = entry.customerPoItemId,
-                                deliveredQty = delivered,
-                                rejectedByCustomerQty = rejected,
-                                rejectionReason = entry.rejectionReason.takeIf { it.isNotBlank() },
-                                notes = null,
-                            )
-                        },
-                        clientUuid = java.util.UUID.randomUUID().toString(),
-                        gps = com.cortoba.fieldops.core.location.LocationProvider.lastKnown(),
-                    )
-                    val outcome = repository.confirmDelivery(assignmentId, request)
-                    if (outcome.fromCache) queuedOffline = true
-                }
+                val request = DeliveryConfirmRequest(
+                    items = entries.map { entry ->
+                        val delivered = entry.deliveredQty.toDoubleOrNull() ?: 0.0
+                        val rejected = if (delivered <= 1e-6) entry.availableQty else 0.0
+                        DeliveryItemRequest(
+                            customerPoItemId = entry.customerPoItemId,
+                            deliveredQty = delivered,
+                            rejectedByCustomerQty = rejected,
+                            rejectionReason = entry.rejectionReason.takeIf { it.isNotBlank() },
+                            notes = null,
+                        )
+                    },
+                    clientUuid = java.util.UUID.randomUUID().toString(),
+                    gps = com.cortoba.fieldops.core.location.LocationProvider.lastKnown(),
+                )
+                val outcome = repository.confirmDelivery(assignmentId, request)
+                // Drop the seeded marker for this customer so the reload below
+                // re-seeds the form from the fresh server state.
                 _form.update {
                     it.copy(
                         submitting = false,
+                        seededForCustomer = null,
                         result = DeliverySubmitResult(
-                            queuedOffline = queuedOffline,
-                            deliveredQty = summary.totalDelivered,
-                            remainingQty = (summary.totalAvailable - summary.totalDelivered)
-                                .coerceAtLeast(0.0),
+                            queuedOffline = outcome.fromCache,
+                            deliveredQty = deliveredTotal,
+                            remainingQty = (availableTotal - deliveredTotal).coerceAtLeast(0.0),
                         ),
                     )
                 }
+                if (customerKey != null) loadCustomerDetail(customerKey)
             } catch (e: ApiException) {
                 _form.update { it.copy(submitting = false, error = e.userMessage) }
             }
         }
     }
+
+    /** Clear the confirmation result so the rep returns to the order list. */
+    fun clearResult() = _form.update { it.copy(result = null) }
 
     private fun sanitizeNumber(raw: String): String {
         val normalized = raw

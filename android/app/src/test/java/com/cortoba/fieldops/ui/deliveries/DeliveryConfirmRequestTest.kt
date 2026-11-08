@@ -166,7 +166,7 @@ class DeliveryConfirmRequestTest {
         awaitUntil { viewModel.form.value.entries.isNotEmpty() }
         enqueueJson("""{"success":true,"deliveryIds":[1]}""")
 
-        viewModel.submit(11)
+        viewModel.submitPo(4, null)
         awaitUntil { viewModel.form.value.result != null }
 
         assertNotNull("a delivery with quantities alone must be accepted", viewModel.form.value.result)
@@ -180,7 +180,7 @@ class DeliveryConfirmRequestTest {
         awaitUntil { viewModel.form.value.entries.isNotEmpty() }
         enqueueJson("""{"success":true,"deliveryIds":[1]}""")
 
-        viewModel.submit(11)
+        viewModel.submitPo(4, null)
         awaitUntil { viewModel.form.value.result != null }
 
         val body = JSONObject(takeConfirmRequest().body.readUtf8())
