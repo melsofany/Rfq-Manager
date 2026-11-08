@@ -33,4 +33,11 @@ class PaymentStatusPresentationTest {
     fun `unknown status is shown verbatim and never guessed`() {
         assertEquals("weird" to StatusGrey, paymentStatusPresentation("weird"))
     }
+
+    @Test
+    fun `a missing status is treated as unsettled, never a crash`() {
+        // A server payload that omits the field arrives as null; the chip must
+        // still render rather than take the whole supplier screen down.
+        assertEquals("غير مسدد" to StatusRed, paymentStatusPresentation(null))
+    }
 }
