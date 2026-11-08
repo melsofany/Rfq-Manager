@@ -137,6 +137,15 @@ interface FieldOpsDao {
     @Query("DELETE FROM cached_delivery_tasks")
     suspend fun clearDeliveryTasks()
 
+    @Query("DELETE FROM cached_delivery_detail WHERE assignmentId = :id")
+    suspend fun clearDeliveryDetail(id: Int)
+
+    // Customer-detail rows live in the negative range below WHOLE_LIST_KEY (-1),
+    // while assignment details are positive. Clearing by that range drops every
+    // cached customer screen without touching the assignment rows.
+    @Query("DELETE FROM cached_delivery_detail WHERE assignmentId < -1")
+    suspend fun clearCustomerDeliveryDetails()
+
     @Query("DELETE FROM cached_notifications")
     suspend fun clearNotifications()
 

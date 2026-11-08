@@ -305,6 +305,34 @@ def main() -> int:
         check("replaying the same operationKey does not deliver again",
               abs(remaining - 3) < 1e-6, f"remaining={remaining}")
 
+    print("\n[9b] a fully delivered customer disappears from the list immediately")
+    # The reported defect: work that was already delivered stayed on the list.
+    # Deliver the last remaining unit of the عميل 2 PO; that customer must then
+    # vanish from the list and from the customer detail.
+    if assignment_id is not None and cpi_id is not None:
+        status, body = api(
+            "POST", f"/api/mobile/deliveries/{assignment_id}/confirm", token,
+            {"items": [{"customerPoItemId": cpi_id, "deliveredQty": 1}],
+             "recipientName": "مستلم اختبار",
+             "operationKey": "e2e-delivery-final"})
+        check("the final delivery is accepted", status == 200, f"status={status} body={body}")
+
+        status, d4 = api("GET", "/api/mobile/deliveries", token)
+        names = [t["customerName"] for t in d4.get("tasks", [])]
+        check("the fully delivered customer is gone from the list",
+              "عميل 2" not in names, f"customers={names}")
+        remaining = sum(float(x.get("availableQty", 0)) for x in d4.get("tasks", []))
+        check("only the other customer's 2 units remain deliverable",
+              abs(remaining - 2) < 1e-6, f"got {remaining}")
+
+        key = target["key"]
+        kind, _, value = key.partition(":")
+        query = f"id={value}" if kind == "id" else f"name={quote(value)}"
+        status, cdetail2 = api("GET", f"/api/mobile/deliveries/customer?{query}", token)
+        check("the customer detail hides the finished purchase order",
+              status == 200 and len(cdetail2.get("purchaseOrders", [])) == 0,
+              f"status={status} POs={cdetail2.get('purchaseOrders')}")
+
     print("\n[10] employee isolation — a second rep sees none of the first rep's work")
     other = sql(
         f"""
