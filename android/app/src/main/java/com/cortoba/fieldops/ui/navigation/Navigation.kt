@@ -13,9 +13,8 @@ import com.cortoba.fieldops.ui.auth.LoginScreen
 import com.cortoba.fieldops.ui.custody.CustodyScreen
 import com.cortoba.fieldops.ui.dashboard.DashboardScreen
 import com.cortoba.fieldops.ui.deliveries.CustomerDeliveryDetailScreen
-import com.cortoba.fieldops.ui.deliveries.DeliveryConfirmScreen
-import com.cortoba.fieldops.ui.deliveries.DeliveryDetailScreen
 import com.cortoba.fieldops.ui.deliveries.DeliveryListScreen
+import com.cortoba.fieldops.ui.deliveries.PoDeliveryScreen
 import com.cortoba.fieldops.ui.notifications.NotificationsScreen
 import com.cortoba.fieldops.ui.pickups.PickupDetailScreen
 import com.cortoba.fieldops.ui.pickups.PickupListScreen
@@ -28,19 +27,18 @@ object Routes {
     const val PICKUPS = "pickups"
     const val PICKUP_DETAIL = "pickups/{assignmentId}"
     const val DELIVERIES = "deliveries"
-    const val DELIVERY_DETAIL = "deliveries/{assignmentId}"
-    const val DELIVERY_CONFIRM = "deliveries/{assignmentId}/confirm"
     const val DELIVERY_CUSTOMER = "deliveries/customer/{customerKey}"
+    const val DELIVERY_PO = "deliveries/po/{customerPoId}/{customerKey}"
     const val NOTIFICATIONS = "notifications"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
     const val CUSTODY = "custody"
 
     fun pickupDetail(assignmentId: Int) = "pickups/$assignmentId"
-    fun deliveryDetail(assignmentId: Int) = "deliveries/$assignmentId"
-    fun deliveryConfirm(assignmentId: Int) = "deliveries/$assignmentId/confirm"
     fun deliveryCustomer(customerKey: String) =
         "deliveries/customer/${java.net.URLEncoder.encode(customerKey, "UTF-8")}"
+    fun deliveryPo(customerKey: String, customerPoId: Int) =
+        "deliveries/po/$customerPoId/${java.net.URLEncoder.encode(customerKey, "UTF-8")}"
 }
 
 /**
@@ -124,31 +122,25 @@ fun CortobaNavHost(
             CustomerDeliveryDetailScreen(
                 customerKey = customerKey,
                 onBack = { navController.popBackStack() },
-                onOpenPo = { navController.navigate(Routes.deliveryDetail(it)) },
+                onOpenPo = { customerPoId ->
+                    navController.navigate(Routes.deliveryPo(customerKey, customerPoId))
+                },
             )
         }
 
         composable(
-            route = Routes.DELIVERY_DETAIL,
-            arguments = listOf(navArgument("assignmentId") { type = NavType.IntType }),
+            route = Routes.DELIVERY_PO,
+            arguments = listOf(
+                navArgument("customerPoId") { type = NavType.IntType },
+                navArgument("customerKey") { type = NavType.StringType },
+            ),
         ) { entry ->
-            val assignmentId = entry.arguments?.getInt("assignmentId") ?: 0
-            DeliveryDetailScreen(
-                assignmentId = assignmentId,
+            val customerPoId = entry.arguments?.getInt("customerPoId") ?: 0
+            val customerKey = entry.arguments?.getString("customerKey") ?: ""
+            PoDeliveryScreen(
+                customerKey = customerKey,
+                customerPoId = customerPoId,
                 onBack = { navController.popBackStack() },
-                onConfirm = { navController.navigate(Routes.deliveryConfirm(it)) },
-            )
-        }
-
-        composable(
-            route = Routes.DELIVERY_CONFIRM,
-            arguments = listOf(navArgument("assignmentId") { type = NavType.IntType }),
-        ) { entry ->
-            val assignmentId = entry.arguments?.getInt("assignmentId") ?: 0
-            DeliveryConfirmScreen(
-                assignmentId = assignmentId,
-                onBack = { navController.popBackStack() },
-                onDone = { navController.popBackStack(Routes.DELIVERIES, inclusive = false) },
             )
         }
 

@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cortoba.fieldops.core.network.dto.CustomerDeliveryPo
 import com.cortoba.fieldops.core.network.dto.DeliveryTask
 import com.cortoba.fieldops.core.util.formatQty
 import com.cortoba.fieldops.ui.components.CreamCard
@@ -194,6 +195,48 @@ fun CustomerSquare(task: DeliveryTask, onClick: () -> Unit, modifier: Modifier =
             )
             Spacer(Modifier.height(8.dp))
             StatusChip(task.status)
+        }
+    }
+}
+
+/**
+ * A compact purchase-order tile, the same square shape as the customer tile.
+ * One tap opens that order's items.
+ */
+@Composable
+fun PoSquare(po: CustomerDeliveryPo, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        shadowElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = po.customerPoNo,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "الأصناف: ${po.totalItems}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            StatusChip(po.status)
         }
     }
 }
