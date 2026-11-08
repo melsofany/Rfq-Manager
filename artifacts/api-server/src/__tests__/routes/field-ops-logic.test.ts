@@ -250,8 +250,10 @@ describe("checkDeliveryQuantities", () => {
   it("is unguarded when there is no supplier link", () => {
     expect(checkDeliveryQuantities({ ...ok, acceptedFromSupplier: null }).ok).toBe(true);
   });
-  it("rejects a zero or negative quantity", () => {
-    expect(checkDeliveryQuantities({ ...ok, deliveredQty: 0 }).ok).toBe(false);
+  it("allows a zero quantity as a deliberate customer rejection", () => {
+    expect(checkDeliveryQuantities({ ...ok, deliveredQty: 0 }).ok).toBe(true);
+  });
+  it("rejects a negative quantity", () => {
     expect(checkDeliveryQuantities({ ...ok, deliveredQty: -2 }).ok).toBe(false);
   });
 });
