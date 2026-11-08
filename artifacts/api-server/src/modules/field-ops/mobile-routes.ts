@@ -860,13 +860,22 @@ router.get("/deliveries", async (req, res): Promise<void> => {
 
   for (const g of grouped) {
     const customer = g.customerId != null ? customerMap.get(g.customerId) : undefined;
+    // Only POs that still have something to deliver are shown. A PO whose every
+    // line is fully delivered must disappear from the list the moment it is
+    // confirmed — otherwise the rep keeps seeing work that is already done.
+    let deliverablePoCount = 0;
     let distinctItemCount = 0;
     let availableQty = 0;
     for (const poId of g.customerPoIds) {
       const items = await deliveryItemsFor({ customerPoId: poId, customerPoItemId: null });
-      distinctItemCount += items.length;
-      availableQty += items.reduce((s, i) => s + i.availableQty, 0);
+      const remaining = items.filter((i) => i.availableQty > 0);
+      if (!remaining.length) continue;
+      deliverablePoCount += 1;
+      distinctItemCount += remaining.length;
+      availableQty += remaining.reduce((s, i) => s + i.availableQty, 0);
     }
+    // Nothing left for this customer — drop the whole card.
+    if (!deliverablePoCount) continue;
     const name = customer?.name ?? g.customerName ?? "عميل غير محدد";
     tasks.push({
       // A stable handle the app navigates with. A name-only customer (the
@@ -877,7 +886,7 @@ router.get("/deliveries", async (req, res): Promise<void> => {
       phone: customer?.phone ?? null,
       address: customer?.address ?? null,
       contactPerson: customer?.contactPerson ?? null,
-      poCount: g.customerPoIds.length,
+      poCount: deliverablePoCount,
       distinctItemCount,
       availableQty: Math.round(availableQty * 10000) / 10000,
       status: g.status,
@@ -1024,6 +1033,9 @@ router.get("/deliveries/customer", async (req, res): Promise<void> => {
   const purchaseOrders = [];
   for (const cpo of ownedPoRows) {
     const items = await deliveryItemsFor({ customerPoId: cpo.id, customerPoItemId: null });
+    // A PO whose lines are all delivered is finished — hide it so the rep does
+    // not see (and cannot re-open) work that is already done.
+    if (!items.some((i) => i.availableQty > 0)) continue;
     const assignmentId = assignmentByPo.get(cpo.id);
     const assignment = assignments.find((a) => a.id === assignmentId);
     purchaseOrders.push({

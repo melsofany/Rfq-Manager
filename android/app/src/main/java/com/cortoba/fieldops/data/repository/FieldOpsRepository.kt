@@ -238,10 +238,21 @@ class FieldOpsRepository @Inject constructor(
     ): Cached<DeliveryConfirmResponse> {
         return try {
             val fresh = apiCall { api.confirmDelivery(assignmentId, request) }
+            // The server recorded the delivery. Drop the stale list + detail
+            // caches so a rep who returns to the list (or reopens this customer)
+            // never sees items that are already delivered — and cannot deliver
+            // them again on top of what the server already accepted.
+            dao.clearDeliveryDetail(WHOLE_LIST_KEY)
+            dao.clearDeliveryDetail(assignmentId)
+            dao.clearCustomerDeliveryDetails()
             Cached(fresh, fromCache = false)
         } catch (e: ApiException) {
             if (e.isUnauthorized || !e.isNetwork) throw e
             enqueue(SyncEngine.TYPE_DELIVERY, assignmentId, request)
+            // Offline too: drop this assignment's cached detail so the rep cannot
+            // reopen it and re-deliver the same items before the queue syncs.
+            // The list cache stays so other customers remain visible offline.
+            dao.clearDeliveryDetail(assignmentId)
             Cached(DeliveryConfirmResponse(success = false), fromCache = true)
         }
     }
