@@ -130,7 +130,10 @@ fun CustomerDeliveryDetailScreen(
                     items(data.purchaseOrders, key = { "po-${it.customerPoId}" }) { po ->
                         PoSquare(
                             po = po,
-                            onClick = { po.assignmentId?.let(onOpenPo) },
+                            // The order is identified by its own customerPoId — the
+                            // assignment id is a different key and using it here
+                            // opened a screen that could never find the order.
+                            onClick = { onOpenPo(po.customerPoId) },
                         )
                     }
                 }
