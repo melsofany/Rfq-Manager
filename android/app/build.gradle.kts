@@ -14,8 +14,8 @@ android {
         applicationId = "com.cortoba.fieldops"
         minSdk = 26
         targetSdk = 35
-        versionCode = 24
-        versionName = "1.0.24"
+        versionCode = 25
+        versionName = "1.0.25"
         // The Render service URL. Overridable per build so a staging build does
         // not need a source edit.
         buildConfigField(

@@ -158,7 +158,7 @@ fun OfflineBanner(cachedAt: Long?, modifier: Modifier = Modifier) {
  * the same status never renders two different ways on two screens.
  */
 @Composable
-fun StatusChip(status: String, modifier: Modifier = Modifier) {
+fun StatusChip(status: String?, modifier: Modifier = Modifier) {
     val (label, color) = statusPresentation(status)
     Box(
         modifier = modifier
@@ -271,7 +271,7 @@ fun CreamCard(
 }
 
 /** Shared colour/name mapping for both receipt and delivery status codes. */
-fun statusPresentation(status: String): Pair<String, Color> = when (status.uppercase()) {
+fun statusPresentation(status: String?): Pair<String, Color> = when (status?.uppercase()) {
     "ASSIGNED" -> "تم الإسناد" to StatusBlue
     "SENT" -> "تم الإسناد" to StatusBlue
     "IN_PROGRESS" -> "جاري التنفيذ" to StatusAmber
@@ -287,6 +287,7 @@ fun statusPresentation(status: String): Pair<String, Color> = when (status.upper
     "EXCEPTION" -> "توجد مشكلة" to StatusRed
     "CANCELLED" -> "ملغي" to StatusGrey
     "FULFILLED" -> "مكتمل" to StatusGreen
+    null -> "—" to StatusGrey
     else -> status to StatusGrey
 }
 
