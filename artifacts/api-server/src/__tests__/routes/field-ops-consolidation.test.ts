@@ -205,6 +205,20 @@ describe("groupAssignmentsByCustomer", () => {
     expect(allDone[0].status).toBe("delivered");
   });
 
+  it("collapses a linked order and a name-only order of the same customer", () => {
+    // The reported defect: one customer whose orders were recorded two ways —
+    // one linked to a customer record (id set), one entered name-only. Keying
+    // by id alone showed them as TWO cards.
+    const groups = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "sent", customerId: 7, customerName: "شركة النور" },
+      { customerPoId: 11, status: "sent", customerId: null, customerName: "شركة النور" },
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].customerPoIds.sort()).toEqual([10, 11]);
+    // The id is kept so the app can still open the customer by id.
+    expect(groups[0].customerId).toBe(7);
+  });
+
   it("groups a name-only customer by name so their work never disappears", () => {
     // The portal allows a customer PO with a name but no customer id. Those rows
     // must still collapse together, or a real delivery would vanish from the list.

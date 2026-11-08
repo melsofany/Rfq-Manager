@@ -165,14 +165,17 @@ export interface CustomerDeliveryGroup {
  * A customer with three purchase orders must appear as a single square, not
  * three cards that look like three different customers.
  *
- * Identity is the customer id. A customer PO entered without an id (the portal
- * allows a name-only customer) falls back to its customer NAME so its work is
- * still grouped — dropping it would make a real delivery vanish from the list.
- * An assignment with neither id nor name cannot be grouped and is dropped,
- * because guessing would merge unrelated customers.
+ * Identity is the customer NAME (trimmed), because the same customer can be
+ * recorded two ways in the data: a purchase order linked to a customer record
+ * (id set) and another entered as name-only. Keying by id alone split that one
+ * customer into two cards — the reported defect. The name is the stable,
+ * human-meaningful identity both shapes share, so it is the grouping key; the
+ * id is carried through when any of the customer's orders has one, so the app
+ * can still open the customer by id.
  *
- * `status` is "delivered" only when EVERY assignment for the customer is
- * delivered; one outstanding order keeps the customer in progress.
+ * Only when a row has no name at all does it fall back to its id. A row with
+ * neither cannot be grouped and is dropped, because guessing would merge
+ * unrelated customers.
  */
 export function groupAssignmentsByCustomer(
   assignments: {
@@ -189,14 +192,16 @@ export function groupAssignmentsByCustomer(
   for (const a of assignments) {
     if (a.customerPoId == null) continue;
     const name = a.customerName?.trim() || null;
-    if (a.customerId == null && name == null) continue;
-    const key = a.customerId != null ? `id:${a.customerId}` : `name:${name}`;
+    if (name == null && a.customerId == null) continue;
+    const key = name != null ? `name:${name}` : `id:${a.customerId}`;
     const entry = byKey.get(key) ?? {
-      customerId: a.customerId,
+      customerId: null,
       name,
       poIds: new Set<number>(),
       statuses: new Set<string>(),
     };
+    // Prefer a real customer id so the app can open the customer by id.
+    if (entry.customerId == null && a.customerId != null) entry.customerId = a.customerId;
     entry.poIds.add(a.customerPoId);
     entry.statuses.add(a.status);
     byKey.set(key, entry);

@@ -405,6 +405,62 @@ def main() -> int:
               len(d_other.get("tasks", [])) == 0,
               f"got {len(d_other.get('tasks', []))}")
 
+    print("\n[10b] one customer whose orders are recorded two ways shows ONE card")
+    # The reported defect: the same customer had one order linked to a customer
+    # record (customer_id set) and another entered name-only. Grouping by id alone
+    # split them into TWO cards — «في انتظار التسليم» and «تم التسليم».
+    dual_customer = sql(
+        "INSERT INTO customers (name, phone, address, contact_person) "
+        "VALUES ('شركة مزدوجة', '201222222222', 'الجيزة', 'سمير') RETURNING id;"
+    )
+    dual = sql(
+        "INSERT INTO customer_pos (internal_po_no, customer_po_no, customer_id, "
+        "customer_name, po_date, buyer_name, status) "
+        "VALUES ('CPO-DUAL-A', 'P-DUAL-A', "
+        f"{dual_customer}, 'شركة مزدوجة', '2026-02-01', 'سمير', 'confirmed') RETURNING id;"
+    )
+    dual_name_only = sql(
+        "INSERT INTO customer_pos (internal_po_no, customer_po_no, customer_id, "
+        "customer_name, po_date, buyer_name, status) "
+        "VALUES ('CPO-DUAL-B', 'P-DUAL-B', NULL, 'شركة مزدوجة', '2026-02-02', 'سمير', "
+        "'confirmed') RETURNING id;"
+    )
+    for po_id, label in ((dual, "بند مزدوج أ"), (dual_name_only, "بند مزدوج ب")):
+        cpi = sql(
+            f"INSERT INTO customer_po_items (customer_po_id, description, qty, uom) "
+            f"VALUES ({po_id}, '{label}', 4, 'قطعة') RETURNING id;"
+        )
+        spo = sql(
+            f"INSERT INTO purchase_orders (internal_po_no, sheet_po_no, status) "
+            f"VALUES ('SPO-DUAL-{cpi}', 'SPO-DUAL-{cpi}', 'draft') RETURNING id;"
+        )
+        poi = sql(
+            f"INSERT INTO purchase_order_items (po_id, line_item, description, qty, uom, "
+            f"supplier_id, line_status, customer_po_item_id, total_accepted_qty) "
+            f"VALUES ({spo}, '1', '{label}', 4, 'قطعة', {supplier}, 'received', {cpi}, 4) "
+            f"RETURNING id;"
+        )
+        sql(
+            f"INSERT INTO work_order_assignments (po_id, po_item_id, customer_po_id, "
+            f"customer_po_item_id, kind, status, hr_employee_id, representative_name, "
+            f"representative_phone) "
+            f"VALUES ({spo}, {poi}, {po_id}, {cpi}, 'delivery', 'sent', {emp}, "
+            f"'مندوب اختبار', '201000000001');"
+        )
+    status, d_dual = api("GET", "/api/mobile/deliveries", token)
+    dual_cards = [t for t in d_dual.get("tasks", []) if t["customerName"] == "شركة مزدوجة"]
+    check("a customer recorded two ways shows exactly ONE card",
+          len(dual_cards) == 1, f"cards={[t['customerName'] for t in d_dual.get('tasks', [])]}")
+    if dual_cards:
+        check("the single card carries BOTH purchase orders",
+              dual_cards[0]["poCount"] == 2, f"poCount={dual_cards[0]['poCount']}")
+        # Opening by id must also return both orders, not just the id-linked one.
+        status, cd_dual = api(
+            "GET", f"/api/mobile/deliveries/customer?id={dual_cards[0]['customerId']}", token)
+        check("the customer detail returns both orders",
+              status == 200 and len(cd_dual.get("purchaseOrders", [])) == 2,
+              f"status={status} POs={[p['customerPoNo'] for p in cd_dual.get('purchaseOrders', [])]}")
+
     print("\n[11] representative cannot reach the HR control plane")
     status, _ = api("GET", "/api/hr/field-ops/overview", token)
     check("mobile token is refused by the control API (401/403)",

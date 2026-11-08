@@ -980,6 +980,29 @@ router.get("/deliveries/customer", async (req, res): Promise<void> => {
     return;
   }
 
+  const customer =
+    customerId != null
+      ? ((
+          await db
+            .select({
+              id: customersTable.id,
+              name: customersTable.name,
+              phone: customersTable.phone,
+              address: customersTable.address,
+              contactPerson: customersTable.contactPerson,
+            })
+            .from(customersTable)
+            .where(eq(customersTable.id, customerId))
+        )[0] ?? null)
+      : null;
+
+  // The customer identity is the NAME. A customer can be recorded two ways: a
+  // purchase order linked to a customer record (id set) and another entered as
+  // name-only. Matching by id ALONE hid the name-only orders — the reported
+  // defect where one customer appeared as two cards. So a customer is the set
+  // of orders that share its name, plus any order linked to its id.
+  const resolvedName = rawName ?? customer?.name ?? null;
+
   // The rep may open only a customer they actually have delivery work for.
   const { assignmentIds } = await visibleAssignmentsFor(actor.hrEmployeeId, "delivery");
   const assignments = assignmentIds.length
@@ -1008,31 +1031,15 @@ router.get("/deliveries/customer", async (req, res): Promise<void> => {
         .where(inArray(customerPosTable.id, customerPoIds))
     : [];
 
-  const ownedPoRows = cpoRows.filter((c) =>
-    customerId != null
-      ? c.customerId === customerId
-      : c.customerId == null && c.customerName === rawName,
+  const ownedPoRows = cpoRows.filter(
+    (c) =>
+      (customerId != null && c.customerId === customerId) ||
+      (resolvedName != null && (c.customerName ?? "").trim() === resolvedName.trim()),
   );
   if (!ownedPoRows.length) {
     res.status(404).json({ error: "العميل غير موجود أو لا توجد لك مهام تسليم له" });
     return;
   }
-
-  const customer =
-    customerId != null
-      ? ((
-          await db
-            .select({
-              id: customersTable.id,
-              name: customersTable.name,
-              phone: customersTable.phone,
-              address: customersTable.address,
-              contactPerson: customersTable.contactPerson,
-            })
-            .from(customersTable)
-            .where(eq(customersTable.id, customerId))
-        )[0] ?? null)
-      : null;
 
   const assignmentByPo = new Map<number, number>();
   for (const a of assignments) {
@@ -1091,7 +1098,7 @@ router.get("/deliveries/customer", async (req, res): Promise<void> => {
         }
       : {
           id: null,
-          name: ownedPoRows[0]?.customerName ?? null,
+          name: resolvedName,
           phone: null,
           address: null,
           contactPerson: null,
