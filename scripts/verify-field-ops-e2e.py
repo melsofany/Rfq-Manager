@@ -333,6 +333,56 @@ def main() -> int:
               status == 200 and len(cdetail2.get("purchaseOrders", [])) == 0,
               f"status={status} POs={cdetail2.get('purchaseOrders')}")
 
+    print("\n[9c] the PO card carries buyer / item count / value / derived status")
+    # عميل 1 still has its two received units pending, so its card is the subject.
+    c1 = next((t for t in tasks if t["customerName"] == "عميل 1"), None)
+    check("the عميل 1 customer card exists", c1 is not None)
+    c1_po = None
+    if c1:
+        k1 = c1["key"]
+        k1_kind, _, k1_val = k1.partition(":")
+        q1 = f"id={k1_val}" if k1_kind == "id" else f"name={quote(k1_val)}"
+        st, cd1 = api("GET", f"/api/mobile/deliveries/customer?{q1}", token)
+        check("customer detail loads", st == 200, f"status={st}")
+        pos1 = cd1.get("purchaseOrders", [])
+        c1_po = pos1[0] if pos1 else None
+        check("the purchase order exposes its header fields",
+              c1_po is not None
+              and "buyerName" in c1_po and "totalItems" in c1_po and "totalAmount" in c1_po,
+              f"po keys={sorted(c1_po.keys()) if c1_po else None}")
+        if c1_po:
+            check("total items counts every line",
+                  c1_po["totalItems"] == len(c1_po["items"]),
+                  f"totalItems={c1_po['totalItems']} items={len(c1_po['items'])}")
+            check("the derived status is 'under delivery' while a line is pending",
+                  c1_po["status"] == "in_progress", f"status={c1_po['status']}")
+
+    print("\n[9d] a full rejection settles the order and records the reason")
+    if c1_po and c1_po.get("assignmentId") is not None:
+        line0 = c1_po["items"][0]
+        avail0 = float(line0["availableQty"])
+        st, body = api(
+            "POST", f"/api/mobile/deliveries/{c1_po['assignmentId']}/confirm", token,
+            {"items": [{"customerPoItemId": line0["customerPoItemId"],
+                        "deliveredQty": 0,
+                        "rejectedByCustomerQty": avail0,
+                        "rejectionReason": "تالف"}],
+             "operationKey": "e2e-delivery-reject"})
+        check("a zero-delivery full rejection is accepted", st == 200,
+              f"status={st} body={body}")
+
+        st, dl = api("GET", "/api/mobile/deliveries", token)
+        names_l = [t["customerName"] for t in dl.get("tasks", [])]
+        check("the fully rejected customer leaves the pending list",
+              "عميل 1" not in names_l, f"customers={names_l}")
+
+        reason_row = sql(
+            "SELECT rejection_reason FROM customer_po_item_deliveries "
+            f"WHERE customer_po_item_id = {line0['customerPoItemId']} "
+            "AND rejected_by_customer_qty > 0 ORDER BY id DESC LIMIT 1;")
+        check("the rejection reason is stored against the line",
+              reason_row == "تالف", f"reason={reason_row}")
+
     print("\n[10] employee isolation — a second rep sees none of the first rep's work")
     other = sql(
         f"""

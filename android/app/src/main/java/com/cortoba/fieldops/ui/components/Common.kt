@@ -278,8 +278,10 @@ fun statusPresentation(status: String): Pair<String, Color> = when (status.upper
     "RECEIVED" -> "تم الاستلام" to StatusGreen
     "PENDING" -> "في انتظار التسليم" to StatusBlue
     "IN_TRANSIT" -> "جاري التسليم" to StatusAmber
-    "PARTIALLY_DELIVERED" -> "تسليم جزئي" to StatusAmber
+    "PARTIALLY_DELIVERED" -> "تحت التسليم" to StatusAmber
     "DELIVERED" -> "تم التسليم" to StatusGreen
+    "COMPLETED" -> "مكتمل التسليم" to StatusGreen
+    "FULLY_REJECTED" -> "مرفوض بالكامل" to StatusRed
     "REJECTED" -> "مرفوض" to StatusRed
     "EXCEPTION" -> "توجد مشكلة" to StatusRed
     "CANCELLED" -> "ملغي" to StatusGrey

@@ -237,13 +237,20 @@ export interface DeliveryGuardInput {
  * The two rules that must never be relaxed: you cannot deliver more than was
  * received and accepted from the supplier, and you cannot deliver more than the
  * customer's remaining balance.
+ *
+ * A zero delivered quantity is a DELIBERATE customer rejection, not an empty
+ * form: the line is recorded as `rejected` (with a reason) and must not block
+ * the rest of the submission. Rejecting the whole order must still be possible
+ * when nothing has been accepted from the supplier yet, so a zero-qty line is
+ * allowed even before a receipt exists — it can never over-deliver.
  */
 export function checkDeliveryQuantities(input: DeliveryGuardInput): Decision {
   const { orderedQty, acceptedFromSupplier, alreadyDelivered, deliveredQty } = input;
   if (!isFinite(deliveredQty) || deliveredQty < 0) {
     return deny(400, "الكمية المسلّمة يجب أن تكون رقمًا موجبًا");
   }
-  if (deliveredQty <= 0) return deny(400, "أدخل الكمية المسلّمة");
+  // Zero = full rejection of this line. Allowed; nothing is delivered.
+  if (deliveredQty <= 0) return allow(undefined);
 
   if (
     acceptedFromSupplier != null &&

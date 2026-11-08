@@ -43,6 +43,7 @@ import {
   hasOutstandingQty,
   type PickupLine,
 } from "./consolidation";
+import { computePoDeliveryStatus } from "./delivery-status";
 import {
   hasActiveFieldAssignment,
   visibleAssignmentsFor,
@@ -918,7 +919,9 @@ async function deliveryItemsFor(assignment: {
       description: customerPoItemsTable.description,
       uom: customerPoItemsTable.uom,
       qty: customerPoItemsTable.qty,
+      unitPrice: customerPoItemsTable.unitPrice,
       delivered: customerPoItemsTable.totalDeliveredQty,
+      rejected: customerPoItemsTable.totalRejectedByCustomerQty,
       deliveryStatus: customerPoItemsTable.deliveryStatus,
     })
     .from(customerPoItemsTable)
@@ -935,9 +938,13 @@ async function deliveryItemsFor(assignment: {
   for (const r of rows) {
     const ordered = toNum(r.qty) ?? 0;
     const delivered = toNum(r.delivered) ?? 0;
+    const rejected = toNum(r.rejected) ?? 0;
     const accepted = await acceptedQtyFromSupplier(r.id);
-    const available =
-      accepted == null ? Math.max(0, ordered - delivered) : Math.max(0, accepted - delivered);
+    const ceiling = accepted == null ? ordered : accepted;
+    // A line is settled by BOTH a delivery and a customer rejection, so the
+    // remaining quantity excludes rejected units. Otherwise a fully rejected
+    // line would keep its order "under delivery" forever.
+    const available = Math.max(0, ceiling - delivered - rejected);
     out.push({
       customerPoItemId: r.id,
       partNo: r.partNo,
@@ -945,8 +952,10 @@ async function deliveryItemsFor(assignment: {
       description: r.description,
       uom: r.uom,
       orderedQty: ordered,
+      unitPrice: toNum(r.unitPrice),
       acceptedFromSupplierQty: accepted,
       deliveredQty: delivered,
+      rejectedByCustomerQty: rejected,
       availableQty: Math.round(available * 10000) / 10000,
       deliveryStatus: r.deliveryStatus,
     });
@@ -990,6 +999,8 @@ router.get("/deliveries/customer", async (req, res): Promise<void> => {
           customerId: customerPosTable.customerId,
           customerName: customerPosTable.customerName,
           poDate: customerPosTable.poDate,
+          buyerName: customerPosTable.buyerName,
+          employeeName: customerPosTable.employeeName,
           notes: customerPosTable.notes,
           status: customerPosTable.status,
         })
@@ -1033,19 +1044,37 @@ router.get("/deliveries/customer", async (req, res): Promise<void> => {
   const purchaseOrders = [];
   for (const cpo of ownedPoRows) {
     const items = await deliveryItemsFor({ customerPoId: cpo.id, customerPoItemId: null });
-    // A PO whose lines are all delivered is finished — hide it so the rep does
-    // not see (and cannot re-open) work that is already done.
+    // Only orders with something left to settle appear here. A fully delivered
+    // (or fully rejected) order is finished — the rep finds it in the delivery
+    // history, not in the pending list.
     if (!items.some((i) => i.availableQty > 0)) continue;
     const assignmentId = assignmentByPo.get(cpo.id);
     const assignment = assignments.find((a) => a.id === assignmentId);
+    // The order status is DERIVED from its lines, never stored separately — so
+    // a line delivered or rejected through any path moves the order correctly.
+    const deliveryState = computePoDeliveryStatus(
+      items.map((i) => ({
+        orderedQty: i.orderedQty,
+        deliveredQty: i.deliveredQty,
+        rejectedQty: i.rejectedByCustomerQty ?? 0,
+        acceptedFromSupplier: i.acceptedFromSupplierQty,
+      })),
+    );
+    const totalAmount = items.reduce((sum, i) => sum + (i.unitPrice ?? 0) * i.orderedQty, 0);
     purchaseOrders.push({
       assignmentId,
       customerPoId: cpo.id,
       customerPoNo: cpo.customerPoNo,
       customerName: cpo.customerName,
       poDate: cpo.poDate,
+      buyerName: cpo.buyerName ?? cpo.employeeName ?? null,
       notes: cpo.notes,
-      status: assignment?.status ?? cpo.status ?? "pending",
+      // Delivery status the rep acts on; the assignment status stays separate.
+      status: deliveryState,
+      // Kept for compatibility with the assignment-scoped detail screen.
+      assignmentStatus: assignment?.status ?? cpo.status ?? "pending",
+      totalItems: items.length,
+      totalAmount: Math.round(totalAmount * 10000) / 10000,
       items,
     });
   }
@@ -1275,10 +1304,19 @@ router.post("/deliveries/:id/confirm", async (req, res): Promise<void> => {
     }
   }
 
+  // The task is "delivered" only once NO line of this customer PO has anything
+  // left. A partial delivery (or a mix of delivered and rejected lines) keeps
+  // the task open so the rep can return for the remainder.
+  const poItems = await deliveryItemsFor({
+    customerPoId: assignment.customerPoId,
+    customerPoItemId: null,
+  });
+  const anyRemaining = poItems.some((i) => i.availableQty > 0);
+
   await db
     .update(workOrderAssignmentsTable)
     .set({
-      status: "delivered",
+      status: anyRemaining ? "partially_delivered" : "delivered",
       performedByHrEmployeeId: actor.hrEmployeeId,
       updatedAt: new Date(),
     })

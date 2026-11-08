@@ -49,6 +49,8 @@ data class DeliveryFormState(
     val result: DeliverySubmitResult? = null,
     /** Assignment the entries were seeded from — makes seeding idempotent. */
     val seededFor: Int? = null,
+    /** Customer key the entries were seeded from (workbench mode). */
+    val seededForCustomer: String? = null,
 )
 
 data class DeliverySubmitResult(
@@ -61,18 +63,46 @@ data class DeliverySubmitResult(
  * One editable delivery row, keyed by the customer PO ITEM id.
  *
  * `availableQty` is the ceiling the server enforces: the quantity actually
- * received and accepted from the supplier, minus what was already delivered.
- * The UI clamps to it, and the server rejects anything above it.
+ * received and accepted from the supplier, minus what was already delivered and
+ * rejected. The UI clamps to it, and the server rejects anything above it.
  */
 data class DeliveryEntry(
     val customerPoItemId: Int,
+    val customerPoId: Int,
+    val assignmentId: Int?,
+    val poNo: String,
     val displayName: String,
     val orderedQty: Double,
     val availableQty: Double,
     val alreadyDeliveredQty: Double,
+    val alreadyRejectedQty: Double = 0.0,
     val deliveredQty: String,
     val rejectedQty: String = "",
     val rejectionReason: String = "",
+) {
+    /** Selected state of the line: derived from the typed quantities. */
+    val mode: DeliveryLineMode
+        get() {
+            val delivered = deliveredQty.toDoubleOrNull() ?: 0.0
+            return when {
+                delivered <= 1e-6 -> DeliveryLineMode.REJECT
+                delivered >= availableQty - 1e-6 -> DeliveryLineMode.FULL
+                else -> DeliveryLineMode.PARTIAL
+            }
+        }
+}
+
+/** How a single PO line is being settled. */
+enum class DeliveryLineMode { FULL, PARTIAL, REJECT }
+
+/** Common rejection reasons, plus «أخرى» for a free-text reason. */
+val DELIVERY_REJECTION_REASONS = listOf(
+    "تالف",
+    "خطأ في الصنف",
+    "كمية أقل",
+    "متأخر عن الموعد",
+    "مواصفات غير مطابقة",
+    "أخرى",
 )
 
 @HiltViewModel
@@ -149,11 +179,101 @@ class DeliveryViewModel @Inject constructor(
                         cachedAt = result.cachedAt,
                     )
                 }
+                seedCustomerForm(key, result.value)
             } catch (e: ApiException) {
                 _customerDetail.update { it.copy(loading = false, error = e.userMessage) }
             }
         }
     }
+
+    // ── Customer workbench actions ─────────────────────────────────────────
+
+    /** «تسليم كلي» on one PO line: deliver its whole remaining quantity. */
+    fun markLineFull(customerPoItemId: Int) {
+        _form.update { state ->
+            state.copy(
+                entries = state.entries.map {
+                    if (it.customerPoItemId == customerPoItemId) {
+                        it.copy(
+                            deliveredQty = com.cortoba.fieldops.core.util.formatQty(it.availableQty),
+                            rejectedQty = "",
+                            rejectionReason = "",
+                        )
+                    } else {
+                        it
+                    }
+                },
+                error = null,
+            )
+        }
+    }
+
+    /** «رفض» on one PO line: deliver nothing, flag it for a rejection reason. */
+    fun markLineRejected(customerPoItemId: Int) {
+        _form.update { state ->
+            state.copy(
+                entries = state.entries.map {
+                    if (it.customerPoItemId == customerPoItemId) {
+                        it.copy(deliveredQty = "0", rejectedQty = "")
+                    } else {
+                        it
+                    }
+                },
+                error = null,
+            )
+        }
+    }
+
+    /** «تسليم كلي» on a whole PO: deliver every line of that order. */
+    fun markPoFull(customerPoId: Int) {
+        _form.update { state ->
+            state.copy(
+                entries = state.entries.map {
+                    if (it.customerPoId == customerPoId) {
+                        it.copy(
+                            deliveredQty = com.cortoba.fieldops.core.util.formatQty(it.availableQty),
+                            rejectedQty = "",
+                            rejectionReason = "",
+                        )
+                    } else {
+                        it
+                    }
+                },
+                error = null,
+            )
+        }
+    }
+
+    /** «رفض كلي» on a whole PO: reject every line of that order. */
+    fun markPoRejected(customerPoId: Int, reason: String) {
+        _form.update { state ->
+            state.copy(
+                entries = state.entries.map {
+                    if (it.customerPoId == customerPoId) {
+                        it.copy(deliveredQty = "0", rejectedQty = "", rejectionReason = reason)
+                    } else {
+                        it
+                    }
+                },
+                error = null,
+            )
+        }
+    }
+
+    /** Set the rejection reason on one line (free text from «أخرى»). */
+    fun setLineReason(customerPoItemId: Int, reason: String) {
+        _form.update { state ->
+            state.copy(
+                entries = state.entries.map {
+                    if (it.customerPoItemId == customerPoItemId) it.copy(rejectionReason = reason) else it
+                },
+            )
+        }
+    }
+
+    /** Lines of one PO currently held in the workbench form. */
+    fun entriesForPo(customerPoId: Int): List<DeliveryEntry> =
+        _form.value.entries.filter { it.customerPoId == customerPoId }
 
     /**
      * Seed the delivery form from the loaded task.
@@ -171,16 +291,59 @@ class DeliveryViewModel @Inject constructor(
                 entries = detail.items.map { item ->
                     DeliveryEntry(
                         customerPoItemId = item.customerPoItemId,
+                        customerPoId = detail.customerPo?.id ?: 0,
+                        assignmentId = detail.assignmentId,
+                        poNo = detail.customerPo?.customerPoNo ?: "",
                         displayName = item.description,
                         orderedQty = item.orderedQty,
                         availableQty = item.availableQty,
                         alreadyDeliveredQty = item.deliveredQty,
+                        alreadyRejectedQty = item.rejectedByCustomerQty,
                         deliveredQty = com.cortoba.fieldops.core.util.formatQty(item.availableQty),
                     )
                 },
                 error = null,
                 result = null,
                 seededFor = assignmentId,
+            )
+        }
+    }
+
+    /**
+     * Seed the workbench form from the whole customer, one entry per PO line that
+     * still has quantity to settle. Called from [loadCustomerDetail] so the
+     * rep can settle every order of the customer from one screen.
+     *
+     * Idempotent per customer key: re-opening the same customer keeps whatever
+     * the rep has already typed.
+     */
+    private fun seedCustomerForm(key: String, detail: CustomerDeliveryDetailResponse) {
+        _form.update { current ->
+            if (current.seededForCustomer == key && current.entries.isNotEmpty()) return@update current
+            val entries = detail.purchaseOrders.flatMap { po ->
+                po.items
+                    .filter { it.availableQty > 0 }
+                    .map { item ->
+                        DeliveryEntry(
+                            customerPoItemId = item.customerPoItemId,
+                            customerPoId = po.customerPoId,
+                            assignmentId = po.assignmentId,
+                            poNo = po.customerPoNo,
+                            displayName = item.description,
+                            orderedQty = item.orderedQty,
+                            availableQty = item.availableQty,
+                            alreadyDeliveredQty = item.deliveredQty,
+                            alreadyRejectedQty = item.rejectedByCustomerQty,
+                            deliveredQty = com.cortoba.fieldops.core.util.formatQty(item.availableQty),
+                        )
+                    }
+            }
+            current.copy(
+                entries = entries,
+                error = null,
+                result = null,
+                seededFor = null,
+                seededForCustomer = key,
             )
         }
     }
@@ -326,6 +489,101 @@ class DeliveryViewModel @Inject constructor(
                         submitting = false,
                         result = DeliverySubmitResult(
                             queuedOffline = outcome.fromCache,
+                            deliveredQty = summary.totalDelivered,
+                            remainingQty = (summary.totalAvailable - summary.totalDelivered)
+                                .coerceAtLeast(0.0),
+                        ),
+                    )
+                }
+            } catch (e: ApiException) {
+                _form.update { it.copy(submitting = false, error = e.userMessage) }
+            }
+        }
+    }
+
+    /**
+     * Confirm the whole customer workbench: every line is submitted through the
+     * assignment that owns its purchase order. Lines the rep left at their full
+     * quantity are delivered as-is; lines with quantity 0 are recorded as
+     * customer rejections (the server allows a zero delivery as a rejection).
+     *
+     * A rejection with no reason is refused here — the requirement is that a
+     * rejection is always explained.
+     */
+    fun submitCustomer() {
+        val entries = _form.value.entries
+        if (entries.isEmpty()) {
+            _form.update { it.copy(error = "لا توجد أصناف للتسليم") }
+            return
+        }
+
+        for (entry in entries) {
+            val delivered = entry.deliveredQty.toDoubleOrNull()
+            if (delivered == null || delivered < 0) {
+                _form.update { it.copy(error = "أدخل كمية صحيحة لكل صنف") }
+                return
+            }
+            if (delivered > entry.availableQty + 1e-6) {
+                _form.update {
+                    it.copy(
+                        error = "الكمية المسلّمة أكبر من المتاح (${entry.displayName}). " +
+                            "المتاح: ${com.cortoba.fieldops.core.util.formatQty(entry.availableQty)}",
+                    )
+                }
+                return
+            }
+            // A line with nothing delivered is a rejection and must carry a reason.
+            if (delivered <= 1e-6 && entry.rejectionReason.isBlank()) {
+                _form.update {
+                    it.copy(error = "اختر سبب رفض الصنف (${entry.displayName}) أو «أخرى» واكتب السبب")
+                }
+                return
+            }
+        }
+
+        // One submission per assignment — a customer can have several POs, each
+        // owned by its own delivery assignment.
+        val byAssignment = entries
+            .filter { it.assignmentId != null }
+            .groupBy { it.assignmentId!! }
+        if (byAssignment.isEmpty()) {
+            _form.update { it.copy(error = "لا توجد مهام تسليم مرتبطة بأوامر هذا العميل") }
+            return
+        }
+
+        val summary = deliverySummary()
+        _form.update { it.copy(submitting = true, error = null) }
+
+        viewModelScope.launch {
+            try {
+                var queuedOffline = false
+                for ((assignmentId, group) in byAssignment) {
+                    val request = DeliveryConfirmRequest(
+                        items = group.map { entry ->
+                            val delivered = entry.deliveredQty.toDoubleOrNull() ?: 0.0
+                            // A line with nothing delivered is a full rejection of
+                            // its remaining quantity, recorded with the reason so
+                            // the line settles and the order can close.
+                            val rejected = if (delivered <= 1e-6) entry.availableQty else 0.0
+                            DeliveryItemRequest(
+                                customerPoItemId = entry.customerPoItemId,
+                                deliveredQty = delivered,
+                                rejectedByCustomerQty = rejected,
+                                rejectionReason = entry.rejectionReason.takeIf { it.isNotBlank() },
+                                notes = null,
+                            )
+                        },
+                        clientUuid = java.util.UUID.randomUUID().toString(),
+                        gps = com.cortoba.fieldops.core.location.LocationProvider.lastKnown(),
+                    )
+                    val outcome = repository.confirmDelivery(assignmentId, request)
+                    if (outcome.fromCache) queuedOffline = true
+                }
+                _form.update {
+                    it.copy(
+                        submitting = false,
+                        result = DeliverySubmitResult(
+                            queuedOffline = queuedOffline,
                             deliveredQty = summary.totalDelivered,
                             remainingQty = (summary.totalAvailable - summary.totalDelivered)
                                 .coerceAtLeast(0.0),

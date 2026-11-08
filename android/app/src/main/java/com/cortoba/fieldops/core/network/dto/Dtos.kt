@@ -248,8 +248,10 @@ data class DeliveryItem(
     val description: String,
     val uom: String? = null,
     val orderedQty: Double = 0.0,
+    val unitPrice: Double? = null,
     val acceptedFromSupplierQty: Double? = null,
     val deliveredQty: Double = 0.0,
+    val rejectedByCustomerQty: Double = 0.0,
     val availableQty: Double = 0.0,
     val deliveryStatus: String = "",
 )
@@ -260,8 +262,15 @@ data class CustomerDeliveryPo(
     val customerPoNo: String,
     val customerName: String? = null,
     val poDate: String? = null,
+    /** Buyer on the customer side, or the responsible employee as fallback. */
+    val buyerName: String? = null,
     val notes: String? = null,
+    /** Derived delivery status: completed | in_progress | fully_rejected. */
     val status: String = "",
+    /** The assignment's own status (sent / partially_delivered / delivered). */
+    val assignmentStatus: String = "",
+    val totalItems: Int = 0,
+    val totalAmount: Double = 0.0,
     val items: List<DeliveryItem> = emptyList(),
 )
 
