@@ -3,6 +3,7 @@ import {
   consolidatePickupLines,
   groupKeyFor,
   customerPoNosOf,
+  groupAssignmentsByCustomer,
   hasOutstandingQty,
   supplierPoCount,
   type PickupLine,
@@ -162,5 +163,81 @@ describe("hasOutstandingQty", () => {
 
   it("treats a line with no ordered quantity as complete", () => {
     expect(hasOutstandingQty(null, 0)).toBe(false);
+  });
+});
+
+/**
+ * The delivery list shows ONE square per customer. A customer with three
+ * purchase orders must collapse onto a single row — the reported defect was a
+ * customer scattered across several cards that read like several customers.
+ */
+describe("groupAssignmentsByCustomer", () => {
+  it("collapses several purchase orders of one customer onto one row", () => {
+    const groups = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "sent", customerId: 7, customerName: "شركة النور" },
+      { customerPoId: 11, status: "sent", customerId: 7, customerName: "شركة النور" },
+      { customerPoId: 12, status: "delivered", customerId: 7, customerName: "شركة النور" },
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].customerId).toBe(7);
+    expect(groups[0].customerPoIds.sort()).toEqual([10, 11, 12]);
+  });
+
+  it("keeps different customers apart", () => {
+    const groups = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "sent", customerId: 7, customerName: "أ" },
+      { customerPoId: 20, status: "sent", customerId: 8, customerName: "ب" },
+    ]);
+    expect(groups.map((g) => g.customerId).sort()).toEqual([7, 8]);
+  });
+
+  it("counts a customer as delivered only when every order is delivered", () => {
+    const mixed = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "delivered", customerId: 7, customerName: "أ" },
+      { customerPoId: 11, status: "sent", customerId: 7, customerName: "أ" },
+    ]);
+    expect(mixed[0].status).toBe("pending");
+
+    const allDone = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "delivered", customerId: 7, customerName: "أ" },
+      { customerPoId: 11, status: "delivered", customerId: 7, customerName: "أ" },
+    ]);
+    expect(allDone[0].status).toBe("delivered");
+  });
+
+  it("groups a name-only customer by name so their work never disappears", () => {
+    // The portal allows a customer PO with a name but no customer id. Those rows
+    // must still collapse together, or a real delivery would vanish from the list.
+    const groups = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "sent", customerId: null, customerName: "شركة الفجر" },
+      { customerPoId: 11, status: "sent", customerId: null, customerName: "شركة الفجر" },
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].customerId).toBeNull();
+    expect(groups[0].customerName).toBe("شركة الفجر");
+    expect(groups[0].customerPoIds.sort()).toEqual([10, 11]);
+  });
+
+  it("keeps two name-only customers with different names apart", () => {
+    const groups = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "sent", customerId: null, customerName: "أ" },
+      { customerPoId: 11, status: "sent", customerId: null, customerName: "ب" },
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+
+  it("drops an assignment with neither a customer id nor a name", () => {
+    const groups = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "sent", customerId: null, customerName: null },
+    ]);
+    expect(groups).toEqual([]);
+  });
+
+  it("deduplicates a purchase order reached through two assignments", () => {
+    const groups = groupAssignmentsByCustomer([
+      { customerPoId: 10, status: "sent", customerId: 7, customerName: "أ" },
+      { customerPoId: 10, status: "sent", customerId: 7, customerName: "أ" },
+    ]);
+    expect(groups[0].customerPoIds).toEqual([10]);
   });
 });

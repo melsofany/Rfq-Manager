@@ -12,6 +12,7 @@ import androidx.navigation.navArgument
 import com.cortoba.fieldops.ui.auth.LoginScreen
 import com.cortoba.fieldops.ui.custody.CustodyScreen
 import com.cortoba.fieldops.ui.dashboard.DashboardScreen
+import com.cortoba.fieldops.ui.deliveries.CustomerDeliveryDetailScreen
 import com.cortoba.fieldops.ui.deliveries.DeliveryConfirmScreen
 import com.cortoba.fieldops.ui.deliveries.DeliveryDetailScreen
 import com.cortoba.fieldops.ui.deliveries.DeliveryListScreen
@@ -29,6 +30,7 @@ object Routes {
     const val DELIVERIES = "deliveries"
     const val DELIVERY_DETAIL = "deliveries/{assignmentId}"
     const val DELIVERY_CONFIRM = "deliveries/{assignmentId}/confirm"
+    const val DELIVERY_CUSTOMER = "deliveries/customer/{customerKey}"
     const val NOTIFICATIONS = "notifications"
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
@@ -37,6 +39,8 @@ object Routes {
     fun pickupDetail(assignmentId: Int) = "pickups/$assignmentId"
     fun deliveryDetail(assignmentId: Int) = "deliveries/$assignmentId"
     fun deliveryConfirm(assignmentId: Int) = "deliveries/$assignmentId/confirm"
+    fun deliveryCustomer(customerKey: String) =
+        "deliveries/customer/${java.net.URLEncoder.encode(customerKey, "UTF-8")}"
 }
 
 /**
@@ -108,7 +112,19 @@ fun CortobaNavHost(
         composable(Routes.DELIVERIES) {
             DeliveryListScreen(
                 onBack = { navController.popBackStack() },
-                onOpen = { navController.navigate(Routes.deliveryDetail(it)) },
+                onOpenCustomer = { navController.navigate(Routes.deliveryCustomer(it)) },
+            )
+        }
+
+        composable(
+            route = Routes.DELIVERY_CUSTOMER,
+            arguments = listOf(navArgument("customerKey") { type = NavType.StringType }),
+        ) { entry ->
+            val customerKey = entry.arguments?.getString("customerKey") ?: ""
+            CustomerDeliveryDetailScreen(
+                customerKey = customerKey,
+                onBack = { navController.popBackStack() },
+                onOpenPo = { navController.navigate(Routes.deliveryDetail(it)) },
             )
         }
 

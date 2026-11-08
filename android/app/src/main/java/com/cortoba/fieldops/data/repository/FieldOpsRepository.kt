@@ -17,12 +17,12 @@ import com.cortoba.fieldops.core.network.dto.PickupListResponse
 import com.cortoba.fieldops.core.network.dto.ProfileResponse
 import com.cortoba.fieldops.core.network.dto.ReceiptConfirmRequest
 import com.cortoba.fieldops.core.network.dto.ReceiptConfirmResponse
+import com.cortoba.fieldops.core.network.dto.CustomerDeliveryDetailResponse
 import com.cortoba.fieldops.core.network.dto.DeliveryDetailResponse
 import com.cortoba.fieldops.core.network.dto.DeliveryListResponse
 import com.cortoba.fieldops.core.network.dto.DeliveryConfirmResponse
 import com.cortoba.fieldops.core.session.SessionStore
 import com.cortoba.fieldops.data.local.CachedDeliveryDetailEntity
-import com.cortoba.fieldops.data.local.CachedDeliveryTaskEntity
 import com.cortoba.fieldops.data.local.CachedNotificationEntity
 import com.cortoba.fieldops.data.local.CachedPickupDetailEntity
 import com.cortoba.fieldops.data.local.CachedPickupTaskEntity
@@ -178,11 +178,6 @@ class FieldOpsRepository @Inject constructor(
     suspend fun deliveries(): Cached<DeliveryListResponse> {
         return try {
             val fresh = apiCall { api.deliveries() }
-            dao.cacheDeliveryTasks(
-                fresh.tasks.map { task ->
-                    CachedDeliveryTaskEntity(task.assignmentId, gson.toJson(task), System.currentTimeMillis())
-                },
-            )
             dao.cacheDeliveryDetail(
                 CachedDeliveryDetailEntity(WHOLE_LIST_KEY, gson.toJson(fresh), System.currentTimeMillis()),
             )
@@ -193,6 +188,33 @@ class FieldOpsRepository @Inject constructor(
                 ?: return Cached(DeliveryListResponse(), fromCache = true)
             Cached(gson.fromJson(cached.payloadJson, DeliveryListResponse::class.java), true, cached.cachedAt)
         }
+    }
+
+    suspend fun customerDeliveryDetail(key: String): Cached<CustomerDeliveryDetailResponse> {
+        // The key is `id:<customerId>` or `name:<name>`. Customer rows live in
+        // the negative range below WHOLE_LIST_KEY (-1) and the positive
+        // assignment ids, so the two payload shapes never collide.
+        val cacheKey = -(2 + (key.hashCode() and 0x3FFFFFFF))
+        val (id, name) = parseCustomerKey(key)
+        return try {
+            val fresh = apiCall { api.customerDelivery(customerId = id, customerName = name) }
+            dao.cacheDeliveryDetail(
+                CachedDeliveryDetailEntity(cacheKey, gson.toJson(fresh), System.currentTimeMillis()),
+            )
+            Cached(fresh, fromCache = false)
+        } catch (e: ApiException) {
+            if (e.isUnauthorized) throw e
+            val cached = dao.deliveryDetail(cacheKey)
+                ?: throw ApiException(0, "لا يوجد اتصال، ولا توجد نسخة محفوظة لهذا العميل")
+            Cached(gson.fromJson(cached.payloadJson, CustomerDeliveryDetailResponse::class.java), true, cached.cachedAt)
+        }
+    }
+
+    /** Split `id:<n>` / `name:<s>` into the API's `id` / `name` query params. */
+    private fun parseCustomerKey(key: String): Pair<Int?, String?> = when {
+        key.startsWith("id:") -> key.removePrefix("id:").toIntOrNull() to null
+        key.startsWith("name:") -> null to key.removePrefix("name:")
+        else -> key.toIntOrNull() to null
     }
 
     suspend fun deliveryDetail(assignmentId: Int): Cached<DeliveryDetailResponse> {

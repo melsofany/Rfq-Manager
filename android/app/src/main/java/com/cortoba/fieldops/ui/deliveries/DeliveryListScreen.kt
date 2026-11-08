@@ -1,28 +1,30 @@
 package com.cortoba.fieldops.ui.deliveries
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -31,22 +33,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cortoba.fieldops.core.util.dialPhone
+import com.cortoba.fieldops.core.network.dto.DeliveryTask
 import com.cortoba.fieldops.core.util.formatQty
-import com.cortoba.fieldops.core.util.openMap
-import com.cortoba.fieldops.ui.components.BrandActionButton
 import com.cortoba.fieldops.ui.components.CreamCard
 import com.cortoba.fieldops.ui.components.EmptyState
 import com.cortoba.fieldops.ui.components.ErrorBanner
 import com.cortoba.fieldops.ui.components.InfoRow
 import com.cortoba.fieldops.ui.components.LoadingBox
 import com.cortoba.fieldops.ui.components.OfflineBanner
-import com.cortoba.fieldops.ui.components.OutlineActionButton
 import com.cortoba.fieldops.ui.components.SectionTitle
 import com.cortoba.fieldops.ui.components.StatusChip
 import com.cortoba.fieldops.ui.theme.CortobaBrown
@@ -55,20 +55,19 @@ import com.cortoba.fieldops.ui.theme.CortobaCream
 /**
  * Customer deliveries assigned to the representative.
  *
- * Only quantities that were actually RECEIVED AND ACCEPTED from the supplier are
- * available here — that is why a task can appear with fewer units than the
- * customer ordered. The card states the available quantity explicitly so the rep
- * never promises the customer more than exists.
+ * The list is a grid of CUSTOMER squares — one tap answers «which customer».
+ * A customer's purchase orders live inside the detail screen, because one
+ * customer can carry several orders. Only quantities that were actually
+ * RECEIVED AND ACCEPTED from the supplier are available for delivery.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeliveryListScreen(
     onBack: () -> Unit,
-    onOpen: (Int) -> Unit,
+    onOpenCustomer: (String) -> Unit,
     viewModel: DeliveryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.list.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     LaunchedEffect(Unit) { viewModel.loadList() }
 
@@ -106,16 +105,18 @@ fun DeliveryListScreen(
 
                 else -> {
                     val data = state.data!!
-                    LazyColumn(
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         if (state.fromCache) {
-                            item { OfflineBanner(state.cachedAt) }
+                            item(span = { GridItemSpan(maxLineSpan) }) { OfflineBanner(state.cachedAt) }
                         }
 
-                        item {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             CreamCard {
                                 Column {
                                     Text(
@@ -123,7 +124,7 @@ fun DeliveryListScreen(
                                         style = MaterialTheme.typography.titleMedium,
                                         color = CortobaBrown,
                                     )
-                                    InfoRow("عدد مهام التسليم", "${data.summary.taskCount}")
+                                    InfoRow("عدد العملاء", "${data.summary.taskCount}")
                                     InfoRow("عدد الأصناف", "${data.summary.distinctItems}")
                                     InfoRow(
                                         "إجمالي الكميات المتاحة",
@@ -135,53 +136,64 @@ fun DeliveryListScreen(
                         }
 
                         if (data.tasks.isEmpty()) {
-                            item {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
                                 EmptyState(
                                     title = "لا توجد تسليمات مسندة إليك",
                                     subtitle = "تصبح الكميات متاحة للتسليم بعد تأكيد استلامها من المورد",
                                 )
                             }
                         } else {
-                            item { SectionTitle("مهام التسليم") }
+                            item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("العملاء") }
                         }
 
-                        items(data.tasks, key = { "delivery-${it.assignmentId}" }) { task ->
-                            CreamCard {
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Column(Modifier.weight(1f)) {
-                                            Text(
-                                                text = task.customerName ?: "عميل غير محدد",
-                                                style = MaterialTheme.typography.titleLarge,
-                                                fontWeight = FontWeight.Bold,
-                                            )
-                                            Text(
-                                                text = "أمر العميل: ${task.customerPoNo}",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                        StatusChip(task.status)
-                                    }
-
-                                    Spacer(Modifier.height(10.dp))
-
-                                    InfoRow("عدد الأصناف", "${task.distinctItemCount}")
-                                    InfoRow("الكميات المتاحة", formatQty(task.availableQty))
-                                    InfoRow("تاريخ الأمر", com.cortoba.fieldops.core.util.formatDate(task.poDate))
-
-                                    Spacer(Modifier.height(10.dp))
-
-                                    BrandActionButton(
-                                        text = "عرض تفاصيل التسليم",
-                                        onClick = { onOpen(task.assignmentId) },
-                                    )
-                                }
-                            }
+                        items(data.tasks, key = { "customer-${it.key}" }) { task ->
+                            CustomerSquare(
+                                task = task,
+                                onClick = { onOpenCustomer(task.key) },
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/** A compact customer tile. The purchase orders live on the customer screen. */
+@Composable
+fun CustomerSquare(task: DeliveryTask, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        shadowElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = task.customerName ?: "عميل غير محدد",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "أوامر الشراء: ${task.poCount}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            StatusChip(task.status)
         }
     }
 }

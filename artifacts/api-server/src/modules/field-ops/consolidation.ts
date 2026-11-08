@@ -149,3 +149,65 @@ export function hasOutstandingQty(orderedQty: number | null, acceptedQty: number
 export function supplierPoCount(group: ConsolidatedGroup): number {
   return new Set(group.allocations.map((a) => a.poNo)).size;
 }
+
+/** One customer and the distinct purchase orders that carry delivery work. */
+export interface CustomerDeliveryGroup {
+  /** Customer id when known, otherwise null. */
+  customerId: number | null;
+  customerName: string | null;
+  customerPoIds: number[];
+  status: "delivered" | "pending";
+}
+
+/**
+ * Collapse delivery assignments onto ONE row per customer.
+ *
+ * A customer with three purchase orders must appear as a single square, not
+ * three cards that look like three different customers.
+ *
+ * Identity is the customer id. A customer PO entered without an id (the portal
+ * allows a name-only customer) falls back to its customer NAME so its work is
+ * still grouped — dropping it would make a real delivery vanish from the list.
+ * An assignment with neither id nor name cannot be grouped and is dropped,
+ * because guessing would merge unrelated customers.
+ *
+ * `status` is "delivered" only when EVERY assignment for the customer is
+ * delivered; one outstanding order keeps the customer in progress.
+ */
+export function groupAssignmentsByCustomer(
+  assignments: {
+    customerPoId: number | null;
+    status: string;
+    customerId: number | null;
+    customerName: string | null;
+  }[],
+): CustomerDeliveryGroup[] {
+  const byKey = new Map<
+    string,
+    { customerId: number | null; name: string | null; poIds: Set<number>; statuses: Set<string> }
+  >();
+  for (const a of assignments) {
+    if (a.customerPoId == null) continue;
+    const name = a.customerName?.trim() || null;
+    if (a.customerId == null && name == null) continue;
+    const key = a.customerId != null ? `id:${a.customerId}` : `name:${name}`;
+    const entry = byKey.get(key) ?? {
+      customerId: a.customerId,
+      name,
+      poIds: new Set<number>(),
+      statuses: new Set<string>(),
+    };
+    entry.poIds.add(a.customerPoId);
+    entry.statuses.add(a.status);
+    byKey.set(key, entry);
+  }
+  return [...byKey.values()].map((entry) => ({
+    customerId: entry.customerId,
+    customerName: entry.name,
+    customerPoIds: [...entry.poIds],
+    status:
+      entry.statuses.size > 0 && [...entry.statuses].every((s) => s === "delivered")
+        ? "delivered"
+        : "pending",
+  }));
+}

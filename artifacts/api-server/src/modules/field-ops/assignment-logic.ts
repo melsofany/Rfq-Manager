@@ -205,9 +205,6 @@ export function checkReceiptQuantities(input: ReceiptGuardInput): Decision {
   if (values.some((v) => !isFinite(v) || v < 0)) {
     return deny(400, "الكميات يجب أن تكون أرقامًا موجبة");
   }
-  if (receivedQty <= 0 && rejectedQty <= 0) {
-    return deny(400, "أدخل الكمية المستلمة أو المرفوضة");
-  }
   if (acceptedQty + rejectedQty > receivedQty + 1e-6) {
     return deny(400, "مجموع الكمية المقبولة والمرفوضة أكبر من الكمية المستلمة");
   }
@@ -217,6 +214,9 @@ export function checkReceiptQuantities(input: ReceiptGuardInput): Decision {
       return deny(400, `الكمية المقبولة أكبر من المتبقي (${remaining})`);
     }
   }
+  // A zero-quantity line is a deliberate refusal (the app seeds every line with
+  // its full quantity, so 0 is never an accidental blank) — allow it. It records
+  // as a "rejected" receipt and must not block the rest of the submission.
   return allow(undefined);
 }
 
