@@ -124,15 +124,6 @@ fun PoDeliveryScreen(
             when {
                 state.loading && state.data == null -> LoadingBox(Modifier.fillMaxSize())
 
-                form.result != null -> DeliveryResultView(
-                    result = form.result!!,
-                    onDone = {
-                        // Return to the order list with the fresh state.
-                        viewModel.clearResult()
-                        onBack()
-                    },
-                )
-
                 po == null -> Column(Modifier.padding(20.dp)) {
                     if (state.error != null) {
                         ErrorBanner(state.error!!)
@@ -162,9 +153,10 @@ fun PoDeliveryScreen(
 
                         item {
                             PoActionsRow(
-                                onPoFull = { viewModel.markPoFull(customerPoId) },
+                                submitting = form.submitting,
+                                onPoFull = { viewModel.deliverPoFull(customerKey, customerPoId) },
                                 onPoReject = { reason ->
-                                    viewModel.markPoRejected(customerPoId, reason)
+                                    viewModel.rejectPo(customerKey, customerPoId, reason)
                                 },
                             )
                         }
@@ -174,35 +166,21 @@ fun PoDeliveryScreen(
                         items(entries, key = { "line-${it.customerPoItemId}" }) { entry ->
                             DeliveryLineCard(
                                 entry = entry,
+                                submitting = form.submitting,
                                 onDeliveredChange = {
                                     viewModel.onDeliveredQtyChange(entry.customerPoItemId, it)
                                 },
                                 onReasonChange = { viewModel.setLineReason(entry.customerPoItemId, it) },
-                                onFull = { viewModel.markLineFull(entry.customerPoItemId) },
-                                onReject = { viewModel.markLineRejected(entry.customerPoItemId) },
+                                onFull = { viewModel.deliverLineFull(customerKey, entry.customerPoItemId) },
+                                onPartial = {
+                                    viewModel.deliverLinePartial(customerKey, entry.customerPoItemId)
+                                },
+                                onReject = { viewModel.rejectLine(customerKey, entry.customerPoItemId) },
                             )
                         }
 
                         if (form.error != null) {
                             item { ErrorBanner(form.error!!) }
-                        }
-
-                        item {
-                            Button(
-                                onClick = { viewModel.submitPo(customerPoId, customerKey) },
-                                enabled = !form.submitting,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = CortobaBrown,
-                                    contentColor = CortobaCream,
-                                ),
-                                modifier = Modifier.fillMaxWidth().height(52.dp),
-                            ) {
-                                Text(
-                                    "تأكيد تسليم الأمر",
-                                    style = MaterialTheme.typography.titleMedium,
-                                )
-                            }
                         }
 
                         if (form.submitting) {
@@ -249,12 +227,17 @@ private fun PoHeaderCard(po: CustomerDeliveryPo) {
 }
 
 @Composable
-private fun PoActionsRow(onPoFull: () -> Unit, onPoReject: (String) -> Unit) {
+private fun PoActionsRow(
+    submitting: Boolean,
+    onPoFull: () -> Unit,
+    onPoReject: (String) -> Unit,
+) {
     var showPoReject by remember { mutableStateOf(false) }
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(
             onClick = onPoFull,
+            enabled = !submitting,
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.weight(1f),
         ) {
@@ -262,6 +245,7 @@ private fun PoActionsRow(onPoFull: () -> Unit, onPoReject: (String) -> Unit) {
         }
         OutlinedButton(
             onClick = { showPoReject = true },
+            enabled = !submitting,
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.weight(1f),
         ) {
@@ -272,6 +256,7 @@ private fun PoActionsRow(onPoFull: () -> Unit, onPoReject: (String) -> Unit) {
     if (showPoReject) {
         RejectionReasonDialog(
             title = "رفض كلي للأمر",
+            message = "اختر سبب الرفض — سيتم تسجيل رفض كل البنود فوراً.",
             onDismiss = { showPoReject = false },
             onConfirm = { reason ->
                 showPoReject = false
@@ -281,18 +266,24 @@ private fun PoActionsRow(onPoFull: () -> Unit, onPoReject: (String) -> Unit) {
     }
 }
 
-/** One PO line: full / partial / reject, with the reason selector for rejections. */
+/**
+ * One PO line: «كلي» delivers the whole remaining quantity now, «جزئي» reveals
+ * the quantity field and a «تنفيذ» that delivers what was typed, «رفض» opens
+ * the reason picker and records the rejection. No separate confirm step.
+ */
 @Composable
 private fun DeliveryLineCard(
     entry: DeliveryEntry,
+    submitting: Boolean,
     onDeliveredChange: (String) -> Unit,
     onReasonChange: (String) -> Unit,
     onFull: () -> Unit,
+    onPartial: () -> Unit,
     onReject: () -> Unit,
 ) {
-    val delivered = entry.deliveredQty.toDoubleOrNull() ?: 0.0
-    val remaining = (entry.availableQty - delivered).coerceAtLeast(0.0)
+    var showPartial by remember { mutableStateOf(false) }
     var showReasonMenu by remember { mutableStateOf(false) }
+    var showRejectDialog by remember { mutableStateOf(false) }
 
     CreamCard {
         Column {
@@ -313,83 +304,85 @@ private fun DeliveryLineCard(
             Spacer(Modifier.height(8.dp))
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ModeButton(
+                ReceiptLikeActionButton(
                     text = "كلي",
-                    selected = entry.mode == DeliveryLineMode.FULL,
                     color = StatusGreen,
+                    enabled = !submitting,
                     onClick = onFull,
                 )
-                ModeButton(
+                ReceiptLikeActionButton(
                     text = "جزئي",
-                    selected = entry.mode == DeliveryLineMode.PARTIAL,
                     color = StatusBlue,
-                    onClick = { onDeliveredChange("") },
+                    enabled = !submitting,
+                    onClick = { showPartial = !showPartial },
                 )
-                ModeButton(
+                ReceiptLikeActionButton(
                     text = "رفض",
-                    selected = entry.mode == DeliveryLineMode.REJECT,
                     color = StatusAmber,
-                    onClick = onReject,
+                    enabled = !submitting,
+                    onClick = { showRejectDialog = true },
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = entry.deliveredQty,
-                onValueChange = onDeliveredChange,
-                label = { Text("الكمية المسلّمة") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            InfoRow("المتبقي", formatQty(remaining), emphasize = remaining > 0)
-
-            if (entry.mode == DeliveryLineMode.REJECT) {
+            if (showPartial) {
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = entry.deliveredQty,
+                    onValueChange = onDeliveredChange,
+                    label = { Text("الكمية المسلّمة") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Spacer(Modifier.height(6.dp))
-                Box {
-                    OutlinedButton(
-                        onClick = { showReasonMenu = true },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = entry.rejectionReason.ifBlank { "اختر سبب الرفض" },
-                            color = StatusAmber,
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showReasonMenu,
-                        onDismissRequest = { showReasonMenu = false },
-                    ) {
-                        DELIVERY_REJECTION_REASONS.forEach { reason ->
-                            DropdownMenuItem(
-                                text = { Text(reason) },
-                                onClick = {
-                                    showReasonMenu = false
-                                    // «أخرى» clears the field so the rep types a reason;
-                                    // the common reasons are recorded as-is.
-                                    onReasonChange(if (reason == "أخرى") "" else reason)
-                                },
-                            )
-                        }
-                    }
-                }
-                if (entry.rejectionReason.isBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedTextField(
-                        value = entry.rejectionReason,
-                        onValueChange = onReasonChange,
-                        label = { Text("اكتب سبب الرفض") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                Button(
+                    onClick = onPartial,
+                    enabled = !submitting,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = CortobaBrown,
+                        contentColor = CortobaCream,
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                ) {
+                    Text("تنفيذ")
                 }
             }
         }
+    }
+
+    if (showRejectDialog) {
+        RejectionReasonDialog(
+            title = "رفض الصنف",
+            message = "اختر سبب الرفض — سيتم تسجيله فوراً.",
+            onDismiss = { showRejectDialog = false },
+            onConfirm = { reason ->
+                showRejectDialog = false
+                onReasonChange(reason)
+                onReject()
+            },
+        )
+    }
+}
+
+/** A compact per-line action button. */
+@Composable
+private fun RowScope.ReceiptLikeActionButton(
+    text: String,
+    color: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
+        contentPadding = PaddingValues(horizontal = 4.dp),
+        modifier = Modifier.weight(1f),
+    ) {
+        Text(text, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -428,6 +421,7 @@ private fun RowScope.ModeButton(
 @Composable
 private fun RejectionReasonDialog(
     title: String,
+    message: String,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -439,6 +433,12 @@ private fun RejectionReasonDialog(
         title = { Text(title) },
         text = {
             Column {
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
                 DELIVERY_REJECTION_REASONS.forEach { reason ->
                     Row(
                         modifier = Modifier
@@ -481,84 +481,4 @@ private fun RejectionReasonDialog(
             TextButton(onClick = onDismiss) { Text("إلغاء") }
         },
     )
-}
-
-@Composable
-private fun DeliveryResultView(result: DeliverySubmitResult, onDone: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        if (result.queuedOffline) {
-            Icon(
-                Icons.Default.CloudOff,
-                contentDescription = null,
-                tint = StatusBlue,
-                modifier = Modifier.height(64.dp),
-            )
-            Text(
-                text = "تم الحفظ محلياً",
-                style = MaterialTheme.typography.headlineSmall,
-                color = StatusBlue,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            Text(
-                text = "لا يوجد اتصال بالإنترنت. سيتم إرسال عملية التسليم تلقائياً عند عودة الاتصال، " +
-                    "ولن تُعتمد رسمياً إلا بعد تأكيد الخادم.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        } else {
-            Icon(
-                Icons.Default.CloudDone,
-                contentDescription = null,
-                tint = StatusGreen,
-                modifier = Modifier.height(64.dp),
-            )
-            Text(
-                text = "تم تأكيد التسليم",
-                style = MaterialTheme.typography.headlineSmall,
-                color = StatusGreen,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            Text(
-                text = "تم تسجيل الكميات المسلّمة وأسباب الرفض باسمك ووقت التنفيذ.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        CreamCard {
-            Column {
-                InfoRow("إجمالي المسلّم", formatQty(result.deliveredQty), emphasize = true)
-                InfoRow("المتبقي", formatQty(result.remainingQty))
-            }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Button(
-            onClick = onDone,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = CortobaBrown,
-                contentColor = CortobaCream,
-            ),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null)
-                Text("تم", modifier = Modifier.padding(start = 8.dp))
-            }
-        }
-    }
 }

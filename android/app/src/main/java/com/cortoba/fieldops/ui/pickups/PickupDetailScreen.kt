@@ -104,7 +104,8 @@ fun PickupDetailScreen(
 
     LaunchedEffect(assignmentId) { viewModel.loadDetail(assignmentId) }
 
-    var showSummary by remember { mutableStateOf(false) }
+    // The all-of-task actions still ask once, because a stray tap would settle
+    // every line at once. The per-line buttons do not: their tap is the action.
     var showConfirmAll by remember { mutableStateOf(false) }
     var showRejectAll by remember { mutableStateOf(false) }
 
@@ -133,11 +134,6 @@ fun PickupDetailScreen(
                 detailState.data == null -> Column(Modifier.padding(20.dp)) {
                     if (detailState.error != null) ErrorBanner(detailState.error!!)
                 }
-
-                form.result != null -> ReceiptResultView(
-                    result = form.result!!,
-                    onDone = onDone,
-                )
 
                 else -> {
                     val data = detailState.data!!
@@ -206,6 +202,7 @@ fun PickupDetailScreen(
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     BrandActionButton(
                                         text = "استلام الكل",
+                                        enabled = !form.submitting,
                                         onClick = { showConfirmAll = true },
                                         modifier = Modifier.weight(1f),
                                     )
@@ -223,45 +220,18 @@ fun PickupDetailScreen(
                                 ReceiptGroupCard(
                                     group = group,
                                     entries = form.entries.filter { it.groupKey == group.groupKey },
+                                    submitting = form.submitting,
                                     onReceivedChange = viewModel::onReceivedQtyChange,
                                     onRejectedChange = viewModel::onRejectedQtyChange,
                                     onReasonChange = viewModel::onRejectionReasonChange,
-                                    onFull = { viewModel.fillGroupFullQuantity(group.groupKey) },
-                                    onReject = { viewModel.rejectGroup(group.groupKey) },
+                                    onReceiveFull = { viewModel.receiveLineFull(assignmentId, it) },
+                                    onReceivePartial = { viewModel.receiveLinePartial(assignmentId, it) },
+                                    onReject = { viewModel.rejectLine(assignmentId, it) },
                                 )
-                            }
-
-                            item {
-                                CreamCard {
-                                    Column {
-                                        Text(
-                                            text = "ملاحظات عامة",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = CortobaBrown,
-                                        )
-                                        OutlinedTextField(
-                                            value = form.notes,
-                                            onValueChange = viewModel::onNotesChange,
-                                            placeholder = { Text("أي ملاحظات على عملية الاستلام") },
-                                            shape = RoundedCornerShape(12.dp),
-                                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                                        )
-                                    }
-                                }
                             }
 
                             if (form.error != null) {
                                 item { ErrorBanner(form.error!!) }
-                            }
-
-                            item { ReceiptSummaryCard(summary) }
-
-                            item {
-                                BrandActionButton(
-                                    text = "تأكيد الاستلام",
-                                    enabled = !form.submitting,
-                                    onClick = { showSummary = true },
-                                )
                             }
 
                             if (form.submitting) {
@@ -288,53 +258,16 @@ fun PickupDetailScreen(
         }
     }
 
-    if (showSummary) {
-        val summary = viewModel.summaryFor(form.entries)
-        AlertDialog(
-            onDismissRequest = { showSummary = false },
-            title = { Text("تأكيد الاستلام") },
-            text = {
-                Column {
-                    InfoRow("عدد الأصناف", "${summary.distinctItems}")
-                    InfoRow("إجمالي المطلوب", formatQty(summary.totalRequired))
-                    InfoRow("إجمالي المستلم", formatQty(summary.totalReceived), emphasize = true)
-                    InfoRow("الكميات الناقصة", formatQty(summary.totalMissing))
-                    InfoRow("الكميات التالفة", formatQty(summary.totalRejected))
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "سيتم تسجيل الكميات المقبولة فقط كمتاحة للتسليم للعملاء. " +
-                            "لا يمكن التراجع عن هذه العملية.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showSummary = false
-                        viewModel.submit(assignmentId)
-                    },
-                ) {
-                    Text("تأكيد نهائي", color = CortobaBrown)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSummary = false }) { Text("رجوع") }
-            },
-        )
-    }
-
     if (showConfirmAll) {
         AlertDialog(
             onDismissRequest = { showConfirmAll = false },
             title = { Text("استلام الكل") },
-            text = { Text("سيتم تعبئة كل الأصناف بالكمية المطلوبة كاملة. هل تريد المتابعة؟") },
+            text = { Text("سيتم تسجيل استلام كل الأصناف بالكمية المطلوبة كاملة. هل تريد المتابعة؟") },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showConfirmAll = false
-                        viewModel.fillAllFullQuantity()
+                        viewModel.receiveAll(assignmentId)
                     },
                 ) {
                     Text("استلام الكل", color = CortobaBrown)
@@ -347,26 +280,93 @@ fun PickupDetailScreen(
     }
 
     if (showRejectAll) {
-        AlertDialog(
-            onDismissRequest = { showRejectAll = false },
-            title = { Text("رفض الكل") },
-            text = { Text("سيتم وضع كل الأصناف كغير مستلمة (رفض). هل تريد المتابعة؟") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showRejectAll = false
-                        viewModel.rejectAll()
-                    },
-                ) {
-                    Text("رفض الكل", color = StatusAmber)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRejectAll = false }) { Text("رجوع") }
+        RejectionReasonDialog(
+            title = "رفض الكل",
+            message = "سيتم تسجيل رفض كل الأصناف بالسبب المختار. هل تريد المتابعة؟",
+            onDismiss = { showRejectAll = false },
+            onConfirm = { reason ->
+                showRejectAll = false
+                viewModel.rejectAll(assignmentId, reason)
             },
         )
     }
 }
+
+/** Pick a common rejection reason, or «أخرى» to type one. */
+@Composable
+private fun RejectionReasonDialog(
+    title: String,
+    message: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var selected by remember { mutableStateOf("") }
+    var other by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                RECEIPT_REJECTION_REASONS.forEach { reason ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selected = reason }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = if (selected == reason) "◉" else "○",
+                            color = CortobaBrown,
+                        )
+                        Text(reason, modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+                if (selected == "أخرى") {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = other,
+                        onValueChange = { other = it },
+                        label = { Text("اكتب سبب الرفض") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val reason = if (selected == "أخرى") other.trim() else selected
+                    if (reason.isNotBlank()) onConfirm(reason)
+                },
+            ) {
+                Text("تأكيد", color = CortobaBrown)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("رجاء") }
+        },
+    )
+}
+
+/** Common rejection reasons, plus «أخرى» for a free-text reason. */
+private val RECEIPT_REJECTION_REASONS = listOf(
+    "تالف",
+    "خطأ في الصنف",
+    "كمية أقل",
+    "متأخر عن الموعد",
+    "مواصفات غير مطابقة",
+    "أخرى",
+)
 
 /** Selected state of one item in the receiving form. */
 private enum class ReceiptMode { FULL, PARTIAL, REJECT }
@@ -413,26 +413,18 @@ private fun RowScope.ReceiptModeButton(
 private fun ReceiptGroupCard(
     group: ConsolidatedItem,
     entries: List<ReceiptEntry>,
+    submitting: Boolean,
     onReceivedChange: (Int, String) -> Unit,
     onRejectedChange: (Int, String) -> Unit,
     onReasonChange: (Int, String) -> Unit,
-    onFull: () -> Unit,
-    onReject: () -> Unit,
+    onReceiveFull: (Int) -> Unit,
+    onReceivePartial: (Int) -> Unit,
+    onReject: (Int) -> Unit,
 ) {
     var showPartial by remember { mutableStateOf(false) }
     var showDistribution by remember { mutableStateOf(false) }
+    var rejectingPoItemId by remember { mutableStateOf<Int?>(null) }
     val entryByPoItemId = entries.associateBy { it.poItemId }
-
-    // The single source of truth for the item's state is the form entries.
-    // Deriving the selected mode from them (instead of a second flag) keeps the
-    // highlight and the typed quantities from drifting apart.
-    val receivedTotal = entries.sumOf { it.receivedQty.toDoubleOrNull() ?: 0.0 }
-    val requiredTotal = group.totalRemainingQty
-    val mode = when {
-        receivedTotal <= 1e-6 -> ReceiptMode.REJECT
-        receivedTotal >= requiredTotal - 1e-6 -> ReceiptMode.FULL
-        else -> ReceiptMode.PARTIAL
-    }
 
     CreamCard(modifier = Modifier.animateContentSize()) {
         Column {
@@ -467,61 +459,30 @@ private fun ReceiptGroupCard(
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-
-            InfoRow("المستلم سابقاً", formatQty(group.totalAcceptedQty))
-            InfoRow(
-                "الكمية المستلمة الآن",
-                "${formatQty(receivedTotal)} / ${formatQty(requiredTotal)}",
-                emphasize = true,
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ReceiptModeButton(
-                    text = "استلام كلي",
-                    selected = !showPartial && mode == ReceiptMode.FULL,
-                    color = StatusGreen,
-                    onClick = {
-                        showPartial = false
-                        onFull()
-                    },
-                )
-                ReceiptModeButton(
-                    text = "استلام جزئي",
-                    selected = showPartial || mode == ReceiptMode.PARTIAL,
-                    color = StatusBlue,
-                    onClick = { showPartial = true },
-                )
-                ReceiptModeButton(
-                    text = "رفض",
-                    selected = !showPartial && mode == ReceiptMode.REJECT,
-                    color = StatusAmber,
-                    onClick = {
-                        showPartial = false
-                        onReject()
-                    },
-                )
+            if (group.totalAcceptedQty > 0) {
+                Spacer(Modifier.height(6.dp))
+                InfoRow("المستلم سابقاً", formatQty(group.totalAcceptedQty))
             }
 
-            if (showPartial) {
-                Spacer(Modifier.height(8.dp))
-                group.allocations.forEach { allocation ->
-                    val entry = entryByPoItemId[allocation.poItemId]
-                    if (entry != null) {
-                        ReceiptLineInput(
-                            entry = entry,
-                            poNo = allocation.poNo,
-                            onReceivedChange = { onReceivedChange(entry.poItemId, it) },
-                            onRejectedChange = { onRejectedChange(entry.poItemId, it) },
-                            onReasonChange = { onReasonChange(entry.poItemId, it) },
-                        )
-                    }
-                }
-            }
+            Spacer(Modifier.height(10.dp))
 
-            Spacer(Modifier.height(6.dp))
+            // Each line carries its own buttons, and each tap records that line
+            // on the server at once — there is no separate confirm step.
+            entries.forEach { entry ->
+                ReceiptLineActions(
+                    entry = entry,
+                    submitting = submitting,
+                    expanded = showPartial,
+                    onTogglePartial = { showPartial = !showPartial },
+                    onReceivedChange = { onReceivedChange(entry.poItemId, it) },
+                    onRejectedChange = { onRejectedChange(entry.poItemId, it) },
+                    onReasonChange = { onReasonChange(entry.poItemId, it) },
+                    onReceiveFull = { onReceiveFull(entry.poItemId) },
+                    onReceivePartial = { onReceivePartial(entry.poItemId) },
+                    onReject = { rejectingPoItemId = entry.poItemId },
+                )
+                Spacer(Modifier.height(10.dp))
+            }
 
             Row(
                 modifier = Modifier
@@ -556,9 +517,114 @@ private fun ReceiptGroupCard(
             }
         }
     }
+
+    // A rejection needs a reason; picking one records the rejection at once.
+    rejectingPoItemId?.let { poItemId ->
+        RejectionReasonDialog(
+            title = "رفض الصنف",
+            message = "اختر سبب الرفض — سيتم تسجيله فوراً.",
+            onDismiss = { rejectingPoItemId = null },
+            onConfirm = { reason ->
+                onReasonChange(poItemId, reason)
+                rejectingPoItemId = null
+                onReject(poItemId)
+            },
+        )
+    }
 }
 
-/** Editable received/damaged quantities for one original PO line (partial receipt). */
+/**
+ * The per-line actions: «استلام كلي» records the whole quantity now, «استلام
+ * جزئي» reveals the quantity fields and a «تنفيذ» that records them, «رفض»
+ * opens the reason picker. No separate confirm step.
+ */
+@Composable
+private fun ReceiptLineActions(
+    entry: ReceiptEntry,
+    submitting: Boolean,
+    expanded: Boolean,
+    onTogglePartial: () -> Unit,
+    onReceivedChange: (String) -> Unit,
+    onRejectedChange: (String) -> Unit,
+    onReasonChange: (String) -> Unit,
+    onReceiveFull: () -> Unit,
+    onReceivePartial: () -> Unit,
+    onReject: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            text = "أمر شراء ${entry.poNo}",
+            style = MaterialTheme.typography.bodySmall,
+            color = CortobaBrown,
+        )
+        Text(
+            text = "المتبقي: ${formatQty(entry.requiredQty)}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ReceiptActionButton(
+                text = "استلام كلي",
+                color = StatusGreen,
+                enabled = !submitting,
+                onClick = onReceiveFull,
+            )
+            ReceiptActionButton(
+                text = "استلام جزئي",
+                color = StatusBlue,
+                enabled = !submitting,
+                onClick = onTogglePartial,
+            )
+            ReceiptActionButton(
+                text = "رفض",
+                color = StatusAmber,
+                enabled = !submitting,
+                onClick = onReject,
+            )
+        }
+
+        if (expanded) {
+            Spacer(Modifier.height(8.dp))
+            ReceiptLineInput(
+                entry = entry,
+                poNo = entry.poNo,
+                onReceivedChange = onReceivedChange,
+                onRejectedChange = onRejectedChange,
+                onReasonChange = onReasonChange,
+            )
+            Spacer(Modifier.height(6.dp))
+            BrandActionButton(
+                text = "تنفيذ",
+                enabled = !submitting,
+                onClick = onReceivePartial,
+            )
+        }
+    }
+}
+
+/** A compact per-line action button. */
+@Composable
+private fun RowScope.ReceiptActionButton(
+    text: String,
+    color: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = color),
+        contentPadding = PaddingValues(horizontal = 4.dp),
+        modifier = Modifier.weight(1f),
+    ) {
+        Text(text, maxLines = 1, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
 @Composable
 private fun ReceiptLineInput(
     entry: ReceiptEntry,
@@ -645,110 +711,6 @@ private fun AllocationRow(allocation: PickupAllocation) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReceiptSummaryCard(summary: ReceiptSummary) {
-    CreamCard {
-        Column {
-            Text(
-                text = "ملخص الاستلام",
-                style = MaterialTheme.typography.titleMedium,
-                color = CortobaBrown,
-            )
-            InfoRow("عدد الأصناف", "${summary.distinctItems}")
-            InfoRow("إجمالي المطلوب", formatQty(summary.totalRequired))
-            InfoRow("إجمالي المستلم", formatQty(summary.totalReceived), emphasize = true)
-            InfoRow("الكميات المقبولة", formatQty(summary.totalAccepted))
-            InfoRow("الكميات التالفة", formatQty(summary.totalRejected))
-            InfoRow("الكميات الناقصة", formatQty(summary.totalMissing))
-        }
-    }
-}
-
-/** The outcome screen: online, queued offline, or an already-applied duplicate. */
-@Composable
-private fun ReceiptResultView(result: ReceiptSubmitResult, onDone: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        if (result.queuedOffline) {
-            Icon(Icons.Default.CloudOff, contentDescription = null, tint = StatusBlue, modifier = Modifier.height(64.dp))
-            Text(
-                text = "تم الحفظ محلياً",
-                style = MaterialTheme.typography.headlineSmall,
-                color = StatusBlue,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            Text(
-                text = "لا يوجد اتصال بالإنترنت. سيتم إرسال عملية الاستلام تلقائياً عند عودة الاتصال، " +
-                    "ولن تُعتمد رسمياً إلا بعد تأكيد الخادم.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Default.CloudDone,
-                contentDescription = null,
-                tint = if (result.partial) StatusAmber else StatusGreen,
-                modifier = Modifier.height(64.dp),
-            )
-            Text(
-                text = when {
-                    result.duplicate -> "تمت معالجة هذه العملية مسبقاً"
-                    result.partial -> "تم تسجيل استلام جزئي"
-                    else -> "تم تأكيد الاستلام"
-                },
-                style = MaterialTheme.typography.headlineSmall,
-                color = if (result.partial) StatusAmber else StatusGreen,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            Text(
-                text = if (result.partial) {
-                    "تم تسجيل الكميات المقبولة، وتبقى الكميات الناقصة على نفس المهمة " +
-                        "لإتمام استلامها في زيارة أخرى."
-                } else {
-                    "تم تسجيل الكميات المقبولة وأصبحت متاحة لتسليم العملاء."
-                },
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        CreamCard {
-            Column {
-                InfoRow("الكميات المقبولة", formatQty(result.acceptedQty), emphasize = true)
-                InfoRow("الكميات الناقصة", formatQty(result.missingQty))
-            }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        Button(
-            onClick = onDone,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = CortobaBrown,
-                contentColor = CortobaCream,
-            ),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null)
-                Text("تم", modifier = Modifier.padding(start = 8.dp))
             }
         }
     }
