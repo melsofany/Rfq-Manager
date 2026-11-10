@@ -209,122 +209,147 @@ class ReceiptFormSeedingTest {
     }
 
     /**
-     * A partial receipt is a success, not an error: the outstanding quantity
-     * stays on the same task for a later visit. The result the UI reads must say
-     * so, otherwise the rep sees a completed screen for unfinished work.
+     * A per-line action sends that line to the server at once. There is no
+     * separate confirm step, so the request must leave on the tap itself.
      */
     @Test
-    fun partialSubmissionIsReportedAsPartialAndKeepsTheShortfall() = runTest(dispatcher) {
+    fun receivingOneLineFullSendsItImmediately() = runTest(dispatcher) {
         enqueueJson(detailJson())
         val viewModel = PickupViewModel(repository)
-
         viewModel.loadDetail(7)
         awaitUntil { viewModel.form.value.entries.isNotEmpty() }
-        // Receive 4 of the 6 required units: 2 + 2 + 0.
-        viewModel.onReceivedQtyChange(101, "2")
+
+        enqueueJson("""{"success":true,"receiptIds":[1]}""")
+        viewModel.receiveLineFull(7, 101)
+        awaitUntil { server.requestCount >= 2 }
+
+        val confirm = takeConfirmRequest()
+        val body = confirm.body.readUtf8()
+        assertTrue("the line's own quantity must be sent", body.contains("\"receivedQty\":2"))
+        assertTrue("the PO line id must be sent", body.contains("\"poItemId\":101"))
+        assertTrue(
+            "a full receipt records the line as accepted",
+            body.contains("\"acceptedQty\":2"),
+        )
+    }
+
+    /** «رفض» on one line sends nothing received and the whole quantity rejected. */
+    @Test
+    fun rejectingOneLineSendsTheWholeQuantityAsRejectedWithTheReason() =
+        runTest(dispatcher) {
+            enqueueJson(detailJson())
+            val viewModel = PickupViewModel(repository)
+            viewModel.loadDetail(7)
+            awaitUntil { viewModel.form.value.entries.isNotEmpty() }
+
+            enqueueJson("""{"success":true,"receiptIds":[1]}""")
+            viewModel.onRejectionReasonChange(101, "تالف")
+            viewModel.rejectLine(7, 101)
+            awaitUntil { server.requestCount >= 2 }
+
+            val body = takeConfirmRequest().body.readUtf8()
+            assertTrue(body.contains("\"receivedQty\":0"))
+            assertTrue("the whole remaining quantity is rejected", body.contains("\"rejectedQty\":2"))
+            assertTrue("the reason is recorded", body.contains("تالف"))
+        }
+
+    /** A rejection without a reason must be refused before it reaches the wire. */
+    @Test
+    fun rejectingWithoutAReasonIsRefusedLocally() = runTest(dispatcher) {
+        enqueueJson(detailJson())
+        val viewModel = PickupViewModel(repository)
+        viewModel.loadDetail(7)
+        awaitUntil { viewModel.form.value.entries.isNotEmpty() }
+
+        val before = server.requestCount
+        viewModel.rejectLine(7, 101)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals("no request may leave without a reason", before, server.requestCount)
+        assertNotNull(viewModel.form.value.error)
+    }
+
+    /** «استلام جزئي» sends exactly the quantity the rep typed. */
+    @Test
+    fun partialReceiptSendsTheTypedQuantity() = runTest(dispatcher) {
+        enqueueJson(detailJson())
+        val viewModel = PickupViewModel(repository)
+        viewModel.loadDetail(7)
+        awaitUntil { viewModel.form.value.entries.isNotEmpty() }
+
+        enqueueJson("""{"success":true,"receiptIds":[1]}""")
         viewModel.onReceivedQtyChange(102, "2")
-        viewModel.onReceivedQtyChange(103, "0")
+        viewModel.receiveLinePartial(7, 102)
+        awaitUntil { server.requestCount >= 2 }
 
-        enqueueJson(
-            """{"success":true,"receiptIds":[1,2],"duplicate":false,"assignmentStatus":"partially_received"}""",
-        )
-        viewModel.submit(7)
-        awaitUntil { viewModel.form.value.result != null }
-
-        val result = viewModel.form.value.result
-        assertNotNull(result)
-        assertTrue("a partial receipt must report the shortfall", result!!.partial)
-        assertEquals(2.0, result.missingQty, 0.0001)
-        assertEquals(4.0, result.acceptedQty, 0.0001)
+        val body = takeConfirmRequest().body.readUtf8()
+        assertTrue(body.contains("\"poItemId\":102"))
+        assertTrue(body.contains("\"receivedQty\":2"))
     }
 
+    /** A quantity above the required one is refused before it reaches the wire. */
     @Test
-    fun fullSubmissionIsNotReportedAsPartial() = runTest(dispatcher) {
-        enqueueJson(detailJson())
-        val viewModel = PickupViewModel(repository)
-
-        viewModel.loadDetail(7)
-        awaitUntil { viewModel.form.value.entries.isNotEmpty() }
-        viewModel.onReceivedQtyChange(101, "2")
-        viewModel.onReceivedQtyChange(102, "3")
-        viewModel.onReceivedQtyChange(103, "1")
-
-        enqueueJson(
-            """{"success":true,"receiptIds":[1,2,3],"duplicate":false,"assignmentStatus":"received"}""",
-        )
-        viewModel.submit(7)
-        awaitUntil { viewModel.form.value.result != null }
-
-        val result = viewModel.form.value.result
-        assertNotNull(result)
-        assertTrue("a complete receipt must not be flagged partial", !result!!.partial)
-        assertEquals(0.0, result.missingQty, 0.0001)
-        assertEquals(6.0, result.acceptedQty, 0.0001)
-    }
-
-    /** «استلام الكل» fills every original PO line with its full quantity. */
-    @Test
-    fun receiveAllFillsEveryLineToItsFullRequiredQuantity() = runTest(dispatcher) {
+    fun overReceiptIsRefusedLocally() = runTest(dispatcher) {
         enqueueJson(detailJson())
         val viewModel = PickupViewModel(repository)
         viewModel.loadDetail(7)
         awaitUntil { viewModel.form.value.entries.isNotEmpty() }
 
-        viewModel.fillAllFullQuantity()
+        val before = server.requestCount
+        viewModel.onReceivedQtyChange(101, "99")
+        viewModel.receiveLinePartial(7, 101)
+        testScheduler.advanceUntilIdle()
 
-        val entries = viewModel.form.value.entries
-        assertEquals(listOf("2", "3", "1"), entries.map { it.receivedQty })
-        assertEquals(listOf("", "", ""), entries.map { it.rejectedQty })
+        assertEquals("an over-receipt must not reach the server", before, server.requestCount)
+        assertNotNull(viewModel.form.value.error)
     }
 
-    /** «رفض الكل» zeroes every line without rejecting anything. */
+    /** «استلام الكل» sends every line of the task in one submission. */
     @Test
-    fun rejectAllZeroesEveryLine() = runTest(dispatcher) {
+    fun receiveAllSendsEveryLine() = runTest(dispatcher) {
         enqueueJson(detailJson())
         val viewModel = PickupViewModel(repository)
         viewModel.loadDetail(7)
         awaitUntil { viewModel.form.value.entries.isNotEmpty() }
 
-        viewModel.fillAllFullQuantity()
-        viewModel.rejectAll()
+        enqueueJson("""{"success":true,"receiptIds":[1,2,3]}""")
+        viewModel.receiveAll(7)
+        awaitUntil { server.requestCount >= 2 }
 
-        val entries = viewModel.form.value.entries
-        assertEquals(listOf("0", "0", "0"), entries.map { it.receivedQty })
-        assertEquals(listOf("", "", ""), entries.map { it.rejectedQty })
+        val body = takeConfirmRequest().body.readUtf8()
+        assertTrue(body.contains("\"poItemId\":101"))
+        assertTrue(body.contains("\"poItemId\":102"))
+        assertTrue(body.contains("\"poItemId\":103"))
+    }
+
+    /** «رفض الكل» sends every line rejected with the one chosen reason. */
+    @Test
+    fun rejectAllSendsEveryLineRejected() = runTest(dispatcher) {
+        enqueueJson(detailJson())
+        val viewModel = PickupViewModel(repository)
+        viewModel.loadDetail(7)
+        awaitUntil { viewModel.form.value.entries.isNotEmpty() }
+
+        enqueueJson("""{"success":true,"receiptIds":[1,2,3]}""")
+        viewModel.rejectAll(7, "تالف")
+        awaitUntil { server.requestCount >= 2 }
+
+        val body = takeConfirmRequest().body.readUtf8()
+        assertTrue(body.contains("\"receivedQty\":0"))
+        assertTrue(body.contains("تالف"))
     }
 
     /**
-     * Damaged units are recorded but never counted as accepted, so a receipt
-     * that arrives short must still be reported as partial.
+     * The receipt endpoint is the one the app must reach; `takeConfirmRequest`
+     * filters the earlier GET out of the recorded traffic.
      */
-    @Test
-    fun damagedUnitsAreExcludedFromAcceptedAndCountAsMissing() = runTest(dispatcher) {
-        enqueueJson(detailJson())
-        val viewModel = PickupViewModel(repository)
-
-        viewModel.loadDetail(7)
-        awaitUntil { viewModel.form.value.entries.isNotEmpty() }
-        viewModel.onReceivedQtyChange(101, "2")
-        viewModel.onReceivedQtyChange(102, "3")
-        viewModel.onReceivedQtyChange(103, "1")
-        viewModel.onRejectedQtyChange(103, "1")
-
-        enqueueJson(
-            """{"success":true,"receiptIds":[1,2,3],"duplicate":false,"assignmentStatus":"partially_received"}""",
-        )
-        viewModel.submit(7)
-        awaitUntil { viewModel.form.value.result != null }
-
-        val result = viewModel.form.value.result
-        assertNotNull(result)
-        // The server marks the task partial because the damaged unit was never
-        // accepted, so the line still has an outstanding quantity.
-        assertTrue(result!!.partial)
-        assertEquals(5.0, result.acceptedQty, 0.0001)
-        // Per the specification "missing" is ordered-minus-RECEIVED (the units
-        // that never arrived); the damaged unit arrived and is reported through
-        // the damaged count instead. The task still stays open because accepted
-        // is below ordered — which is exactly what `partial` above captures.
-        assertEquals(0.0, result.missingQty, 0.0001)
+    private fun takeConfirmRequest(): okhttp3.mockwebserver.RecordedRequest {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < deadline) {
+            val request = server.takeRequest(1, java.util.concurrent.TimeUnit.SECONDS)
+            if (request == null) continue
+            if (request.path?.endsWith("/confirm") == true) return request
+        }
+        throw AssertionError("the confirm request never reached the server")
     }
 }

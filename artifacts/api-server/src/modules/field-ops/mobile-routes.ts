@@ -682,29 +682,15 @@ router.post("/pickups/:id/confirm", async (req, res): Promise<void> => {
   // Mark the assignment received and record the ACTUAL executor (which differs
   // from the responsible rep when the task was delegated).
   //
-  // A partial receipt must NOT close the task. If it did, the rep could never
-  // come back for the outstanding quantity — and the outstanding quantity is
-  // exactly what a second visit is for. It becomes PARTIALLY_RECEIVED and stays
-  // visible until every line in this submission is fully accepted.
-  //
-  // The check is scoped to the lines just submitted, not to the whole PO: an
-  // assignment covers one supplier line, so a sibling line still outstanding on
-  // the same PO must not keep this task open.
-  const lineStates = await db
-    .select({
-      id: purchaseOrderItemsTable.id,
-      qty: purchaseOrderItemsTable.qty,
-      accepted: purchaseOrderItemsTable.totalAcceptedQty,
-    })
-    .from(purchaseOrderItemsTable)
-    .where(
-      inArray(
-        purchaseOrderItemsTable.id,
-        prepared.map((p) => p.poItemId),
-      ),
-    );
-  const anyOutstanding = lineStates.some((l) =>
-    hasOutstandingQty(toNum(l.qty), toNum(l.accepted) ?? 0),
+  // The check covers EVERY line of this task, not just the lines in this
+  // submission. Now that each button confirms on its own, a rep can receive one
+  // line per tap — and the task must stay open until the last line is settled,
+  // or a tap on a single line would silently close work that is still owed.
+  // `buildPickupGroups(includeCompleted)` is the same source the list uses, so
+  // "closed" here and "hidden" there can never disagree.
+  const taskGroups = await buildPickupGroups([assignment.id], { includeCompleted: true });
+  const anyOutstanding = taskGroups.some((g) =>
+    g.allocations.some((a) => hasOutstandingQty(a.qty, a.acceptedQty)),
   );
   await db
     .update(workOrderAssignmentsTable)

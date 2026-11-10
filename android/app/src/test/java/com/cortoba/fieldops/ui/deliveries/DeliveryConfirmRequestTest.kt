@@ -156,20 +156,18 @@ class DeliveryConfirmRequestTest {
     }
 
     /**
-     * The rep must be able to confirm with quantities alone. While the recipient
-     * name was required, this submit returned early with «أدخل اسم المستلم» and
-     * never reached the server.
+     * «كلي» on one line must send that line to the server at once — there is no
+     * separate confirm step, so the request leaves on the tap itself.
      */
     @Test
-    fun submitSucceedsWithQuantitiesAloneAndReachesTheServer() = runTest(dispatcher) {
+    fun deliveringOneLineFullReachesTheServerImmediately() = runTest(dispatcher) {
         val viewModel = loadedViewModel()
         awaitUntil { viewModel.form.value.entries.isNotEmpty() }
         enqueueJson("""{"success":true,"deliveryIds":[1]}""")
 
-        viewModel.submitPo(4, null)
-        awaitUntil { viewModel.form.value.result != null }
+        viewModel.deliverLineFull(null, 501)
+        awaitUntil { server.requestCount >= 2 }
 
-        assertNotNull("a delivery with quantities alone must be accepted", viewModel.form.value.result)
         assertEquals("/api/mobile/deliveries/11/confirm", takeConfirmRequest().path)
     }
 
@@ -180,8 +178,8 @@ class DeliveryConfirmRequestTest {
         awaitUntil { viewModel.form.value.entries.isNotEmpty() }
         enqueueJson("""{"success":true,"deliveryIds":[1]}""")
 
-        viewModel.submitPo(4, null)
-        awaitUntil { viewModel.form.value.result != null }
+        viewModel.deliverLineFull(null, 501)
+        awaitUntil { server.requestCount >= 2 }
 
         val body = JSONObject(takeConfirmRequest().body.readUtf8())
         assertFalse(
@@ -191,6 +189,35 @@ class DeliveryConfirmRequestTest {
         // The quantities are still there — the removal must not have taken them.
         assertTrue(body.has("items"))
         assertTrue(body.has("clientUuid"))
+    }
+
+    /** «رفض» on one line sends nothing delivered and the reason. */
+    @Test
+    fun rejectingOneLineSendsTheReasonAtOnce() = runTest(dispatcher) {
+        val viewModel = loadedViewModel()
+        awaitUntil { viewModel.form.value.entries.isNotEmpty() }
+        enqueueJson("""{"success":true,"deliveryIds":[1]}""")
+
+        viewModel.setLineReason(501, "تالف")
+        viewModel.rejectLine(null, 501)
+        awaitUntil { server.requestCount >= 2 }
+
+        val body = JSONObject(takeConfirmRequest().body.readUtf8())
+        assertTrue("the rejection reason must be sent", body.toString().contains("تالف"))
+    }
+
+    /** A rejection with no reason must be refused before it reaches the wire. */
+    @Test
+    fun rejectingWithoutAReasonIsRefusedLocally() = runTest(dispatcher) {
+        val viewModel = loadedViewModel()
+        awaitUntil { viewModel.form.value.entries.isNotEmpty() }
+
+        val before = server.requestCount
+        viewModel.rejectLine(null, 501)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals("no request may leave without a reason", before, server.requestCount)
+        assertNotNull(viewModel.form.value.error)
     }
 
     /** The form exposes no recipient field for the screen to bind. */

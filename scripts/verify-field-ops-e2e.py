@@ -565,6 +565,77 @@ def main() -> int:
             check("the zero-quantity line records as rejected, not dropped",
                   rejected_row == "rejected", f"status={rejected_row}")
 
+    print("\n[12d] a one-line receipt keeps the task open for the other lines")
+    # Now that each button confirms on its own, a rep can receive one line per
+    # tap. The task must stay open until the LAST line of that task is settled —
+    # a single tap must not silently close work that is still owed.
+    one_po = sql(
+        "INSERT INTO purchase_orders (internal_po_no, sheet_po_no, status) "
+        "VALUES ('SPO-ONEBYONE', 'SPO-ONEBYONE', 'draft') RETURNING id;"
+    )
+    cpo_one = sql(
+        "INSERT INTO customer_pos (internal_po_no, customer_po_no, customer_name, status) "
+        "VALUES ('CPO-ONEBYONE', 'P26E-ONEBYONE', 'عميل واحد واحد', 'confirmed') RETURNING id;"
+    )
+    one_items = []
+    for idx4, label in enumerate(("بند أول", "بند ثان"), start=1):
+        cpi = sql(
+            f"INSERT INTO customer_po_items (customer_po_id, description, qty, uom) "
+            f"VALUES ({cpo_one}, '{label}', 3, 'قطعة') RETURNING id;"
+        )
+        item_id = sql(
+            f"INSERT INTO purchase_order_items "
+            f"(po_id, line_item, description, qty, uom, supplier_id, line_status, "
+            f" customer_po_item_id) "
+            f"VALUES ({one_po}, '{idx4}', '{label}', 3, 'قطعة', {supplier}, 'pending', "
+            f"{cpi}) RETURNING id;"
+        )
+        one_items.append(int(item_id))
+    # po_item_id = NULL: a whole-PO assignment, so this one card covers BOTH
+    # lines — the shape where a single tap must not close the task.
+    one_assignment = sql(
+        f"INSERT INTO work_order_assignments "
+        f"(po_id, po_item_id, kind, status, hr_employee_id, representative_name, "
+        f" representative_phone) "
+        f"VALUES ({one_po}, NULL, 'receipt', 'sent', {emp}, "
+        f"'مندوب اختبار', '201000000001') RETURNING id;"
+    )
+    # The task card must list BOTH lines so each can be received on its own.
+    status, p5 = api("GET", "/api/mobile/pickups", token)
+    one_task = next((t for t in p5.get("tasks", []) if t["poNo"] == "SPO-ONEBYONE"), None)
+    check("the two-line task appears as one supplier card", one_task is not None,
+          f"tasks={[t['poNo'] for t in p5.get('tasks', [])]}")
+
+    # Receive ONLY the first line.
+    status, body = api(
+        "POST", f"/api/mobile/pickups/{one_assignment}/confirm", token,
+        {"items": [{"poItemId": one_items[0], "receivedQty": 3}],
+         "clientUuid": "e2e-receipt-onebyone-1"})
+    check("receiving one line is accepted", status == 200, f"status={status} body={body}")
+    if status == 200:
+        check("the task stays open while the second line is outstanding",
+              body.get("assignmentStatus") == "partially_received",
+              f"assignmentStatus={body.get('assignmentStatus')}")
+        status, p6 = api("GET", "/api/mobile/pickups", token)
+        still_listed = any(t["poNo"] == "SPO-ONEBYONE" for t in p6.get("tasks", []))
+        check("the task is still on the list after only one line", still_listed,
+              f"tasks={[t['poNo'] for t in p6.get('tasks', [])]}")
+
+    # Now receive the second line: the task must close and drop off the list.
+    status, body = api(
+        "POST", f"/api/mobile/pickups/{one_assignment}/confirm", token,
+        {"items": [{"poItemId": one_items[1], "receivedQty": 3}],
+         "clientUuid": "e2e-receipt-onebyone-2"})
+    check("receiving the last line is accepted", status == 200, f"status={status} body={body}")
+    if status == 200:
+        check("the task closes once every line is settled",
+              body.get("assignmentStatus") == "received",
+              f"assignmentStatus={body.get('assignmentStatus')}")
+        status, p7 = api("GET", "/api/mobile/pickups", token)
+        gone = not any(t["poNo"] == "SPO-ONEBYONE" for t in p7.get("tasks", []))
+        check("the settled task leaves the list", gone,
+              f"tasks={[t['poNo'] for t in p7.get('tasks', [])]}")
+
     print("\n[13] maintenance mode freezes operations but not the account")
     sql(
         """
