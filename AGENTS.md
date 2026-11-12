@@ -4691,3 +4691,33 @@ Postgres حقيقي.
 - **الدرس**: عندما تعرض قائمة تجميعاً وتعرض شاشة التفاصيل عنصراً واحداً، اسأل
   «هل كلتاهما تجمّعان بنفس الطريقة؟» — هنا كانت القائمة تجمع والتفاصيل لا تجمع،
   فبدت القائمة سليمة والتفاصيل مكسورة.
+
+## Chatwoot is an agent console on an API channel — never a WhatsApp channel
+
+Replacing the hand-built `/whatsapp` page (2453 lines) with Chatwoot failed once
+before (PR #5 added it, PR #6 reverted) because Chatwoot's **WhatsApp channel**
+would take over the Meta webhook. That webhook (`/api/webhook/whatsapp`) is what
+drives RFQ sending, PO dispatch, the representative bot and the AI assistant —
+pointing Meta at Chatwoot silently breaks all of them.
+
+- **The webhook is the gateway; Chatwoot is a view.** Wire Chatwoot on an **API
+  inbox** and mirror in both directions: inbound (our webhook → Chatwoot),
+  outbound (our sends → Chatwoot), and agent replies (Chatwoot webhook → our
+  `sendWhatsAppText` → also recorded in `whatsapp_chats`). One conversation, one
+  source of truth.
+- **Never point Meta at Chatwoot.** `docs/CHATWOOT_INTEGRATION.md` previously
+  instructed exactly that ("stop the old webhook") — a doc that breaks sending.
+- **Mirroring must be best-effort.** Every Chatwoot call is wrapped; a Chatwoot
+  outage must never fail an inbound message or an RFQ/PO send.
+- **`private` notes are internal.** The agent-reply webhook must reject
+  `private: true` or the team's internal discussion is sent to the supplier. A
+  test caught this, not review — keep the guard and its test.
+- **Own-message dedup.** Chatwoot echoes every message we mirror back on its
+  webhook; `ownMessageIds` (bounded) stops us forwarding our own sends to
+  WhatsApp a second time.
+- **Unconfigured = today's behaviour exactly.** With no `CHATWOOT_*` vars
+  `/whatsapp` renders the built-in chat, and a Chatwoot outage shows a button
+  back to it. `/whatsapp-legacy` keeps the built-in page reachable.
+- **Hosting is a separate Rails stack** (web + Sidekiq + Postgres + Redis) and
+  cannot run on the Node service; ~$23/mo on Render, ~$6/mo on a VPS, or paid
+  Chatwoot Cloud. The code is safe to merge before hosting is decided.
