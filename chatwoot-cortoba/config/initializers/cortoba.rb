@@ -18,11 +18,46 @@
 # missing one column in its UI.
 require "cortoba"
 
+# Provision the attributes for an account as soon as it exists. The boot pass
+# below runs BEFORE the first account on a fresh database, so without this hook
+# a documented install ends up with no attributes at all (measured: the boot
+# pass returns [] and the console shows no RFQ/owner fields). Provisioning here
+# makes the attributes appear on the very first account, whatever the order of
+# the README steps.
+#
+# `to_prepare` (not `on_load(:active_record)`) is what makes this safe: the
+# model classes are autoloadable by then, and it re-runs on reload, so the guard
+# below keeps the callback from being registered twice.
+Rails.application.config.to_prepare do
+  next if Account.respond_to?(:cortoba_attribute_hook_installed)
+
+  Account.after_create_commit do
+    Cortoba::CustomAttributes.ensure!(self)
+    Rails.logger.info("[cortoba] attributes provisioned for account #{id}")
+  rescue StandardError => e
+    Rails.logger.warn("[cortoba] account #{id} attribute provisioning failed: #{e.class}: #{e.message}")
+  end
+
+  Account.define_singleton_method(:cortoba_attribute_hook_installed) { true }
+end
+
 Rails.application.config.after_initialize do
   next unless defined?(ActiveRecord::Base)
 
   begin
-    Cortoba::CustomAttributes.ensure!
+    created = Cortoba::CustomAttributes.ensure!
+    # An empty result is only normal when there is genuinely no account yet.
+    # Saying nothing there is how a fresh install looks configured while having
+    # no attributes — the operator then sees a supplier thread with no owner,
+    # which is the exact problem this integration exists to solve.
+    if created.empty?
+      Rails.logger.warn(
+        "[cortoba] no account yet — conversation attributes will be provisioned " \
+        "automatically when the first account is created"
+      )
+    else
+      Rails.logger.info("[cortoba] conversation attributes ready: #{created.map(&:attribute_key).join(', ')}")
+    end
   rescue StandardError => e
     Rails.logger.warn(
       "[cortoba] custom attributes not provisioned: #{e.class}: #{e.message}"

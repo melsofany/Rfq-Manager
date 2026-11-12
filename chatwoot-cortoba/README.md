@@ -30,12 +30,21 @@ cd chatwoot-cortoba
 cp .env.example .env          # then set POSTGRES_PASSWORD and SECRET_KEY_BASE
 docker compose up -d --build
 docker compose exec web bundle exec rails db:chatwoot_prepare   # first run only
-docker compose exec web bundle exec rails cortoba:attributes    # idempotent
 docker compose exec web bundle exec rails cortoba:selftest      # verifies the overlay
 ```
 
-Open <http://localhost:3000>. On a fresh database, create the first account in
-the browser; then the overlay's attributes appear on every conversation.
+Open <http://localhost:3000> and create the first account in the browser. The
+overlay's conversation attributes (`cortoba_rfq_no`, `cortoba_owner_name`) are
+provisioned **automatically when that account is created** — an account-creation
+hook does it, so there is nothing to run afterwards.
+
+`cortoba:attributes` exists for the case where the hook was missed (e.g. an
+account created while the overlay was not loaded). It refuses to run when no
+account exists yet rather than reporting success for doing nothing:
+
+```bash
+docker compose exec web bundle exec rails cortoba:attributes   # idempotent
+```
 
 | Service | Role |
 | --- | --- |

@@ -12,8 +12,13 @@
 namespace :cortoba do
   desc "Provision the Cortoba conversation custom attributes (idempotent)"
   task attributes: :environment do
-    created = Cortoba::CustomAttributes.ensure!
-    puts "[cortoba] attributes ready: #{created.map(&:attribute_key).join(', ')}"
+    account = Cortoba::Config.account
+    if account.nil?
+      abort "[cortoba] no account exists yet — create the first account in the browser, " \
+            "then run this task (or let the account-creation hook provision it automatically)"
+    end
+    created = Cortoba::CustomAttributes.ensure!(account)
+    puts "[cortoba] attributes ready for account #{account.id}: #{created.map(&:attribute_key).join(', ')}"
   end
 
   desc "Import one conversation thread from JSON on stdin (dry run unless FORCE=1)"

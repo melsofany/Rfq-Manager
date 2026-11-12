@@ -29,9 +29,17 @@ module Cortoba
 
     module_function
 
+    # @param account [Account, nil] target account; defaults to the first one.
+    #   Passing it explicitly is what lets the account-creation hook provision
+    #   for the account it just created, before any other account exists.
     # @return [Array<CustomAttributeDefinition>] the definitions, created or existing
-    def ensure!
-      account = Config.account
+    def ensure!(account = nil)
+      account ||= Config.account
+      # No account means nothing to attach to. Returning [] is correct, but the
+      # CALLER must say so: on a fresh database the boot pass runs before the
+      # first account exists, and a silent [] here is how a documented install
+      # ends up with no attributes and no error. See the initializer's warning
+      # and the Account hook that provisions on account creation.
       return [] unless account
 
       DEFINITIONS.filter_map do |spec|
