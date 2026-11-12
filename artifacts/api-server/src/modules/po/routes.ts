@@ -936,6 +936,7 @@ router.post("/po/:id/dispatch", requireAuth, async (req, res): Promise<void> => 
             phone: chatPhone,
             body: `[أمر شراء PDF: ${poNo}]`,
             supplierId,
+            employeeName: req.session?.employeeName ?? null,
           });
         } catch (saveErr) {
           req.log.error(

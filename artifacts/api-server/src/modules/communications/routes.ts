@@ -35,6 +35,8 @@ import {
   sendDeliveryRejectionReasonOptions,
   CUSTOMER_REJECTION_REASONS,
   formatQty as formatWaQty,
+  sendSupplierRequestPicker,
+  sendSupplierRequestConfirmed,
 } from "./service";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
@@ -45,7 +47,13 @@ const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50
 
 import { resolveCustomerPoLinks } from "../../shared/po-links";
 import { guardFor } from "../../shared/permissions";
-import { mirrorInboundMessage, mirrorOutboundMessage } from "../chatwoot/bridge";
+import {
+  mirrorInboundMessage,
+  mirrorOutboundMessage,
+  openPricingRequestsForSupplier,
+  pickRequestFromText,
+  supplierByPhone,
+} from "../chatwoot/bridge";
 
 const router = Router();
 router.use("/whatsapp", guardFor("/whatsapp"));
@@ -162,6 +170,9 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
     } else if (await handleRepMessage(from, msg)) {
       // Registered representative bot owns this message (text or rep_ menu).
       logger.info({ from }, "Representative bot message handled");
+    } else if (await handleSupplierRequestPick(from, msg)) {
+      // Supplier tapped a request button — the conversation is now filed there.
+      logger.info({ from }, "Supplier request pick handled");
     } else if (msg.type === "interactive" && (await handleWorkOrderButton(from, msg))) {
       logger.info({ from }, "Work-order interactive button handled");
     } else {
@@ -298,6 +309,8 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
       } else if (await handleRepMessage(from, message)) {
         // Registered representative bot owns this message (text or rep_ menu).
         logger.info({ from }, "Representative bot message handled");
+      } else if (await handleSupplierRequestPick(from, message)) {
+        logger.info({ from }, "Supplier request pick handled");
       } else if (message.type === "interactive" && (await handleWorkOrderButton(from, message))) {
         logger.info({ from }, "Work-order interactive button handled");
       } else {
@@ -983,6 +996,55 @@ async function repDeliveryItems(
 }
 
 /**
+ * Supplier request picker.
+ *
+ * A supplier with several open pricing requests sends a message we cannot
+ * attribute to one request. Rather than guess (a wrong guess files a price under
+ * the wrong request and the wrong employee), the bot shows their open requests
+ * as tappable buttons and the tap is what assigns the conversation.
+ *
+ * Returns true when the message was consumed by this flow, so the caller stops
+ * before the generic inbound handler.
+ */
+async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Promise<boolean> {
+  const payload = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id ?? "";
+  if (!payload.startsWith("rfq_pick:")) return false;
+
+  const rfqId = Number(payload.split(":")[1]);
+  if (!Number.isFinite(rfqId)) return false;
+
+  const supplier = await supplierByPhone(phone);
+  if (!supplier) {
+    await sendWhatsAppText(phone, "هذا الرقم غير مسجّل كمورد لدينا. تواصل مع الإدارة.");
+    return true;
+  }
+  // Re-read the open set: the request must still be open and belong to THIS
+  // supplier, or a stale button could file a reply against another supplier's
+  // request.
+  const open = await openPricingRequestsForSupplier(supplier.id);
+  const chosen = open.find((r) => r.rfqId === rfqId);
+  if (!chosen) {
+    await sendWhatsAppText(phone, "هذا الطلب لم يعد مفتوحاً. اختر من الطلبات الحالية.");
+    await sendSupplierRequestPicker(phone, open);
+    return true;
+  }
+
+  // Point the conversation at the chosen request so the reply that follows is
+  // filed there, and tell the supplier who is handling it.
+  await mirrorInboundMessage({
+    phone,
+    body: `[اختيار الطلب ${chosen.internalRfqNo}]`,
+    rfqId: chosen.rfqId,
+    supplierId: supplier.id,
+    employeeId: chosen.employeeId,
+    employeeName: chosen.employeeName,
+  });
+  await sendSupplierRequestConfirmed(phone, chosen.internalRfqNo, chosen.employeeName);
+  broadcastWaEvent({ type: "new_message", phone });
+  return true;
+}
+
+/**
  * Handle an inbound message from a registered representative. Returns true if
  * handled (rep bot owns the message), false to let it fall through to the
  * normal chat flow. Triggers on: any text, or a list_reply/button_reply with a
@@ -1637,12 +1699,50 @@ async function handleInboundMessage(
 
   // Mirror into the Chatwoot console so agents can read and reply. Best-effort:
   // a Chatwoot outage must never affect the inbound pipeline.
-  void mirrorInboundMessage({
-    phone,
-    body,
-    contactName: senderName ?? null,
-    supplierId: matchedSupplier?.id ?? null,
-  });
+  //
+  // The reply is filed under the REQUEST it answers, not just the phone: an
+  // explicit request number in the text wins, then a supplier with a single open
+  // request. With several open requests and no number given, the message is
+  // filed with no request context (rfqId 0) rather than guessed onto one — a
+  // wrong guess misfiles a price, which is worse than an unlabelled thread.
+  void (async () => {
+    const supplierId = matchedSupplier?.id ?? null;
+    let rfqId = 0;
+    let owner: { employeeId: number | null; employeeName: string | null } = {
+      employeeId: null,
+      employeeName: null,
+    };
+    let needsPick = false;
+    if (supplierId) {
+      const open = await openPricingRequestsForSupplier(supplierId);
+      const picked = pickRequestFromText(body, open);
+      if (!picked.ambiguous) {
+        rfqId = picked.rfqId;
+        const match = open.find((r) => r.rfqId === picked.rfqId);
+        owner = {
+          employeeId: match?.employeeId ?? null,
+          employeeName: match?.employeeName ?? null,
+        };
+      } else {
+        needsPick = open.length > 1;
+      }
+    }
+    await mirrorInboundMessage({
+      phone,
+      body,
+      rfqId,
+      contactName: senderName ?? null,
+      supplierId,
+      employeeId: owner.employeeId,
+      employeeName: owner.employeeName,
+    });
+    // Several open requests and no number given: ask which one instead of
+    // guessing. The reply lands in an unlabelled thread until they pick.
+    if (needsPick && supplierId) {
+      const open = await openPricingRequestsForSupplier(supplierId);
+      await sendSupplierRequestPicker(phone, open);
+    }
+  })();
 
   void reply;
 }

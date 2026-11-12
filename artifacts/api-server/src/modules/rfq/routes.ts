@@ -1197,8 +1197,11 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
           });
           void mirrorOutboundMessage({
             phone: normalizedPhone,
+            rfqId: rfqId,
             body: `[RFQ ${rfq.internalRfqNo}] تم إرسال طلب عرض السعر — ${pricingUrl}`,
             supplierId: supplier.id,
+            employeeId: employee?.id ?? null,
+            employeeName: employee?.name ?? null,
           });
         } catch (chatErr) {
           req.log.warn(

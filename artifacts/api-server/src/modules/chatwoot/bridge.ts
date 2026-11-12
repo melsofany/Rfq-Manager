@@ -15,8 +15,15 @@
  * Every function here is best-effort. A Chatwoot outage degrades the console; it
  * must never stop an RFQ from being sent or a supplier reply from being stored.
  */
-import { db, chatwootLinksTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import {
+  db,
+  chatwootLinksTable,
+  suppliersTable,
+  sentLogTable,
+  rfqTable,
+  employeesTable,
+} from "@workspace/db";
+import { and, eq, ne, ilike } from "drizzle-orm";
 import { logger } from "../../shared/logger";
 import {
   isChatwootConfigured,
@@ -49,48 +56,161 @@ export function isOwnChatwootMessage(id: number | undefined): boolean {
   return id != null && ownMessageIds.has(id);
 }
 
+/** Digits-only canonical phone, matching the form Meta sends. */
+export function canonicalPhone(phone: string): string {
+  let c = (phone || "").replace(/[^\d]/g, "");
+  if (c.startsWith("00")) c = c.slice(2);
+  if (c.length === 11 && c.startsWith("0")) c = "2" + c;
+  if (c.length === 10 && c.startsWith("1")) c = "20" + c;
+  return c;
+}
+
+export interface OpenRequest {
+  rfqId: number;
+  internalRfqNo: string;
+  employeeId: number | null;
+  employeeName: string | null;
+}
+
+/** Resolve the supplier behind a phone number, comparing canonical forms. */
+export async function supplierByPhone(phone: string): Promise<{
+  id: number;
+  name: string;
+  phone: string | null;
+} | null> {
+  const target = canonicalPhone(phone);
+  if (!target) return null;
+  const tail = target.slice(-9);
+  try {
+    const rows = await db
+      .select({ id: suppliersTable.id, name: suppliersTable.name, phone: suppliersTable.phone })
+      .from(suppliersTable)
+      .where(ilike(suppliersTable.phone, `%${tail}%`))
+      .limit(5);
+    return rows.find((r) => canonicalPhone(r.phone ?? "") === target) ?? null;
+  } catch (err) {
+    logger.warn({ err, phone }, "Chatwoot: supplier lookup by phone failed");
+    return null;
+  }
+}
+
+/**
+ * Open pricing requests for a supplier: sent to them, not yet answered, and not
+ * failed. This is the list the console bot offers as buttons, and what decides
+ * which conversation an inbound message belongs to.
+ */
+export async function openPricingRequestsForSupplier(supplierId: number): Promise<OpenRequest[]> {
+  try {
+    const rows = await db
+      .select({
+        rfqId: sentLogTable.rfqId,
+        internalRfqNo: rfqTable.internalRfqNo,
+        employeeId: sentLogTable.employeeId,
+        employeeName: employeesTable.name,
+      })
+      .from(sentLogTable)
+      .innerJoin(rfqTable, eq(sentLogTable.rfqId, rfqTable.id))
+      .leftJoin(employeesTable, eq(sentLogTable.employeeId, employeesTable.id))
+      .where(
+        and(
+          eq(sentLogTable.supplierId, supplierId),
+          eq(sentLogTable.offerSubmitted, false),
+          ne(rfqTable.status, "FAILED"),
+        ),
+      );
+    return rows.map((r) => ({
+      rfqId: r.rfqId,
+      internalRfqNo: r.internalRfqNo,
+      employeeId: r.employeeId ?? null,
+      employeeName: r.employeeName ?? null,
+    }));
+  } catch (err) {
+    logger.warn({ err, supplierId }, "Chatwoot: open-request lookup failed");
+    return [];
+  }
+}
+
+/**
+ * Decide which request an inbound supplier message answers.
+ *
+ * Order matters. An explicit request number in the text is authoritative — the
+ * supplier telling us which request they mean must never be overruled. Failing
+ * that, a supplier with exactly ONE open request is unambiguous. Anything else
+ * is ambiguous on purpose: the caller must ask rather than guess, because
+ * attributing a reply to the wrong request silently misfiles a price.
+ */
+export function pickRequestFromText(
+  text: string,
+  open: OpenRequest[],
+): { rfqId: number; ambiguous: false } | { rfqId: null; ambiguous: true } {
+  // Compare on alphanumerics only: a supplier retyping the number in WhatsApp
+  // drops the separators («RFQ 2026 000222» for «RFQ-2026-000222»), and a
+  // separator-sensitive match would miss the very reply naming its request.
+  const squeeze = (s: string) => (s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const norm = squeeze(text);
+  const explicit = open.find((r) => norm.includes(squeeze(r.internalRfqNo)));
+  if (explicit) return { rfqId: explicit.rfqId, ambiguous: false };
+  if (open.length === 1) return { rfqId: open[0].rfqId, ambiguous: false };
+  return { rfqId: null, ambiguous: true };
+}
+
 interface LinkRow {
+  id?: number;
   phone: string;
+  rfqId: number;
   contactId: number | null;
   conversationId: number | null;
   displayName: string | null;
   supplierId: number | null;
+  employeeId: number | null;
+  employeeName: string | null;
 }
 
-async function loadLink(phone: string): Promise<LinkRow | undefined> {
+async function loadLink(phone: string, rfqId: number): Promise<LinkRow | undefined> {
   const [row] = await db
     .select()
     .from(chatwootLinksTable)
-    .where(eq(chatwootLinksTable.phone, phone))
+    .where(and(eq(chatwootLinksTable.phone, phone), eq(chatwootLinksTable.rfqId, rfqId)))
     .limit(1);
   return row as LinkRow | undefined;
 }
 
 async function saveLink(link: LinkRow): Promise<void> {
+  const now = new Date();
   await db
     .insert(chatwootLinksTable)
-    .values({ ...link, updatedAt: new Date() })
+    .values({ ...link, updatedAt: now })
     .onConflictDoUpdate({
-      target: chatwootLinksTable.phone,
+      target: [chatwootLinksTable.phone, chatwootLinksTable.rfqId],
       set: {
         contactId: link.contactId,
         conversationId: link.conversationId,
         displayName: link.displayName,
         supplierId: link.supplierId,
-        updatedAt: new Date(),
+        employeeId: link.employeeId,
+        employeeName: link.employeeName,
+        updatedAt: now,
       },
     });
 }
 
 /**
  * Resolve (creating when needed) the Chatwoot contact + conversation for a
- * phone number. Returns null when Chatwoot is unconfigured or the inbox is
- * missing — the caller then simply skips mirroring.
+ * (phone, request) pair. Returns null when Chatwoot is unconfigured or the inbox
+ * is missing — the caller then simply skips mirroring.
+ *
+ * The CONTACT is per phone (one supplier), the CONVERSATION is per request, so
+ * each open request gets its own thread under the same contact.
  */
 async function ensureConversation(
   phone: string,
-  displayName?: string | null,
-  supplierId?: number | null,
+  rfqId: number,
+  opts: {
+    displayName?: string | null;
+    supplierId?: number | null;
+    employeeId?: number | null;
+    employeeName?: string | null;
+  } = {},
 ): Promise<LinkRow | null> {
   if (!isChatwootConfigured) return null;
   if (!process.env.CHATWOOT_INBOX_ID) {
@@ -98,11 +218,18 @@ async function ensureConversation(
     return null;
   }
 
-  const existing = await loadLink(phone);
+  const existing = await loadLink(phone, rfqId);
   if (existing?.conversationId && existing?.contactId) {
-    // Keep the name fresh when Meta sends a better one later.
-    if (displayName && displayName !== existing.displayName) {
-      const updated = { ...existing, displayName };
+    // Keep ownership/name fresh when a later send knows more than the first did.
+    const displayName = opts.displayName ?? existing.displayName;
+    const employeeId = opts.employeeId ?? existing.employeeId;
+    const employeeName = opts.employeeName ?? existing.employeeName;
+    if (
+      displayName !== existing.displayName ||
+      employeeId !== existing.employeeId ||
+      employeeName !== existing.employeeName
+    ) {
+      const updated = { ...existing, displayName, employeeId, employeeName };
       await saveLink(updated);
       return updated;
     }
@@ -112,7 +239,7 @@ async function ensureConversation(
   let contactId = existing?.contactId ?? null;
   if (!contactId) {
     const found = await findContactByPhone(phone);
-    contactId = found?.id ?? (await createContact(displayName || phone, phone))?.id ?? null;
+    contactId = found?.id ?? (await createContact(opts.displayName || phone, phone))?.id ?? null;
   }
   if (!contactId) return null;
 
@@ -125,10 +252,13 @@ async function ensureConversation(
 
   const link: LinkRow = {
     phone,
+    rfqId,
     contactId,
     conversationId,
-    displayName: displayName ?? existing?.displayName ?? null,
-    supplierId: supplierId ?? existing?.supplierId ?? null,
+    displayName: opts.displayName ?? existing?.displayName ?? null,
+    supplierId: opts.supplierId ?? existing?.supplierId ?? null,
+    employeeId: opts.employeeId ?? existing?.employeeId ?? null,
+    employeeName: opts.employeeName ?? existing?.employeeName ?? null,
   };
   await saveLink(link);
   return link;
@@ -138,11 +268,19 @@ async function ensureConversation(
 export async function mirrorInboundMessage(opts: {
   phone: string;
   body: string;
+  rfqId?: number | null;
   contactName?: string | null;
   supplierId?: number | null;
+  employeeId?: number | null;
+  employeeName?: string | null;
 }): Promise<void> {
   try {
-    const link = await ensureConversation(opts.phone, opts.contactName, opts.supplierId);
+    const link = await ensureConversation(opts.phone, opts.rfqId ?? 0, {
+      displayName: opts.contactName ?? null,
+      supplierId: opts.supplierId ?? null,
+      employeeId: opts.employeeId ?? null,
+      employeeName: opts.employeeName ?? null,
+    });
     if (!link?.conversationId) return;
     const msg = await createMessage(link.conversationId, opts.body, "incoming");
     rememberOwnMessage(msg?.id);
@@ -155,10 +293,17 @@ export async function mirrorInboundMessage(opts: {
 export async function mirrorOutboundMessage(opts: {
   phone: string;
   body: string;
+  rfqId?: number | null;
   supplierId?: number | null;
+  employeeId?: number | null;
+  employeeName?: string | null;
 }): Promise<void> {
   try {
-    const link = await ensureConversation(opts.phone, null, opts.supplierId);
+    const link = await ensureConversation(opts.phone, opts.rfqId ?? 0, {
+      supplierId: opts.supplierId ?? null,
+      employeeId: opts.employeeId ?? null,
+      employeeName: opts.employeeName ?? null,
+    });
     if (!link?.conversationId) return;
     const msg = await createMessage(link.conversationId, opts.body, "outgoing");
     rememberOwnMessage(msg?.id);

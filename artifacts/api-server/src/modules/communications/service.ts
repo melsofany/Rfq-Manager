@@ -1555,6 +1555,79 @@ export async function sendWhatsAppText(phone: string, text: string): Promise<str
   return result.messages?.[0]?.id ?? null;
 }
 
+/**
+ * Supplier request picker — the console bot's opening message.
+ *
+ * When a supplier messages us and their reply cannot be tied to a specific
+ * request, they are shown their OPEN requests as tappable buttons, each labelled
+ * with its number and the employee responsible for it. That label is the point:
+ * one supplier routinely has several requests open at once, and the request a
+ * reply belongs to is what decides whose conversation it lands in.
+ *
+ * WhatsApp caps ActionButtons at 3, so 3–9 requests use a list instead. The
+ * payload carries the request id so the reply is filed without a second guess.
+ */
+export async function sendSupplierRequestPicker(
+  phone: string,
+  requests: Array<{ rfqId: number; internalRfqNo: string; employeeName: string | null }>,
+): Promise<string | null> {
+  requireConfigured();
+  const to = normalizePhone(phone);
+  if (requests.length === 0) {
+    return sendWhatsAppText(phone, "لا توجد طلبات تسعير مفتوحة حالياً.");
+  }
+  const intro =
+    "أهلاً بكم في شركة قرطبة للتوريدات. من فضلك اختر طلب التسعير الذي ترغب في الرد عليه.";
+
+  if (requests.length <= 2) {
+    const buttons = requests.map(
+      (r) => new Button(`rfq_pick:${r.rfqId}`, r.internalRfqNo.slice(0, 20)),
+    );
+    const message =
+      buttons.length === 1
+        ? new Interactive(new ActionButtons(buttons[0]), new Body(intro))
+        : new Interactive(new ActionButtons(buttons[0], buttons[1]), new Body(intro));
+    const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+    if ("error" in result && result.error)
+      throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+    return result.messages?.[0]?.id ?? null;
+  }
+
+  const rows = requests
+    .slice(0, 9)
+    .map(
+      (r) =>
+        new Row(
+          `rfq_pick:${r.rfqId}`,
+          r.internalRfqNo,
+          r.employeeName ? `المسؤول: ${r.employeeName}` : "",
+        ),
+    );
+  const [first, ...rest] = rows;
+  const message = new Interactive(
+    new ActionList("اختر طلب التسعير", new ListSection("الطلبات المفتوحة", first, ...rest)),
+    new Body(intro),
+  );
+  const result = await Whatsapp.sendMessage(PHONE_NUMBER_ID, to, message);
+  if ("error" in result && result.error) {
+    throw new WhatsAppApiError(`WhatsApp API error: ${JSON.stringify(result.error)}`);
+  }
+  return result.messages?.[0]?.id ?? null;
+}
+
+/** Confirmation after a supplier picks a request from the picker. */
+export async function sendSupplierRequestConfirmed(
+  phone: string,
+  internalRfqNo: string,
+  employeeName: string | null,
+): Promise<string | null> {
+  const who = employeeName ? `\nالمسؤول عن الطلب: ${employeeName}` : "";
+  return sendWhatsAppText(
+    phone,
+    `تم اختيار طلب التسعير ${internalRfqNo}.${who}\nمن فضلك أرسل عرض السعر الآن وسيصل إلى المحادثة الصحيحة.`,
+  );
+}
+
 export async function markWhatsAppRead(messageId: string): Promise<void> {
   if (!isWhatsAppConfigured) return;
   try {
