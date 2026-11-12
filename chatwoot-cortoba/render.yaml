@@ -32,7 +32,10 @@ services:
     dockerfilePath: ./chatwoot-cortoba/Dockerfile
     dockerContext: ./chatwoot-cortoba
     region: oregon
-    plan: starter
+    # 1 CPU / 2 GB. NOT `starter` — that is a legacy alias for
+    # 0.5c-512mb, and Chatwoot's web process measures ~437 MB, which
+    # leaves no headroom on 512 MB (measured, not assumed).
+    plan: 1c-2g
     healthCheckPath: /health
     # `preDeployCommand` gates the deploy on a successful migration when Render
     # supports it on this service type. The design does NOT depend on it: the web
@@ -113,7 +116,10 @@ services:
     dockerfilePath: ./chatwoot-cortoba/Dockerfile
     dockerContext: ./chatwoot-cortoba
     region: oregon
-    plan: starter
+    # 1 CPU / 2 GB, same reason: the worker measured ~432-471 MB and
+    # does not shrink with SIDEKIQ_CONCURRENCY — the Rails baseline
+    # dominates.
+    plan: 1c-2g
     dockerCommand: sh /app/bin/entrypoint.sh worker
     envVars:
       - key: RAILS_ENV
@@ -157,6 +163,8 @@ services:
   - type: keyvalue
     name: cortoba-chatwoot-redis
     region: oregon
+    # Disk-backed persistence. The free 25 MB tier has none, so a restart would
+    # drop queued Sidekiq jobs.
     plan: 256mb
     # Sidekiq jobs must survive a restart; without persistence a queued webhook
     # is lost and the conversation it belonged to is never created.

@@ -230,10 +230,26 @@ unacceptable, and so would a migration of ours running against Chatwoot's.
 
 | Resource | Type | Plan | Why |
 | --- | --- | --- | --- |
-| `cortoba-chatwoot` | Web (Docker) | starter | Puma — console UI + REST API |
-| `cortoba-chatwoot-worker` | Worker (Docker) | starter | Sidekiq — webhooks, imports, jobs |
-| `cortoba-chatwoot-redis` | Key Value | starter | Sidekiq queue; persistence on |
-| `cortoba-chatwoot-db` | Postgres 16 | basic-256mb | Chatwoot's own data |
+| `cortoba-chatwoot` | Web (Docker) | `1c-2g` (1 CPU / 2 GB) | Puma — console UI + REST API |
+| `cortoba-chatwoot-worker` | Worker (Docker) | `1c-2g` (1 CPU / 2 GB) | Sidekiq — webhooks, imports, jobs |
+| `cortoba-chatwoot-redis` | Key Value | `256mb` | Sidekiq queue; disk-backed persistence |
+| `cortoba-chatwoot-db` | Postgres 16 | `basic-256mb` | Chatwoot's own data |
+
+**The plans are set from measured memory, and `starter` is deliberately avoided.**
+`starter` is a legacy alias for `0.5c-512mb` — 512 MB, not 2 GB:
+
+| CPU | RAM | Plan id | Legacy alias |
+| --- | --- | --- | --- |
+| 0.5 | 512 MB | `0.5c-512mb` | `starter` |
+| 1 | 2 GB | `1c-2g` | `standard` |
+
+Measured on the real image: the web process holds ~**437 MB** and the worker
+~**432–471 MB**, and the worker does *not* shrink with `SIDEKIQ_CONCURRENCY`
+(432 MB at 3, 471 MB at 10 — the Rails baseline dominates). On 512 MB that leaves
+tens of megabytes of headroom, which is how a service ends up in the OOM
+crash-loop this repository has already been through once. `1c-2g` gives ~4x.
+The blueprint uses the explicit ids rather than the aliases so the RAM is not a
+matter of interpretation.
 
 **`pgvector` is the requirement that decides whether this works at all.**
 Upstream `db/schema.rb` runs `enable_extension "vector"`, so a Postgres without
