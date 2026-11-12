@@ -1,0 +1,92 @@
+{
+  "PAGINATION_FOOTER": {
+    "SHOWING": "Mostrando {startItem} - {endItem} di {totalItems} elementi",
+    "CURRENT_PAGE_INFO": "{currentPage} di {totalPages} pagine"
+  },
+  "COMBOBOX": {
+    "PLACEHOLDER": "Seleziona un'opzione...",
+    "EMPTY_SEARCH_RESULTS": "Nessun elemento trovato per il termine di ricerca `{searchTerm}`",
+    "EMPTY_STATE": "Nessun risultato trovato.",
+    "SEARCH_PLACEHOLDER": "Cerca...",
+    "MORE": "+{count} altre"
+  },
+  "DROPDOWN_MENU": {
+    "SEARCH_PLACEHOLDER": "Cerca...",
+    "EMPTY_STATE": "Nessun risultato trovato.",
+    "SEARCHING": "Ricerca..."
+  },
+  "DIALOG": {
+    "BUTTONS": {
+      "CANCEL": "Annulla",
+      "CONFIRM": "Conferma"
+    }
+  },
+  "PHONE_INPUT": {
+    "SEARCH_PLACEHOLDER": "Cerca Paese",
+    "ERROR": "Il numero di telefono deve essere vuoto o in formato E.164",
+    "DIAL_CODE_ERROR": "Seleziona un codice di chiamata dalla lista"
+  },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "Autore non disponibile"
+    }
+  },
+  "BREADCRUMB": {
+    "ARIA_LABEL": "Breadcrumb"
+  },
+  "SWITCH": {
+    "TOGGLE": "Toggle switch"
+  },
+  "LABEL": {
+    "TAG_BUTTON": "tag"
+  },
+  "FEATURE_ANNOUNCEMENT": {
+    "BADGE": "Novità",
+    "DISMISS": "Got it",
+    "PREVIOUS": "Precedente",
+    "NEXT": "Successivo",
+    "DISMISS_HINT": "Premi {key} per chiudere",
+    "ESCAPE_KEY": "Esc",
+    "CLOSE": "Chiudi"
+  },
+  "FEATURE_SPOTLIGHT": {
+    "LEARN_MORE": "Scopri di più",
+    "WATCH_VIDEO": "Guarda video"
+  },
+  "DURATION_INPUT": {
+    "MINUTES": "Minuti",
+    "HOURS": "Ore",
+    "DAYS": "Giorni",
+    "PLACEHOLDER": "Inserisci durata"
+  },
+  "CHANNEL_SELECTOR": {
+    "COMING_SOON": "Coming Soon!"
+  },
+  "SLASH_COMMANDS": {
+    "HEADING_1": "Heading 1",
+    "HEADING_2": "Heading 2",
+    "HEADING_3": "Heading 3",
+    "BOLD": "Bold",
+    "ITALIC": "Italic",
+    "STRIKETHROUGH": "Strikethrough",
+    "CODE": "Code",
+    "BULLET_LIST": "Bullet List",
+    "ORDERED_LIST": "Ordered List",
+    "TABLE": "Table",
+    "IMAGE": "Immagine",
+    "VIDEO": "Video",
+    "DIVIDER": "Divisore"
+  },
+  "VIDEO_EMBED": {
+    "TAB_EMBED": "Link da incorporare",
+    "TAB_UPLOAD": "Carica",
+    "PLACEHOLDER": "Incolla il link di un video",
+    "HINT": "Funziona con i link di YouTube, Vimeo, Loom, Wistia, Arcade, Bunny, CodePen, GuideJar e mp4",
+    "ERROR": "Non sembra un link video supportato",
+    "UPLOAD_LABEL": "Scegli un file video",
+    "UPLOAD_HINT": "MP4 · fino a {size}MB · o trascinalo qui",
+    "UPLOAD_ERROR": "Si possono caricare solo file MP4",
+    "ADD": "Incorpora",
+    "CANCEL": "Annulla"
+  }
+}

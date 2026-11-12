@@ -1,0 +1,277 @@
+<script setup>
+import { computed } from 'vue';
+import { useToggle } from '@vueuse/core';
+import { useI18n } from 'vue-i18n';
+import { dynamicTime } from 'shared/helpers/timeHelper';
+import { useExactTimestamp } from 'shared/composables/useExactTimestamp';
+import { usePolicy } from 'dashboard/composables/usePolicy';
+import {
+  isSafeHttpLink,
+  formatDocumentLink,
+  getDocumentDisplayPath,
+} from 'shared/helpers/documentHelper';
+
+import Icon from 'dashboard/components-next/icon/Icon.vue';
+import CardLayout from 'dashboard/components-next/CardLayout.vue';
+import DropdownMenu from 'dashboard/components-next/dropdown-menu/DropdownMenu.vue';
+import Button from 'dashboard/components-next/button/Button.vue';
+import Checkbox from 'dashboard/components-next/checkbox/Checkbox.vue';
+import DocumentSyncStatus from 'dashboard/components-next/captain/assistant/DocumentSyncStatus.vue';
+
+const props = defineProps({
+  id: {
+    type: Number,
+    required: true,
+  },
+  name: {
+    type: String,
+    default: '',
+  },
+  assistant: {
+    type: Object,
+    default: () => ({}),
+  },
+  externalLink: {
+    type: String,
+    required: true,
+  },
+  pdfDocument: {
+    type: Boolean,
+    default: false,
+  },
+  markdownDocument: {
+    type: Boolean,
+    default: false,
+  },
+  syncable: {
+    type: Boolean,
+    default: true,
+  },
+  createdAt: {
+    type: Number,
+    required: true,
+  },
+  status: {
+    type: String,
+    default: null,
+  },
+  syncStatus: {
+    type: String,
+    default: null,
+  },
+  lastSyncedAt: {
+    type: Number,
+    default: null,
+  },
+  lastSyncErrorCode: {
+    type: String,
+    default: null,
+  },
+  syncInProgress: {
+    type: Boolean,
+    default: false,
+  },
+  syncStaleAfterHours: {
+    type: Number,
+    default: null,
+  },
+  responsesCount: {
+    type: Number,
+    default: 0,
+  },
+  isSelected: {
+    type: Boolean,
+    default: false,
+  },
+  selectable: {
+    type: Boolean,
+    default: false,
+  },
+  showSelectionControl: {
+    type: Boolean,
+    default: false,
+  },
+  showMenu: {
+    type: Boolean,
+    default: true,
+  },
+});
+
+const emit = defineEmits(['action', 'select', 'hover']);
+
+const exactTimestamp = useExactTimestamp();
+
+const { checkPermissions } = usePolicy();
+
+const { t } = useI18n();
+
+const [showActionsDropdown, toggleDropdown] = useToggle();
+const modelValue = computed({
+  get: () => props.isSelected,
+  set: () => emit('select', props.id),
+});
+
+const isPdf = computed(() => props.pdfDocument);
+const isMarkdown = computed(() => props.markdownDocument);
+const hasSafeLink = computed(() => isSafeHttpLink(props.externalLink));
+const canManage = computed(() => checkPermissions(['administrator']));
+const isAvailable = computed(() => props.status === 'available');
+const canSync = computed(
+  () => canManage.value && props.syncable && isAvailable.value
+);
+const isSyncing = computed(() => props.syncStatus === 'syncing');
+const isFailed = computed(() => props.syncStatus === 'failed');
+const isRetryableSync = computed(
+  () => isFailed.value || (isSyncing.value && !props.syncInProgress)
+);
+const showSyncStatus = computed(() => props.syncable);
+
+const menuItems = computed(() => {
+  const allOptions = [];
+
+  if (canSync.value) {
+    allOptions.push({
+      label: isRetryableSync.value
+        ? t('CAPTAIN.DOCUMENTS.OPTIONS.RETRY_SYNC')
+        : t('CAPTAIN.DOCUMENTS.OPTIONS.SYNC_NOW'),
+      value: 'sync',
+      action: 'sync',
+      icon: 'i-lucide-refresh-cw',
+    });
+  }
+
+  if (canManage.value) {
+    allOptions.push({
+      label: t('CAPTAIN.DOCUMENTS.OPTIONS.DELETE_DOCUMENT'),
+      value: 'delete',
+      action: 'delete',
+      icon: 'i-lucide-trash',
+    });
+  }
+
+  return allOptions;
+});
+
+const createdAtLabel = computed(() => dynamicTime(props.createdAt));
+const responsesCountLabel = computed(() =>
+  t('CAPTAIN.DOCUMENTS.FAQ_COUNT', { n: props.responsesCount })
+);
+const displayLink = computed(() => {
+  if (isMarkdown.value) return props.name;
+  if (isPdf.value) return formatDocumentLink(props.externalLink);
+
+  return getDocumentDisplayPath(props.externalLink);
+});
+const linkIcon = computed(() => {
+  if (isMarkdown.value) return 'i-lucide-file-text';
+  return isPdf.value ? 'i-ph-file-pdf' : 'i-ph-link-simple';
+});
+
+const handleAction = ({ action, value }) => {
+  toggleDropdown(false);
+  emit('action', { action, value, id: props.id });
+};
+
+const handleViewDetails = () => {
+  emit('action', { action: 'viewDetails', id: props.id });
+};
+
+const handleRetry = () => {
+  emit('action', { action: 'sync', id: props.id });
+};
+</script>
+
+<template>
+  <CardLayout
+    :selectable="selectable"
+    class="relative"
+    @mouseenter="emit('hover', true)"
+    @mouseleave="emit('hover', false)"
+  >
+    <div
+      v-show="showSelectionControl"
+      class="absolute top-7 ltr:left-3 rtl:right-3"
+    >
+      <Checkbox v-model="modelValue" />
+    </div>
+    <div class="flex gap-1 justify-between w-full">
+      <button
+        type="button"
+        class="p-0 text-base text-left bg-transparent border-0 outline-transparent text-n-slate-12 line-clamp-1 underline-offset-2 hover:underline focus-visible:underline"
+        @click="handleViewDetails"
+      >
+        {{ name }}
+      </button>
+      <div
+        v-if="showMenu && menuItems.length"
+        v-on-clickaway="() => toggleDropdown(false)"
+        class="flex relative items-center group"
+      >
+        <Button
+          icon="i-lucide-ellipsis-vertical"
+          color="slate"
+          size="xs"
+          class="rounded-md group-hover:bg-n-alpha-2"
+          @click="toggleDropdown()"
+        />
+        <DropdownMenu
+          v-if="showActionsDropdown"
+          :menu-items="menuItems"
+          class="top-full mt-1 ltr:right-0 rtl:left-0 xl:ltr:right-0 xl:rtl:left-0"
+          @action="handleAction($event)"
+        />
+      </div>
+    </div>
+    <div class="flex gap-4 justify-between items-center w-full">
+      <span
+        class="flex gap-1 items-center text-sm truncate shrink-0 text-n-slate-11"
+      >
+        <Icon icon="i-woot-captain" />
+        {{ assistant?.name || '' }}
+      </span>
+      <a
+        v-if="!isPdf && !isMarkdown && hasSafeLink"
+        :href="externalLink"
+        :title="externalLink"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="flex flex-1 gap-1 justify-start items-center text-sm truncate text-n-slate-11 hover:text-n-slate-12 hover:underline"
+        @click.stop
+      >
+        <Icon :icon="linkIcon" class="shrink-0" />
+        <span class="truncate">{{ displayLink }}</span>
+        <Icon icon="i-lucide-external-link size-3 shrink-0 opacity-70" />
+      </a>
+      <span
+        v-else
+        class="flex flex-1 gap-1 justify-start items-center text-sm truncate text-n-slate-11"
+      >
+        <Icon :icon="linkIcon" class="shrink-0" />
+        <span class="truncate">{{ displayLink }}</span>
+      </span>
+      <span class="text-sm shrink-0 text-n-slate-11">
+        {{ responsesCountLabel }}
+      </span>
+      <DocumentSyncStatus
+        v-if="showSyncStatus"
+        :status="syncStatus"
+        :last-synced-at="lastSyncedAt"
+        :error-code="lastSyncErrorCode"
+        :sync-in-progress="syncInProgress"
+        :stale-after-hours="syncStaleAfterHours"
+        :show-retry="canSync && isRetryableSync"
+        @retry="handleRetry"
+      />
+      <div
+        v-else
+        v-tooltip.top="{
+          content: exactTimestamp(createdAt),
+          delay: { show: 500, hide: 0 },
+        }"
+        class="text-sm shrink-0 text-n-slate-11 line-clamp-1"
+      >
+        {{ createdAtLabel }}
+      </div>
+    </div>
+  </CardLayout>
+</template>

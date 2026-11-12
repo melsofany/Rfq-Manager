@@ -1,0 +1,258 @@
+{
+  "AUTOMATION": {
+    "HEADER": "Otomasyon",
+    "DESCRIPTION": "Otomasyon, etiket ekleme veya konuşmaları en uygun temsilciye atama gibi manuel çaba gerektiren mevcut süreçleri kolaylaştırabilir ve onların yerine geçebilir. Bu sayede ekip, rutin işlere harcanan zamanı azaltarak güçlü yönlerine odaklanabilir.",
+    "LEARN_MORE": "Learn more about automation",
+    "COUNT": "{n} automation | {n} automations",
+    "HEADER_BTN_TXT": "Otomasyon Oluştur",
+    "LOADING": "Otomasyon kuralları getiriliyor",
+    "SEARCH_PLACEHOLDER": "Otomasyon kurallarını ara...",
+    "NO_RESULTS": "Aramanızla eşleşen otomasyon kuralı bulunamadı",
+    "ADD": {
+      "TITLE": "Otomasyon Kuralı Ekle",
+      "SUBMIT": "Oluştur",
+      "CANCEL_BUTTON_TEXT": "İptal Et",
+      "FORM": {
+        "NAME": {
+          "LABEL": "Kural Adı",
+          "PLACEHOLDER": "Kural ismi yazınız",
+          "ERROR": "İsim gereklidir"
+        },
+        "DESC": {
+          "LABEL": "Açıklama",
+          "PLACEHOLDER": "Kural açıklaması yazınız",
+          "ERROR": "Açıklama zorunludur"
+        },
+        "EVENT": {
+          "LABEL": "Olay",
+          "PLACEHOLDER": "Lütfen birini seçiniz",
+          "ERROR": "Olay seçilmelidir"
+        },
+        "MONITOR": {
+          "LABEL": "Monitor",
+          "PLACEHOLDER": "Select a live monitor",
+          "ERROR": "Select a live monitor",
+          "FETCH_FAILED": "Could not load monitors. Try again later.",
+          "API_UNAVAILABLE": "This monitor is no longer available. Select a live monitor and try again.",
+          "EMPTY": "No live monitors yet. Create or resume a monitor to use this event.",
+          "GO_TO_MONITORS": "Go to monitors",
+          "RETRY": "Tekrar dene",
+          "UNAVAILABLE": "Unavailable monitor",
+          "UNAVAILABLE_HELP": "This monitor is unavailable for automation. Select a live monitor to activate this rule.",
+          "HELP": "Runs once when the monitor first matches a conversation from new live activity. Historical scans do not trigger actions."
+        },
+        "RUN_TYPE": {
+          "LABEL": "When should this rule run?",
+          "OPTIONS": {
+            "INSTANT": {
+              "LABEL": "Run instantly",
+              "DESCRIPTION": "Koşullar uygun olduğu sürece, bir olay gerçekleştiği anda çalışır."
+            },
+            "WAIT": {
+              "LABEL": "Run after a wait",
+              "DESCRIPTION": "Waits for a set time and runs only if things are still the same. If they change, the rule is skipped."
+            }
+          }
+        },
+        "WAIT": {
+          "LABEL": "Bekleme koşulu",
+          "WHEN_LABEL": "When",
+          "STATUS_LABEL": "Status is",
+          "FOR_LABEL": "For",
+          "INBOX_LABEL": "Gelen Kutusu",
+          "ERROR": "The wait must be between 10 minutes and 30 days",
+          "OPTIONS": {
+            "CONVERSATION_STATUS": "Conversation stays in a status",
+            "CUSTOMER_UNRESPONSIVE": "Customer hasn't replied",
+            "AGENT_UNRESPONSIVE": "No teammate has replied"
+          },
+          "DURATION": {
+            "MINUTES": "{count} minute | {count} minutes",
+            "HOURS": "{count} hour | {count} hours",
+            "DAYS": "{count} day | {count} days"
+          },
+          "EXPLANATION": {
+            "CONVERSATION_STATUS": "The clock starts when a conversation moves into this status. If it is still there {duration} later, the actions below run. If the status changes before then, nothing happens.",
+            "CUSTOMER_UNRESPONSIVE": "The clock starts when a teammate replies. If the customer hasn't written back {duration} later, the actions below run. If they do reply, nothing happens, and the next teammate reply starts the clock again.",
+            "AGENT_UNRESPONSIVE": "The clock starts when a customer sends a message. If no teammate has replied {duration} later, the actions below run. If someone replies before then, nothing happens."
+          },
+          "FOOTNOTE": "Only new activity starts a clock. Conversations already sitting in this state are picked up the next time something happens on them."
+        },
+        "CONDITIONS": {
+          "LABEL": "Koşullar"
+        },
+        "ACTIONS": {
+          "LABEL": "Hareketler"
+        }
+      },
+      "CONDITION_BUTTON_LABEL": "Koşul Ekle",
+      "ACTION_BUTTON_LABEL": "Olay Ekle",
+      "API": {
+        "SUCCESS_MESSAGE": "Otomasyon kuralı başarıyla eklendi",
+        "ERROR_MESSAGE": "Otomasyon kuralı oluşturulamadı, lütfen daha sonra tekrar deneyin"
+      }
+    },
+    "LIST": {
+      "TABLE_HEADER": {
+        "NAME": "İsim",
+        "ACTIVE": "Aktif",
+        "CREATED_ON": "Oluşturma"
+      },
+      "404": "Otomasyon kuralı bulunamadı",
+      "404_DELAYED": "No rules run after a wait yet",
+      "TABS": {
+        "INSTANT": "Runs instantly",
+        "DELAYED": "Runs after a wait"
+      },
+      "DELAY_BADGE": "Runs after {delay}",
+      "MONITOR_PAUSED": "Monitor paused",
+      "MONITOR_DELETED": "Monitor deleted",
+      "MONITOR_UNAVAILABLE": "Monitor feature unavailable",
+      "DELAY_DISABLED_BANNER": "Delayed execution is turned off for this account, so the rules below that run after a wait are paused until it is turned back on."
+    },
+    "DELETE": {
+      "TITLE": "Otomasyon Kuralını Sil",
+      "SUBMIT": "Sil",
+      "CANCEL_BUTTON_TEXT": "İptal Et",
+      "CONFIRM": {
+        "TITLE": "Silmeyi onayla",
+        "MESSAGE": "Silmek istediğinize emin misiniz ?",
+        "YES": "Evet, Sil ",
+        "NO": "Hayır, Tut"
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Otomasyon kuralı başarıyla silindi",
+        "ERROR_MESSAGE": "Otomasyon kuralı silinemedi, lütfen daha sonra tekrar deneyin"
+      }
+    },
+    "EDIT": {
+      "TITLE": "Otomasyon Kuralını Düzenle",
+      "SUBMIT": "Güncelleme",
+      "CANCEL_BUTTON_TEXT": "İptal Et",
+      "API": {
+        "SUCCESS_MESSAGE": "Otomasyon kuralı başarıyla güncellendi",
+        "ERROR_MESSAGE": "Otomasyon kuralı güncellenemedi, lütfen daha sonra tekrar deneyin"
+      }
+    },
+    "CLONE": {
+      "TOOLTIP": "Kopyala",
+      "API": {
+        "SUCCESS_MESSAGE": "Otomasyon başarıyla kopyalandı",
+        "ERROR_MESSAGE": "Otomasyon kuralı kopyalanamadı, lütfen daha sonra tekrar deneyin"
+      }
+    },
+    "FORM": {
+      "EDIT": "Düzenle",
+      "CREATE": "Oluştur",
+      "DELETE": "Sil",
+      "CANCEL": "İptal Et",
+      "RESET_MESSAGE": "Olay seçimini değiştirmek tüm koşulları ve aşağıda eklenmiş etkinlikleri değiştirecektir"
+    },
+    "CONDITION": {
+      "DELETE_MESSAGE": "Kaydetmek için en az bir koşul eklemelisiniz",
+      "CONTACT_CUSTOM_ATTR_LABEL": "İletişim Özel Nitelikleri",
+      "CONVERSATION_CUSTOM_ATTR_LABEL": "Konuşma Özel Nitelikleri",
+      "PLACEHOLDERS": {
+        "CAPTAIN": "Describe what to look for, e.g. customer wants to cancel"
+      }
+    },
+    "ACTION": {
+      "DELETE_MESSAGE": "Kaydetmek için en az bir olay seçmelisiniz",
+      "TEAM_MESSAGE_INPUT_PLACEHOLDER": "Mesajınızı buraya yazınız",
+      "TEAM_DROPDOWN_PLACEHOLDER": "Takımları seçin",
+      "EMAIL_INPUT_PLACEHOLDER": "Enter email",
+      "URL_INPUT_PLACEHOLDER": "Enter URL",
+      "INSERT_CONTACT_EMAIL": "Use contact's email"
+    },
+    "TOGGLE": {
+      "ACTIVATION_TITLE": "Otomasyon Kuralını Etkinleştir",
+      "DEACTIVATION_TITLE": "Otomasyon Kuralını Pasifleştir",
+      "ACTIVATION_DESCRIPTION": "'{automationName}' isimli otomasyon kuralı etkinleştirilecek. Devam etmek istiyor musunuz?",
+      "DEACTIVATION_DESCRIPTION": "'{automationName}' isimli otomasyon kuralı pasifleştirilecek. Devam etmek istiyor musunuz?",
+      "ACTIVATION_SUCCESFUL": "Otomasyon Kuralı Başarıyla Etkinleştirildi",
+      "DEACTIVATION_SUCCESFUL": "Otomasyon Kuralı Başarıyla Pasifleştirildi",
+      "ACTIVATION_ERROR": "Otomasyon Kuralı Aktifleştirilemedi, Lütfen daha sonra tekrar deneyin",
+      "DEACTIVATION_ERROR": "Otomasyon Kuralı Pasifleştirilemedi, Lütfen daha sonra tekrar deneyin",
+      "CONFIRMATION_LABEL": "Evet",
+      "CANCEL_LABEL": "Hayır"
+    },
+    "ATTACHMENT": {
+      "UPLOAD_ERROR": "Ek yüklenemedi, Tekrar deneyin",
+      "LABEL_IDLE": "Dosya Yükle",
+      "LABEL_UPLOADING": "Yükleniyor ...",
+      "LABEL_UPLOADED": "Başarıyla Yüklendi",
+      "LABEL_UPLOAD_FAILED": "Yükleme Başarısız"
+    },
+    "ERRORS": {
+      "ATTRIBUTE_KEY_REQUIRED": "Attribute key is required",
+      "FILTER_OPERATOR_REQUIRED": "Filter operator is required",
+      "VALUE_REQUIRED": "Değer gereklidir",
+      "VALUE_MUST_BE_BETWEEN_1_AND_998": "Değer 1 ile 998 arasında olmalıdır",
+      "ACTION_PARAMETERS_REQUIRED": "Eylem parametreleri gereklidir",
+      "ATLEAST_ONE_CONDITION_REQUIRED": "At least one condition is required",
+      "ATLEAST_ONE_ACTION_REQUIRED": "At least one action is required"
+    },
+    "NONE_OPTION": "Hiç",
+    "LAST_RESPONDING_AGENT": "Last Responding Agent",
+    "EVENTS": {
+      "CONVERSATION_CREATED": "Sohbet Oluşturuldu",
+      "CONVERSATION_UPDATED": "Sohbet Güncellendi",
+      "MESSAGE_CREATED": "Mesaj Oluşturuldu",
+      "CONVERSATION_RESOLVED": "Konuşma Çözüldü",
+      "CONVERSATION_OPENED": "Sohbet Açıldı",
+      "MONITOR_MATCHED": "Monitor Matched"
+    },
+    "ACTIONS": {
+      "ASSIGN_AGENT": "Temsilciye Ata",
+      "ASSIGN_TEAM": "Bir Ekibe Ata",
+      "REMOVE_ASSIGNED_AGENT": "Remove Assigned Agent",
+      "REMOVE_ASSIGNED_TEAM": "Atanan Ekibi Kaldır",
+      "ADD_LABEL": "Etiket Ekle",
+      "REMOVE_LABEL": "Etiketi Kaldır",
+      "SEND_EMAIL_TO_TEAM": "Ekibe E-posta Gönder",
+      "SEND_EMAIL_TRANSCRIPT": "E-posta Dökümü Gönder",
+      "MUTE_CONVERSATION": "Konuşmayı Sessize Al",
+      "SNOOZE_CONVERSATION": "Konuşmayı Ertele",
+      "RESOLVE_CONVERSATION": "Görüşmeyi çöz",
+      "SEND_WEBHOOK_EVENT": "Webhook Olayı Gönder",
+      "SEND_ATTACHMENT": "Ek Gönder",
+      "SEND_MESSAGE": "Mesaj Gönder",
+      "ADD_PRIVATE_NOTE": "Özel Not Ekle",
+      "CHANGE_PRIORITY": "Önceliği Değiştir",
+      "ADD_SLA": "Add SLA",
+      "OPEN_CONVERSATION": "Görüşmeyi aç",
+      "PENDING_CONVERSATION": "Mark conversation as pending"
+    },
+    "MESSAGE_TYPES": {
+      "INCOMING": "Gelen Mesaj",
+      "OUTGOING": "Giden Mesaj"
+    },
+    "PRIORITY_TYPES": {
+      "NONE": "Hiç",
+      "LOW": "Düşük",
+      "MEDIUM": "Orta",
+      "HIGH": "Yüksek",
+      "URGENT": "Acil"
+    },
+    "ATTRIBUTES": {
+      "MESSAGE_TYPE": "Mesaj Türü",
+      "PRIVATE_NOTE": "Özel Not",
+      "MESSAGE_CONTAINS": "Message Content",
+      "EMAIL": "E-Posta",
+      "INBOX": "Gelen Kutusu",
+      "CONVERSATION_LANGUAGE": "Sohbet Dili",
+      "PHONE_NUMBER": "Telefon Numarası",
+      "STATUS": "Durum",
+      "BROWSER_LANGUAGE": "Tarayıcı Dili",
+      "MAIL_SUBJECT": "E-posta Konusu",
+      "COUNTRY_NAME": "Ülke",
+      "COMPANY_NAME": "Şirket",
+      "REFERER_LINK": "Yönlendiren Bağlantı",
+      "ASSIGNEE_NAME": "Assignee",
+      "TEAM_NAME": "Ekip",
+      "PRIORITY": "Öncelik",
+      "LABELS": "Etiketler",
+      "CAPTAIN": "Captain"
+    }
+  }
+}

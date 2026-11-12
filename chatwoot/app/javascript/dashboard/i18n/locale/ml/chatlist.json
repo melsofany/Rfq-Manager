@@ -1,0 +1,148 @@
+{
+  "CHAT_LIST": {
+    "LOADING": "സംഭാഷണങ്ങൾ ലഭ്യമാക്കുന്നു",
+    "LOAD_MORE_CONVERSATIONS": "കൂടുതൽ സംഭാഷണങ്ങൾ ലോഡുചെയ്യുക",
+    "EOF": "എല്ലാ സംഭാഷണങ്ങളും ലോഡുചെയ്തു 🎉",
+    "LIST": {
+      "404": "ഈ ഗ്രൂപ്പിൽ സജീവ സംഭാഷണങ്ങളൊന്നുമില്ല."
+    },
+    "FAILED_TO_SEND": "Failed to send",
+    "FETCH_ERROR": "Couldn't load conversations. Please try again.",
+    "TAB_HEADING": "സംഭാഷണങ്ങൾ",
+    "MENTION_HEADING": "പരാമർശിക്കുന്നു",
+    "UNATTENDED_HEADING": "Unattended",
+    "SEARCH": {
+      "INPUT": "ആളുകൾ, ചാറ്റുകൾ, ക്യാൻഡ് മറുപടികൾ എന്നിവയ്ക്കായി തിരയുക .."
+    },
+    "FILTER_ALL": "എല്ലാം",
+    "ASSIGNEE_TYPE_TABS": {
+      "me": "എന്റേത്",
+      "unassigned": "നിയുക്തമാക്കാത്തത്",
+      "all": "എല്ലാം"
+    },
+    "CHAT_STATUS_FILTER_ITEMS": {
+      "open": {
+        "TEXT": "സജീവം"
+      },
+      "resolved": {
+        "TEXT": "പരിഹരിച്ചത്"
+      },
+      "pending": {
+        "TEXT": "കെട്ടിക്കിടക്കുന്നു"
+      },
+      "snoozed": {
+        "TEXT": "സ്‌നൂസ് ചെയ്തു"
+      },
+      "all": {
+        "TEXT": "എല്ലാം"
+      }
+    },
+    "VIEW_FILTER": "കാണുക",
+    "SORT_TOOLTIP_LABEL": "Sort conversations",
+    "CHAT_SORT": {
+      "STATUS": "സ്റ്റാറ്റസ്",
+      "ORDER_BY": "Order by"
+    },
+    "CHAT_TIME_STAMP": {
+      "CREATED": {
+        "OLDEST": "Created at:"
+      },
+      "LAST_ACTIVITY": {
+        "NOT_ACTIVE": "Last activity:"
+      }
+    },
+    "SORT_ORDER_ITEMS": {
+      "last_activity_at_asc": {
+        "TEXT": "Last activity: Oldest first"
+      },
+      "last_activity_at_desc": {
+        "TEXT": "Last activity: Newest first"
+      },
+      "created_at_desc": {
+        "TEXT": "Created at: Newest first"
+      },
+      "created_at_asc": {
+        "TEXT": "Created at: Oldest first"
+      },
+      "priority_desc": {
+        "TEXT": "Priority: Highest first"
+      },
+      "priority_asc": {
+        "TEXT": "Priority: Lowest first"
+      },
+      "waiting_since_asc": {
+        "TEXT": "Pending Response: Longest first"
+      },
+      "waiting_since_desc": {
+        "TEXT": "Pending Response: Shortest first"
+      },
+      "priority_desc_created_at_asc": {
+        "TEXT": "Priority: Highest first, Created: Oldest first"
+      },
+      "unread": {
+        "TEXT": "Unread Count: Highest first"
+      }
+    },
+    "ATTACHMENTS": {
+      "image": {
+        "CONTENT": "ചിത്ര സന്ദേശം"
+      },
+      "audio": {
+        "CONTENT": "ഓഡിയോ സന്ദേശം"
+      },
+      "video": {
+        "CONTENT": "വീഡിയോ സന്ദേശം"
+      },
+      "file": {
+        "CONTENT": "ഫയൽ അറ്റാച്ചുമെന്റ്"
+      },
+      "location": {
+        "CONTENT": "സ്ഥാനം"
+      },
+      "ig_reel": {
+        "CONTENT": "Instagram Reel"
+      },
+      "fallback": {
+        "CONTENT": "ഒരു യു. ആർ. എൽ പങ്കിട്ടു"
+      },
+      "contact": {
+        "CONTENT": "Shared contact"
+      },
+      "embed": {
+        "CONTENT": "Embedded content"
+      }
+    },
+    "CHAT_SORT_BY_FILTER": {
+      "TITLE": "Sort conversation",
+      "DROPDOWN_TITLE": "Sort by",
+      "ITEMS": {
+        "LATEST": {
+          "NAME": "Last activity at",
+          "LABEL": "Last activity"
+        },
+        "CREATED_AT": {
+          "NAME": "എന്ന സ്ഥലത്ത് സൃഷ്ടിച്ചു",
+          "LABEL": "എന്ന സ്ഥലത്ത് സൃഷ്ടിച്ചു"
+        },
+        "LAST_USER_MESSAGE_AT": {
+          "NAME": "Last user message at",
+          "LABEL": "Last message"
+        }
+      }
+    },
+    "RECEIVED_VIA_EMAIL": "ഇമെയിൽ വഴി ലഭിച്ചു",
+    "VIEW_TWEET_IN_TWITTER": "ട്വിറ്ററിൽ ട്വീറ്റ് കാണുക",
+    "REPLY_TO_TWEET": "ഈ ട്വീറ്റിന് മറുപടി നൽകുക",
+    "LINK_TO_STORY": "Go to instagram story",
+    "SENT": "വിജയകരമായി അയച്ചു",
+    "READ": "Read successfully",
+    "DELIVERED": "Delivered successfully",
+    "NO_MESSAGES": "സന്ദേശങ്ങളൊന്നുമില്ല",
+    "NO_CONTENT": "ഉള്ളടക്കമൊന്നും ലഭ്യമല്ല",
+    "HIDE_QUOTED_TEXT": "ഉദ്ധരിച്ച വാചകം മറയ്ക്കുക",
+    "SHOW_QUOTED_TEXT": "ഉദ്ധരിച്ച വാചകം കാണിക്കുക",
+    "MESSAGE_READ": "Read",
+    "SENDING": "Sending",
+    "UNREAD_COUNT_OVERFLOW": "9+"
+  }
+}

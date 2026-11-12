@@ -1,0 +1,24 @@
+{
+  "DATE_PICKER": {
+    "PREVIOUS_PERIOD": "Previous period",
+    "NEXT_PERIOD": "Next period",
+    "WEEK_NUMBER": "Week #{weekNumber}",
+    "APPLY_BUTTON": "Použiť",
+    "CLEAR_BUTTON": "Clear",
+    "DATE_RANGE_INPUT": {
+      "START": "Start Date",
+      "END": "End Date"
+    },
+    "DATE_RANGE_OPTIONS": {
+      "TITLE": "DATE RANGE",
+      "LAST_7_DAYS": "Posledných 7 dní",
+      "LAST_30_DAYS": "Posledných 30 dní",
+      "LAST_3_MONTHS": "Posledné 3 mesiace",
+      "LAST_6_MONTHS": "Posledných 6 mesiacov",
+      "LAST_YEAR": "Posledný rok",
+      "THIS_WEEK": "This week",
+      "MONTH_TO_DATE": "This month",
+      "CUSTOM_RANGE": "Vlastný rozsah dátumov"
+    }
+  }
+}

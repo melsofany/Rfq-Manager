@@ -17,6 +17,11 @@ export default tseslint.config(
       ".agents/**",
       "pnpm-lock.yaml",
       "eslint.config.mjs",
+      // Vendored upstream Chatwoot (Ruby/Vue) and our Ruby overlay onto it are
+      // not part of this JS/TS workspace — they are built and linted by their
+      // own toolchain inside the Chatwoot image.
+      "chatwoot/**",
+      "chatwoot-cortoba/**",
     ],
   },
 

@@ -1,0 +1,271 @@
+<script setup>
+import { computed, useTemplateRef } from 'vue';
+import { getLastMessage } from 'dashboard/helper/conversationHelper';
+import CardAvatar from './CardAvatar.vue';
+import CardContent from './CardContent.vue';
+import CardLabels from './CardLabelsV5.vue';
+import CardPriorityIcon from './CardPriorityIcon.vue';
+import InboxName from 'dashboard/components-next/Conversation/InboxName.vue';
+import Avatar from 'next/avatar/Avatar.vue';
+import TimeAgo from 'dashboard/components/ui/TimeAgo.vue';
+import SLACardLabel from 'dashboard/components-next/Conversation/Sla/SLACardLabel.vue';
+import CardStatusIcon from './CardStatusIcon.vue';
+import Checkbox from 'dashboard/components-next/checkbox/Checkbox.vue';
+import Icon from 'dashboard/components-next/icon/Icon.vue';
+
+const props = defineProps({
+  chat: { type: Object, required: true },
+  currentContact: { type: Object, required: true },
+  assignee: { type: Object, default: () => ({}) },
+  inbox: { type: Object, default: () => ({}) },
+  selected: { type: Boolean, default: false },
+  isActiveChat: { type: Boolean, default: false },
+  showAssignee: { type: Boolean, default: false },
+  showInboxName: { type: Boolean, default: false },
+  isInboxView: { type: Boolean, default: false },
+  selectable: { type: Boolean, default: true },
+  conversationFirst: { type: Boolean, default: false },
+});
+
+const emit = defineEmits([
+  'selectConversation',
+  'deSelectConversation',
+  'click',
+  'contextmenu',
+]);
+const CONVERSATION_FIRST_ORDER = {
+  id: 'order-1 max-lg:w-auto',
+  avatar: 'order-2',
+  name: 'order-3 max-lg:basis-12 max-lg:grow max-lg:max-w-32',
+  dividerAfterName: 'order-4',
+  priority: 'order-5',
+  assignee: 'order-6',
+  status: 'order-7',
+  // Below lg this divider is the line break that moves the message to a second line.
+  time: 'max-lg:order-7 max-lg:ms-auto',
+  dividerAfterStatus: 'order-8 max-lg:basis-full max-lg:h-0',
+  content: 'order-9 max-lg:flex-1 max-lg:min-w-0',
+  labels: 'max-lg:order-9 max-lg:w-24',
+  sla: 'max-lg:order-9',
+  dividerBeforeInbox: 'order-10 ms-auto max-lg:hidden',
+  inbox: 'order-11 max-lg:hidden',
+};
+const CONVERSATION_FIRST_DIVIDERS = [
+  'dividerAfterName',
+  'dividerAfterStatus',
+  'dividerBeforeInbox',
+];
+const orderClass = key =>
+  props.conversationFirst ? CONVERSATION_FIRST_ORDER[key] : undefined;
+
+const lastMessageInChat = computed(() => getLastMessage(props.chat));
+const showLabelsSection = computed(() => props.chat.labels?.length > 0);
+
+const voiceCallData = computed(() => {
+  const last = lastMessageInChat.value;
+  if (last?.content_type !== 'voice_call' || !last.call) {
+    return { status: null, direction: null };
+  }
+  return {
+    status: last.call.status,
+    direction: last.call.direction === 'outgoing' ? 'outbound' : 'inbound',
+  };
+});
+
+const unreadCount = computed(() => props.chat.unread_count);
+
+const slaCardLabel = useTemplateRef('slaCardLabel');
+
+const hasSlaPolicyId = computed(
+  () =>
+    !props.currentContact?.blocked &&
+    (props.chat?.applied_sla?.id || slaCardLabel.value?.hasSlaThreshold)
+);
+
+const selectedModel = computed({
+  get: () => props.selected,
+  set: value => {
+    if (value) {
+      emit('selectConversation', value);
+    } else {
+      emit('deSelectConversation', value);
+    }
+  },
+});
+</script>
+
+<template>
+  <div
+    class="conversation relative cursor-pointer group grid gap-4 items-center px-3 h-12 border-b border-n-slate-3 hover:border-n-surface-1 hover:z-[1] before:content-[none] before:absolute before:-top-px before:inset-x-0 before:h-px before:bg-n-surface-1 before:pointer-events-none hover:before:content-['']"
+    :class="{
+      'active animate-card-select bg-n-alpha-1 dark:bg-n-alpha-3 !border-n-surface-1':
+        isActiveChat,
+      'selected bg-n-slate-2 dark:bg-n-slate-3 !border-n-surface-1': selected,
+      'hover:bg-n-alpha-1': !isActiveChat && !selected,
+      'grid-cols-[minmax(0,2fr)_minmax(0,1fr)]': showLabelsSection,
+      'grid-cols-[minmax(0,2fr)_max-content]': !showLabelsSection,
+      'max-lg:flex max-lg:flex-wrap max-lg:gap-x-2 max-lg:gap-y-1 max-lg:h-auto max-lg:py-2.5':
+        conversationFirst,
+    }"
+    @click="$emit('click', $event)"
+    @contextmenu="$emit('contextmenu', $event)"
+  >
+    <!-- LEFT SECTION -->
+    <div
+      class="flex items-center gap-2 min-w-0 flex-1"
+      :class="{ 'max-lg:contents': conversationFirst }"
+    >
+      <template v-if="conversationFirst">
+        <div
+          v-for="divider in CONVERSATION_FIRST_DIVIDERS"
+          :key="divider"
+          class="w-px h-3 bg-n-slate-6 flex-shrink-0"
+          :class="orderClass(divider)"
+        />
+      </template>
+      <div
+        v-if="selectable"
+        class="flex items-center justify-center flex-shrink-0"
+        @click.stop
+      >
+        <Checkbox v-model="selectedModel" />
+      </div>
+
+      <div v-if="selectable" class="w-px h-3 bg-n-slate-6 flex-shrink-0" />
+
+      <div
+        class="w-4 flex items-center justify-center flex-shrink-0"
+        :class="orderClass('priority')"
+      >
+        <CardPriorityIcon :priority="chat.priority" show-empty />
+      </div>
+
+      <div
+        class="w-4 flex items-center justify-center flex-shrink-0"
+        :class="orderClass('assignee')"
+      >
+        <Avatar
+          v-if="showAssignee && assignee.name"
+          v-tooltip.top="{
+            content: assignee.name,
+            delay: { show: 500, hide: 0 },
+          }"
+          :name="assignee.name"
+          :src="assignee.thumbnail"
+          :size="14"
+          :status="assignee.availability_status"
+          hide-offline-status
+        />
+        <Icon
+          v-else
+          icon="i-woot-empty-assignee"
+          class="size-4 text-n-slate-7"
+        />
+      </div>
+
+      <div
+        class="w-4 flex items-center justify-center flex-shrink-0"
+        :class="orderClass('status')"
+      >
+        <CardStatusIcon :status="chat.status" show-empty />
+      </div>
+
+      <div
+        v-if="!conversationFirst"
+        class="w-px h-3 bg-n-slate-6 flex-shrink-0"
+      />
+
+      <div
+        v-if="!isInboxView && showInboxName"
+        class="w-20 flex-shrink-0"
+        :class="orderClass('inbox')"
+      >
+        <InboxName v-if="showInboxName" :inbox="inbox" class="min-w-0" />
+      </div>
+
+      <div
+        v-if="!isInboxView && showInboxName && !conversationFirst"
+        class="w-px h-3 bg-n-slate-6 flex-shrink-0"
+      />
+
+      <div
+        v-tooltip.top="{
+          content: chat.id,
+          delay: { show: 500, hide: 0 },
+        }"
+        class="h-6 flex items-center gap-1 max-w-20 w-full min-w-0 flex-shrink-0"
+        :class="orderClass('id')"
+      >
+        <Icon
+          icon="i-woot-hash"
+          class="size-3.5 text-n-slate-10 flex-shrink-0"
+        />
+        <span class="text-body-main text-n-slate-11 truncate">
+          {{ chat.id }}
+        </span>
+      </div>
+
+      <CardAvatar
+        :class="orderClass('avatar')"
+        :contact="currentContact"
+        :selected="false"
+        :enable-selection="false"
+        :hide-thumbnail="false"
+      />
+
+      <h4
+        class="text-heading-3 my-0 capitalize truncate text-n-slate-12 font-medium w-32 flex-shrink-0"
+        :class="orderClass('name')"
+      >
+        {{ currentContact.name }}
+      </h4>
+
+      <CardContent
+        :class="orderClass('content')"
+        :last-message="lastMessageInChat"
+        :voice-call-status="voiceCallData.status"
+        :voice-call-direction="voiceCallData.direction"
+        :unread-count="unreadCount"
+        :show-expanded-preview="false"
+      />
+    </div>
+
+    <!-- RIGHT SECTION -->
+    <div
+      class="flex items-center justify-end gap-1.5 flex-shrink-0"
+      :class="{ 'max-lg:contents': conversationFirst }"
+    >
+      <div
+        v-if="showLabelsSection"
+        class="min-w-0 w-full"
+        :class="orderClass('labels')"
+      >
+        <CardLabels
+          :labels="chat.labels"
+          disable-toggle
+          class="my-0 [&>div]:justify-end justify-end"
+        />
+      </div>
+
+      <div
+        v-if="hasSlaPolicyId"
+        class="flex-shrink-0"
+        :class="orderClass('sla')"
+      >
+        <SLACardLabel ref="slaCardLabel" :chat="chat" />
+      </div>
+
+      <div
+        class="flex-shrink-0 w-[4.375rem] text-end"
+        :class="orderClass('time')"
+      >
+        <TimeAgo
+          :conversation-id="chat.id"
+          :last-activity-timestamp="chat.timestamp"
+          :created-at-timestamp="chat.created_at"
+          class="font-440 !text-xs text-n-slate-11"
+        />
+      </div>
+    </div>
+  </div>
+</template>

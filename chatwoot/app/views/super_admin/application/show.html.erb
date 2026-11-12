@@ -1,0 +1,44 @@
+<%#
+# Show
+
+This view is the template for the show page.
+It renders the attributes of a resource,
+as well as a link to its edit page.
+
+## Local variables:
+
+- `page`:
+  An instance of [Administrate::Page::Show][1].
+  Contains methods for accessing the resource to be displayed on the page,
+  as well as helpers for describing how each attribute of the resource
+  should be displayed.
+
+[1]: http://www.rubydoc.info/gems/administrate/Administrate/Page/Show
+%>
+
+<% content_for(:title) { t("administrate.actions.show_resource", name: page.page_title) } %>
+<% content_for(:commands) { render "command_group", label: page.page_title, commands: record_commands(page.resource) } %>
+
+<%= render "page_header", title: page.page_title, back: display_resource_name(page.resource_name) do %>
+  <%= render("button", label: t("administrate.actions.edit"), url: [:edit, namespace, page.resource]) if accessible_action?(page.resource, :edit) %>
+
+  <%= render(
+    "button",
+    label: t("administrate.actions.destroy"),
+    url: [namespace, page.resource],
+    variant: :danger,
+    method: :delete,
+    data: { confirm: t("administrate.actions.confirm") }
+  ) if accessible_action?(page.resource, :destroy) %>
+<% end %>
+
+<div class="space-y-6">
+  <% page.attributes.each do |title, attributes| %>
+    <fieldset class="rounded-xl border border-n-weak bg-n-solid-1 min-w-0">
+      <% if title.present? %>
+        <legend class="text-xs font-medium uppercase tracking-wider text-n-slate-10 mx-3 px-1.5"><%= t "helpers.label.#{page.resource_name}.#{title}", default: title %></legend>
+      <% end %>
+      <%= render "attributes", page: page, attributes: attributes %>
+    </fieldset>
+  <% end %>
+</div>

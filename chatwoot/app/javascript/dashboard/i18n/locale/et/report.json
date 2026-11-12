@@ -1,0 +1,841 @@
+{
+  "MONITORS": {
+    "TITLE": "Monitors",
+    "AUTOMATIONS": {
+      "TITLE": "Automations",
+      "DESCRIPTION": "Run actions when this monitor first matches a conversation from new live activity.",
+      "CREATE": "Create automation",
+      "EMPTY": "No automations are linked to this monitor yet.",
+      "ACTIVE": "Active",
+      "DISABLED": "Keelatud",
+      "FETCH_FAILED": "Could not load linked automations."
+    },
+    "LIST": {
+      "CONVERSATIONS_COUNT": "{count} conversation | {count} conversations",
+      "CONVERSATIONS_HELP": "Count of conversations matching this monitor in the last 7 days.",
+      "RUNNING": "Running",
+      "FETCH_FAILED": "Could not load monitors. Please try again.",
+      "PAGINATION": "Showing {startItem} – {endItem} of {totalItems} monitor | Showing {startItem} – {endItem} of {totalItems} monitors"
+    },
+    "DESCRIPTION": "Follow the themes that matter across your customer conversations. Describe a topic in plain English, and a monitor charts matching conversations as new customer messages arrive.",
+    "CREATE": "Create monitor",
+    "PREVIEW": "Preview matches",
+    "PREVIEW_COOLDOWN": "You can preview again in {count} second. | You can preview again in {count} seconds.",
+    "PREVIEW_FAILED": "Could not preview matches. Please try again.",
+    "PREVIEW_HELP": "{count} match in a sample of {sampled} recent conversations ({excluded} without usable context). This sample does not represent a complete scan. | {count} matches in a sample of {sampled} recent conversations ({excluded} without usable context). This sample does not represent a complete scan.",
+    "NAME": "Name",
+    "NAME_PLACEHOLDER": "Refund conversations",
+    "CHOOSE_ICON": "Choose icon or emoji",
+    "CONDITION": "Which conversations should this monitor find?",
+    "CONDITION_PLACEHOLDER": "All conversations mentioning refunds",
+    "CREATE_HELP": "We will check conversations created in the last seven days, then keep checking new customer messages. Public replies and configured customer attributes provide context. Private notes are excluded.",
+    "SECTIONS": {
+      "YOUR_MONITORS": "Your monitors",
+      "TEMPLATES": "Templates"
+    },
+    "TEMPLATES": {
+      "TITLE": "Start with a template",
+      "USE_NAMED": "Use {name} template",
+      "EDIT_HINT": "From {name} template. Edit anything before creating.",
+      "ADMIN_HELP": "Ask an administrator to create a monitor from a template.",
+      "LOGIN_PROBLEMS": {
+        "NAME": "Login problems",
+        "AUDIENCE": "For support teams",
+        "SUMMARY": "See when login complaints start increasing.",
+        "CONDITION": "A customer says they cannot sign in to their account, including failed password resets and verification codes that never arrive. Exclude questions about changing a password while already signed in."
+      },
+      "MISSING_ORDER_UPDATES": {
+        "NAME": "Missing order updates",
+        "AUDIENCE": "For operations teams",
+        "SUMMARY": "Track recurring delivery communication problems.",
+        "CONDITION": "A customer says an order confirmation, shipping update, or delivery notice did not arrive, or arrived for the wrong order. Exclude customers asking where a parcel is when they did receive the tracking email."
+      },
+      "COMPETITOR_MENTIONS": {
+        "NAME": "Competitor mentions",
+        "AUDIENCE": "For founders and sales teams",
+        "SUMMARY": "Find conversations worth following up on.",
+        "CONDITION": "A customer compares us with a competing product, says they are evaluating one, or mentions they may switch. Exclude customers who moved to us from a competitor and are asking how to import their data."
+      },
+      "FEATURE_REQUESTS": {
+        "NAME": "Feature requests",
+        "AUDIENCE": "For product teams",
+        "SUMMARY": "Keep a running count of conversations about unmet needs.",
+        "CONDITION": "A customer asks for a capability the product does not currently offer, or asks whether something is possible and it is not. Exclude questions about how to use a feature that already exists."
+      },
+      "REFUND_REQUESTS": {
+        "NAME": "Refund requests",
+        "AUDIENCE": "For finance teams",
+        "SUMMARY": "Bring a consistent definition to your weekly refund request count.",
+        "CONDITION": "A customer asks for money back on a payment they already made, including duplicate charges and refunds after cancelling. Exclude questions about the refund policy and requests for a discount."
+      },
+      "CANCELLATION_INTENT": {
+        "NAME": "Cancellation intent",
+        "AUDIENCE": "For account managers",
+        "SUMMARY": "Find customers who may need a conversation before they leave.",
+        "CONDITION": "A customer says they intend to cancel, will not renew, or plan to stop using the product. Exclude requests to reduce seats or downgrade, and cancellations the customer takes back in the same conversation."
+      },
+      "PAYMENT_FAILURES": {
+        "NAME": "Payment failures",
+        "AUDIENCE": "For billing and support teams",
+        "SUMMARY": "Spot customers who are blocked from paying.",
+        "CONDITION": "A customer says a payment, checkout, or invoice payment failed, or their card was declined. Exclude refund requests, disputes about completed charges, and general questions about payment methods."
+      },
+      "PRODUCT_ERRORS": {
+        "NAME": "Product errors",
+        "AUDIENCE": "For support and engineering teams",
+        "SUMMARY": "See when errors and crashes start spreading.",
+        "CONDITION": "A customer reports an error, crash, unavailable service, or severe slowness that prevents them from completing a task. Exclude sign-in problems and questions about how to use a working feature."
+      },
+      "ISSUE_STILL_UNRESOLVED": {
+        "NAME": "Issue still unresolved",
+        "AUDIENCE": "For support leads",
+        "SUMMARY": "Find conversations that need another pass.",
+        "CONDITION": "A customer says a suggested fix did not work, the same problem returned, or their issue remains after support said it was resolved. Exclude first-time reports and requests only asking for a status update."
+      },
+      "ESCALATION_REQUESTS": {
+        "NAME": "Escalation requests",
+        "AUDIENCE": "For support leads",
+        "SUMMARY": "Surface requests that need prompt attention.",
+        "CONDITION": "A customer explicitly asks for a human agent, manager, specialist, or higher support tier because their issue has not been resolved. Exclude routine transfers and sales requests."
+      }
+    },
+    "MATCHING_CONVERSATIONS": "Matching conversations created",
+    "LAST_DAYS": "Last {count} day | Last {count} days",
+    "LAST_DAYS_BEFORE_PAUSE": "{count} day before pause | {count} days before pause",
+    "GROUP_BY": "Group by {interval}",
+    "INTERVALS": {
+      "HOUR": "1 hour",
+      "SIX_HOURS": "6 hours",
+      "DAY": "1 day"
+    },
+    "EDIT": "Edit",
+    "UPDATE": "Uuenda",
+    "MONITOR_DESCRIPTION": "Description",
+    "EDIT_HELP": "The description defines which conversations match. Changing it clears existing matches and rechecks previously checked conversations. Skipped periods stay skipped. If paused, rechecking starts when you resume.",
+    "DUPLICATE": "Duplicate",
+    "PAUSE": "Pause",
+    "RESUME": "Resume",
+    "RESUME_HELP": "Choose where this monitor should pick up. Existing results will stay available.",
+    "RESUME_CATCH_UP": "Check the paused period",
+    "RESUME_CATCH_UP_HELP": "Check conversations created and customer messages received from when the monitor was paused until now, then continue live updates.",
+    "RESUME_FROM_NOW": "Start from now",
+    "RESUME_FROM_NOW_HELP": "Only check new customer messages and conversations from now on. Do not scan the paused period.",
+    "DELETE": "Delete",
+    "DELETE_HELP": "Delete this monitor and its results? This does not delete the conversations.",
+    "PAUSE_HELP": "Pause this monitor? Its results will remain available, and it will stop checking messages and conversations.",
+    "PAUSED_HELP": "Paused on {time}. Historical results remain available. New messages and conversations are not being checked.",
+    "COLLECTED_UNTIL": "Results collected until {time}.",
+    "RETRY": "Retry",
+    "RESULTS_UPDATED": "New results are available. The chart has been refreshed; select a bar to view its updated conversations.",
+    "TIME_BASIS_HELP": "Each conversation counts once, on the date it was created. A new match can update an earlier bar.",
+    "COVERAGE_HELP": "This range includes periods that were not fully checked. Counts may be incomplete.",
+    "REFRESHED": "Last refreshed at {time}. Updates appear automatically.",
+    "USAGE": {
+      "LIMIT_REACHED": "This account has used its {limit} monitor calls for this month.",
+      "RESETS": "New evaluations and previews are on hold until {time}. Existing results remain available.",
+      "REACHED_AT": "Limit reached on {time}."
+    },
+    "STATES": {
+      "SCANNING": "Checking recent conversations",
+      "PROCESSING": "Checking conversations",
+      "RECHECKING": "Rechecking conversations with the updated description",
+      "LIVE": "Up to date",
+      "DELAYED": "Updates are delayed",
+      "NEEDS_ATTENTION": "Needs attention",
+      "PAUSED": "Paused",
+      "CATCHING_UP": "Checking the paused period"
+    },
+    "ERRORS": {
+      "FETCH_FAILED": "Could not load this monitor. Refresh to try again.",
+      "SAVE_FAILED": "Could not save the monitor. Check the name and condition, then try again.",
+      "NOT_CONFIGURED": "Configure the OpenRouter connection, then click Retry.",
+      "CREDENTIALS_INVALID": "The OpenRouter connection needs attention. Ask your installation administrator to check its credentials.",
+      "PROVIDER_CREDITS_EXHAUSTED": "The OpenRouter account has insufficient credits. Ask your installation administrator to check its balance, then retry.",
+      "INVALID_REQUEST": "The evaluation request needs attention. Contact your installation administrator.",
+      "INVALID_RESPONSE": "The evaluation provider returned an incomplete result. Affected conversations have not been counted.",
+      "PROVIDER_BUSY": "The evaluation provider is busy. Pending conversations need another evaluation.",
+      "PROVIDER_UNAVAILABLE": "The evaluation provider is temporarily unavailable. Updates may be delayed.",
+      "BUDGET_LIMIT": "The daily evaluation allowance has been reached. Pending work will resume after it resets.",
+      "MONTHLY_LIMIT": "This account has reached its monthly monitor allowance. Pending evaluations will resume next month.",
+      "CONTEXT_LIMIT": "Some conversations are too long to evaluate completely. They are excluded from the results.",
+      "INVALID_PARAMETERS": "Check the name, condition, date range, and interval.",
+      "TOO_MANY_BUCKETS": "Choose a shorter date range or a larger interval. A chart can show up to 744 bars.",
+      "MONITOR_LIMIT": "This account has reached its active monitor limit. Pause a monitor before creating another.",
+      "MONITOR_PAUSED": "This monitor is paused and no longer checks conversations.",
+      "MONITOR_CHANGED": "This monitor changed in another session. Its current state has been refreshed. Try again."
+    }
+  },
+  "REPORT": {
+    "HEADER": "Vestlused",
+    "LOADING_CHART": "Laaditakse diagrammi andmeid...",
+    "NO_ENOUGH_DATA": "Me pole saanud piisavalt andmepunkte aruande genereerimiseks, palun proovige hiljem uuesti.",
+    "DOWNLOAD_CONVERSATION_REPORTS": "Laadi alla vestluste aruanded",
+    "DATA_FETCHING_FAILED": "Andmete toomine ebaõnnestus, palun proovi hiljem uuesti.",
+    "SUMMARY_FETCHING_FAILED": "Kokkuvõtte toomine ebaõnnestus, palun proovi hiljem uuesti.",
+    "METRICS": {
+      "CONVERSATIONS": {
+        "NAME": "Vestlused",
+        "DESC": "(Kokku)"
+      },
+      "INCOMING_MESSAGES": {
+        "NAME": "Vastuvõetud sõnumid",
+        "DESC": "(Kokku)"
+      },
+      "OUTGOING_MESSAGES": {
+        "NAME": "Saadetud sõnumid",
+        "DESC": "( Kogus )"
+      },
+      "FIRST_RESPONSE_TIME": {
+        "NAME": "Esimene vastuse aeg",
+        "DESC": "( Keskmine )",
+        "INFO_TEXT": "Arvutamiseks kasutatud vestluste koguarv:",
+        "TOOLTIP_DESCRIPTION": "Based on {count} conversation | Based on {count} conversations",
+        "TOOLTIP_TEXT": "Esimene vastuse aeg on {metricValue} (põhineb {conversationCount} vestlusel)"
+      },
+      "RESOLUTION_TIME": {
+        "NAME": "Lahendamise aeg",
+        "DESC": "( Keskmine )",
+        "INFO_TEXT": "Arvutamiseks kasutatud vestluste koguarv:",
+        "TOOLTIP_DESCRIPTION": "Based on {count} conversation | Based on {count} conversations",
+        "TOOLTIP_TEXT": "Lahendamise aeg on {metricValue} (põhineb {conversationCount} vestlusel)"
+      },
+      "RESOLUTION_COUNT": {
+        "NAME": "Lahenduste arv",
+        "DESC": "( Kokku )"
+      },
+      "BOT_RESOLUTION_COUNT": {
+        "NAME": "Lahenduste arv",
+        "DESC": "( Kokku )"
+      },
+      "BOT_HANDOFF_COUNT": {
+        "NAME": "Üleandmiste arv",
+        "DESC": "( Kokku )"
+      },
+      "REPLY_TIME": {
+        "NAME": "Kliendi ooteaeg",
+        "TOOLTIP_LABEL": "Waiting time",
+        "TOOLTIP_DESCRIPTION": "Based on {count} reply | Based on {count} replies",
+        "TOOLTIP_TEXT": "Ooteaeg on {metricValue} (põhineb {conversationCount} vastusel)",
+        "DESC": ""
+      }
+    },
+    "DATE_RANGE_OPTIONS": {
+      "LAST_7_DAYS": "Viimased 7 päeva",
+      "LAST_14_DAYS": "Viimased 14 päeva",
+      "LAST_30_DAYS": "Viimased 30 päeva",
+      "THIS_MONTH": "Käesolev kuu",
+      "LAST_MONTH": "Eelmine kuu",
+      "LAST_3_MONTHS": "Viimased 3 kuud",
+      "LAST_6_MONTHS": "Viimased 6 kuud",
+      "LAST_YEAR": "Eelmine aasta",
+      "CUSTOM_DATE_RANGE": "Kohandatud kuupäevavahemik"
+    },
+    "CUSTOM_DATE_RANGE": {
+      "CONFIRM": "Rakenda",
+      "PLACEHOLDER": "Vali kuupäevavahemik"
+    },
+    "GROUP_BY_FILTER_DROPDOWN_LABEL": "Grupeeri",
+    "DURATION_FILTER_LABEL": "Kestus",
+    "GROUPING_OPTIONS": {
+      "DAY": "Päev",
+      "WEEK": "Nädal",
+      "MONTH": "Kuu",
+      "YEAR": "Aasta"
+    },
+    "GROUP_BY_DAY_OPTIONS": [
+      {
+        "id": 1,
+        "groupBy": "Päev"
+      }
+    ],
+    "GROUP_BY_WEEK_OPTIONS": [
+      {
+        "id": 1,
+        "groupBy": "Päev"
+      },
+      {
+        "id": 2,
+        "groupBy": "Nädal"
+      }
+    ],
+    "GROUP_BY_MONTH_OPTIONS": [
+      {
+        "id": 1,
+        "groupBy": "Päev"
+      },
+      {
+        "id": 2,
+        "groupBy": "Nädal"
+      },
+      {
+        "id": 3,
+        "groupBy": "Kuu"
+      }
+    ],
+    "GROUP_BY_YEAR_OPTIONS": [
+      {
+        "id": 2,
+        "groupBy": "Nädal"
+      },
+      {
+        "id": 3,
+        "groupBy": "Kuu"
+      },
+      {
+        "id": 4,
+        "groupBy": "Aasta"
+      }
+    ],
+    "BUSINESS_HOURS": "Tööaeg",
+    "FILTER_ACTIONS": {
+      "CLEAR_FILTER": "Tühjenda filter",
+      "EMPTY_LIST": "Tulemusi ei leitud"
+    },
+    "DRILLDOWN": {
+      "TITLE": "{metric} details",
+      "RESULT_COUNT_CONVERSATION": "{count} conversation | {count} conversations",
+      "RESULT_COUNT_MESSAGE": "{count} message | {count} messages",
+      "EMPTY": "No records found for this bar.",
+      "ERROR": "Could not load records. Please try again.",
+      "ADMIN_ONLY": "Only administrators can drill down into report records.",
+      "LOAD_MORE": "Load more",
+      "PREVIOUS_BUCKET": "Previous bar",
+      "NEXT_BUCKET": "Next bar",
+      "VIEW_ALL": "View all",
+      "UNKNOWN_CONTACT": "Unknown contact",
+      "UNKNOWN_INBOX": "Unknown inbox",
+      "UNASSIGNED_AGENT": "Määramata",
+      "NO_MESSAGE_CONTENT": "No message content",
+      "MESSAGE_CREATED_AT": "Message created at {time}",
+      "EVENT_OCCURRED_AT": "Event occurred at {time}",
+      "INCOMING_MESSAGE": "Incoming message",
+      "OUTGOING_MESSAGE": "Outgoing message"
+    },
+    "PAGINATION": {
+      "RESULTS": "Kuvatakse {start} kuni {end} {total} tulemusest",
+      "PER_PAGE_TEMPLATE": "{size} / lehekülg"
+    }
+  },
+  "AGENT_REPORTS": {
+    "HEADER": "Agentide ülevaade",
+    "DESCRIPTION": "Jälgi agentide sooritust lihtsalt oluliste mõõdikutega nagu vestlused, vastamisajad, lahendamisajad ja lahendatud juhtumid. Klõpsa agendi nimele, et rohkem teada saada.",
+    "LOADING_CHART": "Diagrammi andmete laadimine...",
+    "NO_ENOUGH_DATA": "Meil pole piisavalt andmepunkte aruande genereerimiseks, palun proovige hiljem uuesti.",
+    "DOWNLOAD_AGENT_REPORTS": "Laadi alla agendi aruanded",
+    "FILTER_DROPDOWN_LABEL": "Vali agent",
+    "FILTERS": {
+      "INPUT_PLACEHOLDER": {
+        "AGENTS": "Otsi agente"
+      }
+    },
+    "METRICS": {
+      "CONVERSATIONS": {
+        "NAME": "Vestlused",
+        "DESC": "( Kogus )"
+      },
+      "INCOMING_MESSAGES": {
+        "NAME": "Sissetulevad sõnumid",
+        "DESC": "( Kogus )"
+      },
+      "OUTGOING_MESSAGES": {
+        "NAME": "Väljaminevad sõnumid",
+        "DESC": "( Kogus )"
+      },
+      "FIRST_RESPONSE_TIME": {
+        "NAME": "Esimene vastuse aeg",
+        "DESC": "( Keskmine )",
+        "INFO_TEXT": "Arvutuste tegemiseks kasutatud vestluste koguarv:",
+        "TOOLTIP_TEXT": "Esimese vastuse aeg on {metricValue} (põhineb {conversationCount} vestlusel)"
+      },
+      "RESOLUTION_TIME": {
+        "NAME": "Lahendamise aeg",
+        "DESC": "( Keskmine )",
+        "INFO_TEXT": "Arvutuste tegemiseks kasutatud vestluste koguarv:",
+        "TOOLTIP_TEXT": "Lahendamise aeg on {metricValue} (põhineb {conversationCount} vestlusel)"
+      },
+      "RESOLUTION_COUNT": {
+        "NAME": "Lahenduste arv",
+        "DESC": "( Kokku )"
+      }
+    },
+    "DATE_RANGE": [
+      {
+        "id": 0,
+        "name": "Viimased 7 päeva"
+      },
+      {
+        "id": 1,
+        "name": "Viimased 30 päeva"
+      },
+      {
+        "id": 2,
+        "name": "Viimased 3 kuud"
+      },
+      {
+        "id": 3,
+        "name": "Viimased 6 kuud"
+      },
+      {
+        "id": 4,
+        "name": "Eelmine aasta"
+      },
+      {
+        "id": 5,
+        "name": "Kohandatud kuupäevavahemik"
+      }
+    ],
+    "CUSTOM_DATE_RANGE": {
+      "CONFIRM": "Rakenda",
+      "PLACEHOLDER": "Vali kuupäevavahemik"
+    }
+  },
+  "LABEL_REPORTS": {
+    "HEADER": "Siltide ülevaade",
+    "DESCRIPTION": "Jälgi sildi tulemuslikkust peamiste mõõdikute abil, sealhulgas vestlused, vastamisajad, lahendamise ajad ja lahendatud juhtumid. Täpsemate teadmiste saamiseks klõpsa sildi nimele.",
+    "LOADING_CHART": "Diagrammi andmete laadimine...",
+    "NO_ENOUGH_DATA": "Meil ei ole piisavalt andmepunkte aruande genereerimiseks, palun proovige hiljem uuesti.",
+    "DOWNLOAD_LABEL_REPORTS": "Laadi alla sildiaruanded",
+    "FILTER_DROPDOWN_LABEL": "Vali silt",
+    "FILTERS": {
+      "INPUT_PLACEHOLDER": {
+        "LABELS": "Otsi silte"
+      }
+    },
+    "METRICS": {
+      "CONVERSATIONS": {
+        "NAME": "Vestlused",
+        "DESC": "(Kokku)"
+      },
+      "INCOMING_MESSAGES": {
+        "NAME": "Sissetulevad sõnumid",
+        "DESC": "( Kogus )"
+      },
+      "OUTGOING_MESSAGES": {
+        "NAME": "Väljaminevad sõnumid",
+        "DESC": "( Kogus )"
+      },
+      "FIRST_RESPONSE_TIME": {
+        "NAME": "Esimene vastuse aeg",
+        "DESC": "( Keskmine )",
+        "INFO_TEXT": "Arvutuste tegemiseks kasutatud vestluste koguarv:",
+        "TOOLTIP_TEXT": "Esimese vastuse aeg on {metricValue} (põhineb {conversationCount} vestlusel)"
+      },
+      "RESOLUTION_TIME": {
+        "NAME": "Lahendamise aeg",
+        "DESC": "( Keskmine )",
+        "INFO_TEXT": "Arvutuste tegemiseks kasutatud vestluste koguarv:",
+        "TOOLTIP_TEXT": "Lahendamise aeg on {metricValue} (põhineb {conversationCount} vestlusel)"
+      },
+      "RESOLUTION_COUNT": {
+        "NAME": "Lahenduste arv",
+        "DESC": "( Kogus )"
+      }
+    },
+    "DATE_RANGE": [
+      {
+        "id": 0,
+        "name": "Viimased 7 päeva"
+      },
+      {
+        "id": 1,
+        "name": "Viimased 30 päeva"
+      },
+      {
+        "id": 2,
+        "name": "Viimased 3 kuud"
+      },
+      {
+        "id": 3,
+        "name": "Viimased 6 kuud"
+      },
+      {
+        "id": 4,
+        "name": "Eelmine aasta"
+      },
+      {
+        "id": 5,
+        "name": "Kohandatud kuupäevavahemik"
+      }
+    ],
+    "CUSTOM_DATE_RANGE": {
+      "CONFIRM": "Rakenda",
+      "PLACEHOLDER": "Vali kuupäevavahemik"
+    }
+  },
+  "INBOX_REPORTS": {
+    "HEADER": "Postkasti ülevaade",
+    "DESCRIPTION": "Vaata kiiresti oma postkasti tulemuslikkust võtmemõõdikute abil nagu vestlused, reageerimisajad, lahendamisajad ja lahendatud juhtumid – kõik ühes kohas. Klõpsa postkasti nimele, et näha rohkem üksikasju.",
+    "LOADING_CHART": "Diagrammi andmete laadimine...",
+    "NO_ENOUGH_DATA": "Meil pole piisavalt andmepunkte aruande genereerimiseks, palun proovige hiljem uuesti.",
+    "DOWNLOAD_INBOX_REPORTS": "Laadi alla postkasti aruanded",
+    "FILTER_DROPDOWN_LABEL": "Vali postkast",
+    "ALL_INBOXES": "Kõik postkastid",
+    "SEARCH_INBOX": "Otsi postkastist",
+    "FILTERS": {
+      "INPUT_PLACEHOLDER": {
+        "INBOXES": "Otsi postkaste"
+      }
+    },
+    "METRICS": {
+      "CONVERSATIONS": {
+        "NAME": "Vestlused",
+        "DESC": "( Kokku )"
+      },
+      "INCOMING_MESSAGES": {
+        "NAME": "Sissetulevad sõnumid",
+        "DESC": "( Kogus )"
+      },
+      "OUTGOING_MESSAGES": {
+        "NAME": "Väljaminevad sõnumid",
+        "DESC": "( Kogus )"
+      },
+      "FIRST_RESPONSE_TIME": {
+        "NAME": "Esimene vastuse aeg",
+        "DESC": "( Keskmine )",
+        "INFO_TEXT": "Arvutamiseks kasutatud vestluste koguarv:",
+        "TOOLTIP_TEXT": "Esimene vastuse aeg on {metricValue} (põhineb {conversationCount} vestlusel)"
+      },
+      "RESOLUTION_TIME": {
+        "NAME": "Lahendamise aeg",
+        "DESC": "( Keskmine )",
+        "INFO_TEXT": "Arvutamiseks kasutatud vestluste koguarv:",
+        "TOOLTIP_TEXT": "Lahendamise aeg on {metricValue} (põhineb {conversationCount} vestlusel)"
+      },
+      "RESOLUTION_COUNT": {
+        "NAME": "Lahenduste arv",
+        "DESC": "( Kogus )"
+      }
+    },
+    "DATE_RANGE": [
+      {
+        "id": 0,
+        "name": "Viimased 7 päeva"
+      },
+      {
+        "id": 1,
+        "name": "Viimased 30 päeva"
+      },
+      {
+        "id": 2,
+        "name": "Viimased 3 kuud"
+      },
+      {
+        "id": 3,
+        "name": "Viimased 6 kuud"
+      },
+      {
+        "id": 4,
+        "name": "Eelmine aasta"
+      },
+      {
+        "id": 5,
+        "name": "Kohandatud kuupäevavahemik"
+      }
+    ],
+    "CUSTOM_DATE_RANGE": {
+      "CONFIRM": "Rakenda",
+      "PLACEHOLDER": "Vali kuupäevavahemik"
+    }
+  },
+  "TEAM_REPORTS": {
+    "HEADER": "Meeskonna ülevaade",
+    "DESCRIPTION": "Saate ülevaate oma meeskonna tulemuslikkusest oluliste mõõdikutega, sealhulgas vestlused, reageerimisajad, lahendamise ajad ja lahendatud juhtumid. Lisateabe saamiseks klõpsake meeskonna nime.",
+    "LOADING_CHART": "Diagrammi andmete laadimine...",
+    "NO_ENOUGH_DATA": "Meil ei ole piisavalt andmepunkte aruande koostamiseks, palun proovige hiljem uuesti.",
+    "DOWNLOAD_TEAM_REPORTS": "Laadi alla meeskonna aruanded",
+    "FILTER_DROPDOWN_LABEL": "Vali meeskond",
+    "FILTERS": {
+      "ADD_FILTER": "Lisa filter",
+      "CLEAR_ALL": "Tühjenda kõik",
+      "NO_FILTER": "Filtreid pole saadaval",
+      "INPUT_PLACEHOLDER": {
+        "TEAMS": "Otsi meeskondi"
+      }
+    },
+    "METRICS": {
+      "CONVERSATIONS": {
+        "NAME": "Vestlused",
+        "DESC": "( Kogus )"
+      },
+      "INCOMING_MESSAGES": {
+        "NAME": "Sissetulevad sõnumid",
+        "DESC": "( Kogus )"
+      },
+      "OUTGOING_MESSAGES": {
+        "NAME": "Väljaminevad sõnumid",
+        "DESC": "( Kogus )"
+      },
+      "FIRST_RESPONSE_TIME": {
+        "NAME": "Esimene vastuse aeg",
+        "DESC": "( Keskmine )",
+        "INFO_TEXT": "Arvutamiseks kasutatud vestluste koguarv:",
+        "TOOLTIP_TEXT": "Esimene vastuse aeg on {metricValue} (põhineb {conversationCount} vestlusel)"
+      },
+      "RESOLUTION_TIME": {
+        "NAME": "Lahendamise aeg",
+        "DESC": "( Keskmine )",
+        "INFO_TEXT": "Kokku vestluste arv arvutamiseks:",
+        "TOOLTIP_TEXT": "Lahendamise aeg on {metricValue} (põhineb {conversationCount} vestlusel)"
+      },
+      "RESOLUTION_COUNT": {
+        "NAME": "Lahenduste arv",
+        "DESC": "( Kogus )"
+      }
+    },
+    "DATE_RANGE": [
+      {
+        "id": 0,
+        "name": "Viimased 7 päeva"
+      },
+      {
+        "id": 1,
+        "name": "Viimased 30 päeva"
+      },
+      {
+        "id": 2,
+        "name": "Viimased 3 kuud"
+      },
+      {
+        "id": 3,
+        "name": "Viimased 6 kuud"
+      },
+      {
+        "id": 4,
+        "name": "Eelmine aasta"
+      },
+      {
+        "id": 5,
+        "name": "Kohandatud kuupäevavahemik"
+      }
+    ],
+    "CUSTOM_DATE_RANGE": {
+      "CONFIRM": "Rakenda",
+      "PLACEHOLDER": "Vali kuupäevavahemik"
+    }
+  },
+  "CSAT_REPORTS": {
+    "HEADER": "CSAT aruanded",
+    "NO_RECORDS": "Vastuseid pole veel",
+    "NO_RECORDS_DESCRIPTION": "Kliendirahulolu küsitluse vastused kuvatakse siin, kui kliendid hakkavad tagasisidet andma.",
+    "DOWNLOAD": "Laadi alla CSAT aruanded",
+    "DOWNLOAD_FAILED": "Failed to download CSAT Reports",
+    "FILTERS": {
+      "ADD_FILTER": "Lisa filter",
+      "CLEAR_ALL": "Tühjenda kõik",
+      "NO_FILTER": "Filtreid pole saadaval",
+      "INPUT_PLACEHOLDER": {
+        "AGENTS": "Otsi agente",
+        "INBOXES": "Otsi postkaste",
+        "TEAMS": "Otsi meeskondi",
+        "RATINGS": "Otsi hinnanguid"
+      },
+      "AGENTS": {
+        "LABEL": "Agent"
+      },
+      "INBOXES": {
+        "LABEL": "Sissetulek"
+      },
+      "TEAMS": {
+        "LABEL": "Meeskond"
+      },
+      "RATINGS": {
+        "LABEL": "Hinnang"
+      }
+    },
+    "TABLE": {
+      "HEADER": {
+        "CONTACT_NAME": "Kontakt",
+        "AGENT_NAME": "Agent",
+        "RATING": "Hinnang",
+        "FEEDBACK_TEXT": "Tagasiside kommentaar",
+        "CONVERSATION": "Vestlus",
+        "CUSTOMER": "Klient",
+        "RESPONSE": "Vastus",
+        "HANDLED_BY": "Käsitlenud"
+      },
+      "UNKNOWN_CUSTOMER": "Tundmatu klient"
+    },
+    "NO_AGENT": "Määramata agent",
+    "NO_FEEDBACK": "Tagasisidet ei ole antud",
+    "METRIC": {
+      "TOTAL_RESPONSES": {
+        "LABEL": "Vastuste koguarv",
+        "TOOLTIP": "Kogutud vastuste koguarv"
+      },
+      "SATISFACTION_SCORE": {
+        "LABEL": "Rahulolu skoor",
+        "TOOLTIP": "Positiivsete vastuste koguarv / Vastuste koguarv * 100"
+      },
+      "RESPONSE_RATE": {
+        "LABEL": "Vastuste määr",
+        "TOOLTIP": "Total number of responses / Total number of CSAT survey messages sent * 100"
+      },
+      "RATING_DISTRIBUTION": "Hinnangute jaotus"
+    },
+    "REVIEW_NOTES": {
+      "TITLE": "Ülevaate märkmed",
+      "PLACEHOLDER": "Lisa selle hinnangu kohta ülevaate märkmeid...",
+      "SAVE": "Salvesta",
+      "CANCEL": "Tühista",
+      "SAVING": "Salvestamine...",
+      "SAVED": "Märkmed salvestatud edukalt",
+      "SAVE_ERROR": "Märkmete salvestamine ebaõnnestus",
+      "UPDATED_BY": "Uuendas {name} {time}",
+      "UPDATED_BY_LABEL": "Uuendas",
+      "PAYWALL": {
+        "TITLE": "Uuenda, et lisada ülevaate märkmeid",
+        "AVAILABLE_ON": "The review notes feature is only available in the Business and Enterprise plans.",
+        "UPGRADE_PROMPT": "Lisa igale CSAT vastusele sisekontekst arvustuste märkmetega. Kogu teavet tegeliku olukorra kohta, avasta mustreid kiiremini ja tee paremaid otsuseid oma tagasiside põhjal.",
+        "UPGRADE_NOW": "Uuenda kohe",
+        "CANCEL_ANYTIME": "Saad oma plaani igal ajal muuta või tühistada"
+      }
+    }
+  },
+  "BOT_REPORTS": {
+    "HEADER": "Bot Reports",
+    "METRIC": {
+      "TOTAL_CONVERSATIONS": {
+        "LABEL": "Vestluste arv",
+        "TOOLTIP": "Total number of conversations handled by the bot"
+      },
+      "TOTAL_RESPONSES": {
+        "LABEL": "Vastuste koguarv",
+        "TOOLTIP": "Total number of responses sent by the bot"
+      },
+      "RESOLUTION_RATE": {
+        "LABEL": "Lahendamise määr",
+        "TOOLTIP": "Total number of conversations resolved by the bot / Total number of conversations handled by the bot * 100"
+      },
+      "HANDOFF_RATE": {
+        "LABEL": "Üleandmise määr",
+        "TOOLTIP": "Total number of conversations handed off to agents / Total number of conversations handled by the bot * 100"
+      }
+    }
+  },
+  "OVERVIEW_REPORTS": {
+    "HEADER": "Ülevaade",
+    "LIVE": "Otseülekanne",
+    "HEATMAP_ARIA_LABEL": "{metric} by day and hour",
+    "ACCOUNT_CONVERSATIONS": {
+      "HEADER": "Avatud vestlused",
+      "LOADING_MESSAGE": "Vestluse mõõdikute laadimine...",
+      "OPEN": "Avatud",
+      "UNATTENDED": "Jäetud tähelepanuta",
+      "UNASSIGNED": "Määramata",
+      "PENDING": "Ootel"
+    },
+    "CONVERSATION_HEATMAP": {
+      "HEADER": "Vestluste liiklus",
+      "NO_CONVERSATIONS": "Vestlusi pole",
+      "CONVERSATION": "{count} vestlus",
+      "CONVERSATIONS": "{count} vestlust",
+      "DOWNLOAD_REPORT": "Laadi aruanne alla"
+    },
+    "RESOLUTION_HEATMAP": {
+      "HEADER": "Lahendused",
+      "NO_CONVERSATIONS": "Vestlusi pole",
+      "CONVERSATION": "{count} vestlus",
+      "CONVERSATIONS": "{count} vestlust",
+      "DOWNLOAD_REPORT": "Laadi aruanne alla"
+    },
+    "AGENT_CONVERSATIONS": {
+      "HEADER": "Agentide vestlused",
+      "LOADING_MESSAGE": "Agendi mõõdikute laadimine...",
+      "NO_AGENTS": "Agentide vestlusi pole",
+      "TABLE_HEADER": {
+        "AGENT": "Agent",
+        "OPEN": "Ava",
+        "UNATTENDED": "Jäetud tähelepanuta",
+        "STATUS": "Staatus"
+      }
+    },
+    "TEAM_CONVERSATIONS": {
+      "ALL_TEAMS": "Kõik meeskonnad",
+      "HEADER": "Vestlused meeskondade kaupa",
+      "LOADING_MESSAGE": "Meeskonna mõõdikute laadimine...",
+      "NO_TEAMS": "Andmeid pole saadaval",
+      "TABLE_HEADER": {
+        "TEAM": "Meeskond",
+        "OPEN": "Avatud",
+        "UNATTENDED": "Jäetud tähelepanuta",
+        "STATUS": "Staatus"
+      }
+    },
+    "AGENT_STATUS": {
+      "HEADER": "Agendi olek",
+      "ONLINE": "Veebis",
+      "BUSY": "Hõivatud",
+      "OFFLINE": "Võrgust väljas"
+    }
+  },
+  "DAYS_OF_WEEK": {
+    "SUNDAY": "Pühapäev",
+    "MONDAY": "Monday",
+    "TUESDAY": "Teisipäev",
+    "WEDNESDAY": "Wednesday",
+    "THURSDAY": "Neljapäev",
+    "FRIDAY": "Reede",
+    "SATURDAY": "Laupäev"
+  },
+  "SLA_REPORTS": {
+    "HEADER": "SLA aruanded",
+    "NO_RECORDS": "SLA applied conversations are not available.",
+    "LOADING": "Laaditakse SLA andmeid...",
+    "DOWNLOAD_SLA_REPORTS": "Laadi alla SLA aruanded",
+    "DOWNLOAD_FAILED": "SLA aruannete allalaadimine ebaõnnestus",
+    "DROPDOWN": {
+      "ADD_FIlTER": "Lisa filter",
+      "CLEAR_ALL": "Tühjenda kõik",
+      "CLEAR_FILTER": "Tühjenda filter",
+      "EMPTY_LIST": "Tulemusi ei leitud",
+      "NO_FILTER": "Filtreid pole saadaval",
+      "SEARCH": "Otsi filtrit",
+      "INPUT_PLACEHOLDER": {
+        "SLA": "SLA nimi",
+        "AGENTS": "Agendi nimi",
+        "INBOXES": "Postkasti nimi",
+        "LABELS": "Sildi nimi",
+        "TEAMS": "Meeskonna nimi"
+      },
+      "SLA": "SLA poliitika",
+      "INBOXES": "Postkast",
+      "AGENTS": "Agent",
+      "LABELS": "Silt",
+      "TEAMS": "Meeskond"
+    },
+    "WITH": "koos",
+    "METRICS": {
+      "HIT_RATE": {
+        "LABEL": "Täitumismäär",
+        "TOOLTIP": "Percentage of SLAs created were completed successfully"
+      },
+      "NO_OF_MISSES": {
+        "LABEL": "Mittejärgimiste arv",
+        "TOOLTIP": "Kokku SLA mittejärgimised kindlal perioodil"
+      },
+      "NO_OF_CONVERSATIONS": {
+        "LABEL": "Vestluste arv",
+        "TOOLTIP": "Vestluste koguarv, millel on SLA"
+      }
+    },
+    "TABLE": {
+      "HEADER": {
+        "POLICY": "Poliitika",
+        "CONVERSATION": "Vestlus",
+        "AGENT": "Agent"
+      },
+      "VIEW_DETAILS": "Vaata üksikasju"
+    }
+  },
+  "SUMMARY_REPORTS": {
+    "INBOX": "Postkast",
+    "AGENT": "Agent",
+    "TEAM": "Meeskond",
+    "LABEL": "Silt",
+    "AVG_RESOLUTION_TIME": "Keskmine lahendusaeg",
+    "AVG_FIRST_RESPONSE_TIME": "Keskmine esimene vastuse aeg",
+    "AVG_REPLY_TIME": "Keskmine kliendi ooteaeg",
+    "RESOLUTION_COUNT": "Lahenduste arv",
+    "CONVERSATIONS": "Vestluste arv"
+  }
+}

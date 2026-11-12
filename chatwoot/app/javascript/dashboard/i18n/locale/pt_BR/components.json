@@ -1,0 +1,92 @@
+{
+  "PAGINATION_FOOTER": {
+    "SHOWING": "Exibindo {startItem} - {endItem} de {totalItems} itens",
+    "CURRENT_PAGE_INFO": "{currentPage} de {totalPages} páginas"
+  },
+  "COMBOBOX": {
+    "PLACEHOLDER": "Selecione uma opção...",
+    "EMPTY_SEARCH_RESULTS": "Nenhum item encontrado para o termo de pesquisa `{searchTerm}`",
+    "EMPTY_STATE": "Nenhum resultado encontrado.",
+    "SEARCH_PLACEHOLDER": "Pesquisar...",
+    "MORE": "+{count} mais"
+  },
+  "DROPDOWN_MENU": {
+    "SEARCH_PLACEHOLDER": "Pesquisar...",
+    "EMPTY_STATE": "Nenhum resultado encontrado.",
+    "SEARCHING": "Procurando..."
+  },
+  "DIALOG": {
+    "BUTTONS": {
+      "CANCEL": "Cancelar",
+      "CONFIRM": "Confirmar"
+    }
+  },
+  "PHONE_INPUT": {
+    "SEARCH_PLACEHOLDER": "Selecione o país",
+    "ERROR": "O número de telefone deve estar vazio ou no formato E.164",
+    "DIAL_CODE_ERROR": "Por favor, selecione um código de discagem da lista"
+  },
+  "THUMBNAIL": {
+    "AUTHOR": {
+      "NOT_AVAILABLE": "Autor indisponível"
+    }
+  },
+  "BREADCRUMB": {
+    "ARIA_LABEL": "Mapa"
+  },
+  "SWITCH": {
+    "TOGGLE": "Alternar botão"
+  },
+  "LABEL": {
+    "TAG_BUTTON": "etiqueta"
+  },
+  "FEATURE_ANNOUNCEMENT": {
+    "BADGE": "Novo",
+    "DISMISS": "Entendi",
+    "PREVIOUS": "Anterior",
+    "NEXT": "Próximo",
+    "DISMISS_HINT": "Pressione {key} para fechar",
+    "ESCAPE_KEY": "Esc",
+    "CLOSE": "Fechar"
+  },
+  "FEATURE_SPOTLIGHT": {
+    "LEARN_MORE": "Saiba mais",
+    "WATCH_VIDEO": "Assistir ao vídeo"
+  },
+  "DURATION_INPUT": {
+    "MINUTES": "Minutos",
+    "HOURS": "Horas",
+    "DAYS": "Dias",
+    "PLACEHOLDER": "Insira a duração"
+  },
+  "CHANNEL_SELECTOR": {
+    "COMING_SOON": "Em breve!"
+  },
+  "SLASH_COMMANDS": {
+    "HEADING_1": "Heading 1",
+    "HEADING_2": "Heading 2",
+    "HEADING_3": "Heading 3",
+    "BOLD": "Bold",
+    "ITALIC": "Italic",
+    "STRIKETHROUGH": "Strikethrough",
+    "CODE": "Code",
+    "BULLET_LIST": "Bullet List",
+    "ORDERED_LIST": "Ordered List",
+    "TABLE": "Table",
+    "IMAGE": "Imagem",
+    "VIDEO": "Vídeo",
+    "DIVIDER": "Divisor"
+  },
+  "VIDEO_EMBED": {
+    "TAB_EMBED": "Incorporar link",
+    "TAB_UPLOAD": "Enviar arquivo",
+    "PLACEHOLDER": "Cole o link de um vídeo",
+    "HINT": "Funciona com links do YouTube, Vimeo, Loom, Wistia, Arcade, Bunny, CodePen, GuideJar e arquivos mp4",
+    "ERROR": "Este link de vídeo não parece ser compatível",
+    "UPLOAD_LABEL": "Escolha um arquivo de vídeo",
+    "UPLOAD_HINT": "MP4 · até {size}MB · ou arraste e solte aqui",
+    "UPLOAD_ERROR": "Apenas arquivos MP4 podem ser enviados",
+    "ADD": "Incorporar",
+    "CANCEL": "Cancelar"
+  }
+}

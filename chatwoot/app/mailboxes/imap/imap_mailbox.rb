@@ -1,0 +1,143 @@
+class Imap::ImapMailbox
+  include MailboxHelper
+  include IncomingEmailValidityHelper
+  attr_accessor :channel, :account, :inbox, :conversation, :processed_mail
+
+  FALLBACK_CONVERSATION_PATTERN = %r{account/(\d+)/conversation/([a-zA-Z0-9-]+)@}
+
+  def process(mail, channel)
+    @inbound_mail = mail
+    @channel = channel
+    load_account
+    load_inbox
+    decorate_mail
+
+    Rails.logger.info("Processing Email from: #{@processed_mail.original_sender} : inbox #{@inbox.id} : message_id #{@processed_mail.message_id}")
+
+    # Skip processing email if it belongs to any of the edge cases
+    return unless incoming_email_from_valid_email?
+
+    ActiveRecord::Base.transaction do
+      next if duplicate_email?
+
+      find_or_create_contact
+      find_or_create_conversation
+      create_message
+      add_attachments_to_message
+    end
+  end
+
+  private
+
+  def load_account
+    @account = @channel.account
+  end
+
+  def load_inbox
+    @inbox = @channel.inbox
+  end
+
+  def decorate_mail
+    @processed_mail = MailPresenter.new(@inbound_mail, @account)
+  end
+
+  # Fetch jobs for an inbox can overlap and hold the same email, long after their own duplicate check ran.
+  # The advisory lock makes a job wait while another job saves the same email. Postgres releases it when the transaction ends.
+  # Waiting, instead of skipping, means a reply later in the batch can find this email's conversation.
+  # The check after the lock sees the copy the other job committed. It bypasses the query cache,
+  # which can still hold the result of the same query from the fetch-stage check.
+  def duplicate_email?
+    source_id = sanitize_mailbox_value(@processed_mail.message_id)
+    lock_key = Digest::SHA256.digest(source_id).unpack1('l>')
+    ActiveRecord::Base.connection.select_value("SELECT pg_advisory_xact_lock(#{@inbox.id}, #{lock_key})")
+
+    Message.uncached { @inbox.messages.exists?(source_id: source_id) }
+  end
+
+  # Replies to a forwarded email stay in the forward recipient's own conversation
+  def find_conversation_by_in_reply_to
+    return if in_reply_to.blank?
+
+    message = @inbox.messages.find_by(source_id: in_reply_to)
+    return @inbox.conversations.find(message.conversation_id) if message.present? && !message.forwarded?
+
+    @contact.conversations.where(inbox: @inbox).find_by("additional_attributes->>'in_reply_to' = ?", in_reply_to)
+  end
+
+  def find_conversation_by_reference_ids
+    return if @inbound_mail.references.blank?
+
+    message = find_message_by_references
+    if message.present?
+      conversation = @inbox.conversations.find_by(id: message.conversation_id)
+      return conversation if conversation.present?
+    end
+
+    # FALLBACK_PATTERN use to find a conversation that is started by an agent (no incoming message yet)
+    conversation_id = find_conversation_by_references
+    @inbox.conversations.find_by(uuid: conversation_id) if conversation_id.present?
+  end
+
+  def in_reply_to
+    sanitize_mailbox_value(@processed_mail.in_reply_to)
+  end
+
+  def find_conversation_by_references
+    references.each do |message_id|
+      match = FALLBACK_CONVERSATION_PATTERN.match(message_id)
+
+      return match[2] if match.present?
+    end
+  end
+
+  def find_message_by_references
+    message_to_return = nil
+
+    references.each do |message_id|
+      message = @inbox.messages.find_by(source_id: message_id)
+      message_to_return = message if message.present? && !message.forwarded?
+    end
+    message_to_return
+  end
+
+  def find_or_create_conversation
+    @conversation = find_conversation_by_in_reply_to || find_conversation_by_reference_ids || ::Conversation.create!(
+      {
+        account_id: @account.id,
+        inbox_id: @inbox.id,
+        contact_id: @contact.id,
+        contact_inbox_id: @contact_inbox.id,
+        additional_attributes: {
+          source: 'email',
+          in_reply_to: in_reply_to,
+          auto_reply: @processed_mail.auto_reply?,
+          mail_subject: sanitize_mailbox_value(@processed_mail.subject),
+          initiated_at: {
+            timestamp: Time.now.utc
+          }
+        }
+      }
+    )
+  end
+
+  def find_or_create_contact
+    @contact = @inbox.contacts.from_email(original_sender_email)
+    if @contact.present?
+      @contact_inbox = ContactInbox.find_by(inbox: @inbox, contact: @contact)
+    else
+      create_contact
+    end
+  end
+
+  def identify_contact_name
+    sanitize_mailbox_value(processed_mail.sender_name || processed_mail.from.first.split('@').first)
+  end
+
+  def original_sender_email
+    sanitize_mailbox_value(@processed_mail.original_sender)
+  end
+
+  def references
+    sanitize_mailbox_value(Array.wrap(@inbound_mail.references))
+  end
+end

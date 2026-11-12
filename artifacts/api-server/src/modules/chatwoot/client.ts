@@ -153,3 +153,141 @@ export async function createMessage(
   const data = (await res.json()) as ChatwootMessage;
   return data;
 }
+
+// ── Agents & conversation ownership ────────────────────────────────────────
+//
+// An inbound supplier reply is filed under the pricing request it answers, and
+// that request has a RESPONSIBLE EMPLOYEE. Making the console useful means the
+// conversation is assigned to that employee, not left in a shared pile where
+// nobody owns it. Everything below is best-effort for the same reason as the
+// rest of this file: a console problem must not break the WhatsApp pipeline.
+
+export interface ChatwootAgent {
+  id: number;
+  name?: string;
+  email?: string;
+  /** `online` | `offline` | `busy` — Chatwoot's own availability state. */
+  availability_status?: string;
+  role?: string;
+  confirmed?: boolean;
+}
+
+export type ConversationStatus = "open" | "pending" | "resolved";
+
+/** List the account's agents. Used to resolve an employee → agent mapping. */
+export async function listAgents(): Promise<ChatwootAgent[]> {
+  const res = await cw(`/agents`);
+  if (!res.ok) {
+    logger.warn({ status: res.status }, "Chatwoot: agent list failed");
+    return [];
+  }
+  const data = (await res.json()) as ChatwootAgent[];
+  return Array.isArray(data) ? data : [];
+}
+
+/** Find an agent by email. Email is the identity both systems share, so it is
+ *  the only safe key to match an employee to an agent — a name is not unique. */
+export async function findAgentByEmail(email: string): Promise<ChatwootAgent | undefined> {
+  if (!email) return undefined;
+  const wanted = email.trim().toLowerCase();
+  const agents = await listAgents();
+  return agents.find((a) => (a.email || "").trim().toLowerCase() === wanted);
+}
+
+/** Create an agent. Chatwoot emails an invitation; when SMTP is not configured
+ *  the record is still created and assignable, which is what we need. */
+export async function createAgent(
+  name: string,
+  email: string,
+  role: "agent" | "administrator" = "agent",
+): Promise<ChatwootAgent | undefined> {
+  const res = await cw(`/agents`, {
+    method: "POST",
+    body: JSON.stringify({ name: name || email, email, role }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    logger.warn({ status: res.status, body, email }, "Chatwoot: create agent failed");
+    return undefined;
+  }
+  return (await res.json()) as ChatwootAgent;
+}
+
+/** Assign a conversation to an agent. Idempotent in effect: assigning the same
+ *  agent twice leaves the conversation in the same state. */
+export async function assignConversation(
+  conversationId: number,
+  agentId: number,
+): Promise<boolean> {
+  const res = await cw(`/conversations/${conversationId}/assignments`, {
+    method: "POST",
+    body: JSON.stringify({ assignee_id: agentId, assignee_type: "User" }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    logger.warn(
+      { status: res.status, body, conversationId, agentId },
+      "Chatwoot: assign conversation failed",
+    );
+    return false;
+  }
+  return true;
+}
+
+/** Merge custom attributes onto a conversation. `merge:true` is essential — the
+ *  default REPLACES the whole attribute set, so a second call would wipe the
+ *  request number written by the first. */
+export async function setConversationCustomAttributes(
+  conversationId: number,
+  attributes: Record<string, string>,
+): Promise<boolean> {
+  if (Object.keys(attributes).length === 0) return true;
+  const res = await cw(`/conversations/${conversationId}/custom_attributes`, {
+    method: "POST",
+    body: JSON.stringify({ custom_attributes: attributes, merge: true }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    logger.warn(
+      { status: res.status, body, conversationId },
+      "Chatwoot: set custom attributes failed",
+    );
+    return false;
+  }
+  return true;
+}
+
+/** Add labels to a conversation. Chatwoot merges labels, so this is additive. */
+export async function addConversationLabels(
+  conversationId: number,
+  labels: string[],
+): Promise<boolean> {
+  if (labels.length === 0) return true;
+  const res = await cw(`/conversations/${conversationId}/labels`, {
+    method: "POST",
+    body: JSON.stringify({ labels }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    logger.warn({ status: res.status, body, conversationId }, "Chatwoot: add labels failed");
+    return false;
+  }
+  return true;
+}
+
+/** Move a conversation between open/pending/resolved. */
+export async function setConversationStatus(
+  conversationId: number,
+  status: ConversationStatus,
+): Promise<boolean> {
+  const res = await cw(`/conversations/${conversationId}/toggle_status`, {
+    method: "POST",
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    logger.warn({ status: res.status, body, conversationId }, "Chatwoot: set status failed");
+    return false;
+  }
+  return true;
+}

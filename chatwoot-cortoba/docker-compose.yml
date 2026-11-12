@@ -1,0 +1,112 @@
+# Chatwoot + Cortoba overlay — the ONE canonical stack.
+#
+# Four services: web (Rails), worker (Sidekiq), postgres, redis.
+#
+# DATABASE ISOLATION IS ABSOLUTE: Chatwoot gets its own postgres container and
+# its own volume. It never sees Cortoba's DATABASE_URL, and Cortoba never reads
+# Chatwoot's tables. Cortoba remains the source of truth for suppliers, pricing
+# requests, purchase orders and employees; Chatwoot owns conversations, messages
+# and attachments.
+#
+# Run:
+#   cd chatwoot-cortoba && cp .env.example .env   # then set the secrets
+#   docker compose up -d --build
+#   docker compose exec web bundle exec rails db:chatwoot_prepare
+#
+# See README.md.
+
+name: chatwoot-cortoba
+
+services:
+  postgres:
+    # Chatwoot v4.19+ requires the `vector` extension (db/schema.rb:
+    # `enable_extension "vector"`), so plain postgres fails at db:chatwoot_prepare
+    # with `extension "vector" is not available`. Upstream's own compose file
+    # uses this image; we match it rather than adding a manual extension install.
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chatwoot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: chatwoot
+    volumes:
+      - chatwoot_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatwoot -d chatwoot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - chatwoot_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cortoba/chatwoot:4.19.1
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports:
+      - "${CHATWOOT_PORT:-3000}:3000"
+    env_file: .env
+    environment: &chatwoot_env
+      RAILS_ENV: production
+      NODE_ENV: production
+      INSTALLATION_ENV: docker
+      # A separate database, on a separate container. Not Cortoba's.
+      DATABASE_URL: postgres://chatwoot:${POSTGRES_PASSWORD}@postgres:5432/chatwoot
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      # Local install: no TLS termination in front of this compose file.
+      FORCE_SSL: ${FORCE_SSL:-false}
+      # Employees sign in to Cortoba only; they never get a Chatwoot password.
+      ENABLE_ACCOUNT_SIGNUP: "false"
+      DISABLE_TELEMETRY: "true"
+      ACTIVE_STORAGE_SERVICE: local
+      DEFAULT_LOCALE: ar
+      RAILS_LOG_TO_STDOUT: "true"
+      RAILS_LOG_LEVEL: ${RAILS_LOG_LEVEL:-info}
+      # Cortoba wiring (read by the overlay initializer).
+      CORTOBA_APP_URL: ${CORTOBA_APP_URL:-}
+      CORTOBA_OWNER_ATTRIBUTE_KEY: ${CORTOBA_OWNER_ATTRIBUTE_KEY:-cortoba_owner_name}
+      CORTOBA_RFQ_ATTRIBUTE_KEY: ${CORTOBA_RFQ_ATTRIBUTE_KEY:-cortoba_rfq_no}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
+    command: bundle exec rails s -b 0.0.0.0 -p 3000
+
+  worker:
+    image: cortoba/chatwoot:4.19.1
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      web: { condition: service_started }
+    env_file: .env
+    environment: *chatwoot_env
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f sidekiq || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    command: bundle exec sidekiq -C config/sidekiq.yml
+
+volumes:
+  chatwoot_pgdata:
+  chatwoot_redisdata:

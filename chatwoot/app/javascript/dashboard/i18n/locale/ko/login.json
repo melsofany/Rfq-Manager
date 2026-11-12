@@ -1,0 +1,42 @@
+{
+  "LOGIN": {
+    "TITLE": "로그인",
+    "EMAIL": {
+      "LABEL": "이메일",
+      "PLACEHOLDER": "example{'@'}companyname.com",
+      "ERROR": "올바른 이메일 주소를 입력하십시오."
+    },
+    "PASSWORD": {
+      "LABEL": "비밀번호",
+      "PLACEHOLDER": "비밀번호"
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "로그인 성공",
+      "ERROR_MESSAGE": "Woot 서버에 연결할 수 없습니다. 다시 시도하십시오.",
+      "UNAUTH": "이름 또는 비밀번호가 올바르지 않습니다. 다시 시도하십시오."
+    },
+    "OAUTH": {
+      "GOOGLE_LOGIN": "Google로 로그인",
+      "BUSINESS_ACCOUNTS_ONLY": "You can't create a new account with a personal email address. Please sign up using your work email.",
+      "NO_ACCOUNT_FOUND": "귀하의 이메일 주소로 계정을 찾을 수 없습니다.",
+      "SHOPIFY_INSTALLATION_FAILED": "We couldn't complete your Shopify installation. Please restart installation from Shopify."
+    },
+    "FORGOT_PASSWORD": "비밀번호를 잊으셨습니까?",
+    "CREATE_NEW_ACCOUNT": "새 계정 만들기",
+    "SUBMIT": "로그인",
+    "SAML": {
+      "LABEL": "SSO로 로그인",
+      "TITLE": "SSO(Single Sign-on) 시작",
+      "SUBTITLE": "조직에 액세스하려면 업무용 이메일을 입력하십시오",
+      "BACK_TO_LOGIN": "비밀번호로 로그인",
+      "WORK_EMAIL": {
+        "LABEL": "업무용 이메일",
+        "PLACEHOLDER": "업무용 이메일을 입력하십시오"
+      },
+      "SUBMIT": "SSO로 계속",
+      "API": {
+        "ERROR_MESSAGE": "SSO 인증에 실패했습니다. 자격 증명을 확인하고 다시 시도하십시오."
+      }
+    }
+  }
+}

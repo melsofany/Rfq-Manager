@@ -1,0 +1,24 @@
+{
+  "DATE_PICKER": {
+    "PREVIOUS_PERIOD": "Previous period",
+    "NEXT_PERIOD": "Next period",
+    "WEEK_NUMBER": "Week #{weekNumber}",
+    "APPLY_BUTTON": "Применить",
+    "CLEAR_BUTTON": "Сбросить",
+    "DATE_RANGE_INPUT": {
+      "START": "Дата начала",
+      "END": "Дата окончания"
+    },
+    "DATE_RANGE_OPTIONS": {
+      "TITLE": "Диапазон дат",
+      "LAST_7_DAYS": "Последние 7 дней",
+      "LAST_30_DAYS": "Последние 30 дней",
+      "LAST_3_MONTHS": "Последние 3 месяца",
+      "LAST_6_MONTHS": "Последние 6 месяцев",
+      "LAST_YEAR": "За прошлый год",
+      "THIS_WEEK": "This week",
+      "MONTH_TO_DATE": "This month",
+      "CUSTOM_RANGE": "Настраиваемый диапазон даты"
+    }
+  }
+}

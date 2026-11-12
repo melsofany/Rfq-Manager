@@ -1,0 +1,617 @@
+{
+  "CONVERSATION": {
+    "REFERRAL": {
+      "AD_LABEL": "Ad",
+      "POST_LABEL": "Post",
+      "VIEW_AD": "View ad",
+      "WELCOME_MESSAGE_LABEL": "Pre-filled message: ",
+      "REPLIED_BELOW": "Customer replied below"
+    },
+    "SELECT_A_CONVERSATION": "Välj en konversation från vänster panel",
+    "CSAT_REPLY_MESSAGE": "Betygsätt konversationen",
+    "404": "Tyvärr kan vi inte hitta konversationen. Försök igen",
+    "SWITCH_VIEW_LAYOUT": "Byt layout",
+    "DASHBOARD_APP_TAB_MESSAGES": "Meddelanden",
+    "UNVERIFIED_SESSION": "Identiteten för den här användaren är inte verifierad",
+    "NO_MESSAGE_1": "Oj då! Det ser ut som att det inte finns några meddelanden från kunder i din inkorg.",
+    "NO_MESSAGE_2": " för att skicka ett meddelande till din sida!",
+    "NO_INBOX_1": "Hola! Ser ut som om du inte har lagt till några inkorgar än.",
+    "NO_INBOX_2": " för att komma igång",
+    "NO_INBOX_AGENT": "Oj då! Ser ut som om du inte är del av någon inkorg. Kontakta administratören",
+    "SEARCH_MESSAGES": "Sök meddelanden i konversationer",
+    "VIEW_ORIGINAL": "View original",
+    "VIEW_TRANSLATED": "View translated",
+    "TRANSLATING": "Translating…",
+    "TRANSLATING_TO": "Translating to {language}…",
+    "VIEW_ORIGINAL_IN": "View original ({language})",
+    "VIEW_TRANSLATED_IN": "View translated ({language})",
+    "TRANSLATION_FAILED": "Could not translate, sent as typed",
+    "CONTACT_TRANSLATION_FAILED": "Could not translate",
+    "EMPTY_STATE": {
+      "CMD_BAR": "för att öppna kommandomenyn",
+      "KEYBOARD_SHORTCUTS": "för att visa kortkommandon"
+    },
+    "SEARCH": {
+      "TITLE": "Sök meddelanden",
+      "RESULT_TITLE": "Sökresultat",
+      "LOADING_MESSAGE": "Tuggar data...",
+      "PLACEHOLDER": "Skriv valfri text för att söka efter meddelanden",
+      "NO_MATCHING_RESULTS": "Inga resultat hittades."
+    },
+    "UNREAD_MESSAGES": "Olästa meddelanden",
+    "UNREAD_MESSAGE": "Oläst meddelande",
+    "CONTACT_HISTORY": {
+      "OLDER": "Previous conversation",
+      "NEWER": "Next conversation",
+      "OLDER_WITH": "Previous conversation with {name} · {time}",
+      "NEWER_WITH": "Next conversation with {name} · {time}",
+      "CUSTOMER": "this customer",
+      "REPLY_TO_OLDER": "Reply to this older conversation",
+      "GO_TO_LATEST": "Go to latest conversation"
+    },
+    "CLICK_HERE": "Klicka här",
+    "LOADING_INBOXES": "Laddar inkorgar",
+    "LOADING_CONVERSATIONS": "Laddar konversationer",
+    "CANNOT_REPLY": "Du kan inte svara på grund av",
+    "24_HOURS_WINDOW": "24 timmars meddelandebegränsning",
+    "48_HOURS_WINDOW": "48 timmars meddelandebegränsning",
+    "API_HOURS_WINDOW": "You can only reply to this conversation within {hours} hours",
+    "NOT_ASSIGNED_TO_YOU": "Den här konversationen är inte tilldelad dig. Vill du tilldela dig själv den här konversationen?",
+    "ASSIGN_TO_ME": "Tilldela mig",
+    "BOT_HANDOFF_MESSAGE": "This conversation is currently handled by {assigneeName}.",
+    "BOT_HANDOFF_FALLBACK_ASSIGNEE": "an AI agent",
+    "BOT_HANDOFF_ACTION": "Take over",
+    "BOT_HANDOFF_REOPEN_ACTION": "Mark conversation open",
+    "BOT_HANDOFF_SUCCESS": "Conversation has been handed over to you",
+    "BOT_HANDOFF_ERROR": "Failed to take over the conversation. Please try again.",
+    "TWILIO_WHATSAPP_CAN_REPLY": "Du kan bara svara på denna konversation med ett mallmeddelande på grund av",
+    "TWILIO_WHATSAPP_24_HOURS_WINDOW": "24 timmars meddelandebegränsning",
+    "OLD_INSTAGRAM_INBOX_REPLY_BANNER": "This Instagram account was migrated to the new Instagram channel inbox. All new messages will show up there. You won’t be able to send messages from this conversation anymore.",
+    "INSTAGRAM_RESTRICTION_BANNER": "Instagram messaging is currently affected by an API-level issue on Meta’s side, not a problem with Chatwoot. Some messages or actions may be delayed or unavailable. We’re working closely with Meta to resolve it as quickly as possible.",
+    "INSTAGRAM_RESTRICTION_STATUS_LINK": "View status updates",
+    "REPLYING_TO": "Du svarar:",
+    "REMOVE_SELECTION": "Ta bort urval",
+    "DOWNLOAD": "Hämta",
+    "UNKNOWN_FILE_TYPE": "Okänd fil",
+    "SAVE_CONTACT": "Save Contact",
+    "NO_CONTENT": "No content to display",
+    "SHARED_ATTACHMENT": {
+      "CONTACT": "{sender} has shared a contact",
+      "LOCATION": "{sender} has shared a location",
+      "FILE": "{sender} has shared a file",
+      "MEETING": "{sender} has started a meeting"
+    },
+    "UPLOADING_ATTACHMENTS": "Laddar upp bilagor...",
+    "REPLIED_TO_STORY": "Replied to your story",
+    "UNSUPPORTED_MESSAGE": "This message is unsupported. You can view this message on the Facebook / Instagram app.",
+    "UNSUPPORTED_MESSAGE_FACEBOOK": "Detta meddelande stöds inte. Du kan se detta meddelande på Facebook Messenger-appen.",
+    "UNSUPPORTED_MESSAGE_INSTAGRAM": "Detta meddelande stöds inte. Du kan se detta meddelande på Instagram-appen.",
+    "UNSUPPORTED_MESSAGE_TIKTOK": "This message is unsupported. You can view this message on the TikTok app.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_TITLE": "Message content unavailable",
+    "UNSUPPORTED_MESSAGE_WHATSAPP": "We’re unable to display this message because Meta hasn’t provided its content. This can happen with WhatsApp Coexistence setups. To view the message, please check it in your WhatsApp Business app.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_DETAILS": "For more details, refer to {documentation}.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_LEARN_MORE": "Meta’s documentation",
+    "WHATSAPP_FLOW_RESPONSE": "Submitted a flow response",
+    "WHATSAPP_REFERRAL": {
+      "AD": "Ad"
+    },
+    "SUCCESS_DELETE_MESSAGE": "Meddelandet har tagits bort",
+    "FAIL_DELETE_MESSSAGE": "Det gick inte att ta bort meddelande! Försök igen",
+    "NO_RESPONSE": "Inget svar",
+    "REQUEST_CONTACT_INFO": {
+      "ACTION": "Ask the customer to share their WhatsApp phone number",
+      "PENDING_ACTION": "Contact information request pending",
+      "STATES": {
+        "PENDING": "Waiting for contact information",
+        "SHARED": "Phone number shared",
+        "IDENTITY_CONFLICT": "Phone number needs review"
+      }
+    },
+    "RESPONSE": "Response",
+    "RATING_TITLE": "Betyg",
+    "FEEDBACK_TITLE": "Feedback",
+    "REPLY_MESSAGE_NOT_FOUND": "Meddelandet är inte tillgängligt",
+    "CAPTAIN_GENERATION": {
+      "TITLE": "How was this reply generated?",
+      "GENERATED_BY": "Generated by Captain",
+      "LOADING": "Loading details…",
+      "EMPTY": "No generation details available for this message.",
+      "TIMELINE": "Generation steps",
+      "STEP_TOOL": "Called {name}",
+      "STEP_HANDOFF": "Handed off to {name}",
+      "REASONING": "Reasoning",
+      "SOURCES": "Knowledge base",
+      "SOURCES_SUMMARY": "{count} result | {count} results",
+      "MODEL": "Generated with {model}",
+      "CREDITS": "Credits: {credits}"
+    },
+    "CARD": {
+      "SHOW_LABELS": "Visa etiketter",
+      "HIDE_LABELS": "Dölj etiketter",
+      "LABELS_COUNT": "{count} labels"
+    },
+    "VOICE_CALL": {
+      "INCOMING_CALL": "Incoming call",
+      "OUTGOING_CALL": "Outgoing call",
+      "CALL_IN_PROGRESS": "Call in progress",
+      "NO_ANSWER": "No answer",
+      "NO_ANSWER_OUTBOUND_LABEL": "No answer",
+      "NO_ANSWER_OUTBOUND_SUBTEXT": "Contact didn't pick up",
+      "MISSED_CALL": "Missed call",
+      "MISSED_CALL_INBOUND_SUBTEXT": "No agent picked up",
+      "MISSED_CALL_DECLINED_BY": "Declined by {agentName}",
+      "CALL_ENDED": "Call ended",
+      "HANDLED_BY": "Handled by {agentName}",
+      "NOT_ANSWERED_YET": "Not answered yet",
+      "CALLING": "Calling…",
+      "THEY_ANSWERED": "They answered",
+      "YOU_ANSWERED": "You answered",
+      "AGENT_ANSWERED": "{agentName} answered",
+      "JOIN_CALL": "Join call",
+      "CALL_BACK": "Call back",
+      "TRANSCRIPT_SHOW_MORE": "Show more",
+      "TRANSCRIPT_SHOW_LESS": "Show less"
+    },
+    "HEADER": {
+      "RESOLVE_ACTION": "Lös",
+      "REOPEN_ACTION": "Återöppna",
+      "OPEN_ACTION": "Öppna",
+      "MORE_ACTIONS": "More actions",
+      "OPEN": "Mer",
+      "CLOSE": "Stäng",
+      "DETAILS": "detaljer",
+      "COPY_ID_SUCCESS": "Conversation ID copied to clipboard",
+      "SNOOZED_UNTIL": "Snoozad till",
+      "SNOOZED_UNTIL_TOMORROW": "Snoozad till imorgon",
+      "SNOOZED_UNTIL_NEXT_WEEK": "Snoozad till nästa vecka",
+      "SNOOZED_UNTIL_NEXT_REPLY": "Snoozad till nästa svar",
+      "WHATSAPP_CALL": "Start WhatsApp call",
+      "WHATSAPP_CALL_FAILED": "Could not start the WhatsApp call.",
+      "VOICE_CALL": "Start call",
+      "VOICE_CALL_FAILED": "Could not start the call.",
+      "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+      "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+      "SLA_STATUS": {
+        "FRT": "FRT {status}",
+        "NRT": "NRT {status}",
+        "RT": "RT {status}",
+        "MISSED": "missed",
+        "DUE": "due"
+      }
+    },
+    "RESOLVE_DROPDOWN": {
+      "MARK_PENDING": "Markera som väntande",
+      "SNOOZE_UNTIL": "Snooza",
+      "SNOOZE": {
+        "TITLE": "Snooza tills",
+        "NEXT_REPLY": "Nästa svar",
+        "TOMORROW": "Imorgon",
+        "NEXT_WEEK": "Nästa vecka"
+      }
+    },
+    "MENTION": {
+      "AGENTS": "Agenter",
+      "TEAMS": "Teams"
+    },
+    "PICKER": {
+      "VARIABLE": {
+        "SEARCH_PLACEHOLDER": "Search variables",
+        "DESCRIPTION": "Beskrivning",
+        "VALUE": "Value",
+        "NO_VALUE": "No value for this conversation"
+      },
+      "EMOJI": {
+        "SEARCH_PLACEHOLDER": "Sök emoji",
+        "EMPTY_STATE": "Type to search emojis"
+      },
+      "MACRO": {
+        "SEARCH_PLACEHOLDER": "Search macros",
+        "ACTION_COUNT": "1 action | {count} actions"
+      },
+      "MENTION": {
+        "SEARCH_PLACEHOLDER": "Search agents and teams",
+        "FILTER": {
+          "ALL": "Alla"
+        },
+        "AVAILABILITY": "Tillgänglighet",
+        "ROLE": "Roll",
+        "AUTO_ASSIGN": "Auto assign",
+        "ENABLED": "Aktiverad",
+        "DISABLED": "Inaktiverad",
+        "YOU_ARE_A_MEMBER": "You are a member of this team"
+      }
+    },
+    "CUSTOM_SNOOZE": {
+      "TITLE": "Snooza tills",
+      "APPLY": "Snooza",
+      "CANCEL": "Avbryt"
+    },
+    "SUGGESTIONS": {
+      "SUGGEST": "Suggest with Captain",
+      "EMPTY": "No new suggestions",
+      "ACCEPT": "Accept",
+      "APPLY_HINT": "Click to apply",
+      "REJECT": "Dismiss",
+      "ACCEPT_ALL": "Accept all",
+      "ERROR": "Could not load suggestions. Please try again.",
+      "APPLY_ERROR": "Could not apply the suggested labels. Please try again."
+    },
+    "PRIORITY": {
+      "TITLE": "Prioritet",
+      "OPTIONS": {
+        "NONE": "Inget",
+        "URGENT": "Brådskande",
+        "HIGH": "Hög",
+        "MEDIUM": "Medel",
+        "LOW": "Låg"
+      },
+      "CHANGE_PRIORITY": {
+        "SELECT_PLACEHOLDER": "Inget",
+        "INPUT_PLACEHOLDER": "Välj prioritet",
+        "NO_RESULTS": "Inga resultat hittades",
+        "SUCCESSFUL": "Ändrad prioritet för konversations-id {conversationId} till {priority}",
+        "FAILED": "Kunde inte ändra prioritet. Försök igen."
+      }
+    },
+    "DELETE_CONVERSATION": {
+      "TITLE": "Delete conversation #{conversationId}",
+      "DESCRIPTION": "Are you sure you want to delete this conversation?",
+      "CONFIRM": "Radera"
+    },
+    "CARD_CONTEXT_MENU": {
+      "PENDING": "Markera som väntande",
+      "RESOLVED": "Markera som löst",
+      "MARK_AS_UNREAD": "Markera som oläst",
+      "MARK_AS_READ": "Mark as read",
+      "REOPEN": "Återöppna konversationen",
+      "SNOOZE": {
+        "TITLE": "Snooza",
+        "NEXT_REPLY": "Tills nästa svar",
+        "TOMORROW": "Tills imorgon",
+        "NEXT_WEEK": "Tills nästa vecka"
+      },
+      "ASSIGN_AGENT": "Tilldela agent",
+      "ASSIGN_LABEL": "Tilldela etikett",
+      "SEARCH_LABELS": "Sök etiketter",
+      "NO_LABELS_FOUND": "Inga etiketter hittades",
+      "AGENTS_LOADING": "Laddar agenter...",
+      "ASSIGN_TEAM": "Tilldela team",
+      "DELETE": "Delete conversation",
+      "OPEN_IN_NEW_TAB": "Open in new tab",
+      "COPY_LINK": "Copy conversation link",
+      "COPY_LINK_SUCCESS": "Conversation link copied to clipboard",
+      "API": {
+        "AGENT_ASSIGNMENT": {
+          "SUCCESFUL": "Conversation id {conversationId} assigned to \"{agentName}\"",
+          "FAILED": "Couldn't assign agent. Please try again."
+        },
+        "LABEL_ASSIGNMENT": {
+          "SUCCESFUL": "Assigned label #{labelName} to conversation id {conversationId}",
+          "FAILED": "Couldn't assign label. Please try again."
+        },
+        "LABEL_REMOVAL": {
+          "SUCCESFUL": "Removed label #{labelName} from conversation id {conversationId}",
+          "FAILED": "Couldn't remove label. Please try again."
+        },
+        "TEAM_ASSIGNMENT": {
+          "SUCCESFUL": "Assigned team \"{team}\" to conversation id {conversationId}",
+          "FAILED": "Couldn't assign team. Please try again."
+        }
+      }
+    },
+    "FOOTER": {
+      "MESSAGE_SIGN_TOOLTIP": "Meddelandesignatur",
+      "ENABLE_SIGN_TOOLTIP": "Aktivera signatur",
+      "DISABLE_SIGN_TOOLTIP": "Inaktivera signatur",
+      "MSG_INPUT": "Skift + Enter för ny rad. Börja med '/' för att välja en svarsmall.",
+      "PRIVATE_MSG_INPUT": "Skift + Enter för ny rad. Detta kommer endast att vara synligt för agenter",
+      "MESSAGING_RESTRICTED": "You cannot reply to this conversation",
+      "MESSAGING_RESTRICTED_WHATSAPP": "You can only reply using a template message due to 24-hour message window restriction",
+      "MESSAGING_RESTRICTED_API": "You can only reply using a template message due to message window restriction",
+      "MESSAGE_SIGNATURE_NOT_CONFIGURED": "Meddelandesignaturen är inte konfigurerad. Konfigurera den i profilinställningarna.",
+      "COPILOT_MSG_INPUT": "Ge copilot ytterligare instruktioner, eller ställ andra frågor... Tryck enter för att skicka uppföljning",
+      "CLICK_HERE": "Klicka här för att uppdatera",
+      "WHATSAPP_TEMPLATES": "Whatsapp Templates"
+    },
+    "REPLYBOX": {
+      "REPLY": "Svara",
+      "PRIVATE_NOTE": "Privat anteckning",
+      "SEND": "Skicka",
+      "CREATE": "Lägg till anteckning",
+      "INSERT_READ_MORE": "Läs mer",
+      "DISMISS_REPLY": "Avvisa svar",
+      "REPLYING_TO": "Svarar till:",
+      "TIP_EMOJI_ICON": "Visa emoji-väljare",
+      "TIP_ATTACH_ICON": "Bifoga filer",
+      "TIP_AUDIORECORDER_ICON": "Spela in ljud",
+      "TIP_AUDIORECORDER_PERMISSION": "Tillåt åtkomst till ljud",
+      "TIP_AUDIORECORDER_ERROR": "Kunde inte öppna ljudet",
+      "AUDIO_CONVERSION_FAILED": "Audio conversion failed. Please try again.",
+      "DRAG_DROP": "Dra och släpp hit för att bifoga",
+      "IMAGE_UPLOAD_SUCCESS": "Image uploaded successfully",
+      "START_AUDIO_RECORDING": "Starta ljudinspelning",
+      "STOP_AUDIO_RECORDING": "Stop audio recording",
+      "COPILOT_THINKING": "Copilot tänker",
+      "EMAIL_HEAD": {
+        "TO": "Till",
+        "CC": {
+          "LABEL": "Cc",
+          "PLACEHOLDER": "E-post separerade med kommatecken",
+          "ERROR": "Ange giltiga e-postadresser"
+        },
+        "BCC": {
+          "LABEL": "Bcc",
+          "PLACEHOLDER": "E-post separerade med kommatecken",
+          "ERROR": "Ange giltiga e-postadresser"
+        },
+        "SUBJECT": {
+          "LABEL": "Ämne",
+          "PLACEHOLDER": "Enter a subject"
+        }
+      },
+      "UNDEFINED_VARIABLES": {
+        "TITLE": "Undefined variables",
+        "MESSAGE": "You have {undefinedVariablesCount} undefined variables in your message: {undefinedVariables}. Would you like to send the message anyway?",
+        "CONFIRM": {
+          "YES": "Skicka",
+          "CANCEL": "Avbryt"
+        }
+      },
+      "QUOTED_REPLY": {
+        "SHOW_TOOLTIP": "Show trimmed content",
+        "HIDE_TOOLTIP": "Hide trimmed content",
+        "REMOVE": "Remove quoted text"
+      }
+    },
+    "VISIBLE_TO_AGENTS": "Privat anteckning: Endast synlig för dig och ditt team",
+    "CHANGE_STATUS": "Konversationsstatus ändrad",
+    "CHANGE_STATUS_FAILED": "Conversation status change failed",
+    "CHANGE_AGENT": "Konversationstilldelning ändrad",
+    "CHANGE_AGENT_FAILED": "Assignee change failed",
+    "ASSIGN_LABEL_SUCCESFUL": "Label assigned successfully",
+    "ASSIGN_LABEL_FAILED": "Label assignment failed",
+    "CHANGE_TEAM": "Konversationsteamet har ändrats",
+    "SUCCESS_DELETE_CONVERSATION": "Conversation deleted successfully",
+    "FAIL_DELETE_CONVERSATION": "Couldn't delete conversation! Try again",
+    "FILE_SIZE_LIMIT": "File exceeds the {MAXIMUM_SUPPORTED_FILE_UPLOAD_SIZE} MB attachment limit",
+    "FILE_TYPE_NOT_SUPPORTED": "This {fileName} file type is not supported in this conversation",
+    "MESSAGE_ERROR": "Det gick inte att skicka detta meddelande, försök igen senare",
+    "SENT_BY": "Skickat av:",
+    "BOT": "Bot",
+    "NATIVE_APP": "Native app",
+    "NATIVE_APP_ADVISORY": "This message was sent from the native app. Reply from Chatwoot to maintain the message window.",
+    "SEND_FAILED": "Couldn't send message! Try again",
+    "TRY_AGAIN": "retry",
+    "ASSIGNMENT": {
+      "SELECT_AGENT": "Välj agent",
+      "REMOVE": "Radera",
+      "ASSIGN": "Tilldela"
+    },
+    "CONTEXT_MENU": {
+      "COPY": "Kopiera",
+      "REPLY_TO": "Svara på detta meddelande",
+      "FORWARD_EMAIL": "Forward email",
+      "DELETE": "Radera",
+      "CREATE_A_CANNED_RESPONSE": "Add to canned responses",
+      "TRANSLATE": "Translate",
+      "COPY_PERMALINK": "Copy link to the message",
+      "LINK_COPIED": "Message URL copied to the clipboard",
+      "DELETE_CONFIRMATION": {
+        "TITLE": "Are you sure you want to delete this message?",
+        "MESSAGE": "You cannot undo this action",
+        "DELETE": "Radera",
+        "CANCEL": "Avbryt"
+      },
+      "REPORT_MESSAGE": {
+        "LABEL": "Report message",
+        "TITLE": "Report Captain message",
+        "DESCRIPTION": "Found an issue with this AI response? Let us know what went wrong and our team will review it to help improve Captain's accuracy.",
+        "PROBLEM_TYPE": "Problem type",
+        "PROBLEM_TYPE_PLACEHOLDER": "Select a problem type",
+        "DESCRIPTION_LABEL": "Beskrivning",
+        "DESCRIPTION_PLACEHOLDER": "Describe the problem in detail",
+        "SUBMIT": "Report",
+        "SUCCESS": "Thanks for reporting. Our team will take a look.",
+        "ERROR": "Could not report this message. Please try again.",
+        "REASONS": {
+          "incorrect_information": "Incorrect information",
+          "inappropriate_response": "Inappropriate response",
+          "incomplete_response": "Incomplete response",
+          "outdated_information": "Outdated information",
+          "other": "Other"
+        }
+      }
+    },
+    "SIDEBAR": {
+      "CONTACT": "Contact",
+      "COPILOT": "Copilot"
+    },
+    "VOICE_WIDGET": {
+      "INCOMING_CALL": "Incoming call",
+      "OUTGOING_CALL": "Outgoing call",
+      "CALL_IN_PROGRESS": "Call in progress",
+      "NOT_ANSWERED_YET": "Not answered yet",
+      "HANDLED_IN_ANOTHER_TAB": "Being handled in another tab",
+      "REJECT_CALL": "Reject",
+      "DISMISS_CALL": "Dismiss",
+      "JOIN_CALL": "Join call",
+      "END_CALL": "End call",
+      "MUTE": "Mute mic",
+      "UNMUTE": "Unmute mic",
+      "VIEW_CHAT_HISTORY": "View chat history",
+      "GO_TO_CONVERSATION": "Go to conversation thread"
+    }
+  },
+  "EMAIL_TRANSCRIPT": {
+    "TITLE": "Skicka konversationstranskribering",
+    "DESC": "Skicka en kopia av konversationstranskriberingen till den angivna e-postadressen",
+    "SUBMIT": "Skicka",
+    "CANCEL": "Avbryt",
+    "SEND_EMAIL_SUCCESS": "Chattranskriberingen har skickats",
+    "SEND_EMAIL_ERROR": "Ett fel uppstod, vänligen försök igen",
+    "SEND_EMAIL_PAYMENT_REQUIRED": "Email transcript is not available on your current plan. Please upgrade to use this feature.",
+    "FORM": {
+      "SEND_TO_CONTACT": "Skicka transkriberingen till kunden",
+      "SEND_TO_AGENT": "Skicka transkriberingen till den tilldelade agenten",
+      "SEND_TO_OTHER_EMAIL_ADDRESS": "Skicka transkriberingen till annan epost-adress",
+      "EMAIL": {
+        "PLACEHOLDER": "Ange en e-postadress",
+        "ERROR": "Ange en giltig e-postadress"
+      }
+    }
+  },
+  "ONBOARDING": {
+    "TITLE": "Hej 👋, Välkommen till {installationName}!",
+    "DESCRIPTION": "Tack för att du registrerar dig. Vi vill att du ska få ut det mesta av {installationName}. Här är några saker du kan göra i {installationName} för att göra upplevelsen härlig.",
+    "GREETING_MORNING": "👋 Good morning, {name}. Welcome to {installationName}.",
+    "GREETING_AFTERNOON": "👋 Good afternoon, {name}. Welcome to {installationName}.",
+    "GREETING_EVENING": "👋 Good evening, {name}. Welcome to {installationName}.",
+    "READ_LATEST_UPDATES": "Läs våra senaste uppdateringar",
+    "ALL_CONVERSATION": {
+      "TITLE": "Alla dina konversationer på ett ställe",
+      "DESCRIPTION": "Visa alla konversationer från dina kunder i en enda instrumentpanel. Du kan filtrera konversationerna genom inkommande kanal, etikett och status.",
+      "NEW_LINK": "Click here to create an inbox"
+    },
+    "TEAM_MEMBERS": {
+      "TITLE": "Bjud in dina teammedlemmar",
+      "DESCRIPTION": "Since you are getting ready to talk to your customer, bring in your teammates to assist you. You can invite your teammates by adding their email addresses to the agent list.",
+      "NEW_LINK": "Click here to invite a team member"
+    },
+    "LABELS": {
+      "TITLE": "Organize conversations with labels",
+      "DESCRIPTION": "Labels provide an easier way to categorize your conversation. Create some labels like #support-enquiry, #billing-question etc., so that you can use them in a conversation later.",
+      "NEW_LINK": "Click here to create tags"
+    },
+    "CANNED_RESPONSES": {
+      "TITLE": "Create canned responses",
+      "DESCRIPTION": "Pre-written quick reply templates help you quickly respond to a conversation. Agents can type the '/' character followed by the shortcode to insert a response.",
+      "NEW_LINK": "Click here to create a canned response"
+    }
+  },
+  "CONVERSATION_SIDEBAR": {
+    "ASSIGNEE_LABEL": "Assigned Agent",
+    "SELF_ASSIGN": "Assign to me",
+    "TEAM_LABEL": "Assigned Team",
+    "SELECT": {
+      "PLACEHOLDER": "None"
+    },
+    "ACCORDION": {
+      "CONTACT_DETAILS": "Contact Details",
+      "CONVERSATION_ACTIONS": "Conversation Actions",
+      "CONVERSATION_LABELS": "Etiketter för konversation",
+      "CONVERSATION_INFO": "Conversation Information",
+      "CONTACT_NOTES": "Contact Notes",
+      "CONTACT_ATTRIBUTES": "Contact Attributes",
+      "PREVIOUS_CONVERSATION": "Tidigare konversationer",
+      "MACROS": "Macros",
+      "LINEAR_ISSUES": "Linked Linear Issues",
+      "SHOPIFY_ORDERS": "Shopify Orders",
+      "SHARED_FILES": "Attachments"
+    },
+    "SHARED_FILES": {
+      "EMPTY": "No attachments yet",
+      "DOWNLOAD": "Download file",
+      "DOWNLOAD_ERROR": "Could not download the file. Please try again.",
+      "MEDIA_HEADING": "Media",
+      "FILES_HEADING": "Files",
+      "VIEW_ALL": "Visa alla",
+      "SHOW_LESS": "Show less",
+      "MORE_COUNT": "+{count}",
+      "UNTITLED_FILE": "Untitled file",
+      "JUMP_TO_MESSAGE": "Jump to message"
+    },
+    "SHOPIFY": {
+      "ORDER_ID": "Order #{id}",
+      "ERROR": "Error loading orders",
+      "NO_SHOPIFY_ORDERS": "No orders found",
+      "FINANCIAL_STATUS": {
+        "PENDING": "Väntande",
+        "AUTHORIZED": "Authorized",
+        "PARTIALLY_PAID": "Partially Paid",
+        "PAID": "Paid",
+        "PARTIALLY_REFUNDED": "Partially Refunded",
+        "REFUNDED": "Refunded",
+        "VOIDED": "Voided"
+      },
+      "FULFILLMENT_STATUS": {
+        "FULFILLED": "Fulfilled",
+        "PARTIALLY_FULFILLED": "Partially Fulfilled",
+        "UNFULFILLED": "Unfulfilled"
+      }
+    }
+  },
+  "CONVERSATION_CUSTOM_ATTRIBUTES": {
+    "ADD_BUTTON_TEXT": "Create attribute",
+    "NO_RECORDS_FOUND": "Inga attribut hittades",
+    "UPDATE": {
+      "SUCCESS": "Attribute updated successfully",
+      "ERROR": "Unable to update attribute. Please try again later"
+    },
+    "ADD": {
+      "TITLE": "Add",
+      "SUCCESS": "Attribute added successfully",
+      "ERROR": "Unable to add attribute. Please try again later"
+    },
+    "DELETE": {
+      "SUCCESS": "Attribute deleted successfully",
+      "ERROR": "Unable to delete attribute. Please try again later"
+    },
+    "ATTRIBUTE_SELECT": {
+      "TITLE": "Add attributes",
+      "PLACEHOLDER": "Sök attribut",
+      "NO_RESULT": "Inga attribut hittades"
+    }
+  },
+  "EMAIL_HEADER": {
+    "FROM": "Från",
+    "TO": "Till",
+    "BCC": "Bcc",
+    "CC": "Cc",
+    "SUBJECT": "Ämne",
+    "DATE": "Date",
+    "EXPAND": "Expand email"
+  },
+  "FORWARD_EMAIL": {
+    "HEADER_TITLE": "---------- Forwarded message ---------",
+    "TO_LABEL": "Till:",
+    "TO_PLACEHOLDER": "Enter at least 2 characters to search by email",
+    "MESSAGE_PLACEHOLDER": "Add a message (optional)",
+    "FORWARDED_TO": "Forwarded to {emails}",
+    "CONTACT_CANNOT_SEE": "{name} cannot see this"
+  },
+  "CONVERSATION_PARTICIPANTS": {
+    "SIDEBAR_MENU_TITLE": "Deltar",
+    "SIDEBAR_TITLE": "Deltagare i konversation",
+    "NO_RECORDS_FOUND": "Inga resultat hittades",
+    "ADD_PARTICIPANTS": "Välj deltagare",
+    "REMANING_PARTICIPANTS_TEXT": "+{count} others",
+    "REMANING_PARTICIPANT_TEXT": "+{count} other",
+    "TOTAL_PARTICIPANTS_TEXT": "{count} personer deltar.",
+    "TOTAL_PARTICIPANT_TEXT": "{count} person deltar.",
+    "NO_PARTICIPANTS_TEXT": "No one is participating!",
+    "WATCH_CONVERSATION": "Join conversation",
+    "YOU_ARE_WATCHING": "You are participating",
+    "API": {
+      "ERROR_MESSAGE": "Could not update, try again!",
+      "SUCCESS_MESSAGE": "Participants updated!"
+    }
+  },
+  "TRANSLATE_MODAL": {
+    "TITLE": "View translated content",
+    "DESC": "You can view the translated content in each langauge.",
+    "ORIGINAL_CONTENT": "Original Content",
+    "TRANSLATED_CONTENT": "Translated Content",
+    "NO_TRANSLATIONS_AVAILABLE": "No translations are available for this content"
+  },
+  "TYPING": {
+    "ONE": "{user} is typing",
+    "TWO": "{user} and {secondUser} are typing",
+    "MULTIPLE": "{user} and {count} others are typing"
+  },
+  "COPILOT": {
+    "TRY_THESE_PROMPTS": "Try these prompts"
+  },
+  "GALLERY_VIEW": {
+    "ERROR_DOWNLOADING": "Unable to download attachment. Please try again"
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "CHAT_LIST": {
+    "LOADING": "Đang tải các cuộc trò chuyện",
+    "LOAD_MORE_CONVERSATIONS": "Tải thêm các cuộc trò chuyện",
+    "EOF": "Tất cả các cuộc trò chuyện đã được tải 🎉",
+    "LIST": {
+      "404": "Không có bất kì hoạt động trò chuyện nào trong nhóm."
+    },
+    "FAILED_TO_SEND": "Failed to send",
+    "FETCH_ERROR": "Couldn't load conversations. Please try again.",
+    "TAB_HEADING": "Các cuộc hội thoại",
+    "MENTION_HEADING": "Nhắn đến",
+    "UNATTENDED_HEADING": "Không giám sát",
+    "SEARCH": {
+      "INPUT": "Tìm kiếm cho người, đoạn chat, lưu trữ trả lời .."
+    },
+    "FILTER_ALL": "Tất cả",
+    "ASSIGNEE_TYPE_TABS": {
+      "me": "Của tôi",
+      "unassigned": "Chưa được phân công",
+      "all": "Tất cả"
+    },
+    "CHAT_STATUS_FILTER_ITEMS": {
+      "open": {
+        "TEXT": "Mở"
+      },
+      "resolved": {
+        "TEXT": "Đã được giải quyết"
+      },
+      "pending": {
+        "TEXT": "Chờ giải quyết"
+      },
+      "snoozed": {
+        "TEXT": "Tạm dừng"
+      },
+      "all": {
+        "TEXT": "Tất cả"
+      }
+    },
+    "VIEW_FILTER": "Xem",
+    "SORT_TOOLTIP_LABEL": "Sort conversations",
+    "CHAT_SORT": {
+      "STATUS": "Trạng thái",
+      "ORDER_BY": "Order by"
+    },
+    "CHAT_TIME_STAMP": {
+      "CREATED": {
+        "OLDEST": "Tạo vào lúc:"
+      },
+      "LAST_ACTIVITY": {
+        "NOT_ACTIVE": "Last activity:"
+      }
+    },
+    "SORT_ORDER_ITEMS": {
+      "last_activity_at_asc": {
+        "TEXT": "Last activity: Oldest first"
+      },
+      "last_activity_at_desc": {
+        "TEXT": "Last activity: Newest first"
+      },
+      "created_at_desc": {
+        "TEXT": "Created at: Newest first"
+      },
+      "created_at_asc": {
+        "TEXT": "Created at: Oldest first"
+      },
+      "priority_desc": {
+        "TEXT": "Priority: Highest first"
+      },
+      "priority_asc": {
+        "TEXT": "Priority: Lowest first"
+      },
+      "waiting_since_asc": {
+        "TEXT": "Pending Response: Longest first"
+      },
+      "waiting_since_desc": {
+        "TEXT": "Pending Response: Shortest first"
+      },
+      "priority_desc_created_at_asc": {
+        "TEXT": "Priority: Highest first, Created: Oldest first"
+      },
+      "unread": {
+        "TEXT": "Unread Count: Highest first"
+      }
+    },
+    "ATTACHMENTS": {
+      "image": {
+        "CONTENT": "Tin nhắn hình ảnh"
+      },
+      "audio": {
+        "CONTENT": "Tin nhắn thoại"
+      },
+      "video": {
+        "CONTENT": "Tin nhắn video"
+      },
+      "file": {
+        "CONTENT": "Tập tin đính kèm"
+      },
+      "location": {
+        "CONTENT": "Địa điểm"
+      },
+      "ig_reel": {
+        "CONTENT": "Instagram Reel"
+      },
+      "fallback": {
+        "CONTENT": "có một đường dẫn chia sẻ"
+      },
+      "contact": {
+        "CONTENT": "Shared contact"
+      },
+      "embed": {
+        "CONTENT": "Embedded content"
+      }
+    },
+    "CHAT_SORT_BY_FILTER": {
+      "TITLE": "Sort conversation",
+      "DROPDOWN_TITLE": "Sắp bởi",
+      "ITEMS": {
+        "LATEST": {
+          "NAME": "Last activity at",
+          "LABEL": "Last activity"
+        },
+        "CREATED_AT": {
+          "NAME": "Tạo vào lúc",
+          "LABEL": "Tạo vào lúc"
+        },
+        "LAST_USER_MESSAGE_AT": {
+          "NAME": "Last user message at",
+          "LABEL": "Last message"
+        }
+      }
+    },
+    "RECEIVED_VIA_EMAIL": "Nhận được từ email",
+    "VIEW_TWEET_IN_TWITTER": "Xem tweet trên Twitter",
+    "REPLY_TO_TWEET": "Trả lời cho tweet này",
+    "LINK_TO_STORY": "Đến xem lịch sử instagram",
+    "SENT": "Gửi thành công",
+    "READ": "Đọc thành công",
+    "DELIVERED": "Đã gửi thành công",
+    "NO_MESSAGES": "Không có tin nhắn",
+    "NO_CONTENT": "Không có nội dung",
+    "HIDE_QUOTED_TEXT": "Ẩn văn bản được trích dẫn",
+    "SHOW_QUOTED_TEXT": "Hiện Văn bản được trích dẫn",
+    "MESSAGE_READ": "\bĐọc",
+    "SENDING": "Sending",
+    "UNREAD_COUNT_OVERFLOW": "9+"
+  }
+}

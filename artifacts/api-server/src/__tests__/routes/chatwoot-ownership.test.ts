@@ -20,8 +20,10 @@ vi.mock("@workspace/db", () => ({
   suppliersTable: { id: "id", name: "name", phone: "phone" },
   sentLogTable: { rfqId: "rfq_id", supplierId: "supplier_id", employeeId: "employee_id" },
   rfqTable: { id: "id", internalRfqNo: "internal_rfq_no", status: "status" },
-  employeesTable: { id: "id", name: "name" },
+  employeesTable: { id: "id", name: "name", email: "email" },
 }));
+// Every export the bridge imports must exist here, or vitest throws
+// "No <name> export is defined on the mock" and the whole suite fails to load.
 vi.mock("../../modules/chatwoot/client", () => ({
   isChatwootConfigured: false,
   findContactByPhone: vi.fn(),
@@ -29,6 +31,10 @@ vi.mock("../../modules/chatwoot/client", () => ({
   createConversation: vi.fn(),
   createMessage: vi.fn(),
   getConversationContactPhone: vi.fn(),
+  findAgentByEmail: vi.fn(),
+  createAgent: vi.fn(),
+  assignConversation: vi.fn(),
+  setConversationCustomAttributes: vi.fn(),
 }));
 
 const { canonicalPhone, pickRequestFromText } = await import("../../modules/chatwoot/bridge");

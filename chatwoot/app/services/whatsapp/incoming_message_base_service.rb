@@ -1,0 +1,219 @@
+# Mostly modeled after the intial implementation of the service based on 360 Dialog
+# https://docs.360dialog.com/whatsapp-api/whatsapp-api/media
+# https://developers.facebook.com/docs/whatsapp/api/media/
+class Whatsapp::IncomingMessageBaseService
+  include ::Whatsapp::IncomingMessageServiceHelpers
+  include ::Whatsapp::IncomingMessageIdentifierHelper
+  include ::Whatsapp::IncomingContactMessageHandler
+
+  pattr_initialize [:inbox!, :params!, :outgoing_echo, { locked_sender_id: nil }]
+
+  def perform
+    processed_params
+
+    return process_statuses if processed_params.try(:[], :statuses).present?
+
+    process_identity_change_messages
+    return process_messages if messages_data.present?
+  end
+
+  # Returns messages array for both regular messages and echo events
+  def messages_data
+    return @messages_data if defined?(@messages_data)
+
+    @processed_params&.dig(:messages) || @processed_params&.dig(:message_echoes)
+  end
+
+  private
+
+  def process_messages
+    # We don't support reactions & ephemeral message now, we need to skip processing the message
+    # if the webhook event is a reaction or an ephermal message or an unsupported message.
+    return if unprocessable_message_type?(message_type)
+
+    # Multiple webhook events can be received for the same message due to
+    # misconfigurations in the Meta business manager account.
+    # We use an atomic Redis SET NX to prevent concurrent workers from both
+    # processing the same message simultaneously.
+    return if find_message_by_source_id(messages_data.first[:id])
+    return unless lock_message_source_id!
+
+    set_contact
+    return unless @contact
+    return if @contact.blocked? && !outgoing_echo
+
+    ActiveRecord::Base.transaction do
+      set_conversation
+      create_messages
+    end
+  end
+
+  def process_statuses
+    status = @processed_params[:statuses].first
+    return unless find_message_by_source_id(status[:id])
+
+    update_whatsapp_identifiers_from_status(status)
+    update_message_with_status(@message, status)
+  rescue ArgumentError => e
+    Rails.logger.error "Error while processing whatsapp status update #{e.message}"
+  end
+
+  def update_message_with_status(message, status)
+    external_error = if status[:status] == 'failed' && status[:errors].present?
+                       error = status[:errors]&.first
+                       "#{error[:code]}: #{error[:title]}"
+                     end
+
+    Messages::StatusUpdateService.new(message, status[:status], external_error).perform
+  end
+
+  def create_messages
+    message = messages_data.first
+    return create_unsupported_message(message) if message_type == 'unsupported'
+
+    log_error(message) && return if error_webhook_event?(message)
+
+    process_in_reply_to(message)
+
+    message_type == 'contacts' ? create_contact_messages(message) : create_regular_message(message)
+  end
+
+  # WhatsApp delivers messages it cannot render (e.g. coexistence companion-device syncs that
+  # fail with error 131060) as type: unsupported with no content. We still persist a placeholder
+  # so the contact/conversation isn't created "headless" and agents know to check the WhatsApp app.
+  def create_unsupported_message(message)
+    log_error(message) if error_webhook_event?(message)
+    process_in_reply_to(message)
+    create_message(message, source_id: message[:id])
+    @message.content = I18n.t('conversations.messages.whatsapp.unsupported_message')
+    @message.content_attributes = @message.content_attributes.merge(is_unsupported: true)
+    @message.save!
+  end
+
+  def create_regular_message(message)
+    create_message(message, source_id: message[:id])
+    attach_files
+    attach_location if message_type == 'location'
+    @message.save!
+  end
+
+  def set_contact
+    if outgoing_echo
+      set_contact_from_echo
+    else
+      set_contact_from_message
+    end
+  end
+
+  def set_conversation
+    # Reuse is scoped to the contact inbox that resolved this message, never to the contact. A contact
+    # can hold unrelated WhatsApp identities in the same inbox, either from coexistence or from a
+    # dashboard merge, and a contact wide lookup cannot tell them apart: it would answer one identity
+    # through another one's source id. The conversation opened under a previous identity stays where it
+    # is and remains reachable under previous conversations.
+    #
+    # Only where an identifier can be replied to, though. 360Dialog always sends the destination in
+    # `to` and has no way to address one, so anchoring a thread there would produce a conversation
+    # nobody can answer. That provider keeps the contact wide reuse it had, which lands every message
+    # on the phone backed thread it can actually reply through.
+    conversations = addressable_identifiers? ? @contact_inbox.conversations : @contact.conversations.where(inbox_id: @inbox.id)
+    # if lock to single conversation is disabled, we will create a new conversation if previous conversation is resolved
+    @conversation = if @inbox.lock_to_single_conversation
+                      conversations.last
+                    else
+                      conversations.where.not(status: :resolved).last
+                    end
+    return if @conversation
+
+    @conversation = ::Conversation.create!(conversation_params)
+  end
+
+  def attach_files
+    return if %w[text button interactive location contacts].include?(message_type)
+
+    attachment_payload = messages_data.first[message_type.to_sym]
+    @message.content ||= attachment_payload[:caption]
+
+    attachment_file = download_attachment_file(attachment_payload)
+    return if attachment_file.blank?
+
+    @message.attachments.new(
+      account_id: @message.account_id,
+      file_type: file_content_type(message_type),
+      file: {
+        io: attachment_file,
+        filename: attachment_file.original_filename,
+        content_type: attachment_file.content_type
+      }
+    )
+  end
+
+  def attach_location
+    location = messages_data.first['location']
+    location_name = (location['name'] ? "#{location['name']}, #{location['address']}" : '').first(255)
+    @message.attachments.new(
+      account_id: @message.account_id,
+      file_type: file_content_type(message_type),
+      coordinates_lat: location['latitude'],
+      coordinates_long: location['longitude'],
+      fallback_title: location_name,
+      external_url: location['url']
+    )
+  end
+
+  def create_message(message, source_id: nil, content_attributes_source: message)
+    @message = @conversation.messages.build(
+      content: message_content(message),
+      account_id: @inbox.account_id,
+      inbox_id: @inbox.id,
+      message_type: outgoing_echo ? :outgoing : :incoming,
+      # Set status to :delivered for echo messages to prevent SendReplyJob from trying to send them
+      status: outgoing_echo ? :delivered : :sent,
+      sender: outgoing_echo ? nil : @contact,
+      source_id: (source_id || message[:id]).to_s,
+      content_attributes: message_content_attributes(content_attributes_source)
+    )
+  end
+
+  def message_content_attributes(message)
+    content_attrs = outgoing_echo ? { external_echo: true } : {}
+    content_attrs[:in_reply_to] = @in_reply_to_message_id if @in_reply_to_message_id.present?
+    content_attrs[:in_reply_to_external_id] = @in_reply_to_external_id if @in_reply_to_external_id.present?
+    referral_content_attrs = referral_attributes(message)
+    content_attrs[:referral] = referral_content_attrs if referral_content_attrs.present?
+
+    flow_response = message.dig(:interactive, :nfm_reply)
+    if flow_response.present?
+      content_attrs[:whatsapp_flow_response] = {
+        name: flow_response[:name],
+        body: flow_response[:body],
+        response_json: parse_flow_response_json(flow_response[:response_json])
+      }.compact
+    end
+
+    content_attrs
+  end
+
+  def update_contact_with_profile_name(contact_params)
+    profile_name = contact_params.dig(:profile, :name)
+    return if profile_name.blank?
+    return if @contact.name == profile_name
+
+    # Only update if current name exactly matches a phone number candidate
+    return unless contact_name_matches_phone_number?
+
+    @contact.update!(name: profile_name)
+  end
+
+  def contact_name_matches_phone_number?
+    return false if (message_phone_number = whatsapp_phone_number(messages_data.first[:from])).blank?
+
+    phone_number_candidates(message_phone_number).any? do |number|
+      phone_number = "+#{number}"
+      formatted_phone_number = TelephoneNumber.parse(phone_number).international_number
+      @contact.name == phone_number || @contact.name == formatted_phone_number
+    end
+  end
+end
+
+Whatsapp::IncomingMessageBaseService.prepend_mod_with('Whatsapp::IncomingMessageBaseService')

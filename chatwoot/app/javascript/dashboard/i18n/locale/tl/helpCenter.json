@@ -1,0 +1,1119 @@
+{
+  "HELP_CENTER": {
+    "TITLE": "Sentro ng Tulong",
+    "NEW_PAGE": {
+      "DESCRIPTION": "Gumawa ng mga self-service na help center portal para sa iyong mga customer. Tulungan silang makahanap ng sagot agad, nang hindi naghihintay. Pabilisin ang mga katanungan, pataasin ang pagiging epektibo ng ahente, at itaas ang kalidad ng suporta sa customer.",
+      "CREATE_PORTAL_BUTTON": "Gumawa ng Portal"
+    },
+    "HEADER": {
+      "FILTER": "I-filter ayon sa",
+      "SORT": "Ayusin ayon sa",
+      "LOCALE": "Wika",
+      "SETTINGS_BUTTON": "Mga Setting",
+      "NEW_BUTTON": "Bagong Artikulo",
+      "DROPDOWN_OPTIONS": {
+        "PUBLISHED": "Nailathala",
+        "DRAFT": "Burador",
+        "ARCHIVED": "Na-archive"
+      },
+      "TITLES": {
+        "ALL_ARTICLES": "Lahat ng Artikulo",
+        "MINE": "Aking mga Artikulo",
+        "DRAFT": "Mga Draft na Artikulo",
+        "ARCHIVED": "Mga Na-archive na Artikulo"
+      },
+      "LOCALE_SELECT": {
+        "TITLE": "Pumili ng wika",
+        "PLACEHOLDER": "Pumili ng wika",
+        "NO_RESULT": "Walang nahanap na wika",
+        "SEARCH_PLACEHOLDER": "Maghanap ng wika"
+      }
+    },
+    "EDIT_HEADER": {
+      "ALL_ARTICLES": "Lahat ng Artikulo",
+      "PUBLISH_BUTTON": "I-publish",
+      "MOVE_TO_ARCHIVE_BUTTON": "Ilipat sa archive",
+      "PREVIEW": "I-preview",
+      "ADD_TRANSLATION": "Magdagdag ng pagsasalin",
+      "OPEN_SIDEBAR": "Buksan ang sidebar",
+      "CLOSE_SIDEBAR": "Isara ang sidebar",
+      "SAVING": "Nagsu-save...",
+      "SAVED": "Naka-save"
+    },
+    "ARTICLE_EDITOR": {
+      "IMAGE_UPLOAD": {
+        "TITLE": "Mag-upload ng larawan",
+        "UPLOADING": "Ina-upload...",
+        "SUCCESS": "Matagumpay na na-upload ang larawan",
+        "UPLOAD_FAILED": "Upload failed",
+        "RATE_LIMITED": "Upload limit reached. Try again in a few minutes.",
+        "RETRY": "Retry",
+        "REMOVE": "Alisin",
+        "CANCEL": "Cancel upload",
+        "ERROR_FILE_SIZE": "Ang laki ng larawan ay dapat mas mababa sa {size}MB",
+        "ERROR_ATTACHMENT_FILE_SIZE": "File size should be less than {size}MB",
+        "ERROR_UNSUPPORTED_TYPE": "This file type is not supported",
+        "ERROR_FILE_FORMAT": "Ang format ng larawan ay dapat jpg, jpeg, o png",
+        "ERROR_FILE_DIMENSIONS": "Ang sukat ng larawan ay dapat mas mababa sa 2000 x 2000"
+      }
+    },
+    "ARTICLE_SETTINGS": {
+      "TITLE": "Mga Setting ng Artikulo",
+      "FORM": {
+        "CATEGORY": {
+          "LABEL": "Kategorya",
+          "TITLE": "Pumili ng kategorya",
+          "PLACEHOLDER": "Pumili ng kategorya",
+          "NO_RESULT": "Walang nahanap na kategorya",
+          "SEARCH_PLACEHOLDER": "Maghanap ng kategorya"
+        },
+        "AUTHOR": {
+          "LABEL": "May-akda",
+          "TITLE": "Pumili ng may-akda",
+          "PLACEHOLDER": "Pumili ng may-akda",
+          "NO_RESULT": "Walang nahanap na mga may-akda",
+          "SEARCH_PLACEHOLDER": "Maghanap ng may-akda"
+        },
+        "META_TITLE": {
+          "LABEL": "Meta pamagat",
+          "PLACEHOLDER": "Magdagdag ng meta pamagat"
+        },
+        "META_DESCRIPTION": {
+          "LABEL": "Meta paglalarawan",
+          "PLACEHOLDER": "Magdagdag ng iyong meta paglalarawan para sa mas magandang SEO resulta..."
+        },
+        "META_TAGS": {
+          "LABEL": "Meta tag",
+          "PLACEHOLDER": "Magdagdag ng mga meta tag na pinaghihiwalay ng kuwit..."
+        }
+      },
+      "BUTTONS": {
+        "ARCHIVE": "I-archive ang artikulo",
+        "DELETE": "Tanggalin ang artikulo"
+      }
+    },
+    "ARTICLE_SEARCH_RESULT": {
+      "UNCATEGORIZED": "Hindi naka-kategorya",
+      "SEARCH_RESULTS": "Mga resulta ng paghahanap para sa {query}",
+      "EMPTY_TEXT": "Maghanap ng mga artikulo upang isingit sa mga tugon.",
+      "SEARCH_LOADER": "Naghahanap...",
+      "INSERT_ARTICLE": "Ipasok",
+      "NO_RESULT": "Walang nahanap na mga artikulo",
+      "COPY_LINK": "Kopyahin ang link ng artikulo sa clipboard",
+      "OPEN_LINK": "Buksan ang artikulo sa bagong tab",
+      "PREVIEW_LINK": "I-preview ang artikulo"
+    },
+    "PORTAL": {
+      "HEADER": "Mga Portal",
+      "DEFAULT": "Default",
+      "NEW_BUTTON": "Bagong Portal",
+      "ACTIVE_BADGE": "aktibo",
+      "CHOOSE_LOCALE_LABEL": "Pumili ng wika",
+      "LOADING_MESSAGE": "Naglo-load ng mga portal...",
+      "ARTICLES_LABEL": "mga artikulo",
+      "NO_PORTALS_MESSAGE": "Walang magagamit na mga portal",
+      "ADD_NEW_LOCALE": "Magdagdag ng bagong wika",
+      "POPOVER": {
+        "TITLE": "Mga Portal",
+        "PORTAL_SETTINGS": "Mga setting ng portal",
+        "SUBTITLE": "Mayroon kang maraming portal at maaaring iba-iba ang wika para sa bawat portal.",
+        "CANCEL_BUTTON_LABEL": "Kanselahin",
+        "CHOOSE_LOCALE_BUTTON": "Pumili ng Wika"
+      },
+      "PORTAL_SETTINGS": {
+        "LIST_ITEM": {
+          "HEADER": {
+            "COUNT_LABEL": "mga artikulo",
+            "ADD": "Magdagdag ng wika",
+            "VISIT": "Bisitahin ang site",
+            "SETTINGS": "Mga Setting",
+            "DELETE": "Tanggalin"
+          },
+          "PORTAL_CONFIG": {
+            "TITLE": "Mga Konpigurasyon ng Portal",
+            "ITEMS": {
+              "NAME": "Pangalan",
+              "DOMAIN": "Custom na domain",
+              "SLUG": "Slug",
+              "TITLE": "Pamagat ng portal",
+              "THEME": "Kulay ng tema",
+              "SUB_TEXT": "Sub-teksto ng portal"
+            }
+          },
+          "AVAILABLE_LOCALES": {
+            "TITLE": "Mga magagamit na wika",
+            "TABLE": {
+              "NAME": "Pangalan ng wika",
+              "CODE": "Kodigo ng wika",
+              "ARTICLE_COUNT": "Bilang ng mga artikulo",
+              "CATEGORIES": "Bilang ng mga kategorya",
+              "SWAP": "Palitan",
+              "DELETE": "Tanggalin",
+              "DEFAULT_LOCALE": "Default"
+            }
+          }
+        },
+        "DELETE_PORTAL": {
+          "TITLE": "Tanggalin ang portal",
+          "MESSAGE": "Sigurado ka bang gusto mong tanggalin ang portal na ito",
+          "YES": "Oo, tanggalin ang portal",
+          "NO": "Hindi, panatilihin ang portal",
+          "API": {
+            "DELETE_SUCCESS": "Matagumpay na natanggal ang portal",
+            "DELETE_ERROR": "Nagkaroon ng error habang tinatanggal ang portal"
+          }
+        },
+        "SEND_CNAME_INSTRUCTIONS": {
+          "API": {
+            "SUCCESS_MESSAGE": "Matagumpay na naipadala ang mga tagubilin sa CNAME",
+            "ERROR_MESSAGE": "Nagkaroon ng error habang nagpapadala ng mga tagubilin sa CNAME"
+          }
+        }
+      },
+      "EDIT": {
+        "HEADER_TEXT": "I-edit ang portal",
+        "TABS": {
+          "BASIC_SETTINGS": {
+            "TITLE": "Pangunahing impormasyon"
+          },
+          "CUSTOMIZATION_SETTINGS": {
+            "TITLE": "Pag-customize ng portal"
+          },
+          "CATEGORY_SETTINGS": {
+            "TITLE": "Mga kategorya"
+          },
+          "LOCALE_SETTINGS": {
+            "TITLE": "Mga wika"
+          }
+        },
+        "CATEGORIES": {
+          "TITLE": "Mga kategorya sa",
+          "NEW_CATEGORY": "Bagong kategorya",
+          "TABLE": {
+            "NAME": "Pangalan",
+            "DESCRIPTION": "Deskripsyon",
+            "LOCALE": "Wika",
+            "ARTICLE_COUNT": "Bilang ng mga artikulo",
+            "ACTION_BUTTON": {
+              "EDIT": "I-edit ang kategorya",
+              "DELETE": "Tanggalin ang kategorya"
+            },
+            "EMPTY_TEXT": "Walang nahanap na mga kategorya"
+          }
+        },
+        "EDIT_BASIC_INFO": {
+          "BUTTON_TEXT": "I-update ang pangunahing mga setting"
+        }
+      },
+      "ADD": {
+        "CREATE_FLOW": {
+          "BASIC": {
+            "TITLE": "Impormasyon ng help center",
+            "BODY": "Pangunahing impormasyon tungkol sa portal"
+          },
+          "CUSTOMIZATION": {
+            "TITLE": "Pag-customize ng help center",
+            "BODY": "I-customize ang portal"
+          },
+          "FINISH": {
+            "TITLE": "Ayos! 🎉",
+            "BODY": "Handa ka na!"
+          }
+        },
+        "CREATE_FLOW_PAGE": {
+          "BACK_BUTTON": "Bumalik",
+          "BASIC_SETTINGS_PAGE": {
+            "HEADER": "Gumawa ng Portal",
+            "TITLE": "Impormasyon ng help center",
+            "CREATE_BASIC_SETTING_BUTTON": "Gumawa ng pangunahing setting ng portal"
+          },
+          "CUSTOMIZATION_PAGE": {
+            "HEADER": "Pagpapasadya ng portal",
+            "TITLE": "Pagpapasadya ng help center",
+            "UPDATE_PORTAL_BUTTON": "I-update ang mga setting ng portal"
+          },
+          "FINISH_PAGE": {
+            "TITLE": "Ayos!🎉 Naka-set up ka na!",
+            "MESSAGE": "Makikita mo na ngayon ang nalikhang portal na ito sa iyong pahina ng lahat ng portal.",
+            "FINISH": "Pumunta sa pahina ng lahat ng portal"
+          }
+        },
+        "LOGO": {
+          "LABEL": "Logo",
+          "UPLOAD_BUTTON": "Mag-upload ng logo",
+          "HELP_TEXT": "Ang logo na ito ay ipapakita sa header ng portal.",
+          "IMAGE_UPLOAD_SUCCESS": "Matagumpay na na-upload ang logo",
+          "IMAGE_UPLOAD_ERROR": "Matagumpay na natanggal ang logo",
+          "IMAGE_DELETE_ERROR": "Nagkaroon ng error sa pagtanggal ng logo"
+        },
+        "NAME": {
+          "LABEL": "Pangalan",
+          "PLACEHOLDER": "Pangalan ng portal",
+          "HELP_TEXT": "Ang pangalan ay gagamitin sa pampublikong portal at internal na sistema.",
+          "ERROR": "Kinakailangan ang pangalan"
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Slug ng portal para sa mga url",
+          "ERROR": "Kinakailangan ang slug"
+        },
+        "DOMAIN": {
+          "LABEL": "Custom na Domain",
+          "PLACEHOLDER": "Custom na domain ng portal",
+          "HELP_TEXT": "Magdagdag lamang kung nais mong gumamit ng custom na domain para sa iyong mga portal. Halimbawa: {exampleURL}",
+          "ERROR": "Maglagay ng wastong domain URL"
+        },
+        "HOME_PAGE_LINK": {
+          "LABEL": "Link ng Home Page",
+          "PLACEHOLDER": "Link ng home page ng portal",
+          "HELP_TEXT": "Ang link na ginagamit upang bumalik mula sa portal papunta sa home page. Halimbawa: {exampleURL}",
+          "ERROR": "Maglagay ng wastong URL ng home page"
+        },
+        "THEME_COLOR": {
+          "LABEL": "Kulay ng tema ng portal",
+          "HELP_TEXT": "Ang kulay na ito ang ipapakita bilang tema ng portal."
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Pamagat ng Pahina",
+          "PLACEHOLDER": "Pamagat ng pahina ng portal",
+          "HELP_TEXT": "Ang pamagat ng pahina ay gagamitin sa pampublikong portal.",
+          "ERROR": "Kinakailangan ang pamagat ng pahina"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Teksto ng Header",
+          "PLACEHOLDER": "Teksto ng header ng portal",
+          "HELP_TEXT": "Ang header text ng Portal ay gagamitin sa pampublikong portal.",
+          "ERROR": "Kinakailangan ang teksto ng header ng portal"
+        },
+        "API": {
+          "SUCCESS_MESSAGE_FOR_BASIC": "Matagumpay na nalikha ang portal.",
+          "ERROR_MESSAGE_FOR_BASIC": "Hindi makagawa ng portal. Subukang muli.",
+          "SUCCESS_MESSAGE_FOR_UPDATE": "Matagumpay na na-update ang portal.",
+          "ERROR_MESSAGE_FOR_UPDATE": "Hindi ma-update ang portal. Subukang muli."
+        }
+      },
+      "ADD_LOCALE": {
+        "TITLE": "Magdagdag ng bagong wika",
+        "SUB_TITLE": "Magdadagdag ito ng bagong wika sa iyong listahan ng mga magagamit na pagsasalin.",
+        "PORTAL": "Portal",
+        "LOCALE": {
+          "LABEL": "Wika",
+          "PLACEHOLDER": "Pumili ng wika",
+          "ERROR": "Kinakailangan ang wika"
+        },
+        "BUTTONS": {
+          "CREATE": "Gumawa ng wika",
+          "CANCEL": "Kanselahin"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na nadagdag ang wika",
+          "ERROR_MESSAGE": "Hindi maidagdag ang wika. Subukang muli."
+        }
+      },
+      "CHANGE_DEFAULT_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na na-update ang default na wika",
+          "ERROR_MESSAGE": "Hindi ma-update ang default na wika. Subukang muli."
+        }
+      },
+      "DELETE_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na natanggal ang wika mula sa portal",
+          "ERROR_MESSAGE": "Hindi matanggal ang wika mula sa portal. Subukang muli."
+        }
+      },
+      "DRAFT_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Locale moved to draft successfully",
+          "ERROR_MESSAGE": "Unable to move locale to draft. Try again."
+        }
+      },
+      "PUBLISH_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Locale published successfully",
+          "ERROR_MESSAGE": "Unable to publish locale. Try again."
+        }
+      }
+    },
+    "TABLE": {
+      "LOADING_MESSAGE": "Naglo-load ng mga artikulo...",
+      "404": "Walang artikulo na tugma sa iyong hinanap 🔍",
+      "NO_ARTICLES": "Walang magagamit na mga artikulo",
+      "HEADERS": {
+        "TITLE": "Pamagat",
+        "CATEGORY": "Kategorya",
+        "READ_COUNT": "Mga Pagtingin",
+        "STATUS": "Katayuan",
+        "LAST_EDITED": "Huling in-edit"
+      },
+      "COLUMNS": {
+        "BY": "ni",
+        "AUTHOR_NOT_AVAILABLE": "Walang magagamit na may-akda"
+      }
+    },
+    "EDIT_ARTICLE": {
+      "LOADING": "Naglo-load ng artikulo...",
+      "TITLE_PLACEHOLDER": "Ilagay ang pamagat ng artikulo dito",
+      "CONTENT_PLACEHOLDER": "Isulat ang iyong artikulo dito",
+      "API": {
+        "ERROR": "Nagkaroon ng error habang sine-save ang artikulo"
+      }
+    },
+    "PUBLISH_ARTICLE": {
+      "API": {
+        "ERROR": "Nagkaroon ng error habang inilalathala ang artikulo",
+        "SUCCESS": "Matagumpay na nailathala ang artikulo"
+      }
+    },
+    "ARCHIVE_ARTICLE": {
+      "API": {
+        "ERROR": "Nagkaroon ng error habang ina-archive ang artikulo",
+        "SUCCESS": "Matagumpay na na-archive ang artikulo"
+      }
+    },
+    "DRAFT_ARTICLE": {
+      "API": {
+        "ERROR": "Nagkaroon ng error habang gumagawa ng draft ng artikulo",
+        "SUCCESS": "Matagumpay na nagawa ang draft ng artikulo"
+      }
+    },
+    "DELETE_ARTICLE": {
+      "MODAL": {
+        "CONFIRM": {
+          "TITLE": "Kumpirmahin ang Pagbura",
+          "MESSAGE": "Sigurado ka bang gusto mong tanggalin ang artikulo?",
+          "YES": "Oo, Tanggalin",
+          "NO": "Hindi, Panatilihin"
+        }
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Matagumpay na natanggal ang artikulo",
+        "ERROR_MESSAGE": "Nagkaroon ng error habang tinatanggal ang artikulo"
+      }
+    },
+    "REORDER_ARTICLE": {
+      "API": {
+        "ERROR_MESSAGE": "Hindi maisaayos muli ang mga artikulo. Pakisubukang muli."
+      }
+    },
+    "REORDER_CATEGORY": {
+      "API": {
+        "ERROR_MESSAGE": "Hindi maisaayos muli ang mga kategorya. Pakisubukang muli."
+      }
+    },
+    "CREATE_ARTICLE": {
+      "ERROR_MESSAGE": "Pakilagay ang pamagat at nilalaman ng artikulo bago mo ma-update ang mga setting"
+    },
+    "SIDEBAR": {
+      "SEARCH": {
+        "PLACEHOLDER": "Maghanap ng mga artikulo"
+      }
+    },
+    "BREADCRUMB": {
+      "ARTICLES": "Mga Artikulo",
+      "CATEGORIES": "Mga kategorya",
+      "LOCALES": "Mga wika",
+      "SETTINGS": "Mga Setting"
+    },
+    "CATEGORY": {
+      "ADD": {
+        "TITLE": "Gumawa ng kategorya",
+        "SUB_TITLE": "Gagamitin ang kategoryang ito sa pampublikong portal upang ikategorya ang mga artikulo.",
+        "PORTAL": "Portal",
+        "LOCALE": "Wika",
+        "NAME": {
+          "LABEL": "Pangalan",
+          "PLACEHOLDER": "Pangalan ng kategorya",
+          "HELP_TEXT": "Ang pangalan at icon ng kategorya ay gagamitin sa pampublikong portal upang ikategorya ang mga artikulo.",
+          "ERROR": "Kinakailangan ang pangalan"
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Slug ng kategorya para sa mga url",
+          "HELP_TEXT": "app.chatwoot.com/hc/my-portal/en-US/categories/my-slug",
+          "ERROR": "Kinakailangan ang slug"
+        },
+        "DESCRIPTION": {
+          "LABEL": "Deskripsyon",
+          "PLACEHOLDER": "Magbigay ng maikling deskripsyon tungkol sa kategorya.",
+          "ERROR": "Kinakailangan ang deskripsyon"
+        },
+        "BUTTONS": {
+          "CREATE": "Gumawa ng kategorya",
+          "CANCEL": "Kanselahin"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na nalikha ang kategorya",
+          "ERROR_MESSAGE": "Hindi makalikha ng kategorya"
+        }
+      },
+      "EDIT": {
+        "TITLE": "I-edit ang isang kategorya",
+        "SUB_TITLE": "Ang pag-edit ng kategorya ay mag-a-update ng kategorya sa pampublikong portal.",
+        "PORTAL": "Portal",
+        "LOCALE": "Wika",
+        "NAME": {
+          "LABEL": "Pangalan",
+          "PLACEHOLDER": "Pangalan ng kategorya",
+          "HELP_TEXT": "Ang pangalan at icon ng kategorya ay gagamitin sa pampublikong portal upang ikategorya ang mga artikulo.",
+          "ERROR": "Kinakailangan ang pangalan"
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Slug ng kategorya para sa mga url",
+          "HELP_TEXT": "app.chatwoot.com/hc/my-portal/en-US/categories/my-slug",
+          "ERROR": "Kinakailangan ang slug"
+        },
+        "DESCRIPTION": {
+          "LABEL": "Paglalarawan",
+          "PLACEHOLDER": "Magbigay ng maikling paglalarawan tungkol sa kategorya.",
+          "ERROR": "Kinakailangan ang paglalarawan"
+        },
+        "BUTTONS": {
+          "CREATE": "I-update ang kategorya",
+          "CANCEL": "Kanselahin"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na na-update ang kategorya",
+          "ERROR_MESSAGE": "Hindi ma-update ang kategorya"
+        }
+      },
+      "DELETE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na natanggal ang kategorya",
+          "ERROR_MESSAGE": "Hindi matanggal ang kategorya"
+        }
+      }
+    },
+    "ARTICLE_SEARCH": {
+      "TITLE": "Maghanap ng mga artikulo",
+      "PLACEHOLDER": "Maghanap ng mga artikulo",
+      "NO_RESULT": "Walang nahanap na artikulo",
+      "SEARCHING": "Naghahanap...",
+      "SEARCH_BUTTON": "Hanapin",
+      "INSERT_ARTICLE": "Ilagay ang link",
+      "IFRAME_ERROR": "Walang laman o hindi wasto ang URL. Hindi maipakita ang nilalaman.",
+      "OPEN_ARTICLE_SEARCH": "Maglagay ng artikulo mula sa Help Center",
+      "SUCCESS_ARTICLE_INSERTED": "Matagumpay na naipasok ang artikulo",
+      "PREVIEW_LINK": "I-preview ang artikulo",
+      "CANCEL": "Isara",
+      "BACK": "Bumalik",
+      "BACK_RESULTS": "Bumalik sa mga resulta"
+    },
+    "UPGRADE_PAGE": {
+      "TITLE": "Sentro ng Tulong",
+      "DESCRIPTION": "Lumikha ng madaling gamitin na self-service portal. Tulungan ang iyong mga user na ma-access ang mga artikulo at makakuha ng suporta 24/7. I-upgrade ang iyong subscription upang magamit ang tampok na ito.",
+      "SELF_HOSTED_DESCRIPTION": "Lumikha ng madaling gamitin na self-service portal. Tulungan ang iyong mga user na ma-access ang mga artikulo at makakuha ng suporta 24/7. Mangyaring makipag-ugnayan sa iyong administrator upang paganahin ang tampok na ito.",
+      "BUTTON": {
+        "LEARN_MORE": "Alamin pa",
+        "UPGRADE": "I-upgrade"
+      },
+      "FEATURES": {
+        "PORTALS": {
+          "TITLE": "Maramihang portal",
+          "DESCRIPTION": "Lumikha ng maraming help center portal para sa iba't ibang produkto gamit ang parehong account."
+        },
+        "LOCALES": {
+          "TITLE": "Kumpletong suporta para sa mga lokal na wika",
+          "DESCRIPTION": "I-localize ang portal sa iyong wika. Sinusuportahan namin ang lahat ng lokal na wika at pinapayagan ang pagsasalin para sa bawat artikulo."
+        },
+        "SEO": {
+          "TITLE": "Disenyong SEO-friendly",
+          "DESCRIPTION": "I-customize ang iyong mga meta tag upang mapabuti ang iyong visibility sa mga search engine gamit ang aming mga SEO-friendly na pahina."
+        },
+        "API": {
+          "TITLE": "Kumpletong suporta sa API",
+          "DESCRIPTION": "Gamitin ang portal bilang headless CMS kasama ang mga third party na front-end framework gamit ang aming mga API."
+        }
+      }
+    },
+    "LOADING": "Naglo-load...",
+    "ARTICLES_PAGE": {
+      "ARTICLE_CARD": {
+        "CARD": {
+          "VIEWS": "{count} beses na tiningnan | {count} beses na tiningnan",
+          "DROPDOWN_MENU": {
+            "PUBLISH": "I-publish",
+            "DRAFT": "Burador",
+            "ARCHIVE": "I-archive",
+            "TRANSLATE": "Translate",
+            "DELETE": "Tanggalin"
+          },
+          "STATUS": {
+            "DRAFT": "Burador",
+            "PUBLISHED": "Nailathala",
+            "ARCHIVED": "Na-archive"
+          },
+          "PENDING_EDITS": "Unpublished edits",
+          "PENDING_EDITS_TOOLTIP": "This published article has unpublished edits",
+          "CATEGORY": {
+            "UNCATEGORISED": "Walang Kategorya"
+          }
+        }
+      },
+      "ARTICLES_HEADER": {
+        "TABS": {
+          "ALL": "Lahat ng artikulo",
+          "MINE": "Akin",
+          "DRAFT": "Burador",
+          "PUBLISHED": "Nailathala",
+          "ARCHIVED": "Na-archive"
+        },
+        "CATEGORY": {
+          "ALL": "Lahat ng kategorya"
+        },
+        "LOCALE": {
+          "ALL": "Lahat ng wika"
+        },
+        "SEARCH_PLACEHOLDER": "Maghanap ng mga artikulo...",
+        "NEW_ARTICLE": "Bagong artikulo"
+      },
+      "EMPTY_STATE": {
+        "ALL": {
+          "TITLE": "Sumulat ng artikulo",
+          "SUBTITLE": "Sumulat ng makabuluhang artikulo, simulan na natin!",
+          "BUTTON_LABEL": "Bagong artikulo"
+        },
+        "MINE": {
+          "TITLE": "Wala ka pang naisusulat na mga artikulo dito",
+          "SUBTITLE": "Lahat ng artikulong isinulat mo ay lalabas dito para sa mabilisang pag-access."
+        },
+        "DRAFT": {
+          "TITLE": "Walang mga artikulo sa mga draft",
+          "SUBTITLE": "Lalabas dito ang mga draft na artikulo"
+        },
+        "PUBLISHED": {
+          "TITLE": "Walang mga nailathalang artikulo",
+          "SUBTITLE": "Lalabas dito ang mga nailathalang artikulo"
+        },
+        "ARCHIVED": {
+          "TITLE": "Walang mga artikulo sa archive",
+          "SUBTITLE": "Ang mga naka-archive na artikulo ay hindi lumalabas sa portal, maaari mo itong gamitin upang markahan ang mga pahinang luma o hindi na ginagamit"
+        },
+        "CATEGORY": {
+          "TITLE": "Walang artikulo sa kategoryang ito",
+          "SUBTITLE": "Lalabas dito ang mga artikulo sa kategoryang ito"
+        },
+        "SEARCH": {
+          "TITLE": "No matching articles",
+          "SUBTITLE": "We couldn't find any articles matching your search. Try a different term."
+        }
+      },
+      "BULK_TRANSLATE": {
+        "TITLE": "Translate article | Translate {count} articles",
+        "DESCRIPTION": "Translate the selected article to another language. | Translate the selected articles to another language.",
+        "LOCALE_LABEL": "Target language",
+        "LOCALE_PLACEHOLDER": "Select a language",
+        "CATEGORY_LABEL": "Target category",
+        "CATEGORY_PLACEHOLDER": "Select a category",
+        "OPTIONAL": "(optional)",
+        "CONFIRM": "Translate",
+        "SELECT_ALL": "Piliin lahat ({count})",
+        "SELECTED_COUNT": "{count} napili",
+        "CLEAR_SELECTION": "Tanggalin ang pagpili",
+        "TRANSLATE_BUTTON": "Translate",
+        "CONFIRM_OVERWRITE": "Overwrite and translate",
+        "DUPLICATE_WARNING": "A translation already exists for this article in the selected language. | Translations already exist for {count} articles in the selected language.",
+        "DUPLICATE_CONFIRM_HINT": "Click translate again to overwrite the existing translation.",
+        "API": {
+          "SUCCESS_MESSAGE": "Translation in progress. The article will appear as a draft once ready.",
+          "ERROR_MESSAGE": "Failed to start translation. Please try again."
+        }
+      },
+      "BULK_ACTIONS": {
+        "PUBLISH": "I-publish",
+        "DRAFT": "Burador",
+        "ARCHIVE": "I-archive",
+        "TRANSLATE": "Translate",
+        "MOVE_TO_CATEGORY": "Category",
+        "DELETE": "Delete",
+        "STATUS_SUCCESS": "Articles updated successfully",
+        "STATUS_ERROR": "Failed to update articles",
+        "STATUS_SKIPPED": "1 article with unpublished edits was skipped — open it to publish or discard. | {count} articles with unpublished edits were skipped — open them to publish or discard.",
+        "STATUS_SKIPPED_ALL": "These articles have unpublished edits — open each to publish or discard.",
+        "CATEGORY_SUCCESS": "Articles moved successfully",
+        "CATEGORY_ERROR": "Failed to move articles",
+        "DELETE_CONFIRM_TITLE": "Delete article | Delete {count} articles",
+        "DELETE_CONFIRM_DESCRIPTION": "This will permanently delete the selected article. This action cannot be undone. | This will permanently delete {count} selected articles. This action cannot be undone.",
+        "DELETE_CONFIRM": "Delete",
+        "DELETE_SUCCESS": "Articles deleted successfully",
+        "DELETE_ERROR": "Failed to delete articles"
+      }
+    },
+    "CATEGORY_PAGE": {
+      "CATEGORY_HEADER": {
+        "NEW_CATEGORY": "Bagong kategorya",
+        "EDIT_CATEGORY": "I-edit ang kategorya",
+        "SEARCH_PLACEHOLDER": "Search categories...",
+        "CATEGORIES_COUNT": "{n} kategorya | {n} mga kategorya",
+        "BREADCRUMB": {
+          "CATEGORY_LOCALE": "Mga kategorya ({localeCode})",
+          "ACTIVE_CATEGORY": "{categoryName} ({categoryCount} mga artikulo) | {categoryName} ({categoryCount} artikulo)"
+        }
+      },
+      "CATEGORY_EMPTY_STATE": {
+        "TITLE": "Walang nahanap na mga kategorya",
+        "SUBTITLE": "Lalabas dito ang mga kategorya. Maaari kang magdagdag ng kategorya sa pamamagitan ng pag-click sa 'Bagong Kategorya' na button."
+      },
+      "SEARCH_EMPTY_STATE": {
+        "TITLE": "No matching categories",
+        "SUBTITLE": "We couldn't find any categories matching your search. Try a different term."
+      },
+      "CATEGORY_CARD": {
+        "ARTICLES_COUNT": "{count} artikulo | {count} mga artikulo"
+      },
+      "CATEGORY_DIALOG": {
+        "CREATE": {
+          "API": {
+            "SUCCESS_MESSAGE": "Matagumpay na nalikha ang kategorya",
+            "ERROR_MESSAGE": "Hindi makalikha ng kategorya"
+          }
+        },
+        "EDIT": {
+          "API": {
+            "SUCCESS_MESSAGE": "Matagumpay na na-update ang kategorya",
+            "ERROR_MESSAGE": "Hindi ma-update ang kategorya"
+          }
+        },
+        "DELETE": {
+          "API": {
+            "SUCCESS_MESSAGE": "Matagumpay na nabura ang kategorya",
+            "ERROR_MESSAGE": "Hindi mabura ang kategorya"
+          }
+        },
+        "HEADER": {
+          "CREATE": "Lumikha ng kategorya",
+          "EDIT": "I-edit ang kategorya",
+          "DESCRIPTION": "Ang pag-edit ng kategorya ay mag-a-update ng kategorya sa pampublikong portal.",
+          "PORTAL": "Portal",
+          "LOCALE": "Wika"
+        },
+        "FORM": {
+          "NAME": {
+            "LABEL": "Pangalan",
+            "PLACEHOLDER": "Pangalan ng kategorya",
+            "ERROR": "Kinakailangan ang pangalan"
+          },
+          "SLUG": {
+            "LABEL": "Slug",
+            "PLACEHOLDER": "Slug ng kategorya para sa mga url",
+            "ERROR": "Kinakailangan ang slug",
+            "HELP_TEXT": "app.chatwoot.com/hc/{portalSlug}/{localeCode}/categories/{categorySlug}"
+          },
+          "DESCRIPTION": {
+            "LABEL": "Paglalarawan",
+            "PLACEHOLDER": "Magbigay ng maikling paglalarawan tungkol sa kategorya.",
+            "ERROR": "Kinakailangan ang paglalarawan"
+          }
+        },
+        "BUTTONS": {
+          "CREATE": "Gumawa",
+          "EDIT": "I-update",
+          "CANCEL": "Kanselahin"
+        }
+      }
+    },
+    "LOCALES_PAGE": {
+      "LOCALES_COUNT": "Walang magagamit na locale | {n} locale | {n} mga locale",
+      "NEW_LOCALE_BUTTON_TEXT": "Bagong locale",
+      "SEARCH_PLACEHOLDER": "Search locales...",
+      "SEARCH_EMPTY_STATE": {
+        "TITLE": "No matching locales",
+        "SUBTITLE": "We couldn't find any locales matching your search. Try a different term."
+      },
+      "LOCALE_CARD": {
+        "ARTICLES_COUNT": "{count} artikulo | {count} mga artikulo",
+        "CATEGORIES_COUNT": "{count} kategorya | {count} mga kategorya",
+        "DEFAULT": "Default",
+        "DRAFT": "Burador",
+        "DROPDOWN_MENU": {
+          "MAKE_DEFAULT": "Gawing default",
+          "MOVE_TO_DRAFT": "Move to draft",
+          "PUBLISH_LOCALE": "Publish locale",
+          "CUSTOMIZE_CONTENT": "Localize content",
+          "SELECT_POPULAR_CONTENT": "Select recommended content",
+          "DELETE": "Tanggalin"
+        }
+      },
+      "POPULAR_CONTENT_DIALOG": {
+        "TITLE": "Recommended content",
+        "DESCRIPTION": "Pick up to 3 categories and 6 articles to feature on this locale's help center home page. Drag them into the order you want visitors to see.",
+        "SEARCH": "Search...",
+        "EMPTY": "No matching results",
+        "ADD_ANOTHER": "Add another...",
+        "SLOTS_LEFT": "{count} slots left",
+        "OVERRIDING_DEFAULTS": "Overriding defaults for this locale",
+        "CONFIRM": "Save recommendations",
+        "CATEGORIES": {
+          "LABEL": "Recommended categories",
+          "ARTICLES_COUNT": "No articles | {count} article | {count} articles"
+        },
+        "ARTICLES": {
+          "LABEL": "Recommended articles",
+          "IN_CATEGORY": "in {category}",
+          "UNCATEGORIZED": "Hindi naka-kategorya"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Recommended content updated successfully",
+          "ERROR_MESSAGE": "Unable to update recommended content. Try again."
+        }
+      },
+      "CONTENT_DIALOG": {
+        "TITLE": "Localize content",
+        "DESCRIPTION": "Set values specific to this locale. Anything left blank falls back to the default locale.",
+        "NAME": {
+          "LABEL": "Name"
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Pamagat ng pahina"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Teksto ng header"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Locale content updated successfully",
+          "ERROR_MESSAGE": "Unable to update locale content. Try again."
+        }
+      },
+      "ADD_LOCALE_DIALOG": {
+        "TITLE": "Magdagdag ng bagong wika",
+        "DESCRIPTION": "Piliin ang wikang gagamitin sa artikulong ito. Idadagdag ito sa iyong listahan ng mga pagsasalin, at maaari kang magdagdag pa mamaya.",
+        "COMBOBOX": {
+          "PLACEHOLDER": "Pumili ng wika..."
+        },
+        "STATUS": {
+          "LABEL": "Status",
+          "OPTIONS": {
+            "LIVE": "Nailathala",
+            "DRAFT": "Burador"
+          }
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Matagumpay na nadagdag ang wika",
+          "ERROR_MESSAGE": "Hindi maidagdag ang wika. Subukang muli."
+        }
+      }
+    },
+    "EDIT_ARTICLE_PAGE": {
+      "HEADER": {
+        "STATUS": {
+          "SAVING": "Sini-save...",
+          "SAVED": "Nai-save na"
+        },
+        "PREVIEW": "I-preview",
+        "PUBLISH": "I-publish",
+        "PUBLISH_CHANGES": "Publish changes",
+        "PUBLISH_CHANGES_SUCCESS": "Changes published successfully",
+        "PUBLISH_CHANGES_ERROR": "Could not publish changes",
+        "SAVE_IN_PROGRESS": "Still saving your latest changes. Please try again in a moment.",
+        "UPLOAD_IN_PROGRESS": "A file upload is unfinished. Wait for it to finish or remove it first.",
+        "CREATE_IN_PROGRESS": "The article is still being created. Add files again in a moment.",
+        "DISCARD_CHANGES": "Discard changes",
+        "DISCARD_CHANGES_SUCCESS": "Changes discarded",
+        "DISCARD_CHANGES_ERROR": "Could not discard changes",
+        "PENDING_CHANGES": "Pending changes",
+        "VIEW_CHANGES": "View unpublished changes",
+        "DRAFT": "Burador",
+        "ARCHIVE": "I-archive",
+        "BACK_TO_ARTICLES": "Bumalik sa mga artikulo"
+      },
+      "PENDING_CHANGES_POPOVER": {
+        "TITLE": "Unpublished changes",
+        "DESCRIPTION": "This article has draft changes that aren't live yet. Apply them before changing the status, or discard them?",
+        "APPLY": "Apply changes",
+        "DISCARD": "Discard changes"
+      },
+      "DIFF_DIALOG": {
+        "TITLE": "Unpublished changes",
+        "DESCRIPTION": "Compare your draft against the version that's currently live.",
+        "TITLE_LABEL": "Title"
+      },
+      "EDIT_ARTICLE": {
+        "MORE_PROPERTIES": "Higit pang mga katangian",
+        "UNCATEGORIZED": "Walang kategorya",
+        "EDITOR_PLACEHOLDER": "Write your content here. Type '/' for formatting options."
+      },
+      "ARTICLE_PROPERTIES": {
+        "ARTICLE_PROPERTIES": "Mga katangian ng artikulo",
+        "META_DESCRIPTION": "Meta paglalarawan",
+        "META_DESCRIPTION_PLACEHOLDER": "Magdagdag ng meta paglalarawan",
+        "META_TITLE": "Meta pamagat",
+        "META_TITLE_PLACEHOLDER": "Magdagdag ng meta pamagat",
+        "META_TAGS": "Meta tag",
+        "META_TAGS_PLACEHOLDER": "Magdagdag ng meta tag",
+        "SLUG": "Slug",
+        "SLUG_PLACEHOLDER": "Add slug",
+        "SLUG_USE_TITLE": "Use title as slug",
+        "SLUG_WARNING": "The current URL will stop working, and existing links to it will break.",
+        "SLUG_UPDATE": "I-update",
+        "SLUG_UPDATED": "Slug updated. The article is now available at the new URL.",
+        "SLUG_OPEN": "Open URL"
+      },
+      "API": {
+        "ERROR": "Nagkaroon ng error habang sine-save ang artikulo"
+      }
+    },
+    "PORTAL_SWITCHER": {
+      "NEW_PORTAL": "Bagong portal",
+      "PORTALS": "Mga portal",
+      "CREATE_PORTAL": "Lumikha at pamahalaan ang maraming portal",
+      "ARTICLES": "mga artikulo",
+      "DOMAIN": "domain",
+      "PORTAL_NAME": "Pangalan ng portal"
+    },
+    "CREATE_PORTAL_DIALOG": {
+      "TITLE": "Gumawa ng bagong portal",
+      "DESCRIPTION": "Bigyan ng pangalan ang iyong portal at gumawa ng madaling tandaan na URL slug. Maaari mo itong baguhin sa mga setting sa ibang pagkakataon.",
+      "CONFIRM_BUTTON_LABEL": "Gumawa",
+      "NAME": {
+        "LABEL": "Pangalan",
+        "PLACEHOLDER": "Gabay ng Gumagamit | Chatwoot",
+        "MESSAGE": "Pumili ng pangalan para sa iyong portal.",
+        "ERROR": "Kinakailangan ang pangalan"
+      },
+      "SLUG": {
+        "LABEL": "Slug",
+        "PLACEHOLDER": "gabay-ng-gumagamit",
+        "ERROR": "Kinakailangan ang slug",
+        "FORMAT_ERROR": "Pakilagay ang wastong slug, halimbawa: user-guide"
+      }
+    },
+    "PORTAL_SETTINGS": {
+      "FORM": {
+        "AVATAR": {
+          "LABEL": "Logo",
+          "IMAGE_UPLOAD_ERROR": "Hindi ma-upload ang larawan! Subukang muli",
+          "IMAGE_UPLOAD_SUCCESS": "Matagumpay na nadagdag ang larawan. Paki-click ang save changes upang mai-save ang logo",
+          "IMAGE_DELETE_SUCCESS": "Matagumpay na natanggal ang logo",
+          "IMAGE_DELETE_ERROR": "Hindi matanggal ang logo",
+          "IMAGE_UPLOAD_SIZE_ERROR": "Ang laki ng larawan ay dapat mas mababa sa {size}MB"
+        },
+        "NAME": {
+          "LABEL": "Pangalan",
+          "PLACEHOLDER": "Pangalan ng portal",
+          "ERROR": "Kinakailangan ang pangalan"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Teksto ng header",
+          "PLACEHOLDER": "Teksto ng header ng portal"
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Pamagat ng pahina",
+          "PLACEHOLDER": "Pamagat ng pahina ng portal"
+        },
+        "HOME_PAGE_LINK": {
+          "LABEL": "Link ng home page",
+          "PLACEHOLDER": "Link ng home page ng portal",
+          "ERROR": "Maglagay ng wastong URL. Ang link ng Home page ay dapat magsimula sa 'http://' o 'https://'."
+        },
+        "SLUG": {
+          "LABEL": "Slug",
+          "PLACEHOLDER": "Slug ng portal"
+        },
+        "BRAND_COLOR": {
+          "LABEL": "Kulay ng brand"
+        },
+        "SAVE_CHANGES": "I-save ang mga pagbabago"
+      },
+      "CONFIGURATION_FORM": {
+        "CUSTOM_DOMAIN": {
+          "HEADER": "Custom na domain",
+          "LABEL": "Custom na domain:",
+          "DESCRIPTION": "Maaari mong i-host ang iyong portal sa isang custom na domain. Halimbawa, kung ang iyong website ay yourdomain.com at gusto mong maging available ang iyong portal sa docs.yourdomain.com, ilagay lamang ito sa field na ito.",
+          "STATUS_DESCRIPTION": "Magsisimula nang gumana ang iyong custom na portal kapag ito ay na-verify.",
+          "PLACEHOLDER": "Custom na domain ng portal",
+          "EDIT_BUTTON": "I-edit",
+          "ADD_BUTTON": "Magdagdag ng custom na domain",
+          "STATUS": {
+            "LIVE": "Aktibo",
+            "PENDING": "Naghihintay ng beripikasyon",
+            "ERROR": "Nabigo ang beripikasyon"
+          },
+          "DIALOG": {
+            "ADD_HEADER": "Magdagdag ng custom na domain",
+            "EDIT_HEADER": "I-edit ang custom na domain",
+            "ADD_CONFIRM_BUTTON_LABEL": "Magdagdag ng domain",
+            "EDIT_CONFIRM_BUTTON_LABEL": "I-update ang domain",
+            "LABEL": "Pasadyang domain",
+            "PLACEHOLDER": "Portal na pasadyang domain",
+            "ERROR": "Kinakailangan ang pasadyang domain",
+            "FORMAT_ERROR": "Pakilagay ang wastong domain URL, hal. docs.yourdomain.com"
+          },
+          "DNS_CONFIGURATION_DIALOG": {
+            "HEADER": "DNS na pagsasaayos",
+            "DESCRIPTION": "Mag-login sa iyong account sa DNS provider, at magdagdag ng CNAME record para sa subdomain na ituturo sa chatwoot.help",
+            "COPY": "Matagumpay na nakopya ang CNAME",
+            "SEND_INSTRUCTIONS": {
+              "HEADER": "Ipadala ang mga tagubilin",
+              "DESCRIPTION": "Kung nais mong ipagawa ito sa isang miyembro ng iyong development team, maaari mong ilagay ang kanilang email address sa ibaba at ipapadala namin sa kanila ang kinakailangang mga tagubilin.",
+              "PLACEHOLDER": "Ilagay ang kanilang email",
+              "ERROR": "Maglagay ng wastong email address",
+              "SEND_BUTTON": "Ipadala"
+            }
+          }
+        },
+        "DELETE_PORTAL": {
+          "BUTTON": "Tanggalin ang {portalName}",
+          "HEADER": "Tanggalin ang portal",
+          "DESCRIPTION": "Permanenteng tanggalin ang portal na ito. Hindi na ito maaaring ibalik",
+          "DIALOG": {
+            "HEADER": "Sigurado ka bang gusto mong tanggalin ang {portalName}?",
+            "DESCRIPTION": "Ito ay isang permanenteng aksyon na hindi na maaaring ibalik.",
+            "CONFIRM_BUTTON_LABEL": "Tanggalin"
+          }
+        },
+        "EDIT_CONFIGURATION": "I-edit ang configuration"
+      },
+      "LAYOUT_CONTENT": {
+        "HEADER": "Appearance",
+        "DESCRIPTION": "Pick the layout that fits how your visitors read.",
+        "LAYOUT": {
+          "CLASSIC": {
+            "TITLE": "Classic",
+            "DESCRIPTION": "A welcoming home page with search and featured topics."
+          },
+          "SIDEBAR": {
+            "TITLE": "Documentation",
+            "DESCRIPTION": "Side-by-side navigation that keeps every guide a click away."
+          }
+        },
+        "SOCIAL_LINKS": {
+          "HEADER": "Social links",
+          "DESCRIPTION": "Add the handle for each network and your help center builds the full link. Shown in the documentation layout footer.",
+          "PLACEHOLDER": "handle",
+          "ADD": "Add social link",
+          "REMOVE": "Alisin"
+        },
+        "SAVE": "I-save ang mga pagbabago"
+      },
+      "INTEGRATIONS": {
+        "HEADER": "Mga Integrasyon",
+        "DESCRIPTION": "Connect tools that extend what your help center can do.",
+        "LIVE_CHAT": {
+          "TITLE": "Live chat with Chatwoot",
+          "DESCRIPTION": "Show a live chat widget on your help center so visitors can reach you while they read.",
+          "PLACEHOLDER": "Pumili ng live chat widget",
+          "NONE_OPTION": "Walang widget"
+        },
+        "GTM": {
+          "TITLE": "Google Tag Manager",
+          "DESCRIPTION": "Add analytics and marketing tags by connecting your Tag Manager container.",
+          "PLACEHOLDER": "GTM-XXXXXXX",
+          "HELP": "Find this in your Google Tag Manager workspace. Leave empty to disable.",
+          "INVALID": "Enter a valid container ID, for example GTM-XXXXXXX."
+        },
+        "GA4": {
+          "TITLE": "Google Analytics 4",
+          "DESCRIPTION": "Measure traffic and visitor behavior on your help center with Google Analytics.",
+          "PLACEHOLDER": "G-XXXXXXXXXX",
+          "HELP": "Find the measurement ID under Admin → Data streams in Google Analytics. Leave empty to disable.",
+          "INVALID": "Enter a valid measurement ID, for example G-XXXXXXXXXX."
+        },
+        "HOTJAR": {
+          "TITLE": "Hotjar",
+          "DESCRIPTION": "Understand how visitors use your help center with heatmaps and session recordings.",
+          "PLACEHOLDER": "1234567",
+          "HELP": "Find your site ID under Sites & organizations in Hotjar. Leave empty to disable.",
+          "INVALID": "Enter a numeric Hotjar site ID."
+        },
+        "PLAUSIBLE": {
+          "TITLE": "Plausible",
+          "DESCRIPTION": "Track help center traffic with privacy-friendly Plausible Analytics.",
+          "PLACEHOLDER": "example.com",
+          "HELP": "Enter the domain configured in your Plausible site settings. Leave empty to disable.",
+          "INVALID": "Enter a valid domain, for example example.com."
+        },
+        "AMPLITUDE": {
+          "TITLE": "Amplitude",
+          "DESCRIPTION": "Analyze visitor behavior on your help center with Amplitude.",
+          "PLACEHOLDER": "0123456789abcdef0123456789abcdef",
+          "HELP": "Find the API key in your Amplitude project settings. Leave empty to disable.",
+          "INVALID": "Enter a valid Amplitude API key."
+        },
+        "CLARITY": {
+          "TITLE": "Microsoft Clarity",
+          "DESCRIPTION": "Capture heatmaps and session recordings with Microsoft Clarity.",
+          "PLACEHOLDER": "abcd1234ef",
+          "HELP": "Find the project ID in your Clarity project settings. Leave empty to disable.",
+          "INVALID": "Enter a valid Clarity project ID."
+        },
+        "META_PIXEL": {
+          "TITLE": "Meta Pixel",
+          "DESCRIPTION": "Measure ad conversions and build audiences from help center visits with Meta Pixel.",
+          "PLACEHOLDER": "123456789012345",
+          "HELP": "Find the pixel ID in Meta Events Manager. Leave empty to disable.",
+          "INVALID": "Enter a numeric pixel ID."
+        },
+        "SAVE": "I-save ang mga pagbabago"
+      },
+      "NAV": {
+        "GENERAL": "General",
+        "DOMAIN": "Domain",
+        "APPEARANCE": "Appearance",
+        "INTEGRATIONS": "Mga Integrasyon"
+      },
+      "API": {
+        "CREATE_PORTAL": {
+          "SUCCESS_MESSAGE": "Matagumpay na nalikha ang portal",
+          "ERROR_MESSAGE": "Hindi makalikha ng portal"
+        },
+        "UPDATE_PORTAL": {
+          "SUCCESS_MESSAGE": "Matagumpay na na-update ang portal",
+          "ERROR_MESSAGE": "Hindi ma-update ang portal"
+        }
+      }
+    },
+    "PDF_UPLOAD": {
+      "TITLE": "Mag-upload ng PDF Dokumento",
+      "DESCRIPTION": "Mag-upload ng PDF dokumento upang awtomatikong makabuo ng mga FAQ gamit ang AI",
+      "DRAG_DROP_TEXT": "I-drag at i-drop ang iyong PDF file dito, o i-click upang pumili",
+      "SELECT_FILE": "Pumili ng PDF File",
+      "ADDITIONAL_CONTEXT_LABEL": "Karagdagang Konteksto (Opsyonal)",
+      "ADDITIONAL_CONTEXT_PLACEHOLDER": "Magbigay ng anumang karagdagang konteksto o tagubilin para sa paggawa ng FAQ...",
+      "UPLOADING": "Ina-upload...",
+      "UPLOAD": "I-upload at Iproseso",
+      "CANCEL": "Kanselahin",
+      "ERROR_INVALID_TYPE": "Pumili ng wastong PDF file",
+      "ERROR_FILE_TOO_LARGE": "Ang laki ng file ay dapat mas mababa sa 512MB",
+      "ERROR_UPLOAD_FAILED": "Nabigong mai-upload ang PDF. Pakisubukang muli."
+    },
+    "PDF_DOCUMENTS": {
+      "TITLE": "Mga PDF na Dokumento",
+      "DESCRIPTION": "Pamahalaan ang mga na-upload na PDF na dokumento at gumawa ng mga FAQ mula rito",
+      "UPLOAD_PDF": "Mag-upload ng PDF",
+      "UPLOAD_FIRST_PDF": "I-upload ang iyong unang PDF",
+      "UPLOADED_BY": "In-upload ni",
+      "GENERATE_FAQS": "Gumawa ng mga FAQ",
+      "GENERATING": "Gumagawa...",
+      "CONFIRM_DELETE": "Sigurado ka bang gusto mong tanggalin ang {filename}?",
+      "EMPTY_STATE": {
+        "TITLE": "Wala pang PDF na dokumento",
+        "DESCRIPTION": "Mag-upload ng mga PDF na dokumento upang awtomatikong makabuo ng mga FAQ gamit ang AI"
+      },
+      "STATUS": {
+        "UPLOADED": "Handa na",
+        "PROCESSING": "Pinoproseso",
+        "PROCESSED": "Tapos na",
+        "FAILED": "Nabigo"
+      }
+    },
+    "CONTENT_GENERATION": {
+      "TITLE": "Pagbuo ng Nilalaman",
+      "DESCRIPTION": "Mag-upload ng mga PDF na dokumento upang awtomatikong makabuo ng FAQ na nilalaman gamit ang AI",
+      "UPLOAD_TITLE": "Mag-upload ng PDF na Dokumento",
+      "DRAG_DROP": "I-drag at i-drop ang iyong PDF file dito, o i-click upang pumili",
+      "SELECT_FILE": "Pumili ng PDF File",
+      "UPLOADING": "Pinoproseso ang dokumento...",
+      "UPLOAD_SUCCESS": "Matagumpay na naproseso ang dokumento!",
+      "UPLOAD_ERROR": "Nabigong mai-upload ang dokumento. Pakisubukang muli.",
+      "INVALID_FILE_TYPE": "Pumili ng wastong PDF file",
+      "FILE_TOO_LARGE": "Ang laki ng file ay dapat mas mababa sa 512MB",
+      "GENERATED_CONTENT": "Nabuong FAQ na Nilalaman",
+      "PUBLISH_SELECTED": "I-publish ang Napili",
+      "PUBLISHING": "Ipinapublish...",
+      "FROM_DOCUMENT": "Mula sa dokumento",
+      "NO_CONTENT": "Walang nabuong nilalaman. Mag-upload ng PDF na dokumento upang makapagsimula.",
+      "LOADING": "Ikinakarga ang nabuong nilalaman..."
+    }
+  }
+}

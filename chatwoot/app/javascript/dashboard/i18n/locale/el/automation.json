@@ -1,0 +1,258 @@
+{
+  "AUTOMATION": {
+    "HEADER": "Αυτοματισμός",
+    "DESCRIPTION": "Automation can replace and streamline existing processes that require manual effort, such as adding labels and assigning conversations to the most suitable agent. This allows the team to focus on their strengths while reducing time spent on routine tasks.",
+    "LEARN_MORE": "Learn more about automation",
+    "COUNT": "{n} automation | {n} automations",
+    "HEADER_BTN_TXT": "Create Automation",
+    "LOADING": "Λήψη κανόνων αυτοματισμού",
+    "SEARCH_PLACEHOLDER": "Search automation rules...",
+    "NO_RESULTS": "No automation rules found matching your search",
+    "ADD": {
+      "TITLE": "Προσθήκη Κανόνα Αυτοματισμού",
+      "SUBMIT": "Δημιουργία",
+      "CANCEL_BUTTON_TEXT": "Άκυρο",
+      "FORM": {
+        "NAME": {
+          "LABEL": "Όνομα Κανόνα",
+          "PLACEHOLDER": "Εισάγετε όνομα κανόνα",
+          "ERROR": "Απαιτείται όνομα"
+        },
+        "DESC": {
+          "LABEL": "Περιγραφή",
+          "PLACEHOLDER": "Εισάγετε περιγραφή κανόνα",
+          "ERROR": "Η περιγραφή απαιτείται"
+        },
+        "EVENT": {
+          "LABEL": "Συμβάν",
+          "PLACEHOLDER": "Παρακαλώ επιλέξτε ένα",
+          "ERROR": "Απαιτείται συμβάν"
+        },
+        "MONITOR": {
+          "LABEL": "Monitor",
+          "PLACEHOLDER": "Select a live monitor",
+          "ERROR": "Select a live monitor",
+          "FETCH_FAILED": "Could not load monitors. Try again later.",
+          "API_UNAVAILABLE": "This monitor is no longer available. Select a live monitor and try again.",
+          "EMPTY": "No live monitors yet. Create or resume a monitor to use this event.",
+          "GO_TO_MONITORS": "Go to monitors",
+          "RETRY": "Retry",
+          "UNAVAILABLE": "Unavailable monitor",
+          "UNAVAILABLE_HELP": "This monitor is unavailable for automation. Select a live monitor to activate this rule.",
+          "HELP": "Runs once when the monitor first matches a conversation from new live activity. Historical scans do not trigger actions."
+        },
+        "RUN_TYPE": {
+          "LABEL": "When should this rule run?",
+          "OPTIONS": {
+            "INSTANT": {
+              "LABEL": "Run instantly",
+              "DESCRIPTION": "Runs the moment an event happens, as long as the conditions match."
+            },
+            "WAIT": {
+              "LABEL": "Run after a wait",
+              "DESCRIPTION": "Waits for a set time and runs only if things are still the same. If they change, the rule is skipped."
+            }
+          }
+        },
+        "WAIT": {
+          "LABEL": "Wait condition",
+          "WHEN_LABEL": "When",
+          "STATUS_LABEL": "Status is",
+          "FOR_LABEL": "For",
+          "INBOX_LABEL": "Εισερχόμενα",
+          "ERROR": "The wait must be between 10 minutes and 30 days",
+          "OPTIONS": {
+            "CONVERSATION_STATUS": "Conversation stays in a status",
+            "CUSTOMER_UNRESPONSIVE": "Customer hasn't replied",
+            "AGENT_UNRESPONSIVE": "No teammate has replied"
+          },
+          "DURATION": {
+            "MINUTES": "{count} minute | {count} minutes",
+            "HOURS": "{count} hour | {count} hours",
+            "DAYS": "{count} day | {count} days"
+          },
+          "EXPLANATION": {
+            "CONVERSATION_STATUS": "The clock starts when a conversation moves into this status. If it is still there {duration} later, the actions below run. If the status changes before then, nothing happens.",
+            "CUSTOMER_UNRESPONSIVE": "The clock starts when a teammate replies. If the customer hasn't written back {duration} later, the actions below run. If they do reply, nothing happens, and the next teammate reply starts the clock again.",
+            "AGENT_UNRESPONSIVE": "The clock starts when a customer sends a message. If no teammate has replied {duration} later, the actions below run. If someone replies before then, nothing happens."
+          },
+          "FOOTNOTE": "Only new activity starts a clock. Conversations already sitting in this state are picked up the next time something happens on them."
+        },
+        "CONDITIONS": {
+          "LABEL": "Προϋποθέσεις"
+        },
+        "ACTIONS": {
+          "LABEL": "Ενέργειες"
+        }
+      },
+      "CONDITION_BUTTON_LABEL": "Προσθήκη Προϋπόθεσης",
+      "ACTION_BUTTON_LABEL": "Προσθήκη Ενέργειας",
+      "API": {
+        "SUCCESS_MESSAGE": "Ο κανόνας αυτοματισμού προστέθηκε με επιτυχία",
+        "ERROR_MESSAGE": "Δεν ήταν δυνατή η δημιουργία ενός κανόνα αυτοματισμού, Παρακαλώ δοκιμάστε ξανά αργότερα"
+      }
+    },
+    "LIST": {
+      "TABLE_HEADER": {
+        "NAME": "Όνομα",
+        "ACTIVE": "Ενεργή",
+        "CREATED_ON": "Δημιουργήθηκε στις"
+      },
+      "404": "Δεν βρέθηκαν κανόνες αυτοματισμού",
+      "404_DELAYED": "No rules run after a wait yet",
+      "TABS": {
+        "INSTANT": "Runs instantly",
+        "DELAYED": "Runs after a wait"
+      },
+      "DELAY_BADGE": "Runs after {delay}",
+      "MONITOR_PAUSED": "Monitor paused",
+      "MONITOR_DELETED": "Monitor deleted",
+      "MONITOR_UNAVAILABLE": "Monitor feature unavailable",
+      "DELAY_DISABLED_BANNER": "Delayed execution is turned off for this account, so the rules below that run after a wait are paused until it is turned back on."
+    },
+    "DELETE": {
+      "TITLE": "Διαγραφή Κανόνα Αυτοματισμού",
+      "SUBMIT": "Διαγραφή",
+      "CANCEL_BUTTON_TEXT": "Άκυρο",
+      "CONFIRM": {
+        "TITLE": "Επιβεβαίωση Διαγραφής",
+        "MESSAGE": "Είσαστε σίγουροι για την διαγραφή ",
+        "YES": "Ναι, Διέγραψε τον/την ",
+        "NO": "Όχι, Κράτησε τον/την"
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Ο κανόνας αυτοματισμού διαγράφηκε επιτυχώς",
+        "ERROR_MESSAGE": "Δεν ήταν δυνατή η διαγραφή του κανόνα αυτοματισμού, Παρακαλώ δοκιμάστε ξανά αργότερα"
+      }
+    },
+    "EDIT": {
+      "TITLE": "Επεξεργασία Κανόνα Αυτοματισμού",
+      "SUBMIT": "Ενημέρωση",
+      "CANCEL_BUTTON_TEXT": "Άκυρο",
+      "API": {
+        "SUCCESS_MESSAGE": "Ο κανόνας αυτοματισμού ενημερώθηκε επιτυχώς",
+        "ERROR_MESSAGE": "Δεν ήταν δυνατή η ενημέρωση του κανόνα αυτοματισμού, Παρακαλώ προσπαθήστε ξανά αργότερα"
+      }
+    },
+    "CLONE": {
+      "TOOLTIP": "Κλώνος",
+      "API": {
+        "SUCCESS_MESSAGE": "Ο αυτοματισμός κλωνοποιήθηκε επιτυχώς",
+        "ERROR_MESSAGE": "Δεν ήταν δυνατή η κλωνοποίηση του κανόνα αυτοματισμού, Παρακαλώ δοκιμάστε ξανά αργότερα"
+      }
+    },
+    "FORM": {
+      "EDIT": "Επεξεργασία",
+      "CREATE": "Δημιουργία",
+      "DELETE": "Διαγραφή",
+      "CANCEL": "Άκυρο",
+      "RESET_MESSAGE": "Η αλλαγή τύπου συμβάντος θα επαναφέρει τις συνθήκες και τα συμβάντα που έχετε προσθέσει παρακάτω"
+    },
+    "CONDITION": {
+      "DELETE_MESSAGE": "Πρέπει να έχετε τουλάχιστον μία συνθήκη για να αποθηκεύσετε",
+      "CONTACT_CUSTOM_ATTR_LABEL": "Προσαρμοσμένες Ιδιότητες Επαφής",
+      "CONVERSATION_CUSTOM_ATTR_LABEL": "Προσαρμοσμένες Ιδιότητες Συνομιλίας",
+      "PLACEHOLDERS": {
+        "CAPTAIN": "Describe what to look for, e.g. customer wants to cancel"
+      }
+    },
+    "ACTION": {
+      "DELETE_MESSAGE": "Πρέπει να έχετε τουλάχιστον μία ενέργεια για να αποθηκεύσετε",
+      "TEAM_MESSAGE_INPUT_PLACEHOLDER": "Γράψτε το μήνυμά σας εδώ",
+      "TEAM_DROPDOWN_PLACEHOLDER": "Επιλογή ομάδων",
+      "EMAIL_INPUT_PLACEHOLDER": "Enter email",
+      "URL_INPUT_PLACEHOLDER": "Enter URL",
+      "INSERT_CONTACT_EMAIL": "Use contact's email"
+    },
+    "TOGGLE": {
+      "ACTIVATION_TITLE": "Ενεργοποίηση Κανόνα Αυτοματισμού",
+      "DEACTIVATION_TITLE": "Απενεργοποίηση Κανόνα Αυτοματισμού",
+      "ACTIVATION_DESCRIPTION": "Αυτή η ενέργεια θα ενεργοποιήσει τον κανόνα αυτοματισμού '{automationName}'. Είστε σίγουροι ότι θέλετε να συνεχίσετε;",
+      "DEACTIVATION_DESCRIPTION": "Αυτή η ενέργεια θα απενεργοποιήσει τον κανόνα αυτοματισμού '{automationName}'. Είστε σίγουροι ότι θέλετε να συνεχίσετε;",
+      "ACTIVATION_SUCCESFUL": "Κανόνας Αυτοματισμού Ενεργοποιήθηκε Επιτυχώς",
+      "DEACTIVATION_SUCCESFUL": "Ο Κανόνας Αυτοματισμού Απενεργοποιήθηκε Επιτυχώς",
+      "ACTIVATION_ERROR": "Δεν ήταν δυνατή η ενεργοποίηση του Αυτοματισμού, παρακαλώ προσπαθήστε ξανά αργότερα",
+      "DEACTIVATION_ERROR": "Δεν ήταν δυνατή η απενεργοποίηση του Αυτοματισμού, παρακαλώ προσπαθήστε ξανά αργότερα",
+      "CONFIRMATION_LABEL": "Ναι",
+      "CANCEL_LABEL": "Όχι"
+    },
+    "ATTACHMENT": {
+      "UPLOAD_ERROR": "Δεν ήταν δυνατή η μεταφόρτωση συνημμένου, παρακαλώ προσπαθήστε ξανά",
+      "LABEL_IDLE": "Ανέβασμα επισυναπτόμενου",
+      "LABEL_UPLOADING": "Ανέβασμα...",
+      "LABEL_UPLOADED": "Επιτυχής Μεταφόρτωση",
+      "LABEL_UPLOAD_FAILED": "Αποτυχία Μεταφόρτωσης"
+    },
+    "ERRORS": {
+      "ATTRIBUTE_KEY_REQUIRED": "Attribute key is required",
+      "FILTER_OPERATOR_REQUIRED": "Filter operator is required",
+      "VALUE_REQUIRED": "Απαιτείται τιμή",
+      "VALUE_MUST_BE_BETWEEN_1_AND_998": "Value must be between 1 and 998",
+      "ACTION_PARAMETERS_REQUIRED": "Action parameters are required",
+      "ATLEAST_ONE_CONDITION_REQUIRED": "At least one condition is required",
+      "ATLEAST_ONE_ACTION_REQUIRED": "At least one action is required"
+    },
+    "NONE_OPTION": "Κανένα",
+    "LAST_RESPONDING_AGENT": "Last Responding Agent",
+    "EVENTS": {
+      "CONVERSATION_CREATED": "Δημιουργήθηκε Συνομιλία",
+      "CONVERSATION_UPDATED": "Η Συνομιλία Ενημερώθηκε",
+      "MESSAGE_CREATED": "Message Created",
+      "CONVERSATION_RESOLVED": "Conversation Resolved",
+      "CONVERSATION_OPENED": "Conversation Opened",
+      "MONITOR_MATCHED": "Monitor Matched"
+    },
+    "ACTIONS": {
+      "ASSIGN_AGENT": "Assign to Agent",
+      "ASSIGN_TEAM": "Assign a Team",
+      "REMOVE_ASSIGNED_AGENT": "Remove Assigned Agent",
+      "REMOVE_ASSIGNED_TEAM": "Remove Assigned Team",
+      "ADD_LABEL": "Add a Label",
+      "REMOVE_LABEL": "Remove a Label",
+      "SEND_EMAIL_TO_TEAM": "Send an Email to Team",
+      "SEND_EMAIL_TRANSCRIPT": "Send an Email Transcript",
+      "MUTE_CONVERSATION": "Σίγαση Συνομιλίας",
+      "SNOOZE_CONVERSATION": "Αναβολή Συνομιλίας",
+      "RESOLVE_CONVERSATION": "Επίλυση Συνομιλίας",
+      "SEND_WEBHOOK_EVENT": "Send Webhook Event",
+      "SEND_ATTACHMENT": "Send Attachment",
+      "SEND_MESSAGE": "Send a Message",
+      "ADD_PRIVATE_NOTE": "Add a Private Note",
+      "CHANGE_PRIORITY": "Change Priority",
+      "ADD_SLA": "Add SLA",
+      "OPEN_CONVERSATION": "Άνοιγμα συνομιλίας",
+      "PENDING_CONVERSATION": "Mark conversation as pending"
+    },
+    "MESSAGE_TYPES": {
+      "INCOMING": "Incoming Message",
+      "OUTGOING": "Outgoing Message"
+    },
+    "PRIORITY_TYPES": {
+      "NONE": "Κανένα",
+      "LOW": "Low",
+      "MEDIUM": "Medium",
+      "HIGH": "High",
+      "URGENT": "Urgent"
+    },
+    "ATTRIBUTES": {
+      "MESSAGE_TYPE": "Message Type",
+      "PRIVATE_NOTE": "Ιδιωτική Σημείωση",
+      "MESSAGE_CONTAINS": "Message Content",
+      "EMAIL": "Email",
+      "INBOX": "Εισερχόμενα",
+      "CONVERSATION_LANGUAGE": "Conversation Language",
+      "PHONE_NUMBER": "Αριθμός Τηλεφώνου",
+      "STATUS": "Κατάσταση",
+      "BROWSER_LANGUAGE": "Γλώσσα Περιήγησης",
+      "MAIL_SUBJECT": "Email Subject",
+      "COUNTRY_NAME": "Χώρα",
+      "COMPANY_NAME": "Εταιρία",
+      "REFERER_LINK": "Referrer Link",
+      "ASSIGNEE_NAME": "Assignee",
+      "TEAM_NAME": "Ομάδα",
+      "PRIORITY": "Priority",
+      "LABELS": "Ετικέτες",
+      "CAPTAIN": "Captain"
+    }
+  }
+}

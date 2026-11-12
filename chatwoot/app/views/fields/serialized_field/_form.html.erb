@@ -1,0 +1,16 @@
+<%= render "field", f: f, field: field do %>
+  <% if field.array? %>
+    <% field.data.each do |sub_field| %>
+      <%= f.fields_for "#{field.attribute}[]", field.resource do |values_form| %>
+        <div class="mb-3 space-y-1.5">
+          <% sub_field.each do |sf_key, sf_value| %>
+            <%= values_form.label sf_key, class: "text-label-small text-n-slate-11" %>
+            <%= values_form.text_field sf_key, value: sf_value, disabled: true, class: ui(:input) %>
+          <% end %>
+        </div>
+      <% end %>
+    <% end %>
+  <% else %>
+    <%= f.text_field field.attribute, class: ui(:input) %>
+  <% end %>
+<% end %>

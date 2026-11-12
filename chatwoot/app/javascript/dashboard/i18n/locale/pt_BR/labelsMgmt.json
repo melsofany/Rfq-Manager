@@ -1,0 +1,75 @@
+{
+  "LABEL_MGMT": {
+    "HEADER": "Etiquetas",
+    "HEADER_BTN_TXT": "Adicionar etiqueta",
+    "LOADING": "Buscando etiquetas",
+    "DESCRIPTION": "As etiquetas ajudam você a categorizar e priorizar conversas e leads. Você pode atribuir uma etiqueta a uma conversa ou contato usando o painel lateral.",
+    "LEARN_MORE": "Aprenda mais sobre etiquetas",
+    "COUNT": "{n} etiqueta | {n} etiquetas",
+    "SEARCH_PLACEHOLDER": "Pesquisar etiquetas...",
+    "NO_RESULTS": "Nenhuma etiqueta encontrada correspondente à sua busca",
+    "SEARCH_404": "Não existem itens correspondentes a esta consulta",
+    "LIST": {
+      "404": "Não há etiquetas disponíveis nesta conta.",
+      "TITLE": "Gerenciar etiquetas",
+      "DESC": "Etiquetas permitem agrupar as conversas.",
+      "TABLE_HEADER": {
+        "NAME": "Nome",
+        "DESCRIPTION": "Descrição",
+        "COLOR": "Cor",
+        "ACTION": "Ações"
+      }
+    },
+    "FORM": {
+      "NAME": {
+        "LABEL": "Nome da Etiqueta",
+        "PLACEHOLDER": "Nome da etiqueta",
+        "REQUIRED_ERROR": "O nome da etiqueta é obrigatório",
+        "MINIMUM_LENGTH_ERROR": "Tamanho mínimo 2 é necessário",
+        "VALID_ERROR": "Somente Letras, Números, Hífen e Sublinhado são permitidos"
+      },
+      "DESCRIPTION": {
+        "LABEL": "Descrição",
+        "PLACEHOLDER": "Descrição da etiqueta"
+      },
+      "COLOR": {
+        "LABEL": "Cor"
+      },
+      "SHOW_ON_SIDEBAR": {
+        "LABEL": "Exibir etiqueta na barra lateral"
+      },
+      "EDIT": "Alterar",
+      "CREATE": "Criar",
+      "DELETE": "Excluir",
+      "CANCEL": "Cancelar"
+    },
+    "ADD": {
+      "TITLE": "Adicionar etiqueta",
+      "DESC": "Etiquetas permitem agrupar as conversas.",
+      "API": {
+        "SUCCESS_MESSAGE": "Etiqueta adicionada com sucesso",
+        "ERROR_MESSAGE": "Ocorreu um erro, por favor tente novamente"
+      }
+    },
+    "EDIT": {
+      "TITLE": "Alterar etiqueta",
+      "API": {
+        "SUCCESS_MESSAGE": "Etiqueta atualizada com sucesso",
+        "ERROR_MESSAGE": "Ocorreu um erro, por favor tente novamente"
+      }
+    },
+    "DELETE": {
+      "BUTTON_TEXT": "Excluir",
+      "API": {
+        "SUCCESS_MESSAGE": "Etiqueta excluída com sucesso",
+        "ERROR_MESSAGE": "Ocorreu um erro, por favor tente novamente"
+      },
+      "CONFIRM": {
+        "TITLE": "Confirmar exclusão",
+        "MESSAGE": "Você tem certeza que deseja excluir ",
+        "YES": "Sim, excluir ",
+        "NO": "Não, Mantenha "
+      }
+    }
+  }
+}

@@ -1,0 +1,1119 @@
+{
+  "HELP_CENTER": {
+    "TITLE": "Օգնության կենտրոն",
+    "NEW_PAGE": {
+      "DESCRIPTION": "Ստեղծեք ինքնասպասարկման օգնության կենտրոնի պորտալներ ձեր հաճախորդների համար։ Օգնեք նրանց արագ գտնել պատասխաններ՝ առանց սպասելու։ Հեշտացրեք հարցումները, բարձրացրեք գործակալների արդյունավետությունը և բարելավեք հաճախորդների աջակցությունը։",
+      "CREATE_PORTAL_BUTTON": "Ստեղծել պորտալ։"
+    },
+    "HEADER": {
+      "FILTER": "Ֆիլտրել ըստ",
+      "SORT": "Տեսակավորել ըստ",
+      "LOCALE": "Լոկալիզացիա",
+      "SETTINGS_BUTTON": "Կարգավորումներ",
+      "NEW_BUTTON": "Նոր հոդված",
+      "DROPDOWN_OPTIONS": {
+        "PUBLISHED": "Հրապարակված",
+        "DRAFT": "Սևագիր",
+        "ARCHIVED": "Արխիվացված"
+      },
+      "TITLES": {
+        "ALL_ARTICLES": "Բոլոր հոդվածները",
+        "MINE": "Իմ հոդվածները",
+        "DRAFT": "Սևագրեր",
+        "ARCHIVED": "Արխիվացված հոդվածներ"
+      },
+      "LOCALE_SELECT": {
+        "TITLE": "Ընտրել լեզուն",
+        "PLACEHOLDER": "Ընտրել լեզուն",
+        "NO_RESULT": "Լեզու չի գտնվել",
+        "SEARCH_PLACEHOLDER": "Փնտրել լեզուն"
+      }
+    },
+    "EDIT_HEADER": {
+      "ALL_ARTICLES": "Բոլոր հոդվածները",
+      "PUBLISH_BUTTON": "Հրապարակել",
+      "MOVE_TO_ARCHIVE_BUTTON": "Տեղափոխել արխիվացվածների մեջ",
+      "PREVIEW": "Նախադիտում",
+      "ADD_TRANSLATION": "Ավելացնել թարգմանություն",
+      "OPEN_SIDEBAR": "Բացել կողային վահանակը",
+      "CLOSE_SIDEBAR": "Փակել կողային վահանակը",
+      "SAVING": "Պահպանում...",
+      "SAVED": "Պահպանված է"
+    },
+    "ARTICLE_EDITOR": {
+      "IMAGE_UPLOAD": {
+        "TITLE": "Ներբեռնել պատկեր",
+        "UPLOADING": "Ներբեռնում...",
+        "SUCCESS": "Պատկերը հաջողությամբ ներբեռնվեց",
+        "UPLOAD_FAILED": "Upload failed",
+        "RATE_LIMITED": "Upload limit reached. Try again in a few minutes.",
+        "RETRY": "Retry",
+        "REMOVE": "Հեռացնել",
+        "CANCEL": "Cancel upload",
+        "ERROR_FILE_SIZE": "Պատկերի չափը պետք է լինի փոքր քան {size}MB",
+        "ERROR_ATTACHMENT_FILE_SIZE": "File size should be less than {size}MB",
+        "ERROR_UNSUPPORTED_TYPE": "This file type is not supported",
+        "ERROR_FILE_FORMAT": "Պատկերի ֆորմատը պետք է լինի jpg, jpeg կամ png",
+        "ERROR_FILE_DIMENSIONS": "Պատկերի չափերը պետք է լինեն փոքր քան 2000 × 2000"
+      }
+    },
+    "ARTICLE_SETTINGS": {
+      "TITLE": "Հոդվածի կարգավորումներ",
+      "FORM": {
+        "CATEGORY": {
+          "LABEL": "Կատեգորիա",
+          "TITLE": "Ընտրեք կատեգորիա",
+          "PLACEHOLDER": "Ընտրեք կատեգորիա",
+          "NO_RESULT": "Կատեգորիա չի գտնվել",
+          "SEARCH_PLACEHOLDER": "Որոնել կատեգորիաներ"
+        },
+        "AUTHOR": {
+          "LABEL": "Հեղինակ",
+          "TITLE": "Ընտրեք հեղինակ",
+          "PLACEHOLDER": "Ընտրել հեղինակը",
+          "NO_RESULT": "Հեղինակներ չեն գտնվել",
+          "SEARCH_PLACEHOLDER": "Որոնել հեղինակը"
+        },
+        "META_TITLE": {
+          "LABEL": "Մետա վերնագիր",
+          "PLACEHOLDER": "Ավելացնել մետա վերնագիր"
+        },
+        "META_DESCRIPTION": {
+          "LABEL": "Մետա նկարագրություն",
+          "PLACEHOLDER": "Ավելացրեք ձեր մետա նկարագրությունը ավելի լավ SEO արդյունքների համար..."
+        },
+        "META_TAGS": {
+          "LABEL": "Մետա պիտակներ",
+          "PLACEHOLDER": "Ավելացրեք մետա պիտակներ, բաժանված ստորակետերով..."
+        }
+      },
+      "BUTTONS": {
+        "ARCHIVE": "Արխիվացնել հոդվածը",
+        "DELETE": "Ջնջել հոդվածը"
+      }
+    },
+    "ARTICLE_SEARCH_RESULT": {
+      "UNCATEGORIZED": "Առանձնահատուկ կատեգորիա չունի",
+      "SEARCH_RESULTS": "{query} որոնման արդյունքներ",
+      "EMPTY_TEXT": "Որոնեք հոդվածներ՝ պատասխաններում տեղադրելու համար։",
+      "SEARCH_LOADER": "Որոնվում է...",
+      "INSERT_ARTICLE": "Ներմուծել",
+      "NO_RESULT": "Հոդվածներ չեն գտնվել",
+      "COPY_LINK": "Պատճենել հոդվածի հղումը սեղմատախտակին",
+      "OPEN_LINK": "Բացել հոդվածը նոր ներդիրում",
+      "PREVIEW_LINK": "Նախադիտել հոդվածը"
+    },
+    "PORTAL": {
+      "HEADER": "Պորտալներ",
+      "DEFAULT": "Նախնական",
+      "NEW_BUTTON": "Նոր պորտալ",
+      "ACTIVE_BADGE": "ակտիվ",
+      "CHOOSE_LOCALE_LABEL": "Ընտրել լեզու",
+      "LOADING_MESSAGE": "Պորտալները բեռնվում են...",
+      "ARTICLES_LABEL": "հոդվածներ",
+      "NO_PORTALS_MESSAGE": "Հասանելի պորտալներ չկան",
+      "ADD_NEW_LOCALE": "Ավելացնել նոր լեզու",
+      "POPOVER": {
+        "TITLE": "Պորտալներ",
+        "PORTAL_SETTINGS": "Պորտալի կարգավորումներ",
+        "SUBTITLE": "Դուք ունեք մի քանի պորտալ և յուրաքանչյուրի համար կարող եք ունենալ տարբեր լեզուներ։",
+        "CANCEL_BUTTON_LABEL": "Չեղարկել",
+        "CHOOSE_LOCALE_BUTTON": "Ընտրել լեզու"
+      },
+      "PORTAL_SETTINGS": {
+        "LIST_ITEM": {
+          "HEADER": {
+            "COUNT_LABEL": "հոդվածներ",
+            "ADD": "Ավելացնել լեզու",
+            "VISIT": "Այցելել կայք",
+            "SETTINGS": "Կարգավորումներ",
+            "DELETE": "Ջնջել"
+          },
+          "PORTAL_CONFIG": {
+            "TITLE": "Պորտալի կազմաձևումներ",
+            "ITEMS": {
+              "NAME": "Անուն",
+              "DOMAIN": "Հատուկ տիրույթ",
+              "SLUG": "Սլագ",
+              "TITLE": "Պորտալի վերնագիր",
+              "THEME": "Թեմայի գույն",
+              "SUB_TEXT": "Պորտալի ենթագրություն"
+            }
+          },
+          "AVAILABLE_LOCALES": {
+            "TITLE": "Հասանելի լեզուներ",
+            "TABLE": {
+              "NAME": "Լեզվի անուն",
+              "CODE": "Լեզվի կոդ",
+              "ARTICLE_COUNT": "Հոդվածների քանակ",
+              "CATEGORIES": "Կատեգորիաների քանակ",
+              "SWAP": "Փոխանակել",
+              "DELETE": "Ջնջել",
+              "DEFAULT_LOCALE": "Նախնական"
+            }
+          }
+        },
+        "DELETE_PORTAL": {
+          "TITLE": "Ջնջել պորտալը",
+          "MESSAGE": "Համոզվա՞ծ եք, որ ցանկանում եք ջնջել այս պորտալը:",
+          "YES": "Այո, ջնջել պորտալը",
+          "NO": "Ոչ, պահել պորտալը",
+          "API": {
+            "DELETE_SUCCESS": "Պորտալը հաջողությամբ ջնջվեց",
+            "DELETE_ERROR": "Սխալ պորտալը ջնջելիս"
+          }
+        },
+        "SEND_CNAME_INSTRUCTIONS": {
+          "API": {
+            "SUCCESS_MESSAGE": "CNAME հրահանգները հաջողությամբ ուղարկվեցին",
+            "ERROR_MESSAGE": "Սխալ CNAME հրահանգները ուղարկելու ժամանակ"
+          }
+        }
+      },
+      "EDIT": {
+        "HEADER_TEXT": "Խմբագրել պորտալը",
+        "TABS": {
+          "BASIC_SETTINGS": {
+            "TITLE": "Հիմնական տեղեկություններ"
+          },
+          "CUSTOMIZATION_SETTINGS": {
+            "TITLE": "Պորտալի հարմարեցում"
+          },
+          "CATEGORY_SETTINGS": {
+            "TITLE": "Կատեգորիաներ"
+          },
+          "LOCALE_SETTINGS": {
+            "TITLE": "Լեզուներ"
+          }
+        },
+        "CATEGORIES": {
+          "TITLE": "Կատեգորիաներ՝",
+          "NEW_CATEGORY": "Նոր կատեգորիա",
+          "TABLE": {
+            "NAME": "Անուն",
+            "DESCRIPTION": "Նկարագրություն",
+            "LOCALE": "Լեզու",
+            "ARTICLE_COUNT": "Հոդվածների քանակը",
+            "ACTION_BUTTON": {
+              "EDIT": "Խմբագրել կատեգորիան",
+              "DELETE": "Ջնջել կատեգորիան"
+            },
+            "EMPTY_TEXT": "Կատեգորիաներ չեն գտնվել"
+          }
+        },
+        "EDIT_BASIC_INFO": {
+          "BUTTON_TEXT": "Թարմացնել հիմնական կարգավորումները"
+        }
+      },
+      "ADD": {
+        "CREATE_FLOW": {
+          "BASIC": {
+            "TITLE": "Օգնության կենտրոնի տեղեկություններ",
+            "BODY": "Հիմնական տեղեկություններ պորտալի մասին։"
+          },
+          "CUSTOMIZATION": {
+            "TITLE": "Օգնության կենտրոնի հարմարեցում",
+            "BODY": "Հարմարեցրեք պորտալը։"
+          },
+          "FINISH": {
+            "TITLE": "Ահա և վերջը! 🎉",
+            "BODY": "Դուք պատրաստ եք։"
+          }
+        },
+        "CREATE_FLOW_PAGE": {
+          "BACK_BUTTON": "Հետ",
+          "BASIC_SETTINGS_PAGE": {
+            "HEADER": "Ստեղծել պորտալ",
+            "TITLE": "Օգնության կենտրոնի տեղեկություններ",
+            "CREATE_BASIC_SETTING_BUTTON": "Ստեղծել պորտալի հիմնական կարգավորումները"
+          },
+          "CUSTOMIZATION_PAGE": {
+            "HEADER": "Պորտալի հարմարեցում",
+            "TITLE": "Օգնության կենտրոնի հարմարեցում",
+            "UPDATE_PORTAL_BUTTON": "Թարմացնել պորտալի կարգավորումները"
+          },
+          "FINISH_PAGE": {
+            "TITLE": "Voila🎉 Դուք պատրաստ եք։",
+            "MESSAGE": "Այժմ կարող եք տեսնել այս ստեղծված պորտալը ձեր բոլոր պորտալների էջում։",
+            "FINISH": "Գնալ բոլոր պորտալների էջ"
+          }
+        },
+        "LOGO": {
+          "LABEL": "Լոգո",
+          "UPLOAD_BUTTON": "Վերբեռնել լոգոն",
+          "HELP_TEXT": "Այս լոգոն կցուցադրվի պորտալի վերնագրում։",
+          "IMAGE_UPLOAD_SUCCESS": "Լոգոն հաջողությամբ բեռնվել է։",
+          "IMAGE_UPLOAD_ERROR": "Լոգոն հաջողությամբ ջնջվել է։",
+          "IMAGE_DELETE_ERROR": "Սխալ լոգոն ջնջելիս։"
+        },
+        "NAME": {
+          "LABEL": "Անուն",
+          "PLACEHOLDER": "Պորտալի անուն",
+          "HELP_TEXT": "Անվանումը կօգտագործվի հանրային պորտալում ներսում։",
+          "ERROR": "Անունը պարտադիր է"
+        },
+        "SLUG": {
+          "LABEL": "Սլագ",
+          "PLACEHOLDER": "Պորտալի slug URL-ների համար",
+          "ERROR": "Սլագը պարտադիր է"
+        },
+        "DOMAIN": {
+          "LABEL": "Անհատական տիրույթ",
+          "PLACEHOLDER": "Պորտալի անհատական տիրույթ",
+          "HELP_TEXT": "Ավելացրեք միայն, եթե ցանկանում եք օգտագործել հարմարեցված դոմեն ձեր պորտալների համար։ Օրինակ՝ {exampleURL}",
+          "ERROR": "Մուտքագրեք վավեր դոմեյնի URL"
+        },
+        "HOME_PAGE_LINK": {
+          "LABEL": "Գլխավոր էջի հղում",
+          "PLACEHOLDER": "Պորտալի գլխավոր էջի հղում",
+          "HELP_TEXT": "Հղումը, որը օգտագործվում է պորտալից տուն էջ վերադառնալու համար։ Օրինակ՝ {exampleURL}",
+          "ERROR": "Մուտքագրեք վավեր գլխավոր էջի URL"
+        },
+        "THEME_COLOR": {
+          "LABEL": "Պորտալի թեմայի գույն",
+          "HELP_TEXT": "Այս գույնը կցուցադրվի որպես պորտալի թեմայի գույն։"
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Էջի վերնագիր",
+          "PLACEHOLDER": "Պորտալի էջի վերնագիր",
+          "HELP_TEXT": "Էջի վերնագիրը կօգտագործվի հանրային պորտալում։",
+          "ERROR": "Էջի վերնագիրը պարտադիր է"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Վերնագրի տեքստ",
+          "PLACEHOLDER": "Պորտալի վերնագրի տեքստ",
+          "HELP_TEXT": "Պորտալի վերնագրի տեքստը կօգտագործվի հանրային պորտալում։",
+          "ERROR": "Պորտալի վերնագրի տեքստը պարտադիր է"
+        },
+        "API": {
+          "SUCCESS_MESSAGE_FOR_BASIC": "Պորտալը հաջողությամբ ստեղծվեց։",
+          "ERROR_MESSAGE_FOR_BASIC": "Չհաջողվեց ստեղծել պորտալը։ Փորձեք կրկին։",
+          "SUCCESS_MESSAGE_FOR_UPDATE": "Պորտալը հաջողությամբ թարմացվեց։",
+          "ERROR_MESSAGE_FOR_UPDATE": "Չհաջողվեց թարմացնել պորտալը։ Փորձեք կրկին։"
+        }
+      },
+      "ADD_LOCALE": {
+        "TITLE": "Ավելացնել նոր լեզու",
+        "SUB_TITLE": "Սա ավելացնում է նոր լեզու ձեր թարգմանությունների ցանկում։",
+        "PORTAL": "Պորտալ",
+        "LOCALE": {
+          "LABEL": "Լեզու",
+          "PLACEHOLDER": "Ընտրեք լեզու",
+          "ERROR": "Լեզուն պարտադիր է"
+        },
+        "BUTTONS": {
+          "CREATE": "Ստեղծել լեզու",
+          "CANCEL": "Չեղարկել"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Լեզուն հաջողությամբ ավելացվեց",
+          "ERROR_MESSAGE": "Չհաջողվեց ավելացնել լեզուն։ Փորձեք կրկին։"
+        }
+      },
+      "CHANGE_DEFAULT_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Նախնական լեզուն հաջողությամբ թարմացվեց",
+          "ERROR_MESSAGE": "Չհաջողվեց թարմացնել նախնական լեզուն։ Փորձեք կրկին։"
+        }
+      },
+      "DELETE_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Լեզուն հաջողությամբ հեռացվեց պորտալից։",
+          "ERROR_MESSAGE": "Չհաջողվեց հեռացնել լեզուն պորտալից։ Փորձեք կրկին։"
+        }
+      },
+      "DRAFT_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Locale moved to draft successfully",
+          "ERROR_MESSAGE": "Unable to move locale to draft. Try again."
+        }
+      },
+      "PUBLISH_LOCALE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Locale published successfully",
+          "ERROR_MESSAGE": "Unable to publish locale. Try again."
+        }
+      }
+    },
+    "TABLE": {
+      "LOADING_MESSAGE": "Հոդվածները բեռնվում են...",
+      "404": "Ոչ մի հոդված չի համապատասխանում ձեր որոնմանը 🔍",
+      "NO_ARTICLES": "Հոդվածներ առկա չեն",
+      "HEADERS": {
+        "TITLE": "Վերնագիր",
+        "CATEGORY": "Կատեգորիա",
+        "READ_COUNT": "Դիտումներ",
+        "STATUS": "Կարգավիճակ",
+        "LAST_EDITED": "Վերջին խմբագրումը"
+      },
+      "COLUMNS": {
+        "BY": "հեղինակ՝",
+        "AUTHOR_NOT_AVAILABLE": "Հեղինակն անհասանելի է"
+      }
+    },
+    "EDIT_ARTICLE": {
+      "LOADING": "Բեռնվում է հոդվածը...",
+      "TITLE_PLACEHOLDER": "Հոդվածի վերնագիրը գրեք այստեղ",
+      "CONTENT_PLACEHOLDER": "Գրեք ձեր հոդվածը այստեղ",
+      "API": {
+        "ERROR": "Սխալ հոդվածը պահելիս"
+      }
+    },
+    "PUBLISH_ARTICLE": {
+      "API": {
+        "ERROR": "Սխալ հոդվածը հրապարակելիս",
+        "SUCCESS": "Հոդվածը հաջողությամբ հրապարակվեց"
+      }
+    },
+    "ARCHIVE_ARTICLE": {
+      "API": {
+        "ERROR": "Սխալ հոդվածը արխիվավորելիս",
+        "SUCCESS": "Հոդվածը հաջողությամբ արխիվավորվեց"
+      }
+    },
+    "DRAFT_ARTICLE": {
+      "API": {
+        "ERROR": "Սխալ հոդվածի նախագծման ընթացքում",
+        "SUCCESS": "Հոդվածը հաջողությամբ պահպանվեց"
+      }
+    },
+    "DELETE_ARTICLE": {
+      "MODAL": {
+        "CONFIRM": {
+          "TITLE": "Հաստատել ջնջումը",
+          "MESSAGE": "Համոզվա՞ծ եք, որ ցանկանում եք ջնջել հոդվածը:",
+          "YES": "Այո, ջնջել",
+          "NO": "Ոչ, պահել"
+        }
+      },
+      "API": {
+        "SUCCESS_MESSAGE": "Հոդվածը հաջողությամբ ջնջվեց",
+        "ERROR_MESSAGE": "Սխալ հոդվածը ջնջելիս"
+      }
+    },
+    "REORDER_ARTICLE": {
+      "API": {
+        "ERROR_MESSAGE": "Հոդվածները վերադասավորել հնարավոր չէ։ Խնդրում ենք փորձել կրկին։"
+      }
+    },
+    "REORDER_CATEGORY": {
+      "API": {
+        "ERROR_MESSAGE": "Կատեգորիաները վերադասավորել հնարավոր չէ։ Խնդրում ենք փորձել կրկին։"
+      }
+    },
+    "CREATE_ARTICLE": {
+      "ERROR_MESSAGE": "Խնդրում ենք ավելացնել հոդվածի վերնագիրը և բովանդակությունը, ապա միայն կարող եք թարմացնել կարգավորումները"
+    },
+    "SIDEBAR": {
+      "SEARCH": {
+        "PLACEHOLDER": "Որոնել հոդվածներ"
+      }
+    },
+    "BREADCRUMB": {
+      "ARTICLES": "Հոդվածներ",
+      "CATEGORIES": "Կատեգորիաներ",
+      "LOCALES": "Լեզուներ",
+      "SETTINGS": "Կարգավորումներ"
+    },
+    "CATEGORY": {
+      "ADD": {
+        "TITLE": "Ստեղծել կատեգորիա",
+        "SUB_TITLE": "Կատեգորիան կօգտագործվի հանրային պորտալում հոդվածները դասակարգելու համար։",
+        "PORTAL": "Պորտալ",
+        "LOCALE": "Լոկալ",
+        "NAME": {
+          "LABEL": "Անուն",
+          "PLACEHOLDER": "Կատեգորիայի անուն",
+          "HELP_TEXT": "Կատեգորիայի անունն ու պատկերակը կօգտագործվեն հանրային պորտալում՝ հոդվածները դասակարգելու համար։",
+          "ERROR": "Անունը պարտադիր է"
+        },
+        "SLUG": {
+          "LABEL": "Սլագ",
+          "PLACEHOLDER": "Կատեգորիայի slug URL-ների համար",
+          "HELP_TEXT": "app.chatwoot.com/hc/my-portal/en-US/categories/my-slug",
+          "ERROR": "Slug-ը պարտադիր է"
+        },
+        "DESCRIPTION": {
+          "LABEL": "Նկարագրություն",
+          "PLACEHOLDER": "Տվեք կարճ նկարագրություն կատեգորիայի մասին։",
+          "ERROR": "Նկարագրությունը պարտադիր է"
+        },
+        "BUTTONS": {
+          "CREATE": "Ստեղծել կատեգորիա",
+          "CANCEL": "Չեղարկել"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Կատեգորիան հաջողությամբ ստեղծվեց",
+          "ERROR_MESSAGE": "Չհաջողվեց ստեղծել կատեգորիա"
+        }
+      },
+      "EDIT": {
+        "TITLE": "Խմբագրել կատեգորիան",
+        "SUB_TITLE": "Կատեգորիայի խմբագրումը կթարմացնի կատեգորիան հանրային պորտալում։",
+        "PORTAL": "Պորտալ",
+        "LOCALE": "Լեզու",
+        "NAME": {
+          "LABEL": "Անուն",
+          "PLACEHOLDER": "Կատեգորիայի անուն",
+          "HELP_TEXT": "Կատեգորիայի անունն ու պատկերակը կօգտագործվեն հանրային պորտալում՝ հոդվածները դասակարգելու համար։",
+          "ERROR": "Անունը պարտադիր է"
+        },
+        "SLUG": {
+          "LABEL": "Սլագ",
+          "PLACEHOLDER": "Կատեգորիայի սլագ URL-ների համար",
+          "HELP_TEXT": "app.chatwoot.com/hc/my-portal/en-US/categories/my-slug",
+          "ERROR": "Սլագը պարտադիր է"
+        },
+        "DESCRIPTION": {
+          "LABEL": "Նկարագրություն",
+          "PLACEHOLDER": "Տվեք կարճ նկարագրություն կատեգորիայի մասին։",
+          "ERROR": "Նկարագրությունը պարտադիր է"
+        },
+        "BUTTONS": {
+          "CREATE": "Թարմացնել կատեգորիան",
+          "CANCEL": "Չեղարկել"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Կատեգորիան հաջողությամբ թարմացվեց",
+          "ERROR_MESSAGE": "Չհաջողվեց թարմացնել կատեգորիան"
+        }
+      },
+      "DELETE": {
+        "API": {
+          "SUCCESS_MESSAGE": "Կատեգորիան հաջողությամբ ջնջվեց",
+          "ERROR_MESSAGE": "Չհաջողվեց ջնջել կատեգորիան"
+        }
+      }
+    },
+    "ARTICLE_SEARCH": {
+      "TITLE": "Որոնել հոդվածներ",
+      "PLACEHOLDER": "Որոնել հոդվածներ",
+      "NO_RESULT": "Հոդվածներ չեն գտնվել",
+      "SEARCHING": "Որոնվում է...",
+      "SEARCH_BUTTON": "Որոնել",
+      "INSERT_ARTICLE": "Ներդնել հղումը",
+      "IFRAME_ERROR": "URL-ը դատարկ է կամ անվավեր։ Բովանդակությունը չի կարող ցուցադրվել։",
+      "OPEN_ARTICLE_SEARCH": "Ներդնել հոդված Help Center-ից",
+      "SUCCESS_ARTICLE_INSERTED": "Հոդվածը հաջողությամբ ներդրվել է։",
+      "PREVIEW_LINK": "Դիտել հոդվածը",
+      "CANCEL": "Փակել",
+      "BACK": "Հետ",
+      "BACK_RESULTS": "Վերադառնալ արդյունքներին"
+    },
+    "UPGRADE_PAGE": {
+      "TITLE": "Օգնության կենտրոն",
+      "DESCRIPTION": "Ստեղծեք օգտատերերի համար հարմար ինքնասպասարկման պորտալներ։ Օգնեք ձեր օգտատերերին մուտք գործել հոդվածներ և ստանալ աջակցություն 24/7։ Թարմացրեք ձեր բաժանորդագրությունը՝ այս հնարավորությունը միացնելու համար։",
+      "SELF_HOSTED_DESCRIPTION": "Ստեղծեք օգտատերերի համար հարմար ինքնասպասարկման պորտալներ։ Օգնեք ձեր օգտատերերին մուտք գործել հոդվածներ և ստանալ աջակցություն 24/7։ Խնդրում ենք կապ հաստատել ձեր ադմինիստրատորի հետ՝ այս հնարավորությունը միացնելու համար։",
+      "BUTTON": {
+        "LEARN_MORE": "Իմանալ ավելին",
+        "UPGRADE": "Թարմացնել"
+      },
+      "FEATURES": {
+        "PORTALS": {
+          "TITLE": "Բազմաթիվ պորտալներ",
+          "DESCRIPTION": "Ստեղծեք բազմաթիվ օգնության կենտրոնի պորտալներ տարբեր ապրանքների համար նույն հաշվի միջոցով։"
+        },
+        "LOCALES": {
+          "TITLE": "Լիակատար աջակցություն լեզուների համար",
+          "DESCRIPTION": "Լոկալիզացրեք պորտալը ձեր լեզվով։ Մենք աջակցում ենք բոլոր լեզուներին և թույլ ենք տալիս թարգմանություններ յուրաքանչյուր հոդվածի համար։"
+        },
+        "SEO": {
+          "TITLE": "SEO-ի համար հարմար դիզայն",
+          "DESCRIPTION": "Անհատականացրեք ձեր մետա պիտակները՝ բարելավելու որոնողական համակարգերում ձեր տեսանելիությունը մեր SEO-ի համար հարմար էջերով։"
+        },
+        "API": {
+          "TITLE": "Լիակատար API աջակցություն",
+          "DESCRIPTION": "Օգտագործեք պորտալը որպես գլխազուրկ CMS՝ երրորդ կողմի ֆրոնթենդ ֆրեյմվորքերի հետ մեր API-ների միջոցով։"
+        }
+      }
+    },
+    "LOADING": "Բեռնվում է...",
+    "ARTICLES_PAGE": {
+      "ARTICLE_CARD": {
+        "CARD": {
+          "VIEWS": "{count} դիտում | {count} դիտումներ",
+          "DROPDOWN_MENU": {
+            "PUBLISH": "Հրապարակել",
+            "DRAFT": "Սևագիր",
+            "ARCHIVE": "Արխիվ",
+            "TRANSLATE": "Translate",
+            "DELETE": "Ջնջել"
+          },
+          "STATUS": {
+            "DRAFT": "Սևագիր",
+            "PUBLISHED": "Հրապարակված",
+            "ARCHIVED": "Արխիվացված"
+          },
+          "PENDING_EDITS": "Unpublished edits",
+          "PENDING_EDITS_TOOLTIP": "This published article has unpublished edits",
+          "CATEGORY": {
+            "UNCATEGORISED": "Առանձնացված չէ"
+          }
+        }
+      },
+      "ARTICLES_HEADER": {
+        "TABS": {
+          "ALL": "Բոլոր հոդվածները",
+          "MINE": "Իմը",
+          "DRAFT": "Սևագիր",
+          "PUBLISHED": "Հրապարակված",
+          "ARCHIVED": "Արխիվացված"
+        },
+        "CATEGORY": {
+          "ALL": "Բոլոր կատեգորիաները"
+        },
+        "LOCALE": {
+          "ALL": "Բոլոր լեզուները"
+        },
+        "SEARCH_PLACEHOLDER": "Որոնել հոդվածներ...",
+        "NEW_ARTICLE": "Նոր հոդված"
+      },
+      "EMPTY_STATE": {
+        "ALL": {
+          "TITLE": "Գրեք հոդված",
+          "SUBTITLE": "Գրեք հարուստ հոդված։ Սկսենք։",
+          "BUTTON_LABEL": "Նոր հոդված"
+        },
+        "MINE": {
+          "TITLE": "Դուք այստեղ դեռ հոդվածներ չեք գրել",
+          "SUBTITLE": "Ձեր կողմից գրված բոլոր հոդվածները ցուցադրվում են այստեղ արագ հասանելիության համար։"
+        },
+        "DRAFT": {
+          "TITLE": "Սևագրերում հոդվածներ չկան",
+          "SUBTITLE": "Սևագրերը կցուցադրվեն այստեղ։"
+        },
+        "PUBLISHED": {
+          "TITLE": "Հրապարակված հոդվածներ չկան",
+          "SUBTITLE": "Հրապարակված հոդվածները կցուցադրվեն այստեղ"
+        },
+        "ARCHIVED": {
+          "TITLE": "Արխիվում հոդվածներ չկան",
+          "SUBTITLE": "Արխիվացված հոդվածները չեն ցուցադրվում պորտալում, դուք կարող եք օգտագործել դրանք որպես հին կամ ժամկետանց էջերի նշում"
+        },
+        "CATEGORY": {
+          "TITLE": "Այս կատեգորիայի մեջ հոդվածներ չկան։",
+          "SUBTITLE": "Այս կատեգորիայի հոդվածները կցուցադրվեն այստեղ։"
+        },
+        "SEARCH": {
+          "TITLE": "No matching articles",
+          "SUBTITLE": "We couldn't find any articles matching your search. Try a different term."
+        }
+      },
+      "BULK_TRANSLATE": {
+        "TITLE": "Translate article | Translate {count} articles",
+        "DESCRIPTION": "Translate the selected article to another language. | Translate the selected articles to another language.",
+        "LOCALE_LABEL": "Target language",
+        "LOCALE_PLACEHOLDER": "Select a language",
+        "CATEGORY_LABEL": "Target category",
+        "CATEGORY_PLACEHOLDER": "Select a category",
+        "OPTIONAL": "(optional)",
+        "CONFIRM": "Translate",
+        "SELECT_ALL": "Ընտրել բոլորը ({count})",
+        "SELECTED_COUNT": "{count} ընտրված",
+        "CLEAR_SELECTION": "Մաքրել ընտրությունը",
+        "TRANSLATE_BUTTON": "Translate",
+        "CONFIRM_OVERWRITE": "Overwrite and translate",
+        "DUPLICATE_WARNING": "A translation already exists for this article in the selected language. | Translations already exist for {count} articles in the selected language.",
+        "DUPLICATE_CONFIRM_HINT": "Click translate again to overwrite the existing translation.",
+        "API": {
+          "SUCCESS_MESSAGE": "Translation in progress. The article will appear as a draft once ready.",
+          "ERROR_MESSAGE": "Failed to start translation. Please try again."
+        }
+      },
+      "BULK_ACTIONS": {
+        "PUBLISH": "Հրապարակել",
+        "DRAFT": "Սևագիր",
+        "ARCHIVE": "Արխիվ",
+        "TRANSLATE": "Translate",
+        "MOVE_TO_CATEGORY": "Category",
+        "DELETE": "Delete",
+        "STATUS_SUCCESS": "Articles updated successfully",
+        "STATUS_ERROR": "Failed to update articles",
+        "STATUS_SKIPPED": "1 article with unpublished edits was skipped — open it to publish or discard. | {count} articles with unpublished edits were skipped — open them to publish or discard.",
+        "STATUS_SKIPPED_ALL": "These articles have unpublished edits — open each to publish or discard.",
+        "CATEGORY_SUCCESS": "Articles moved successfully",
+        "CATEGORY_ERROR": "Failed to move articles",
+        "DELETE_CONFIRM_TITLE": "Delete article | Delete {count} articles",
+        "DELETE_CONFIRM_DESCRIPTION": "This will permanently delete the selected article. This action cannot be undone. | This will permanently delete {count} selected articles. This action cannot be undone.",
+        "DELETE_CONFIRM": "Delete",
+        "DELETE_SUCCESS": "Articles deleted successfully",
+        "DELETE_ERROR": "Failed to delete articles"
+      }
+    },
+    "CATEGORY_PAGE": {
+      "CATEGORY_HEADER": {
+        "NEW_CATEGORY": "Նոր կատեգորիա",
+        "EDIT_CATEGORY": "Խմբագրել կատեգորիան",
+        "SEARCH_PLACEHOLDER": "Search categories...",
+        "CATEGORIES_COUNT": "{n} կատեգորիա | {n} կատեգորիաներ",
+        "BREADCRUMB": {
+          "CATEGORY_LOCALE": "Կատեգորիաներ ({localeCode})",
+          "ACTIVE_CATEGORY": "{categoryName} ({categoryCount} հոդված) | {categoryName} ({categoryCount} հոդված)"
+        }
+      },
+      "CATEGORY_EMPTY_STATE": {
+        "TITLE": "Կատեգորիաներ չեն գտնվել։",
+        "SUBTITLE": "Կատեգորիաները կցուցադրվեն այստեղ։ Կարող եք ավելացնել կատեգորիա՝ սեղմելով «Նոր կատեգորիա» կոճակը։"
+      },
+      "SEARCH_EMPTY_STATE": {
+        "TITLE": "No matching categories",
+        "SUBTITLE": "We couldn't find any categories matching your search. Try a different term."
+      },
+      "CATEGORY_CARD": {
+        "ARTICLES_COUNT": "{count} հոդված | {count} հոդվածներ"
+      },
+      "CATEGORY_DIALOG": {
+        "CREATE": {
+          "API": {
+            "SUCCESS_MESSAGE": "Կատեգորիան հաջողությամբ ստեղծվեց։",
+            "ERROR_MESSAGE": "Չհաջողվեց ստեղծել կատեգորիան"
+          }
+        },
+        "EDIT": {
+          "API": {
+            "SUCCESS_MESSAGE": "Կատեգորիան հաջողությամբ թարմացվեց",
+            "ERROR_MESSAGE": "Չհաջողվեց թարմացնել կատեգորիան"
+          }
+        },
+        "DELETE": {
+          "API": {
+            "SUCCESS_MESSAGE": "Կատեգորիան հաջողությամբ ջնջվեց",
+            "ERROR_MESSAGE": "Չհաջողվեց ջնջել կատեգորիան"
+          }
+        },
+        "HEADER": {
+          "CREATE": "Ստեղծել կատեգորիա",
+          "EDIT": "Խմբագրել կատեգորիան",
+          "DESCRIPTION": "Կատեգորիայի խմբագրումը կթարմացնի կատեգորիան հանրային պորտալում։",
+          "PORTAL": "Պորտալ",
+          "LOCALE": "Լոկալ"
+        },
+        "FORM": {
+          "NAME": {
+            "LABEL": "Անուն",
+            "PLACEHOLDER": "Կատեգորիայի անուն",
+            "ERROR": "Անունը պարտադիր է"
+          },
+          "SLUG": {
+            "LABEL": "Սլագ",
+            "PLACEHOLDER": "կատեգորիայի slug URL-ների համար",
+            "ERROR": "Slug-ը պարտադիր է",
+            "HELP_TEXT": "app.chatwoot.com/hc/{portalSlug}/{localeCode}/categories/{categorySlug}"
+          },
+          "DESCRIPTION": {
+            "LABEL": "Նկարագրություն",
+            "PLACEHOLDER": "Տվեք կարճ նկարագրություն կատեգորիայի մասին։",
+            "ERROR": "Նկարագրությունը պարտադիր է"
+          }
+        },
+        "BUTTONS": {
+          "CREATE": "Ստեղծել",
+          "EDIT": "Թարմացնել",
+          "CANCEL": "Չեղարկել"
+        }
+      }
+    },
+    "LOCALES_PAGE": {
+      "LOCALES_COUNT": "Լեզուներ չկան | {n} լեզու | {n} լեզուներ",
+      "NEW_LOCALE_BUTTON_TEXT": "Նոր լեզու",
+      "SEARCH_PLACEHOLDER": "Search locales...",
+      "SEARCH_EMPTY_STATE": {
+        "TITLE": "No matching locales",
+        "SUBTITLE": "We couldn't find any locales matching your search. Try a different term."
+      },
+      "LOCALE_CARD": {
+        "ARTICLES_COUNT": "{count} հոդված | {count} հոդվածներ",
+        "CATEGORIES_COUNT": "{count} կատեգորիա | {count} կատեգորիաներ",
+        "DEFAULT": "Նախնական",
+        "DRAFT": "Սևագիր",
+        "DROPDOWN_MENU": {
+          "MAKE_DEFAULT": "Դարձնել նախնական",
+          "MOVE_TO_DRAFT": "Move to draft",
+          "PUBLISH_LOCALE": "Publish locale",
+          "CUSTOMIZE_CONTENT": "Localize content",
+          "SELECT_POPULAR_CONTENT": "Select recommended content",
+          "DELETE": "Ջնջել"
+        }
+      },
+      "POPULAR_CONTENT_DIALOG": {
+        "TITLE": "Recommended content",
+        "DESCRIPTION": "Pick up to 3 categories and 6 articles to feature on this locale's help center home page. Drag them into the order you want visitors to see.",
+        "SEARCH": "Search...",
+        "EMPTY": "No matching results",
+        "ADD_ANOTHER": "Add another...",
+        "SLOTS_LEFT": "{count} slots left",
+        "OVERRIDING_DEFAULTS": "Overriding defaults for this locale",
+        "CONFIRM": "Save recommendations",
+        "CATEGORIES": {
+          "LABEL": "Recommended categories",
+          "ARTICLES_COUNT": "No articles | {count} article | {count} articles"
+        },
+        "ARTICLES": {
+          "LABEL": "Recommended articles",
+          "IN_CATEGORY": "in {category}",
+          "UNCATEGORIZED": "Առանձնահատուկ կատեգորիա չունի"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Recommended content updated successfully",
+          "ERROR_MESSAGE": "Unable to update recommended content. Try again."
+        }
+      },
+      "CONTENT_DIALOG": {
+        "TITLE": "Localize content",
+        "DESCRIPTION": "Set values specific to this locale. Anything left blank falls back to the default locale.",
+        "NAME": {
+          "LABEL": "Name"
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Էջի վերնագիր"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Վերնագրի տեքստ"
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Locale content updated successfully",
+          "ERROR_MESSAGE": "Unable to update locale content. Try again."
+        }
+      },
+      "ADD_LOCALE_DIALOG": {
+        "TITLE": "Ավելացնել նոր լեզու",
+        "DESCRIPTION": "Ընտրեք լեզուն, որով կգրվի այս հոդվածը։ Այն կավելացվի ձեր թարգմանությունների ցանկին, և դուք կարող եք ավելացնել ավելի շատ հետագայում։",
+        "COMBOBOX": {
+          "PLACEHOLDER": "Ընտրեք լեզու..."
+        },
+        "STATUS": {
+          "LABEL": "Status",
+          "OPTIONS": {
+            "LIVE": "Հրապարակված",
+            "DRAFT": "Սևագիր"
+          }
+        },
+        "API": {
+          "SUCCESS_MESSAGE": "Լեզուն հաջողությամբ ավելացվեց",
+          "ERROR_MESSAGE": "Չհաջողվեց ավելացնել լեզուն։ Փորձեք կրկին։"
+        }
+      }
+    },
+    "EDIT_ARTICLE_PAGE": {
+      "HEADER": {
+        "STATUS": {
+          "SAVING": "Պահպանում...",
+          "SAVED": "Պահպանված է"
+        },
+        "PREVIEW": "Նախադիտում",
+        "PUBLISH": "Հրապարակել",
+        "PUBLISH_CHANGES": "Publish changes",
+        "PUBLISH_CHANGES_SUCCESS": "Changes published successfully",
+        "PUBLISH_CHANGES_ERROR": "Could not publish changes",
+        "SAVE_IN_PROGRESS": "Still saving your latest changes. Please try again in a moment.",
+        "UPLOAD_IN_PROGRESS": "A file upload is unfinished. Wait for it to finish or remove it first.",
+        "CREATE_IN_PROGRESS": "The article is still being created. Add files again in a moment.",
+        "DISCARD_CHANGES": "Discard changes",
+        "DISCARD_CHANGES_SUCCESS": "Changes discarded",
+        "DISCARD_CHANGES_ERROR": "Could not discard changes",
+        "PENDING_CHANGES": "Pending changes",
+        "VIEW_CHANGES": "View unpublished changes",
+        "DRAFT": "Սևագիր",
+        "ARCHIVE": "Արխիվ",
+        "BACK_TO_ARTICLES": "Վերադառնալ հոդվածներին"
+      },
+      "PENDING_CHANGES_POPOVER": {
+        "TITLE": "Unpublished changes",
+        "DESCRIPTION": "This article has draft changes that aren't live yet. Apply them before changing the status, or discard them?",
+        "APPLY": "Apply changes",
+        "DISCARD": "Discard changes"
+      },
+      "DIFF_DIALOG": {
+        "TITLE": "Unpublished changes",
+        "DESCRIPTION": "Compare your draft against the version that's currently live.",
+        "TITLE_LABEL": "Title"
+      },
+      "EDIT_ARTICLE": {
+        "MORE_PROPERTIES": "Ավելին հատկություններ",
+        "UNCATEGORIZED": "Առանց կատեգորիայի",
+        "EDITOR_PLACEHOLDER": "Գրեք ինչ-որ բան..."
+      },
+      "ARTICLE_PROPERTIES": {
+        "ARTICLE_PROPERTIES": "Հոդվածի հատկություններ",
+        "META_DESCRIPTION": "Մետա նկարագրություն",
+        "META_DESCRIPTION_PLACEHOLDER": "Ավելացնել մետա նկարագրություն",
+        "META_TITLE": "Մետա վերնագիր",
+        "META_TITLE_PLACEHOLDER": "Ավելացնել մետա վերնագիր",
+        "META_TAGS": "Մետա թեգեր",
+        "META_TAGS_PLACEHOLDER": "Ավելացնել մետա թեգեր",
+        "SLUG": "Սլագ",
+        "SLUG_PLACEHOLDER": "Add slug",
+        "SLUG_USE_TITLE": "Use title as slug",
+        "SLUG_WARNING": "The current URL will stop working, and existing links to it will break.",
+        "SLUG_UPDATE": "Թարմացնել",
+        "SLUG_UPDATED": "Slug updated. The article is now available at the new URL.",
+        "SLUG_OPEN": "Open URL"
+      },
+      "API": {
+        "ERROR": "Սխալ հոդվածը պահպանելիս"
+      }
+    },
+    "PORTAL_SWITCHER": {
+      "NEW_PORTAL": "Նոր պորտալ",
+      "PORTALS": "Պորտալներ",
+      "CREATE_PORTAL": "Ստեղծել և կառավարել մի քանի պորտալ",
+      "ARTICLES": "հոդվածներ",
+      "DOMAIN": "դոմեն",
+      "PORTAL_NAME": "Պորտալի անուն"
+    },
+    "CREATE_PORTAL_DIALOG": {
+      "TITLE": "Ստեղծել նոր պորտալ",
+      "DESCRIPTION": "Տվեք ձեր պորտալին անուն և ստեղծեք օգտատերերին հարմար URL slug։ Կարող եք փոփոխել երկուսն էլ հետագայում կարգավորումների մեջ։",
+      "CONFIRM_BUTTON_LABEL": "Ստեղծել",
+      "NAME": {
+        "LABEL": "Անուն",
+        "PLACEHOLDER": "Օգտագործողի ուղեցույց | Chatwoot",
+        "MESSAGE": "Ընտրեք անուն ձեր պորտալի համար։",
+        "ERROR": "Անունը պարտադիր է"
+      },
+      "SLUG": {
+        "LABEL": "Սլագ",
+        "PLACEHOLDER": "user-guide",
+        "ERROR": "Slug-ը պարտադիր է",
+        "FORMAT_ERROR": "Խնդրում ենք մուտքագրել վավեր slug, օրինակ՝ user-guide"
+      }
+    },
+    "PORTAL_SETTINGS": {
+      "FORM": {
+        "AVATAR": {
+          "LABEL": "Լոգո",
+          "IMAGE_UPLOAD_ERROR": "Չհաջողվեց պատկերն ուղարկել։ Փորձեք կրկին",
+          "IMAGE_UPLOAD_SUCCESS": "Պատկերը հաջողությամբ ավելացվեց։ Խնդրում ենք սեղմել «Պահպանել փոփոխությունները»՝ լոգոն պահպանելու համար",
+          "IMAGE_DELETE_SUCCESS": "Լոգոն հաջողությամբ ջնջվեց",
+          "IMAGE_DELETE_ERROR": "Չհաջողվեց ջնջել լոգոն",
+          "IMAGE_UPLOAD_SIZE_ERROR": "Պատկերի չափը պետք է լինի {size}MB-ից պակաս"
+        },
+        "NAME": {
+          "LABEL": "Անուն",
+          "PLACEHOLDER": "Պորտալի անուն",
+          "ERROR": "Պետք է մուտքագրել անուն"
+        },
+        "HEADER_TEXT": {
+          "LABEL": "Վերնագրի տեքստ",
+          "PLACEHOLDER": "Պորտալի վերնագրի տեքստ"
+        },
+        "PAGE_TITLE": {
+          "LABEL": "Էջի վերնագիր",
+          "PLACEHOLDER": "Պորտալի էջի վերնագիր"
+        },
+        "HOME_PAGE_LINK": {
+          "LABEL": "Գլխավոր էջի հղում",
+          "PLACEHOLDER": "Պորտալի գլխավոր էջի հղում",
+          "ERROR": "Մուտքագրեք վավեր URL։ Գլխավոր էջի հղումը պետք է սկսվի 'http://' կամ 'https://'։"
+        },
+        "SLUG": {
+          "LABEL": "Սլագ",
+          "PLACEHOLDER": "Պորտալի slug"
+        },
+        "BRAND_COLOR": {
+          "LABEL": "Բրենդի գույն"
+        },
+        "SAVE_CHANGES": "Պահպանել փոփոխությունները"
+      },
+      "CONFIGURATION_FORM": {
+        "CUSTOM_DOMAIN": {
+          "HEADER": "Հարմարեցված դոմեն",
+          "LABEL": "Հարմարեցված դոմեն՝",
+          "DESCRIPTION": "Դուք կարող եք հյուրընկալել ձեր պորտալը հարմարեցված դոմեյնում։ Օրինակ՝ եթե ձեր կայքը yourdomain.com է և ցանկանում եք, որ պորտալը հասանելի լինի docs.yourdomain.com հասցեով, պարզապես մուտքագրեք այն այս դաշտում։",
+          "STATUS_DESCRIPTION": "Ձեր հարմարեցված պորտալը կսկսի աշխատել, երբ այն հաստատվի։",
+          "PLACEHOLDER": "Պորտալի հարմարեցված դոմեն",
+          "EDIT_BUTTON": "Խմբագրել",
+          "ADD_BUTTON": "Ավելացնել հարմարեցված դոմեն",
+          "STATUS": {
+            "LIVE": "Ակտիվ",
+            "PENDING": "Սպասում է հաստատմանը",
+            "ERROR": "Հաստատումը ձախողվեց"
+          },
+          "DIALOG": {
+            "ADD_HEADER": "Ավելացնել հարմարեցված դոմեն",
+            "EDIT_HEADER": "Խմբագրել հարմարեցված դոմենը",
+            "ADD_CONFIRM_BUTTON_LABEL": "Ավելացնել դոմեն",
+            "EDIT_CONFIRM_BUTTON_LABEL": "Թարմացնել դոմենը",
+            "LABEL": "Հարմարեցված դոմեն",
+            "PLACEHOLDER": "Պորտալի հարմարեցված դոմեն",
+            "ERROR": "Պարտադիր է հարմարեցված դոմենը",
+            "FORMAT_ERROR": "Խնդրում ենք մուտքագրել վավեր դոմենի URL, օրինակ՝ docs.yourdomain.com"
+          },
+          "DNS_CONFIGURATION_DIALOG": {
+            "HEADER": "DNS կարգավորումներ",
+            "DESCRIPTION": "Մուտք գործեք ձեր DNS մատակարարի հաշիվ և ավելացրեք CNAME գրառում ենթադոմենի համար, որը ցույց է տալիս chatwoot.help",
+            "COPY": "CNAME-ը հաջողությամբ պատճենվեց",
+            "SEND_INSTRUCTIONS": {
+              "HEADER": "Ուղարկել հրահանգներ",
+              "DESCRIPTION": "Եթե ցանկանում եք, որ ձեր զարգացման թիմից որևէ մեկը զբաղվի այս քայլով, կարող եք ներքևում մուտքագրել էլ․ հասցեն, և մենք կուղարկենք անհրաժեշտ հրահանգները։",
+              "PLACEHOLDER": "Մուտքագրեք նրանց էլ․ հասցեն",
+              "ERROR": "Մուտքագրեք վավեր էլ․ հասցե",
+              "SEND_BUTTON": "Ուղարկել"
+            }
+          }
+        },
+        "DELETE_PORTAL": {
+          "BUTTON": "Ջնջել {portalName}",
+          "HEADER": "Ջնջել պորտալը",
+          "DESCRIPTION": "Մշտապես ջնջել այս պորտալը։ Այս գործողությունը անշրջելի է",
+          "DIALOG": {
+            "HEADER": "Համոզվա՞ծ եք, որ ցանկանում եք ջնջել {portalName}-ը:",
+            "DESCRIPTION": "Սա մշտական գործողություն է, որը չի կարող հետադարձվել։",
+            "CONFIRM_BUTTON_LABEL": "Ջնջել"
+          }
+        },
+        "EDIT_CONFIGURATION": "Խմբագրել կազմաձևը"
+      },
+      "LAYOUT_CONTENT": {
+        "HEADER": "Appearance",
+        "DESCRIPTION": "Pick the layout that fits how your visitors read.",
+        "LAYOUT": {
+          "CLASSIC": {
+            "TITLE": "Classic",
+            "DESCRIPTION": "A welcoming home page with search and featured topics."
+          },
+          "SIDEBAR": {
+            "TITLE": "Documentation",
+            "DESCRIPTION": "Side-by-side navigation that keeps every guide a click away."
+          }
+        },
+        "SOCIAL_LINKS": {
+          "HEADER": "Social links",
+          "DESCRIPTION": "Add the handle for each network and your help center builds the full link. Shown in the documentation layout footer.",
+          "PLACEHOLDER": "handle",
+          "ADD": "Add social link",
+          "REMOVE": "Հեռացնել"
+        },
+        "SAVE": "Պահպանել փոփոխությունները"
+      },
+      "INTEGRATIONS": {
+        "HEADER": "Ինտեգրացիաներ",
+        "DESCRIPTION": "Connect tools that extend what your help center can do.",
+        "LIVE_CHAT": {
+          "TITLE": "Live chat with Chatwoot",
+          "DESCRIPTION": "Show a live chat widget on your help center so visitors can reach you while they read.",
+          "PLACEHOLDER": "Ընտրեք ուղիղ զրույցի վիջեթը",
+          "NONE_OPTION": "Առկա չէ վիջեթ"
+        },
+        "GTM": {
+          "TITLE": "Google Tag Manager",
+          "DESCRIPTION": "Add analytics and marketing tags by connecting your Tag Manager container.",
+          "PLACEHOLDER": "GTM-XXXXXXX",
+          "HELP": "Find this in your Google Tag Manager workspace. Leave empty to disable.",
+          "INVALID": "Enter a valid container ID, for example GTM-XXXXXXX."
+        },
+        "GA4": {
+          "TITLE": "Google Analytics 4",
+          "DESCRIPTION": "Measure traffic and visitor behavior on your help center with Google Analytics.",
+          "PLACEHOLDER": "G-XXXXXXXXXX",
+          "HELP": "Find the measurement ID under Admin → Data streams in Google Analytics. Leave empty to disable.",
+          "INVALID": "Enter a valid measurement ID, for example G-XXXXXXXXXX."
+        },
+        "HOTJAR": {
+          "TITLE": "Hotjar",
+          "DESCRIPTION": "Understand how visitors use your help center with heatmaps and session recordings.",
+          "PLACEHOLDER": "1234567",
+          "HELP": "Find your site ID under Sites & organizations in Hotjar. Leave empty to disable.",
+          "INVALID": "Enter a numeric Hotjar site ID."
+        },
+        "PLAUSIBLE": {
+          "TITLE": "Plausible",
+          "DESCRIPTION": "Track help center traffic with privacy-friendly Plausible Analytics.",
+          "PLACEHOLDER": "example.com",
+          "HELP": "Enter the domain configured in your Plausible site settings. Leave empty to disable.",
+          "INVALID": "Enter a valid domain, for example example.com."
+        },
+        "AMPLITUDE": {
+          "TITLE": "Amplitude",
+          "DESCRIPTION": "Analyze visitor behavior on your help center with Amplitude.",
+          "PLACEHOLDER": "0123456789abcdef0123456789abcdef",
+          "HELP": "Find the API key in your Amplitude project settings. Leave empty to disable.",
+          "INVALID": "Enter a valid Amplitude API key."
+        },
+        "CLARITY": {
+          "TITLE": "Microsoft Clarity",
+          "DESCRIPTION": "Capture heatmaps and session recordings with Microsoft Clarity.",
+          "PLACEHOLDER": "abcd1234ef",
+          "HELP": "Find the project ID in your Clarity project settings. Leave empty to disable.",
+          "INVALID": "Enter a valid Clarity project ID."
+        },
+        "META_PIXEL": {
+          "TITLE": "Meta Pixel",
+          "DESCRIPTION": "Measure ad conversions and build audiences from help center visits with Meta Pixel.",
+          "PLACEHOLDER": "123456789012345",
+          "HELP": "Find the pixel ID in Meta Events Manager. Leave empty to disable.",
+          "INVALID": "Enter a numeric pixel ID."
+        },
+        "SAVE": "Պահպանել փոփոխությունները"
+      },
+      "NAV": {
+        "GENERAL": "General",
+        "DOMAIN": "Դոմեն",
+        "APPEARANCE": "Appearance",
+        "INTEGRATIONS": "Ինտեգրացիաներ"
+      },
+      "API": {
+        "CREATE_PORTAL": {
+          "SUCCESS_MESSAGE": "Պորտալը հաջողությամբ ստեղծվեց",
+          "ERROR_MESSAGE": "Չհաջողվեց ստեղծել պորտալը"
+        },
+        "UPDATE_PORTAL": {
+          "SUCCESS_MESSAGE": "Պորտալը հաջողությամբ թարմացվեց",
+          "ERROR_MESSAGE": "Չհաջողվեց թարմացնել պորտալը"
+        }
+      }
+    },
+    "PDF_UPLOAD": {
+      "TITLE": "Բեռնավորել PDF փաստաթուղթ",
+      "DESCRIPTION": "Բեռնավորեք PDF փաստաթուղթ՝ ավտոմատ կերպով ստեղծելու համար հաճախ տրվող հարցեր՝ օգտագործելով AI",
+      "DRAG_DROP_TEXT": "Քաշեք և թողեք ձեր PDF ֆայլը այստեղ, կամ սեղմեք ընտրելու համար",
+      "SELECT_FILE": "Ընտրել PDF ֆայլ",
+      "ADDITIONAL_CONTEXT_LABEL": "Լրացուցիչ համատեքստ (Ընտրովի)",
+      "ADDITIONAL_CONTEXT_PLACEHOLDER": "Տրամադրեք լրացուցիչ համատեքստ կամ հրահանգներ ՀՏՀ ստեղծման համար...",
+      "UPLOADING": "Բեռնվում է...",
+      "UPLOAD": "Բեռնավորել և մշակել",
+      "CANCEL": "Չեղարկել",
+      "ERROR_INVALID_TYPE": "Խնդրում ենք ընտրել վավեր PDF ֆայլ",
+      "ERROR_FILE_TOO_LARGE": "Ֆայլի չափը պետք է լինի 512ՄԲ-ից պակաս",
+      "ERROR_UPLOAD_FAILED": "PDF ֆայլի վերբեռնումը ձախողվեց։ Խնդրում ենք փորձել կրկին։"
+    },
+    "PDF_DOCUMENTS": {
+      "TITLE": "PDF փաստաթղթեր",
+      "DESCRIPTION": "Կառավարեք վերբեռնված PDF փաստաթղթերը և ստեղծեք ՀՏՀ դրանցից",
+      "UPLOAD_PDF": "Վերբեռնել PDF",
+      "UPLOAD_FIRST_PDF": "Վերբեռնեք ձեր առաջին PDF-ը",
+      "UPLOADED_BY": "Վերբեռնվել է՝",
+      "GENERATE_FAQS": "Ստեղծել ՀՏՀ",
+      "GENERATING": "Ստեղծվում է...",
+      "CONFIRM_DELETE": "Համոզվա՞ծ եք, որ ցանկանում եք ջնջել {filename} ֆայլը?",
+      "EMPTY_STATE": {
+        "TITLE": "Դեռևս PDF փաստաթղթեր չկան",
+        "DESCRIPTION": "Վերբեռնեք PDF փաստաթղթեր՝ արհեստական բանականությամբ ավտոմատ ՀՏՀ ստեղծելու համար"
+      },
+      "STATUS": {
+        "UPLOADED": "Պատրաստ է",
+        "PROCESSING": "Ընթացքի մեջ է",
+        "PROCESSED": "Ավարտված է",
+        "FAILED": "Ձախողվել է"
+      }
+    },
+    "CONTENT_GENERATION": {
+      "TITLE": "Բովանդակության ստեղծում",
+      "DESCRIPTION": "Վերբեռնեք PDF փաստաթղթեր՝ արհեստական բանականությամբ ավտոմատ ՀՏՀ բովանդակություն ստեղծելու համար",
+      "UPLOAD_TITLE": "Վերբեռնել PDF փաստաթուղթ",
+      "DRAG_DROP": "Քաշեք և թողեք ձեր PDF ֆայլը այստեղ, կամ սեղմեք ընտրելու համար",
+      "SELECT_FILE": "Ընտրել PDF ֆայլ",
+      "UPLOADING": "Փաստաթուղթը մշակվում է...",
+      "UPLOAD_SUCCESS": "Փաստաթուղթը հաջողությամբ մշակվեց։",
+      "UPLOAD_ERROR": "Փաստաթուղթը վերբեռնելուց ձախողվեց։ Խնդրում ենք փորձել կրկին։",
+      "INVALID_FILE_TYPE": "Խնդրում ենք ընտրել վավեր PDF ֆայլ",
+      "FILE_TOO_LARGE": "Ֆայլի չափը պետք է լինի 512ՄԲ-ից պակաս",
+      "GENERATED_CONTENT": "Ստեղծված ՀՏՀ բովանդակություն",
+      "PUBLISH_SELECTED": "Հրապարակել ընտրվածը",
+      "PUBLISHING": "Հրապարակվում է...",
+      "FROM_DOCUMENT": "Փաստաթղթից",
+      "NO_CONTENT": "Ստեղծված բովանդակություն չկա։ Սկսելու համար վերբեռնեք PDF փաստաթուղթ։",
+      "LOADING": "Բեռնվում է ստեղծված բովանդակությունը..."
+    }
+  }
+}

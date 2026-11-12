@@ -1,0 +1,148 @@
+{
+  "CHAT_LIST": {
+    "LOADING": "Beszélgetések betöltése",
+    "LOAD_MORE_CONVERSATIONS": "További beszélgetések betöltése",
+    "EOF": "Minden beszélgetés betöltve 🎉",
+    "LIST": {
+      "404": "Nincs aktív üzenetváltás ebben a csoportban."
+    },
+    "FAILED_TO_SEND": "Failed to send",
+    "FETCH_ERROR": "Nem sikerült betölteni a beszélgetéseket. Próbálja meg újra.",
+    "TAB_HEADING": "Beszélgetések",
+    "MENTION_HEADING": "Megemlítések",
+    "UNATTENDED_HEADING": "Figyelmen kívül hagyott",
+    "SEARCH": {
+      "INPUT": "Keresés: emberek, beszélgetése, mentett válaszok .."
+    },
+    "FILTER_ALL": "Mind",
+    "ASSIGNEE_TYPE_TABS": {
+      "me": "Enyém",
+      "unassigned": "Gazdátlan",
+      "all": "Mind"
+    },
+    "CHAT_STATUS_FILTER_ITEMS": {
+      "open": {
+        "TEXT": "Megnyitás"
+      },
+      "resolved": {
+        "TEXT": "Megoldva"
+      },
+      "pending": {
+        "TEXT": "Függőben lévő"
+      },
+      "snoozed": {
+        "TEXT": "Elnémított"
+      },
+      "all": {
+        "TEXT": "Mind"
+      }
+    },
+    "VIEW_FILTER": "Megtekintés",
+    "SORT_TOOLTIP_LABEL": "Beszélgetések rendezése",
+    "CHAT_SORT": {
+      "STATUS": "Státusz",
+      "ORDER_BY": "Rendezés"
+    },
+    "CHAT_TIME_STAMP": {
+      "CREATED": {
+        "OLDEST": "Létrehozva:"
+      },
+      "LAST_ACTIVITY": {
+        "NOT_ACTIVE": "Utolsó aktivitás:"
+      }
+    },
+    "SORT_ORDER_ITEMS": {
+      "last_activity_at_asc": {
+        "TEXT": "Utolsó tevékenység: Legrégebbi először"
+      },
+      "last_activity_at_desc": {
+        "TEXT": "Utolsó tevékenység: Legújabb először"
+      },
+      "created_at_desc": {
+        "TEXT": "Készült: Legújabb először"
+      },
+      "created_at_asc": {
+        "TEXT": "Készült: Legrégebbi először"
+      },
+      "priority_desc": {
+        "TEXT": "Prioritás: Először a legfontosabb"
+      },
+      "priority_asc": {
+        "TEXT": "Prioritás: Legkevésbé fontos először"
+      },
+      "waiting_since_asc": {
+        "TEXT": "Függőben lévő válasz: Leghosszabb először"
+      },
+      "waiting_since_desc": {
+        "TEXT": "Függőben lévő válasz: Legrövidebb először"
+      },
+      "priority_desc_created_at_asc": {
+        "TEXT": "Priority: Highest first, Created: Oldest first"
+      },
+      "unread": {
+        "TEXT": "Olvasatlan üzenetek száma: legtöbb elöl"
+      }
+    },
+    "ATTACHMENTS": {
+      "image": {
+        "CONTENT": "Képüzenet"
+      },
+      "audio": {
+        "CONTENT": "Hangüzenet"
+      },
+      "video": {
+        "CONTENT": "Videoüzenet"
+      },
+      "file": {
+        "CONTENT": "Csatolt file"
+      },
+      "location": {
+        "CONTENT": "Hely"
+      },
+      "ig_reel": {
+        "CONTENT": "Instagram Reel"
+      },
+      "fallback": {
+        "CONTENT": "megosztott URL-t tartalmaz"
+      },
+      "contact": {
+        "CONTENT": "Shared contact"
+      },
+      "embed": {
+        "CONTENT": "Embedded content"
+      }
+    },
+    "CHAT_SORT_BY_FILTER": {
+      "TITLE": "Beszélgetés rendezése",
+      "DROPDOWN_TITLE": "Rendezés",
+      "ITEMS": {
+        "LATEST": {
+          "NAME": "Utolsó aktivitás",
+          "LABEL": "Utolsó aktivitás"
+        },
+        "CREATED_AT": {
+          "NAME": "Létrehozva",
+          "LABEL": "Létrehozva"
+        },
+        "LAST_USER_MESSAGE_AT": {
+          "NAME": "Utolsó felhasználói üzenet",
+          "LABEL": "Utolsó üzenet"
+        }
+      }
+    },
+    "RECEIVED_VIA_EMAIL": "E-mailen keresztül érkezett",
+    "VIEW_TWEET_IN_TWITTER": "Üzenet megtekintése Twitteren",
+    "REPLY_TO_TWEET": "Válasz",
+    "LINK_TO_STORY": "Instagram story megnyitása",
+    "SENT": "Sikeresen elküldve",
+    "READ": "Olvasott",
+    "DELIVERED": "Elküldve",
+    "NO_MESSAGES": "Nincs üzenet",
+    "NO_CONTENT": "Nincs elérhető tartalom",
+    "HIDE_QUOTED_TEXT": "Idézett szöveg eltűntetése",
+    "SHOW_QUOTED_TEXT": "Idézett szöveg megjelenítése",
+    "MESSAGE_READ": "Olvasott",
+    "SENDING": "Sending",
+    "UNREAD_COUNT_OVERFLOW": "9+"
+  }
+}

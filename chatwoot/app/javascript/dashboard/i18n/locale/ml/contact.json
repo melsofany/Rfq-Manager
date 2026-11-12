@@ -1,0 +1,675 @@
+{
+  "CONTACT_PANEL": {
+    "NOT_AVAILABLE": "ലഭ്യമല്ല",
+    "EMAIL_ADDRESS": "ഇമെയിൽ വിലാസം",
+    "PHONE_NUMBER": "ഫോൺ നമ്പർ",
+    "WHATSAPP_USERNAME": "WhatsApp username",
+    "IDENTIFIER": "Identifier",
+    "COPY_SUCCESSFUL": "ക്ലിപ്പ്ബോർഡിലേക്ക് വിജയകരമായി പകർത്തി",
+    "COMPANY": "കമ്പനി",
+    "LOCATION": "സ്ഥാനം",
+    "BROWSER_LANGUAGE": "ബ്രൗസറിന്റെ ഭാഷ",
+    "CONVERSATION_TITLE": "സംഭാഷണ വിശദാംശങ്ങൾ",
+    "VIEW_PROFILE": "വ്യക്തിവിവരങ്ങൾ കാണുക",
+    "BROWSER": "ബ്രൗസർ",
+    "OS": "ഓപ്പറേറ്റിംഗ് സിസ്റ്റം",
+    "INITIATED_FROM": "ആരംഭിച്ച ആൾ ",
+    "INITIATED_AT": "ആരംഭിച്ച സമയം ",
+    "IP_ADDRESS": "IP വിലാസം",
+    "CREATED_AT_LABEL": "Created",
+    "NEW_MESSAGE": "പുതിയ സന്ദേശം",
+    "CALL": "Call",
+    "CALL_INITIATED": "Calling the contact…",
+    "CALL_FAILED": "Unable to start the call. Please try again.",
+    "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+    "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+    "CLICK_TO_EDIT": "Click to edit",
+    "VOICE_INBOX_PICKER": {
+      "TITLE": "Choose a voice inbox"
+    },
+    "CONVERSATIONS": {
+      "NO_RECORDS_FOUND": "ഈ കോൺടാക്റ്റുമായി മുമ്പത്തെ സംഭാഷണങ്ങളൊന്നും ബന്ധപ്പെടുത്തിയിട്ടില്ല.",
+      "TITLE": "മുമ്പത്തെ സംഭാഷണങ്ങൾ",
+      "VIEW_ALL": "View all conversations"
+    },
+    "LABELS": {
+      "CONTACT": {
+        "TITLE": "Contact Labels",
+        "ERROR": "ലേബലുകൾ അപ്‌ഡേറ്റ് ചെയ്യാനായില്ല"
+      },
+      "CONVERSATION": {
+        "TITLE": "സംഭാഷണ ലേബലുകൾ",
+        "ADD_BUTTON": "ലേബലുകൾ ചേർക്കുക"
+      },
+      "LABEL_SELECT": {
+        "TITLE": "ലേബലുകൾ ചേർക്കുക",
+        "PLACEHOLDER": "ലേബലുകൾ തിരയുക",
+        "NO_RESULT": "ലേബലുകളൊന്നും കണ്ടെത്തിയില്ല",
+        "CREATE_LABEL": "Create new label"
+      }
+    },
+    "MERGE_CONTACT": "കോൺടാക്റ്റ് ലയിപ്പിക്കുക",
+    "CONTACT_ACTIONS": "Contact actions",
+    "MUTE_CONTACT": "Block Contact",
+    "UNMUTE_CONTACT": "Unblock Contact",
+    "MUTED_SUCCESS": "This contact is blocked successfully. You will not be notified of any future conversations.",
+    "UNMUTED_SUCCESS": "This contact is unblocked successfully.",
+    "SEND_TRANSCRIPT": "ട്രാൻസ്ക്രിപ്റ്റ് അയയ്ക്കുക",
+    "EDIT_LABEL": "എഡിറ്റുചെയ്യുക",
+    "SIDEBAR_SECTIONS": {
+      "CUSTOM_ATTRIBUTES": "ഇഷ്‌ടാനുസൃത ആട്രിബ്യൂട്ടുകൾ",
+      "CONTACT_LABELS": "Contact Labels",
+      "PREVIOUS_CONVERSATIONS": "മുമ്പത്തെ സംഭാഷണങ്ങൾ",
+      "NO_RECORDS_FOUND": "No attributes found"
+    }
+  },
+  "EDIT_CONTACT": {
+    "BUTTON_LABEL": "കോൺ‌ടാക്റ്റ് എഡിറ്റുചെയ്യുക",
+    "TITLE": "കോൺ‌ടാക്റ്റ് എഡിറ്റുചെയ്യുക",
+    "DESC": "കോൺ‌ടാക്റ്റ് വിശദാംശങ്ങൾ‌ എഡിറ്റുചെയ്യുക"
+  },
+  "DELETE_CONTACT": {
+    "BUTTON_LABEL": "കോൺടാക്റ്റ് ഇല്ലാതാക്കുക",
+    "TITLE": "കോൺടാക്റ്റ് ഇല്ലാതാക്കുക",
+    "DESC": "ബന്ധപ്പെടാനുള്ള വിശദാംശങ്ങൾ ഇല്ലാതാക്കുക",
+    "CONFIRM": {
+      "TITLE": "ഇല്ലാതാക്കൽ സ്ഥിരീകരിക്കുക",
+      "MESSAGE": "<p><b>ഏജന്റുമാർ</b></p><p> ഒരു <b>ഏജൻറ്</b> നിങ്ങളുടെ ഉപഭോക്തൃ പിന്തുണാ ടീമിലെ ഒരു അംഗമാണ്. </p><p> ഏജന്റുമാർക്ക് നിങ്ങളുടെ ഉപയോക്താക്കളിൽ നിന്നുള്ള സന്ദേശങ്ങൾ കാണാനും മറുപടി നൽകാനും കഴിയും. നിങ്ങളുടെ അക്കൗണ്ടിലുള്ള എല്ലാ ഏജന്റുമാരെയും ഈ പട്ടിക കാണിക്കുന്നു. </ p> <p> ഒരു പുതിയ ഏജന്റിനെ ചേർക്കുന്നതിന് <b> ഏജന്റിനെ ചേർക്കുക </ b> ബട്ടൺ ക്ലിക്കുചെയ്യുക. നിങ്ങൾ ചേർത്ത ഏജന്റിന് അവരുടെ അക്കൗണ്ട് സജീവമാക്കുന്നതിന് ഒരു സ്ഥിരീകരണ ലിങ്കുള്ള ഇമെയിൽ ലഭിക്കും. അതിനുശേഷം അവർക്ക് ചാറ്റ് വൂട്ട് ആക്സസ് ചെയ്യാനും സന്ദേശങ്ങളോട് പ്രതികരിക്കാനും കഴിയും.</p> <p> ചാറ്റ് വൂട്ടിന്റെ സവിശേഷതകളിലേക്കുള്ള ആക്സസ് ഇനിപ്പറയുന്ന റോളുകളെ അടിസ്ഥാനമാക്കിയുള്ളതാണ്. </p><p> <b>ഏജൻറ്</ b> - ഈ റോൾ‌ ഉള്ള ഏജന്റുമാർ‌ക്ക് ഇൻ‌ബോക്‍സുകൾ‌, റിപ്പോർ‌ട്ടുകൾ‌, സംഭാഷണങ്ങൾ‌ എന്നിവ മാത്രമേ ആക്‌സസ് ചെയ്യാൻ‌ കഴിയൂ. അവർക്ക് മറ്റ് ഏജന്റുമാരുടെയോ അല്ലെങ്കിൽ‌ തങ്ങളുടേയോ സംഭാഷണങ്ങൾ‌ നിർ‌ണ്ണയിക്കാനും സംഭാഷണങ്ങൾ‌ പരിഹരിക്കാനും കഴിയും.</p><p> <b>അഡ്മിനിസ്ട്രേറ്റർ</b> - ഒരു സാധാരണ ഏജന്റിന്റെ പ്രത്യേകാവകാശങ്ങളോടൊപ്പം ക്രമീകരണങ്ങളും ബില്ലിംഗും ഉൾപ്പെടെ നിങ്ങളുടെ അക്കൗണ്ടിൽ ലഭ്യമായ എല്ലാ ചാറ്റ് വൂട്ട് സവിശേഷതകളിലേക്കും ആക്‌സസ് ഉണ്ടായിരിക്കുക. </ p> ",
+      "YES": "അതെ, ഇല്ലാതാക്കുക",
+      "NO": "No, Keep"
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "കോൺടാക്റ്റ് വിജയകരമായി ഇല്ലാതാക്കിയിരിക്കുന്നു",
+      "ERROR_MESSAGE": "കോൺടാക്റ്റ് ഇല്ലാതാക്കാൻ കഴിഞ്ഞില്ല. ദയവായി പിന്നീട് വീണ്ടും ശ്രമിക്കുക."
+    }
+  },
+  "CONTACT_FORM": {
+    "FORM": {
+      "SUBMIT": "സമർപ്പിക്കുക",
+      "CANCEL": "റദ്ദാക്കുക",
+      "AVATAR": {
+        "LABEL": "കോൺ‌ടാക്റ്റ് ലഘുചിത്രം"
+      },
+      "NAME": {
+        "PLACEHOLDER": "കോൺടാക്റ്റിന്റെ മുഴുവൻ പേര് നൽകുക",
+        "LABEL": "പൂർണ്ണമായ പേര്"
+      },
+      "BIO": {
+        "PLACEHOLDER": "കോൺടാക്റ്റിന്റെ ബയോ നൽകുക",
+        "LABEL": "വിവരണം"
+      },
+      "EMAIL_ADDRESS": {
+        "PLACEHOLDER": "കോൺ‌ടാക്റ്റിന്റെ ഇമെയിൽ വിലാസം നൽകുക",
+        "LABEL": "ഇമെയിൽ വിലാസം",
+        "DUPLICATE": "ഈ ഇമെയിൽ വിലാസം മറ്റൊരു കോൺ‌ടാക്റ്റിനായി ഉപയോഗത്തിലാണ്.",
+        "ERROR": "ദയവായി സാധുവായ ഒരു ഇമെയിൽ വിലാസം നൽകുക."
+      },
+      "PHONE_NUMBER": {
+        "PLACEHOLDER": "കോൺടാക്റ്റിന്റെ ഫോൺ നമ്പർ നൽകുക",
+        "LABEL": "ഫോൺ നമ്പർ",
+        "HELP": "ഫോൺ നമ്പർ E.164 ഫോർമാറ്റ് ആയിരിക്കണം ഉദാ: +1415555555 [+][രാജ്യ കോഡ്][ഏരിയ കോഡ്][പ്രാദേശിക ഫോൺ നമ്പർ]",
+        "ERROR": "ഫോൺ നമ്പർ ശൂന്യമോ E.164 ഫോർമാറ്റിലുള്ളതോ ആയിരിക്കണം",
+        "DIAL_CODE_ERROR": "Please select a dial code from the list",
+        "DUPLICATE": "ഈ ഫോൺ നമ്പർ മറ്റൊരു കോൺടാക്റ്റിനായി ഉപയോഗിക്കുന്നു."
+      },
+      "LOCATION": {
+        "PLACEHOLDER": "കോൺടാക്റ്റിന്റെ സ്ഥാനം നൽകുക",
+        "LABEL": "സ്ഥാനം"
+      },
+      "COMPANY_NAME": {
+        "PLACEHOLDER": "കമ്പനിയുടെ പേര് നൽകുക",
+        "LABEL": "കമ്പനിയുടെ പേര്"
+      },
+      "COUNTRY": {
+        "PLACEHOLDER": "Enter the country name",
+        "LABEL": "രാജ്യത്തിന്റെ പേര്",
+        "SELECT_PLACEHOLDER": "Select",
+        "REMOVE": "നീക്കം ചെയ്യുക",
+        "SELECT_COUNTRY": "Select Country"
+      },
+      "CITY": {
+        "PLACEHOLDER": "Enter the city name",
+        "LABEL": "City Name"
+      },
+      "SOCIAL_PROFILES": {
+        "FACEBOOK": {
+          "PLACEHOLDER": "Facebook ഉപയോക്തൃനാമം നൽകുക",
+          "LABEL": "Facebook"
+        },
+        "TWITTER": {
+          "PLACEHOLDER": "Twitter ഉപയോക്തൃനാമം നൽകുക",
+          "LABEL": "Twitter"
+        },
+        "LINKEDIN": {
+          "PLACEHOLDER": "Linkedin ഉപയോക്തൃനാമം നൽകുക",
+          "LABEL": "Linkedin"
+        },
+        "GITHUB": {
+          "PLACEHOLDER": "Github ഉപയോക്തൃനാമം നൽകുക",
+          "LABEL": "Github"
+        }
+      }
+    },
+    "DELETE_AVATAR": {
+      "API": {
+        "SUCCESS_MESSAGE": "Contact avatar deleted successfully",
+        "ERROR_MESSAGE": "Could not delete the contact avatar. Please try again later."
+      }
+    },
+    "SUCCESS_MESSAGE": "കോൺടാക്റ്റ് വിജയകരമായി സേവ് ചെയ്തിരിക്കുന്നു",
+    "ERROR_MESSAGE": "ഒരു പിശക് ഉണ്ടായിരുന്നു, ദയവായി വീണ്ടും ശ്രമിക്കുക"
+  },
+  "NEW_CONVERSATION": {
+    "BUTTON_LABEL": "സംഭാഷണം ആരംഭിക്കുക",
+    "TITLE": "പുതിയ സംഭാഷണം",
+    "DESC": "ഒരു പുതിയ സന്ദേശം അയച്ചുകൊണ്ട് ഒരു പുതിയ സംഭാഷണം ആരംഭിക്കുക.",
+    "NO_INBOX": "ഈ കോൺടാക്റ്റുമായി ഒരു പുതിയ സംഭാഷണം ആരംഭിക്കുന്നതിന് ഒരു ഇൻബോക്സ് കണ്ടെത്താനായില്ല.",
+    "FORM": {
+      "TO": {
+        "LABEL": "To"
+      },
+      "INBOX": {
+        "LABEL": "ഇൻബോക്സ്",
+        "PLACEHOLDER": "Choose source inbox",
+        "ERROR": "ഒരു ഇൻബോക്സ് തിരഞ്ഞെടുക്കുക"
+      },
+      "SUBJECT": {
+        "LABEL": "വിഷയം",
+        "PLACEHOLDER": "വിഷയം",
+        "ERROR": "വിഷയം ശൂന്യമാക്കാൻ പാടില്ല"
+      },
+      "MESSAGE": {
+        "LABEL": "സന്ദേശം",
+        "PLACEHOLDER": "നിങ്ങളുടെ സന്ദേശം ഇവിടെ എഴുതുക",
+        "ERROR": "സന്ദേശം ശൂന്യമാക്കാൻ കഴിയില്ല"
+      },
+      "ATTACHMENTS": {
+        "SELECT": "Choose files",
+        "HELP_TEXT": "Drag and drop files here or choose files to attach"
+      },
+      "SUBMIT": "സന്ദേശം അയയ്ക്കുക",
+      "CANCEL": "റദ്ദാക്കുക",
+      "SUCCESS_MESSAGE": "സന്ദേശം അയച്ചു!",
+      "GO_TO_CONVERSATION": "കാണുക",
+      "ERROR_MESSAGE": "അയയ്‌ക്കാനായില്ല! വീണ്ടും ശ്രമിക്കുക"
+    }
+  },
+  "CONTACTS_PAGE": {
+    "LIST": {
+      "TABLE_HEADER": {
+        "SOCIAL_PROFILES": "സോഷ്യൽ പ്രൊഫൈലുകൾ"
+      }
+    }
+  },
+  "CUSTOM_ATTRIBUTES": {
+    "BUTTON": "Add custom attribute",
+    "COPY_SUCCESSFUL": "ക്ലിപ്പ്ബോർഡിലേക്ക് വിജയകരമായി പകർത്തി",
+    "SHOW_MORE": "Show all attributes",
+    "SHOW_LESS": "Show less attributes",
+    "ACTIONS": {
+      "COPY": "Copy attribute",
+      "DELETE": "Delete attribute",
+      "EDIT": "Edit attribute"
+    },
+    "ADD": {
+      "TITLE": "Create custom attribute",
+      "DESC": "Add custom information to this contact."
+    },
+    "FORM": {
+      "CREATE": "Add attribute",
+      "CANCEL": "റദ്ദാക്കുക",
+      "NAME": {
+        "LABEL": "Custom attribute name",
+        "PLACEHOLDER": "Eg: shopify id",
+        "ERROR": "Invalid custom attribute name"
+      },
+      "VALUE": {
+        "LABEL": "Attribute value",
+        "PLACEHOLDER": "Eg: 11901 "
+      },
+      "ADD": {
+        "TITLE": "Create new attribute ",
+        "SUCCESS": "Attribute added successfully",
+        "ERROR": "Unable to add attribute. Please try again later"
+      },
+      "UPDATE": {
+        "SUCCESS": "Attribute updated successfully",
+        "ERROR": "Unable to update attribute. Please try again later"
+      },
+      "DELETE": {
+        "SUCCESS": "Attribute deleted successfully",
+        "ERROR": "Unable to delete attribute. Please try again later"
+      },
+      "ATTRIBUTE_SELECT": {
+        "TITLE": "Add attributes",
+        "PLACEHOLDER": "Search attributes",
+        "NO_RESULT": "No attributes found"
+      },
+      "ATTRIBUTE_TYPE": {
+        "LIST": {
+          "PLACEHOLDER": "Select value",
+          "SEARCH_INPUT_PLACEHOLDER": "Search value",
+          "NO_RESULT": "No result found"
+        }
+      }
+    },
+    "VALIDATIONS": {
+      "REQUIRED": "Valid value is required",
+      "INVALID_URL": "Invalid URL",
+      "INVALID_INPUT": "Invalid Input"
+    }
+  },
+  "MERGE_CONTACTS": {
+    "TITLE": "Merge contacts",
+    "DESCRIPTION": "Merge contacts to combine two profiles into one, including all attributes and conversations. In case of conflict, the Primary contact’ s attributes will take precedence.",
+    "PRIMARY": {
+      "TITLE": "Primary contact",
+      "HELP_LABEL": "To be deleted"
+    },
+    "PARENT": {
+      "TITLE": "Contact to merge",
+      "PLACEHOLDER": "Search for a contact",
+      "HELP_LABEL": "To be kept"
+    },
+    "SUMMARY": {
+      "TITLE": "Summary",
+      "DELETE_WARNING": "Contact of <strong>{primaryContactName}</strong> will be deleted.",
+      "ATTRIBUTE_WARNING": "Contact details of <strong>{primaryContactName}</strong> will be copied to <strong>{parentContactName}</strong>."
+    },
+    "SEARCH": {
+      "ERROR_MESSAGE": "Something went wrong. Please try again later."
+    },
+    "FORM": {
+      "SUBMIT": " Merge contacts",
+      "CANCEL": "റദ്ദാക്കുക",
+      "CHILD_CONTACT": {
+        "ERROR": "Select a child contact to merge"
+      },
+      "SUCCESS_MESSAGE": "Contact merged successfully",
+      "ERROR_MESSAGE": "Could not merge contacts, try again!"
+    },
+    "DROPDOWN_ITEM": {
+      "ID": "(ID: {identifier})"
+    }
+  },
+  "CONTACTS_LAYOUT": {
+    "HEADER": {
+      "TITLE": "കോൺ‌ടാക്റ്റുകൾ",
+      "SEARCH_TITLE": "Search contacts",
+      "ACTIVE_TITLE": "Active contacts",
+      "SEARCH_PLACEHOLDER": "Search...",
+      "MESSAGE_BUTTON": "സന്ദേശം",
+      "SEND_MESSAGE": "സന്ദേശം അയയ്ക്കുക",
+      "BLOCK_CONTACT": "Block contact",
+      "UNBLOCK_CONTACT": "Unblock contact",
+      "BREADCRUMB": {
+        "CONTACTS": "കോൺ‌ടാക്റ്റുകൾ"
+      },
+      "ACTIONS": {
+        "CONTACT_CREATION": {
+          "ADD_CONTACT": "Add contact",
+          "EXPORT_CONTACT": "Export contacts",
+          "IMPORT_CONTACT": "Import contacts",
+          "SAVE_CONTACT": "Save contact",
+          "EMAIL_ADDRESS_DUPLICATE": "ഈ ഇമെയിൽ വിലാസം മറ്റൊരു കോൺ‌ടാക്റ്റിനായി ഉപയോഗത്തിലാണ്.",
+          "PHONE_NUMBER_DUPLICATE": "ഈ ഫോൺ നമ്പർ മറ്റൊരു കോൺടാക്റ്റിനായി ഉപയോഗിക്കുന്നു.",
+          "SUCCESS_MESSAGE": "കോൺടാക്റ്റ് വിജയകരമായി സേവ് ചെയ്തിരിക്കുന്നു",
+          "ERROR_MESSAGE": "Unable to save contact. Please try again later."
+        },
+        "BLOCK_SUCCESS_MESSAGE": "This contact is blocked successfully",
+        "BLOCK_ERROR_MESSAGE": "Unable to block contact. Please try again later.",
+        "UNBLOCK_SUCCESS_MESSAGE": "This contact is unblocked successfully",
+        "UNBLOCK_ERROR_MESSAGE": "Unable to unblock contact. Please try again later.",
+        "IMPORT_CONTACT": {
+          "TITLE": "Import contacts",
+          "DESCRIPTION": "Import contacts through a CSV file.",
+          "DOWNLOAD_LABEL": "Download a sample csv.",
+          "LABEL": "CSV ഫയൽ:",
+          "CHOOSE_FILE": "Choose file",
+          "CHANGE": "മാറ്റം വരുത്തുക",
+          "CANCEL": "റദ്ദാക്കുക",
+          "IMPORT": "Import",
+          "SUCCESS_MESSAGE": "You will be notified via email when the import is complete.",
+          "ERROR_MESSAGE": "ഒരു പിശക് ഉണ്ടായിരുന്നു, ദയവായി വീണ്ടും ശ്രമിക്കുക"
+        },
+        "EXPORT_CONTACT": {
+          "TITLE": "Export contacts",
+          "DESCRIPTION": "Quickly export a csv file with comprehensive details of your contacts",
+          "CONFIRM": "Export",
+          "SUCCESS_MESSAGE": "Export is in progress, You will be notified via email when export file is ready to dowanlod.",
+          "ERROR_MESSAGE": "ഒരു പിശക് ഉണ്ടായിരുന്നു, ദയവായി വീണ്ടും ശ്രമിക്കുക"
+        },
+        "SORT_BY": {
+          "LABEL": "Sort by",
+          "OPTIONS": {
+            "NAME": "പേര്",
+            "EMAIL": "ഇമെയിൽ",
+            "PHONE_NUMBER": "ഫോൺ നമ്പർ",
+            "COMPANY": "കമ്പനി",
+            "COUNTRY": "രാജ്യം",
+            "CITY": "നഗരം",
+            "LAST_ACTIVITY": "Last activity",
+            "CREATED_AT": "എന്ന സ്ഥലത്ത് സൃഷ്ടിച്ചു"
+          }
+        },
+        "ORDER": {
+          "LABEL": "Ordering",
+          "OPTIONS": {
+            "ASCENDING": "Ascending",
+            "DESCENDING": "Descending"
+          }
+        },
+        "FILTERS": {
+          "CREATE_SEGMENT": {
+            "TITLE": "നിങ്ങൾക്ക് ഈ ഫിൽട്ടർ സേവ് ചെയ്യണോ?",
+            "CONFIRM": "ഫിൽട്ടർ സേവ് ചെയുക",
+            "LABEL": "പേര്",
+            "PLACEHOLDER": "Enter the name of the filter",
+            "ERROR": "Enter a valid name",
+            "SUCCESS_MESSAGE": "Filter saved successfully",
+            "ERROR_MESSAGE": "Unable to save filter. Please try again later."
+          },
+          "DELETE_SEGMENT": {
+            "TITLE": "ഇല്ലാതാക്കൽ സ്ഥിരീകരിക്കുക",
+            "DESCRIPTION": "Are you sure you want to delete this filter?",
+            "CONFIRM": "അതെ, ഇല്ലാതാക്കുക",
+            "CANCEL": "No, Cancel",
+            "SUCCESS_MESSAGE": "Filter deleted successfully",
+            "ERROR_MESSAGE": "Unable to delete filter. Please try again later."
+          }
+        }
+      }
+    },
+    "PAGINATION_FOOTER": {
+      "SHOWING": "Showing {startItem} - {endItem} of {totalItems} contacts"
+    },
+    "FILTER": {
+      "NAME": "പേര്",
+      "EMAIL": "ഇമെയിൽ",
+      "PHONE_NUMBER": "ഫോൺ നമ്പർ",
+      "IDENTIFIER": "Identifier",
+      "COUNTRY": "രാജ്യം",
+      "CITY": "നഗരം",
+      "COMPANY": "കമ്പനി",
+      "CREATED_AT": "എന്ന സ്ഥലത്ത് സൃഷ്ടിച്ചു",
+      "LAST_ACTIVITY": "Last activity",
+      "REFERER_LINK": "റഫറർ ലിങ്ക്",
+      "BLOCKED": "Blocked",
+      "BLOCKED_TRUE": "True",
+      "BLOCKED_FALSE": "False",
+      "BUTTONS": {
+        "CLEAR_FILTERS": "Clear filters",
+        "UPDATE_SEGMENT": "Update segment",
+        "APPLY_FILTERS": "ഫിൽട്ടറുകൾ പ്രയോഗിക്കുക",
+        "ADD_FILTER": "ഫിൽട്ടർ ചേർക്കുക"
+      },
+      "TITLE": "Filter contacts",
+      "EDIT_SEGMENT": "Edit segment",
+      "SEGMENT": {
+        "LABEL": "Segment name",
+        "INPUT_PLACEHOLDER": "Enter the name of the segment"
+      },
+      "ACTIVE_FILTERS": {
+        "MORE_FILTERS": "+ {count} more filters",
+        "CLEAR_FILTERS": "Clear filters"
+      }
+    },
+    "CARD": {
+      "OF": "of",
+      "VIEW_DETAILS": "വിശദാംശങ്ങൾ കാണുക",
+      "EDIT_DETAILS_FORM": {
+        "TITLE": "കോൺ‌ടാക്റ്റ് വിശദാംശങ്ങൾ‌ എഡിറ്റുചെയ്യുക",
+        "FORM": {
+          "FIRST_NAME": {
+            "PLACEHOLDER": "Enter the first name"
+          },
+          "LAST_NAME": {
+            "PLACEHOLDER": "Enter the last name"
+          },
+          "EMAIL_ADDRESS": {
+            "PLACEHOLDER": "Enter the email address",
+            "DUPLICATE": "ഈ ഇമെയിൽ വിലാസം മറ്റൊരു കോൺ‌ടാക്റ്റിനായി ഉപയോഗത്തിലാണ്."
+          },
+          "PHONE_NUMBER": {
+            "PLACEHOLDER": "Enter the phone number",
+            "DUPLICATE": "ഈ ഫോൺ നമ്പർ മറ്റൊരു കോൺടാക്റ്റിനായി ഉപയോഗിക്കുന്നു."
+          },
+          "CITY": {
+            "PLACEHOLDER": "Enter the city name"
+          },
+          "COUNTRY": {
+            "PLACEHOLDER": "Select country"
+          },
+          "BIO": {
+            "PLACEHOLDER": "Enter the bio"
+          },
+          "COMPANY_NAME": {
+            "PLACEHOLDER": "കമ്പനിയുടെ പേര് നൽകുക"
+          }
+        },
+        "UPDATE_BUTTON": "Update contact",
+        "SUCCESS_MESSAGE": "Contact updated successfully",
+        "ERROR_MESSAGE": "Unable to update contact. Please try again later."
+      },
+      "SOCIAL_MEDIA": {
+        "TITLE": "Edit social links",
+        "FORM": {
+          "FACEBOOK": {
+            "PLACEHOLDER": "Add Facebook"
+          },
+          "GITHUB": {
+            "PLACEHOLDER": "Add Github"
+          },
+          "INSTAGRAM": {
+            "PLACEHOLDER": "Add Instagram"
+          },
+          "WHATSAPP": {
+            "PLACEHOLDER": "Add WhatsApp"
+          },
+          "TELEGRAM": {
+            "PLACEHOLDER": "Add Telegram"
+          },
+          "TIKTOK": {
+            "PLACEHOLDER": "Add TikTok"
+          },
+          "LINKEDIN": {
+            "PLACEHOLDER": "Add LinkedIn"
+          },
+          "TWITTER": {
+            "PLACEHOLDER": "Add Twitter"
+          }
+        }
+      },
+      "DELETE_CONTACT": {
+        "MESSAGE": "This action is permanent and irreversible.",
+        "BUTTON": "Delete now"
+      }
+    },
+    "DETAILS": {
+      "CREATED_AT": "Created {date}",
+      "LAST_ACTIVITY": "Last active {date}",
+      "DELETE_CONTACT_DESCRIPTION": "Permanently delete this contact. This action is irreversible",
+      "DELETE_CONTACT": "കോൺടാക്റ്റ് ഇല്ലാതാക്കുക",
+      "DELETE_DIALOG": {
+        "TITLE": "ഇല്ലാതാക്കൽ സ്ഥിരീകരിക്കുക",
+        "DESCRIPTION": "Are you sure you want to delete this contact?",
+        "CONFIRM": "അതെ, ഇല്ലാതാക്കുക",
+        "API": {
+          "SUCCESS_MESSAGE": "കോൺടാക്റ്റ് വിജയകരമായി ഇല്ലാതാക്കിയിരിക്കുന്നു",
+          "ERROR_MESSAGE": "കോൺടാക്റ്റ് ഇല്ലാതാക്കാൻ കഴിഞ്ഞില്ല. ദയവായി പിന്നീട് വീണ്ടും ശ്രമിക്കുക."
+        }
+      },
+      "AVATAR": {
+        "UPLOAD": {
+          "ERROR_MESSAGE": "Could not upload avatar. Please try again later.",
+          "SUCCESS_MESSAGE": "Avatar uploaded successfully"
+        },
+        "DELETE": {
+          "SUCCESS_MESSAGE": "Avatar deleted successfully",
+          "ERROR_MESSAGE": "Could not delete avatar. Please try again later."
+        }
+      }
+    },
+    "SIDEBAR": {
+      "TABS": {
+        "ATTRIBUTES": "Attributes",
+        "HISTORY": "History",
+        "NOTES": "Notes",
+        "MEDIA": "Media",
+        "MERGE": "Merge"
+      },
+      "HISTORY": {
+        "EMPTY_STATE": "ഈ കോൺടാക്റ്റുമായി മുമ്പത്തെ സംഭാഷണങ്ങളൊന്നും ബന്ധപ്പെടുത്തിയിട്ടില്ല"
+      },
+      "ATTRIBUTES": {
+        "SEARCH_PLACEHOLDER": "Search for attributes",
+        "UNUSED_ATTRIBUTES": "{count} Used attribute | {count} Unused attributes",
+        "EMPTY_STATE": "There are no contact custom attributes available in this account. You can create a custom attribute in settings.",
+        "YES": "Yes",
+        "NO": "No",
+        "TRIGGER": {
+          "SELECT": "Select value",
+          "INPUT": "Enter value"
+        },
+        "VALIDATIONS": {
+          "INVALID_NUMBER": "Invalid number",
+          "REQUIRED": "Valid value is required",
+          "INVALID_INPUT": "Invalid input",
+          "INVALID_URL": "Invalid URL",
+          "INVALID_DATE": "Invalid date"
+        },
+        "NO_ATTRIBUTES": "No attributes found",
+        "API": {
+          "SUCCESS_MESSAGE": "Attribute updated successfully",
+          "DELETE_SUCCESS_MESSAGE": "Attribute deleted successfully",
+          "UPDATE_ERROR": "Unable to update attribute. Please try again later",
+          "DELETE_ERROR": "Unable to delete attribute. Please try again later"
+        }
+      },
+      "MERGE": {
+        "TITLE": "കോൺടാക്റ്റ് ലയിപ്പിക്കുക",
+        "DESCRIPTION": "Combine two profiles into one, including all attributes and conversations. In case of conflict, the primary contact’s attributes will take precedence.",
+        "PRIMARY": "Primary contact",
+        "PRIMARY_HELP_LABEL": "To be saved",
+        "PRIMARY_REQUIRED_ERROR": "Please select a contact to merge with before proceeding",
+        "PARENT": "To be merged",
+        "PARENT_HELP_LABEL": "To be deleted",
+        "EMPTY_STATE": "No contacts found",
+        "PLACEHOLDER": "Search for primary contact",
+        "SEARCH_PLACEHOLDER": "Search for a contact",
+        "SEARCH_ERROR_MESSAGE": "Could not search for contacts. Please try again later.",
+        "SUCCESS_MESSAGE": "Contact merged successfully",
+        "ERROR_MESSAGE": "Could not merge contacts, try again!",
+        "IS_SEARCHING": "Searching...",
+        "BUTTONS": {
+          "CANCEL": "റദ്ദാക്കുക",
+          "CONFIRM": "കോൺടാക്റ്റ് ലയിപ്പിക്കുക"
+        }
+      },
+      "NOTES": {
+        "PLACEHOLDER": "Add a note",
+        "WROTE": "wrote",
+        "YOU": "You",
+        "SAVE": "Save note",
+        "ADD_NOTE": "Add contact note",
+        "EXPAND": "Expand",
+        "COLLAPSE": "Collapse",
+        "NO_NOTES": "No notes, you can add notes from the contact details page.",
+        "EMPTY_STATE": "There are no notes associated to this contact. You can add a note by typing in the box above.",
+        "CONVERSATION_EMPTY_STATE": "There are no notes yet. Use the Add note button to create one."
+      }
+    },
+    "EMPTY_STATE": {
+      "TITLE": "No contacts found in this account",
+      "SUBTITLE": "Start adding new contacts by clicking on the button below",
+      "BUTTON_LABEL": "Add contact",
+      "SEARCH_EMPTY_STATE_TITLE": "കോൺ‌ടാക്റ്റുകളൊന്നും നിങ്ങളുടെ തിരയലുമായി പൊരുത്തപ്പെടുന്നില്ല",
+      "LIST_EMPTY_STATE_TITLE": "No contacts available in this view 📋",
+      "ACTIVE_EMPTY_STATE_TITLE": "No contacts are active at the moment 🌙"
+    },
+    "LOAD_MORE": "Load more"
+  },
+  "CONTACTS_BULK_ACTIONS": {
+    "ASSIGN_LABELS": "Assign Labels",
+    "REMOVE_LABELS": "Remove Labels",
+    "ASSIGN_LABELS_SUCCESS": "Labels assigned successfully.",
+    "ASSIGN_LABELS_FAILED": "Failed to assign labels",
+    "REMOVE_LABELS_SUCCESS": "Labels removed successfully.",
+    "REMOVE_LABELS_FAILED": "Failed to remove labels",
+    "DESCRIPTION": "Select the labels you want to add to the selected contacts.",
+    "NO_LABELS_FOUND": "No labels available yet.",
+    "SELECTED_COUNT": "{count} selected",
+    "CLEAR_SELECTION": "Clear selection",
+    "SELECT_ALL": "Select all ({count})",
+    "DELETE_CONTACTS": "ഇല്ലാതാക്കുക",
+    "DELETE_SUCCESS": "Contacts deleted successfully.",
+    "DELETE_FAILED": "Failed to delete contacts.",
+    "DELETE_DIALOG": {
+      "TITLE": "Delete selected contacts",
+      "SINGULAR_TITLE": "Delete selected contact",
+      "DESCRIPTION": "This will permanently delete {count} selected contacts. This action cannot be undone.",
+      "SINGULAR_DESCRIPTION": "This will permanently delete the selected contact. This action cannot be undone.",
+      "CONFIRM_MULTIPLE": "Delete contacts",
+      "CONFIRM_SINGLE": "കോൺടാക്റ്റ് ഇല്ലാതാക്കുക"
+    }
+  },
+  "COMPOSE_NEW_CONVERSATION": {
+    "CONTACT_SEARCH": {
+      "ERROR_MESSAGE": "We couldn’t complete the search. Please try again."
+    },
+    "CONTACT_CREATE": {
+      "ERROR_MESSAGE": "We couldn’t create the contact. Please try again."
+    },
+    "FORM": {
+      "GO_TO_CONVERSATION": "കാണുക",
+      "SUCCESS_MESSAGE": "The message was sent successfully!",
+      "ERROR_MESSAGE": "An error occurred while creating the conversation. Please try again later.",
+      "NO_INBOX_ALERT": "There are no available inboxes to start a conversation with this contact.",
+      "CONTACT_SELECTOR": {
+        "LABEL": "To:",
+        "TAG_INPUT_PLACEHOLDER": "Enter at least 2 characters to search by name, email, or phone number",
+        "CONTACT_CREATING": "Creating contact..."
+      },
+      "INBOX_SELECTOR": {
+        "LABEL": "Via:",
+        "BUTTON": "Show inboxes"
+      },
+      "EMAIL_OPTIONS": {
+        "SUBJECT_LABEL": "Subject :",
+        "SUBJECT_PLACEHOLDER": "Enter your email subject here",
+        "CC_LABEL": "Cc:",
+        "CC_PLACEHOLDER": "Enter at least 2 characters to search by email",
+        "BCC_LABEL": "Bcc:",
+        "BCC_PLACEHOLDER": "Enter at least 2 characters to search by email",
+        "BCC_BUTTON": "Bcc"
+      },
+      "MESSAGE_EDITOR": {
+        "PLACEHOLDER": "നിങ്ങളുടെ സന്ദേശം ഇവിടെ എഴുതുക..."
+      },
+      "WHATSAPP_OPTIONS": {
+        "LABEL": "Select template",
+        "SEARCH_PLACEHOLDER": "Search templates",
+        "EMPTY_STATE": "No templates found",
+        "TEMPLATE_PARSER": {
+          "TEMPLATE_NAME": "WhatsApp template: {templateName}",
+          "VARIABLES": "Variables",
+          "BACK": "Go back",
+          "SEND_MESSAGE": "സന്ദേശം അയയ്ക്കുക"
+        }
+      },
+      "TWILIO_OPTIONS": {
+        "LABEL": "Select template",
+        "SEARCH_PLACEHOLDER": "Search templates",
+        "EMPTY_STATE": "No templates found",
+        "TEMPLATE_PARSER": {
+          "BACK": "Go back",
+          "SEND_MESSAGE": "സന്ദേശം അയയ്ക്കുക"
+        }
+      },
+      "ACTION_BUTTONS": {
+        "DISCARD": "Discard",
+        "SEND": "Send ({keyCode})"
+      }
+    }
+  }
+}

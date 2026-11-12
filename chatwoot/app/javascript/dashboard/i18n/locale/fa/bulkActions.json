@@ -1,0 +1,52 @@
+{
+  "BULK_ACTION": {
+    "CONVERSATIONS_SELECTED": "{conversationCount} گفتگو انتخاب شده است",
+    "NONE": "هیچکدام",
+    "CLEAR_SELECTION": "پاک کردن",
+    "ASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {agentName}? | Are you sure you want to assign {n} conversations to {agentName}?",
+    "UNASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+    "YES": "بله",
+    "CANCEL": "انصراف",
+    "SEARCH_INPUT_PLACEHOLDER": "جستجو",
+    "ASSIGN_AGENT_TOOLTIP": "اپراتور را تعیین کنید",
+    "ASSIGN_TEAM_TOOLTIP": "تیم را تعیین کنید",
+    "ASSIGN_SUCCESFUL": "گفتگو با موفقیت اختصاص داده شده.",
+    "ASSIGN_FAILED": "گفتگو اختصاص داده نشد، لطفا دوباره امتحان کنید.",
+    "RESOLVE_SUCCESFUL": "گفتگو با موفقیت حل شد.",
+    "RESOLVE_FAILED": "گفتگو حل نشد، لطفا دوباره امتحان کنید.",
+    "ALL_CONVERSATIONS_SELECTED_ALERT": "گفتگوهای قابل مشاهده در این صفحه فقط انتخاب می‌شوند.",
+    "UPDATE": {
+      "CHANGE_STATUS": "تغییر وضعیت",
+      "SNOOZE_UNTIL": "به تعویق انداختن",
+      "UPDATE_SUCCESFUL": "وضعیت گفتگو با موفقیت به روز شد.",
+      "UPDATE_FAILED": "گفتگوها به روز نشدند، لطفا دوباره امتحان کنید."
+    },
+    "RESOLVE": {
+      "ALL_MISSING_ATTRIBUTES": "Cannot resolve conversations due to missing required attributes",
+      "PARTIAL_SUCCESS": "Some conversations need required attributes before resolving and were skipped"
+    },
+    "LABELS": {
+      "ASSIGN_LABELS": "برچسب اختصاص دهید",
+      "REMOVE_LABELS": "Remove labels",
+      "ASSIGN_SELECTED_LABELS": "اختصاص برچسب‌های انتخاب شده",
+      "REMOVE_SELECTED_LABELS": "Remove selected labels",
+      "ASSIGN_SUCCESFUL": "برچسب‌ها با موفقیت اختصاص یافتند.",
+      "ASSIGN_FAILED": "اختصاص برچسب‌ به صورت موفق انجام نشد، لطفا دوباره امتحان کنید.",
+      "REMOVE_SUCCESFUL": "Labels removed successfully.",
+      "REMOVE_FAILED": "Failed to remove labels. Please try again."
+    },
+    "TEAMS": {
+      "NONE": "هیچکدام",
+      "ASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {teamName}? | Are you sure you want to assign {n} conversations to {teamName}?",
+      "UNASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+      "ASSIGN_SUCCESFUL": "Teams assigned successfully.",
+      "ASSIGN_FAILED": "اختصاص تیم با موفقیت انجام نشد، لطفا دوباره امتحان کنید."
+    },
+    "MACROS": {
+      "EXECUTE_MACRO": "Execute macro",
+      "EXECUTE_CONFIRMATION_LABEL": "Are you sure you want to run {macroName} on {n} conversation? | Are you sure you want to run {macroName} on {n} conversations?",
+      "QUEUED": "Macro queued for {count} conversation. | Macro queued for {count} conversations.",
+      "QUEUED_WITH_MISSING_ATTRIBUTES": "Macro queued for {count} conversation. It currently lacks required attributes and may remain open. | Macro queued for {count} conversations. At least one currently lacks required attributes and may remain open."
+    }
+  }
+}

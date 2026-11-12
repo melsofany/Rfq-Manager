@@ -1,0 +1,61 @@
+{
+  "REGISTER": {
+    "TRY_WOOT": "Hesap oluştur",
+    "GET_STARTED": "Get started with Chatwoot",
+    "TITLE": "Kayıt ol",
+    "TESTIMONIAL_HEADER": "İlerlemek için tek bir adım atmanız yeterlidir",
+    "TESTIMONIAL_CONTENT": "Müşterilerinizle etkileşimde bulunmaktan, onları elde tutmaktan ve yeni müşteriler bulmaktan sadece bir adım uzaktasınız.",
+    "TERMS_ACCEPT": "Bir hesap oluşturarak, <a href=\"https://www.chatwoot.com/terms\">Kullanım Koşulları</a> ve <a href=\"https://www.chatwoot.com/privacy-policy\">Gizlilik Politikamızı</a> kabul etmiş olursunuz",
+    "OAUTH": {
+      "GOOGLE_SIGNUP": "Google ile kaydol"
+    },
+    "SHOPIFY": {
+      "TITLE": "Set up Chatwoot for your Shopify store",
+      "DESCRIPTION": "Create your account to continue to Shopify App Pricing and choose a plan."
+    },
+    "COMPANY_NAME": {
+      "LABEL": "Şirket adı",
+      "PLACEHOLDER": "Şirket adınızı girin. Örneğin, Wayne Enterprises",
+      "ERROR": "Şirket adı çok kısa."
+    },
+    "FULL_NAME": {
+      "LABEL": "Ad Soyad",
+      "PLACEHOLDER": "Tam adınızı girin. Örneğin, Bruce Wayne",
+      "ERROR": "Ad Soyad çok kısa."
+    },
+    "EMAIL": {
+      "LABEL": "İş emaili",
+      "PLACEHOLDER": "Enter your work email address. E.g., bruce{'@'}wayne{'.'}enterprises",
+      "ERROR": "Lütfen geçerli bir iş email adresi girin."
+    },
+    "PASSWORD": {
+      "LABEL": "Parola",
+      "PLACEHOLDER": "Parola",
+      "ERROR": "Parola çok kısa.",
+      "IS_INVALID_PASSWORD": "Şifre en az 1 büyük harf, 1 küçük harf, 1 rakam ve 1 özel karakter içermelidir.",
+      "REQUIREMENTS_LENGTH": "En az 6 karakter uzunluğunda olmalı",
+      "REQUIREMENTS_UPPERCASE": "En az bir büyük harf içermeli",
+      "REQUIREMENTS_LOWERCASE": "En az bir küçük harf içermeli",
+      "REQUIREMENTS_NUMBER": "En az bir rakam içermeli",
+      "REQUIREMENTS_SPECIAL": "En az bir özel karakter içermeli"
+    },
+    "CONFIRM_PASSWORD": {
+      "LABEL": "Parolayı onayla",
+      "PLACEHOLDER": "Parolayı onayla",
+      "ERROR": "Parola eşleşmiyor."
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "Başarıyla Kayıt Olundu",
+      "ERROR_MESSAGE": "Woot sunucusuna bağlanılamadı. Lütfen tekrar deneyin."
+    },
+    "SUBMIT": "Hesap oluştur",
+    "HAVE_AN_ACCOUNT": "Hesabın var mı?",
+    "VERIFY_EMAIL": {
+      "TITLE": "Check your inbox",
+      "DESCRIPTION": "We sent a verification link to {email}. Click the link to verify your email and get started.",
+      "RESEND": "Doğrulama E-Postasını tekrar gönder",
+      "RESEND_SUCCESS": "Verification email sent. Please check your inbox.",
+      "RESEND_ERROR": "Could not send verification email. Please try again."
+    }
+  }
+}

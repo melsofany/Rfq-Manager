@@ -1,0 +1,148 @@
+{
+  "CHAT_LIST": {
+    "LOADING": "جاري جلب المحادثات",
+    "LOAD_MORE_CONVERSATIONS": "تحميل المزيد من المحادثات",
+    "EOF": "تم تحميل كافة المحادثات 🎉",
+    "LIST": {
+      "404": "لا توجد محادثات نشطة في هذه المجموعة."
+    },
+    "FAILED_TO_SEND": "Failed to send",
+    "FETCH_ERROR": "تعذر تحميل المحادثات. الرجاء المحاولة مرة أخرى.",
+    "TAB_HEADING": "المحادثات",
+    "MENTION_HEADING": "الإشارات",
+    "UNATTENDED_HEADING": "بدون حضور",
+    "SEARCH": {
+      "INPUT": "البحث عن جهات الاتصال، المحادثات، قوالب الردود الجاهزة .."
+    },
+    "FILTER_ALL": "الكل",
+    "ASSIGNEE_TYPE_TABS": {
+      "me": "محادثاتي",
+      "unassigned": "غير معيّن",
+      "all": "الكل"
+    },
+    "CHAT_STATUS_FILTER_ITEMS": {
+      "open": {
+        "TEXT": "فتح"
+      },
+      "resolved": {
+        "TEXT": "تم حلها"
+      },
+      "pending": {
+        "TEXT": "معلق"
+      },
+      "snoozed": {
+        "TEXT": "مؤجلة"
+      },
+      "all": {
+        "TEXT": "الكل"
+      }
+    },
+    "VIEW_FILTER": "عرض",
+    "SORT_TOOLTIP_LABEL": "ترتيب المحادثات",
+    "CHAT_SORT": {
+      "STATUS": "الحالة",
+      "ORDER_BY": "الترتيب بواسطة"
+    },
+    "CHAT_TIME_STAMP": {
+      "CREATED": {
+        "OLDEST": "تم إنشاؤها في:"
+      },
+      "LAST_ACTIVITY": {
+        "NOT_ACTIVE": "آخر نشاط:"
+      }
+    },
+    "SORT_ORDER_ITEMS": {
+      "last_activity_at_asc": {
+        "TEXT": "آخر نشاط: الأقدم أولا"
+      },
+      "last_activity_at_desc": {
+        "TEXT": "آخر نشاط: الأحدث أولا"
+      },
+      "created_at_desc": {
+        "TEXT": "وقت الإنشاء: الأحدث أولاً"
+      },
+      "created_at_asc": {
+        "TEXT": "وقت الإنشاء: الأقدم أولاً"
+      },
+      "priority_desc": {
+        "TEXT": "الأولوية: الأعلى أولا"
+      },
+      "priority_asc": {
+        "TEXT": "الأولوية: الأقل أولاً"
+      },
+      "waiting_since_asc": {
+        "TEXT": "الرد المعلق: الأطول أولا"
+      },
+      "waiting_since_desc": {
+        "TEXT": "الرد المعلق: الأقصر أولاً"
+      },
+      "priority_desc_created_at_asc": {
+        "TEXT": "Priority: Highest first, Created: Oldest first"
+      },
+      "unread": {
+        "TEXT": "عدد الغير المقروء: الأعلى أولا"
+      }
+    },
+    "ATTACHMENTS": {
+      "image": {
+        "CONTENT": "رسالة صورة"
+      },
+      "audio": {
+        "CONTENT": "رسالة صوتية"
+      },
+      "video": {
+        "CONTENT": "رسالة فيديو"
+      },
+      "file": {
+        "CONTENT": "مرفقات"
+      },
+      "location": {
+        "CONTENT": "الموقع الجغرافي"
+      },
+      "ig_reel": {
+        "CONTENT": "Instagram Reel"
+      },
+      "fallback": {
+        "CONTENT": "قام بمشاركة رابط"
+      },
+      "contact": {
+        "CONTENT": "Shared contact"
+      },
+      "embed": {
+        "CONTENT": "المحتوى المضمن"
+      }
+    },
+    "CHAT_SORT_BY_FILTER": {
+      "TITLE": "ترتيب المحادثات",
+      "DROPDOWN_TITLE": "ترتيب حسب",
+      "ITEMS": {
+        "LATEST": {
+          "NAME": "آخر نشاط في",
+          "LABEL": "آخر نشاط"
+        },
+        "CREATED_AT": {
+          "NAME": "تم إنشاؤها في",
+          "LABEL": "تم إنشاؤها في"
+        },
+        "LAST_USER_MESSAGE_AT": {
+          "NAME": "آخر رسالة للمستخدم في",
+          "LABEL": "أخر رسالة"
+        }
+      }
+    },
+    "RECEIVED_VIA_EMAIL": "تم تلقيه عبر البريد الإلكتروني",
+    "VIEW_TWEET_IN_TWITTER": "عرض التغريدة في تويتر",
+    "REPLY_TO_TWEET": "الرد على هذه التغريدة",
+    "LINK_TO_STORY": "الذهاب إلى قصة الإنستقرام",
+    "SENT": "تم الإرسال بنجاح",
+    "READ": "تمت القراءة بنجاح",
+    "DELIVERED": "تم الإرسال بنجاح",
+    "NO_MESSAGES": "لا توجد رسائل",
+    "NO_CONTENT": "لم يتم العثور على محتوى",
+    "HIDE_QUOTED_TEXT": "إخفاء النص المقتبس",
+    "SHOW_QUOTED_TEXT": "إظهار النص المقتبس",
+    "MESSAGE_READ": "قراءة",
+    "SENDING": "Sending",
+    "UNREAD_COUNT_OVERFLOW": "9+"
+  }
+}

@@ -32,6 +32,12 @@ import {
   createConversation,
   createMessage,
   getConversationContactPhone,
+  findAgentByEmail,
+  createAgent,
+  listAgents,
+  assignConversation,
+  setConversationCustomAttributes,
+  addConversationLabels,
 } from "./client";
 
 export { isChatwootConfigured };
@@ -63,6 +69,246 @@ export function canonicalPhone(phone: string): string {
   if (c.length === 11 && c.startsWith("0")) c = "2" + c;
   if (c.length === 10 && c.startsWith("1")) c = "20" + c;
   return c;
+}
+
+/** Conversation custom attribute keys. These MUST match the overlay's defaults
+ *  in chatwoot-cortoba/lib/cortoba/config.rb, or the console shows an unlabelled
+ *  thread: the bridge would write a key the console never declared. */
+export const RFQ_ATTRIBUTE_KEY = process.env.CORTOBA_RFQ_ATTRIBUTE_KEY || "cortoba_rfq_no";
+export const OWNER_ATTRIBUTE_KEY = process.env.CORTOBA_OWNER_ATTRIBUTE_KEY || "cortoba_owner_name";
+
+/** Employee emails we have already resolved to an agent, so a busy thread does
+ *  not re-list the whole agent roster on every message. Only successful
+ *  resolutions are cached — a failure must be retried, or one transient error
+ *  would leave that employee unassignable for the process lifetime. */
+const agentIdByEmail = new Map<string, number>();
+
+/** Resolve the Chatwoot agent for an employee email, creating it on first use.
+ *
+ *  Best-effort by contract: returns null on any failure, and the caller simply
+ *  leaves the conversation unassigned rather than blocking the mirror. */
+export async function ensureAgentForEmail(
+  email: string | null | undefined,
+  name?: string | null,
+): Promise<number | null> {
+  const key = (email || "").trim().toLowerCase();
+  if (!key) return null;
+  const cached = agentIdByEmail.get(key);
+  if (cached != null) return cached;
+  try {
+    const existing = await findAgentByEmail(key);
+    if (existing?.id) {
+      agentIdByEmail.set(key, existing.id);
+      return existing.id;
+    }
+    const created = await createAgent(name || key, key);
+    if (created?.id) {
+      agentIdByEmail.set(key, created.id);
+      return created.id;
+    }
+  } catch (err) {
+    logger.warn({ err, email: key }, "Chatwoot: agent resolution failed — non-fatal");
+  }
+  return null;
+}
+
+/** Test seam: forget resolved agents so a test can exercise the resolution. */
+export function resetAgentCache(): void {
+  agentIdByEmail.clear();
+}
+
+/** Routing labels written onto a conversation so a supervisor can see, at a
+ *  glance, HOW the thread was routed and whether it still needs attention. */
+export const ROUTE_LABEL_OWNER = "cortoba:مسؤول الطلب";
+export const ROUTE_LABEL_ONLINE = "cortoba:مندوب متاح";
+export const ROUTE_LABEL_SUPERVISOR = "cortoba:مشرف";
+export const ROUTE_LABEL_UNASSIGNED = "cortoba:بلا مسؤول";
+
+/** Which agent a conversation was routed to, and why. `reason` is the audit
+ *  trail: an operator asking "why is this thread with someone else?" gets an
+ *  answer instead of a mystery. */
+export interface RoutingDecision {
+  agentId: number | null;
+  reason: "owner" | "online" | "supervisor" | "unassigned";
+  label: string;
+}
+
+/**
+ * Choose who should handle a conversation.
+ *
+ * Priority, and the reasoning behind each step:
+ *  1. `owner` — the employee responsible for the pricing request. A reply about
+ *     THEIR request belongs with them; routing it anywhere else means the person
+ *     who can answer the supplier has to go looking for it.
+ *  2. `online` — any agent currently online. Only used when the owner has no
+ *     console account or is not at their desk, so the supplier is not left
+ *     waiting for someone who is away.
+ *  3. `supervisor` — an administrator. Last resort before leaving it unassigned:
+ *     Community Edition has no supervisor role, so the administrators are the
+ *     escalation tier.
+ *  4. `unassigned` — nobody can take it. Labelled so it appears in the console's
+ *     unassigned view rather than silently disappearing.
+ *
+ * `availability_status` is COMPUTED by Chatwoot (stored preference + live Redis
+ * presence), so an agent who has never opened the console reports `offline` even
+ * when their preference is online. Step 2 therefore picks among agents actually
+ * using the console, which is the intended meaning of "available".
+ */
+export async function pickAssignee(opts: {
+  ownerAgentId?: number | null;
+  ownerAvailable?: boolean;
+}): Promise<RoutingDecision> {
+  const agents = await listAgents();
+  if (agents.length === 0) return { agentId: null, reason: "unassigned", label: ROUTE_LABEL_UNASSIGNED };
+
+  if (opts.ownerAgentId != null && opts.ownerAvailable !== false) {
+    return { agentId: opts.ownerAgentId, reason: "owner", label: ROUTE_LABEL_OWNER };
+  }
+
+  const online = agents.find((a) => a.availability_status === "online");
+  if (online?.id) return { agentId: online.id, reason: "online", label: ROUTE_LABEL_ONLINE };
+
+  const admin = agents.find((a) => a.role === "administrator");
+  if (admin?.id) return { agentId: admin.id, reason: "supervisor", label: ROUTE_LABEL_SUPERVISOR };
+
+  return { agentId: null, reason: "unassigned", label: ROUTE_LABEL_UNASSIGNED };
+}
+
+/** Look up an employee's email by id. Split out so tests can stub it. */
+async function employeeEmail(employeeId: number | null | undefined): Promise<string | null> {
+  if (employeeId == null) return null;
+  try {
+    const [row] = await db
+      .select({ email: employeesTable.email })
+      .from(employeesTable)
+      .where(eq(employeesTable.id, employeeId))
+      .limit(1);
+    return row?.email ?? null;
+  } catch (err) {
+    logger.warn({ err, employeeId }, "Chatwoot: employee email lookup failed");
+    return null;
+  }
+}
+
+/**
+ * Make a conversation OWNED: write the request/owner attributes and assign it to
+ * the responsible employee's agent.
+ *
+ * Without this an inbound reply lands in a shared pile and nobody knows whose
+ * request it answers — the request number and owner are the reason this console
+ * exists. Called after the conversation is ensured, so the attributes are
+ * written once per (phone, request) rather than on every message.
+ */
+export async function applyConversationOwnership(
+  conversationId: number,
+  opts: { internalRfqNo?: string | null; employeeId?: number | null; employeeName?: string | null },
+): Promise<boolean> {
+  try {
+    const attributes: Record<string, string> = {};
+    if (opts.internalRfqNo) attributes[RFQ_ATTRIBUTE_KEY] = opts.internalRfqNo;
+    if (opts.employeeName) attributes[OWNER_ATTRIBUTE_KEY] = opts.employeeName;
+    const attributesOk = await setConversationCustomAttributes(conversationId, attributes);
+
+    // The responsible employee's console account, when they have one.
+    const email = await employeeEmail(opts.employeeId);
+    const ownerAgentId = email ? await ensureAgentForEmail(email, opts.employeeName) : null;
+
+    // Decide who actually gets it: the owner when they have an account, else
+    // someone online, else an administrator, else nobody (and say so).
+    const decision = await pickAssignee({ ownerAgentId });
+
+    // The label is the visible audit trail of that decision. A failure to label
+    // is not a failure to route, so it is attempted before the assignment and
+    // does not decide the result.
+    const labelled = await addConversationLabels(conversationId, [decision.label]);
+
+    if (decision.agentId == null) {
+      // Unassigned on purpose — labelled so a supervisor can find it. This is a
+      // successful outcome, not an error to retry.
+      return attributesOk && labelled;
+    }
+
+    const assigned = await assignConversation(conversationId, decision.agentId);
+    // Report failure so the caller does not cache a half-done result and leave
+    // the thread unassigned forever.
+    return attributesOk && labelled && assigned;
+  } catch (err) {
+    logger.warn({ err, conversationId }, "Chatwoot: ownership application failed — non-fatal");
+    return false;
+  }
+}
+
+/** Conversations whose ownership is already applied, keyed by the ownership
+ *  signature. In-memory and bounded: it exists only to avoid re-issuing the same
+ *  two REST calls on every message of a long thread, not to be a durable record.
+ *  A FAILED application is deliberately NOT recorded, so it is retried. */
+const ownershipApplied = new Map<number, string>();
+const OWNERSHIP_CAP = 2000;
+
+/** Test seam. */
+export function resetOwnershipCache(): void {
+  ownershipApplied.clear();
+}
+
+/**
+ * Ensure the conversation exists AND is owned by the responsible employee.
+ *
+ * Ownership is applied once per (conversation, request, owner) rather than per
+ * message, and retried on the next message if it failed — so a transient
+ * Chatwoot fault delays ownership instead of losing it.
+ */
+async function ensureConversationOwned(
+  phone: string,
+  rfqId: number,
+  opts: {
+    displayName?: string | null;
+    supplierId?: number | null;
+    employeeId?: number | null;
+    employeeName?: string | null;
+    internalRfqNo?: string | null;
+  } = {},
+): Promise<LinkRow | null> {
+  const link = await ensureConversation(phone, rfqId, opts);
+  if (!link?.conversationId) return link;
+
+  const signature = `${rfqId}:${opts.employeeId ?? ""}`;
+  if (ownershipApplied.get(link.conversationId) === signature) return link;
+
+  // The attribute the operator reads is the REQUEST NUMBER, which callers do
+  // not always carry (an inbound text may only have told us the phone). Resolve
+  // it here rather than making every caller remember to pass it.
+  let rfqNo = opts.internalRfqNo ?? null;
+  if (!rfqNo && rfqId > 0) rfqNo = await internalRfqNoFor(rfqId);
+
+  const ok = await applyConversationOwnership(link.conversationId, {
+    internalRfqNo: rfqNo,
+    employeeId: opts.employeeId ?? null,
+    employeeName: opts.employeeName ?? null,
+  });
+  if (ok) {
+    if (ownershipApplied.size >= OWNERSHIP_CAP) {
+      const first = ownershipApplied.keys().next().value;
+      if (first !== undefined) ownershipApplied.delete(first);
+    }
+    ownershipApplied.set(link.conversationId, signature);
+  }
+  return link;
+}
+
+/** The human-facing request number for an id. Best-effort: a lookup failure
+ *  leaves the attribute unwritten rather than failing the mirror. */
+async function internalRfqNoFor(rfqId: number): Promise<string | null> {
+  try {
+    const [row] = await db
+      .select({ internalRfqNo: rfqTable.internalRfqNo })
+      .from(rfqTable)
+      .where(eq(rfqTable.id, rfqId))
+      .limit(1);
+    return row?.internalRfqNo ?? null;
+  } catch (err) {
+    logger.warn({ err, rfqId }, "Chatwoot: request-number lookup failed");
+    return null;
+  }
 }
 
 export interface OpenRequest {
@@ -275,7 +521,7 @@ export async function mirrorInboundMessage(opts: {
   employeeName?: string | null;
 }): Promise<void> {
   try {
-    const link = await ensureConversation(opts.phone, opts.rfqId ?? 0, {
+    const link = await ensureConversationOwned(opts.phone, opts.rfqId ?? 0, {
       displayName: opts.contactName ?? null,
       supplierId: opts.supplierId ?? null,
       employeeId: opts.employeeId ?? null,
@@ -299,7 +545,7 @@ export async function mirrorOutboundMessage(opts: {
   employeeName?: string | null;
 }): Promise<void> {
   try {
-    const link = await ensureConversation(opts.phone, opts.rfqId ?? 0, {
+    const link = await ensureConversationOwned(opts.phone, opts.rfqId ?? 0, {
       supplierId: opts.supplierId ?? null,
       employeeId: opts.employeeId ?? null,
       employeeName: opts.employeeName ?? null,

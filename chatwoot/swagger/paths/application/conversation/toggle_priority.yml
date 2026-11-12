@@ -1,0 +1,47 @@
+tags:
+  - Conversations
+operationId: toggle-priority-of-a-conversation
+summary: Toggle Priority
+description: Toggles the priority of conversation
+security:
+  - userBearerAuth: []
+  - agentBotBearerAuth: []
+  - userApiKey: []
+  - agentBotApiKey: []
+requestBody:
+  required: false
+  content:
+    application/json:
+      schema:
+        type: object
+        properties:
+          priority:
+            type: [string, "null"]
+            enum: ['urgent', 'high', 'medium', 'low', null]
+            description: 'The priority of the conversation. Omit or set to null to clear the priority.'
+            example: 'high'
+responses:
+  '200':
+    description: Success
+  '401':
+    description: Unauthorized
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/bad_request_error'
+  '404':
+    description: Conversation not found
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/bad_request_error'
+  '422':
+    description: Validation error
+    content:
+      application/json:
+        schema:
+          type: object
+          required: [error]
+          properties:
+            error:
+              type: string

@@ -1,0 +1,112 @@
+{
+  "AUDIT_LOGS": {
+    "HEADER": "Журнал аудита",
+    "HEADER_BTN_TXT": "Добавить журнал аудита",
+    "LOADING": "Загрузка журнала аудита",
+    "DESCRIPTION": "Журнал аудита фиксирует действия в вашей учетной записи, позволяя отслеживать и проверять действия пользователей, команд и сервисов.",
+    "LEARN_MORE": "Узнать больше о журнале аудита",
+    "SEARCH_404": "По вашему запросу ничего не найдено",
+    "SIDEBAR_TXT": "<p><b>Журнал аудита</b> </p><p>Журнал аудита фиксирует события и действия в системе Chatwoot.</p>",
+    "COUNT": "{n} event | {n} events",
+    "FILTERS": {
+      "SEARCH_PLACEHOLDER": "Search by name or email",
+      "ALL_EVENTS": "All events",
+      "DATE_RANGE": "Date range",
+      "CLEAR_ALL": "Очистить фильтры",
+      "EVENT_TYPE_GROUPS": {
+        "ACCESS": "Access",
+        "AGENTS_TEAMS": "Agents & teams",
+        "CONFIGURATION": "Настройки",
+        "CONVERSATIONS": "Диалоги"
+      },
+      "EVENT_TYPES": {
+        "SIGN_IN_OUT": "Sign in / sign out",
+        "AGENTS": "Операторы",
+        "TEAMS": "Команды",
+        "TEAM_MEMBERS": "Team members",
+        "INBOX_MEMBERS": "Inbox collaborators",
+        "ACCOUNT": "Настройки аккаунта",
+        "INBOXES": "Источники",
+        "WEBHOOKS": "Webhooks",
+        "AUTOMATION_RULES": "Automation rules",
+        "MACROS": "Макрос",
+        "CONVERSATION_DELETIONS": "Conversation deletions",
+        "MESSAGE_DELETIONS": "Message deletions"
+      },
+      "SORT": {
+        "NEWEST": "Newest first",
+        "OLDEST": "Oldest first"
+      }
+    },
+    "LIST": {
+      "404": "В этой учетной записи нет записей журнала аудита.",
+      "TITLE": "Управление журналом аудита",
+      "DESC": "Журнал аудита фиксирует события и действия в системе Chatwoot.",
+      "TABLE_HEADER": {
+        "ACTIVITY": "Действие",
+        "TIME": "Время",
+        "IP_ADDRESS": "IP-адрес",
+        "LOCATION": "Местоположение"
+      }
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "Журнал аудита успешно загружен",
+      "ERROR_MESSAGE": "Не удалось подключиться к серверу Woot. Пожалуйста, попробуйте позже"
+    },
+    "DEFAULT_USER": "Система",
+    "AUTOMATION_RULE": {
+      "ADD": "{agentName} создал новое правило автоматизации (#{id})",
+      "EDIT": "{agentName} обновил правило автоматизации (#{id})",
+      "DELETE": "{agentName} удалил правило автоматизации (#{id})"
+    },
+    "ACCOUNT_USER": {
+      "ADD": "{agentName} пригласил {invitee} с ролью {role}",
+      "EDIT": {
+        "SELF": "{agentName} изменил {attributes} на {values}",
+        "OTHER": "{agentName} изменил {attributes} пользователя {user} на {values}",
+        "DELETED": "{agentName} изменил {attributes} удаленного пользователя на {values}"
+      }
+    },
+    "INBOX": {
+      "ADD": "{agentName} создал новый почтовый ящик (#{id})",
+      "EDIT": "{agentName} обновил почтовый ящик (#{id})",
+      "DELETE": "{agentName} удалил почтовый ящик (#{id})"
+    },
+    "WEBHOOK": {
+      "ADD": "{agentName} создал новый вебхук (#{id})",
+      "EDIT": "{agentName} обновил вебхук (#{id})",
+      "DELETE": "{agentName} удалил вебхук (#{id})"
+    },
+    "USER_ACTION": {
+      "SIGN_IN": "{agentName} вошел в систему",
+      "SIGN_OUT": "{agentName} вышел из системы"
+    },
+    "TEAM": {
+      "ADD": "{agentName} создал новую команду (#{id})",
+      "EDIT": "{agentName} обновил команду (#{id})",
+      "DELETE": "{agentName} удалил команду (#{id})"
+    },
+    "MACRO": {
+      "ADD": "{agentName} создал новый макрос (#{id})",
+      "EDIT": "{agentName} обновил макрос (#{id})",
+      "DELETE": "{agentName} удалил макрос (#{id})"
+    },
+    "INBOX_MEMBER": {
+      "ADD": "{agentName} добавил {user} в почтовый ящик (#{inbox_id})",
+      "REMOVE": "{agentName} удалил {user} из почтового ящика (#{inbox_id})"
+    },
+    "TEAM_MEMBER": {
+      "ADD": "{agentName} добавил {user} в команду (#{team_id})",
+      "REMOVE": "{agentName} удалил {user} из команды (#{team_id})"
+    },
+    "ACCOUNT": {
+      "EDIT": "{agentName} обновил настройки учетной записи (#{id})"
+    },
+    "CONVERSATION": {
+      "DELETE": "{agentName} удалил диалог #{id}"
+    },
+    "MESSAGE": {
+      "DELETE": "{agentName} deleted a message in conversation #{conversationId}"
+    }
+  }
+}

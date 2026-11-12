@@ -1,0 +1,148 @@
+{
+  "CHAT_LIST": {
+    "LOADING": "Gespräche abrufen",
+    "LOAD_MORE_CONVERSATIONS": "Laden Sie weitere Gespräche",
+    "EOF": "Alle Gespräche geladen 🎉",
+    "LIST": {
+      "404": "In dieser Gruppe existieren keine aktiven Gespräche."
+    },
+    "FAILED_TO_SEND": "Fehler beim Senden",
+    "FETCH_ERROR": "Unterhaltungen konnten nicht geladen werden. Bitte versuche es erneut.",
+    "TAB_HEADING": "Gespräche",
+    "MENTION_HEADING": "Erwähnungen",
+    "UNATTENDED_HEADING": "Unbeaufsichtigt",
+    "SEARCH": {
+      "INPUT": "Suche nach Personen, Chats, gespeicherten Antworten .."
+    },
+    "FILTER_ALL": "Alle",
+    "ASSIGNEE_TYPE_TABS": {
+      "me": "Meine",
+      "unassigned": "Nicht zugewiesen",
+      "all": "Alle"
+    },
+    "CHAT_STATUS_FILTER_ITEMS": {
+      "open": {
+        "TEXT": "Öffnen"
+      },
+      "resolved": {
+        "TEXT": "Gelöst"
+      },
+      "pending": {
+        "TEXT": "Ausstehend"
+      },
+      "snoozed": {
+        "TEXT": "Erinnern"
+      },
+      "all": {
+        "TEXT": "Alle"
+      }
+    },
+    "VIEW_FILTER": "Anzeigen",
+    "SORT_TOOLTIP_LABEL": "Konversationen sortieren",
+    "CHAT_SORT": {
+      "STATUS": "Status",
+      "ORDER_BY": "Sortieren nach"
+    },
+    "CHAT_TIME_STAMP": {
+      "CREATED": {
+        "OLDEST": "Erstellt am:"
+      },
+      "LAST_ACTIVITY": {
+        "NOT_ACTIVE": "Letzte Aktivität:"
+      }
+    },
+    "SORT_ORDER_ITEMS": {
+      "last_activity_at_asc": {
+        "TEXT": "Letzte Aktivität: Älteste zuerst"
+      },
+      "last_activity_at_desc": {
+        "TEXT": "Letzte Aktivität: Neueste zuerst"
+      },
+      "created_at_desc": {
+        "TEXT": "Erstellt am: Neueste zuerst"
+      },
+      "created_at_asc": {
+        "TEXT": "Erstellt am: Älteste zuerst"
+      },
+      "priority_desc": {
+        "TEXT": "Priorität: Höchste zuerst"
+      },
+      "priority_asc": {
+        "TEXT": "Priorität: Niedrigste zuerst"
+      },
+      "waiting_since_asc": {
+        "TEXT": "Ausstehende Antwort: Längste zuerst"
+      },
+      "waiting_since_desc": {
+        "TEXT": "Ausstehende Antwort: Kürzeste zuerst"
+      },
+      "priority_desc_created_at_asc": {
+        "TEXT": "Priority: Highest first, Created: Oldest first"
+      },
+      "unread": {
+        "TEXT": "Ungelesene: höchste Anzahl zuerst"
+      }
+    },
+    "ATTACHMENTS": {
+      "image": {
+        "CONTENT": "Bildnachricht"
+      },
+      "audio": {
+        "CONTENT": "Audio-Nachricht"
+      },
+      "video": {
+        "CONTENT": "Videonachricht"
+      },
+      "file": {
+        "CONTENT": "Dateianhang"
+      },
+      "location": {
+        "CONTENT": "Ort"
+      },
+      "ig_reel": {
+        "CONTENT": "Instagram Reel"
+      },
+      "fallback": {
+        "CONTENT": "hat eine URL geteilt"
+      },
+      "contact": {
+        "CONTENT": "Geteilter Kontakt"
+      },
+      "embed": {
+        "CONTENT": "Embedded content"
+      }
+    },
+    "CHAT_SORT_BY_FILTER": {
+      "TITLE": "Konversationen sortieren",
+      "DROPDOWN_TITLE": "Sortieren nach",
+      "ITEMS": {
+        "LATEST": {
+          "NAME": "Letzte Aktivität am",
+          "LABEL": "Letzte Aktivität"
+        },
+        "CREATED_AT": {
+          "NAME": "Erstellt am",
+          "LABEL": "Erstellt am"
+        },
+        "LAST_USER_MESSAGE_AT": {
+          "NAME": "Letzte Benutzernachricht am",
+          "LABEL": "Letzte Nachricht"
+        }
+      }
+    },
+    "RECEIVED_VIA_EMAIL": "Per E-Mail empfangen",
+    "VIEW_TWEET_IN_TWITTER": "Tweet auf Twitter anzeigen",
+    "REPLY_TO_TWEET": "Auf diesen Tweet antworten",
+    "LINK_TO_STORY": "Zur Instagram-Geschichte",
+    "SENT": "Erfolgreich gesendet",
+    "READ": "Erfolgreich gelesen",
+    "DELIVERED": "Erfolgreich versendet",
+    "NO_MESSAGES": "Keine Nachrichten",
+    "NO_CONTENT": "Kein Inhalt verfügbar",
+    "HIDE_QUOTED_TEXT": "Zitierten Text ausblenden",
+    "SHOW_QUOTED_TEXT": "Zitierten Text anzeigen",
+    "MESSAGE_READ": "Lesen",
+    "SENDING": "Sende",
+    "UNREAD_COUNT_OVERFLOW": "9+"
+  }
+}

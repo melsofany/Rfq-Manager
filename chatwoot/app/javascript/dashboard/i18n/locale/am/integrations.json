@@ -1,0 +1,1743 @@
+{
+  "STRIPE_INTEGRATION": {
+    "UNAVAILABLE": "Stripe is unavailable for this account. Contact your administrator to check the integration configuration.",
+    "TITLE": "Stripe",
+    "DESCRIPTION": "View customer details, subscriptions, and invoices alongside your conversations.",
+    "CONNECT": "አገናኝ",
+    "DISCONNECT": "Disconnect from Chatwoot",
+    "DISCONNECT_NOTE": "Disconnecting removes the saved credentials from Chatwoot. Uninstall the app in Stripe to revoke its access there.",
+    "CONNECTED": "Connected",
+    "RECONNECT": "Reconnect Stripe",
+    "REAUTHORIZATION_REQUIRED": "Reconnect required",
+    "ACCOUNT": "Connected account",
+    "ACCOUNT_ID": "Account ID",
+    "ENVIRONMENT": "Environment",
+    "SANDBOX": "ሳንድቦክስ",
+    "LIVE": "Live",
+    "CONNECTED_ON": "Connected on",
+    "OPEN_STRIPE": "Open Stripe dashboard",
+    "ERROR": "Unable to load Stripe. Please try again or reconnect the integration.",
+    "EMPTY": "No Stripe customer matches this contact's email.",
+    "NO_EMAIL": "Add an email to this contact to look up Stripe customers.",
+    "SELECT": "Select a matching customer",
+    "CUSTOMER_OPTION": "{name} — {id}",
+    "MORE": "Showing the first 100 matching customers. Refine the contact email if the customer is not listed.",
+    "SUBSCRIPTIONS": "Latest five subscriptions",
+    "SUBSCRIPTION": "Subscription",
+    "VIEW_SUBSCRIPTION": "View {name} subscription details",
+    "COPY_ID": "Copy ID",
+    "COPIED": "Copied",
+    "QUANTITY": "Quantity: {count}",
+    "PRICE_INTERVAL": "{amount} / {interval}",
+    "INTERVAL": {
+      "day": "day | {count} days",
+      "week": "week | {count} weeks",
+      "month": "month | {count} months",
+      "year": "year | {count} years"
+    },
+    "VARIABLE_PRICE": "Usage-based or tiered pricing",
+    "RENEWS": "Renews {date}",
+    "PERIOD_START": "Period starts {date}",
+    "PERIOD_END": "Period ends {date}",
+    "TRIAL_ENDS": "Trial ends {date}",
+    "CANCELS": "Cancels {date}",
+    "CANCELS_AT_PERIOD_END": "Cancels at the end of the billing period",
+    "CANCELED_ON": "Canceled {date}",
+    "MORE_ITEMS": "Additional subscription items are not shown.",
+    "PRICE_NOTE": "Prices are per unit, before discounts and taxes. They are not an estimate of the next invoice.",
+    "INVOICES": "Recent invoices",
+    "NO_SUBSCRIPTIONS": "No subscriptions found.",
+    "NO_INVOICES": "No invoices found."
+  },
+  "INTEGRATION_SETTINGS": {
+    "SHOPIFY": {
+      "HEADER": "Shopify",
+      "DELETE": {
+        "TITLE": "የShopify አገናኝ ማጥፊያ",
+        "MESSAGE": "እርግጠኛ ነዎት የShopify አገናኝነትን ማጥፊያ ይፈልጋሉ?"
+      },
+      "STORE_URL": {
+        "TITLE": "የShopify ሱቅ ያገናኙ",
+        "LABEL": "የሱቅ አድራሻ",
+        "PLACEHOLDER": "your-store.myshopify.com",
+        "HELP": "የShopify ሱቅዎ የmyshopify.com አድራሻ ያስገቡ",
+        "INVALID_URL": "Please enter a valid Shopify store URL (e.g., your-store.myshopify.com)",
+        "CANCEL": "ሰርዝ",
+        "SUBMIT": "ሱቅ ያገናኙ"
+      },
+      "HELP_TEXT": {
+        "TITLE": "How to use the Shopify Integration?",
+        "BODY": "With this integration, your Shopify store ***{storeDomain}*** is connected to your Chatwoot workspace. Here's what you can do:\n\n**Track orders in conversations:** When you open a conversation, the Shopify sidebar will automatically display recent orders for the customer based on their email address. This gives your support team instant context without switching tabs.\n\n**Access order details:** View order status, fulfillment status, and total amount directly within the conversation panel."
+      },
+      "ERROR": "ከShopify ጋር ለመገናኘት ስህተት ተከስቷል። እባክዎ እንደገና ይሞክሩ ወይም ችግሩ ከቀጠለ ደጋፊን ያግኙ።",
+      "PENDING_INSTALL": {
+        "SUCCESS": "Shopify store connected successfully.",
+        "ERROR": "Unable to complete the Shopify installation. Please try again."
+      },
+      "SELECT_ACCOUNT": {
+        "TITLE": "Choose a workspace",
+        "DESCRIPTION": "Select the workspace to connect to your Shopify store. To restore a previous connection, choose its original workspace.",
+        "UNAVAILABLE": "No eligible workspace or valid installation was found. Restart installation or sign in as a workspace administrator."
+      }
+    },
+    "HEADER": "አካባቢዎች",
+    "DESCRIPTION": "Chatwoot ከብዙ መሣሪያዎችና አገልግሎቶች ጋር ተያይዞ የቡድናችሁን ብቃት ለማሻሻል ይሰራል። ከታች ያለውን ዝርዝር ይመልከቱ እና የተወደዱትን መተግበሪያዎች ያስተካክሉ።",
+    "LEARN_MORE": "ስለ አገናኝቶች ተጨማሪ ያውቁ",
+    "LOADING": "አገናኝቶችን እየሰበሰበ",
+    "SEARCH_PLACEHOLDER": "አገናኞችን ፈልግ...",
+    "NO_RESULTS": "የፈለጉትን አገናኝቶች አልተገኙም",
+    "CAPTAIN": {
+      "DISABLED": "Captain በአካውንትዎ ላይ አልተነሳም።",
+      "CLICK_HERE_TO_CONFIGURE": "ለማስተካከል እዚህ ጠቅ ያድርጉ",
+      "LOADING_CONSOLE": "Captain Console እየጫነ ነው...",
+      "FAILED_TO_LOAD_CONSOLE": "Captain Console ለመጫን አልተሳካም። እባክዎን ዳግም ያስመልክቱ እና ይሞክሩ።"
+    },
+    "WEBHOOK": {
+      "SUBSCRIBED_EVENTS": "ተመዝግቧል የሆኑ ክስተቶች",
+      "LEARN_MORE": "ስለ webhooks ተጨማሪ ያውቁ",
+      "PAYWALL": {
+        "TITLE": "Webhooks are available on paid plans",
+        "AVAILABLE_ON": "Use webhooks to receive real-time events from your Chatwoot account.",
+        "UPGRADE_PROMPT": "Upgrade to the Startups, Business, or Enterprise plan to use webhooks.",
+        "UPGRADE_NOW": "Upgrade now",
+        "CANCEL_ANYTIME": "Change or cancel your plan anytime."
+      },
+      "SECRET": {
+        "LABEL": "ምስጢር",
+        "COPY": "ምስጢሩን ወደ ክሊፕቦርድ ቅዳ",
+        "COPY_SUCCESS": "ምስጢሩ ወደ ክሊፕቦርድ ተቀድሷል",
+        "TOGGLE": "የምስጢሩን ማየት አሳይ/ደብቅ",
+        "CREATED_DESC": "የድር ማስተካከያዎ ተፈጥሯል። የድር ማስተካከያ ፊርማዎችን ለማረጋገጥ በታች ያለውን ምስጢር ይጠቀሙ። እባክዎን አሁን ይቅዱት — በኋላም በድር ማስተካከያ አርትዕ ቅጽ ውስጥ ማግኘት ይችላሉ።",
+        "DONE": "ተጠናቀቀ"
+      },
+      "COUNT": "{n} የድር ማስተካከያ | {n} የድር ማስተካከያዎች",
+      "SEARCH_PLACEHOLDER": "የድር ማስተካከያዎችን ፈልጉ...",
+      "NO_RESULTS": "የፈለጉትን የድር ማስተካከያዎች አልተገኙም",
+      "FORM": {
+        "CANCEL": "ሰርዝ",
+        "DESC": "የዌብሁክ ክስተቶች በChatwoot አካውንትዎ ውስጥ ምን እንደሚከሰት በሕይወት ጊዜ መረጃ ይሰጣሉ። እባክዎ ትክክለኛ ዩአርኤል አስገባ ለመቀጠል እንዲሆን ያዘጋጁ።",
+        "SUBSCRIPTIONS": {
+          "LABEL": "ክስተቶች",
+          "EVENTS": {
+            "CONVERSATION_CREATED": "ውይይት ተፈጥሯል",
+            "CONVERSATION_STATUS_CHANGED": "የውይይት ሁኔታ ተቀየረ",
+            "CONVERSATION_UPDATED": "ውይይት ተሻሽሏል",
+            "MESSAGE_CREATED": "መልእክት ተፈጥሯል",
+            "MESSAGE_UPDATED": "መልእክት ተሻሽሏል",
+            "WEBWIDGET_TRIGGERED": "በተጠቃሚው የተከፈተ ቀጥታ ውይይት ዊጅት",
+            "CONTACT_CREATED": "እውቂያ ተፈጥሯል",
+            "CONTACT_UPDATED": "እውቂያ ተሻሽሏል",
+            "CONVERSATION_TYPING_ON": "ውይይት ማስተካከያ በተጠቃሚ ላይ ነው",
+            "CONVERSATION_TYPING_OFF": "ውይይት ማስተካከያ ከተጠቃሚ ላይ አልተጠቀሰም",
+            "INBOX_UPDATED": "Inbox updated"
+          }
+        },
+        "NAME": {
+          "LABEL": "የWebhook ስም",
+          "PLACEHOLDER": "የWebhook ስም አስገባ"
+        },
+        "END_POINT": {
+          "LABEL": "የዌብሁክ ዩአርኤል",
+          "PLACEHOLDER": "ለምሳሌ፡ {webhookExampleURL}",
+          "ERROR": "እባክዎ ትክክለኛ ዩአርኤል አስገባ"
+        },
+        "EDIT_SUBMIT": "ዌብሁክን አሻሽል",
+        "ADD_SUBMIT": "ዌብሁክ ፍጠር"
+      },
+      "TITLE": "ዌብሁክ",
+      "CONFIGURE": "አዋቂ አድርግ",
+      "HEADER": "የዌብሁክ ቅንብሮች",
+      "HEADER_BTN_TXT": "አዲስ ዌብሁክ አክል",
+      "LOADING": "ተያያዥ ዌብሁኮችን እየሰበሰበ ነው",
+      "SEARCH_404": "ይህን ጥያቄ የሚያስማሙ ንጥሎች የሉም",
+      "SIDEBAR_TXT": "<p><b>ዌብሁኮች</b> </p> <p>ዌብሁኮች ለእያንዳንዱ አካውንት ሊቀመጡ የሚችሉ የHTTP ተጠሪዎች ናቸው። እነሱ በChatwoot ውስጥ መልእክት ፍጠር ያሉ ክስተቶች ተነስተው ይነሳሉ። ለዚህ አካውንት ከአንድ በላይ ዌብሁክ ማምረት ትችላለህ። <br /><br /> የ<b>ዌብሁክ</b> ለማምረት በ<b>አዲስ ዌብሁክ አክል</b> አዝራር ጠቅ አድርግ። እንዲሁም ያለውን ዌብሁክ በመሰረዝ ትችላለህ።</p>",
+      "LIST": {
+        "404": "ለዚህ አካውንት የተያዙ ዌብሁኮች የሉም።",
+        "TITLE": "ዌብሁኮችን አስተዳደር አድርግ",
+        "TABLE_HEADER": {
+          "WEBHOOK_ENDPOINT": "Webhook መድረሻ",
+          "ACTIONS": "እርምጃዎች"
+        }
+      },
+      "EDIT": {
+        "BUTTON_TEXT": "አርትዕ",
+        "TITLE": "ዌብሁክን አርትዕ",
+        "API": {
+          "SUCCESS_MESSAGE": "የዌብሁክ ቅንብር በተሳካ ሁኔታ ተሻሽሏል",
+          "ERROR_MESSAGE": "ወደ Woot አገልግሎት ማገናኘት አልተቻለም፣ እባክዎ በኋላ ደግመው ይሞክሩ"
+        }
+      },
+      "ADD": {
+        "CANCEL": "ሰርዝ",
+        "TITLE": "አዲስ ዌብሁክ አክል",
+        "API": {
+          "SUCCESS_MESSAGE": "የዌብሁክ ቅንብር በተሳካ ሁኔታ ታክሏል",
+          "ERROR_MESSAGE": "ወደ Woot አገልግሎት ማገናኘት አልተቻለም፣ እባክዎ በኋላ ደግመው ይሞክሩ"
+        }
+      },
+      "DELETE": {
+        "BUTTON_TEXT": "ሰርዝ",
+        "API": {
+          "SUCCESS_MESSAGE": "ዌብሁክ በተሳካ ሁኔታ ተሰርዟል",
+          "ERROR_MESSAGE": "ወደ Woot አገልግሎት ማገናኘት አልተቻለም፣ እባክዎ በኋላ ደግመው ይሞክሩ"
+        },
+        "CONFIRM": {
+          "TITLE": "ማስረጃ አረጋግጥ",
+          "MESSAGE": "Webhook ለማስወገድ እርግጠኛ ነዎት? ({webhookURL})",
+          "YES": "አዎን፣ ሰርዝ ",
+          "NO": "አይ፣ አስቀምጥው"
+        }
+      }
+    },
+    "SLACK": {
+      "HEADER": "Slack",
+      "DELETE": "ሰርዝ",
+      "DELETE_CONFIRMATION": {
+        "TITLE": "አገናኝ ሰርዝ",
+        "MESSAGE": "አገናኙን ለመሰረዝ እርግጠኛ ነህ? እንደዚህ ማድረግ በSlack ስፍራህ ያሉ ውይይቶች የመዳረሻ መብት እንዲጠፋ ያደርጋል።"
+      },
+      "HELP_TEXT": {
+        "TITLE": "Slack አገናኝን እንዴት መጠቀም እንደሚቻል?",
+        "BODY": "With this integration, all of your incoming conversations will be synced to the ***{selectedChannelName}*** channel in your Slack workspace. You can manage all your customer conversations right within the channel and never miss a message.\n\nHere are the main features of the integration:\n\n**Respond to conversations from within Slack:** To respond to a conversation in the ***{selectedChannelName}*** Slack channel, simply type out your message and send it as a thread. This will create a response back to the customer through Chatwoot. It's that simple!\n\n **Create private notes:** If you want to create private notes instead of replies, start your message with ***`note:`***. This ensures that your message is kept private and won't be visible to the customer.\n\n**Associate an agent profile:** If the person who replied on Slack has an agent profile in Chatwoot under the same email, the replies will be associated with that agent profile automatically. This means you can easily track who said what and when. On the other hand, when the replier doesn't have an associated agent profile, the replies will appear from the bot profile to the customer.",
+        "BODY_ALERT": "With this integration, all of your incoming conversations will be synced to the ***{selectedChannelName}*** channel in your Slack workspace, so your team can pick them up as soon as they come in.\n\nThis integration is set to **Alerts only**, which means the Slack thread is a safe space for internal discussion. Anything your team posts there stays in Slack and is never sent to the customer.\n\n**Respond to the customer from Chatwoot:** Open the conversation from the link shared in the thread and reply from the Chatwoot dashboard. Replies and private notes added in Chatwoot keep appearing in the Slack thread, so everyone stays in the loop.",
+        "SELECTED": "ተመርጧል"
+      },
+      "MESSAGE_MODE": {
+        "TITLE": "Slack thread behaviour",
+        "DESCRIPTION": "Decide whether replies in the Slack thread reach the customer or stay internal.",
+        "OPTIONS": {
+          "TWO_WAY": {
+            "LABEL": "Two-way sync",
+            "DESCRIPTION": "Replies in the Slack thread are sent to the customer. Start a message with `note:` to keep it internal."
+          },
+          "ALERT": {
+            "LABEL": "Alerts only",
+            "DESCRIPTION": "Conversations are posted to Slack for internal discussion only. Nothing in the thread reaches the customer."
+          }
+        },
+        "UPDATE_SUCCESS": "The Slack thread behaviour is updated successfully"
+      },
+      "SELECT_CHANNEL": {
+        "OPTION_LABEL": "ቻናል ይምረጡ",
+        "UPDATE": "አዘምን",
+        "BUTTON_TEXT": "ቻናል ያገናኙ",
+        "DESCRIPTION": "Slack ስፍራህ ከChatwoot ጋር አሁን ተገናኝቷል። ነገር ግን አገናኙ በአሁኑ ጊዜ አልተነሳም። አገናኙን ለማንቀሳቀስ እና ቻናል ለChatwoot ለማገናኘት ከዚህ በታች ያለውን አዝራር ይጫኑ።\n\n**ማስታወሻ:** የግል ቻናል ለማገናኘት እትም ከሆነ Chatwoot መተግበሪያውን በSlack ቻናል ውስጥ ከመቀላቀል በፊት ያክሉ።",
+        "ATTENTION_REQUIRED": "ትኩረት ያስፈልጋል",
+        "EXPIRED": "የSlack አገናኝዎ ያልተጠበቀ ነው። በSlack ላይ መልዕክቶችን ለመቀጠል እባክዎ አገናኙን ሰርዝ እና ስፍራዎን እንደገና ያገናኙ።"
+      },
+      "UPDATE_ERROR": "አገናኙን ለማዘምን ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ",
+      "UPDATE_SUCCESS": "ቻናሉ በተሳካ ሁኔታ ተገናኝቷል",
+      "FAILED_TO_FETCH_CHANNELS": "ከSlack ቻናሎችን ለማግኘት ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ"
+    },
+    "DYTE": {
+      "CLICK_HERE_TO_JOIN": "ለመቀላቀል እዚህ ጠቅ አድርግ",
+      "LEAVE_THE_ROOM": "ከክፍሉ ውጣ",
+      "START_VIDEO_CALL_HELP_TEXT": "ከደንበኛው ጋር አዲስ የቪዲዮ ጥሪ ጀምር",
+      "JOIN_ERROR": "በጥሪው ላይ ለመቀላቀል ስህተት አጋጥሟል፣ እባክዎ ደግመው ይሞክሩ",
+      "CREATE_ERROR": "የስብሰባ አገናኝ ለመፍጠር ስህተት አጋጥሟል፣ እባክዎ ደግመው ይሞክሩ"
+    },
+    "OPEN_AI": {
+      "AI_ASSIST": "AI እገዛ",
+      "WITH_AI": " {option} ከ AI ጋር ",
+      "OPTIONS": {
+        "REPLY_SUGGESTION": "የመልስ ምክር",
+        "SUMMARIZE": "ማጠቃለያ",
+        "REPHRASE": "ጽሑፍ ያሻሽሉ",
+        "FIX_SPELLING_GRAMMAR": "ስህተትን እና አንቀሳቃሽን ያስተካክሉ",
+        "SHORTEN": "አጭር አድርግ",
+        "EXPAND": "አሰፋ",
+        "MAKE_FRIENDLY": "የመልእክት ቅኔን ወደ ደስተኛ ቀይር",
+        "MAKE_FORMAL": "ቅኔ በአካላዊ ቅኔ አጠቀም",
+        "SIMPLIFY": "ቀላል አድርግ",
+        "CONFIDENT": "እምነታማ ቃላት ይጠቀሙ",
+        "PROFESSIONAL": "ሙያዊ ቃላት ይጠቀሙ",
+        "CASUAL": "ቀላል ቃላት ይጠቀሙ",
+        "STRAIGHTFORWARD": "ቀላል ድምፅ ተጠቀም"
+      },
+      "REPLY_OPTIONS": {
+        "IMPROVE_REPLY": "መልስ አሻሽል",
+        "IMPROVE_REPLY_SELECTION": "ምርጫውን አሻሽል",
+        "CHANGE_TONE": {
+          "TITLE": "ድምፅ ቀይር",
+          "OPTIONS": {
+            "PROFESSIONAL": "ሙያዊ",
+            "CASUAL": "ቀላል ቋንቋ",
+            "STRAIGHTFORWARD": "ቀጥታ ቃል",
+            "CONFIDENT": "እምነታማ",
+            "FRIENDLY": "ደስታ ያለው"
+          }
+        },
+        "GRAMMAR": "አንተኛነትን እና ስህተትን አስተካክል",
+        "SUGGESTION": "መልስ አሳስብ",
+        "SUMMARIZE": "ውይይቱን አጠቃላይ አድርግ",
+        "ASK_COPILOT": "Copilot ጠይቅ"
+      },
+      "ASSISTANCE_MODAL": {
+        "DRAFT_TITLE": "የሥነ-ምግባር ዝግጅት",
+        "GENERATED_TITLE": "የተፈጥሮ ዝግጅት",
+        "AI_WRITING": "AI በመጽሐፍ ላይ ነው",
+        "BUTTONS": {
+          "APPLY": "ይህን ምክር አጠቀም",
+          "CANCEL": "ሰርዝ"
+        }
+      },
+      "CTA_MODAL": {
+        "TITLE": "ከOpenAI ጋር አገናኝ",
+        "DESC": "ከOpenAI የGPT ሞዴሎች ጋር የተሻለ የAI ባህሪያትን ወደ ዳሽቦርድዎ ያመጡ። ለመጀመሪያ ከOpenAI አካውንትዎ የAPI ቁልፍ ያስገቡ።",
+        "KEY_PLACEHOLDER": "የOpenAI API ቁልፍዎን ያስገቡ",
+        "BUTTONS": {
+          "NEED_HELP": "እርዳታ ይፈልጋሉ?",
+          "DISMISS": "አስወግድ",
+          "FINISH": "ቅንብሩን አሟላ"
+        },
+        "DISMISS_MESSAGE": "OpenAI አገናኝን በኋላ በፈለጉት ጊዜ ማቀናበር ይችላሉ።",
+        "SUCCESS_MESSAGE": "OpenAI አገናኝ በተሳካ ሁኔታ ተቋቋመ"
+      },
+      "TITLE": "በAI ያሻሽሉ",
+      "SUMMARY_TITLE": "ከAI ጋር ማጠቃለያ",
+      "REPLY_TITLE": "ከAI ጋር የመልስ ምክር",
+      "SUBTITLE": "በAI በመሠረት የተሻሻለ መልስ እንደሚፈጠር ነው፣ በአሁኑ የምርጫዎ ላይ የተመሠረተ።",
+      "TONE": {
+        "TITLE": "ድምጽ",
+        "OPTIONS": {
+          "PROFESSIONAL": "ሙያዊ",
+          "FRIENDLY": "ደስተኛ"
+        }
+      },
+      "BUTTONS": {
+        "GENERATE": "ፍጠር",
+        "GENERATING": "በመፍጠር ላይ...",
+        "CANCEL": "ሰርዝ"
+      },
+      "GENERATE_ERROR": "ይዘቱን ለማከናወን ላይ ስህተት አጋጥሟል፣ እባክዎ የOpenAI API ቁልፍዎን ያረጋግጡ እና እንደገና ይሞክሩ"
+    },
+    "DELETE": {
+      "BUTTON_TEXT": "ሰርዝ",
+      "API": {
+        "SUCCESS_MESSAGE": "አካባቢው በተሳካ ሁኔታ ተሰርዟል"
+      }
+    },
+    "CONNECT": {
+      "BUTTON_TEXT": "አገናኝ"
+    },
+    "DASHBOARD_APPS": {
+      "TITLE": "የዳሽቦርድ መተግበሪያዎች",
+      "HEADER_BTN_TXT": "አዲስ የዳሽቦርድ መተግበሪያ አክል",
+      "SIDEBAR_TXT": "<p><b>የዳሽቦርድ መተግበሪያዎች</b></p><p>የዳሽቦርድ መተግበሪያዎች ድርጅቶች በChatwoot ዳሽቦርድ ውስጥ መተግበሪያ ለመገጣጠም እንዲችሉ ያስችላቸዋል። ይህ ባህሪ በተለየ ሁኔታ መተግበሪያ ለመፍጠር እና በዳሽቦርድ ውስጥ ለተጠቃሚ መረጃ፣ ትዕዛዞቻቸው ወይም ያለፉ የክፍያ ታሪኮቻቸው ለማቅረብ ይረዳል።</p><p>በChatwoot ዳሽቦርድ ውስጥ መተግበሪያዎን ሲገጥሙ የውይይትና የእውቂያ አገናኝ እንደ መስኮት ክስተት ያገኛሉ። በገፅዎ ላይ ለመልእክት ክስተት ተቀባይ እንዲሆን አስፈጻሚ አድርጉ።</p><p>አዲስ የዳሽቦርድ መተግበሪያ ለማክለብ በ'አዲስ የዳሽቦርድ መተግበሪያ አክል' አዝራር ጠቅ አድርጉ።</p>",
+      "DESCRIPTION": "የዳሽቦርድ መተግበሪያዎች ድርጅቶች በዳሽቦርድ ውስጥ መተግበሪያ ለመገጣጠም እንዲችሉ ያስችላቸዋል። ይህ ባህሪ በተለየ ሁኔታ መተግበሪያ ለመፍጠር እና ለተጠቃሚ መረጃ፣ ትዕዛዞቻቸው ወይም ያለፉ የክፍያ ታሪኮቻቸው ለማቅረብ ይረዳል።",
+      "LEARN_MORE": "ስለ Dashboard መተግበሪያዎች ተጨማሪ ያውቁ",
+      "COUNT": "{n} የዳሽቦርድ መተግበሪያ | {n} የዳሽቦርድ መተግበሪያዎች",
+      "SEARCH_PLACEHOLDER": "የዳሽቦርድ መተግበሪያዎችን ይፈልጉ...",
+      "NO_RESULTS": "በፍለጋዎ የሚስማሙ የዳሽቦርድ መተግበሪያዎች አልተገኙም",
+      "LIST": {
+        "404": "እስካሁን በዚህ አካውንት ላይ የታካሚ የዳሽቦርድ መተግበሪያዎች የሉም",
+        "LOADING": "የዳሽቦርድ መተግበሪያዎችን እየሰበሰበ...",
+        "TABLE_HEADER": {
+          "NAME": "ስም",
+          "ENDPOINT": "መድረሻ",
+          "ACTIONS": "እርምጃዎች"
+        },
+        "EDIT_TOOLTIP": "መተግበሪያ አርትዕ",
+        "DELETE_TOOLTIP": "መተግበሪያ ሰርዝ"
+      },
+      "FORM": {
+        "TITLE_LABEL": "ስም",
+        "TITLE_PLACEHOLDER": "ለዳሽቦርድ መተግበሪያዎ ስም አስገባ",
+        "TITLE_ERROR": "ለዳሽቦርድ መተግበሪያ ስም አስፈላጊ ነው",
+        "URL_LABEL": "መድረሻ",
+        "URL_PLACEHOLDER": "መተግበሪያዎ የተቀመጠበትን መድረሻ ዩአርኤል አስገባ",
+        "URL_ERROR": "ትክክለኛ ዩአርኤል አስፈላጊ ነው"
+      },
+      "CREATE": {
+        "HEADER": "አዲስ የዳሽቦርድ መተግበሪያ አክል",
+        "FORM_SUBMIT": "አስገባ",
+        "FORM_CANCEL": "ሰርዝ",
+        "API_SUCCESS": "የዳሽቦርድ መተግበሪያ በተሳካ ሁኔታ ተቀይሯል",
+        "API_ERROR": "መተግበሪያ ማፍጠር አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ"
+      },
+      "UPDATE": {
+        "HEADER": "የዳሽቦርድ መተግበሪያ አርትዕ",
+        "FORM_SUBMIT": "አሻሽል",
+        "FORM_CANCEL": "ሰርዝ",
+        "API_SUCCESS": "የዳሽቦርድ መተግበሪያ በተሳካ ሁኔታ ተሻሽሏል",
+        "API_ERROR": "መተግበሪያውን ማሻሻል አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ"
+      },
+      "DELETE": {
+        "CONFIRM_YES": "አዎን፣ ሰርዝትው",
+        "CONFIRM_NO": "አይ፣ አስቀምጥው",
+        "TITLE": "ማስረጃ አረጋግጥ",
+        "MESSAGE": "መተግበሪያውን - {appName} ለማስወገድ እርግጠኛ ነዎት?",
+        "API_SUCCESS": "የዳሽቦርድ መተግበሪያ በተሳካ ሁኔታ ተሰርዟል",
+        "API_ERROR": "መተግበሪያውን ማስወገድ አልተቻለም። እባክዎ በኋላ ደግመው ይሞክሩ"
+      }
+    },
+    "LINEAR": {
+      "HEADER": "Linear",
+      "ADD_OR_LINK_BUTTON": "Linear ጉዳይ ፍጠር/ያገናኝ",
+      "LOADING": "Linear ጉዳዮችን እየተመለከቱ...",
+      "LOADING_ERROR": "Linear ጉዳዮችን ለማግኘት ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ",
+      "CREATE": "ፍጠር",
+      "LINK": {
+        "SEARCH": "ጉዳዮችን ፈልግ",
+        "SELECT": "ጉዳይ ይምረጡ",
+        "TITLE": "አገናኝ",
+        "EMPTY_LIST": "ምንም የlinear ጉዳዮች አልተገኙም",
+        "LOADING": "በመጫን ላይ",
+        "ERROR": "Linear ጉዳዮችን ለማግኘት ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ",
+        "LINK_SUCCESS": "ጉዳዩ በተሳካ ሁኔታ ተገናኝቷል",
+        "LINK_ERROR": "ጉዳዩን ለመገናኘት ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ",
+        "LINK_TITLE": "ንግግር (#{conversationId}) ከ {name} ጋር"
+      },
+      "ADD_OR_LINK": {
+        "TITLE": "Linear ጉዳይ ፍጠር/ያገናኝ",
+        "DESCRIPTION": "ከውይይቶች የLinear ጉዳዮችን ፍጠር ወይም አሁን ያሉትን ለቀጣይ መከታተያ ያገናኝ።",
+        "FORM": {
+          "TITLE": {
+            "LABEL": "ርዕስ",
+            "PLACEHOLDER": "ርዕስ ያስገቡ",
+            "REQUIRED_ERROR": "ርዕስ ያስፈልጋል"
+          },
+          "DESCRIPTION": {
+            "LABEL": "መግለጫ",
+            "PLACEHOLDER": "መግለጫ ያስገቡ"
+          },
+          "TEAM": {
+            "LABEL": "ቡድን",
+            "PLACEHOLDER": "ቡድን ይምረጡ",
+            "SEARCH": "ቡድን ይፈልጉ",
+            "REQUIRED_ERROR": "ቡድን ያስፈልጋል"
+          },
+          "ASSIGNEE": {
+            "LABEL": "ተሰጥቷል",
+            "PLACEHOLDER": "ተሰጥቷል የሚለውን ይምረጡ",
+            "SEARCH": "ተሰጥቷል የሚለውን ይፈልጉ"
+          },
+          "PRIORITY": {
+            "LABEL": "ቅደም ተከተል",
+            "PLACEHOLDER": "ቅድሚያ ይምረጡ",
+            "SEARCH": "ቅድሚያ ይፈልጉ"
+          },
+          "LABEL": {
+            "LABEL": "መለያ",
+            "PLACEHOLDER": "መለያ ይምረጡ",
+            "SEARCH": "መለያ ይፈልጉ"
+          },
+          "STATUS": {
+            "LABEL": "ሁኔታ",
+            "PLACEHOLDER": "ሁኔታ ይምረጡ",
+            "SEARCH": "ሁኔታ ይፈልጉ"
+          },
+          "PROJECT": {
+            "LABEL": "ፕሮጀክት",
+            "PLACEHOLDER": "ፕሮጀክት ይምረጡ",
+            "SEARCH": "ፕሮጀክት ይፈልጉ"
+          }
+        },
+        "CREATE": "ፍጠር",
+        "CANCEL": "ሰርዝ",
+        "CREATE_SUCCESS": "ጉዳዩ በተሳካ ሁኔታ ተፈጥሯል",
+        "CREATE_ERROR": "ጉዳዩን ለማፍራት ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ",
+        "LOADING_TEAM_ERROR": "ቡድኖችን ለማግኘት ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ",
+        "LOADING_TEAM_ENTITIES_ERROR": "የቡድን ንዑሶችን ለማግኘት ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ"
+      },
+      "ISSUE": {
+        "STATUS": "ሁኔታ",
+        "PRIORITY": "ቅደም ተከተል",
+        "ASSIGNEE": "ተሰጥቷል",
+        "LABELS": "መለያዎች",
+        "CREATED_AT": "ተፈጥሯል {createdAt}"
+      },
+      "UNLINK": {
+        "TITLE": "አልፎ አጥፋ",
+        "SUCCESS": "ጉዳዩ በተሳካ ሁኔታ ተያይዞ ነው",
+        "ERROR": "ጉዳዩን ለመሰረዝ ስህተት አጋጥሟል፣ እባክዎን እንደገና ይሞክሩ"
+      },
+      "NO_LINKED_ISSUES": "ተገናኝቷ ያልተገኙ ችግሮች የሉም",
+      "DELETE": {
+        "TITLE": "እርግጠኛ ነዎት እንደ አንድ አካል መሳተፍ መሰረዝ ይፈልጋሉ?",
+        "MESSAGE": "እርግጠኛ ነዎት እንደ አንድ አካል መሳተፍ መሰረዝ ይፈልጋሉ?",
+        "CONFIRM": "አዎን፣ አጥፋ",
+        "CANCEL": "ሰርዝ"
+      },
+      "CTA": {
+        "TITLE": "Linear አገልግሎት ያገናኙ",
+        "AGENT_DESCRIPTION": "Linear የስራ ቦታ አልተገናኘም። ይህን አገናኝ ለመጠቀም እባክዎ አስተዳደሩን የስራ ቦታ እንዲገናኝ ይጠይቁ።",
+        "DESCRIPTION": "Linear የስራ ቦታ አልተገናኘም። ይህን አገናኝ ለመጠቀም የስራ ቦታዎን ለመገናኘት በታች ያለውን አዝራር ይጫኑ።",
+        "BUTTON_TEXT": "Linear የስራ ቦታ ያገናኙ"
+      }
+    },
+    "GOOGLE_TRANSLATE": {
+      "HEADER": "Google Translate",
+      "DELETE_MESSAGE": "Agents won't be able to translate messages with Google Translate anymore. If Google Translate is your translation service, auto-translate stops until you pick another one.",
+      "SETUP": {
+        "TITLE": "Set up Google Translate",
+        "DESCRIPTION": "You'll need a Google Cloud project. It takes about five minutes.",
+        "STEPS": {
+          "ENABLE_API": {
+            "TITLE": "Turn on the Cloud Translation API",
+            "DESCRIPTION": "Pick a project in the Google Cloud console and enable the Cloud Translation API. Note the project ID.",
+            "LINK": "Open Cloud Translation API"
+          },
+          "CREATE_KEY": {
+            "TITLE": "Create a service account key",
+            "DESCRIPTION": "Create a service account with the Cloud Translation API User role. Then open it, go to Keys, and add a JSON key.",
+            "LINK": "Open service accounts"
+          },
+          "CONNECT": {
+            "TITLE": "Connect it here",
+            "DESCRIPTION": "Click Connect, enter the project ID and paste the key file. We check it with Google before saving."
+          }
+        }
+      },
+      "DETAILS": {
+        "PROJECT": "Google Cloud project",
+        "SERVICE": "Translation service",
+        "SERVICE_GOOGLE": "Google Translate handles all translation in your conversations. When auto-translate is on, it translates incoming messages into each agent's language and sends replies in the customer's language. Agents also use it when they translate a message from its menu.",
+        "SERVICE_OTHER": "Captain is selected as your translation service, so Google Translate isn't used right now. Auto-translate and the Translate action on messages both go through Captain. Switch the service to Google Translate to use this integration instead.",
+        "CHANGE": "ቀይር"
+      }
+    },
+    "NOTION": {
+      "HEADER": "Notion",
+      "DELETE": {
+        "TITLE": "እርግጠኛ ነህ እንደ Notion አገናኝ መሰረዝ?",
+        "MESSAGE": "ይህን አገናኝ መሰረዝ የ Notion ስፔስ ወደ መዳረሻ መዳረሻዎን እንዲያስወግድ እና ሁሉንም ተያያዥ ተግባሮች እንዲቆሙ ያደርጋል።",
+        "CONFIRM": "አዎን፣ ሰርዝ",
+        "CANCEL": "ሰርዝ"
+      }
+    }
+  },
+  "CAPTAIN": {
+    "NAME": "ካፕቴን",
+    "HEADER_KNOW_MORE": "ተጨማሪ ያውቁ",
+    "OVERVIEW": {
+      "HEADER": "አጠቃላይ እይታ",
+      "WELCOME": {
+        "LABEL": "Captain summary",
+        "LOADING": "Generating summary…"
+      },
+      "INBOX_BANNER": {
+        "TEXT": "This assistant isn't connected to any inbox yet, so it won't respond to conversations.",
+        "ACTION": "Connect inbox",
+        "DISMISS": "Dismiss"
+      },
+      "COVERAGE_BANNER": {
+        "TEXT": "{count} FAQ suggestions are ready for review, keeping coverage at {coverage}%. Approve them so your assistant can resolve more on its own.",
+        "ACTION": "Review suggestions",
+        "DISMISS": "Dismiss"
+      },
+      "RANGES": {
+        "INSUFFICIENT_HISTORY": "Not enough reporting history yet",
+        "THIS_WEEK": "This week",
+        "LAST_WEEK": "Last week",
+        "LAST_DAYS": "Last {count} days",
+        "THIS_MONTH": "This month",
+        "LAST_MONTH": "Last month"
+      },
+      "METRICS": {
+        "HANDLED": {
+          "LABEL": "Conversations handled",
+          "HINT": "Conversations where Captain replied to the customer or handed the conversation to your team."
+        },
+        "AUTO_RESOLUTION": {
+          "LABEL": "Auto-resolution rate",
+          "HINT": "The share of handled conversations Captain resolved without help from your team. Higher means Captain resolved more on its own."
+        },
+        "HANDOFF": {
+          "LABEL": "Handoff rate",
+          "HINT": "The share of handled conversations Captain passed to your team. Lower means fewer conversations needed an agent."
+        },
+        "HOURS_SAVED": {
+          "LABEL": "Time saved",
+          "HINT": "An estimate of how much agent reply time Captain saved.",
+          "NOTE": "Based on two minutes saved for each public Captain reply."
+        },
+        "REOPEN": {
+          "LABEL": "Reopen rate",
+          "HINT": "The share of Captain-resolved conversations that customers returned to later.",
+          "NOTE": "Lower means more resolutions stayed resolved."
+        },
+        "DEPTH": {
+          "LABEL": "Messages / conversation",
+          "HINT": "The average number of replies Captain sent in each conversation it handled.",
+          "NOTE": "A lower number can mean quicker answers, but complex questions may need more replies."
+        }
+      },
+      "DRILLDOWN": {
+        "EMPTY": "No records found for this metric.",
+        "ERROR": "Could not load records. Please try again.",
+        "LOAD_MORE": "Load more",
+        "RESULT_COUNT_CONVERSATION": "{count} conversation | {count} conversations"
+      },
+      "KNOWLEDGE": {
+        "TITLE": "Knowledge coverage",
+        "COVERAGE": "{pct}% approved",
+        "APPROVED": "Approved FAQs",
+        "SUGGESTIONS": "FAQ suggestions",
+        "DOCUMENTS": "ሰነዶች"
+      },
+      "LINKS": {
+        "DOCS": {
+          "TITLE": "Captain docs",
+          "DESCRIPTION": "Guides and how-tos for Captain"
+        },
+        "PLAYGROUND": {
+          "TITLE": "መጫወቻ ቦታ",
+          "DESCRIPTION": "Test this assistant's replies"
+        },
+        "BILLING": {
+          "TITLE": "ክፍያ",
+          "DESCRIPTION": "Manage credits and plan"
+        }
+      },
+      "V2": {
+        "DRILLDOWN": {
+          "HANDLED": "Episodes where Captain participated during the selected period.",
+          "RESOLVED": "Episodes resolved by Captain without a handoff or human reply before resolution.",
+          "HANDED_OFF": "Episodes handed off after Captain participated.",
+          "REOPENED": "Captain-resolved episodes that subsequently reopened.",
+          "DURABLE": "Captain-resolved episodes that remained closed for at least seven days.",
+          "CLOSED_WITH_TEAM": "Episodes where Captain participated but neither resolved autonomously nor handed off.",
+          "REOPENED_WITHIN_7_DAYS": "Captain-resolved episodes that reopened within seven days.",
+          "STAYED_CLOSED": "Captain-resolved episodes with no reopen recorded within seven days. Recent resolutions are included.",
+          "HANDOFF_REASON": "Episodes handed off for this reason: {reason}.",
+          "COUNT": "No episodes | 1 episode | {count} episodes",
+          "EPISODES_HINT": "A conversation can appear more than once if Captain handled it in separate episodes. Episodes are grouped by when they started.",
+          "STARTED_AT": "Episode started {time}",
+          "RETRY": "Try again"
+        },
+        "EMPTY": "No data available for this period.",
+        "SUMMARY": {
+          "GREETING": "Hello, {name}!",
+          "DEFAULT_NAME": "there",
+          "EMPTY": "Captain's performance summary will appear here when enough activity is available.",
+          "PREVIOUS": "Previous summary point",
+          "NEXT": "Next summary point"
+        },
+        "UNITS": {
+          "DAYS": "{value}d",
+          "HOURS": "{value}h",
+          "MINUTES": "{value} min"
+        },
+        "METRICS": {
+          "TIME_SAVED": {
+            "LABEL": "Saved in agent effort and time"
+          },
+          "DURABLE": {
+            "LABEL": "Captain resolutions remained closed",
+            "NOT_APPLICABLE_HINT": "No resolutions in this period have seven days of follow-up yet. Durability is unavailable.",
+            "HINT": "The share of Captain-resolved conversations that were still closed seven days later.",
+            "NOTE": "Only resolutions old enough to observe for seven days are included."
+          },
+          "MEDIAN_RESOLUTION": {
+            "LABEL": "Median resolution time",
+            "HINT": "The typical time from when a conversation reached Captain until it was resolved.",
+            "NOTE": "Lower means customers generally got resolved sooner."
+          },
+          "DEPTH": {
+            "LABEL": "Messages per conversation"
+          },
+          "OF_TOTAL": "of {total}"
+        },
+        "RESOLUTION_FLOW": {
+          "ARIA_LABEL": "Flow of handled conversations through Captain and team outcomes",
+          "NODES": {
+            "HANDLED": "Handled",
+            "RESOLVED_BY_CAPTAIN": "Resolved by Captain",
+            "HANDED_OFF": "Handed off",
+            "CLOSED_WITH_TEAM": "Closed with team",
+            "REOPENED": "Reopened in 7d",
+            "STAYED_CLOSED": "Stayed closed",
+            "OTHER_REASONS": "Other reasons"
+          }
+        },
+        "HANDOFF_REASONS": {
+          "TITLE": "Handoff reasons",
+          "CUSTOMER_REQUEST": "Customer requested",
+          "MISSING_KNOWLEDGE": "Missing knowledge",
+          "UNSUPPORTED_REQUEST": "Unsupported request",
+          "POLICY_RESTRICTION": "Policy restriction",
+          "TOOL_FAILURE": "Tool failure",
+          "PENDING_CLARIFICATION": "Pending customer clarification",
+          "PERCENTAGE": "({value}%)",
+          "USAGE_LIMIT": "Usage limit",
+          "UNCLASSIFIED": "Unclassified"
+        },
+        "RESOLUTION_TREND": {
+          "TITLE": "Resolution trend",
+          "COMPARISON_LABEL": "Weekday-aligned comparison",
+          "COMPARISON_HINT": "Compare resolution rates on matching weekdays, such as Monday with Monday.",
+          "COMPARISON_NOTE": "Today is compared up to the same time of day.",
+          "CONVERSATION_COUNT": "Conversation count",
+          "RESOLUTION_RATE": "Resolution rate",
+          "CURRENT_PERIOD": "Current period",
+          "PREVIOUS_PERIOD": "Previous period",
+          "HANDLED": "Handled",
+          "RESOLVED": "Resolved by Captain",
+          "ARIA_LABEL": "Handled and Captain-resolved conversations by reporting period",
+          "RATE_ARIA_LABEL": "Current and previous Captain resolution rates"
+        },
+        "CSAT": {
+          "TITLE": "Captain CSAT",
+          "AUTONOMOUS": "Captain-resolved conversations",
+          "AUTONOMOUS_HINT": "The average customer rating for conversations Captain resolved without help from your team.",
+          "ASSISTED": "Captain-assisted conversations",
+          "ASSISTED_HINT": "The average customer rating when Captain helped before your team resolved the conversation.",
+          "VS_HUMANS": "{value} vs humans"
+        },
+        "USAGE": {
+          "TITLE": "Usage",
+          "CREDITS": "Credits",
+          "DOCUMENTS": "ሰነዶች",
+          "USED": "({percentage}% used)",
+          "VALUE": "{used}/{total}",
+          "REFRESH": "Refresh usage",
+          "BUY_MORE": "ተጨማሪ ክሬዲቶች ግዙ"
+        },
+        "KNOWLEDGE": {
+          "SUGGESTED": "Suggested FAQs",
+          "REVIEW": "Review FAQs"
+        }
+      }
+    },
+    "ASSISTANT_SWITCHER": {
+      "ASSISTANTS": "አገልጋዮች",
+      "SWITCH_ASSISTANT": "በአገልጋዮች መካከል ቀይር",
+      "NEW_ASSISTANT": "አገልጋይ ፍጠር",
+      "EMPTY_LIST": "አንድ እርዳታ አልተገኘም፣ እባክዎ ለመጀመር አንድ ይፍጠሩ"
+    },
+    "COPILOT": {
+      "TITLE": "ኮፓይሎት",
+      "TRY_THESE_PROMPTS": "እነዚህን ጥያቄዎች ይሞክሩ",
+      "PANEL_TITLE": "ከCopilot ጋር መጀመርያ ይውሰዱ",
+      "KICK_OFF_MESSAGE": "ፈጣን ማጠቃለያ ይፈልጋሉ? ያለፉትን ውይይቶች ማረጋገጥ ይፈልጋሉ? ወይም የተሻለ መልስ ማዘጋጀት ይፈልጋሉ? Copilot እዚህ ነው ነገሮችን ለማሳካት።",
+      "SEND_MESSAGE": "መልእክት ላክ...",
+      "EMPTY_MESSAGE": "መልስ ለመፍጠር ስህተት ተከስቷል። እባክዎ እንደገና ይሞክሩ።",
+      "LOADER": "Captain እየሰራ ነው",
+      "YOU": "አንተ",
+      "USE": "ይጠቀሙበት",
+      "RESET": "እንደገና ማስጀመር",
+      "NEW_CHAT": "New chat",
+      "HISTORY": "Past chats",
+      "NO_HISTORY": "Your past Copilot chats will appear here.",
+      "LOAD_MORE": "Load more chats",
+      "LOADING_CHAT": "Loading chat...",
+      "LOADING_HISTORY": "Loading past chats...",
+      "SHOW_STEPS": "እርምጃዎችን አሳይ",
+      "SELECT_ASSISTANT": "አስማሪ ይምረጡ",
+      "PROMPTS": {
+        "SUMMARIZE": {
+          "LABEL": "ይነጻጸሩ ይነጋገሩትን",
+          "CONTENT": "በደንበኛው እና የድጋፍ ወኪሉ መካከል የተነጋገሩትን አስፈላጊ ነጥቦች ይነጻጸሩ፣ ከዚህ ጋር ደንበኛው ያለውን ችግር፣ ጥያቄዎችና የድጋፍ ወኪሉ የሰጠውን መፍትሄ ወይም መልስ ያካትቱ።"
+        },
+        "SUGGEST": {
+          "LABEL": "መልስ ይጠቅሙ",
+          "CONTENT": "የደንበኛውን ጥያቄ ያስተካክሉ እና ችግሮቻቸውን ወይም ጥያቄዎቻቸውን በትክክል የሚያስተካክል መልስ ያዘጋጁ። መልሱ ግልጽ፣ አጭር እና አገልግሎት የሚሰጥ መሆን አለበት።"
+        },
+        "RATE": {
+          "LABEL": "ይህን ውይይት ደረጃ ያድርጉ",
+          "CONTENT": "ውይይቱን እንዴት እንደሚሰራ እና የደንበኛው ፍላጎት እንደሚሰማ ይገምግሙ። በቃል ቅርጸት፣ ግልጽነት እና ተፅዕኖ መሠረት ከ<b>5</b> ውስጥ ደረጃ ያካፍሉ።"
+        },
+        "HIGH_PRIORITY": {
+          "LABEL": "ከፍተኛ ቅድሚያ ያላቸው ውይይቶች",
+          "CONTENT": "ሁሉንም ከፍተኛ ቅድሚያ ያላቸው ክፍተት ያሉ ውይይቶች ማጠቃለያ ስጠኝ። የውይይት መለያ, የደንበኛ ስም (ካለ), የመጨረሻ መልእክት ይዘት እና የተመደበው ወኪል አካትተው። በሁኔታ መሰብሰብ አድርግ።"
+        },
+        "LIST_CONTACTS": {
+          "LABEL": "እያካተቱ ያሉ ሰዎችን ዝርዝር አሳይ",
+          "CONTENT": "ከፍተኛ 10 እያካተቱ ያሉ ሰዎችን ዝርዝር አሳይ። ስም, ኢሜል ወይም ስልክ ቁጥር (ካለ), የመጨረሻ ጊዜ እና መለያዎች (ካሉ) አካትተው።"
+        }
+      }
+    },
+    "PLAYGROUND": {
+      "USER": "አንተ",
+      "ASSISTANT": "አስማሪ",
+      "MESSAGE_PLACEHOLDER": "መልእክትህን አስጻፍ...",
+      "SEND_MESSAGE": "መልእክት ላክ",
+      "HEADER": "መጫወቻ ቦታ",
+      "DESCRIPTION": "ይህን መጫወቻ ቦታ ተጠቅመህ መልእክቶችን ወደ አስማሪህ ላክ እና ትክክለኛ፣ ፈጣን እና በተጠባበቀው ቅኔ እንደሚመለስ አረጋግጥ።",
+      "CREDIT_NOTE": "እዚህ የተላኩ መልእክቶች ወደ ካፕቴን ክሬዲቶችዎ ይቆጠራሉ።",
+      "CLEAR_CONVERSATION": "Clear conversation",
+      "RESPONSE_ERROR": "Captain could not complete this test run. Review the setup and try again.",
+      "SETUP": {
+        "TITLE": "Test setup",
+        "DESCRIPTION": "Changes here apply only to this playground session unless you explicitly save an item.",
+        "TOGGLE": "Toggle test setup",
+        "CLOSE": "Close test setup",
+        "RESET": "Reset test setup",
+        "TEMPORARY": "Temporary",
+        "SESSION_ONLY": "Session only",
+        "INCLUDE_IN_TEST": "Include in this test",
+        "ADD_TO_TEST": "Add to test (↵)",
+        "LOAD_ERROR": "The saved assistant setup could not be loaded.",
+        "INVALID_CONFIGURATION": "Complete or remove the included temporary scenarios before sending a message.",
+        "SAVE_SCENARIO_SUCCESS": "The scenario was saved and remains included in this test.",
+        "SAVE_SCENARIO_ERROR": "The scenario could not be saved.",
+        "SAVE_RULE_SUCCESS": "The rule was saved and remains included in this test.",
+        "SAVE_RULE_ERROR": "The rule could not be saved.",
+        "RULE_ALREADY_SAVED": "That exact rule is already saved, so no duplicate was created.",
+        "SCENARIOS": {
+          "TAB_TITLE": "ስነ-ሁኔታዎች",
+          "CREATE_TITLE": "Add a temporary scenario",
+          "CREATE_HINT": "Try a new behavior without changing the assistant configuration.",
+          "SAVED_SUMMARY": "Existing scenarios ({count})",
+          "ADD_PERMANENTLY": "Add scenario permanently",
+          "DISABLED": "ተከልክሏል",
+          "EMPTY": "This assistant has no saved scenarios.",
+          "COMPOSER_PLACEHOLDER": "Type a temporary scenario title...",
+          "COLLAPSE": "Collapse temporary scenario",
+          "EXPAND": "Expand temporary scenario",
+          "REMOVE": "Remove temporary scenario"
+        },
+        "GUIDELINES": {
+          "TAB_TITLE": "Guidelines",
+          "CREATE_TITLE": "Add a temporary guideline",
+          "CREATE_HINT": "Test a response preference before adding it to the assistant.",
+          "SAVED_SUMMARY": "Existing guidelines ({count})",
+          "ADD_PERMANENTLY": "Add guideline permanently",
+          "EMPTY": "This assistant has no saved response guidelines.",
+          "COMPOSER_PLACEHOLDER": "Type a temporary guideline...",
+          "PLACEHOLDER": "የምላሽ መመሪያ አክል",
+          "REMOVE": "Remove temporary response guideline"
+        },
+        "GUARDRAILS": {
+          "TAB_TITLE": "መከላከያ መስመሮች",
+          "CREATE_TITLE": "Add a temporary guardrail",
+          "CREATE_HINT": "Test a safety boundary before adding it to the assistant.",
+          "SAVED_SUMMARY": "Existing guardrails ({count})",
+          "ADD_PERMANENTLY": "Add guardrail permanently",
+          "EMPTY": "This assistant has no saved guardrails.",
+          "COMPOSER_PLACEHOLDER": "Type a temporary guardrail...",
+          "PLACEHOLDER": "መከላከያ ያክሉ",
+          "REMOVE": "Remove temporary guardrail"
+        },
+        "KNOWLEDGE": {
+          "TAB_TITLE": "Knowledge",
+          "AVAILABLE_TITLE": "Knowledge available to Captain",
+          "AVAILABLE_DESCRIPTION": "Saved sources are summarized here and managed outside the playground.",
+          "DOCUMENTS": "ሰነዶች",
+          "FAQS": "ተደጋጋሚ ጥያቄዎች",
+          "TEMPORARY_TITLE": "Temporary knowledge",
+          "ADD_PERMANENTLY": "Add document permanently",
+          "LABEL": "Reference text",
+          "PLACEHOLDER": "Paste or write new knowledge for this test",
+          "HINT": "This text is attached only to playground requests unless you add it as a document."
+        },
+        "SAVE_KNOWLEDGE_SUCCESS": "Knowledge added as a document.",
+        "SAVE_KNOWLEDGE_ERROR": "Unable to add knowledge as a document."
+      },
+      "RUN_DETAILS": {
+        "SUMMARY": "Run details · {duration}ms",
+        "HANDLER_VALUE": "Handled by: {handler}",
+        "SCENARIOS": "No scenarios | One scenario | {count} scenarios",
+        "RULES": "{count} rules",
+        "KNOWLEDGE_ATTACHED": "Temporary knowledge was attached to this run.",
+        "NO_EVENTS": "No tool calls or scenario handoffs were recorded.",
+        "HANDOFF": "{from} → {to}",
+        "STATUS": {
+          "RUNNING": "Running",
+          "COMPLETED": "Completed",
+          "FAILED": "አልተሳካም"
+        }
+      }
+    },
+    "PAYWALL": {
+      "TITLE": "Captain AI እንዲጠቀሙ ያሻሽሉ",
+      "AVAILABLE_ON": "Captain በነፃ እቅድ ላይ አይገኝም።",
+      "UPGRADE_PROMPT": "እርስዎ እቅድዎን ያሻሽሉ እንዲሁም እርዳኞቻችንን፣ ኮፒሎትን እና ተጨማሪ ነገሮችን ያግኙ።",
+      "UPGRADE_NOW": "አሁን ያሻሽሉ",
+      "CANCEL_ANYTIME": "እቅድዎን በማንኛውም ጊዜ መቀየር ወይም መሰረዝ ይችላሉ"
+    },
+    "ENTERPRISE_PAYWALL": {
+      "AVAILABLE_ON": "Captain AI በኢንተርፕራይዝ እቅዶች ብቻ ይገኛል።",
+      "UPGRADE_PROMPT": "እባክዎ እቅድዎን ያሻሽሉ እንዲሁም እንደ አስማሚዎቻችን፣ ኮፓይሎት እና ተጨማሪ አገልግሎቶች ያግኙ።",
+      "ASK_ADMIN": "እባክዎ ለእቅድ ማሻሻያ ከአስተዳደሩ ጋር ያግኙ።"
+    },
+    "BANNER": {
+      "RESPONSES": "የመልስ አገዛዝዎን ከ<b>80</b>% በላይ ተጠቅመዋል። Captain AI ለመቀጠል እባክዎ እቅድዎን ያሻሽሉ።",
+      "DOCUMENTS": "የሰነድ አገዛዝ ደረሰ። Captain AI ለመቀጠል እባክዎ እቅድዎን ያሻሽሉ።"
+    },
+    "FORM": {
+      "CANCEL": "ሰርዝ",
+      "CREATE": "ፍጠር",
+      "EDIT": "አዘምን"
+    },
+    "ASSISTANTS": {
+      "HEADER": "እገዛ አገልጋዮች",
+      "NO_ASSISTANTS_AVAILABLE": "በአካውንትዎ ውስጥ ምንም እርዳታ አልተገኙም።",
+      "ADD_NEW": "አዲስ እገዛ አገልጋይ ፍጠር",
+      "DELETE": {
+        "TITLE": "እርግጠኛ ነህ እገዛ አገልጋዩን ለማስወገድ?",
+        "DESCRIPTION": "This action is permanent. Deleting this assistant will remove it from all connected inboxes and permanently erase its custom tools and all generated knowledge.",
+        "CONFIRM": "አዎን፣ ሰርዝ",
+        "SUCCESS_MESSAGE": "እገዛ አገልጋዩ በተሳካ ሁኔታ ተሰርዟል",
+        "ERROR_MESSAGE": "እገዛ አገልጋዩን ማስወገድ ላይ ስህተት አጋጥሟል፣ እባክዎን እንደገና ይሞክሩ።"
+      },
+      "FORM_DESCRIPTION": "እባክዎን ዝርዝሮቹን ይሙሉ እና እገዛ አገልጋዩን ለማስተካከል ስሙን፣ ዓላማውን እና የሚደግፍበትን ምርት ይግለጹ።",
+      "CREATE": {
+        "TITLE": "እገዛ አገልጋይ ፍጠር",
+        "SUCCESS_MESSAGE": "እገዛ አገልጋዩ በተሳካ ሁኔታ ተፈጥሯል",
+        "ERROR_MESSAGE": "እገዛ አገልጋዩን ለማፍራት ስህተት አጋጥሟል፣ እባክዎን እንደገና ይሞክሩ።"
+      },
+      "FORM": {
+        "UPDATE": "አዘምን",
+        "SECTIONS": {
+          "BASIC_INFO": "መሠረታዊ መረጃ",
+          "SYSTEM_MESSAGES": "የስርዓት መልእክቶች",
+          "INSTRUCTIONS": "መመሪያዎች",
+          "FEATURES": "ባህሪያት",
+          "TOOLS": "መሣሪያዎች "
+        },
+        "NAME": {
+          "LABEL": "ስም",
+          "PLACEHOLDER": "የእርዳታ ስም ያስገቡ",
+          "ERROR": "ስም አስፈላጊ ነው"
+        },
+        "DESCRIPTION": {
+          "LABEL": "መግለጫ",
+          "PLACEHOLDER": "እርዳታ መግለጫ ያስገቡ",
+          "ERROR": "መግለጫ አስፈላጊ ነው"
+        },
+        "PRODUCT_NAME": {
+          "LABEL": "የምርት ስም",
+          "PLACEHOLDER": "የምርት ስም ያስገቡ",
+          "ERROR": "የምርት ስም አስፈላጊ ነው"
+        },
+        "WELCOME_MESSAGE": {
+          "LABEL": "እንኳን ደህና መጡ መልእክት",
+          "PLACEHOLDER": "እንኳን ደህና መጡ መልእክት ያስገቡ"
+        },
+        "HANDOFF_MESSAGE": {
+          "LABEL": "ማስተላለፊያ መልእክት",
+          "PLACEHOLDER": "የማስተላለፊያ መልእክት ያስገቡ"
+        },
+        "RESOLUTION_MESSAGE": {
+          "LABEL": "የመፍትሄ መልእክት",
+          "PLACEHOLDER": "የመፍትሄ መልእክት ያስገቡ"
+        },
+        "INACTIVITY_RESOLUTION": {
+          "TITLE": "When customers stop replying",
+          "DESCRIPTION": "Choose how Captain handles the conversation.",
+          "MODE_LABEL": "Action when the customer stops replying",
+          "REVIEW_AFTER": "Review after",
+          "RESOLVE_AFTER": "Resolve after",
+          "ALWAYS_WARNING": "Captain will resolve every conversation after the selected time without reviewing it. Some conversations that still need help may be closed.",
+          "PENDING_INFO": "The conversation remains pending until the customer replies.",
+          "RESOLUTION_MESSAGE": {
+            "TITLE": "Send a message when resolving",
+            "DESCRIPTION": "Captain sends this closing message before it resolves the conversation."
+          },
+          "MODES": {
+            "DISABLED": {
+              "LABEL": "Wait for the customer",
+              "DESCRIPTION": "Captain does not resolve the conversation. Captain can still hand it off if the customer asks."
+            },
+            "LEGACY": {
+              "LABEL": "Always resolve",
+              "DESCRIPTION": "Captain resolves every conversation after the selected time."
+            },
+            "EVALUATED": {
+              "LABEL": "Let Captain review it (recommended)",
+              "DESCRIPTION": "Captain decides whether to resolve the conversation or hand it off."
+            }
+          },
+          "DURATION_HOURS_ARIA_LABEL": "Hours before action",
+          "DURATION_MINUTES_ARIA_LABEL": "Minutes before action",
+          "DURATION_HOURS_SHORT": "{count} h",
+          "DURATION_MINUTES_SHORT": "{count} min"
+        },
+        "INSTRUCTIONS": {
+          "LABEL": "መመሪያዎች",
+          "PLACEHOLDER": "ለአስማሚው መመሪያዎች ያስገቡ"
+        },
+        "FEATURES": {
+          "TITLE": "ባህሪያት",
+          "ALLOW_CONVERSATION_FAQS": "ከተፈታ ውይይቶች የተፈጥሮ የተደጋጋ FAQ ያመነታሉ",
+          "ALLOW_MEMORIES": "ከደንበኞች ግንኙነቶች ቁልፍ ዝርዝሮችን እንደ ማስታወሻ ይይዙ።",
+          "ALLOW_CITATIONS": "በምላሾች ውስጥ የምንጭ ማስረጃዎችን አካትተው ይሰጡ",
+          "ALLOW_CONTACT_ATTRIBUTES": "Allow access to contact information"
+        },
+        "AUDIENCE": {
+          "EVERYONE": {
+            "LABEL": "Everyone",
+            "DESC": "Captain responds to every conversation in connected inboxes."
+          },
+          "SPECIFIC": {
+            "LABEL": "Specific audience",
+            "DESC": "Captain responds only to customers who match the conditions below."
+          },
+          "ADD_CONDITION": "Add condition",
+          "ADD_GROUP": "Add condition group",
+          "EMPTY_TITLE": "No conditions yet",
+          "EMPTY_BODY": "Add a condition to target specific customers, or a condition group to combine conditions with different and/or logic.",
+          "EMPTY_ERROR": "Add at least one condition for a specific audience.",
+          "MATCH_PREFIX": "Match",
+          "MATCH_SUFFIX": "of the following",
+          "MATCH_ALL": "ሁሉም",
+          "MATCH_ANY": "any",
+          "GROUP_CONTACT": "Contact attributes",
+          "GROUP_CONVERSATION": "Conversation",
+          "GROUP_CUSTOM": "Custom attributes",
+          "BROWSER_LANGUAGE": "Browser language",
+          "CONVERSATION_LANGUAGE": "First message language",
+          "LOGGED_IN": "Logged-in user",
+          "LOGGED_IN_TRUE": "አዎን",
+          "LOGGED_IN_FALSE": "አይ"
+        },
+        "SCHEDULE": {
+          "ALWAYS": {
+            "LABEL": "Anytime",
+            "DESC": "Captain responds to every conversation, regardless of time."
+          },
+          "BUSINESS_HOURS": {
+            "LABEL": "During business hours",
+            "DESC": "Captain responds only within each inbox's business hours."
+          },
+          "OUTSIDE_BUSINESS_HOURS": {
+            "LABEL": "Outside business hours",
+            "DESC": "Captain responds only when each inbox is closed."
+          },
+          "HINT": "Inboxes without business hours configured are always covered."
+        }
+      },
+      "EDIT": {
+        "TITLE": "እገዛ አገልጋዩን አዘምን",
+        "SUCCESS_MESSAGE": "እገዛ አገልጋዩ በተሳካ ሁኔታ ተዘምኗል",
+        "ERROR_MESSAGE": "እገዛ አገልጋዩን ለማዘመን ስህተት አጋጥሟል፣ እባክዎን እንደገና ይሞክሩ።",
+        "NOT_FOUND": "አገልጋዩን ማግኘት አልተቻለም። እባክዎ እንደገና ይሞክሩ።"
+      },
+      "SETTINGS": {
+        "HEADER": "ቅንብሮች",
+        "BASIC_SETTINGS": {
+          "TITLE": "መሠረታዊ ቅንብሮች",
+          "DESCRIPTION": "ከውይይት ሲያበቃ ወይም ወደ ሰው ሲለዋወጥ እርዳታው የሚናገረውን በቅን ያስተካክሉ።"
+        },
+        "SYSTEM_SETTINGS": {
+          "TITLE": "የስርዓት ቅንብሮች",
+          "DESCRIPTION": "ከውይይት ሲያበቃ ወይም ወደ ሰው ሲለዋወጥ እርዳታው የሚናገረውን በቅን ያስተካክሉ።",
+          "DESCRIPTION_V2": "Manage what Captain does when customers stop replying and set the handoff message."
+        },
+        "AUDIENCE": {
+          "TITLE": "Audience",
+          "DESCRIPTION": "Choose whether this assistant responds to everyone or only to a specific audience."
+        },
+        "SCHEDULE": {
+          "TITLE": "Schedule",
+          "DESCRIPTION": "Choose when Captain replies. Outside this window, conversations are handed to your team."
+        },
+        "CONTROL_ITEMS": {
+          "TITLE": "የመዝናኛ ነገሮች",
+          "DESCRIPTION": "ከአስማሚው ጋር ተቆጣጣሪ ተጨማሪ አክል። (እንደ ታሪክ ትምህርት ትልቅ ትምህርት፡ ጥያቄ መከላከያ → ሁኔታዎች → ውጤት) ተጠቃሚውን እንዲጠቀም ያበረታታ።",
+          "OPTIONS": {
+            "GUARDRAILS": {
+              "TITLE": "መከላከያ መስመሮች",
+              "DESCRIPTION": "ነገሮችን በመንገድ ላይ ይጠብቃል—እንደ አስማሚዎ ሊመልስ የሚፈልጉትን የጥያቄ አይነቶች ብቻ፣ ከውጭ ወይም ከርእሰ ጉዳይ ውጭ አይደለም።"
+            },
+            "RESPONSE_GUIDELINES": {
+              "TITLE": "የምላሽ መመሪያዎች",
+              "DESCRIPTION": "የአስማሚዎ መልሶች ስሜትና አወቃቀር—ግልጽና ደስታማ? አጭርና ቀላል? ዝርዝርና ቅንጅታዊ?"
+            }
+          }
+        },
+        "DELETE": {
+          "TITLE": "አስማተኛውን ሰርዝ",
+          "DESCRIPTION": "This action is permanent. Deleting this assistant will remove it from all connected inboxes and permanently erase its custom tools and all generated knowledge.",
+          "BUTTON_TEXT": "{assistantName} አስወግድ"
+        }
+      },
+      "OPTIONS": {
+        "EDIT_ASSISTANT": "እገዛ አገልጋይን አርትዕ",
+        "DELETE_ASSISTANT": "እገዛ አገልጋይን ሰርዝ",
+        "VIEW_CONNECTED_INBOXES": "የተገናኙ ኢንቦክሶችን እይ"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "አሰማሪዎች አልተገኙም",
+        "SUBTITLE": "በተጠቃሚዎችዎ ፈጣና ትክክለኛ መልሶች ለማቅረብ አስማሚ ይፍጠሩ። ከእርስዎ የእርዳታ ሰነዶችና ያለፉ ውይይቶች ማማረር ይችላል።",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "የካፕቴን አስማሪ",
+          "NOTE": "Captain Assistant በቀጥታ ከደንበኞች ጋር ይገናኛል፣ ከእርዳታ ሰነዶችዎና ከያለፈው ውይይቶች ይማራል፣ እና ፈጣን፣ ትክክለኛ ምላሾችን ይሰጣል። የመጀመሪያ ጥያቄዎችን ይከታተላል፣ ፈጣን መፍትሄዎችን ሰጥቶ ከዚያ በኋላ በፍላጎት ሲኖር ወደ ወኪል ይላካል።"
+        }
+      },
+      "GUARDRAILS": {
+        "TITLE": "መከላከያ መስመሮች",
+        "DESCRIPTION": "ነገሮችን በመከታተል ያደርጋል—ለእርስዎ እርዳታ የሚሰጥበትን የጥያቄ አይነት ብቻ፣ ከዚህ ውጭ ወይም ከርእሰ ጉዳይ ውጭ አይደለም።",
+        "BULK_ACTION": {
+          "SELECTED": "{count} ንጥል ተመርጧል | {count} ንጥሎች ተመርጠዋል",
+          "SELECT_ALL": "ሁሉንም ይምረጡ ({count})",
+          "UNSELECT_ALL": "ሁሉንም አትምረጡ ({count})",
+          "BULK_DELETE_BUTTON": "ሰርዝ"
+        },
+        "ADD": {
+          "SUGGESTED": {
+            "TITLE": "የምሳሌ መከላከያ መስመሮች",
+            "ADD": "ሁሉንም አክል",
+            "ADD_SINGLE": "ይህን አክል",
+            "SAVE": "አክል እና አስቀምጥ (↵)",
+            "PLACEHOLDER": "ሌላ መከላከያ ያስገቡ..."
+          },
+          "NEW": {
+            "TITLE": "መከላከያ ያክሉ",
+            "CREATE": "ፍጠር",
+            "CANCEL": "ሰርዝ",
+            "PLACEHOLDER": "ሌላ መከላከያ ያስገቡ...",
+            "TEST_ALL": "ሁሉንም ይፈትሹ"
+          }
+        },
+        "LIST": {
+          "SEARCH_PLACEHOLDER": "ፈልግ..."
+        },
+        "EMPTY_MESSAGE": "ምንም መከላከያ አልተገኘም። መጀመር ዘንድ አዲስ ይፍጠሩ ወይም ምሳሌዎችን ያክሉ።",
+        "SEARCH_EMPTY_MESSAGE": "ለዚህ ፍለጋ ምንም መከላከያ አልተገኘም።",
+        "API": {
+          "ADD": {
+            "SUCCESS": "መከላከያዎች በተሳካ ሁኔታ ተጨምሯል",
+            "ERROR": "መከላከያዎችን ማክሰኞ ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ።"
+          },
+          "UPDATE": {
+            "SUCCESS": "መከላከያ መስመሮች በተሳካ ሁኔታ ተሻሽለዋል",
+            "ERROR": "መከላከያ መስመሮችን ለማሻሻል ስህተት አጋጥሟል፣ እባክዎን እንደገና ይሞክሩ።"
+          },
+          "DELETE": {
+            "SUCCESS": "መከላከያ መስመሮች በተሳካ ሁኔታ ተሰርዟል",
+            "ERROR": "መከላከያ መስመሮችን ለማስወገድ ስህተት አጋጥሟል፣ እባክዎን እንደገና ይሞክሩ።"
+          }
+        }
+      },
+      "RESPONSE_GUIDELINES": {
+        "TITLE": "የምላሽ መመሪያዎች",
+        "DESCRIPTION": "የእርስዎ እርዳታ መልሶች ስሜትና አወቃቀር—ግልጽና ደስተኛ? አጭርና ቀላል? ዝርዝርና ቅንጅተኛ?",
+        "BULK_ACTION": {
+          "SELECTED": "{count} ንጥል ተመረጠ | {count} ንጥሎች ተመርጠዋል",
+          "SELECT_ALL": "ሁሉንም ይምረጡ ({count})",
+          "UNSELECT_ALL": "ሁሉንም አትምረጡ ({count})",
+          "BULK_DELETE_BUTTON": "ሰርዝ"
+        },
+        "ADD": {
+          "SUGGESTED": {
+            "TITLE": "የምሳሌ የመልስ መመሪያዎች",
+            "ADD": "ሁሉንም አክል",
+            "ADD_SINGLE": "ይህን አክል",
+            "SAVE": "አክል እና አስቀምጥ (↵)",
+            "PLACEHOLDER": "ሌላ የመልስ መመሪያ ያስጻፉ..."
+          },
+          "NEW": {
+            "TITLE": "የምላሽ መመሪያ አክል",
+            "CREATE": "ፍጠር",
+            "CANCEL": "ሰርዝ",
+            "PLACEHOLDER": "ሌላ የምላሽ መመሪያ ያስጽፉ...",
+            "TEST_ALL": "ሁሉንም ፈትሽ"
+          }
+        },
+        "LIST": {
+          "SEARCH_PLACEHOLDER": "ፈልግ..."
+        },
+        "EMPTY_MESSAGE": "የምላሽ መመሪያዎች አልተገኙም። መጀመሪያ ለመጀመር እባክዎ አሰራሮችን ይፍጠሩ ወይም እባክዎን አሰራሮችን ያክሉ።",
+        "SEARCH_EMPTY_MESSAGE": "ለዚህ ፍለጋ ምንም የምላሽ መመሪያ አልተገኘም።",
+        "API": {
+          "ADD": {
+            "SUCCESS": "የምላሽ መመሪያዎች በተሳካ ሁኔታ ተጨምሯል",
+            "ERROR": "የምላሽ መመሪያዎችን ማክሰኞ ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ።"
+          },
+          "UPDATE": {
+            "SUCCESS": "የምላሽ መመሪያዎች በተሳካ ሁኔታ ተሻሽለዋል",
+            "ERROR": "የምላሽ መመሪያዎችን ለማዘምን ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ።"
+          },
+          "DELETE": {
+            "SUCCESS": "የምላሽ መመሪያዎች በተሳካ ሁኔታ ተሰርዟል",
+            "ERROR": "የምላሽ መመሪያዎችን ለማስወገድ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ።"
+          }
+        }
+      },
+      "SCENARIOS": {
+        "TITLE": "ስነ-ሁኔታዎች",
+        "DESCRIPTION": "ለእርዳታው አካባቢ ስጥ—እንደ “ተጠቃሚ ሲገደብ ምን ማድረግ እንደሚገባ” ወይም “በተመለሰ ጥያቄ ላይ እንዴት መሥራት እንደሚገባ”።",
+        "BULK_ACTION": {
+          "SELECTED": "{count} ንጥል ተመረጠ | {count} ንጥሎች ተመርጠዋል",
+          "SELECT_ALL": "ሁሉንም ምረጥ ({count})",
+          "UNSELECT_ALL": "ሁሉንም አልምረጥም ({count})",
+          "BULK_DELETE_BUTTON": "ሰርዝ"
+        },
+        "ADD": {
+          "SUGGESTED": {
+            "TITLE": "የምሳሌ ሁኔታዎች",
+            "ADD": "ሁሉንም አክል",
+            "ADD_SINGLE": "ይህን አክል",
+            "TOOLS_USED": "ተጠቃሚ መሣሪያዎች :"
+          },
+          "NEW": {
+            "CREATE": "ስነ-ሁኔታ አክል",
+            "TITLE": "ስነ-ሁኔታ ፍጠር",
+            "FORM": {
+              "TITLE": {
+                "LABEL": "ርዕስ",
+                "PLACEHOLDER": "ስነ-ሁኔታው ስም አስገባ",
+                "ERROR": "የስነ-ሁኔታ ስም አስፈላጊ ነው"
+              },
+              "DESCRIPTION": {
+                "LABEL": "መግለጫ",
+                "PLACEHOLDER": "እንዴት እና የት እንደሚጠቀምበት ይግለጹ",
+                "ERROR": "የስነ-ሁኔታ መግለጫ አስፈላጊ ነው"
+              },
+              "INSTRUCTION": {
+                "LABEL": "እንዴት እንደሚያስተናግድ",
+                "PLACEHOLDER": "እንዴት እና የት እንደሚያስተናግድ ይግለጹ",
+                "ERROR": "የስነ-ሁኔታ ይዘት አስፈላጊ ነው"
+              },
+              "CREATE": "ፍጠር",
+              "CANCEL": "ሰርዝ"
+            }
+          }
+        },
+        "UPDATE": {
+          "CANCEL": "ሰርዝ",
+          "UPDATE": "ለውጦችን አዘምን"
+        },
+        "STATUS": {
+          "ENABLED": "ተከናውኗል",
+          "DISABLED": "ተከልክሏል",
+          "TOGGLE": "Toggle {title}"
+        },
+        "LIST": {
+          "SEARCH_PLACEHOLDER": "ፈልግ..."
+        },
+        "EMPTY_MESSAGE": "ምንም ስነ-ሁኔታዎች አልተገኙም። መጀመር ወይም ለመጀመር ምሳሌዎችን ያክሉ።",
+        "SEARCH_EMPTY_MESSAGE": "ለዚህ ፍለጋ ምንም ስነ-ሁኔታዎች አልተገኙም።",
+        "API": {
+          "ADD": {
+            "SUCCESS": "ስነ-ሁኔታዎች በተሳካ ሁኔታ ተጨምሯል",
+            "ERROR": "ስነ-ሁኔታዎችን ማክሰኞ ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ።"
+          },
+          "UPDATE": {
+            "SUCCESS": "ስነ-ሁኔታዎች በተሳካ ሁኔታ ተዘምኗል",
+            "ERROR": "ስነ-ሁኔታዎችን ማዘመን ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ።"
+          },
+          "TOGGLE": {
+            "ENABLED": "Scenario enabled successfully",
+            "DISABLED": "Scenario disabled successfully",
+            "ERROR": "There was an error updating the scenario status, please try again."
+          },
+          "DELETE": {
+            "SUCCESS": "ስነ-ሁኔታዎች በተሳካ ሁኔታ ተሰርዟል",
+            "ERROR": "ስነ-ሁኔታዎችን ማስወገድ ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ።"
+          }
+        }
+      }
+    },
+    "DOCUMENTS": {
+      "HEADER": "ሰነዶች",
+      "ADD_NEW": "አዲስ ሰነድ ፍጠር",
+      "FAQ_COUNT": "{n} FAQ | {n} FAQs",
+      "USED_IN_CONVERSATIONS": "Used in {n} conversation | Used in {n} conversations",
+      "NO_USED_CONVERSATIONS": "No conversations found for this document.",
+      "SELECTED": "{count} ተመረጡ",
+      "SELECT_ALL": "ሁሉንም ይምረጡ ({count})",
+      "UNSELECT_ALL": "ሁሉንም አልምረጥም ({count})",
+      "BULK_DELETE_BUTTON": "Delete",
+      "BULK_SYNC_BUTTON": "Refresh",
+      "BULK_DELETE": {
+        "TITLE": "Delete documents?",
+        "DESCRIPTION": "Are you sure you want to delete the selected documents? This action cannot be undone.",
+        "CONFIRM": "አዎን፣ ሁሉንም አጥፋ",
+        "SUCCESS_MESSAGE": "Documents deleted successfully",
+        "ERROR_MESSAGE": "There was an error deleting the documents, please try again."
+      },
+      "BULK_SYNC": {
+        "SUCCESS_MESSAGE_ONE": "Refresh queued for 1 document",
+        "SUCCESS_MESSAGE": "Refresh queued for {count} documents",
+        "ZERO_MESSAGE": "No documents marked for refresh.",
+        "ERROR_MESSAGE": "There was an error queuing the refresh, please try again."
+      },
+      "SYNC": {
+        "QUEUED_MESSAGE": "Refresh queued. We'll update the document shortly.",
+        "ERROR_MESSAGE": "Could not queue refresh, please try again."
+      },
+      "FILTERS": {
+        "SOURCE": {
+          "ALL": "All sources",
+          "WEB": "Web pages",
+          "PDF": "PDFs"
+        },
+        "STATUS": {
+          "ANY": "Any status",
+          "UPDATED": "Updated",
+          "NEEDS_UPDATE": "Needs update",
+          "UPDATING": "Updating",
+          "FAILED": "አልተሳካም"
+        },
+        "SORT": {
+          "RECENTLY_UPDATED": "Recently updated",
+          "RECENTLY_CREATED": "Recently created",
+          "MOST_USED": "Most used in conversations"
+        },
+        "SEARCH_PLACEHOLDER": "Search..."
+      },
+      "SYNC_STATUS": {
+        "SYNCED": "last updated {time}",
+        "SYNCING": "updating...",
+        "STALE_SYNC": "update stalled",
+        "FAILED": "Failed to sync",
+        "NEVER_SYNCED": "not updated yet"
+      },
+      "SYNC_ERRORS": {
+        "NOT_FOUND": "Page not found",
+        "ACCESS_DENIED": "Access denied",
+        "TIMEOUT": "Page took too long to respond",
+        "CONTENT_EMPTY": "Page returned empty content",
+        "FETCH_FAILED": "Could not fetch page",
+        "SYNC_ERROR": "Unexpected error",
+        "DEFAULT": "Sync error"
+      },
+      "RELATED_RESPONSES": {
+        "TITLE": "ተዛማጅ የFAQ ጥያቄዎች",
+        "EMPTY": "No FAQs have been generated from this document yet."
+      },
+      "DETAILS": {
+        "DESCRIPTION": "Review the crawled content and the FAQs generated from this source.",
+        "SOURCE": "Source",
+        "GENERATED_FAQS": "Generated FAQs",
+        "USED_IN_CONVERSATIONS": "Used in conversations",
+        "LAST_UPDATED": "Last updated",
+        "NOT_AVAILABLE": "Not available",
+        "CONTENT_TAB": "Crawled content",
+        "PDF_TAB": "PDF details",
+        "CONTENT_TITLE": "Crawled content",
+        "PDF_TITLE": "PDF file",
+        "PDF_DESCRIPTION": "Review the original PDF source.",
+        "CHARACTER_COUNT": "{count} characters extracted",
+        "COPY_CONTENT": "ቅዳ",
+        "COPY_SUCCESS": "Crawled content copied to clipboard",
+        "COPY_ERROR": "Could not copy crawled content",
+        "VIEW_RAW": "View raw",
+        "VIEW_PREVIEW": "View preview",
+        "UNREADABLE_CONTENT": "Readable content could not be extracted from this document. You can view the raw extracted content.",
+        "EMPTY_CONTENT": "No crawled content is available for this document yet."
+      },
+      "FORM_DESCRIPTION": "ሰነዱን እንደ የእውቀት ምንጭ ለማከማቸት የሰነዱን URL ያስገቡ እና ከዚያ ጋር ለማገናኘት እገዛ አገልጋይን ይምረጡ።",
+      "CREATE": {
+        "TITLE": "ሰነድ አክል",
+        "SUCCESS_MESSAGE": "ሰነዱ በተሳካ ሁኔታ ተፈጥሯል",
+        "ERROR_MESSAGE": "ሰነዱን ለማፍራት ስህተት አጋጥሟል፣ እባክዎን እንደገና ይሞክሩ።"
+      },
+      "FORM": {
+        "TYPE": {
+          "LABEL": "የሰነድ አይነት",
+          "URL": "URL",
+          "PDF": "PDF ፋይል"
+        },
+        "URL": {
+          "LABEL": "URL",
+          "PLACEHOLDER": "የሰነዱን URL ያስገቡ",
+          "ERROR": "እባክዎን ለሰነዱ ትክክለኛ የ URL አድራሻ ያቀርቡ"
+        },
+        "PDF_FILE": {
+          "LABEL": "PDF ፋይል",
+          "CHOOSE_FILE": "PDF ፋይል ይምረጡ",
+          "ERROR": "እባክዎ የ PDF ፋይል ይምረጡ",
+          "HELP_TEXT": "ከፍተኛ የፋይል መጠን፡ 10MB",
+          "INVALID_TYPE": "እባክዎ ትክክለኛ የ PDF ፋይል ይምረጡ",
+          "TOO_LARGE": "የፋይል መጠን 10MB ከፍተኛ ደረጃን አሻሽሏል"
+        },
+        "NAME": {
+          "LABEL": "የሰነድ ስም (አማራጭ)",
+          "PLACEHOLDER": "ለሰነዱ ስም ያስገቡ"
+        }
+      },
+      "DELETE": {
+        "TITLE": "ሰነዱን ለማስወገድ እርግጠኛ ነዎት?",
+        "DESCRIPTION": "ይህ እርምጃ ቋሚ ነው። ሰነዱን ማስወገድ ሁሉንም የተፈጥሮ እውቀት በቋሚነት ይሰረዛል።",
+        "CONFIRM": "አዎን፣ ሰርዝ",
+        "SUCCESS_MESSAGE": "ሰነዱ በተሳካ ሁኔታ ተሰርዟል",
+        "ERROR_MESSAGE": "ሰነዱን ለማስወገድ ስህተት አጋጥሟል፣ እባክዎን እንደገና ይሞክሩ።"
+      },
+      "OPTIONS": {
+        "VIEW_DETAILS": "ዝርዝሮችን እይ",
+        "SYNC_NOW": "Refresh now",
+        "RETRY_SYNC": "Retry refresh",
+        "DELETE_DOCUMENT": "ሰነድ ሰርዝ"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "ሰነዶች አልተገኙም",
+        "SUBTITLE": "ሰነዶች በእርስዎ አገልጋይ በተጠቃሚ ጥያቄዎች ላይ የሚሰጥ የተደጋጋሚ ጥያቄዎችን ለመፍጠር ይጠቀማሉ። ሰነዶችን ለአገልጋይዎ እውነተኛ እይታ ለማቅረብ ማስገባት ይችላሉ።",
+        "FILTERED_TITLE": "No matching documents",
+        "FILTERED_SUBTITLE": "Try changing the source, status, or search term.",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "Captain ሰነድ",
+          "NOTE": "በCaptain ውስጥ ሰነድ እንደ ለማድረግ ምንጭ እንደሚሰራ አገልግሎት አገልግሎት ነው። የእርዳታ ማዕከላችሁን ወይም መምሪያዎችን በመገናኘት፣ Captain ይዘቱን ማብራሪያ ማድረግ እና ለደንበኞች ጥያቄዎች ትክክለኛ ምላሾችን ማቅረብ ይችላል።"
+        }
+      }
+    },
+    "CUSTOM_TOOLS": {
+      "HEADER": "መሣሪያዎች",
+      "ADD_NEW": "አዲስ መሣሪያ ይፍጠሩ",
+      "CATALOG": {
+        "BUTTON": "Tools Catalog",
+        "HEADER": "Tools Catalog",
+        "DESCRIPTION": "Browse toolsets from the Captain tools catalog and install them on this assistant.",
+        "ALL": "All",
+        "EMPTY": "No toolsets in this category yet.",
+        "LOAD_ERROR": "Could not load the tools catalog. Check the catalog URL in the Captain settings.",
+        "TOOL_COUNT": "{n} tool | {n} tools",
+        "VERSION": "v{version}",
+        "UPDATED": "Updated {time}",
+        "REPOSITORY": "Repository",
+        "MANIFEST": "Manifest",
+        "CONFIGURATION": "ቅንብር",
+        "REQUIRED": "አስፈላጊ",
+        "DETAILS_ERROR": "Could not load the toolset details.",
+        "INSTALLED": "Installed",
+        "UPDATE_AVAILABLE": "Update available"
+      },
+      "INSTALL_LINK": {
+        "TITLE": "Choose an assistant",
+        "DESCRIPTION": "Pick the assistant to install this toolset on.",
+        "PLACEHOLDER": "Select an assistant",
+        "LOAD_ERROR": "Could not load your assistants. Reload the page to try again."
+      },
+      "INSTALL_MANIFEST": {
+        "TITLE": "Install a toolset",
+        "DESCRIPTION": "Install a toolset from the Captain tools catalog.",
+        "VERSION_LABEL": "v{version} · {revision}",
+        "UPDATE_NOTE": "A different version is installed. Updating replaces its tools and keeps whether each one is enabled. Enter the secrets again.",
+        "TOOLS_LABEL": "መሣሪያዎች",
+        "CONFIGURATION_LABEL": "ቅንብር",
+        "CONTINUE": "ቀጥል",
+        "INSTALL": "Install",
+        "UPDATE": "አዘምን",
+        "REINSTALL": "Reinstall",
+        "REINSTALL_NOTE": "Some tools from this toolset were deleted. Reinstalling adds them back and keeps whether each one is enabled. Enter the secrets again.",
+        "ALREADY_INSTALLED": "Already installed",
+        "SUCCESS_MESSAGE": "Toolset installed",
+        "ERROR_MESSAGE": "Could not install the toolset",
+        "PREVIEW_ERROR": "Could not load the toolset"
+      },
+      "ASSISTANT_TOOLS_BANNER": {
+        "MESSAGE": "Custom tools are now managed per assistant. Switch assistants to customize their tools.",
+        "LEARN_MORE": "Learn more",
+        "DISMISS": "Dismiss announcement",
+        "MODAL_TITLE": "Your assistants now have their own tools",
+        "MODAL_DESCRIPTION": "Each assistant now has a separate list of custom tools. We copied your existing tools to every assistant, so nothing is missing.",
+        "MODAL_INSTRUCTIONS": "When you add, edit, turn off, or delete a tool, the change applies only to the assistant you're currently viewing. Switch assistants at the top of the page to review or customize their tools.",
+        "ACKNOWLEDGE": "Got it"
+      },
+      "SOFT_LIMIT_WARNING": "Having more than 10 tools may reduce the assistant's reliability in selecting the right tool. Consider removing unused tools for better results.",
+      "EMPTY_STATE": {
+        "TITLE": "ምንም የተለየ መሣሪያዎች አልተገኙም",
+        "SUBTITLE": "እርስዎን ከውጭ ኤፒአይዎችና አገልግሎቶች ጋር ለማገናኘት የተለየ መሣሪያዎችን ይፍጠሩ፣ እንዲሁም እርስዎን በአካል ውስጥ መረጃ ለማግኘትና ለማከናወን ይፈቅዱ።",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "የተለየ መሣሪያዎች",
+          "NOTE": "የተለየ መሣሪያዎች እርስዎን ከውጭ ኤፒአይዎችና አገልግሎቶች ጋር ለመገናኘት ይፈቅዳሉ። መሣሪያዎችን ይፍጠሩ ለመረጃ ማግኘት፣ ለእርስዎ ተደርጎ ለማከናወን ወይም ከአሁን እንደሚገኙ ስርዓቶችዎ ጋር ለመዋሃድ እንዲቻል ያደርጉ።"
+        }
+      },
+      "FORM_DESCRIPTION": "የተለየ መሣሪያዎን ከውጭ ኤፒአይዎች ጋር ለማገናኘት ያቀናብሩ",
+      "OPTIONS": {
+        "EDIT_TOOL": "መሣሪያውን አርትዕ",
+        "VIEW_TOOL": "View tool",
+        "DELETE_TOOL": "መሣሪያውን ሰርዝ"
+      },
+      "STATUS": {
+        "ENABLED": "ተከናውኗል",
+        "DISABLED": "ተከልክሏል",
+        "TOGGLE": "Toggle {title}"
+      },
+      "TOGGLE": {
+        "ENABLED": "Tool enabled successfully",
+        "DISABLED": "Tool disabled successfully",
+        "ERROR": "Failed to update tool status"
+      },
+      "DISABLE_CONFIRMATION": {
+        "TITLE": "Disable {title}?",
+        "DESCRIPTION_ONE": "This tool is used by {count} enabled scenario. Disabling it may cause that scenario to stop working as expected.",
+        "DESCRIPTION_OTHER": "This tool is used by {count} enabled scenarios. Disabling it may cause those scenarios to stop working as expected.",
+        "CONFIRM": "Disable tool"
+      },
+      "CREATE": {
+        "TITLE": "ብለይ የተሰራ መሣሪያ ፍጠር",
+        "SUCCESS_MESSAGE": "ብለይ የተሰራ መሣሪያ በተሳካ ሁኔታ ተፈጥሯል",
+        "ERROR_MESSAGE": "ብለይ የተሰራ መሣሪያ ማፍጠር አልተሳካም"
+      },
+      "VIEW": {
+        "TITLE": "Custom Tool Details",
+        "REQUEST": "Request and response",
+        "INSTALLED_NOTE": "This tool is read-only because it was installed from the Tools Catalog."
+      },
+      "EDIT": {
+        "TITLE": "ብለይ የተሰራ መሣሪያ አርትዕ",
+        "SUCCESS_MESSAGE": "ብልጥ መሣሪያ በተሳካ ሁኔታ ተሻሽሏል",
+        "ERROR_MESSAGE": "ብልጥ መሣሪያን ማሻሻል አልተሳካም"
+      },
+      "DELETE": {
+        "TITLE": "ብልጥ መሣሪያ ሰርዝ",
+        "DESCRIPTION": "እርግጠኛ ነህ ይህን ብልጥ መሣሪያ ማስወገድ ይፈልጋሉ? ይህ እርምጃ አይተከለከልም።",
+        "CONFIRM": "አዎን፣ ሰርዝ",
+        "SUCCESS_MESSAGE": "ብልጽግና ተጠቃሚ መሣሪያ ተሰርዟል",
+        "ERROR_MESSAGE": "ብልጽግና መሣሪያውን ማስወገድ አልተሳካም"
+      },
+      "PAYWALL": {
+        "TITLE": "Upgrade to use tools with Captain",
+        "AVAILABLE_ON": "Captain Tools are only available in Business and Enterprise plans. Please upgrade to Business plan to use the feature.",
+        "UPGRADE_PROMPT": "",
+        "UPGRADE_NOW": "Open billing",
+        "CANCEL_ANYTIME": ""
+      },
+      "ENTERPRISE_PAYWALL": {
+        "AVAILABLE_ON": "Captain Tools are only available in the paid plans.",
+        "UPGRADE_PROMPT": "Please upgrade to a paid plan to use this feature.",
+        "ASK_ADMIN": "Please reach out to your administrator for the upgrade."
+      },
+      "TEST": {
+        "BUTTON": "Test connection",
+        "SUCCESS": "Endpoint returned HTTP {status}",
+        "ERROR": "Connection failed",
+        "DISABLED_HINT": "Testing is only available for endpoints without templates or request bodies."
+      },
+      "FORM": {
+        "TITLE": {
+          "LABEL": "የመሣሪያ ስም",
+          "PLACEHOLDER": "የትዕዛዝ ፍለጋ",
+          "ERROR": "የመሣሪያ ስም አስፈላጊ ነው",
+          "MAX_LENGTH_ERROR": "Tool name must be {max} characters or fewer"
+        },
+        "DESCRIPTION": {
+          "LABEL": "መግለጫ",
+          "PLACEHOLDER": "በትዕዛዝ መለያ የትዕዛዝ ዝርዝሮችን ይፈልጋል"
+        },
+        "HTTP_METHOD": {
+          "LABEL": "ዘዴ"
+        },
+        "ENDPOINT_URL": {
+          "LABEL": "የመጨረሻ አድራሻ URL",
+          "PLACEHOLDER": "https://api.example.com/orders/{'{{'} order_id {'}}'}",
+          "ERROR": "ትክክለኛ ዩአርኤል ያስፈልጋል"
+        },
+        "AUTH_TYPE": {
+          "LABEL": "የማረጋገጫ አይነት"
+        },
+        "EMAIL_VERIFICATION": {
+          "LABEL": "Require email verification",
+          "DESCRIPTION": "Captain can use this tool only after the customer verifies their email with a one-time code.",
+          "IMPLIED": "A parameter takes the customer's verified email, so email verification is always required."
+        },
+        "AUTH_TYPES": {
+          "NONE": "የለም",
+          "BEARER": "Bearer ቶክን",
+          "BASIC": "መሠረታዊ ማረጋገጫ",
+          "API_KEY": "API ቁልፍ"
+        },
+        "AUTH_CONFIG": {
+          "BEARER_TOKEN": "Bearer ቶክን",
+          "BEARER_TOKEN_PLACEHOLDER": "የእርስዎን ባሪየር ቶክን ያስገቡ",
+          "USERNAME": "የተጠቃሚ ስም",
+          "USERNAME_PLACEHOLDER": "የተጠቃሚ ስም ያስገቡ",
+          "PASSWORD": "የይለፍ ቃል",
+          "PASSWORD_PLACEHOLDER": "የይለፍ ቃል አስገባ",
+          "API_KEY": "የራስጌ ስም",
+          "API_KEY_PLACEHOLDER": "X-API-Key",
+          "API_VALUE": "የራስጌ እሴት",
+          "API_VALUE_PLACEHOLDER": "የAPI ቁልፍ እሴት አስገባ"
+        },
+        "SECTIONS": {
+          "TEMPLATES": "Templates",
+          "TEMPLATES_HELP_TEXT": "Supports Liquid syntax, like {'{{'} order_id {'}}'} or {'{{'} response.status {'}}'}."
+        },
+        "HEADERS": {
+          "LABEL": "Headers",
+          "HELP_TEXT": "Static headers sent with every request. Values are sent exactly as entered; use Authentication for credentials.",
+          "NAME_PLACEHOLDER": "Header name (e.g., cal-api-version)",
+          "VALUE_PLACEHOLDER": "Header value",
+          "NAME_REQUIRED": "Header name is required",
+          "NAME_DUPLICATE": "Header names must be unique",
+          "ADD": "Add Header"
+        },
+        "PARAMETERS": {
+          "LABEL": "ፓራሜተሮች",
+          "HELP_TEXT": "ከተጠቃሚ ጥያቄዎች የሚወጡ ፓራሜተሮችን ውስጥ አስቀምጥ"
+        },
+        "ADD_PARAMETER": "ፓራሜተር አክል",
+        "PARAM_NAME": {
+          "PLACEHOLDER": "የፓራሜተር ስም (ለምሳሌ order_id)"
+        },
+        "PARAM_TYPE": {
+          "PLACEHOLDER": "አይነት"
+        },
+        "PARAM_TYPES": {
+          "STRING": "ሐረግ",
+          "NUMBER": "ቁጥር",
+          "BOOLEAN": "ቡሉን",
+          "ARRAY": "አደራ",
+          "OBJECT": "ነገር"
+        },
+        "PARAM_DESCRIPTION": {
+          "PLACEHOLDER": "የፓራሜተሩ መግለጫ"
+        },
+        "PARAM_REQUIRED": {
+          "LABEL": "ያስፈልጋል"
+        },
+        "RISK": {
+          "MEDIUM": "This tool may return customer data. Consider requiring email verification.",
+          "HIGH": "This tool looks like it reads or changes customer data. Require email verification so only a verified customer can use it.",
+          "TITLE": "Save without email verification?",
+          "GO_BACK": "ተመለስ",
+          "SAVE_ANYWAY": "Save anyway",
+          "EMAIL_PARAM": "This email is not verified. A customer could type someone else's.",
+          "USE_VERIFIED_EMAIL": "Use verified email"
+        },
+        "VERIFIED_VALUES": {
+          "ADD": "Add verified email",
+          "EMAIL": "Contact email",
+          "EMAIL_DESCRIPTION": "The contact's verified email address",
+          "HELP": "Filled by Chatwoot from the email the contact confirmed with a one-time code. Captain cannot see or change it in customer conversations."
+        },
+        "REQUEST_TEMPLATE": {
+          "LABEL": "የጥያቄ አካል አብነት (አማራጭ)",
+          "PLACEHOLDER": "{'{'}\n  \"order_id\": \"{'{{'} order_id {'}}'}\"\n{'}'}"
+        },
+        "RESPONSE_TEMPLATE": {
+          "LABEL": "የመልስ አብነት (አማራጭ)",
+          "PLACEHOLDER": "Order {'{{'} order_id {'}}'} status: {'{{'} status {'}}'}"
+        },
+        "ERRORS": {
+          "PARAM_NAME_REQUIRED": "የፓራሜተር ስም አስፈላጊ ነው"
+        }
+      }
+    },
+    "RESPONSES": {
+      "HEADER": "FAQ ጥያቄዎች",
+      "ADD_NEW": "አዲስ FAQ ፍጠር",
+      "NO_USED_CONVERSATIONS": "No conversations found for this FAQ.",
+      "DOCUMENTABLE": {
+        "CONVERSATION": "ውይይት #{id}"
+      },
+      "SELECTED": "{count} ተመረጡ",
+      "SELECT_ALL": "ሁሉንም ይምረጡ ({count})",
+      "UNSELECT_ALL": "ሁሉንም አልምረጥም ({count})",
+      "SEARCH_PLACEHOLDER": "የተደጋጋሚ ጥያቄዎችን ይፈልጉ...",
+      "ERRORS": {
+        "LOAD": "There was an error loading FAQs. Please try again."
+      },
+      "BULK_DELETE_BUTTON": "አጥፋ",
+      "BULK_DELETE": {
+        "TITLE": "ጥያቄዎችን ማጥፋት ይፈልጋሉ?",
+        "DESCRIPTION": "የተመረጡትን ጥያቄዎች ማጥፋት እርግጠኛ ነዎት? ይህ እርምጃ አይተካልም።",
+        "CONFIRM": "አዎን፣ ሁሉንም አጥፋ",
+        "SUCCESS_MESSAGE": "የተደገፉ ጥያቄዎች በተሳካ ሁኔታ ተሰርዟል",
+        "ERROR_MESSAGE": "የተደገፉ ጥያቄዎችን ማስወገድ ላይ ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ።"
+      },
+      "DELETE": {
+        "TITLE": "FAQ ለማጥፋት እርግጠኛ ነህ?",
+        "DESCRIPTION": "",
+        "CONFIRM": "አዎን፣ አጥፋ",
+        "SUCCESS_MESSAGE": "FAQ በተሳካ ሁኔታ ተሰርዟል",
+        "ERROR_MESSAGE": "FAQ ለማጥፋት ስህተት አጋጥሟል፣ እባክህ እንደገና ይሞክሩ።"
+      },
+      "SUGGESTIONS_BANNER": {
+        "TITLE": "Captain grouped recurring customer questions into FAQ suggestions.",
+        "ACTION": "Review suggestions"
+      },
+      "FORM_DESCRIPTION": "ጥያቄ እና ከዚያ ተዛማጅ መልስ ወደ እውቀት ቋት ያክሉ እና ከሚዛመደው አስማሪ ይምረጡ።",
+      "CREATE": {
+        "TITLE": "ተደጋጋሚ ጥያቄ ያክሉ",
+        "SUCCESS_MESSAGE": "መልስ በተሳካ ሁኔታ ተጨምሯል።",
+        "ERROR_MESSAGE": "መልስ ሲጨምር ላይ ስህተት ተከስቷል። እባክዎ እንደገና ይሞክሩ።"
+      },
+      "FORM": {
+        "QUESTION": {
+          "LABEL": "ጥያቄ",
+          "PLACEHOLDER": "ጥያቄውን እዚህ ያስገቡ",
+          "ERROR": "እባክዎ ትክክለኛ ጥያቄ ያቀርቡ።"
+        },
+        "ANSWER": {
+          "LABEL": "መልስ",
+          "PLACEHOLDER": "መልሱን እዚህ ያስገቡ",
+          "ERROR": "እባክዎ ትክክለኛ መልስ ያቀርቡ።"
+        }
+      },
+      "EDIT": {
+        "TITLE": "የተደጋጋሚ ጥያቄዎችን አዘምን",
+        "SUCCESS_MESSAGE": "የተደጋጋሚ ጥያቄዎች በተሳካ ሁኔታ ተዘምኗል",
+        "ERROR_MESSAGE": "FAQ ለማዘመን ስህተት አጋጥሟል፣ እባክዎ እንደገና ይሞክሩ",
+        "APPROVE_SUCCESS_MESSAGE": "FAQ እንደ ተፈቀደ ተመዝግቧል"
+      },
+      "OPTIONS": {
+        "APPROVE": "አረጋግጥ",
+        "EDIT_RESPONSE": "አርትዕ",
+        "DELETE_RESPONSE": "ሰርዝ"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "FAQ አልተገኘም",
+        "SUBTITLE": "የተደጋጋሚ ጥያቄዎች አገልጋይዎን ከደንበኞችዎ ጥያቄዎች በፍጥነትና ትክክለኛ መልስ ለማቅረብ ይረዳሉ። እነዚህ ከይዘትዎ በራስሰር ሊፈጠሩ ወይም በእጅ ሊጨምሩ ይችላሉ።",
+        "CLEAR_SEARCH": "እየሰሩ ያሉ አሰሳዎችን አጽዳ",
+        "FEATURE_SPOTLIGHT": {
+          "TITLE": "Captain ተደጋጋሚ ጥያቄዎች",
+          "NOTE": "Captain ተደጋጋሚ ጥያቄዎች በደንበኞች መካከል የተለመዱ ጥያቄዎችን ይገነባል—እነሱ ከእርዳታ መረጃ ቤትዎ ውስጥ እንኳን ከሌለው ወይም በተደጋጋሚ የሚጠየቁ ሆነው—እና የሚዛመዱ ተደጋጋሚ ጥያቄዎችን ለድጋፍ ማሻሻል ይፈጥራል። እያንዳንዱን ምክር ማስተካከል ወይም ማቋረጥ መወሰን ይችላሉ።"
+        }
+      }
+    },
+    "FAQ_SUGGESTIONS": {
+      "HEADER": "FAQ suggestions",
+      "SEARCH_PLACEHOLDER": "Search suggestions...",
+      "QUEUE_COUNT": "{count} suggestion to review | {count} suggestions to review",
+      "QUEUE_HINT": "Ranked by customer demand",
+      "SOURCE_COUNT": "{count} conversation | {count} conversations",
+      "REVIEW": "Review sources",
+      "APPROVE": "አረጋግጥ",
+      "APPROVE_FAQ": "Approve FAQ",
+      "DISMISS": "Dismiss",
+      "SAVE": "ለውጦች አስቀምጥ",
+      "DETAILS": {
+        "TITLE": "Review FAQ suggestion",
+        "DESCRIPTION": "Captain grouped {count} conversation into this suggestion. Review the evidence and refine the FAQ before approval. | Captain grouped {count} conversations into this suggestion. Review the evidence and refine the FAQ before approval.",
+        "SOURCES": "Source conversations",
+        "SOURCE_PROGRESS": "{visible} of {total}",
+        "NO_SOURCES": "No accessible source conversations were found.",
+        "RETRY": "Retry"
+      },
+      "EMPTY_STATE": {
+        "TITLE": "The review queue is clear",
+        "SUBTITLE": "New FAQ suggestions will appear here when they are ready to review.",
+        "CLEAR_SEARCH": "Clear search"
+      },
+      "SUCCESS": {
+        "APPROVED": "FAQ approved and added to Captain's knowledge.",
+        "DISMISSED": "Suggestion dismissed.",
+        "SAVED": "Suggestion updated."
+      },
+      "ERRORS": {
+        "LOAD": "There was an error loading FAQ suggestions. Please try again.",
+        "LOAD_DETAILS": "There was an error loading the source conversations.",
+        "APPROVE": "There was an error approving the FAQ. Please try again.",
+        "DISMISS": "There was an error dismissing the suggestion. Please try again.",
+        "SAVE": "There was an error saving the suggestion. Please try again."
+      }
+    },
+    "INBOXES": {
+      "HEADER": "የተገናኙ ኢንቦክሶች",
+      "ADD_NEW": "አዲስ ኢንቦክስ ያገናኙ",
+      "OPTIONS": {
+        "DISCONNECT": "አግኝተው ይቆረጡ"
+      },
+      "DELETE": {
+        "TITLE": "እባክዎ እርግጠኛ ነዎት እንደ ኢንቦክሱ ከመገናኘት መቆለፍ?",
+        "DESCRIPTION": "",
+        "CONFIRM": "አዎን፣ አጥፋ",
+        "SUCCESS_MESSAGE": "ኢንቦክሱ በተሳካ ሁኔታ ተቋርጧል።",
+        "ERROR_MESSAGE": "ኢንቦክሱን ለመቆለፍ ስህተት ተከስቷል፣ እባክዎ እንደገና ይሞክሩ።"
+      },
+      "FORM_DESCRIPTION": "ከአስማሚው ጋር ለመገናኘት ኢንቦክስ ይምረጡ።",
+      "CREATE": {
+        "TITLE": "ኢንቦክስ ያገናኙ",
+        "SUCCESS_MESSAGE": "ኢንቦክሱ በተሳካ ሁኔታ ተገናኝቷል።",
+        "ERROR_MESSAGE": "ኢንቦክሱን ሲገናኝ ስህተት ተከስቷል። እባክዎ እንደገና ይሞክሩ።"
+      },
+      "FORM": {
+        "INBOX": {
+          "LABEL": "ኢንቦክስ",
+          "PLACEHOLDER": "እርዳታውን ለማስተካከል ኢንቦክሱን ይምረጡ።",
+          "ERROR": "የኢንቦክስ ምርጫ አስፈላጊ ነው።"
+        }
+      },
+      "EMPTY_STATE": {
+        "TITLE": "ተገናኝቷ ያልሆኑ ኢንቦክሶች የሉም",
+        "SUBTITLE": "ኢንቦክስ ማገናኘት አገልጋይዎ ከደንበኞችዎ የመጀመሪያ ጥያቄዎችን ማስተካከል እና ከዚያ በኋላ ወደ እርስዎ ለማስተላለፍ ያስችላል።"
+      }
+    }
+  }
+}

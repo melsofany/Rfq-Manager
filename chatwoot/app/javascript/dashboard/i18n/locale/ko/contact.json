@@ -1,0 +1,675 @@
+{
+  "CONTACT_PANEL": {
+    "NOT_AVAILABLE": "사용할 수 없음",
+    "EMAIL_ADDRESS": "이메일 주소",
+    "PHONE_NUMBER": "휴대폰 번호",
+    "WHATSAPP_USERNAME": "WhatsApp username",
+    "IDENTIFIER": "식별자",
+    "COPY_SUCCESSFUL": "클립보드에 성공적으로 복사됨",
+    "COMPANY": "회사",
+    "LOCATION": "장소",
+    "BROWSER_LANGUAGE": "브라우저 언어",
+    "CONVERSATION_TITLE": "대화 상세 정보",
+    "VIEW_PROFILE": "프로필 보기",
+    "BROWSER": "브라우저",
+    "OS": "운영 체제",
+    "INITIATED_FROM": "시작 위치",
+    "INITIATED_AT": "시작 시간",
+    "IP_ADDRESS": "IP 주소",
+    "CREATED_AT_LABEL": "생성일",
+    "NEW_MESSAGE": "새 메시지",
+    "CALL": "통화",
+    "CALL_INITIATED": "연락처에 전화 거는 중...",
+    "CALL_FAILED": "통화를 시작할 수 없습니다. 다시 시도하십시오.",
+    "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+    "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+    "CLICK_TO_EDIT": "Click to edit",
+    "VOICE_INBOX_PICKER": {
+      "TITLE": "음성 받은 메시지함 선택"
+    },
+    "CONVERSATIONS": {
+      "NO_RECORDS_FOUND": "이 연락처와 관련된 이전 대화가 없습니다.",
+      "TITLE": "이전 대화",
+      "VIEW_ALL": "View all conversations"
+    },
+    "LABELS": {
+      "CONTACT": {
+        "TITLE": "연락처 라벨",
+        "ERROR": "라벨 업데이트 실패"
+      },
+      "CONVERSATION": {
+        "TITLE": "대화 라벨",
+        "ADD_BUTTON": "라벨 추가하기"
+      },
+      "LABEL_SELECT": {
+        "TITLE": "라벨 추가하기",
+        "PLACEHOLDER": "라벨 찾기",
+        "NO_RESULT": "라벨을 찾을 수 없습니다",
+        "CREATE_LABEL": "새 라벨 만들기"
+      }
+    },
+    "MERGE_CONTACT": "연락처 합치기",
+    "CONTACT_ACTIONS": "연락처 활동",
+    "MUTE_CONTACT": "연락처 차단",
+    "UNMUTE_CONTACT": "연락처 차단 해제",
+    "MUTED_SUCCESS": "이 연락처가 성공적으로 차단되었습니다. 향후 대화에 대한 알림을 받지 않습니다.",
+    "UNMUTED_SUCCESS": "이 연락처가 성공적으로 차단 해제되었습니다.",
+    "SEND_TRANSCRIPT": "대화기록 보내기",
+    "EDIT_LABEL": "수정",
+    "SIDEBAR_SECTIONS": {
+      "CUSTOM_ATTRIBUTES": "사용자 지정 특성",
+      "CONTACT_LABELS": "연락처 라벨",
+      "PREVIOUS_CONVERSATIONS": "이전 대화",
+      "NO_RECORDS_FOUND": "속성을 찾을 수 없습니다"
+    }
+  },
+  "EDIT_CONTACT": {
+    "BUTTON_LABEL": "연락처 수정",
+    "TITLE": "연락처 수정",
+    "DESC": "연락처 정보 수정"
+  },
+  "DELETE_CONTACT": {
+    "BUTTON_LABEL": "연락처 삭제",
+    "TITLE": "연락처 삭제",
+    "DESC": "연락처 정보 삭제",
+    "CONFIRM": {
+      "TITLE": "삭제 확인",
+      "MESSAGE": "삭제하시겠습니까? ",
+      "YES": "예, 삭제합니다",
+      "NO": "아니요, 유지합니다"
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "연락처가 성공적으로 삭제되었습니다",
+      "ERROR_MESSAGE": "연락처를 삭제할 수 없습니다. 나중에 다시 시도해 주세요."
+    }
+  },
+  "CONTACT_FORM": {
+    "FORM": {
+      "SUBMIT": "제출",
+      "CANCEL": "취소",
+      "AVATAR": {
+        "LABEL": "연락처 아바타"
+      },
+      "NAME": {
+        "PLACEHOLDER": "연락처의 전체 이름 입력",
+        "LABEL": "전체 이름"
+      },
+      "BIO": {
+        "PLACEHOLDER": "연락처의 자기 소개 입력",
+        "LABEL": "자기 소개"
+      },
+      "EMAIL_ADDRESS": {
+        "PLACEHOLDER": "연락처의 이메일 주소 입력",
+        "LABEL": "이메일 주소",
+        "DUPLICATE": "이 이메일 주소는 다른 연락처에 사용 중입니다.",
+        "ERROR": "올바른 이메일 주소를 입력하십시오."
+      },
+      "PHONE_NUMBER": {
+        "PLACEHOLDER": "연락처의 전화 번호 입력",
+        "LABEL": "전화 번호",
+        "HELP": "전화번호는 E.164 형식이어야 합니다. 예: +1415555555 [+][국가 코드][지역 코드][전화번호]. 드롭다운에서 국가 번호를 선택할 수 있습니다.",
+        "ERROR": "전화번호는 비어있거나 E.164 형식이어야 합니다",
+        "DIAL_CODE_ERROR": "목록에서 국가 번호를 선택하십시오",
+        "DUPLICATE": "이 전화번호는 다른 연락처에 사용 중입니다."
+      },
+      "LOCATION": {
+        "PLACEHOLDER": "연락처 위치 입력",
+        "LABEL": "장소"
+      },
+      "COMPANY_NAME": {
+        "PLACEHOLDER": "회사명 입력",
+        "LABEL": "회사명"
+      },
+      "COUNTRY": {
+        "PLACEHOLDER": "국가 이름 입력",
+        "LABEL": "국가 이름",
+        "SELECT_PLACEHOLDER": "선택",
+        "REMOVE": "제거",
+        "SELECT_COUNTRY": "국가 선택"
+      },
+      "CITY": {
+        "PLACEHOLDER": "도시 이름 입력",
+        "LABEL": "도시 이름"
+      },
+      "SOCIAL_PROFILES": {
+        "FACEBOOK": {
+          "PLACEHOLDER": "페이스북 사용자 이름 입력",
+          "LABEL": "Facebook"
+        },
+        "TWITTER": {
+          "PLACEHOLDER": "트위터 사용자 이름 입력",
+          "LABEL": "Twitter"
+        },
+        "LINKEDIN": {
+          "PLACEHOLDER": "링크드인 사용자 이름 입력",
+          "LABEL": "LinkedIn"
+        },
+        "GITHUB": {
+          "PLACEHOLDER": "깃허브 사용자 이름 입력",
+          "LABEL": "Github"
+        }
+      }
+    },
+    "DELETE_AVATAR": {
+      "API": {
+        "SUCCESS_MESSAGE": "연락처 아바타가 성공적으로 삭제되었습니다",
+        "ERROR_MESSAGE": "연락처 아바타를 삭제할 수 없습니다. 나중에 다시 시도해 주세요."
+      }
+    },
+    "SUCCESS_MESSAGE": "연락처가 성공적으로 저장되었습니다.",
+    "ERROR_MESSAGE": "오류가 발생했습니다. 다시 시도하십시오."
+  },
+  "NEW_CONVERSATION": {
+    "BUTTON_LABEL": "대화 시작",
+    "TITLE": "새 대화",
+    "DESC": "새로운 메시지를 보내 대화를 시작하십시오.",
+    "NO_INBOX": "이 연락처와 새 대화를 시작할 받은 메시지함을 찾을 수 없습니다.",
+    "FORM": {
+      "TO": {
+        "LABEL": "받는 사람"
+      },
+      "INBOX": {
+        "LABEL": "받은 메시지함",
+        "PLACEHOLDER": "소스 받은 메시지함 선택",
+        "ERROR": "받은 메시지함 선택"
+      },
+      "SUBJECT": {
+        "LABEL": "제목",
+        "PLACEHOLDER": "제목",
+        "ERROR": "제목은 공백일 수 없습니다."
+      },
+      "MESSAGE": {
+        "LABEL": "메시지",
+        "PLACEHOLDER": "메시지를 여기에 작성해주세요",
+        "ERROR": "메시지는 비어 있을 수 없습니다"
+      },
+      "ATTACHMENTS": {
+        "SELECT": "파일 선택",
+        "HELP_TEXT": "여기에 파일을 끌어다 놓거나 파일을 선택하여 첨부하십시오"
+      },
+      "SUBMIT": "메시지 보내기",
+      "CANCEL": "취소",
+      "SUCCESS_MESSAGE": "메시지가 보내졌습니다!",
+      "GO_TO_CONVERSATION": "보기",
+      "ERROR_MESSAGE": "전송이 불가능합니다! 다시 시도해주세요"
+    }
+  },
+  "CONTACTS_PAGE": {
+    "LIST": {
+      "TABLE_HEADER": {
+        "SOCIAL_PROFILES": "소셜 프로필"
+      }
+    }
+  },
+  "CUSTOM_ATTRIBUTES": {
+    "BUTTON": "사용자 지정 속성 추가하기",
+    "COPY_SUCCESSFUL": "클립보드에 성공적으로 복사됨",
+    "SHOW_MORE": "모든 속성 보기",
+    "SHOW_LESS": "속성 간략히 보기",
+    "ACTIONS": {
+      "COPY": "속성 복사하기",
+      "DELETE": "속성 삭제하기",
+      "EDIT": "속성 수정하기"
+    },
+    "ADD": {
+      "TITLE": "사용자 지정 속성 만들기",
+      "DESC": "이 연락처에 사용자 지정 설명 추가하기"
+    },
+    "FORM": {
+      "CREATE": "속성 추가하기",
+      "CANCEL": "취소",
+      "NAME": {
+        "LABEL": "사용자 지정 속성 이름",
+        "PLACEHOLDER": "예: shopify id",
+        "ERROR": "잘못된 사용자 지정 속성 이름입니다"
+      },
+      "VALUE": {
+        "LABEL": "속성 값",
+        "PLACEHOLDER": "예: 11901 "
+      },
+      "ADD": {
+        "TITLE": "새 속성 만들기 ",
+        "SUCCESS": "속성이 성공적으로 추가되었습니다",
+        "ERROR": "속성을 추가할 수 없습니다. 나중에 다시 시도하십시오"
+      },
+      "UPDATE": {
+        "SUCCESS": "속성이 성공적으로 업데이트되었습니다",
+        "ERROR": "속성을 업데이트할 수 없습니다. 나중에 다시 시도하십시오"
+      },
+      "DELETE": {
+        "SUCCESS": "속성이 성공적으로 삭제되었습니다",
+        "ERROR": "속성을 삭제할 수 없습니다. 나중에 다시 시도하십시오"
+      },
+      "ATTRIBUTE_SELECT": {
+        "TITLE": "속성 추가하기",
+        "PLACEHOLDER": "속성 검색",
+        "NO_RESULT": "속성을 찾을 수 없습니다"
+      },
+      "ATTRIBUTE_TYPE": {
+        "LIST": {
+          "PLACEHOLDER": "값 선택",
+          "SEARCH_INPUT_PLACEHOLDER": "값 검색",
+          "NO_RESULT": "검색 결과가 없습니다."
+        }
+      }
+    },
+    "VALIDATIONS": {
+      "REQUIRED": "유효한 값이 필요합니다",
+      "INVALID_URL": "잘못된 URL입니다",
+      "INVALID_INPUT": "잘못된 입력입니다"
+    }
+  },
+  "MERGE_CONTACTS": {
+    "TITLE": "연락처 합치기",
+    "DESCRIPTION": "두 개의 프로필을 하나로 합칩니다. 모든 속성과 대화가 포함됩니다. 충돌하는 경우 기본 연락처의 속성이 우선합니다.",
+    "PRIMARY": {
+      "TITLE": "기본 연락처",
+      "HELP_LABEL": "삭제 예정"
+    },
+    "PARENT": {
+      "TITLE": "합칠 연락처",
+      "PLACEHOLDER": "연락처 검색",
+      "HELP_LABEL": "유지 예정"
+    },
+    "SUMMARY": {
+      "TITLE": "요약",
+      "DELETE_WARNING": "<strong>{primaryContactName}</strong>의 연락처가 삭제됩니다.",
+      "ATTRIBUTE_WARNING": "<strong>{primaryContactName}</strong>의 연락처 정보가 <strong>{parentContactName}</strong>(으)로 복사됩니다."
+    },
+    "SEARCH": {
+      "ERROR_MESSAGE": "문제가 발생했습니다. 나중에 다시 시도하십시오."
+    },
+    "FORM": {
+      "SUBMIT": " 연락처 합치기",
+      "CANCEL": "취소",
+      "CHILD_CONTACT": {
+        "ERROR": "합칠 하위 연락처를 선택하십시오"
+      },
+      "SUCCESS_MESSAGE": "연락처가 성공적으로 합쳐졌습니다",
+      "ERROR_MESSAGE": "연락처를 합칠 수 없습니다. 다시 시도하십시오!"
+    },
+    "DROPDOWN_ITEM": {
+      "ID": "(ID: {identifier})"
+    }
+  },
+  "CONTACTS_LAYOUT": {
+    "HEADER": {
+      "TITLE": "연락처",
+      "SEARCH_TITLE": "연락처 검색",
+      "ACTIVE_TITLE": "활성 연락처",
+      "SEARCH_PLACEHOLDER": "검색...",
+      "MESSAGE_BUTTON": "메시지",
+      "SEND_MESSAGE": "메시지 보내기",
+      "BLOCK_CONTACT": "연락처 차단",
+      "UNBLOCK_CONTACT": "연락처 차단 해제",
+      "BREADCRUMB": {
+        "CONTACTS": "연락처"
+      },
+      "ACTIONS": {
+        "CONTACT_CREATION": {
+          "ADD_CONTACT": "연락처 추가",
+          "EXPORT_CONTACT": "연락처 내보내기",
+          "IMPORT_CONTACT": "연락처 가져오기",
+          "SAVE_CONTACT": "연락처 저장",
+          "EMAIL_ADDRESS_DUPLICATE": "이 이메일 주소는 다른 연락처에 사용 중입니다.",
+          "PHONE_NUMBER_DUPLICATE": "이 전화번호는 다른 연락처에 사용 중입니다.",
+          "SUCCESS_MESSAGE": "연락처가 성공적으로 저장되었습니다.",
+          "ERROR_MESSAGE": "연락처를 저장할 수 없습니다. 나중에 다시 시도하십시오."
+        },
+        "BLOCK_SUCCESS_MESSAGE": "이 연락처가 성공적으로 차단되었습니다",
+        "BLOCK_ERROR_MESSAGE": "연락처를 차단할 수 없습니다. 나중에 다시 시도하십시오.",
+        "UNBLOCK_SUCCESS_MESSAGE": "이 연락처가 성공적으로 차단 해제되었습니다",
+        "UNBLOCK_ERROR_MESSAGE": "연락처 차단을 해제할 수 없습니다. 나중에 다시 시도하십시오.",
+        "IMPORT_CONTACT": {
+          "TITLE": "연락처 가져오기",
+          "DESCRIPTION": "CSV 파일을 통해 연락처 가져오기",
+          "DOWNLOAD_LABEL": "샘플 CSV 파일 다운로드",
+          "LABEL": "CSV 파일:",
+          "CHOOSE_FILE": "파일 선택",
+          "CHANGE": "변경",
+          "CANCEL": "취소",
+          "IMPORT": "가져오기",
+          "SUCCESS_MESSAGE": "가져오기가 완료되면 이메일로 알림을 받으실 수 있습니다.",
+          "ERROR_MESSAGE": "오류가 발생했습니다. 다시 시도하십시오."
+        },
+        "EXPORT_CONTACT": {
+          "TITLE": "연락처 내보내기",
+          "DESCRIPTION": "연락처의 상세 정보가 포함된 CSV 파일을 빠르게 내보내기",
+          "CONFIRM": "내보내기",
+          "SUCCESS_MESSAGE": "내보내기가 진행 중입니다. 내보내기 파일이 다운로드 준비되면 이메일로 알림을 받으실 수 있습니다.",
+          "ERROR_MESSAGE": "오류가 발생했습니다. 다시 시도하십시오."
+        },
+        "SORT_BY": {
+          "LABEL": "정렬 기준",
+          "OPTIONS": {
+            "NAME": "이름",
+            "EMAIL": "이메일",
+            "PHONE_NUMBER": "전화 번호",
+            "COMPANY": "회사",
+            "COUNTRY": "국가",
+            "CITY": "도시",
+            "LAST_ACTIVITY": "최근 활동",
+            "CREATED_AT": "생성일"
+          }
+        },
+        "ORDER": {
+          "LABEL": "정렬 순서",
+          "OPTIONS": {
+            "ASCENDING": "오름차순",
+            "DESCENDING": "내림차순"
+          }
+        },
+        "FILTERS": {
+          "CREATE_SEGMENT": {
+            "TITLE": "이 필터를 저장하시겠습니까?",
+            "CONFIRM": "필터 저장하기",
+            "LABEL": "이름",
+            "PLACEHOLDER": "필터 이름을 입력하십시오",
+            "ERROR": "유효한 이름을 입력하십시오",
+            "SUCCESS_MESSAGE": "필터가 성공적으로 저장되었습니다",
+            "ERROR_MESSAGE": "필터를 저장할 수 없습니다. 나중에 다시 시도하십시오."
+          },
+          "DELETE_SEGMENT": {
+            "TITLE": "삭제 확인",
+            "DESCRIPTION": "이 필터를 삭제하시겠습니까?",
+            "CONFIRM": "예, 삭제합니다",
+            "CANCEL": "아니요, 취소합니다",
+            "SUCCESS_MESSAGE": "필터가 성공적으로 삭제되었습니다",
+            "ERROR_MESSAGE": "필터를 삭제할 수 없습니다. 나중에 다시 시도하십시오."
+          }
+        }
+      }
+    },
+    "PAGINATION_FOOTER": {
+      "SHOWING": "{totalItems}개의 연락처 중 {startItem} - {endItem} 표시"
+    },
+    "FILTER": {
+      "NAME": "이름",
+      "EMAIL": "이메일",
+      "PHONE_NUMBER": "전화 번호",
+      "IDENTIFIER": "식별자",
+      "COUNTRY": "국가",
+      "CITY": "도시",
+      "COMPANY": "회사",
+      "CREATED_AT": "생성일",
+      "LAST_ACTIVITY": "최근 활동",
+      "REFERER_LINK": "참조 링크",
+      "BLOCKED": "차단됨",
+      "BLOCKED_TRUE": "참",
+      "BLOCKED_FALSE": "거짓",
+      "BUTTONS": {
+        "CLEAR_FILTERS": "필터 초기화",
+        "UPDATE_SEGMENT": "세그먼트 업데이트",
+        "APPLY_FILTERS": "필터 적용하기",
+        "ADD_FILTER": "필터 추가"
+      },
+      "TITLE": "연락처 필터",
+      "EDIT_SEGMENT": "세그먼트 수정",
+      "SEGMENT": {
+        "LABEL": "세그먼트 이름",
+        "INPUT_PLACEHOLDER": "세그먼트 이름을 입력하십시오"
+      },
+      "ACTIVE_FILTERS": {
+        "MORE_FILTERS": "+ {count}개의 필터 더 보기",
+        "CLEAR_FILTERS": "필터 초기화"
+      }
+    },
+    "CARD": {
+      "OF": "/",
+      "VIEW_DETAILS": "상세보기",
+      "EDIT_DETAILS_FORM": {
+        "TITLE": "연락처 정보 수정",
+        "FORM": {
+          "FIRST_NAME": {
+            "PLACEHOLDER": "이름 입력"
+          },
+          "LAST_NAME": {
+            "PLACEHOLDER": "성 입력"
+          },
+          "EMAIL_ADDRESS": {
+            "PLACEHOLDER": "이메일 주소 입력",
+            "DUPLICATE": "이 이메일 주소는 다른 연락처에 사용 중입니다."
+          },
+          "PHONE_NUMBER": {
+            "PLACEHOLDER": "전화 번호 입력",
+            "DUPLICATE": "이 전화번호는 다른 연락처에 사용 중입니다."
+          },
+          "CITY": {
+            "PLACEHOLDER": "도시 이름 입력"
+          },
+          "COUNTRY": {
+            "PLACEHOLDER": "국가 선택"
+          },
+          "BIO": {
+            "PLACEHOLDER": "자기 소개 입력"
+          },
+          "COMPANY_NAME": {
+            "PLACEHOLDER": "회사명 입력"
+          }
+        },
+        "UPDATE_BUTTON": "연락처 업데이트",
+        "SUCCESS_MESSAGE": "연락처가 성공적으로 업데이트되었습니다",
+        "ERROR_MESSAGE": "연락처를 업데이트할 수 없습니다. 나중에 다시 시도하십시오."
+      },
+      "SOCIAL_MEDIA": {
+        "TITLE": "소셜 링크 수정",
+        "FORM": {
+          "FACEBOOK": {
+            "PLACEHOLDER": "Facebook 추가"
+          },
+          "GITHUB": {
+            "PLACEHOLDER": "Github 추가"
+          },
+          "INSTAGRAM": {
+            "PLACEHOLDER": "Instagram 추가"
+          },
+          "WHATSAPP": {
+            "PLACEHOLDER": "Add WhatsApp"
+          },
+          "TELEGRAM": {
+            "PLACEHOLDER": "Telegram 추가"
+          },
+          "TIKTOK": {
+            "PLACEHOLDER": "TikTok 추가"
+          },
+          "LINKEDIN": {
+            "PLACEHOLDER": "LinkedIn 추가"
+          },
+          "TWITTER": {
+            "PLACEHOLDER": "Twitter 추가"
+          }
+        }
+      },
+      "DELETE_CONTACT": {
+        "MESSAGE": "이 작업은 영구적이며 되돌릴 수 없습니다.",
+        "BUTTON": "지금 삭제"
+      }
+    },
+    "DETAILS": {
+      "CREATED_AT": "{date}에 생성됨",
+      "LAST_ACTIVITY": "마지막 활동 {date}",
+      "DELETE_CONTACT_DESCRIPTION": "이 연락처를 영구적으로 삭제합니다. 이 작업은 되돌릴 수 없습니다",
+      "DELETE_CONTACT": "연락처 삭제",
+      "DELETE_DIALOG": {
+        "TITLE": "삭제 확인",
+        "DESCRIPTION": "이 연락처를 삭제하시겠습니까?",
+        "CONFIRM": "예, 삭제합니다",
+        "API": {
+          "SUCCESS_MESSAGE": "연락처가 성공적으로 삭제되었습니다",
+          "ERROR_MESSAGE": "연락처를 삭제할 수 없습니다. 나중에 다시 시도해 주세요."
+        }
+      },
+      "AVATAR": {
+        "UPLOAD": {
+          "ERROR_MESSAGE": "아바타를 업로드할 수 없습니다. 나중에 다시 시도하십시오.",
+          "SUCCESS_MESSAGE": "아바타가 성공적으로 업로드되었습니다"
+        },
+        "DELETE": {
+          "SUCCESS_MESSAGE": "아바타가 성공적으로 삭제되었습니다",
+          "ERROR_MESSAGE": "아바타를 삭제할 수 없습니다. 나중에 다시 시도하십시오."
+        }
+      }
+    },
+    "SIDEBAR": {
+      "TABS": {
+        "ATTRIBUTES": "속성",
+        "HISTORY": "기록",
+        "NOTES": "노트",
+        "MEDIA": "미디어",
+        "MERGE": "합치기"
+      },
+      "HISTORY": {
+        "EMPTY_STATE": "이 연락처와 관련된 이전 대화가 없습니다"
+      },
+      "ATTRIBUTES": {
+        "SEARCH_PLACEHOLDER": "속성 검색",
+        "UNUSED_ATTRIBUTES": "사용된 속성 {count}개 | 사용되지 않은 속성 {count}개",
+        "EMPTY_STATE": "이 계정에 사용할 수 있는 연락처 사용자 지정 속성이 없습니다. 설정에서 사용자 지정 속성을 만들 수 있습니다.",
+        "YES": "예",
+        "NO": "아니오",
+        "TRIGGER": {
+          "SELECT": "값 선택",
+          "INPUT": "값 입력"
+        },
+        "VALIDATIONS": {
+          "INVALID_NUMBER": "잘못된 숫자입니다",
+          "REQUIRED": "유효한 값이 필요합니다",
+          "INVALID_INPUT": "잘못된 입력입니다",
+          "INVALID_URL": "잘못된 URL입니다",
+          "INVALID_DATE": "잘못된 날짜입니다"
+        },
+        "NO_ATTRIBUTES": "속성을 찾을 수 없습니다",
+        "API": {
+          "SUCCESS_MESSAGE": "속성이 성공적으로 업데이트되었습니다",
+          "DELETE_SUCCESS_MESSAGE": "속성이 성공적으로 삭제되었습니다",
+          "UPDATE_ERROR": "속성을 업데이트할 수 없습니다. 나중에 다시 시도하십시오",
+          "DELETE_ERROR": "속성을 삭제할 수 없습니다. 나중에 다시 시도하십시오"
+        }
+      },
+      "MERGE": {
+        "TITLE": "연락처 합치기",
+        "DESCRIPTION": "모든 속성과 대화를 포함하여 두 개의 프로필을 하나로 합칩니다. 충돌하는 경우 기본 연락처의 속성이 우선합니다.",
+        "PRIMARY": "기본 연락처",
+        "PRIMARY_HELP_LABEL": "저장 예정",
+        "PRIMARY_REQUIRED_ERROR": "진행하기 전에 합칠 연락처를 선택하십시오",
+        "PARENT": "합칠 대상",
+        "PARENT_HELP_LABEL": "삭제 예정",
+        "EMPTY_STATE": "연락처를 찾을 수 없습니다",
+        "PLACEHOLDER": "기본 연락처 검색",
+        "SEARCH_PLACEHOLDER": "연락처 검색",
+        "SEARCH_ERROR_MESSAGE": "연락처를 검색할 수 없습니다. 나중에 다시 시도하십시오.",
+        "SUCCESS_MESSAGE": "연락처가 성공적으로 합쳐졌습니다",
+        "ERROR_MESSAGE": "연락처를 합칠 수 없습니다. 다시 시도하십시오!",
+        "IS_SEARCHING": "검색중...",
+        "BUTTONS": {
+          "CANCEL": "취소",
+          "CONFIRM": "연락처 합치기"
+        }
+      },
+      "NOTES": {
+        "PLACEHOLDER": "노트 추가하기",
+        "WROTE": "작성함",
+        "YOU": "나",
+        "SAVE": "노트 저장",
+        "ADD_NOTE": "연락처 노트 추가",
+        "EXPAND": "펼치기",
+        "COLLAPSE": "접기",
+        "NO_NOTES": "노트가 없습니다. 연락처 상세 페이지에서 노트를 추가할 수 있습니다.",
+        "EMPTY_STATE": "이 연락처와 관련된 노트가 없습니다. 위의 입력란에 입력하여 노트를 추가할 수 있습니다.",
+        "CONVERSATION_EMPTY_STATE": "아직 노트가 없습니다. 노트 추가 버튼을 사용하여 작성하십시오."
+      }
+    },
+    "EMPTY_STATE": {
+      "TITLE": "이 계정에 연락처가 없습니다",
+      "SUBTITLE": "아래 버튼을 클릭하여 새 연락처를 추가하십시오",
+      "BUTTON_LABEL": "연락처 추가",
+      "SEARCH_EMPTY_STATE_TITLE": "검색과 일치하는 연락처가 없습니다",
+      "LIST_EMPTY_STATE_TITLE": "이 보기에 사용 가능한 연락처가 없습니다",
+      "ACTIVE_EMPTY_STATE_TITLE": "현재 활성 상태인 연락처가 없습니다"
+    },
+    "LOAD_MORE": "더 보기"
+  },
+  "CONTACTS_BULK_ACTIONS": {
+    "ASSIGN_LABELS": "라벨 배정",
+    "REMOVE_LABELS": "Remove Labels",
+    "ASSIGN_LABELS_SUCCESS": "라벨이 성공적으로 배정되었습니다.",
+    "ASSIGN_LABELS_FAILED": "라벨 배정에 실패했습니다",
+    "REMOVE_LABELS_SUCCESS": "Labels removed successfully.",
+    "REMOVE_LABELS_FAILED": "Failed to remove labels",
+    "DESCRIPTION": "선택한 연락처에 추가할 라벨을 선택하십시오.",
+    "NO_LABELS_FOUND": "사용 가능한 라벨이 없습니다.",
+    "SELECTED_COUNT": "{count}개 선택됨",
+    "CLEAR_SELECTION": "선택 해제",
+    "SELECT_ALL": "전체 선택 ({count})",
+    "DELETE_CONTACTS": "삭제",
+    "DELETE_SUCCESS": "연락처가 성공적으로 삭제되었습니다.",
+    "DELETE_FAILED": "연락처 삭제에 실패했습니다.",
+    "DELETE_DIALOG": {
+      "TITLE": "선택한 연락처 삭제",
+      "SINGULAR_TITLE": "선택한 연락처 삭제",
+      "DESCRIPTION": "선택한 {count}개의 연락처가 영구적으로 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
+      "SINGULAR_DESCRIPTION": "선택한 연락처가 영구적으로 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
+      "CONFIRM_MULTIPLE": "연락처 삭제",
+      "CONFIRM_SINGLE": "연락처 삭제"
+    }
+  },
+  "COMPOSE_NEW_CONVERSATION": {
+    "CONTACT_SEARCH": {
+      "ERROR_MESSAGE": "검색을 완료할 수 없습니다. 다시 시도하십시오."
+    },
+    "CONTACT_CREATE": {
+      "ERROR_MESSAGE": "We couldn’t create the contact. Please try again."
+    },
+    "FORM": {
+      "GO_TO_CONVERSATION": "보기",
+      "SUCCESS_MESSAGE": "메시지가 성공적으로 전송되었습니다!",
+      "ERROR_MESSAGE": "대화를 생성하는 중 오류가 발생했습니다. 나중에 다시 시도하십시오.",
+      "NO_INBOX_ALERT": "이 연락처와 대화를 시작할 수 있는 받은 메시지함이 없습니다.",
+      "CONTACT_SELECTOR": {
+        "LABEL": "받는 사람:",
+        "TAG_INPUT_PLACEHOLDER": "이름, 이메일 또는 전화번호로 연락처 검색",
+        "CONTACT_CREATING": "연락처 생성 중..."
+      },
+      "INBOX_SELECTOR": {
+        "LABEL": "경유:",
+        "BUTTON": "받은 메시지함 보기"
+      },
+      "EMAIL_OPTIONS": {
+        "SUBJECT_LABEL": "제목:",
+        "SUBJECT_PLACEHOLDER": "이메일 제목을 입력하십시오",
+        "CC_LABEL": "참조:",
+        "CC_PLACEHOLDER": "이메일 주소로 연락처 검색",
+        "BCC_LABEL": "숨은 참조:",
+        "BCC_PLACEHOLDER": "이메일 주소로 연락처 검색",
+        "BCC_BUTTON": "숨은 참조"
+      },
+      "MESSAGE_EDITOR": {
+        "PLACEHOLDER": "메시지를 여기에 작성해주세요..."
+      },
+      "WHATSAPP_OPTIONS": {
+        "LABEL": "템플릿 선택",
+        "SEARCH_PLACEHOLDER": "템플릿 검색",
+        "EMPTY_STATE": "템플릿을 찾을 수 없습니다",
+        "TEMPLATE_PARSER": {
+          "TEMPLATE_NAME": "WhatsApp 템플릿: {templateName}",
+          "VARIABLES": "변수",
+          "BACK": "뒤로 가기",
+          "SEND_MESSAGE": "메시지 보내기"
+        }
+      },
+      "TWILIO_OPTIONS": {
+        "LABEL": "템플릿 선택",
+        "SEARCH_PLACEHOLDER": "템플릿 검색",
+        "EMPTY_STATE": "템플릿을 찾을 수 없습니다",
+        "TEMPLATE_PARSER": {
+          "BACK": "뒤로 가기",
+          "SEND_MESSAGE": "메시지 보내기"
+        }
+      },
+      "ACTION_BUTTONS": {
+        "DISCARD": "취소",
+        "SEND": "보내기 ({keyCode})"
+      }
+    }
+  }
+}

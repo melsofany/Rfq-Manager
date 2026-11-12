@@ -1,0 +1,42 @@
+{
+  "LOGIN": {
+    "TITLE": "Inloggen bij Chatwoot",
+    "EMAIL": {
+      "LABEL": "E-mailadres",
+      "PLACEHOLDER": "example{'@'}companyname.com",
+      "ERROR": "Voer een geldig e-mailadres in"
+    },
+    "PASSWORD": {
+      "LABEL": "Wachtwoord",
+      "PLACEHOLDER": "Wachtwoord"
+    },
+    "API": {
+      "SUCCESS_MESSAGE": "Inloggen geslaagd",
+      "ERROR_MESSAGE": "Kan geen verbinding maken met de Woot server. Probeer het opnieuw.",
+      "UNAUTH": "Gebruikersnaam of wachtwoord is onjuist. Probeer het opnieuw."
+    },
+    "OAUTH": {
+      "GOOGLE_LOGIN": "Inloggen met Google",
+      "BUSINESS_ACCOUNTS_ONLY": "You can't create a new account with a personal email address. Please sign up using your work email.",
+      "NO_ACCOUNT_FOUND": "Wij hebben geen e-mailadres gevonden voor uw e-mailadres.",
+      "SHOPIFY_INSTALLATION_FAILED": "We couldn't complete your Shopify installation. Please restart installation from Shopify."
+    },
+    "FORGOT_PASSWORD": "Wachtwoord vergeten?",
+    "CREATE_NEW_ACCOUNT": "Nieuw account aanmaken",
+    "SUBMIT": "Inloggen",
+    "SAML": {
+      "LABEL": "Login via SSO",
+      "TITLE": "Initiate Single Sign-on (SSO)",
+      "SUBTITLE": "Enter your work email to access your organization",
+      "BACK_TO_LOGIN": "Login via Password",
+      "WORK_EMAIL": {
+        "LABEL": "Work Email",
+        "PLACEHOLDER": "Enter your work email"
+      },
+      "SUBMIT": "Continue with SSO",
+      "API": {
+        "ERROR_MESSAGE": "SSO authentication failed. Please check your credentials and try again."
+      }
+    }
+  }
+}

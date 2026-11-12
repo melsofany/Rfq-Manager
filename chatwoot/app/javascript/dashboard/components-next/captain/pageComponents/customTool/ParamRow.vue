@@ -1,0 +1,134 @@
+<script setup>
+import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import Button from 'dashboard/components-next/button/Button.vue';
+import Input from 'dashboard/components-next/input/Input.vue';
+import ComboBox from 'dashboard/components-next/combobox/ComboBox.vue';
+import Checkbox from 'dashboard/components-next/checkbox/Checkbox.vue';
+
+defineProps({
+  suggestVerifiedEmail: {
+    type: Boolean,
+    default: false,
+  },
+});
+
+const emit = defineEmits(['remove', 'useVerifiedEmail']);
+const { t } = useI18n();
+const showErrors = ref(false);
+
+const name = defineModel('name', {
+  type: String,
+  required: true,
+});
+
+const type = defineModel('type', {
+  type: String,
+  required: true,
+});
+
+const description = defineModel('description', {
+  type: String,
+  default: '',
+});
+
+const required = defineModel('required', {
+  type: Boolean,
+  default: false,
+});
+
+const paramTypeOptions = computed(() => [
+  { value: 'string', label: t('CAPTAIN.CUSTOM_TOOLS.FORM.PARAM_TYPES.STRING') },
+  { value: 'number', label: t('CAPTAIN.CUSTOM_TOOLS.FORM.PARAM_TYPES.NUMBER') },
+  {
+    value: 'boolean',
+    label: t('CAPTAIN.CUSTOM_TOOLS.FORM.PARAM_TYPES.BOOLEAN'),
+  },
+  { value: 'array', label: t('CAPTAIN.CUSTOM_TOOLS.FORM.PARAM_TYPES.ARRAY') },
+  { value: 'object', label: t('CAPTAIN.CUSTOM_TOOLS.FORM.PARAM_TYPES.OBJECT') },
+]);
+
+const validationError = computed(() => {
+  if (!name.value || name.value.trim() === '') {
+    return 'PARAM_NAME_REQUIRED';
+  }
+  return null;
+});
+
+watch([name, type, description, required], () => {
+  showErrors.value = false;
+});
+
+const validate = () => {
+  showErrors.value = true;
+  return !validationError.value;
+};
+
+defineExpose({ validate });
+</script>
+
+<template>
+  <li class="list-none">
+    <div
+      class="flex flex-col gap-2 p-3 rounded-lg border border-n-weak"
+      :class="{
+        'animate-wiggle border-n-ruby-9': showErrors && validationError,
+      }"
+    >
+      <div class="grid grid-cols-3 gap-2">
+        <Input
+          v-model="name"
+          :placeholder="t('CAPTAIN.CUSTOM_TOOLS.FORM.PARAM_NAME.PLACEHOLDER')"
+          class="col-span-2 [&_input]:font-mono"
+        />
+        <ComboBox
+          v-model="type"
+          :options="paramTypeOptions"
+          :placeholder="t('CAPTAIN.CUSTOM_TOOLS.FORM.PARAM_TYPE.PLACEHOLDER')"
+          class="[&>div>button]:bg-n-alpha-black2"
+        />
+      </div>
+      <Input
+        v-model="description"
+        :placeholder="
+          t('CAPTAIN.CUSTOM_TOOLS.FORM.PARAM_DESCRIPTION.PLACEHOLDER')
+        "
+      />
+      <div class="flex items-center justify-between">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <Checkbox v-model="required" />
+          <span class="text-sm text-n-slate-11">
+            {{ t('CAPTAIN.CUSTOM_TOOLS.FORM.PARAM_REQUIRED.LABEL') }}
+          </span>
+        </label>
+        <Button
+          type="button"
+          ghost
+          slate
+          xs
+          icon="i-lucide-trash-2"
+          @click.stop="emit('remove')"
+        />
+      </div>
+    </div>
+    <p
+      v-if="suggestVerifiedEmail"
+      class="flex flex-wrap items-center gap-1 mt-1 mb-0 text-sm text-n-amber-11"
+    >
+      {{ t('CAPTAIN.CUSTOM_TOOLS.FORM.RISK.EMAIL_PARAM') }}
+      <Button
+        type="button"
+        link
+        xs
+        :label="t('CAPTAIN.CUSTOM_TOOLS.FORM.RISK.USE_VERIFIED_EMAIL')"
+        @click="emit('useVerifiedEmail')"
+      />
+    </p>
+    <span
+      v-if="showErrors && validationError"
+      class="block mt-1 text-sm text-n-ruby-11"
+    >
+      {{ t(`CAPTAIN.CUSTOM_TOOLS.FORM.ERRORS.${validationError}`) }}
+    </span>
+  </li>
+</template>

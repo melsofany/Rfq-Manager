@@ -1,0 +1,75 @@
+{
+  "LABEL_MGMT": {
+    "HEADER": "라벨",
+    "HEADER_BTN_TXT": "라벨 추가",
+    "LOADING": "라벨을 가져오는 중",
+    "DESCRIPTION": "라벨은 대화와 리드를 분류하고 우선순위를 지정하는 데 도움이 됩니다. 사이드 패널을 사용하여 대화 또는 연락처에 라벨을 할당할 수 있습니다.",
+    "LEARN_MORE": "라벨에 대해 자세히 알아보기",
+    "COUNT": "{n}개의 라벨 | {n}개의 라벨",
+    "SEARCH_PLACEHOLDER": "라벨 검색...",
+    "NO_RESULTS": "검색과 일치하는 라벨이 없습니다",
+    "SEARCH_404": "이 쿼리와 일치하는 항목이 없습니다",
+    "LIST": {
+      "404": "이 계정에는 사용 가능한 라벨이 없습니다.",
+      "TITLE": "라벨 관리",
+      "DESC": "라벨을 사용하여 대화를 그룹화할 수 있습니다.",
+      "TABLE_HEADER": {
+        "NAME": "이름",
+        "DESCRIPTION": "설명",
+        "COLOR": "색상",
+        "ACTION": "액션"
+      }
+    },
+    "FORM": {
+      "NAME": {
+        "LABEL": "라벨 이름",
+        "PLACEHOLDER": "라벨 이름",
+        "REQUIRED_ERROR": "라벨 이름이 필요합니다",
+        "MINIMUM_LENGTH_ERROR": "최소 두글자 이상이여야 합니다",
+        "VALID_ERROR": "영어나, 숫자, - 와 _ 만 사용 가능합니다"
+      },
+      "DESCRIPTION": {
+        "LABEL": "설명",
+        "PLACEHOLDER": "라벨 설명"
+      },
+      "COLOR": {
+        "LABEL": "색상"
+      },
+      "SHOW_ON_SIDEBAR": {
+        "LABEL": "사이드바에 라벨 표시"
+      },
+      "EDIT": "수정",
+      "CREATE": "만들기",
+      "DELETE": "삭제",
+      "CANCEL": "취소"
+    },
+    "ADD": {
+      "TITLE": "라벨 추가",
+      "DESC": "라벨을 사용하여 대화를 그룹화할 수 있습니다.",
+      "API": {
+        "SUCCESS_MESSAGE": "라벨이 성공적으로 추가되었습니다",
+        "ERROR_MESSAGE": "오류가 발생했습니다. 다시 시도하십시오."
+      }
+    },
+    "EDIT": {
+      "TITLE": "라벨 수정",
+      "API": {
+        "SUCCESS_MESSAGE": "라벨이 성공적으로 업데이트되었습니다",
+        "ERROR_MESSAGE": "오류가 발생했습니다. 다시 시도하십시오."
+      }
+    },
+    "DELETE": {
+      "BUTTON_TEXT": "삭제",
+      "API": {
+        "SUCCESS_MESSAGE": "라벨이 성공적으로 삭제되었습니다",
+        "ERROR_MESSAGE": "오류가 발생했습니다. 다시 시도하십시오."
+      },
+      "CONFIRM": {
+        "TITLE": "삭제 확인",
+        "MESSAGE": "삭제하시겠습니까? ",
+        "YES": "예, 삭제합니다. ",
+        "NO": "아니요, 유지해주세요. "
+      }
+    }
+  }
+}

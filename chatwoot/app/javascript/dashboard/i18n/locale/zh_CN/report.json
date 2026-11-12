@@ -1,0 +1,841 @@
+{
+  "MONITORS": {
+    "TITLE": "Monitors",
+    "AUTOMATIONS": {
+      "TITLE": "自动化",
+      "DESCRIPTION": "Run actions when this monitor first matches a conversation from new live activity.",
+      "CREATE": "Create automation",
+      "EMPTY": "No automations are linked to this monitor yet.",
+      "ACTIVE": "状态",
+      "DISABLED": "已禁用",
+      "FETCH_FAILED": "Could not load linked automations."
+    },
+    "LIST": {
+      "CONVERSATIONS_COUNT": "{count} conversation | {count} conversations",
+      "CONVERSATIONS_HELP": "Count of conversations matching this monitor in the last 7 days.",
+      "RUNNING": "Running",
+      "FETCH_FAILED": "Could not load monitors. Please try again.",
+      "PAGINATION": "Showing {startItem} – {endItem} of {totalItems} monitor | Showing {startItem} – {endItem} of {totalItems} monitors"
+    },
+    "DESCRIPTION": "Follow the themes that matter across your customer conversations. Describe a topic in plain English, and a monitor charts matching conversations as new customer messages arrive.",
+    "CREATE": "Create monitor",
+    "PREVIEW": "Preview matches",
+    "PREVIEW_COOLDOWN": "You can preview again in {count} second. | You can preview again in {count} seconds.",
+    "PREVIEW_FAILED": "Could not preview matches. Please try again.",
+    "PREVIEW_HELP": "{count} match in a sample of {sampled} recent conversations ({excluded} without usable context). This sample does not represent a complete scan. | {count} matches in a sample of {sampled} recent conversations ({excluded} without usable context). This sample does not represent a complete scan.",
+    "NAME": "姓名：",
+    "NAME_PLACEHOLDER": "Refund conversations",
+    "CHOOSE_ICON": "Choose icon or emoji",
+    "CONDITION": "Which conversations should this monitor find?",
+    "CONDITION_PLACEHOLDER": "All conversations mentioning refunds",
+    "CREATE_HELP": "We will check conversations created in the last seven days, then keep checking new customer messages. Public replies and configured customer attributes provide context. Private notes are excluded.",
+    "SECTIONS": {
+      "YOUR_MONITORS": "Your monitors",
+      "TEMPLATES": "Templates"
+    },
+    "TEMPLATES": {
+      "TITLE": "Start with a template",
+      "USE_NAMED": "Use {name} template",
+      "EDIT_HINT": "From {name} template. Edit anything before creating.",
+      "ADMIN_HELP": "Ask an administrator to create a monitor from a template.",
+      "LOGIN_PROBLEMS": {
+        "NAME": "Login problems",
+        "AUDIENCE": "For support teams",
+        "SUMMARY": "See when login complaints start increasing.",
+        "CONDITION": "A customer says they cannot sign in to their account, including failed password resets and verification codes that never arrive. Exclude questions about changing a password while already signed in."
+      },
+      "MISSING_ORDER_UPDATES": {
+        "NAME": "Missing order updates",
+        "AUDIENCE": "For operations teams",
+        "SUMMARY": "Track recurring delivery communication problems.",
+        "CONDITION": "A customer says an order confirmation, shipping update, or delivery notice did not arrive, or arrived for the wrong order. Exclude customers asking where a parcel is when they did receive the tracking email."
+      },
+      "COMPETITOR_MENTIONS": {
+        "NAME": "Competitor mentions",
+        "AUDIENCE": "For founders and sales teams",
+        "SUMMARY": "Find conversations worth following up on.",
+        "CONDITION": "A customer compares us with a competing product, says they are evaluating one, or mentions they may switch. Exclude customers who moved to us from a competitor and are asking how to import their data."
+      },
+      "FEATURE_REQUESTS": {
+        "NAME": "Feature requests",
+        "AUDIENCE": "For product teams",
+        "SUMMARY": "Keep a running count of conversations about unmet needs.",
+        "CONDITION": "A customer asks for a capability the product does not currently offer, or asks whether something is possible and it is not. Exclude questions about how to use a feature that already exists."
+      },
+      "REFUND_REQUESTS": {
+        "NAME": "Refund requests",
+        "AUDIENCE": "For finance teams",
+        "SUMMARY": "Bring a consistent definition to your weekly refund request count.",
+        "CONDITION": "A customer asks for money back on a payment they already made, including duplicate charges and refunds after cancelling. Exclude questions about the refund policy and requests for a discount."
+      },
+      "CANCELLATION_INTENT": {
+        "NAME": "Cancellation intent",
+        "AUDIENCE": "For account managers",
+        "SUMMARY": "Find customers who may need a conversation before they leave.",
+        "CONDITION": "A customer says they intend to cancel, will not renew, or plan to stop using the product. Exclude requests to reduce seats or downgrade, and cancellations the customer takes back in the same conversation."
+      },
+      "PAYMENT_FAILURES": {
+        "NAME": "Payment failures",
+        "AUDIENCE": "For billing and support teams",
+        "SUMMARY": "Spot customers who are blocked from paying.",
+        "CONDITION": "A customer says a payment, checkout, or invoice payment failed, or their card was declined. Exclude refund requests, disputes about completed charges, and general questions about payment methods."
+      },
+      "PRODUCT_ERRORS": {
+        "NAME": "Product errors",
+        "AUDIENCE": "For support and engineering teams",
+        "SUMMARY": "See when errors and crashes start spreading.",
+        "CONDITION": "A customer reports an error, crash, unavailable service, or severe slowness that prevents them from completing a task. Exclude sign-in problems and questions about how to use a working feature."
+      },
+      "ISSUE_STILL_UNRESOLVED": {
+        "NAME": "Issue still unresolved",
+        "AUDIENCE": "For support leads",
+        "SUMMARY": "Find conversations that need another pass.",
+        "CONDITION": "A customer says a suggested fix did not work, the same problem returned, or their issue remains after support said it was resolved. Exclude first-time reports and requests only asking for a status update."
+      },
+      "ESCALATION_REQUESTS": {
+        "NAME": "Escalation requests",
+        "AUDIENCE": "For support leads",
+        "SUMMARY": "Surface requests that need prompt attention.",
+        "CONDITION": "A customer explicitly asks for a human agent, manager, specialist, or higher support tier because their issue has not been resolved. Exclude routine transfers and sales requests."
+      }
+    },
+    "MATCHING_CONVERSATIONS": "Matching conversations created",
+    "LAST_DAYS": "Last {count} day | Last {count} days",
+    "LAST_DAYS_BEFORE_PAUSE": "{count} day before pause | {count} days before pause",
+    "GROUP_BY": "Group by {interval}",
+    "INTERVALS": {
+      "HOUR": "1 hour",
+      "SIX_HOURS": "6 hours",
+      "DAY": "1 day"
+    },
+    "EDIT": "编辑",
+    "UPDATE": "更新",
+    "MONITOR_DESCRIPTION": "描述信息",
+    "EDIT_HELP": "The description defines which conversations match. Changing it clears existing matches and rechecks previously checked conversations. Skipped periods stay skipped. If paused, rechecking starts when you resume.",
+    "DUPLICATE": "Duplicate",
+    "PAUSE": "Pause",
+    "RESUME": "Resume",
+    "RESUME_HELP": "Choose where this monitor should pick up. Existing results will stay available.",
+    "RESUME_CATCH_UP": "Check the paused period",
+    "RESUME_CATCH_UP_HELP": "Check conversations created and customer messages received from when the monitor was paused until now, then continue live updates.",
+    "RESUME_FROM_NOW": "Start from now",
+    "RESUME_FROM_NOW_HELP": "Only check new customer messages and conversations from now on. Do not scan the paused period.",
+    "DELETE": "删除",
+    "DELETE_HELP": "Delete this monitor and its results? This does not delete the conversations.",
+    "PAUSE_HELP": "Pause this monitor? Its results will remain available, and it will stop checking messages and conversations.",
+    "PAUSED_HELP": "Paused on {time}. Historical results remain available. New messages and conversations are not being checked.",
+    "COLLECTED_UNTIL": "Results collected until {time}.",
+    "RETRY": "重试",
+    "RESULTS_UPDATED": "New results are available. The chart has been refreshed; select a bar to view its updated conversations.",
+    "TIME_BASIS_HELP": "Each conversation counts once, on the date it was created. A new match can update an earlier bar.",
+    "COVERAGE_HELP": "This range includes periods that were not fully checked. Counts may be incomplete.",
+    "REFRESHED": "Last refreshed at {time}. Updates appear automatically.",
+    "USAGE": {
+      "LIMIT_REACHED": "This account has used its {limit} monitor calls for this month.",
+      "RESETS": "New evaluations and previews are on hold until {time}. Existing results remain available.",
+      "REACHED_AT": "Limit reached on {time}."
+    },
+    "STATES": {
+      "SCANNING": "Checking recent conversations",
+      "PROCESSING": "Checking conversations",
+      "RECHECKING": "Rechecking conversations with the updated description",
+      "LIVE": "Up to date",
+      "DELAYED": "Updates are delayed",
+      "NEEDS_ATTENTION": "Needs attention",
+      "PAUSED": "Paused",
+      "CATCHING_UP": "Checking the paused period"
+    },
+    "ERRORS": {
+      "FETCH_FAILED": "Could not load this monitor. Refresh to try again.",
+      "SAVE_FAILED": "Could not save the monitor. Check the name and condition, then try again.",
+      "NOT_CONFIGURED": "Configure the OpenRouter connection, then click Retry.",
+      "CREDENTIALS_INVALID": "The OpenRouter connection needs attention. Ask your installation administrator to check its credentials.",
+      "PROVIDER_CREDITS_EXHAUSTED": "The OpenRouter account has insufficient credits. Ask your installation administrator to check its balance, then retry.",
+      "INVALID_REQUEST": "The evaluation request needs attention. Contact your installation administrator.",
+      "INVALID_RESPONSE": "The evaluation provider returned an incomplete result. Affected conversations have not been counted.",
+      "PROVIDER_BUSY": "The evaluation provider is busy. Pending conversations need another evaluation.",
+      "PROVIDER_UNAVAILABLE": "The evaluation provider is temporarily unavailable. Updates may be delayed.",
+      "BUDGET_LIMIT": "The daily evaluation allowance has been reached. Pending work will resume after it resets.",
+      "MONTHLY_LIMIT": "This account has reached its monthly monitor allowance. Pending evaluations will resume next month.",
+      "CONTEXT_LIMIT": "Some conversations are too long to evaluate completely. They are excluded from the results.",
+      "INVALID_PARAMETERS": "Check the name, condition, date range, and interval.",
+      "TOO_MANY_BUCKETS": "Choose a shorter date range or a larger interval. A chart can show up to 744 bars.",
+      "MONITOR_LIMIT": "This account has reached its active monitor limit. Pause a monitor before creating another.",
+      "MONITOR_PAUSED": "This monitor is paused and no longer checks conversations.",
+      "MONITOR_CHANGED": "This monitor changed in another session. Its current state has been refreshed. Try again."
+    }
+  },
+  "REPORT": {
+    "HEADER": "会话",
+    "LOADING_CHART": "正在载入图表数据...",
+    "NO_ENOUGH_DATA": "我们没有收到足够的数据点来生成报告，请稍后再试。",
+    "DOWNLOAD_CONVERSATION_REPORTS": "Download conversation reports",
+    "DATA_FETCHING_FAILED": "数据获取失败，请稍后再试。",
+    "SUMMARY_FETCHING_FAILED": "摘要获取失败，请稍后再试。",
+    "METRICS": {
+      "CONVERSATIONS": {
+        "NAME": "会话",
+        "DESC": "(总计)"
+      },
+      "INCOMING_MESSAGES": {
+        "NAME": "收到的消息",
+        "DESC": "(总计)"
+      },
+      "OUTGOING_MESSAGES": {
+        "NAME": "发送的消息",
+        "DESC": "(总计)"
+      },
+      "FIRST_RESPONSE_TIME": {
+        "NAME": "首次响应时间",
+        "DESC": "( 平均)",
+        "INFO_TEXT": "用于计算的对话总数：",
+        "TOOLTIP_DESCRIPTION": "Based on {count} conversation | Based on {count} conversations",
+        "TOOLTIP_TEXT": "首次响应时间为 {metricValue}（基于 {conversationCount} 个对话）"
+      },
+      "RESOLUTION_TIME": {
+        "NAME": "解决时间",
+        "DESC": "( 平均)",
+        "INFO_TEXT": "用于计算的对话总数：",
+        "TOOLTIP_DESCRIPTION": "Based on {count} conversation | Based on {count} conversations",
+        "TOOLTIP_TEXT": "解决时间为 {metricValue}（基于 {conversationCount} 个对话）"
+      },
+      "RESOLUTION_COUNT": {
+        "NAME": "已解决的数量",
+        "DESC": "(总计)"
+      },
+      "BOT_RESOLUTION_COUNT": {
+        "NAME": "已解决的数量",
+        "DESC": "(总计)"
+      },
+      "BOT_HANDOFF_COUNT": {
+        "NAME": "转交次数",
+        "DESC": "(总计)"
+      },
+      "REPLY_TIME": {
+        "NAME": "客户等待时间",
+        "TOOLTIP_LABEL": "Waiting time",
+        "TOOLTIP_DESCRIPTION": "Based on {count} reply | Based on {count} replies",
+        "TOOLTIP_TEXT": "等待时间为 {metricValue}（基于 {conversationCount} 条回复）",
+        "DESC": ""
+      }
+    },
+    "DATE_RANGE_OPTIONS": {
+      "LAST_7_DAYS": "最近7天",
+      "LAST_14_DAYS": "最近14天",
+      "LAST_30_DAYS": "最近30天",
+      "THIS_MONTH": "This month",
+      "LAST_MONTH": "Last month",
+      "LAST_3_MONTHS": "最近3个月",
+      "LAST_6_MONTHS": "最近6个月",
+      "LAST_YEAR": "最近一年",
+      "CUSTOM_DATE_RANGE": "自定义日期范围"
+    },
+    "CUSTOM_DATE_RANGE": {
+      "CONFIRM": "应用",
+      "PLACEHOLDER": "选择日期范围"
+    },
+    "GROUP_BY_FILTER_DROPDOWN_LABEL": "分组依据",
+    "DURATION_FILTER_LABEL": "持续时间",
+    "GROUPING_OPTIONS": {
+      "DAY": "日",
+      "WEEK": "周",
+      "MONTH": "月",
+      "YEAR": "年"
+    },
+    "GROUP_BY_DAY_OPTIONS": [
+      {
+        "id": 1,
+        "groupBy": "日"
+      }
+    ],
+    "GROUP_BY_WEEK_OPTIONS": [
+      {
+        "id": 1,
+        "groupBy": "日"
+      },
+      {
+        "id": 2,
+        "groupBy": "周"
+      }
+    ],
+    "GROUP_BY_MONTH_OPTIONS": [
+      {
+        "id": 1,
+        "groupBy": "日"
+      },
+      {
+        "id": 2,
+        "groupBy": "周"
+      },
+      {
+        "id": 3,
+        "groupBy": "月"
+      }
+    ],
+    "GROUP_BY_YEAR_OPTIONS": [
+      {
+        "id": 1,
+        "groupBy": "日"
+      },
+      {
+        "id": 2,
+        "groupBy": "周"
+      },
+      {
+        "id": 3,
+        "groupBy": "月"
+      }
+    ],
+    "BUSINESS_HOURS": "工作时间",
+    "FILTER_ACTIONS": {
+      "CLEAR_FILTER": "清除筛选条件",
+      "EMPTY_LIST": "没有检索到相关信息"
+    },
+    "DRILLDOWN": {
+      "TITLE": "{metric} details",
+      "RESULT_COUNT_CONVERSATION": "{count} conversation | {count} conversations",
+      "RESULT_COUNT_MESSAGE": "{count} message | {count} messages",
+      "EMPTY": "No records found for this bar.",
+      "ERROR": "Could not load records. Please try again.",
+      "ADMIN_ONLY": "Only administrators can drill down into report records.",
+      "LOAD_MORE": "加载更多",
+      "PREVIOUS_BUCKET": "Previous bar",
+      "NEXT_BUCKET": "Next bar",
+      "VIEW_ALL": "查看全部",
+      "UNKNOWN_CONTACT": "Unknown contact",
+      "UNKNOWN_INBOX": "Unknown inbox",
+      "UNASSIGNED_AGENT": "未分配",
+      "NO_MESSAGE_CONTENT": "No message content",
+      "MESSAGE_CREATED_AT": "Message created at {time}",
+      "EVENT_OCCURRED_AT": "Event occurred at {time}",
+      "INCOMING_MESSAGE": "Incoming message",
+      "OUTGOING_MESSAGE": "Outgoing message"
+    },
+    "PAGINATION": {
+      "RESULTS": "显示 {start} 到 {end} 条，共 {total} 条结果",
+      "PER_PAGE_TEMPLATE": "{size} / page"
+    }
+  },
+  "AGENT_REPORTS": {
+    "HEADER": "客服概览",
+    "DESCRIPTION": "Easily track agent performance with key metrics such as conversations, response times, resolution times, and resolved cases. Click an agent's name to learn more.",
+    "LOADING_CHART": "正在载入图表数据...",
+    "NO_ENOUGH_DATA": "我们没有收到足够的数据点来生成报告，请稍后再试。",
+    "DOWNLOAD_AGENT_REPORTS": "下载客服报表",
+    "FILTER_DROPDOWN_LABEL": "选择客服",
+    "FILTERS": {
+      "INPUT_PLACEHOLDER": {
+        "AGENTS": "搜索客服代表"
+      }
+    },
+    "METRICS": {
+      "CONVERSATIONS": {
+        "NAME": "会话",
+        "DESC": "(总计)"
+      },
+      "INCOMING_MESSAGES": {
+        "NAME": "收到的消息",
+        "DESC": "(总计)"
+      },
+      "OUTGOING_MESSAGES": {
+        "NAME": "发送的消息",
+        "DESC": "(总计)"
+      },
+      "FIRST_RESPONSE_TIME": {
+        "NAME": "首次响应时间",
+        "DESC": "( 平均)",
+        "INFO_TEXT": "用于计算的对话总数：",
+        "TOOLTIP_TEXT": "首次响应时间为 {metricValue}（基于 {conversationCount} 个对话）"
+      },
+      "RESOLUTION_TIME": {
+        "NAME": "解决时间",
+        "DESC": "( 平均)",
+        "INFO_TEXT": "用于计算的对话总数：",
+        "TOOLTIP_TEXT": "解决时间为 {metricValue}（基于 {conversationCount} 个对话）"
+      },
+      "RESOLUTION_COUNT": {
+        "NAME": "已解决的数量",
+        "DESC": "(总计)"
+      }
+    },
+    "DATE_RANGE": [
+      {
+        "id": 0,
+        "name": "最近7天"
+      },
+      {
+        "id": 1,
+        "name": "最近30天"
+      },
+      {
+        "id": 2,
+        "name": "最近3个月"
+      },
+      {
+        "id": 3,
+        "name": "最近6个月"
+      },
+      {
+        "id": 4,
+        "name": "最近一年"
+      },
+      {
+        "id": 5,
+        "name": "自定义日期范围"
+      }
+    ],
+    "CUSTOM_DATE_RANGE": {
+      "CONFIRM": "应用",
+      "PLACEHOLDER": "选择日期范围"
+    }
+  },
+  "LABEL_REPORTS": {
+    "HEADER": "标签概览",
+    "DESCRIPTION": "Track label performance with key metrics including conversations, response times, resolution times, and resolved cases. Click a label name for detailed insights.",
+    "LOADING_CHART": "正在载入图表数据...",
+    "NO_ENOUGH_DATA": "我们没有收到足够的数据点来生成报告，请稍后再试。",
+    "DOWNLOAD_LABEL_REPORTS": "下载标签报表",
+    "FILTER_DROPDOWN_LABEL": "选择标签",
+    "FILTERS": {
+      "INPUT_PLACEHOLDER": {
+        "LABELS": "搜索标签"
+      }
+    },
+    "METRICS": {
+      "CONVERSATIONS": {
+        "NAME": "会话",
+        "DESC": "(总计)"
+      },
+      "INCOMING_MESSAGES": {
+        "NAME": "收到的消息",
+        "DESC": "(总计)"
+      },
+      "OUTGOING_MESSAGES": {
+        "NAME": "发送的消息",
+        "DESC": "(总计)"
+      },
+      "FIRST_RESPONSE_TIME": {
+        "NAME": "首次响应时间",
+        "DESC": "( 平均)",
+        "INFO_TEXT": "用于计算的对话总数：",
+        "TOOLTIP_TEXT": "首次响应时间为 {metricValue}（基于 {conversationCount} 个对话）"
+      },
+      "RESOLUTION_TIME": {
+        "NAME": "解决时间",
+        "DESC": "( 平均)",
+        "INFO_TEXT": "用于计算的对话总数：",
+        "TOOLTIP_TEXT": "解决时间为 {metricValue}（基于 {conversationCount} 个对话）"
+      },
+      "RESOLUTION_COUNT": {
+        "NAME": "已解决的数量",
+        "DESC": "(总计)"
+      }
+    },
+    "DATE_RANGE": [
+      {
+        "id": 0,
+        "name": "最近7天"
+      },
+      {
+        "id": 1,
+        "name": "最近30天"
+      },
+      {
+        "id": 2,
+        "name": "最近3个月"
+      },
+      {
+        "id": 3,
+        "name": "最近6个月"
+      },
+      {
+        "id": 4,
+        "name": "最近一年"
+      },
+      {
+        "id": 5,
+        "name": "自定义日期范围"
+      }
+    ],
+    "CUSTOM_DATE_RANGE": {
+      "CONFIRM": "应用",
+      "PLACEHOLDER": "选择日期范围"
+    }
+  },
+  "INBOX_REPORTS": {
+    "HEADER": "收件箱概览",
+    "DESCRIPTION": "在一个地方快速查看您的收件箱表现，包括会话、响应时间、解决时间和已解决案例等关键指标。点击收件箱名称以了解更多详细信息。",
+    "LOADING_CHART": "正在载入图表数据...",
+    "NO_ENOUGH_DATA": "我们没有收到足够的数据点来生成报告，请稍后再试。",
+    "DOWNLOAD_INBOX_REPORTS": "下载收件箱报表",
+    "FILTER_DROPDOWN_LABEL": "选择收件箱",
+    "ALL_INBOXES": "All Inboxes",
+    "SEARCH_INBOX": "Search Inbox",
+    "FILTERS": {
+      "INPUT_PLACEHOLDER": {
+        "INBOXES": "Search inboxes"
+      }
+    },
+    "METRICS": {
+      "CONVERSATIONS": {
+        "NAME": "会话",
+        "DESC": "(总计)"
+      },
+      "INCOMING_MESSAGES": {
+        "NAME": "收到的消息",
+        "DESC": "(总计)"
+      },
+      "OUTGOING_MESSAGES": {
+        "NAME": "发送的消息",
+        "DESC": "(总计)"
+      },
+      "FIRST_RESPONSE_TIME": {
+        "NAME": "首次响应时间",
+        "DESC": "( 平均)",
+        "INFO_TEXT": "用于计算的对话总数：",
+        "TOOLTIP_TEXT": "首次响应时间为 {metricValue}（基于 {conversationCount} 个对话）"
+      },
+      "RESOLUTION_TIME": {
+        "NAME": "解决时间",
+        "DESC": "( 平均)",
+        "INFO_TEXT": "用于计算的对话总数：",
+        "TOOLTIP_TEXT": "解决时间为 {metricValue}（基于 {conversationCount} 个对话）"
+      },
+      "RESOLUTION_COUNT": {
+        "NAME": "已解决的数量",
+        "DESC": "(总计)"
+      }
+    },
+    "DATE_RANGE": [
+      {
+        "id": 0,
+        "name": "最近7天"
+      },
+      {
+        "id": 1,
+        "name": "最近30天"
+      },
+      {
+        "id": 2,
+        "name": "最近3个月"
+      },
+      {
+        "id": 3,
+        "name": "最近6个月"
+      },
+      {
+        "id": 4,
+        "name": "最近一年"
+      },
+      {
+        "id": 5,
+        "name": "自定义日期范围"
+      }
+    ],
+    "CUSTOM_DATE_RANGE": {
+      "CONFIRM": "应用",
+      "PLACEHOLDER": "选择日期范围"
+    }
+  },
+  "TEAM_REPORTS": {
+    "HEADER": "团队概览",
+    "DESCRIPTION": "Get a snapshot of your team's performance with essential metrics, including conversations, response times, resolution times, and resolved cases. Click a team name for more details.",
+    "LOADING_CHART": "正在载入图表数据...",
+    "NO_ENOUGH_DATA": "我们没有收到足够的数据点来生成报告，请稍后再试。",
+    "DOWNLOAD_TEAM_REPORTS": "下载团队报表",
+    "FILTER_DROPDOWN_LABEL": "选择团队",
+    "FILTERS": {
+      "ADD_FILTER": "添加过滤器",
+      "CLEAR_ALL": "清除全部",
+      "NO_FILTER": "没有可用的过滤器",
+      "INPUT_PLACEHOLDER": {
+        "TEAMS": "查找团队"
+      }
+    },
+    "METRICS": {
+      "CONVERSATIONS": {
+        "NAME": "会话",
+        "DESC": "(总计)"
+      },
+      "INCOMING_MESSAGES": {
+        "NAME": "收到的消息",
+        "DESC": "(总计)"
+      },
+      "OUTGOING_MESSAGES": {
+        "NAME": "发送的消息",
+        "DESC": "(总计)"
+      },
+      "FIRST_RESPONSE_TIME": {
+        "NAME": "首次响应时间",
+        "DESC": "( 平均)",
+        "INFO_TEXT": "用于计算的对话总数：",
+        "TOOLTIP_TEXT": "首次响应时间为 {metricValue}（基于 {conversationCount} 个对话）"
+      },
+      "RESOLUTION_TIME": {
+        "NAME": "解决时间",
+        "DESC": "( 平均)",
+        "INFO_TEXT": "用于计算的对话总数：",
+        "TOOLTIP_TEXT": "解决时间为 {metricValue}（基于 {conversationCount} 个对话）"
+      },
+      "RESOLUTION_COUNT": {
+        "NAME": "已解决的数量",
+        "DESC": "(总计)"
+      }
+    },
+    "DATE_RANGE": [
+      {
+        "id": 0,
+        "name": "最近7天"
+      },
+      {
+        "id": 1,
+        "name": "最近30天"
+      },
+      {
+        "id": 2,
+        "name": "最近3个月"
+      },
+      {
+        "id": 3,
+        "name": "最近6个月"
+      },
+      {
+        "id": 4,
+        "name": "最近一年"
+      },
+      {
+        "id": 5,
+        "name": "自定义日期范围"
+      }
+    ],
+    "CUSTOM_DATE_RANGE": {
+      "CONFIRM": "应用",
+      "PLACEHOLDER": "选择日期范围"
+    }
+  },
+  "CSAT_REPORTS": {
+    "HEADER": "CSAT 报告",
+    "NO_RECORDS": "No responses yet",
+    "NO_RECORDS_DESCRIPTION": "CSAT survey responses will appear here once customers start providing feedback.",
+    "DOWNLOAD": "下载 CSAT 报告",
+    "DOWNLOAD_FAILED": "下载 CSAT 报告失败",
+    "FILTERS": {
+      "ADD_FILTER": "添加过滤器",
+      "CLEAR_ALL": "清除全部",
+      "NO_FILTER": "没有可用的过滤器",
+      "INPUT_PLACEHOLDER": {
+        "AGENTS": "搜索客服代表",
+        "INBOXES": "Search inboxes",
+        "TEAMS": "查找团队",
+        "RATINGS": "Search ratings"
+      },
+      "AGENTS": {
+        "LABEL": "客服"
+      },
+      "INBOXES": {
+        "LABEL": "收件箱"
+      },
+      "TEAMS": {
+        "LABEL": "团队"
+      },
+      "RATINGS": {
+        "LABEL": "评分"
+      }
+    },
+    "TABLE": {
+      "HEADER": {
+        "CONTACT_NAME": "联系人",
+        "AGENT_NAME": "客服",
+        "RATING": "评分",
+        "FEEDBACK_TEXT": "反馈评论",
+        "CONVERSATION": "会话",
+        "CUSTOMER": "Customer",
+        "RESPONSE": "回复",
+        "HANDLED_BY": "Handled by"
+      },
+      "UNKNOWN_CUSTOMER": "Unknown customer"
+    },
+    "NO_AGENT": "No assigned agent",
+    "NO_FEEDBACK": "No feedback provided",
+    "METRIC": {
+      "TOTAL_RESPONSES": {
+        "LABEL": "总回复数",
+        "TOOLTIP": "收集到的回复总数"
+      },
+      "SATISFACTION_SCORE": {
+        "LABEL": "满意度得分",
+        "TOOLTIP": "正面回复数 / 总回复数 * 100"
+      },
+      "RESPONSE_RATE": {
+        "LABEL": "回复率",
+        "TOOLTIP": "总回复数 / 发送的 CSAT 调查消息总数 * 100"
+      },
+      "RATING_DISTRIBUTION": "Rating distribution"
+    },
+    "REVIEW_NOTES": {
+      "TITLE": "Review notes",
+      "PLACEHOLDER": "Add review notes about this rating...",
+      "SAVE": "保存",
+      "CANCEL": "取消",
+      "SAVING": "保存中...",
+      "SAVED": "Notes saved successfully",
+      "SAVE_ERROR": "Failed to save notes",
+      "UPDATED_BY": "Updated by {name} {time}",
+      "UPDATED_BY_LABEL": "Updated by",
+      "PAYWALL": {
+        "TITLE": "Upgrade to add review notes",
+        "AVAILABLE_ON": "The review notes feature is only available in the Business and Enterprise plans.",
+        "UPGRADE_PROMPT": "Add internal context to every CSAT response with review notes. Capture what really happened, spot patterns faster, and make better decisions from your feedback.",
+        "UPGRADE_NOW": "立即升级",
+        "CANCEL_ANYTIME": "您可以随时更改或取消您的计划"
+      }
+    }
+  },
+  "BOT_REPORTS": {
+    "HEADER": "机器人报告",
+    "METRIC": {
+      "TOTAL_CONVERSATIONS": {
+        "LABEL": "会话数量",
+        "TOOLTIP": "机器人处理的会话总数"
+      },
+      "TOTAL_RESPONSES": {
+        "LABEL": "总回复数",
+        "TOOLTIP": "机器人发送的回复总数"
+      },
+      "RESOLUTION_RATE": {
+        "LABEL": "解决率",
+        "TOOLTIP": "机器人解决的会话数 / 机器人处理的会话总数 * 100"
+      },
+      "HANDOFF_RATE": {
+        "LABEL": "转交率",
+        "TOOLTIP": "转交给客服的会话数 / 机器人处理的会话总数 * 100"
+      }
+    }
+  },
+  "OVERVIEW_REPORTS": {
+    "HEADER": "概览",
+    "LIVE": "实时",
+    "HEATMAP_ARIA_LABEL": "{metric} by day and hour",
+    "ACCOUNT_CONVERSATIONS": {
+      "HEADER": "未解决会话",
+      "LOADING_MESSAGE": "正在加载会话指标...",
+      "OPEN": "打开",
+      "UNATTENDED": "未处理",
+      "UNASSIGNED": "未分配",
+      "PENDING": "等待中"
+    },
+    "CONVERSATION_HEATMAP": {
+      "HEADER": "会话流量",
+      "NO_CONVERSATIONS": "没有会话",
+      "CONVERSATION": "{count} 个会话",
+      "CONVERSATIONS": "{count} 个会话",
+      "DOWNLOAD_REPORT": "下载报告"
+    },
+    "RESOLUTION_HEATMAP": {
+      "HEADER": "Resolutions",
+      "NO_CONVERSATIONS": "没有会话",
+      "CONVERSATION": "{count} 个会话",
+      "CONVERSATIONS": "{count} 个会话",
+      "DOWNLOAD_REPORT": "下载报告"
+    },
+    "AGENT_CONVERSATIONS": {
+      "HEADER": "按客服划分的会话",
+      "LOADING_MESSAGE": "正在加载客服指标...",
+      "NO_AGENTS": "没有客服的会话",
+      "TABLE_HEADER": {
+        "AGENT": "客服",
+        "OPEN": "打开",
+        "UNATTENDED": "未处理",
+        "STATUS": "状态"
+      }
+    },
+    "TEAM_CONVERSATIONS": {
+      "ALL_TEAMS": "所有团队",
+      "HEADER": "团队对话统计",
+      "LOADING_MESSAGE": "正在加载团队指标...",
+      "NO_TEAMS": "没有可用数据",
+      "TABLE_HEADER": {
+        "TEAM": "团队",
+        "OPEN": "打开",
+        "UNATTENDED": "未处理",
+        "STATUS": "状态"
+      }
+    },
+    "AGENT_STATUS": {
+      "HEADER": "客服状态",
+      "ONLINE": "在线",
+      "BUSY": "忙碌",
+      "OFFLINE": "离线"
+    }
+  },
+  "DAYS_OF_WEEK": {
+    "SUNDAY": "周日",
+    "MONDAY": "周一",
+    "TUESDAY": "周二",
+    "WEDNESDAY": "周三",
+    "THURSDAY": "周四",
+    "FRIDAY": "周五",
+    "SATURDAY": "周六"
+  },
+  "SLA_REPORTS": {
+    "HEADER": "SLA 报告",
+    "NO_RECORDS": "没有可用的 SLA 应用会话。",
+    "LOADING": "正在加载 SLA 数据...",
+    "DOWNLOAD_SLA_REPORTS": "下载 SLA 报告",
+    "DOWNLOAD_FAILED": "下载 SLA 报告失败",
+    "DROPDOWN": {
+      "ADD_FIlTER": "添加过滤器",
+      "CLEAR_ALL": "清除全部",
+      "CLEAR_FILTER": "清除过滤器",
+      "EMPTY_LIST": "没有检索到相关信息",
+      "NO_FILTER": "没有可用的过滤器",
+      "SEARCH": "搜索过滤器",
+      "INPUT_PLACEHOLDER": {
+        "SLA": "SLA 名称",
+        "AGENTS": "客服名称",
+        "INBOXES": "收件箱名称",
+        "LABELS": "标签名称",
+        "TEAMS": "团队名称"
+      },
+      "SLA": "SLA 策略",
+      "INBOXES": "收件箱",
+      "AGENTS": "客服",
+      "LABELS": "标签",
+      "TEAMS": "团队"
+    },
+    "WITH": "与",
+    "METRICS": {
+      "HIT_RATE": {
+        "LABEL": "命中率",
+        "TOOLTIP": "成功完成的 SLA 百分比"
+      },
+      "NO_OF_MISSES": {
+        "LABEL": "未命中次数",
+        "TOOLTIP": "特定时间段内的 SLA 未命中总数"
+      },
+      "NO_OF_CONVERSATIONS": {
+        "LABEL": "会话数量",
+        "TOOLTIP": "带有 SLA 的会话总数"
+      }
+    },
+    "TABLE": {
+      "HEADER": {
+        "POLICY": "策略",
+        "CONVERSATION": "会话",
+        "AGENT": "客服"
+      },
+      "VIEW_DETAILS": "查看详情"
+    }
+  },
+  "SUMMARY_REPORTS": {
+    "INBOX": "收件箱",
+    "AGENT": "客服",
+    "TEAM": "团队",
+    "LABEL": "标签",
+    "AVG_RESOLUTION_TIME": "平均解决时间",
+    "AVG_FIRST_RESPONSE_TIME": "平均首次响应时间",
+    "AVG_REPLY_TIME": "平均客户等待时间",
+    "RESOLUTION_COUNT": "已解决的数量",
+    "CONVERSATIONS": "会话数量"
+  }
+}

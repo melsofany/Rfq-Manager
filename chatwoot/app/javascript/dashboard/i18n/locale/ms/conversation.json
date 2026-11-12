@@ -1,0 +1,617 @@
+{
+  "CONVERSATION": {
+    "REFERRAL": {
+      "AD_LABEL": "Ad",
+      "POST_LABEL": "Post",
+      "VIEW_AD": "View ad",
+      "WELCOME_MESSAGE_LABEL": "Pre-filled message: ",
+      "REPLIED_BELOW": "Customer replied below"
+    },
+    "SELECT_A_CONVERSATION": "Sila pilih perbualan dari panel kiri",
+    "CSAT_REPLY_MESSAGE": "Sila nilai perbualan ini",
+    "404": "Maaf, kami tidak dapat menemui perbualan tersebut. Sila cuba lagi",
+    "SWITCH_VIEW_LAYOUT": "Tukar susun atur",
+    "DASHBOARD_APP_TAB_MESSAGES": "Mesej",
+    "UNVERIFIED_SESSION": "Identiti pengguna ini belum disahkan",
+    "NO_MESSAGE_1": "Uh oh! Nampaknya tiada mesej daripada pelanggan dalam peti masuk anda.",
+    "NO_MESSAGE_2": " untuk menghantar mesej ke halaman anda!",
+    "NO_INBOX_1": "Hola! Nampaknya anda belum menambah sebarang peti masuk lagi.",
+    "NO_INBOX_2": " untuk bermula",
+    "NO_INBOX_AGENT": "Uh Oh! Nampaknya anda bukan sebahagian daripada mana-mana peti masuk. Sila hubungi pentadbir anda",
+    "SEARCH_MESSAGES": "Cari mesej dalam perbualan",
+    "VIEW_ORIGINAL": "Lihat asal",
+    "VIEW_TRANSLATED": "Lihat terjemahan",
+    "TRANSLATING": "Translating…",
+    "TRANSLATING_TO": "Translating to {language}…",
+    "VIEW_ORIGINAL_IN": "View original ({language})",
+    "VIEW_TRANSLATED_IN": "View translated ({language})",
+    "TRANSLATION_FAILED": "Could not translate, sent as typed",
+    "CONTACT_TRANSLATION_FAILED": "Could not translate",
+    "EMPTY_STATE": {
+      "CMD_BAR": "untuk buka menu arahan",
+      "KEYBOARD_SHORTCUTS": "untuk lihat pintasan papan kekunci"
+    },
+    "SEARCH": {
+      "TITLE": "Cari mesej",
+      "RESULT_TITLE": "Keputusan Carian",
+      "LOADING_MESSAGE": "Memproses data...",
+      "PLACEHOLDER": "Taip sebarang teks untuk cari mesej",
+      "NO_MATCHING_RESULTS": "Tiada keputusan dijumpai."
+    },
+    "UNREAD_MESSAGES": "Mesej Belum Dibaca",
+    "UNREAD_MESSAGE": "Mesej Belum Dibaca",
+    "CONTACT_HISTORY": {
+      "OLDER": "Previous conversation",
+      "NEWER": "Next conversation",
+      "OLDER_WITH": "Previous conversation with {name} · {time}",
+      "NEWER_WITH": "Next conversation with {name} · {time}",
+      "CUSTOMER": "this customer",
+      "REPLY_TO_OLDER": "Reply to this older conversation",
+      "GO_TO_LATEST": "Go to latest conversation"
+    },
+    "CLICK_HERE": "Klik di sini",
+    "LOADING_INBOXES": "Memuatkan peti masuk",
+    "LOADING_CONVERSATIONS": "Memuatkan Perbualan",
+    "CANNOT_REPLY": "Anda tidak boleh membalas kerana",
+    "24_HOURS_WINDOW": "Sekatan tetingkap mesej 24 jam",
+    "48_HOURS_WINDOW": "Sekatan tetingkap mesej 48 jam",
+    "API_HOURS_WINDOW": "You can only reply to this conversation within {hours} hours",
+    "NOT_ASSIGNED_TO_YOU": "Perbualan ini tidak ditugaskan kepada anda. Adakah anda ingin menugaskan perbualan ini kepada diri anda?",
+    "ASSIGN_TO_ME": "Tugaskan kepada saya",
+    "BOT_HANDOFF_MESSAGE": "This conversation is currently handled by {assigneeName}.",
+    "BOT_HANDOFF_FALLBACK_ASSIGNEE": "an AI agent",
+    "BOT_HANDOFF_ACTION": "Take over",
+    "BOT_HANDOFF_REOPEN_ACTION": "Tandakan perbualan terbuka",
+    "BOT_HANDOFF_SUCCESS": "Perbualan telah diserahkan kepada anda",
+    "BOT_HANDOFF_ERROR": "Gagal mengambil alih perbualan. Sila cuba lagi.",
+    "TWILIO_WHATSAPP_CAN_REPLY": "Anda hanya boleh membalas perbualan ini menggunakan mesej templat kerana",
+    "TWILIO_WHATSAPP_24_HOURS_WINDOW": "Sekatan tetingkap mesej 24 jam",
+    "OLD_INSTAGRAM_INBOX_REPLY_BANNER": "Akaun Instagram ini telah dipindahkan ke peti masuk saluran Instagram baru. Semua mesej baru akan dipaparkan di sana. Anda tidak akan dapat menghantar mesej dari perbualan ini lagi.",
+    "INSTAGRAM_RESTRICTION_BANNER": "Instagram messaging is currently affected by an API-level issue on Meta’s side, not a problem with Chatwoot. Some messages or actions may be delayed or unavailable. We’re working closely with Meta to resolve it as quickly as possible.",
+    "INSTAGRAM_RESTRICTION_STATUS_LINK": "View status updates",
+    "REPLYING_TO": "Anda sedang membalas kepada:",
+    "REMOVE_SELECTION": "Buang Pilihan",
+    "DOWNLOAD": "Muat Turun",
+    "UNKNOWN_FILE_TYPE": "Fail Tidak Dikenali",
+    "SAVE_CONTACT": "Simpan Kenalan",
+    "NO_CONTENT": "Tiada kandungan untuk dipaparkan",
+    "SHARED_ATTACHMENT": {
+      "CONTACT": "{sender} has shared a contact",
+      "LOCATION": "{sender} has shared a location",
+      "FILE": "{sender} has shared a file",
+      "MEETING": "{sender} has started a meeting"
+    },
+    "UPLOADING_ATTACHMENTS": "Memuat naik lampiran...",
+    "REPLIED_TO_STORY": "Membalas cerita anda",
+    "UNSUPPORTED_MESSAGE": "This message is unsupported. You can view this message on the Facebook / Instagram app.",
+    "UNSUPPORTED_MESSAGE_FACEBOOK": "Mesej ini tidak disokong. Anda boleh melihat mesej ini di aplikasi Facebook Messenger.",
+    "UNSUPPORTED_MESSAGE_INSTAGRAM": "Mesej ini tidak disokong. Anda boleh melihat mesej ini di aplikasi Instagram.",
+    "UNSUPPORTED_MESSAGE_TIKTOK": "Mesej ini tidak disokong. Anda boleh melihat mesej ini di aplikasi TikTok.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_TITLE": "Message content unavailable",
+    "UNSUPPORTED_MESSAGE_WHATSAPP": "We’re unable to display this message because Meta hasn’t provided its content. This can happen with WhatsApp Coexistence setups. To view the message, please check it in your WhatsApp Business app.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_DETAILS": "For more details, refer to {documentation}.",
+    "UNSUPPORTED_MESSAGE_WHATSAPP_LEARN_MORE": "Meta’s documentation",
+    "WHATSAPP_FLOW_RESPONSE": "Submitted a flow response",
+    "WHATSAPP_REFERRAL": {
+      "AD": "Ad"
+    },
+    "SUCCESS_DELETE_MESSAGE": "Mesej berjaya dipadam",
+    "FAIL_DELETE_MESSSAGE": "Tidak dapat memadam mesej! Sila cuba lagi",
+    "NO_RESPONSE": "Tiada respons",
+    "REQUEST_CONTACT_INFO": {
+      "ACTION": "Ask the customer to share their WhatsApp phone number",
+      "PENDING_ACTION": "Contact information request pending",
+      "STATES": {
+        "PENDING": "Waiting for contact information",
+        "SHARED": "Phone number shared",
+        "IDENTITY_CONFLICT": "Phone number needs review"
+      }
+    },
+    "RESPONSE": "Respons",
+    "RATING_TITLE": "Penilaian",
+    "FEEDBACK_TITLE": "Maklum Balas",
+    "REPLY_MESSAGE_NOT_FOUND": "Mesej tidak tersedia",
+    "CAPTAIN_GENERATION": {
+      "TITLE": "How was this reply generated?",
+      "GENERATED_BY": "Generated by Captain",
+      "LOADING": "Loading details…",
+      "EMPTY": "No generation details available for this message.",
+      "TIMELINE": "Generation steps",
+      "STEP_TOOL": "Called {name}",
+      "STEP_HANDOFF": "Handed off to {name}",
+      "REASONING": "Reasoning",
+      "SOURCES": "Knowledge base",
+      "SOURCES_SUMMARY": "{count} result | {count} results",
+      "MODEL": "Generated with {model}",
+      "CREDITS": "Credits: {credits}"
+    },
+    "CARD": {
+      "SHOW_LABELS": "Tunjukkan label",
+      "HIDE_LABELS": "Sembunyikan label",
+      "LABELS_COUNT": "{count} labels"
+    },
+    "VOICE_CALL": {
+      "INCOMING_CALL": "Panggilan masuk",
+      "OUTGOING_CALL": "Panggilan keluar",
+      "CALL_IN_PROGRESS": "Panggilan sedang berlangsung",
+      "NO_ANSWER": "Tiada jawapan",
+      "NO_ANSWER_OUTBOUND_LABEL": "Tiada jawapan",
+      "NO_ANSWER_OUTBOUND_SUBTEXT": "Contact didn't pick up",
+      "MISSED_CALL": "Panggilan terlepas",
+      "MISSED_CALL_INBOUND_SUBTEXT": "No agent picked up",
+      "MISSED_CALL_DECLINED_BY": "Declined by {agentName}",
+      "CALL_ENDED": "Panggilan tamat",
+      "HANDLED_BY": "Handled by {agentName}",
+      "NOT_ANSWERED_YET": "Belum dijawab",
+      "CALLING": "Calling…",
+      "THEY_ANSWERED": "Mereka menjawab",
+      "YOU_ANSWERED": "Anda menjawab",
+      "AGENT_ANSWERED": "{agentName} answered",
+      "JOIN_CALL": "Sertai panggilan",
+      "CALL_BACK": "Call back",
+      "TRANSCRIPT_SHOW_MORE": "Show more",
+      "TRANSCRIPT_SHOW_LESS": "Show less"
+    },
+    "HEADER": {
+      "RESOLVE_ACTION": "Selesaikan",
+      "REOPEN_ACTION": "Buka semula",
+      "OPEN_ACTION": "Buka",
+      "MORE_ACTIONS": "Tindakan lain",
+      "OPEN": "Lagi",
+      "CLOSE": "Tutup",
+      "DETAILS": "butiran",
+      "COPY_ID_SUCCESS": "Conversation ID copied to clipboard",
+      "SNOOZED_UNTIL": "Ditangguhkan sehingga",
+      "SNOOZED_UNTIL_TOMORROW": "Ditangguhkan sehingga esok",
+      "SNOOZED_UNTIL_NEXT_WEEK": "Ditangguhkan sehingga minggu depan",
+      "SNOOZED_UNTIL_NEXT_REPLY": "Ditangguhkan sehingga balasan seterusnya",
+      "WHATSAPP_CALL": "Start WhatsApp call",
+      "WHATSAPP_CALL_FAILED": "Could not start the WhatsApp call.",
+      "VOICE_CALL": "Start call",
+      "VOICE_CALL_FAILED": "Could not start the call.",
+      "WHATSAPP_CALL_PERMISSION_REQUESTED": "Sent a call permission request to the contact. Try again once they accept.",
+      "WHATSAPP_CALL_PERMISSION_PENDING": "Call permission request already sent recently. Try again once the contact accepts.",
+      "SLA_STATUS": {
+        "FRT": "FRT {status}",
+        "NRT": "NRT {status}",
+        "RT": "RT {status}",
+        "MISSED": "terlepas",
+        "DUE": "tertunggak"
+      }
+    },
+    "RESOLVE_DROPDOWN": {
+      "MARK_PENDING": "Tandakan sebagai tertunda",
+      "SNOOZE_UNTIL": "Tangguhkan",
+      "SNOOZE": {
+        "TITLE": "Tangguhkan sehingga",
+        "NEXT_REPLY": "Balasan seterusnya",
+        "TOMORROW": "Esok",
+        "NEXT_WEEK": "Minggu depan"
+      }
+    },
+    "MENTION": {
+      "AGENTS": "Ejen",
+      "TEAMS": "Pasukan"
+    },
+    "PICKER": {
+      "VARIABLE": {
+        "SEARCH_PLACEHOLDER": "Search variables",
+        "DESCRIPTION": "Penerangan",
+        "VALUE": "Value",
+        "NO_VALUE": "No value for this conversation"
+      },
+      "EMOJI": {
+        "SEARCH_PLACEHOLDER": "Search emojis",
+        "EMPTY_STATE": "Type to search emojis"
+      },
+      "MACRO": {
+        "SEARCH_PLACEHOLDER": "Search macros",
+        "ACTION_COUNT": "1 action | {count} actions"
+      },
+      "MENTION": {
+        "SEARCH_PLACEHOLDER": "Search agents and teams",
+        "FILTER": {
+          "ALL": "All"
+        },
+        "AVAILABILITY": "Ketersediaan",
+        "ROLE": "Peranan",
+        "AUTO_ASSIGN": "Auto assign",
+        "ENABLED": "Diaktifkan",
+        "DISABLED": "Disabled",
+        "YOU_ARE_A_MEMBER": "You are a member of this team"
+      }
+    },
+    "CUSTOM_SNOOZE": {
+      "TITLE": "Tangguhkan sehingga",
+      "APPLY": "Tangguhkan",
+      "CANCEL": "Batalkan"
+    },
+    "SUGGESTIONS": {
+      "SUGGEST": "Suggest with Captain",
+      "EMPTY": "No new suggestions",
+      "ACCEPT": "Accept",
+      "APPLY_HINT": "Click to apply",
+      "REJECT": "Dismiss",
+      "ACCEPT_ALL": "Accept all",
+      "ERROR": "Could not load suggestions. Please try again.",
+      "APPLY_ERROR": "Could not apply the suggested labels. Please try again."
+    },
+    "PRIORITY": {
+      "TITLE": "Keutamaan",
+      "OPTIONS": {
+        "NONE": "Tiada",
+        "URGENT": "Segera",
+        "HIGH": "Tinggi",
+        "MEDIUM": "Sederhana",
+        "LOW": "Rendah"
+      },
+      "CHANGE_PRIORITY": {
+        "SELECT_PLACEHOLDER": "Tiada",
+        "INPUT_PLACEHOLDER": "Pilih keutamaan",
+        "NO_RESULTS": "Tiada dijumpa",
+        "SUCCESSFUL": "Changed priority of conversation id {conversationId} to {priority}",
+        "FAILED": "Gagal menukar keutamaan. Sila cuba lagi."
+      }
+    },
+    "DELETE_CONVERSATION": {
+      "TITLE": "Delete conversation #{conversationId}",
+      "DESCRIPTION": "Adakah anda pasti mahu memadam perbualan ini?",
+      "CONFIRM": "Padamkan"
+    },
+    "CARD_CONTEXT_MENU": {
+      "PENDING": "Tandakan sebagai tertunda",
+      "RESOLVED": "Tandakan sebagai selesai",
+      "MARK_AS_UNREAD": "Tandakan sebagai belum dibaca",
+      "MARK_AS_READ": "Tandakan sebagai sudah dibaca",
+      "REOPEN": "Buka semula perbualan",
+      "SNOOZE": {
+        "TITLE": "Tangguhkan",
+        "NEXT_REPLY": "Sehingga balasan seterusnya",
+        "TOMORROW": "Sehingga esok",
+        "NEXT_WEEK": "Sehingga minggu depan"
+      },
+      "ASSIGN_AGENT": "Tugaskan ejen",
+      "ASSIGN_LABEL": "Tugaskan label",
+      "SEARCH_LABELS": "Search labels",
+      "NO_LABELS_FOUND": "No labels found",
+      "AGENTS_LOADING": "Memuatkan ejen...",
+      "ASSIGN_TEAM": "Tugaskan pasukan",
+      "DELETE": "Padam perbualan",
+      "OPEN_IN_NEW_TAB": "Buka dalam tab baru",
+      "COPY_LINK": "Salin pautan perbualan",
+      "COPY_LINK_SUCCESS": "Pautan perbualan disalin ke papan klip",
+      "API": {
+        "AGENT_ASSIGNMENT": {
+          "SUCCESFUL": "Conversation id {conversationId} assigned to \"{agentName}\"",
+          "FAILED": "Gagal menugaskan ejen. Sila cuba lagi."
+        },
+        "LABEL_ASSIGNMENT": {
+          "SUCCESFUL": "Assigned label #{labelName} to conversation id {conversationId}",
+          "FAILED": "Gagal menugaskan label. Sila cuba lagi."
+        },
+        "LABEL_REMOVAL": {
+          "SUCCESFUL": "Removed label #{labelName} from conversation id {conversationId}",
+          "FAILED": "Gagal mengeluarkan label. Sila cuba lagi."
+        },
+        "TEAM_ASSIGNMENT": {
+          "SUCCESFUL": "Assigned team \"{team}\" to conversation id {conversationId}",
+          "FAILED": "Gagal menugaskan pasukan. Sila cuba lagi."
+        }
+      }
+    },
+    "FOOTER": {
+      "MESSAGE_SIGN_TOOLTIP": "Tandatangan mesej",
+      "ENABLE_SIGN_TOOLTIP": "Dayakan tandatangan",
+      "DISABLE_SIGN_TOOLTIP": "Nyahdayakan tandatangan",
+      "MSG_INPUT": "Shift + enter untuk baris baru. Mula dengan '/' untuk memilih Respons Sedia Ada.",
+      "PRIVATE_MSG_INPUT": "Shift + enter untuk baris baru. Ini hanya akan kelihatan kepada Ejen",
+      "MESSAGING_RESTRICTED": "Anda tidak boleh membalas perbualan ini",
+      "MESSAGING_RESTRICTED_WHATSAPP": "Anda hanya boleh membalas menggunakan mesej templat disebabkan had tetingkap mesej 24 jam",
+      "MESSAGING_RESTRICTED_API": "Anda hanya boleh membalas menggunakan mesej templat disebabkan had tetingkap mesej",
+      "MESSAGE_SIGNATURE_NOT_CONFIGURED": "Tandatangan mesej belum dikonfigurasikan, sila konfigurasikan dalam tetapan profil.",
+      "COPILOT_MSG_INPUT": "Berikan arahan tambahan kepada copilot, atau tanya apa-apa lagi... Tekan enter untuk hantar susulan",
+      "CLICK_HERE": "Klik di sini untuk kemas kini",
+      "WHATSAPP_TEMPLATES": "Templat Whatsapp"
+    },
+    "REPLYBOX": {
+      "REPLY": "Balas",
+      "PRIVATE_NOTE": "Nota Peribadi",
+      "SEND": "Hantar",
+      "CREATE": "Tambah Nota",
+      "INSERT_READ_MORE": "Baca lagi",
+      "DISMISS_REPLY": "Tutup balasan",
+      "REPLYING_TO": "Membalas kepada:",
+      "TIP_EMOJI_ICON": "Tunjukkan pemilih emoji",
+      "TIP_ATTACH_ICON": "Lampirkan fail",
+      "TIP_AUDIORECORDER_ICON": "Rakam audio",
+      "TIP_AUDIORECORDER_PERMISSION": "Benarkan akses ke audio",
+      "TIP_AUDIORECORDER_ERROR": "Tidak dapat membuka audio",
+      "AUDIO_CONVERSION_FAILED": "Audio conversion failed. Please try again.",
+      "DRAG_DROP": "Seret dan lepaskan di sini untuk melampirkan",
+      "IMAGE_UPLOAD_SUCCESS": "Imej berjaya dimuat naik",
+      "START_AUDIO_RECORDING": "Mula rakaman audio",
+      "STOP_AUDIO_RECORDING": "Hentikan rakaman audio",
+      "COPILOT_THINKING": "Copilot sedang berfikir",
+      "EMAIL_HEAD": {
+        "TO": "To",
+        "CC": {
+          "LABEL": "Cc",
+          "PLACEHOLDER": "Emel dipisahkan dengan koma",
+          "ERROR": "Sila masukkan alamat emel yang sah"
+        },
+        "BCC": {
+          "LABEL": "Bcc",
+          "PLACEHOLDER": "Emel dipisahkan dengan koma",
+          "ERROR": "Sila masukkan alamat emel yang sah"
+        },
+        "SUBJECT": {
+          "LABEL": "Subjek",
+          "PLACEHOLDER": "Enter a subject"
+        }
+      },
+      "UNDEFINED_VARIABLES": {
+        "TITLE": "Pembolehubah tidak ditakrifkan",
+        "MESSAGE": "You have {undefinedVariablesCount} undefined variables in your message: {undefinedVariables}. Would you like to send the message anyway?",
+        "CONFIRM": {
+          "YES": "Hantar",
+          "CANCEL": "Batalkan"
+        }
+      },
+      "QUOTED_REPLY": {
+        "SHOW_TOOLTIP": "Show trimmed content",
+        "HIDE_TOOLTIP": "Hide trimmed content",
+        "REMOVE": "Remove quoted text"
+      }
+    },
+    "VISIBLE_TO_AGENTS": "Nota Peribadi: Hanya boleh dilihat oleh anda dan pasukan anda",
+    "CHANGE_STATUS": "Status perbualan telah diubah",
+    "CHANGE_STATUS_FAILED": "Perubahan status perbualan gagal",
+    "CHANGE_AGENT": "Penugas Perbualan telah diubah",
+    "CHANGE_AGENT_FAILED": "Penukaran penugas gagal",
+    "ASSIGN_LABEL_SUCCESFUL": "Label berjaya ditetapkan",
+    "ASSIGN_LABEL_FAILED": "Penetapan label gagal",
+    "CHANGE_TEAM": "Pasukan perbualan telah diubah",
+    "SUCCESS_DELETE_CONVERSATION": "Perbualan berjaya dipadam",
+    "FAIL_DELETE_CONVERSATION": "Tidak dapat memadam perbualan! Sila cuba lagi",
+    "FILE_SIZE_LIMIT": "File exceeds the {MAXIMUM_SUPPORTED_FILE_UPLOAD_SIZE} MB attachment limit",
+    "FILE_TYPE_NOT_SUPPORTED": "This {fileName} file type is not supported in this conversation",
+    "MESSAGE_ERROR": "Tidak dapat menghantar mesej ini, sila cuba lagi kemudian",
+    "SENT_BY": "Dihantar oleh:",
+    "BOT": "Bot",
+    "NATIVE_APP": "Aplikasi asli",
+    "NATIVE_APP_ADVISORY": "Mesej ini dihantar dari aplikasi asli. Balas dari Chatwoot untuk mengekalkan tetingkap mesej.",
+    "SEND_FAILED": "Tidak dapat menghantar mesej! Sila cuba lagi",
+    "TRY_AGAIN": "cuba lagi",
+    "ASSIGNMENT": {
+      "SELECT_AGENT": "Pilih Ejen",
+      "REMOVE": "Alih keluar",
+      "ASSIGN": "Tugaskan"
+    },
+    "CONTEXT_MENU": {
+      "COPY": "Salin",
+      "REPLY_TO": "Balas mesej ini",
+      "FORWARD_EMAIL": "Forward email",
+      "DELETE": "Padamkan",
+      "CREATE_A_CANNED_RESPONSE": "Tambah ke balasan sedia ada",
+      "TRANSLATE": "Terjemah",
+      "COPY_PERMALINK": "Salin pautan ke mesej",
+      "LINK_COPIED": "URL mesej telah disalin ke papan klip",
+      "DELETE_CONFIRMATION": {
+        "TITLE": "Adakah anda pasti mahu memadam mesej ini?",
+        "MESSAGE": "Anda tidak boleh membatalkan tindakan ini",
+        "DELETE": "Padamkan",
+        "CANCEL": "Batalkan"
+      },
+      "REPORT_MESSAGE": {
+        "LABEL": "Report message",
+        "TITLE": "Report Captain message",
+        "DESCRIPTION": "Found an issue with this AI response? Let us know what went wrong and our team will review it to help improve Captain's accuracy.",
+        "PROBLEM_TYPE": "Problem type",
+        "PROBLEM_TYPE_PLACEHOLDER": "Select a problem type",
+        "DESCRIPTION_LABEL": "Penerangan",
+        "DESCRIPTION_PLACEHOLDER": "Describe the problem in detail",
+        "SUBMIT": "Report",
+        "SUCCESS": "Thanks for reporting. Our team will take a look.",
+        "ERROR": "Could not report this message. Please try again.",
+        "REASONS": {
+          "incorrect_information": "Incorrect information",
+          "inappropriate_response": "Inappropriate response",
+          "incomplete_response": "Incomplete response",
+          "outdated_information": "Outdated information",
+          "other": "Other"
+        }
+      }
+    },
+    "SIDEBAR": {
+      "CONTACT": "Hubungi",
+      "COPILOT": "Copilot"
+    },
+    "VOICE_WIDGET": {
+      "INCOMING_CALL": "Panggilan masuk",
+      "OUTGOING_CALL": "Panggilan keluar",
+      "CALL_IN_PROGRESS": "Panggilan sedang berlangsung",
+      "NOT_ANSWERED_YET": "Belum dijawab",
+      "HANDLED_IN_ANOTHER_TAB": "Sedang diuruskan di tab lain",
+      "REJECT_CALL": "Tolak",
+      "DISMISS_CALL": "Dismiss",
+      "JOIN_CALL": "Sertai panggilan",
+      "END_CALL": "Tamatkan panggilan",
+      "MUTE": "Mute mic",
+      "UNMUTE": "Unmute mic",
+      "VIEW_CHAT_HISTORY": "View chat history",
+      "GO_TO_CONVERSATION": "Go to conversation thread"
+    }
+  },
+  "EMAIL_TRANSCRIPT": {
+    "TITLE": "Hantar transkrip perbualan",
+    "DESC": "Hantar salinan transkrip perbualan ke alamat emel yang ditetapkan",
+    "SUBMIT": "Hantar",
+    "CANCEL": "Batalkan",
+    "SEND_EMAIL_SUCCESS": "Transkrip perbualan berjaya dihantar",
+    "SEND_EMAIL_ERROR": "Terdapat ralat, sila cuba lagi",
+    "SEND_EMAIL_PAYMENT_REQUIRED": "Transkrip emel tidak tersedia pada pelan anda sekarang. Sila naik taraf untuk menggunakan ciri ini.",
+    "FORM": {
+      "SEND_TO_CONTACT": "Hantar transkrip kepada pelanggan",
+      "SEND_TO_AGENT": "Hantar transkrip kepada ejen yang ditugaskan",
+      "SEND_TO_OTHER_EMAIL_ADDRESS": "Hantar transkrip ke alamat emel lain",
+      "EMAIL": {
+        "PLACEHOLDER": "Masukkan alamat emel",
+        "ERROR": "Sila masukkan alamat emel yang sah"
+      }
+    }
+  },
+  "ONBOARDING": {
+    "TITLE": "Hey 👋, Welcome to {installationName}!",
+    "DESCRIPTION": "Thanks for signing up. We want you to get the most out of {installationName}. Here are a few things you can do in {installationName} to make the experience delightful.",
+    "GREETING_MORNING": "👋 Good morning, {name}. Welcome to {installationName}.",
+    "GREETING_AFTERNOON": "👋 Good afternoon, {name}. Welcome to {installationName}.",
+    "GREETING_EVENING": "👋 Good evening, {name}. Welcome to {installationName}.",
+    "READ_LATEST_UPDATES": "Baca kemas kini terkini kami",
+    "ALL_CONVERSATION": {
+      "TITLE": "Semua perbualan anda di satu tempat",
+      "DESCRIPTION": "Lihat semua perbualan daripada pelanggan anda dalam satu papan pemuka. Anda boleh menapis perbualan mengikut saluran masuk, label dan status.",
+      "NEW_LINK": "Klik di sini untuk mencipta peti masuk"
+    },
+    "TEAM_MEMBERS": {
+      "TITLE": "Jemput ahli pasukan anda",
+      "DESCRIPTION": "Oleh kerana anda sedang bersedia untuk bercakap dengan pelanggan anda, bawa rakan sepasukan anda untuk membantu. Anda boleh menjemput rakan sepasukan dengan menambah alamat emel mereka ke senarai ejen.",
+      "NEW_LINK": "Klik di sini untuk menjemput ahli pasukan"
+    },
+    "LABELS": {
+      "TITLE": "Susun perbualan dengan label",
+      "DESCRIPTION": "Label memudahkan anda mengkategorikan perbualan anda. Cipta beberapa label seperti #support-enquiry, #billing-question dan lain-lain, supaya anda boleh menggunakannya dalam perbualan kemudian.",
+      "NEW_LINK": "Klik di sini untuk mencipta tag"
+    },
+    "CANNED_RESPONSES": {
+      "TITLE": "Cipta respons siap",
+      "DESCRIPTION": "Templat balasan pantas yang telah ditulis membantu anda membalas perbualan dengan cepat. Ejen boleh menaip aksara '/' diikuti dengan kod pendek untuk memasukkan respons.",
+      "NEW_LINK": "Klik di sini untuk mencipta respons siap"
+    }
+  },
+  "CONVERSATION_SIDEBAR": {
+    "ASSIGNEE_LABEL": "Ejen Ditugaskan",
+    "SELF_ASSIGN": "Tugaskan kepada saya",
+    "TEAM_LABEL": "Pasukan Ditugaskan",
+    "SELECT": {
+      "PLACEHOLDER": "Tiada"
+    },
+    "ACCORDION": {
+      "CONTACT_DETAILS": "Butiran Kenalan",
+      "CONVERSATION_ACTIONS": "Tindakan Perbualan",
+      "CONVERSATION_LABELS": "Label Perbualan",
+      "CONVERSATION_INFO": "Maklumat Perbualan",
+      "CONTACT_NOTES": "Nota Kenalan",
+      "CONTACT_ATTRIBUTES": "Atribut Kenalan",
+      "PREVIOUS_CONVERSATION": "Perbualan Sebelumnya",
+      "MACROS": "Makro",
+      "LINEAR_ISSUES": "Isu Linear Berkaitan",
+      "SHOPIFY_ORDERS": "Shopify Orders",
+      "SHARED_FILES": "Attachments"
+    },
+    "SHARED_FILES": {
+      "EMPTY": "No attachments yet",
+      "DOWNLOAD": "Download file",
+      "DOWNLOAD_ERROR": "Could not download the file. Please try again.",
+      "MEDIA_HEADING": "Media",
+      "FILES_HEADING": "Files",
+      "VIEW_ALL": "View all",
+      "SHOW_LESS": "Show less",
+      "MORE_COUNT": "+{count}",
+      "UNTITLED_FILE": "Untitled file",
+      "JUMP_TO_MESSAGE": "Jump to message"
+    },
+    "SHOPIFY": {
+      "ORDER_ID": "Order #{id}",
+      "ERROR": "Ralat memuatkan pesanan",
+      "NO_SHOPIFY_ORDERS": "Tiada pesanan ditemui",
+      "FINANCIAL_STATUS": {
+        "PENDING": "Dalam Proses",
+        "AUTHORIZED": "Dibenarkan",
+        "PARTIALLY_PAID": "Dibayar Sebahagian",
+        "PAID": "Dibayar",
+        "PARTIALLY_REFUNDED": "Dikembalikan Sebahagian",
+        "REFUNDED": "Dikembalikan",
+        "VOIDED": "Dibatalkan"
+      },
+      "FULFILLMENT_STATUS": {
+        "FULFILLED": "Telah Dipenuhi",
+        "PARTIALLY_FULFILLED": "Sebahagiannya Dipenuhi",
+        "UNFULFILLED": "Belum Dipenuhi"
+      }
+    }
+  },
+  "CONVERSATION_CUSTOM_ATTRIBUTES": {
+    "ADD_BUTTON_TEXT": "Cipta atribut",
+    "NO_RECORDS_FOUND": "Tiada atribut ditemui",
+    "UPDATE": {
+      "SUCCESS": "Atribut berjaya dikemas kini",
+      "ERROR": "Tidak dapat mengemas kini atribut. Sila cuba lagi kemudian"
+    },
+    "ADD": {
+      "TITLE": "Tambah",
+      "SUCCESS": "Atribut berjaya ditambah",
+      "ERROR": "Tidak dapat menambah atribut. Sila cuba lagi kemudian"
+    },
+    "DELETE": {
+      "SUCCESS": "Atribut berjaya dipadam",
+      "ERROR": "Tidak dapat memadam atribut. Sila cuba lagi kemudian"
+    },
+    "ATTRIBUTE_SELECT": {
+      "TITLE": "Tambah atribut",
+      "PLACEHOLDER": "Cari atribut",
+      "NO_RESULT": "Tiada atribut ditemui"
+    }
+  },
+  "EMAIL_HEADER": {
+    "FROM": "Daripada",
+    "TO": "Kepada",
+    "BCC": "Bcc",
+    "CC": "Cc",
+    "SUBJECT": "Subjek",
+    "DATE": "Date",
+    "EXPAND": "Kembangkan emel"
+  },
+  "FORWARD_EMAIL": {
+    "HEADER_TITLE": "---------- Forwarded message ---------",
+    "TO_LABEL": "To:",
+    "TO_PLACEHOLDER": "Enter at least 2 characters to search by email",
+    "MESSAGE_PLACEHOLDER": "Add a message (optional)",
+    "FORWARDED_TO": "Forwarded to {emails}",
+    "CONTACT_CANNOT_SEE": "{name} cannot see this"
+  },
+  "CONVERSATION_PARTICIPANTS": {
+    "SIDEBAR_MENU_TITLE": "Peserta",
+    "SIDEBAR_TITLE": "Peserta perbualan",
+    "NO_RECORDS_FOUND": "Tiada dijumpa",
+    "ADD_PARTICIPANTS": "Pilih peserta",
+    "REMANING_PARTICIPANTS_TEXT": "+{count} others",
+    "REMANING_PARTICIPANT_TEXT": "+{count} other",
+    "TOTAL_PARTICIPANTS_TEXT": "{count} people are participating.",
+    "TOTAL_PARTICIPANT_TEXT": "{count} person is participating.",
+    "NO_PARTICIPANTS_TEXT": "No one is participating!",
+    "WATCH_CONVERSATION": "Sertai perbualan",
+    "YOU_ARE_WATCHING": "Anda sedang menyertai",
+    "API": {
+      "ERROR_MESSAGE": "Tidak dapat mengemas kini, sila cuba lagi!",
+      "SUCCESS_MESSAGE": "Peserta dikemas kini!"
+    }
+  },
+  "TRANSLATE_MODAL": {
+    "TITLE": "Lihat kandungan yang diterjemah",
+    "DESC": "You can view the translated content in each langauge.",
+    "ORIGINAL_CONTENT": "Kandungan Asal",
+    "TRANSLATED_CONTENT": "Kandungan Terjemahan",
+    "NO_TRANSLATIONS_AVAILABLE": "Tiada terjemahan tersedia untuk kandungan ini"
+  },
+  "TYPING": {
+    "ONE": "{user} is typing",
+    "TWO": "{user} and {secondUser} are typing",
+    "MULTIPLE": "{user} and {count} others are typing"
+  },
+  "COPILOT": {
+    "TRY_THESE_PROMPTS": "Cuba arahan ini"
+  },
+  "GALLERY_VIEW": {
+    "ERROR_DOWNLOADING": "Tidak dapat memuat turun lampiran. Sila cuba lagi"
+  }
+}

@@ -1,0 +1,206 @@
+import messageAPI, { buildCreatePayload } from '../../inbox/message';
+import ApiClient from '../../ApiClient';
+
+describe('#ConversationAPI', () => {
+  it('creates correct instance', () => {
+    expect(messageAPI).toBeInstanceOf(ApiClient);
+    expect(messageAPI).toHaveProperty('get');
+    expect(messageAPI).toHaveProperty('show');
+    expect(messageAPI).toHaveProperty('create');
+    expect(messageAPI).toHaveProperty('update');
+    expect(messageAPI).toHaveProperty('delete');
+    expect(messageAPI).toHaveProperty('getPreviousMessages');
+  });
+
+  describe('API calls', () => {
+    const originalAxios = window.axios;
+    const axiosMock = {
+      post: vi.fn(() => Promise.resolve()),
+      get: vi.fn(() => Promise.resolve()),
+      patch: vi.fn(() => Promise.resolve()),
+      delete: vi.fn(() => Promise.resolve()),
+    };
+
+    beforeEach(() => {
+      window.axios = axiosMock;
+    });
+
+    afterEach(() => {
+      window.axios = originalAxios;
+    });
+
+    it('#getPreviousMessages', () => {
+      messageAPI.getPreviousMessages({
+        conversationId: 12,
+        before: 4573,
+      });
+      expect(axiosMock.get).toHaveBeenCalledWith(
+        `/api/v1/conversations/12/messages`,
+        {
+          params: {
+            before: 4573,
+          },
+        }
+      );
+    });
+  });
+  describe('#autoTranslate', () => {
+    it('posts the message ids', () => {
+      const originalAxios = window.axios;
+      window.axios = { post: vi.fn(() => Promise.resolve()) };
+
+      messageAPI.autoTranslate(12, [1, 2]);
+
+      expect(window.axios.post).toHaveBeenCalledWith(
+        '/api/v1/conversations/12/messages/auto_translate',
+        { message_ids: [1, 2] }
+      );
+      window.axios = originalAxios;
+    });
+  });
+
+  describe('#buildCreatePayload', () => {
+    it('builds form payload if file is available', () => {
+      const formPayload = buildCreatePayload({
+        message: 'test content',
+        echoId: 12,
+        isPrivate: true,
+        contentAttributes: { in_reply_to: 12 },
+        files: [new Blob(['test-content'], { type: 'application/pdf' })],
+      });
+      expect(formPayload).toBeInstanceOf(FormData);
+      expect(formPayload.get('content')).toEqual('test content');
+      expect(formPayload.get('echo_id')).toEqual('12');
+      expect(formPayload.get('private')).toEqual('true');
+      expect(formPayload.get('cc_emails')).toEqual('');
+      expect(formPayload.get('bcc_emails')).toEqual('');
+      expect(formPayload.get('content_attributes')).toEqual(
+        '{"in_reply_to":12}'
+      );
+    });
+
+    it('builds object payload if file is not available', () => {
+      expect(
+        buildCreatePayload({
+          message: 'test content',
+          isPrivate: false,
+          echoId: 12,
+          contentAttributes: { in_reply_to: 12 },
+        })
+      ).toEqual({
+        content: 'test content',
+        private: false,
+        echo_id: 12,
+        content_attributes: { in_reply_to: 12 },
+        cc_emails: '',
+        bcc_emails: '',
+        to_emails: '',
+        template_params: undefined,
+      });
+    });
+
+    it('appends is_voice_message when isVoiceMessage is true', () => {
+      const formPayload = buildCreatePayload({
+        message: 'voice message',
+        echoId: 42,
+        isPrivate: false,
+        files: [new Blob(['audio-data'], { type: 'audio/ogg' })],
+        isVoiceMessage: true,
+      });
+      expect(formPayload).toBeInstanceOf(FormData);
+      expect(formPayload.get('is_voice_message')).toEqual('true');
+    });
+
+    it('does not append is_voice_message when isVoiceMessage is false', () => {
+      const formPayload = buildCreatePayload({
+        message: 'regular audio',
+        echoId: 43,
+        isPrivate: false,
+        files: [new Blob(['audio-data'], { type: 'audio/ogg' })],
+        isVoiceMessage: false,
+      });
+      expect(formPayload).toBeInstanceOf(FormData);
+      expect(formPayload.get('is_voice_message')).toBeNull();
+    });
+
+    it('appends the forwarded email fields to the form payload', () => {
+      const formPayload = buildCreatePayload({
+        message: 'Forwarding this',
+        echoId: 44,
+        isPrivate: false,
+        toEmails: 'vendor@example.com',
+        contentAttributes: { forwarded_message_id: 501 },
+        emailHtmlContent: '<p>Edited body</p>',
+        forwardedAttachmentIds: [7, 8],
+        files: [new Blob(['test-content'], { type: 'application/pdf' })],
+      });
+
+      expect(formPayload.get('to_emails')).toEqual('vendor@example.com');
+      expect(formPayload.get('content_attributes')).toEqual(
+        '{"forwarded_message_id":501}'
+      );
+      expect(formPayload.get('email_html_content')).toEqual(
+        '<p>Edited body</p>'
+      );
+      expect(formPayload.getAll('forwarded_attachment_ids[]')).toEqual([
+        '7',
+        '8',
+      ]);
+    });
+
+    it('does not append forwarded email fields when they are absent', () => {
+      const formPayload = buildCreatePayload({
+        message: 'regular',
+        echoId: 45,
+        isPrivate: false,
+        files: [new Blob(['test-content'], { type: 'application/pdf' })],
+      });
+
+      expect(formPayload.get('email_html_content')).toBeNull();
+      expect(formPayload.getAll('forwarded_attachment_ids[]')).toEqual([]);
+    });
+
+    it('includes the forwarded email fields in the object payload', () => {
+      expect(
+        buildCreatePayload({
+          message: 'Forwarding this',
+          isPrivate: false,
+          echoId: 46,
+          toEmails: 'vendor@example.com',
+          contentAttributes: { forwarded_message_id: 501 },
+          emailHtmlContent: '<p>Edited body</p>',
+          forwardedAttachmentIds: [7],
+        })
+      ).toMatchObject({
+        content: 'Forwarding this',
+        to_emails: 'vendor@example.com',
+        content_attributes: { forwarded_message_id: 501 },
+        email_html_content: '<p>Edited body</p>',
+        forwarded_attachment_ids: [7],
+      });
+    });
+
+    it('includes the subject in the object payload', () => {
+      expect(
+        buildCreatePayload({
+          message: 'test content',
+          isPrivate: false,
+          subject: 'Refund approved',
+        })
+      ).toMatchObject({ subject: 'Refund approved' });
+    });
+
+    it('appends the subject to the form payload only when it is set', () => {
+      const files = [new Blob(['test-content'], { type: 'application/pdf' })];
+
+      expect(
+        buildCreatePayload({ isPrivate: false, files, subject: 'Refund' }).get(
+          'subject'
+        )
+      ).toEqual('Refund');
+      expect(
+        buildCreatePayload({ isPrivate: false, files }).get('subject')
+      ).toBeNull();
+    });
+  });
+});

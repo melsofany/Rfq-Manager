@@ -1,0 +1,52 @@
+{
+  "BULK_ACTION": {
+    "CONVERSATIONS_SELECTED": "{conversationCount} 件の会話が選択されました",
+    "NONE": "なし",
+    "CLEAR_SELECTION": "クリア",
+    "ASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {agentName}? | Are you sure you want to assign {n} conversations to {agentName}?",
+    "UNASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+    "YES": "はい",
+    "CANCEL": "キャンセル",
+    "SEARCH_INPUT_PLACEHOLDER": "検索",
+    "ASSIGN_AGENT_TOOLTIP": "担当者を割り当てる",
+    "ASSIGN_TEAM_TOOLTIP": "チームを割り当てる",
+    "ASSIGN_SUCCESFUL": "会話が正常に割り当てられました。",
+    "ASSIGN_FAILED": "会話の割り当てに失敗しました。再試行してください。",
+    "RESOLVE_SUCCESFUL": "会話が正常に解決されました。",
+    "RESOLVE_FAILED": "会話の解決に失敗しました。再試行してください。",
+    "ALL_CONVERSATIONS_SELECTED_ALERT": "このページに表示されている会話のみが選択されています。",
+    "UPDATE": {
+      "CHANGE_STATUS": "ステータスを変更",
+      "SNOOZE_UNTIL": "スヌーズ",
+      "UPDATE_SUCCESFUL": "会話のステータスが正常に更新されました。",
+      "UPDATE_FAILED": "会話の更新に失敗しました。再試行してください。"
+    },
+    "RESOLVE": {
+      "ALL_MISSING_ATTRIBUTES": "Cannot resolve conversations due to missing required attributes",
+      "PARTIAL_SUCCESS": "Some conversations need required attributes before resolving and were skipped"
+    },
+    "LABELS": {
+      "ASSIGN_LABELS": "ラベルを割り当てる",
+      "REMOVE_LABELS": "Remove labels",
+      "ASSIGN_SELECTED_LABELS": "選択したラベルを割り当てる",
+      "REMOVE_SELECTED_LABELS": "Remove selected labels",
+      "ASSIGN_SUCCESFUL": "ラベルが正常に割り当てられました。",
+      "ASSIGN_FAILED": "ラベルの割り当てに失敗しました。再試行してください。",
+      "REMOVE_SUCCESFUL": "Labels removed successfully.",
+      "REMOVE_FAILED": "Failed to remove labels. Please try again."
+    },
+    "TEAMS": {
+      "NONE": "該当なし",
+      "ASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {teamName}? | Are you sure you want to assign {n} conversations to {teamName}?",
+      "UNASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+      "ASSIGN_SUCCESFUL": "チームが正常に割り当てられました。",
+      "ASSIGN_FAILED": "チームの割り当てに失敗しました。再試行してください。"
+    },
+    "MACROS": {
+      "EXECUTE_MACRO": "Execute macro",
+      "EXECUTE_CONFIRMATION_LABEL": "Are you sure you want to run {macroName} on {n} conversation? | Are you sure you want to run {macroName} on {n} conversations?",
+      "QUEUED": "Macro queued for {count} conversation. | Macro queued for {count} conversations.",
+      "QUEUED_WITH_MISSING_ATTRIBUTES": "Macro queued for {count} conversation. It currently lacks required attributes and may remain open. | Macro queued for {count} conversations. At least one currently lacks required attributes and may remain open."
+    }
+  }
+}

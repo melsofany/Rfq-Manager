@@ -1,0 +1,85 @@
+tags:
+  - Conversations
+operationId: conversationFilter
+description: Filter conversations with custom filter options and pagination
+summary: Conversations Filter
+security:
+  - userBearerAuth: []
+  - userApiKey: []
+parameters:
+  - name: page
+    in: query
+    schema:
+      type: number
+  - name: sort_by
+    in: query
+    description: Sort filtered conversations using the same options as the conversation list.
+    schema:
+      type: string
+      default: last_activity_at_desc
+      enum:
+        - last_activity_at_asc
+        - last_activity_at_desc
+        - created_at_asc
+        - created_at_desc
+        - priority_asc
+        - priority_desc
+        - waiting_since_asc
+        - waiting_since_desc
+        - priority_desc_created_at_asc
+        - unread
+requestBody:
+  required: true
+  content:
+    application/json:
+      schema:
+        type: object
+        properties:
+          payload:
+            type: array
+            items:
+              type: object
+              properties:
+                attribute_key:
+                  type: string
+                  description: filter attribute name
+                filter_operator:
+                  type: string
+                  description: filter operator name
+                  enum: [equal_to, not_equal_to, contains, does_not_contain]
+                values:
+                  type: array
+                  items:
+                    type: string
+                  description: array of the attribute values to filter
+                timezone:
+                  type: string
+                  description: IANA timezone for created_at and last_activity_at date comparisons, including days_before. Omit to retain UTC behavior. Date-only custom attributes are not converted.
+                  example: America/Sao_Paulo
+                query_operator:
+                  type: string
+                  description: query operator name
+                  enum: [AND, OR]
+            example:
+              - attribute_key: 'browser_language'
+                filter_operator: 'not_equal_to'
+                values: ['en']
+                query_operator: 'AND'
+              - attribute_key: 'status'
+                filter_operator: 'equal_to'
+                values: ['pending']
+                query_operator: null
+
+responses:
+  '200':
+    description: Success
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/conversation_list'
+  '400':
+    description: Bad Request Error
+    content:
+      application/json:
+        schema:
+          $ref: '#/components/schemas/bad_request_error'

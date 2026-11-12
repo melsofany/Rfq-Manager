@@ -1,0 +1,52 @@
+{
+  "BULK_ACTION": {
+    "CONVERSATIONS_SELECTED": "{conversationCount} שיחות נבחרו",
+    "NONE": "כלום",
+    "CLEAR_SELECTION": "נקה",
+    "ASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {agentName}? | Are you sure you want to assign {n} conversations to {agentName}?",
+    "UNASSIGN_AGENT_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+    "YES": "כן",
+    "CANCEL": "ביטול",
+    "SEARCH_INPUT_PLACEHOLDER": "חפש",
+    "ASSIGN_AGENT_TOOLTIP": "שייך סוכן",
+    "ASSIGN_TEAM_TOOLTIP": "שייך צוות",
+    "ASSIGN_SUCCESFUL": "שיוך בוצע בהצלחה.",
+    "ASSIGN_FAILED": "ההקצאה של השיחות נכשלה. אנא נסה שוב.",
+    "RESOLVE_SUCCESFUL": "שיחה טופלה בהצלחה.",
+    "RESOLVE_FAILED": "הסגירה של השיחות נכשלה. אנא נסה שוב.",
+    "ALL_CONVERSATIONS_SELECTED_ALERT": "השיחות הנבחרות הן המוצגות בדף זה בלבד.",
+    "UPDATE": {
+      "CHANGE_STATUS": "שנה סטאטוס",
+      "SNOOZE_UNTIL": "נודניק",
+      "UPDATE_SUCCESFUL": "סטאטוס השיחה שונה בהצלחה.",
+      "UPDATE_FAILED": "העדכון של השיחות נכשל. אנא נסה שוב."
+    },
+    "RESOLVE": {
+      "ALL_MISSING_ATTRIBUTES": "Cannot resolve conversations due to missing required attributes",
+      "PARTIAL_SUCCESS": "Some conversations need required attributes before resolving and were skipped"
+    },
+    "LABELS": {
+      "ASSIGN_LABELS": "הקצה תוויות",
+      "REMOVE_LABELS": "Remove labels",
+      "ASSIGN_SELECTED_LABELS": "שייך תוויות נבחרות",
+      "REMOVE_SELECTED_LABELS": "Remove selected labels",
+      "ASSIGN_SUCCESFUL": "תוויות שוייכו בהצלחה.",
+      "ASSIGN_FAILED": "ההקצאה של התוויות נכשלה. אנא נסה שוב.",
+      "REMOVE_SUCCESFUL": "Labels removed successfully.",
+      "REMOVE_FAILED": "Failed to remove labels. Please try again."
+    },
+    "TEAMS": {
+      "NONE": "כלום",
+      "ASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to assign {n} conversation to {teamName}? | Are you sure you want to assign {n} conversations to {teamName}?",
+      "UNASSIGN_TEAM_CONFIRMATION_LABEL": "Are you sure you want to unassign {n} conversation? | Are you sure you want to unassign {n} conversations?",
+      "ASSIGN_SUCCESFUL": "הצוותים הוקצו בהצלחה.",
+      "ASSIGN_FAILED": "ההקצאה של הצוות נכשלה. אנא נסה שוב."
+    },
+    "MACROS": {
+      "EXECUTE_MACRO": "Execute macro",
+      "EXECUTE_CONFIRMATION_LABEL": "Are you sure you want to run {macroName} on {n} conversation? | Are you sure you want to run {macroName} on {n} conversations?",
+      "QUEUED": "Macro queued for {count} conversation. | Macro queued for {count} conversations.",
+      "QUEUED_WITH_MISSING_ATTRIBUTES": "Macro queued for {count} conversation. It currently lacks required attributes and may remain open. | Macro queued for {count} conversations. At least one currently lacks required attributes and may remain open."
+    }
+  }
+}

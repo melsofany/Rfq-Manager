@@ -1,0 +1,148 @@
+{
+  "CHAT_LIST": {
+    "LOADING": "A carregar conversas",
+    "LOAD_MORE_CONVERSATIONS": "A carregar mais conversas",
+    "EOF": "Todas as conversas carregadas 🎉",
+    "LIST": {
+      "404": "Não há conversas ativas neste grupo."
+    },
+    "FAILED_TO_SEND": "Failed to send",
+    "FETCH_ERROR": "Couldn't load conversations. Please try again.",
+    "TAB_HEADING": "Conversas",
+    "MENTION_HEADING": "Menções",
+    "UNATTENDED_HEADING": "Por responder",
+    "SEARCH": {
+      "INPUT": "Pesquisar pessoas, conversas, respostas guardadas .."
+    },
+    "FILTER_ALL": "Todas",
+    "ASSIGNEE_TYPE_TABS": {
+      "me": "Minhas",
+      "unassigned": "Não atribuídas",
+      "all": "Todas"
+    },
+    "CHAT_STATUS_FILTER_ITEMS": {
+      "open": {
+        "TEXT": "Abertas"
+      },
+      "resolved": {
+        "TEXT": "Resolvido"
+      },
+      "pending": {
+        "TEXT": "Pendente"
+      },
+      "snoozed": {
+        "TEXT": "Adiado"
+      },
+      "all": {
+        "TEXT": "Todas"
+      }
+    },
+    "VIEW_FILTER": "Visualizar",
+    "SORT_TOOLTIP_LABEL": "Ordenar conversas",
+    "CHAT_SORT": {
+      "STATUS": "Situação",
+      "ORDER_BY": "Ordenar por"
+    },
+    "CHAT_TIME_STAMP": {
+      "CREATED": {
+        "OLDEST": "Criada em:"
+      },
+      "LAST_ACTIVITY": {
+        "NOT_ACTIVE": "Última atividade:"
+      }
+    },
+    "SORT_ORDER_ITEMS": {
+      "last_activity_at_asc": {
+        "TEXT": "Última Atividade: Mais antigas primeiro"
+      },
+      "last_activity_at_desc": {
+        "TEXT": "Última Atividade: Mais recentes primeiro"
+      },
+      "created_at_desc": {
+        "TEXT": "Criado em: Mais recentes primeiro"
+      },
+      "created_at_asc": {
+        "TEXT": "Criado em: Mais antigas primeiro"
+      },
+      "priority_desc": {
+        "TEXT": "Prioridade: Mais alta primeiro"
+      },
+      "priority_asc": {
+        "TEXT": "Prioridade: Mais baixa primeiro"
+      },
+      "waiting_since_asc": {
+        "TEXT": "Resposta pendente: Mais longa primeiro"
+      },
+      "waiting_since_desc": {
+        "TEXT": "Resposta pendente: Mais curta primeiro"
+      },
+      "priority_desc_created_at_asc": {
+        "TEXT": "Priority: Highest first, Created: Oldest first"
+      },
+      "unread": {
+        "TEXT": "Unread Count: Highest first"
+      }
+    },
+    "ATTACHMENTS": {
+      "image": {
+        "CONTENT": "Mensagem de imagem"
+      },
+      "audio": {
+        "CONTENT": "Mensagem de áudio"
+      },
+      "video": {
+        "CONTENT": "Mensagem de vídeo"
+      },
+      "file": {
+        "CONTENT": "Carregar anexo"
+      },
+      "location": {
+        "CONTENT": "Local:"
+      },
+      "ig_reel": {
+        "CONTENT": "Instagram Reel"
+      },
+      "fallback": {
+        "CONTENT": "partilhou um URL"
+      },
+      "contact": {
+        "CONTENT": "Shared contact"
+      },
+      "embed": {
+        "CONTENT": "Embedded content"
+      }
+    },
+    "CHAT_SORT_BY_FILTER": {
+      "TITLE": "Ordenar conversa",
+      "DROPDOWN_TITLE": "Ordenar por",
+      "ITEMS": {
+        "LATEST": {
+          "NAME": "Última atividade em",
+          "LABEL": "Última atividade"
+        },
+        "CREATED_AT": {
+          "NAME": "Criada em",
+          "LABEL": "Criada em"
+        },
+        "LAST_USER_MESSAGE_AT": {
+          "NAME": "Última resposta do utilizador em",
+          "LABEL": "Última mensagem"
+        }
+      }
+    },
+    "RECEIVED_VIA_EMAIL": "Recebido por e-mail",
+    "VIEW_TWEET_IN_TWITTER": "Ver mensagem no Twitter",
+    "REPLY_TO_TWEET": "Responder a esta mensagem",
+    "LINK_TO_STORY": "Ir para story do instagram",
+    "SENT": "Enviado com sucesso",
+    "READ": "Lido com sucesso",
+    "DELIVERED": "Entregue com sucesso",
+    "NO_MESSAGES": "Sem mensagens",
+    "NO_CONTENT": "Sem conteúdo disponível",
+    "HIDE_QUOTED_TEXT": "Ocultar texto citado",
+    "SHOW_QUOTED_TEXT": "Mostrar texto citado",
+    "MESSAGE_READ": "Lida",
+    "SENDING": "Sending",
+    "UNREAD_COUNT_OVERFLOW": "9+"
+  }
+}
