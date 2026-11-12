@@ -1,0 +1,19 @@
+{
+  "name": "oh-cost-governor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cost governance for OpenHands: tiered model routing, deny-by-default paid policy, usage ledger.",
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
+    "prices": "node src/cli.mjs prices",
+    "tiers": "node src/cli.mjs tiers",
+    "route": "node src/cli.mjs route",
+    "report": "node src/cli.mjs report",
+    "guard": "node src/guard.mjs",
+    "apply": "node src/apply-cloud.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

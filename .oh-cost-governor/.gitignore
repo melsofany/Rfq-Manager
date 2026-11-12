@@ -1,0 +1,7 @@
+# Never commit secrets, raw dumps, or local ledgers
+*.key
+*.secret
+.env
+backup/
+ledger/
+*.raw.json

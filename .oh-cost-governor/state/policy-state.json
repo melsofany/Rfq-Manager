@@ -1,0 +1,14 @@
+{
+  "currency": "USD",
+  "claudeTargetUsd": 5,
+  "allocation": {
+    "essential": 0.7,
+    "complex": 0.2,
+    "reserve": 0.1
+  },
+  "spentUsd": 0,
+  "alertThresholds": [0.5, 0.75, 0.9],
+  "alertsFired": [],
+  "approvals": [],
+  "hardStopPaid": false
+}
