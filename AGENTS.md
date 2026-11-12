@@ -4721,3 +4721,53 @@ pointing Meta at Chatwoot silently breaks all of them.
 - **Hosting is a separate Rails stack** (web + Sidekiq + Postgres + Redis) and
   cannot run on the Node service; ~$23/mo on Render, ~$6/mo on a VPS, or paid
   Chatwoot Cloud. The code is safe to merge before hosting is decided.
+
+## Chatwoot: a conversation is per REQUEST, not per supplier phone (feat/chatwoot-agent-console)
+
+- **The defect**: `chatwoot_links` was keyed on `phone` alone, so one supplier's
+  several open pricing requests collapsed into ONE conversation. A reply to
+  Ahmed's request and a reply to Abdelrahman's request landed in the same thread
+  and nothing recorded which request — or which employee — was being answered.
+  The ownership the console exists to show was simply absent.
+- **The key is `(phone, rfqId)`**: the CONTACT is per phone (one supplier), the
+  CONVERSATION is per request. `employee_id`/`employee_name` ride on the row.
+  `rfqId = 0` means "no request context" — 0 rather than NULL so it can take part
+  in the unique index (a NULL in a Postgres unique index does not collide).
+- **Resolution order is the whole design** (`pickRequestFromText`): an explicit
+  request number in the text is AUTHORITATIVE — the supplier naming their request
+  must never be overruled; else a supplier with exactly ONE open request is
+  unambiguous; else **stay ambiguous on purpose**. Guessing files a price under
+  the wrong request and the wrong employee, and a wrong price is worse than an
+  unlabelled thread. The webhook then asks the supplier which request they mean
+  (tappable buttons carrying the number + the responsible employee's name).
+- **Match on alphanumerics, not on the literal string**: a supplier retyping
+  «RFQ 2026 000222» for «RFQ-2026-000222» must still match. The first cut
+  stripped only whitespace and a test caught it. This is the same class as the
+  EDC `26R 011936` / `26R011936` canonicalisation rule.
+- **Stale-button guard**: the chosen request is re-read from the OPEN set before
+  it is honoured, so a button from an old menu cannot file a reply against
+  another supplier's request or a closed one.
+- **`CREATE TABLE IF NOT EXISTS` is a no-op on an existing table**, so the DDL
+  adds `rfq_id`/`employee_id`/`employee_name`/`id` explicitly, and the primary-key
+  move to the surrogate `id` runs ONLY while the PK is still on the old shape
+  (otherwise it would fight the new table). Same rule as the delivery-idempotency
+  incident.
+- **The PO mirror deliberately carries NO `rfqId`** — `supplier-po-no-rfq.test.ts`
+  guards that no RFQ reference ever reaches a supplier, and adding one tripped it.
+  The guard was right: a supplier-facing PO must not expose our request number.
+- **`mirrorInboundMessage`/`mirrorOutboundMessage` are best-effort by design.**
+  A Chatwoot outage degrades the console; it must never stop an RFQ from being
+  sent or a supplier reply from being stored.
+- Tests: `chatwoot-ownership.test.ts` (7) — phone canonicalisation + the
+  resolution rules, including the separator-tolerant match that failed against
+  the first cut. **2279 api-server tests** pass; tsc (libs + api-server + portal)
+  clean; repo-wide prettier clean; portal build clean.
+- **Push**: the environment `$GITHUB_TOKEN` is the read-only `ghu_` OAuth token —
+  `POST /git/refs` returns `403 Resource not accessible by integration` even
+  though `GET /repos/...` reports `permissions.push: true`, and `git push` is
+  refused. A user-issued `ghp_` token with `repo` scope works end-to-end (push →
+  poll `commits/<sha>/check-runs` → update the PR body via `PATCH /pulls/:n`).
+  Reset the remote to the credential-less URL afterwards.
+- **Status**: PR #437 updated (`d699369`), all 4 CI checks green
+  (Type Check / Format Check / Tests / Build+E2E), `mergeable_state: clean`.
+
