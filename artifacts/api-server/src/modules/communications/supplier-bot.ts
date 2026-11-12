@@ -422,6 +422,15 @@ export async function upsertDraft(
   rfqItemId: number,
   patch: DraftPatch,
 ): Promise<void> {
+  // The item id comes from a WhatsApp payload, so it is caller-supplied. This is
+  // the ONE chokepoint every draft write passes through, which makes it the only
+  // place that can guarantee a draft is never created for an item outside the
+  // (supplier, request) pair. Enforcing it here rather than in each handler is
+  // what stops a future handler from forgetting it.
+  const { items } = await loadSupplierRequestItemsWithDrafts(supplierId, rfqId);
+  if (!items.some((i) => i.id === rfqItemId)) {
+    throw new Error(`Supplier bot: item ${rfqItemId} is not part of request ${rfqId}`);
+  }
   const now = new Date();
   // ONE representation for both paths. Building the insert row and then deriving
   // the conflict `set` from it is what keeps them from drifting: writing

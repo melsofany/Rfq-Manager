@@ -352,8 +352,30 @@ describe("supplier scoping (a supplier must never see another's data)", () => {
 // ── Drafts: partial answers must accumulate, never overwrite ─────────────────
 
 describe("draft accumulation", () => {
+  it("refuses to write a draft for an item that is not in the request", async () => {
+    // The item id arrives in a WhatsApp payload, so it is caller-supplied. Every
+    // write goes through `upsertDraft`, which is therefore the one place that can
+    // guarantee a draft is only ever created for an item that really belongs to
+    // the (supplier, request) pair. Without this a crafted payload could plant a
+    // draft against another request's line.
+    selectQueue = [
+      [{ id: 1 }], // the sent-log row: this supplier IS entitled to this request
+      [{ id: 10 }], // ...but the request contains ONLY item 10
+    ];
+    await expect(bot.upsertDraft(1, 2, 999, { unitPrice: 50 })).rejects.toThrow();
+    expect(draftsStore.size).toBe(0);
+  });
+
+  it("writes a draft for an item that IS in the request", async () => {
+    selectQueue = [[{ id: 1 }], [{ id: 10 }]];
+    await bot.upsertDraft(1, 2, 10, { unitPrice: 50 });
+    expect(draftsStore.get("2:10:1")).toBeTruthy();
+  });
+
   it("keeps previously answered fields when a later answer arrives", async () => {
+    selectQueue = [[{ id: 1 }], [{ id: 3 }]];
     await bot.upsertDraft(1, 2, 3, { unitPrice: 120 });
+    selectQueue = [[{ id: 1 }], [{ id: 3 }]];
     await bot.upsertDraft(1, 2, 3, { deliveryDays: 7 });
     const stored = draftsStore.get("2:3:1");
     // The second write must not erase the first — that is what makes
