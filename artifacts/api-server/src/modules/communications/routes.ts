@@ -1108,7 +1108,74 @@ function supplierBotEnabled(): boolean {
   return process.env.SUPPLIER_BOT_ENABLED !== "false";
 }
 
-async function handleSupplierBotMessage(phone: string, msg: ServerMessage): Promise<boolean> {
+/**
+ * Record an inbound supplier message and mirror it into the console.
+ *
+ * The bot consumes a supplier's message BEFORE the generic handler runs, so
+ * without this the employee opens the conversation in Chatwoot and sees an empty
+ * thread while the supplier is actively quoting — the prices, availability and
+ * notes exist only inside the bot session. The console is where the employee is
+ * supposed to work, so the bot has to leave the same trail the generic handler
+ * does.
+ *
+ * Best-effort by design: a console or DB hiccup must never cost the supplier
+ * their answer.
+ */
+async function recordSupplierBotInbound(opts: {
+  phone: string;
+  waMessageId: string | undefined;
+  msg: ServerMessage;
+  supplierId: number;
+  supplierName?: string | null;
+  rfqId?: number | null;
+  employeeId?: number | null;
+  employeeName?: string | null;
+}): Promise<void> {
+  try {
+    const { body, mediaId, mediaType, mimeType, filename } = describeInboundBody(opts.msg);
+    if (opts.waMessageId) {
+      const existing = await db
+        .select({ id: whatsappChatsTable.id })
+        .from(whatsappChatsTable)
+        .where(eq(whatsappChatsTable.waMessageId, opts.waMessageId))
+        .limit(1);
+      // Idempotent: a redelivered webhook must not double the thread.
+      if (existing.length === 0) {
+        await db.insert(whatsappChatsTable).values({
+          waMessageId: opts.waMessageId,
+          direction: "inbound",
+          phone: opts.phone,
+          supplierId: opts.supplierId,
+          body,
+          mediaId,
+          mediaType,
+          mimeType,
+          filename,
+          isRead: false,
+        });
+      }
+    }
+    await mirrorInboundMessage({
+      phone: opts.phone,
+      body,
+      rfqId: opts.rfqId ?? null,
+      contactName: opts.supplierName ?? null,
+      supplierId: opts.supplierId,
+      employeeId: opts.employeeId ?? null,
+      employeeName: opts.employeeName ?? null,
+    });
+  } catch (err) {
+    logger.warn(
+      { err, phone: opts.phone },
+      "Supplier bot: inbound record/mirror failed — non-fatal",
+    );
+  }
+}
+
+export async function handleSupplierBotMessage(
+  phone: string,
+  msg: ServerMessage,
+): Promise<boolean> {
   if (!supplierBotEnabled()) return false;
 
   const payload = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id ?? "";
@@ -1126,6 +1193,17 @@ async function handleSupplierBotMessage(phone: string, msg: ServerMessage): Prom
   // rather than letting it fall through to the generic handler, which would
   // look like the bot ignoring the tap.
   if (!isBotPayload && !text) return false;
+
+  // We are about to consume this message, so the generic handler will never see
+  // it — record it ourselves, once, for every branch below.
+  await recordSupplierBotInbound({
+    phone,
+    waMessageId: msg.id,
+    msg,
+    supplierId: supplier.id,
+    supplierName: supplier.name,
+    rfqId: session?.rfqId ?? null,
+  });
 
   try {
     // ── Explicit taps ────────────────────────────────────────────────────────
@@ -1364,13 +1442,13 @@ async function handleSupplierBotMessage(phone: string, msg: ServerMessage): Prom
     }
 
     // No active step: any plain text from a supplier opens the main menu. The
-    // same message also flows through the normal inbound handler (which files
-    // it in the console), so nothing is lost by answering here.
+    // message was already recorded and mirrored above, so answering here loses
+    // nothing from the console's point of view.
     await sendSupplierBotMainMenu(phone, supplier.name);
     return true;
   } catch (err) {
     logger.error({ err, phone }, "Supplier bot handling error");
-    // Swallow: the generic inbound path still ran for text messages, and a bot
+    // Swallow: the inbound message was recorded before this point, and a bot
     // fault must not surface as silence.
     return true;
   }
@@ -2115,14 +2193,21 @@ async function handleWorkOrderButton(phone: string, msg: ServerMessage): Promise
   return true;
 }
 
-async function handleInboundMessage(
-  phoneID: string,
-  phone: string,
-  msg: ServerMessage,
-  senderName: string | undefined,
-  reply: (message: import("whatsapp-api-js/types").ClientMessage) => Promise<unknown>,
-): Promise<void> {
-  const waMessageId = msg.id;
+/**
+ * Describe an inbound WhatsApp message as the console should show it.
+ *
+ * Extracted so the supplier bot and the generic handler render a message the
+ * SAME way. The bot answers before the generic handler runs, so it has to record
+ * the message itself; two copies of this mapping would drift and the same
+ * message would read differently depending on which path consumed it.
+ */
+function describeInboundBody(msg: ServerMessage): {
+  body: string;
+  mediaId: string | null;
+  mediaType: string | null;
+  mimeType: string | null;
+  filename: string | null;
+} {
   let body: string;
   let mediaId: string | null = null;
   let mediaType: string | null = null;
@@ -2198,6 +2283,18 @@ async function handleInboundMessage(
   } else {
     body = `[رسالة من نوع: ${msg.type}]`;
   }
+  return { body, mediaId, mediaType, mimeType, filename };
+}
+
+async function handleInboundMessage(
+  phoneID: string,
+  phone: string,
+  msg: ServerMessage,
+  senderName: string | undefined,
+  reply: (message: import("whatsapp-api-js/types").ClientMessage) => Promise<unknown>,
+): Promise<void> {
+  const waMessageId = msg.id;
+  const { body, mediaId, mediaType, mimeType, filename } = describeInboundBody(msg);
 
   const allSuppliers = await db.select().from(suppliersTable);
   const matchedSupplier = allSuppliers.find((s) => {
