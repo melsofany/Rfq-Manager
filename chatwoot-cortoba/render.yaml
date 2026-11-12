@@ -28,7 +28,7 @@ services:
     name: cortoba-chatwoot
     runtime: docker
     repo: https://github.com/melsofany/Rfq-Manager
-    branch: main
+    branch: feat/supplier-bot-and-chatwoot-install
     dockerfilePath: ./chatwoot-cortoba/Dockerfile
     dockerContext: ./chatwoot-cortoba
     region: oregon
@@ -112,7 +112,7 @@ services:
     name: cortoba-chatwoot-worker
     runtime: docker
     repo: https://github.com/melsofany/Rfq-Manager
-    branch: main
+    branch: feat/supplier-bot-and-chatwoot-install
     dockerfilePath: ./chatwoot-cortoba/Dockerfile
     dockerContext: ./chatwoot-cortoba
     region: oregon

@@ -21,4 +21,5 @@ end
 
 require "cortoba/config"
 require "cortoba/custom_attributes"
+require "cortoba/bootstrap"
 require "cortoba/importer"

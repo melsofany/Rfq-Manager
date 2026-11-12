@@ -87,6 +87,17 @@ case "$ROLE" in
     # serves 500s, so it prepares the database before serving. `CORTOBA_SKIP_MIGRATE`
     # exists for a deploy that migrates in a separate step.
     [ "${CORTOBA_SKIP_MIGRATE:-0}" = "1" ] || run_migrate
+    # A running console is not a CONNECTED one: Cortoba's bridge needs an account,
+    # an admin, an API inbox and two tokens. Provision them here, idempotently, so
+    # a fresh deploy is integrated without a human in the setup wizard. This runs
+    # on the web role only — one writer, no race.
+    if [ "${CORTOBA_SKIP_BOOTSTRAP:-0}" != "1" ]; then
+      echo "[bootstrap] provisioning account / admin / API inbox / tokens"
+      bundle exec rails cortoba:bootstrap || {
+        echo "[bootstrap] FAILED — the console is up but Cortoba cannot connect yet." >&2
+        exit 1
+      }
+    fi
     exec bundle exec rails s -b 0.0.0.0 -p "${PORT:-3000}"
     ;;
   worker)
