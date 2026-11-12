@@ -4882,3 +4882,85 @@ REST API cannot set `created_at` or a message id).
 **Tests**: 2300 api-server (chatwoot-assignment 21, up from 0) + 78 portal pass;
 tsc (libs + api-server + portal) clean; tracked-file format gate clean; eslint
 clean on the changed files. Committed `fb7fcd9` on `feat/chatwoot-agent-console`.
+
+## `tsc --build` from the root is NOT the typecheck CI runs
+
+`pnpm typecheck` runs `tsc -p tsconfig.json --noEmit` **inside each package**
+(`artifacts/api-server/package.json`), which resolves types differently from the
+root-level `tsc --build`. A change that passes the root build can still fail CI:
+
+```
+supplier-bot.ts(454,15): error TS2769: No overload matches this call.
+  Argument of type 'Record<string, unknown>' is not assignable to parameter of
+  type '{ rfqId: number | SQL<unknown> | ... }'
+```
+
+`Record<string, unknown>` erases the column types drizzle needs for
+`values()`. Use the table's own `$inferInsert` / `Partial<...>` shapes (the
+convention in `modules/users/representatives.ts`) — a renamed column then
+becomes a compile error instead of a value that silently stops being written.
+
+**Run the check the way CI runs it, from the package directory**, before
+pushing:
+`cd artifacts/api-server && ../../node_modules/.bin/tsc -p tsconfig.json --noEmit`
+
+## A guard that errors is not a guard that passes
+
+The `migrate` service's first cut read the table count with
+`count=$(rails runner ...)` and tested `[ "$count" -lt 50 ]`. Rails logs to
+stdout too, so `$count` was `"W, [2026-...] INFO -- ... 110"`, the numeric test
+failed with **`out of range`** — and **a failing test inside `if` does NOT trip
+`set -e`**, so the check fell through and printed `schema ready` for a database
+it had never verified. Extract a sentinel line, then fail closed on anything
+unparsable. Same family as the `filter(Boolean)` and false-`truncated`
+incidents: a capability reporting something other than what it did.
+
+## The documented Chatwoot install was broken (fixed in PR #439)
+
+`docker compose up -d --build` then `exec web rails db:chatwoot_prepare` starts
+`web`/`worker` **before the schema exists**, so they crash-loop on
+`relation "installation_configs" does not exist` until the second command is run
+by hand — a correct install looks like a dead stack. A one-shot `migrate`
+service now prepares the schema, verifies it, and `web`/`worker` wait for
+`service_completed_successfully`. **`up -d` is the whole install.**
+
+`db:chatwoot_prepare` **exits 0 even when it creates nothing** (it short-circuits
+on a database it considers half-prepared), so its exit code is never the proof.
+
+- **Compose interpolates `${...}` even inside a `#` comment** inside a block
+  scalar. A `${var:-default}` written in prose produced
+  `WARN The "count" variable is not set` on every `docker compose` command.
+- **Verify a fix in BOTH directions.** Passes at 110 tables, exits 1 at 0 — a
+  guard only checked on the happy path guards nothing.
+- **A mock cannot see a DDL syntax error.** The new tables, their unique index
+  and the FK cascade were executed against real Postgres
+  (`pgvector/pgvector:pg16`): duplicate triple rejected, `DELETE supplier` →
+  drafts `1 → 0`.
+
+## Supplier WhatsApp bot — scoping must live in the QUERY (Phase 6, PR #439)
+
+The supplier-facing bot (`modules/communications/supplier-bot.ts`) mirrors the
+representative bot: main menu → my requests → request → item → step answers →
+confirm → **unapproved** offer + employee notification.
+
+- **Scoping is in the query, not downstream.** Every item lookup requires the
+  `sent_log` row for `(supplier, rfq)`, so a hand-typed id or a stale button
+  cannot open another supplier's lines.
+- **A mock that returns rows directly cannot test that.** It cannot tell a
+  scoped query from an unscoped one, so "supplier B cannot see A's items" would
+  pass against the unscoped query. The tests record the built `WHERE` and assert
+  the columns.
+- **An answer is a DRAFT; only a confirmation writes an offer, and it is stored
+  unapproved.** A WhatsApp message is not a signed quotation.
+- **`parsePrice("-5")` returned `5`** — dropping a sign invents a price the
+  supplier never stated. It now re-asks.
+- **`upsertDraft` wrote `String(price)` on insert but a raw number in the
+  conflict `SET`** — one column, two shapes depending on whether the row existed.
+  Build one row object and derive the `set` from it.
+- **Add a handler to BOTH webhook paths.** `handleSupplierBotMessage` is in
+  `Whatsapp.on.message` **and** `dispatchWebhookPayload`, in the same order
+  (`reaction → AI → rep → supplier bot → pick → work-order → inbound`). One path
+  only is the recorded dispatch-order bug.
+
+**Tests**: 2322 api-server (was 2300) + 78 portal pass; `tsc` clean for libs,
+api-server and portal; repo-wide prettier clean. PR #439, all 4 CI checks green.
