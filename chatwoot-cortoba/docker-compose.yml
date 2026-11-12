@@ -83,7 +83,13 @@ services:
       CORTOBA_OWNER_ATTRIBUTE_KEY: ${CORTOBA_OWNER_ATTRIBUTE_KEY:-cortoba_owner_name}
       CORTOBA_RFQ_ATTRIBUTE_KEY: ${CORTOBA_RFQ_ATTRIBUTE_KEY:-cortoba_rfq_no}
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/health || exit 1"]
+      # Two traps this avoids, both observed on the running stack:
+      #  * the image ships no `curl` (`/bin/sh: curl: not found`) — `wget` is there;
+      #  * `localhost` resolves to ::1 first, and Rails binds IPv4 only, so a
+      #    localhost check is refused while the app is perfectly healthy.
+      # 127.0.0.1 is the address that actually answers. A healthcheck that
+      # reports "unhealthy" for a working app is worse than none at all.
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 30
