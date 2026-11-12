@@ -43,6 +43,19 @@ services:
     # The ONE migrator. The worker waits for this service's schema rather than
     # migrating itself (two concurrent migrators race on a fresh database).
     dockerCommand: sh /app/bin/entrypoint.sh web
+    # Chatwoot's `local` storage writes to /app/storage (config/storage.yml).
+    # Without a disk that path is on the ephemeral container filesystem, so an
+    # agent's uploaded PDF disappears on the next deploy. $0.25/GB per month.
+    #
+    # A Render disk attaches to ONE service, so the worker cannot share it. That
+    # is acceptable here because the files that matter — a supplier's price
+    # attachment — are stored in Cortoba's Postgres, not in Chatwoot. For a
+    # shared, multi-service store, point ACTIVE_STORAGE_SERVICE at S3 instead
+    # (Chatwoot supports it natively; it needs a bucket and keys, see README).
+    disk:
+      name: chatwoot-storage
+      mountPath: /app/storage
+      sizeGB: 1
     envVars:
       - key: RAILS_ENV
         value: production
@@ -65,9 +78,11 @@ services:
         value: "true"
       - key: DEFAULT_LOCALE
         value: ar
-      # Local disk: attachments live on the instance. A restart keeps the disk;
-      # a re-deploy may not — see the storage note in the README before relying
-      # on attachments surviving a deploy.
+      # Attachments an AGENT uploads from the console. Supplier attachments are
+      # NOT here — the bridge mirrors text only, and inbound WhatsApp media is
+      # stored in Cortoba's own Postgres (`whatsapp_media`), so the canonical
+      # supplier files never depend on this service. This covers the console
+      # side, and `disks:` below makes it survive a re-deploy.
       - key: ACTIVE_STORAGE_SERVICE
         value: local
       - key: DATABASE_URL
@@ -142,7 +157,7 @@ services:
   - type: keyvalue
     name: cortoba-chatwoot-redis
     region: oregon
-    plan: starter
+    plan: 256mb
     # Sidekiq jobs must survive a restart; without persistence a queued webhook
     # is lost and the conversation it belonged to is never created.
     maxmemoryPolicy: noeviction
