@@ -98,11 +98,11 @@ services:
           name: cortoba-chatwoot-redis
           property: connectionString
       - key: FRONTEND_URL
-        sync: false
+        value: https://cortoba-chatwoot.onrender.com
       - key: SECRET_KEY_BASE
-        sync: false
+        generateValue: true
       - key: CORTOBA_APP_URL
-        sync: false
+        value: https://cortoba-rfq.onrender.com
       - key: CORTOBA_RFQ_ATTRIBUTE_KEY
         value: cortoba_rfq_no
       - key: CORTOBA_OWNER_ATTRIBUTE_KEY
@@ -150,11 +150,14 @@ services:
           name: cortoba-chatwoot-redis
           property: connectionString
       - key: FRONTEND_URL
-        sync: false
+        value: https://cortoba-chatwoot.onrender.com
       - key: SECRET_KEY_BASE
-        sync: false
+        fromService:
+          type: web
+          name: cortoba-chatwoot
+          envVarKey: SECRET_KEY_BASE
       - key: CORTOBA_APP_URL
-        sync: false
+        value: https://cortoba-rfq.onrender.com
       - key: CORTOBA_RFQ_ATTRIBUTE_KEY
         value: cortoba_rfq_no
       - key: CORTOBA_OWNER_ATTRIBUTE_KEY

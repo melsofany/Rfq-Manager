@@ -1095,7 +1095,22 @@ async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Pro
  * flow (no `sup_` payload and not a supplier's plain text), which is what keeps
  * ordinary supplier chat working exactly as before.
  */
+/**
+ * The supplier bot intercepts plain text from a REGISTERED supplier, which is a
+ * behaviour change on a live channel: a supplier typing an ordinary question now
+ * gets the bot menu instead of the human chat. Ship it enabled (that is the
+ * requested behaviour) but keep a kill-switch, so if a supplier is mid-quote and
+ * the flow misbehaves the operator can set SUPPLIER_BOT_ENABLED=false and the
+ * message falls through to the ordinary handler on the next deploy — no code
+ * revert, no data migration.
+ */
+function supplierBotEnabled(): boolean {
+  return process.env.SUPPLIER_BOT_ENABLED !== "false";
+}
+
 async function handleSupplierBotMessage(phone: string, msg: ServerMessage): Promise<boolean> {
+  if (!supplierBotEnabled()) return false;
+
   const payload = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id ?? "";
   const isBotPayload = payload.startsWith("sup_");
   const text = msg.type === "text" ? (msg.text?.body ?? "").trim() : "";

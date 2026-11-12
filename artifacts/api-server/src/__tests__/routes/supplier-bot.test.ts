@@ -676,3 +676,25 @@ describe("step ladder", () => {
     }
   });
 });
+
+describe("kill-switch", () => {
+  // The bot claims plain text from a registered supplier, so it changes the
+  // behaviour of a live channel. The switch has to be read at MESSAGE time, not
+  // at module load: an operator setting SUPPLIER_BOT_ENABLED=false expects the
+  // next message to behave, and a load-time constant would keep the old value
+  // for the life of the process.
+  it("reads the flag per message, not once at import", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync(new URL("../../modules/communications/routes.ts", import.meta.url), "utf8"),
+    );
+    // The check must exist inside the handler and be evaluated on each call.
+    const handler = src.slice(src.indexOf("async function handleSupplierBotMessage"));
+    expect(handler).toContain("supplierBotEnabled()");
+    expect(handler.indexOf("supplierBotEnabled()")).toBeLessThan(
+      handler.indexOf("supplierByPhone"),
+    );
+    // A module-level constant would freeze the flag.
+    expect(src).not.toMatch(/^const\s+SUPPLIER_BOT_ENABLED\s*=/m);
+    expect(src).toMatch(/process\.env\.SUPPLIER_BOT_ENABLED\s*!==\s*"false"/);
+  });
+});
