@@ -424,10 +424,15 @@ export async function upsertDraft(
 ): Promise<void> {
   const now = new Date();
   // ONE representation for both paths. Building the insert row and then deriving
-  // the conflict `set` from it (minus the key columns) is what keeps them from
-  // drifting: writing `String(price)` on insert and the raw number in the `set`
-  // gives the same column two shapes depending on whether the row existed.
-  const row: Record<string, unknown> = {
+  // the conflict `set` from it is what keeps them from drifting: writing
+  // `String(price)` on insert and the raw number in the `set` gives the same
+  // column two shapes depending on whether the row existed.
+  //
+  // The types are the table's own inferred insert/update shapes rather than a
+  // bare `Record`, so a column renamed in the schema is a compile error here
+  // instead of a value that silently stops being written.
+  type DraftRow = typeof supplierItemDraftsTable.$inferInsert;
+  const row: DraftRow = {
     rfqId,
     rfqItemId,
     supplierId,
@@ -442,11 +447,14 @@ export async function upsertDraft(
     attachmentName: patch.attachmentName ?? null,
     updatedAt: now,
   };
-  const set: Record<string, unknown> = { updatedAt: now };
-  for (const [k, v] of Object.entries(patch)) {
+  const set: Partial<DraftRow> = { updatedAt: now };
+  for (const key of Object.keys(patch) as Array<keyof DraftPatch>) {
     // Only fields actually supplied are updated, so an answer given now does not
-    // erase one given in an earlier message.
-    if (v !== undefined) set[k] = row[k];
+    // erase one given in an earlier message. `row` holds the converted value, so
+    // the `set` can never disagree with what an insert would have written.
+    if (patch[key] !== undefined) {
+      (set as Record<string, unknown>)[key] = (row as Record<string, unknown>)[key];
+    }
   }
   try {
     await db
