@@ -4964,3 +4964,31 @@ confirm → **unapproved** offer + employee notification.
 
 **Tests**: 2322 api-server (was 2300) + 78 portal pass; `tsc` clean for libs,
 api-server and portal; repo-wide prettier clean. PR #439, all 4 CI checks green.
+
+## Never delete-and-reinsert a row other tables point at (supplier bot)
+
+`confirmDrafts` re-confirmed a supplier's reply by `DELETE FROM offer_items
+WHERE offer_id = ...` and re-inserting every line. Two things died silently:
+
+- **`offer_items.is_approved`** — the approved supplier price, i.e. the
+  reference cost `customer-rfq`'s margin check and the RFQ KPIs read. An
+  approval that vanishes is the "silently wrong authoritative number" class.
+- **`purchase_order_items.offer_item_id`** is `ON DELETE SET NULL`, so every PO
+  line raised from that offer lost its link to it.
+
+Now: match existing lines by `rfqItemId`, UPDATE in place, insert only new ones,
+delete nothing. Same rule already recorded for `customer_rfq_items` and
+`customer_po_items`.
+
+**An approval is an approval OF A PRICE.** When the supplier restates the price
+the endorsement no longer describes the quoted figure, so it is released
+(`approvalsCleared`) rather than left as a stale reference cost; an unchanged
+price keeps its approval. The employee is told over WhatsApp when it happens —
+an approval must never vanish silently.
+
+The passing tests did not catch this; reading the code against the schema did.
+A green suite proves the code does what the tests assert, not that the asserts
+were the right ones.
+
+**Tests**: 3 new cases, all 3 fail against the old block (verified by restoring
+it). 2325 api-server tests pass.
