@@ -57,6 +57,7 @@ import {
   clearSession,
   upsertDraft,
   loadDrafts,
+  loadSupplierRequestItemsWithDrafts,
   summariseDrafts,
   confirmDrafts,
   itemLabel,
@@ -1172,6 +1173,51 @@ async function recordSupplierBotInbound(opts: {
   }
 }
 
+/**
+ * Mirror a submitted quote into the supplier's console conversation.
+ *
+ * The employee reviews offers in Chatwoot, so the prices have to be IN the
+ * thread. Mirrored as an internal-style summary rather than as a WhatsApp
+ * message: this is a record for the team, not something the supplier receives
+ * (they already got their own confirmation).
+ *
+ * Best-effort — the offer is already saved by the time this runs.
+ */
+export async function mirrorSupplierQuoteToConsole(
+  supplier: { id: number; name: string },
+  phone: string,
+  rfqId: number,
+  rfqNo: string,
+): Promise<void> {
+  try {
+    const { items, drafts } = await loadSupplierRequestItemsWithDrafts(supplier.id, rfqId);
+    const priced = items
+      .map((it) => ({ it, d: drafts.get(it.id) }))
+      .filter(({ d }) => d?.unitPrice != null && String(d.unitPrice).trim() !== "");
+    if (priced.length === 0) return;
+
+    const lines = priced.map(({ it, d }) => {
+      const label = it.partNo || it.lineItem || it.description || `بند ${it.id}`;
+      const price = `${d!.unitPrice}${d!.currency ? " " + d!.currency : ""}`;
+      const extra = d!.deliveryDays != null ? ` — توريد ${d!.deliveryDays} يوم` : "";
+      return `• ${label}: ${price}${extra}`;
+    });
+    const unpriced = items.length - priced.length;
+
+    await mirrorOutboundMessage({
+      phone,
+      rfqId,
+      supplierId: supplier.id,
+      body:
+        `📩 رد سعري من ${supplier.name} على الطلب ${rfqNo} — ${priced.length} بند مسعّر` +
+        (unpriced > 0 ? ` (${unpriced} بند بدون سعر)` : "") +
+        `\n${lines.join("\n")}`,
+    });
+  } catch (err) {
+    logger.warn({ err, rfqId }, "Supplier quote mirror to console failed — non-fatal");
+  }
+}
+
 export async function handleSupplierBotMessage(
   phone: string,
   msg: ServerMessage,
@@ -1414,6 +1460,10 @@ export async function handleSupplierBotMessage(
           `✅ تم إرسال ردكم على الطلب ${rfqNo} (${result.savedItems} بند).\n` +
             "سيتم مراجعته من قبل الموظف المسؤول وسنوافيكم بالنتيجة.",
         );
+        // Put the submitted prices in the console thread. The employee reviews
+        // the offer THERE; without this the thread shows a bare acknowledgement
+        // and the employee has to open the RFQ screen to learn what was quoted.
+        await mirrorSupplierQuoteToConsole(supplier, phone, session.rfqId, rfqNo);
         // Tell the responsible employee. Best-effort: the offer is already
         // saved, and a notification failure must not look like a failed reply.
         void notifyResponsibleEmployee(
