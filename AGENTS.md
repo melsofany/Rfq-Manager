@@ -4868,10 +4868,9 @@ REST API cannot set `created_at` or a message id).
 - Exclude heavy non-code assets (`spec/`, `public/videos/`, `*.onnx`,
   `node_modules/`, `public/packs/`) — that is what takes the commit from 232 MB
   to **60.1 MB / 8597 files** (largest blob 1.38 MB).
-- `.oh-cost-governor/` is untracked and absent from a fresh CI checkout, so the
-  12 prettier warnings it produces are **CI-irrelevant**. To check the real gate
-  without committing anything: `git ls-files -z | grep -zE
-  '\.(ts|tsx|js|mjs|json|css|md)$' | xargs -0 prettier --check`.
+- To check the real (tracked-files-only) format gate without committing
+  anything: `git ls-files -z | grep -zE '\.(ts|tsx|js|mjs|json|css|md)$' |
+  xargs -0 prettier --check`.
 - CI runs only **typecheck + tests + format** (no eslint), so an eslint error
   cannot block a deploy — but the format gate absolutely can.
 - `pnpm` is not on PATH; use the corepack shim
