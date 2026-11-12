@@ -4992,3 +4992,36 @@ were the right ones.
 
 **Tests**: 3 new cases, all 3 fail against the old block (verified by restoring
 it). 2325 api-server tests pass.
+
+## A bot that answers before the generic handler consumes the message
+
+The supplier bot (`handleSupplierBotMessage`) runs BEFORE `handleInboundMessage`,
+so it CONSUMES the supplier's message: whatever it does not record itself is
+never recorded at all. The bot saved prices into drafts and recorded nothing, so
+the employee opened the Chatwoot conversation to find an EMPTY thread while the
+supplier was actively quoting — the console is where the employee works, so a
+silent bot makes the console lie about the conversation it shows.
+
+- `recordSupplierBotInbound` records the inbound message (idempotent on
+  `wa_message_id`, so a redelivered webhook cannot double the thread) and mirrors
+  it into Chatwoot. Best-effort — a console fault must never cost the supplier
+  their answer.
+- `mirrorSupplierQuoteToConsole` puts the submitted prices (label, price,
+  currency, delivery days) plus the unpriced count into the thread. A bare
+  acknowledgement there means the employee must open the RFQ screen to learn what
+  was quoted.
+- `describeInboundBody` is the ONE inbound body mapping, shared by the bot and
+  the generic handler. Two copies drift, and the same message would then read
+  differently depending on which path consumed it.
+
+**A test that calls a helper directly guards nothing about whether it is
+called.** The quote-mirror wiring test drives the REAL confirmation; calling
+`mirrorSupplierQuoteToConsole` in isolation passed even after the call site was
+deleted. Removing the recording call fails 3 tests, removing the mirror call
+fails 1 — both verified by reverting.
+
+**The public Chatwoot webhook answers 200 BEFORE validating, deliberately:**
+Chatwoot retries a slow webhook, which would double-send. The token check returns
+before any action, so an unauthenticated request sends nothing. A 200 on that
+path is an ack, not evidence of authorization — verify the absence of the
+outbound send, not the status code.
