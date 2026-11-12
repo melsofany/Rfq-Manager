@@ -58,47 +58,10 @@ services:
       CORTOBA_OWNER_ATTRIBUTE_KEY: ${CORTOBA_OWNER_ATTRIBUTE_KEY:-cortoba_owner_name}
       CORTOBA_RFQ_ATTRIBUTE_KEY: ${CORTOBA_RFQ_ATTRIBUTE_KEY:-cortoba_rfq_no}
     restart: "no"
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -e
-        echo "[migrate] preparing the Chatwoot schema"
-        bundle exec rails db:chatwoot_prepare
-        # VERIFY, do not trust the exit code. `db:chatwoot_prepare` reports
-        # success even when it created nothing (it short-circuits on a
-        # half-applied schema, and an interrupted first run leaves exactly that
-        # state), which is how a "successful" install ends up with an app that
-        # cannot boot. Asking the database directly is the only proof.
-        #
-        # The count is taken from a SENTINEL line, not from raw output: Rails
-        # logs to stdout too, so capturing the whole stream yields a string like
-        # "W, [2026-...] INFO -- ... 110" and the numeric test then fails with
-        # "out of range" — and a failing test inside `if` does NOT trip
-        # `set -e`, so the check silently reported success. Extracting the marker
-        # and failing closed on anything unparsable is what makes this a guard.
-        count=$$(bundle exec rails runner 'puts "CORTOBA_TABLES=#{ActiveRecord::Base.connection.tables.size}"' 2>/dev/null \
-          | grep -o 'CORTOBA_TABLES=[0-9]*' | tail -1 | cut -d= -f2)
-        # No shell default-expansion syntax here: compose interpolates that form
-        # even inside a comment and warns "variable is not set" on every command,
-        # so the default is spelled out instead.
-        if [ -z "$$count" ]; then
-          echo "[migrate] tables present: <unparsable>"
-        else
-          echo "[migrate] tables present: $$count"
-        fi
-        case "$$count" in
-          ''|*[!0-9]*)
-            echo "[migrate] FAILED: could not read the table count from the database." >&2
-            exit 1
-            ;;
-        esac
-        if [ "$$count" -lt 50 ]; then
-          echo "[migrate] FAILED: only $$count tables — the schema was not applied." >&2
-          echo "[migrate] If this is a half-prepared volume, remove it and retry:" >&2
-          echo "[migrate]   docker compose down -v && docker compose up -d" >&2
-          exit 1
-        fi
-        echo "[migrate] schema ready"
+    # The migration + its verification live in ./bin/entrypoint.sh, which Render
+    # runs too. Defining the command once is what keeps a local install and a
+    # deploy from drifting apart.
+    command: ["sh", "/app/bin/entrypoint.sh", "migrate"]
 
   postgres:
     # Chatwoot v4.19+ requires the `vector` extension (db/schema.rb:
@@ -140,7 +103,9 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-      # The schema must exist BEFORE Rails boots, or the app crash-loops.
+      # The schema must exist BEFORE Rails boots, or the app crash-loops. The
+      # one-shot `migrate` service is the single migrator here; on Render the web
+      # service plays that role and the worker waits instead.
       migrate: { condition: service_completed_successfully }
     ports:
       - "${CHATWOOT_PORT:-3000}:3000"
@@ -178,7 +143,8 @@ services:
       timeout: 5s
       retries: 30
       start_period: 90s
-    command: bundle exec rails s -b 0.0.0.0 -p 3000
+    # Same entrypoint Render runs, so the two paths cannot drift.
+    command: ["sh", "/app/bin/entrypoint.sh", "web"]
 
   worker:
     image: cortoba/chatwoot:4.19.1
@@ -195,7 +161,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 60s
-    command: bundle exec sidekiq -C config/sidekiq.yml
+    command: ["sh", "/app/bin/entrypoint.sh", "worker"]
 
 volumes:
   chatwoot_pgdata:

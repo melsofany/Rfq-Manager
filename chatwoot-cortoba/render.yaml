@@ -1,0 +1,157 @@
+# Chatwoot (agent console) on Render.
+#
+# Topology — four resources, and NOTHING here touches the existing cortoba-rfq
+# service or its database:
+#
+#   cortoba-chatwoot         web service   (Puma)  — the console UI + API
+#   cortoba-chatwoot-worker  worker        (Sidekiq) — webhooks, imports, jobs
+#   cortoba-chatwoot-redis   Key Value     — Sidekiq queue + Rails cache
+#   cortoba-chatwoot-db      Postgres 16   — Chatwoot's OWN database
+#
+# `pgvector` is REQUIRED (upstream `db/schema.rb` runs `enable_extension
+# "vector"`), and Render's managed Postgres ships it — verified against the live
+# instance (`vector 0.8.7` in `pg_available_extensions`) before this file was
+# written. A plain Postgres without it fails at `db:chatwoot_prepare` with
+# `extension "vector" is not available`.
+#
+# Chatwoot is wired to Cortoba on an **API inbox**. It is never configured as a
+# WhatsApp channel: the app's own Meta webhook stays the ONE gateway to
+# WhatsApp, because pointing Meta at Chatwoot would silently stop RFQ sending,
+# PO dispatch and the representative bot.
+#
+# Secrets are `sync: false` — Render prompts for them and they are never stored
+# in this file. Deploy order: create the resources, then set the six
+# CHATWOOT_* vars on the cortoba-rfq service (see README).
+
+services:
+  - type: web
+    name: cortoba-chatwoot
+    runtime: docker
+    repo: https://github.com/melsofany/Rfq-Manager
+    branch: main
+    dockerfilePath: ./chatwoot-cortoba/Dockerfile
+    dockerContext: ./chatwoot-cortoba
+    region: oregon
+    plan: starter
+    healthCheckPath: /health
+    # `preDeployCommand` gates the deploy on a successful migration when Render
+    # supports it on this service type. The design does NOT depend on it: the web
+    # entrypoint migrates too, and a second run against a prepared schema is a
+    # fast no-op. Either way a green deploy means the schema is really there,
+    # because the script fails non-zero when it is not.
+    preDeployCommand: sh /app/bin/entrypoint.sh migrate
+    # The ONE migrator. The worker waits for this service's schema rather than
+    # migrating itself (two concurrent migrators race on a fresh database).
+    dockerCommand: sh /app/bin/entrypoint.sh web
+    envVars:
+      - key: RAILS_ENV
+        value: production
+      - key: NODE_ENV
+        value: production
+      - key: INSTALLATION_ENV
+        value: docker
+      - key: RAILS_LOG_TO_STDOUT
+        value: "true"
+      - key: RAILS_LOG_LEVEL
+        value: info
+      # Render terminates TLS in front of us, so the session cookie must be
+      # marked secure or the login redirect bounces.
+      - key: FORCE_SSL
+        value: "true"
+      # Employees sign in to Cortoba only; they never get a Chatwoot password.
+      - key: ENABLE_ACCOUNT_SIGNUP
+        value: "false"
+      - key: DISABLE_TELEMETRY
+        value: "true"
+      - key: DEFAULT_LOCALE
+        value: ar
+      # Local disk: attachments live on the instance. A restart keeps the disk;
+      # a re-deploy may not — see the storage note in the README before relying
+      # on attachments surviving a deploy.
+      - key: ACTIVE_STORAGE_SERVICE
+        value: local
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cortoba-chatwoot-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: cortoba-chatwoot-redis
+          property: connectionString
+      - key: FRONTEND_URL
+        sync: false
+      - key: SECRET_KEY_BASE
+        sync: false
+      - key: CORTOBA_APP_URL
+        sync: false
+      - key: CORTOBA_RFQ_ATTRIBUTE_KEY
+        value: cortoba_rfq_no
+      - key: CORTOBA_OWNER_ATTRIBUTE_KEY
+        value: cortoba_owner_name
+
+  - type: worker
+    name: cortoba-chatwoot-worker
+    runtime: docker
+    repo: https://github.com/melsofany/Rfq-Manager
+    branch: main
+    dockerfilePath: ./chatwoot-cortoba/Dockerfile
+    dockerContext: ./chatwoot-cortoba
+    region: oregon
+    plan: starter
+    dockerCommand: sh /app/bin/entrypoint.sh worker
+    envVars:
+      - key: RAILS_ENV
+        value: production
+      - key: NODE_ENV
+        value: production
+      - key: INSTALLATION_ENV
+        value: docker
+      - key: RAILS_LOG_TO_STDOUT
+        value: "true"
+      - key: RAILS_LOG_LEVEL
+        value: info
+      - key: ENABLE_ACCOUNT_SIGNUP
+        value: "false"
+      - key: DISABLE_TELEMETRY
+        value: "true"
+      - key: DEFAULT_LOCALE
+        value: ar
+      - key: ACTIVE_STORAGE_SERVICE
+        value: local
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cortoba-chatwoot-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: cortoba-chatwoot-redis
+          property: connectionString
+      - key: FRONTEND_URL
+        sync: false
+      - key: SECRET_KEY_BASE
+        sync: false
+      - key: CORTOBA_APP_URL
+        sync: false
+      - key: CORTOBA_RFQ_ATTRIBUTE_KEY
+        value: cortoba_rfq_no
+      - key: CORTOBA_OWNER_ATTRIBUTE_KEY
+        value: cortoba_owner_name
+
+  - type: keyvalue
+    name: cortoba-chatwoot-redis
+    region: oregon
+    plan: starter
+    # Sidekiq jobs must survive a restart; without persistence a queued webhook
+    # is lost and the conversation it belonged to is never created.
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+databases:
+  - name: cortoba-chatwoot-db
+    databaseName: chatwoot
+    user: chatwoot
+    region: oregon
+    plan: basic-256mb
+    postgresMajorVersion: "16"

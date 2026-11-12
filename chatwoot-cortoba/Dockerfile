@@ -13,3 +13,8 @@ COPY config/initializers/cortoba.rb /app/config/initializers/cortoba.rb
 COPY lib/cortoba.rb /app/lib/cortoba.rb
 COPY lib/cortoba/ /app/lib/cortoba/
 COPY lib/tasks/cortoba.rake /app/lib/tasks/cortoba.rake
+
+# One entrypoint for migrate/web/worker. Compose and Render both call it, so the
+# deploy runs the exact command that was tested locally.
+COPY bin/entrypoint.sh /app/bin/entrypoint.sh
+RUN chmod +x /app/bin/entrypoint.sh
