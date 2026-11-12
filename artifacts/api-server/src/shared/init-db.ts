@@ -3348,6 +3348,57 @@ export async function initDb(): Promise<void> {
     `);
 
     logger.info("initDb: field operations schema ready");
+
+    // ── WhatsApp supplier bot (interactive quoting) ──────────────────────
+    // Its own statement, and each CREATE its own too: a failure in one leaves
+    // the others applied. A `CREATE TABLE IF NOT EXISTS` is a NO-OP on a table
+    // that already exists, so anything added later must be a separate
+    // `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, never a column folded into
+    // the CREATE.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS supplier_item_drafts (
+        id SERIAL PRIMARY KEY,
+        rfq_id INTEGER NOT NULL REFERENCES rfq(id) ON DELETE CASCADE,
+        rfq_item_id INTEGER NOT NULL REFERENCES rfq_items(id) ON DELETE CASCADE,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+        availability TEXT,
+        unit_price NUMERIC(15,4),
+        currency TEXT,
+        delivery_days INTEGER,
+        origin_country TEXT,
+        brand TEXT,
+        notes TEXT,
+        attachment_media_id TEXT,
+        attachment_name TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    // The triple is the idempotency key: a re-sent value updates the draft
+    // rather than adding a row, and two concurrent Meta retries cannot
+    // double-write a line.
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS supplier_item_drafts_uq
+        ON supplier_item_drafts (rfq_id, rfq_item_id, supplier_id);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS supplier_bot_sessions (
+        id SERIAL PRIMARY KEY,
+        phone TEXT NOT NULL,
+        supplier_id INTEGER REFERENCES suppliers(id) ON DELETE CASCADE,
+        rfq_id INTEGER REFERENCES rfq(id) ON DELETE CASCADE,
+        rfq_item_id INTEGER REFERENCES rfq_items(id) ON DELETE CASCADE,
+        step TEXT,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS supplier_bot_sessions_phone_uq
+        ON supplier_bot_sessions (phone);
+    `);
+
+    logger.info("initDb: WhatsApp supplier bot schema ready");
   } catch (err) {
     logger.error({ err }, "initDb: FAILED");
     throw err;

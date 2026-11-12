@@ -15,6 +15,9 @@ import {
   customerPoItemDeliveriesTable,
   representativesTable,
   WORK_ORDER_KIND,
+  rfqTable,
+  rfqItemsTable,
+  employeesTable,
 } from "@workspace/db";
 import { eq, desc, sql, and, inArray, ne, isNotNull } from "drizzle-orm";
 import {
@@ -37,7 +40,33 @@ import {
   formatQty as formatWaQty,
   sendSupplierRequestPicker,
   sendSupplierRequestConfirmed,
+  sendSupplierBotMainMenu,
+  sendSupplierBotRequestList,
+  sendSupplierBotItemList,
+  sendSupplierBotItemDetail,
+  sendSupplierBotItemSummary,
+  sendSupplierBotConfirm,
+  notifyEmployeeOfSupplierReply,
 } from "./service";
+import {
+  listSupplierOpenRequests,
+  listSupplierRequestItems,
+  supplierMayAnswer,
+  loadSession,
+  saveSession,
+  clearSession,
+  upsertDraft,
+  loadDrafts,
+  summariseDrafts,
+  confirmDrafts,
+  itemLabel,
+  parsePrice,
+  parseDeliveryDays,
+  isSkip,
+  stepPrompt,
+  STEP_ORDER,
+  type BotStep,
+} from "./supplier-bot";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { REJECTION_REASONS } from "../po/receipts";
@@ -170,6 +199,12 @@ Whatsapp.on.message = async ({ phoneID, from, message, name, reply }) => {
     } else if (await handleRepMessage(from, msg)) {
       // Registered representative bot owns this message (text or rep_ menu).
       logger.info({ from }, "Representative bot message handled");
+    } else if (await handleSupplierBotMessage(from, msg)) {
+      // Interactive supplier bot owns this message (sup_ menu or a supplier's
+      // step answer). Sits after the rep bot so a number that is BOTH a rep and
+      // a supplier keeps its rep behaviour, and before the generic handler so
+      // the bot's menus are not echoed into the shared inbox.
+      logger.info({ from }, "Supplier bot message handled");
     } else if (await handleSupplierRequestPick(from, msg)) {
       // Supplier tapped a request button — the conversation is now filed there.
       logger.info({ from }, "Supplier request pick handled");
@@ -309,6 +344,9 @@ async function dispatchWebhookPayload(body: MetaWebhookBody): Promise<void> {
       } else if (await handleRepMessage(from, message)) {
         // Registered representative bot owns this message (text or rep_ menu).
         logger.info({ from }, "Representative bot message handled");
+      } else if (await handleSupplierBotMessage(from, message)) {
+        // Interactive supplier bot — same order as the library path above.
+        logger.info({ from }, "Supplier bot message handled");
       } else if (await handleSupplierRequestPick(from, message)) {
         logger.info({ from }, "Supplier request pick handled");
       } else if (message.type === "interactive" && (await handleWorkOrderButton(from, message))) {
@@ -1042,6 +1080,495 @@ async function handleSupplierRequestPick(phone: string, msg: ServerMessage): Pro
   await sendSupplierRequestConfirmed(phone, chosen.internalRfqNo, chosen.employeeName);
   broadcastWaEvent({ type: "new_message", phone });
   return true;
+}
+
+/**
+ * ── Interactive supplier bot ─────────────────────────────────────────────────
+ *
+ * The supplier-facing counterpart of the representative bot. A supplier opens
+ * the menu with any message, browses THEIR OWN open pricing requests, opens an
+ * item, answers it step by step, and confirms — at which point the answers are
+ * written as an unapproved offer for an employee to review.
+ *
+ * Returns true when the bot owned the message, so the caller stops before the
+ * generic inbound handler. Returns false for anything that is not the supplier
+ * flow (no `sup_` payload and not a supplier's plain text), which is what keeps
+ * ordinary supplier chat working exactly as before.
+ */
+async function handleSupplierBotMessage(phone: string, msg: ServerMessage): Promise<boolean> {
+  const payload = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id ?? "";
+  const isBotPayload = payload.startsWith("sup_");
+  const text = msg.type === "text" ? (msg.text?.body ?? "").trim() : "";
+
+  // Resolve the supplier FIRST. An unregistered number gets the ordinary chat
+  // flow — the bot must not become a way for a stranger to browse anything.
+  const supplier = await supplierByPhone(phone);
+  if (!supplier) return false;
+
+  const session = await loadSession(phone);
+
+  // A `sup_` payload from a stale menu is still ours: answer with the menu
+  // rather than letting it fall through to the generic handler, which would
+  // look like the bot ignoring the tap.
+  if (!isBotPayload && !text) return false;
+
+  try {
+    // ── Explicit taps ────────────────────────────────────────────────────────
+    if (isBotPayload) {
+      const [head, a, b] = payload.split(":");
+
+      if (head === "sup_menu") {
+        if (a === "myrfqs") {
+          const open = await listSupplierOpenRequests(supplier.id);
+          await sendSupplierBotRequestList(phone, open, 1);
+          await clearSession(phone);
+          return true;
+        }
+        if (a === "back") {
+          await sendSupplierBotMainMenu(phone, supplier.name);
+          await clearSession(phone);
+          return true;
+        }
+        if (a === "help") {
+          await sendWhatsAppText(
+            phone,
+            "كيفية الاستخدام:\n" +
+              "1) اضغط «طلبات التسعير» لعرض طلباتكم المفتوحة.\n" +
+              "2) اختر الطلب ثم البند.\n" +
+              "3) أدخل السعر والبيانات المطلوبة.\n" +
+              "4) كرر لكل بند ثم اضغط «إرسال الرد».\n\n" +
+              "يمكنكم استكمال الرد في أي وقت — يُحفظ تلقائياً.",
+          );
+          return true;
+        }
+        if (a === "agent") {
+          await requestHumanAgent(phone, supplier.id, session?.rfqId ?? null);
+          return true;
+        }
+        return true;
+      }
+
+      if (head === "sup_page") {
+        const page = Number(a) || 1;
+        const open = await listSupplierOpenRequests(supplier.id);
+        await sendSupplierBotRequestList(phone, open, page);
+        return true;
+      }
+
+      if (head === "sup_rfq") {
+        const rfqId = Number(a);
+        if (!Number.isFinite(rfqId)) return true;
+        // Authorise at the moment of USE, not when the menu was drawn: the
+        // request may have been closed or re-sent since.
+        const allowed = await supplierMayAnswer(supplier.id, rfqId);
+        if (!allowed.ok) {
+          await sendWhatsAppText(phone, "هذا الطلب لم يعد متاحاً للرد.");
+          const open = await listSupplierOpenRequests(supplier.id);
+          await sendSupplierBotRequestList(phone, open, 1);
+          return true;
+        }
+        const items = await listSupplierRequestItems(supplier.id, rfqId);
+        await saveSession({
+          phone,
+          supplierId: supplier.id,
+          rfqId,
+          rfqItemId: null,
+          step: null,
+        });
+        await sendSupplierBotItemList(
+          phone,
+          await rfqNoOf(rfqId),
+          items.map((it) => ({
+            id: it.id,
+            label: itemLabel(it),
+            qty: it.qty,
+            uom: it.uom,
+            answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
+          })),
+          1,
+        );
+        return true;
+      }
+
+      if (head === "sup_ipage") {
+        const page = Number(a) || 1;
+        if (!session?.rfqId) return true;
+        const items = await listSupplierRequestItems(supplier.id, session.rfqId);
+        await sendSupplierBotItemList(
+          phone,
+          await rfqNoOf(session.rfqId),
+          items.map((it) => ({
+            id: it.id,
+            label: itemLabel(it),
+            qty: it.qty,
+            uom: it.uom,
+            answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
+          })),
+          page,
+        );
+        return true;
+      }
+
+      if (head === "sup_back") {
+        if (a === "items" && session?.rfqId) {
+          const items = await listSupplierRequestItems(supplier.id, session.rfqId);
+          await sendSupplierBotItemList(
+            phone,
+            await rfqNoOf(session.rfqId),
+            items.map((it) => ({
+              id: it.id,
+              label: itemLabel(it),
+              qty: it.qty,
+              uom: it.uom,
+              answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
+            })),
+            1,
+          );
+          await saveSession({
+            phone,
+            supplierId: supplier.id,
+            rfqId: session.rfqId,
+            rfqItemId: null,
+            step: null,
+          });
+          return true;
+        }
+        await sendSupplierBotMainMenu(phone, supplier.name);
+        await clearSession(phone);
+        return true;
+      }
+
+      if (head === "sup_item") {
+        const itemId = Number(a);
+        if (!session?.rfqId || !Number.isFinite(itemId)) return true;
+        await showItemDetail(phone, supplier.id, session.rfqId, itemId);
+        return true;
+      }
+
+      if (head === "sup_avail") {
+        const itemId = Number(a);
+        const available = b === "1";
+        if (!session?.rfqId || !Number.isFinite(itemId)) return true;
+        await upsertDraft(supplier.id, session.rfqId, itemId, {
+          availability: available ? "available" : "unavailable",
+        });
+        if (!available) {
+          // «غير متاح» ends the item — there is nothing to price. Say so and
+          // return to the list, where the item now reads as answered.
+          const items = await listSupplierRequestItems(supplier.id, session.rfqId);
+          await sendWhatsAppText(phone, "تم تسجيل أن البند غير متاح. اختر بنداً آخر أو أرسل الرد.");
+          await sendSupplierBotItemList(
+            phone,
+            await rfqNoOf(session.rfqId),
+            items.map((it) => ({
+              id: it.id,
+              label: itemLabel(it),
+              qty: it.qty,
+              uom: it.uom,
+              answered:
+                it.draft?.availability === "unavailable" ||
+                (it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0),
+            })),
+            1,
+          );
+          await saveSession({
+            phone,
+            supplierId: supplier.id,
+            rfqId: session.rfqId,
+            rfqItemId: null,
+            step: null,
+          });
+          return true;
+        }
+        // Available → ask for the price, the one field that makes it an offer.
+        await saveSession({
+          phone,
+          supplierId: supplier.id,
+          rfqId: session.rfqId,
+          rfqItemId: itemId,
+          step: "await_price",
+        });
+        await sendWhatsAppText(
+          phone,
+          stepPrompt("await_price", await itemLabelOf(session.rfqId, itemId)),
+        );
+        return true;
+      }
+
+      if (head === "sup_confirm") {
+        const confirmed = a === "1";
+        if (!session?.rfqId) return true;
+        if (!confirmed) {
+          await sendWhatsAppText(
+            phone,
+            "تمام، تم الحفظ. يمكنك استكمال الرد في أي وقت من «طلبات التسعير».",
+          );
+          await clearSession(phone);
+          return true;
+        }
+        const result = await confirmDrafts(supplier.id, session.rfqId);
+        if (!result.ok) {
+          const why =
+            result.reason === "no_priced_items"
+              ? "لم تقم بإدخال أي سعر بعد. أدخل سعراً لبند واحد على الأقل ثم أرسل الرد."
+              : "تعذّر حفظ الرد حالياً. حاول مرة أخرى بعد قليل.";
+          await sendWhatsAppText(phone, why);
+          return true;
+        }
+        const rfqNo = await rfqNoOf(session.rfqId);
+        await sendWhatsAppText(
+          phone,
+          `✅ تم إرسال ردكم على الطلب ${rfqNo} (${result.savedItems} بند).\n` +
+            "سيتم مراجعته من قبل الموظف المسؤول وسنوافيكم بالنتيجة.",
+        );
+        // Tell the responsible employee. Best-effort: the offer is already
+        // saved, and a notification failure must not look like a failed reply.
+        void notifyResponsibleEmployee(supplier.id, session.rfqId, result.savedItems ?? 0);
+        await clearSession(phone);
+        return true;
+      }
+
+      return true;
+    }
+
+    // ── Free text: either a step answer or a request to open the bot ─────────
+    if (session?.step && session.rfqId && session.rfqItemId) {
+      const allowed = await supplierMayAnswer(supplier.id, session.rfqId);
+      if (!allowed.ok) {
+        await sendWhatsAppText(phone, "هذا الطلب لم يعد متاحاً للرد.");
+        await clearSession(phone);
+        return true;
+      }
+      await advanceStep(phone, supplier.id, session.rfqId, session.rfqItemId, session.step, text);
+      return true;
+    }
+
+    // No active step: any plain text from a supplier opens the main menu. The
+    // same message also flows through the normal inbound handler (which files
+    // it in the console), so nothing is lost by answering here.
+    await sendSupplierBotMainMenu(phone, supplier.name);
+    return true;
+  } catch (err) {
+    logger.error({ err, phone }, "Supplier bot handling error");
+    // Swallow: the generic inbound path still ran for text messages, and a bot
+    // fault must not surface as silence.
+    return true;
+  }
+}
+
+/** Send one item's detail screen. */
+async function showItemDetail(
+  phone: string,
+  supplierId: number,
+  rfqId: number,
+  itemId: number,
+): Promise<void> {
+  const items = await listSupplierRequestItems(supplierId, rfqId);
+  const item = items.find((i) => i.id === itemId);
+  if (!item) {
+    await sendWhatsAppText(phone, "هذا البند لم يعد موجوداً في الطلب.");
+    return;
+  }
+  await sendSupplierBotItemDetail(phone, await rfqNoOf(rfqId), {
+    id: item.id,
+    lineItem: item.lineItem,
+    partNo: item.partNo,
+    description: item.description,
+    uom: item.uom,
+    qty: item.qty,
+    referencePrice: null,
+  });
+}
+
+async function itemLabelOf(rfqId: number, itemId: number): Promise<string> {
+  const [row] = await db
+    .select({
+      partNo: rfqItemsTable.partNo,
+      lineItem: rfqItemsTable.lineItem,
+      description: rfqItemsTable.description,
+    })
+    .from(rfqItemsTable)
+    .where(and(eq(rfqItemsTable.rfqId, rfqId), eq(rfqItemsTable.id, itemId)))
+    .limit(1);
+  return row ? itemLabel(row) : `#${itemId}`;
+}
+
+async function rfqNoOf(rfqId: number): Promise<string> {
+  const [row] = await db
+    .select({ no: rfqTable.internalRfqNo })
+    .from(rfqTable)
+    .where(eq(rfqTable.id, rfqId))
+    .limit(1);
+  return row?.no ?? `#${rfqId}`;
+}
+
+/**
+ * Apply one free-text answer to the item's draft and ask the next question.
+ *
+ * The ladder is walked one field at a time; «تخطي» advances an OPTIONAL field
+ * without a value. The price is the only field that must parse — re-asking on an
+ * unparsable price is correct, while storing a 0 would create a fake zero quote.
+ */
+async function advanceStep(
+  phone: string,
+  supplierId: number,
+  rfqId: number,
+  itemId: number,
+  step: BotStep,
+  text: string,
+): Promise<void> {
+  const label = await itemLabelOf(rfqId, itemId);
+  const skip = isSkip(text);
+
+  switch (step) {
+    case "await_price": {
+      const price = parsePrice(text);
+      if (price == null) {
+        await sendWhatsAppText(phone, "لم أتعرف على السعر. اكتب السعر بالأرقام فقط، مثال: 120");
+        return;
+      }
+      await upsertDraft(supplierId, rfqId, itemId, { unitPrice: price, currency: "EGP" });
+      break;
+    }
+    case "await_delivery": {
+      if (!skip) {
+        const days = parseDeliveryDays(text);
+        if (days == null) {
+          await sendWhatsAppText(phone, "اكتب عدد الأيام بالأرقام، مثال: 7 — أو «تخطي».");
+          return;
+        }
+        await upsertDraft(supplierId, rfqId, itemId, { deliveryDays: days });
+      }
+      break;
+    }
+    case "await_origin":
+      if (!skip) await upsertDraft(supplierId, rfqId, itemId, { originCountry: text });
+      break;
+    case "await_brand":
+      if (!skip) await upsertDraft(supplierId, rfqId, itemId, { brand: text });
+      break;
+    case "await_notes":
+      if (!skip) await upsertDraft(supplierId, rfqId, itemId, { notes: text });
+      break;
+  }
+
+  const idx = STEP_ORDER.indexOf(step);
+  const next = STEP_ORDER[idx + 1];
+  if (next) {
+    await saveSession({ phone, supplierId, rfqId, rfqItemId: itemId, step: next });
+    await sendWhatsAppText(phone, stepPrompt(next, label));
+    return;
+  }
+
+  // Item complete — show what was recorded, then offer the next step so the
+  // supplier is never left at a dead end.
+  const drafts = await loadDrafts(supplierId, rfqId);
+  const d = drafts.get(itemId);
+  await saveSession({ phone, supplierId, rfqId, rfqItemId: null, step: null });
+  await sendSupplierBotItemSummary(phone, label, {
+    availability: d?.availability ?? "available",
+    unitPrice: d?.unitPrice ?? null,
+    currency: d?.currency ?? null,
+    deliveryDays: d?.deliveryDays ?? null,
+    originCountry: d?.originCountry ?? null,
+    brand: d?.brand ?? null,
+    notes: d?.notes ?? null,
+  });
+  const items = await listSupplierRequestItems(supplierId, rfqId);
+  await sendSupplierBotItemList(
+    phone,
+    await rfqNoOf(rfqId),
+    items.map((it) => ({
+      id: it.id,
+      label: itemLabel(it),
+      qty: it.qty,
+      uom: it.uom,
+      answered: it.draft?.unitPrice != null && Number(it.draft.unitPrice) > 0,
+    })),
+    1,
+  );
+  // And the confirmation screen, so «done» is always one tap away.
+  const summary = await summariseDrafts(supplierId, rfqId);
+  await sendSupplierBotConfirm(phone, await rfqNoOf(rfqId), {
+    pricedCount: summary.pricedCount,
+    totalCount: summary.totalCount,
+    answeredLabels: summary.answered.map((x) => x.label),
+    unansweredLabels: summary.unanswered.map((x) => x.label),
+  });
+}
+
+/**
+ * The supplier asked for a human. Hand the conversation to the responsible
+ * employee (or the supervisor ladder) and tell the supplier it is on the way.
+ */
+async function requestHumanAgent(
+  phone: string,
+  supplierId: number,
+  rfqId: number | null,
+): Promise<void> {
+  let owner: { employeeId: number | null; employeeName: string | null } = {
+    employeeId: null,
+    employeeName: null,
+  };
+  if (rfqId) {
+    const open = await openPricingRequestsForSupplier(supplierId);
+    const match = open.find((r) => r.rfqId === rfqId);
+    owner = { employeeId: match?.employeeId ?? null, employeeName: match?.employeeName ?? null };
+  }
+  await sendWhatsAppText(
+    phone,
+    owner.employeeName
+      ? `تم تحويل طلبك إلى ${owner.employeeName} وسيتواصل معك في أقرب وقت.`
+      : "تم تحويل طلبك إلى فريق المشتريات وسيتواصل معك أحد الموظفين في أقرب وقت.",
+  );
+  // Stop the automated questions so the human conversation is not interrupted
+  // by a price prompt.
+  await clearSession(phone);
+  broadcastWaEvent({ type: "new_message", phone });
+}
+
+/** Notify the employee responsible for the request that a reply arrived. */
+async function notifyResponsibleEmployee(
+  supplierId: number,
+  rfqId: number,
+  pricedCount: number,
+): Promise<void> {
+  try {
+    const open = await openPricingRequestsForSupplier(supplierId);
+    const match = open.find((r) => r.rfqId === rfqId);
+    const [supplier] = await db
+      .select({ name: suppliersTable.name, phone: suppliersTable.phone })
+      .from(suppliersTable)
+      .where(eq(suppliersTable.id, supplierId))
+      .limit(1);
+    const rfqNo = await rfqNoOf(rfqId);
+    const items = await listSupplierRequestItems(supplierId, rfqId);
+    const employeePhone = await employeePhoneOf(match?.employeeId ?? null);
+    if (!employeePhone) {
+      logger.info({ rfqId, supplierId }, "Supplier reply: no employee phone to notify");
+      return;
+    }
+    await notifyEmployeeOfSupplierReply(employeePhone, {
+      employeeName: match?.employeeName ?? null,
+      rfqNo,
+      supplierName: supplier?.name ?? "مورد",
+      pricedCount,
+      totalCount: items.length,
+    });
+  } catch (err) {
+    logger.warn({ err, rfqId }, "Supplier reply notification failed");
+  }
+}
+
+/** The dialable number of an employee, or null when they have none on file. */
+async function employeePhoneOf(employeeId: number | null): Promise<string | null> {
+  if (!employeeId) return null;
+  const [row] = await db
+    .select({ phone: employeesTable.phone })
+    .from(employeesTable)
+    .where(eq(employeesTable.id, employeeId))
+    .limit(1);
+  return row?.phone ?? null;
 }
 
 /**

@@ -42,3 +42,4 @@ export * from "./field_operations";
 export * from "./finance";
 export * from "./mailbox_access";
 export * from "./chatwoot";
+export * from "./supplier_bot";

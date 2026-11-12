@@ -28,9 +28,29 @@ bumping Chatwoot is a change of one tag in the `Dockerfile` and one line in
 ```bash
 cd chatwoot-cortoba
 cp .env.example .env          # then set POSTGRES_PASSWORD and SECRET_KEY_BASE
-docker compose up -d --build
-docker compose exec web bundle exec rails db:chatwoot_prepare   # first run only
+docker compose up -d          # this is the WHOLE install
 docker compose exec web bundle exec rails cortoba:selftest      # verifies the overlay
+```
+
+`docker compose up -d` is the whole install. A one-shot **`migrate`** service
+prepares the schema, web and worker wait for it to exit successfully, and it
+**verifies its own work** — it asks the database for its table count and exits
+non-zero if the schema is not really there:
+
+```
+[migrate] preparing the Chatwoot schema
+[migrate] tables present: 110
+[migrate] schema ready
+```
+
+This replaced a two-command install (`up -d --build` then
+`exec web rails db:chatwoot_prepare`) that was **broken as documented**: web and
+worker booted before the schema existed and crash-looped on
+`relation "installation_configs" does not exist` until the second command was
+run by hand. If `migrate` fails on a half-prepared volume, start over cleanly:
+
+```bash
+docker compose down -v && docker compose up -d
 ```
 
 Open <http://localhost:3000> and create the first account in the browser. The
@@ -48,6 +68,7 @@ docker compose exec web bundle exec rails cortoba:attributes   # idempotent
 
 | Service | Role |
 | --- | --- |
+| `migrate` | One-shot schema preparation + verification, then exits |
 | `web` | Rails — the console UI and REST API |
 | `worker` | Sidekiq — background jobs |
 | `postgres` | **pgvector/pgvector:pg16** — Chatwoot needs the `vector` extension |
@@ -61,6 +82,16 @@ docker compose exec web bundle exec rails cortoba:attributes   # idempotent
 2. **Plain `postgres` does not work.** `db:chatwoot_prepare` fails with
    `extension "vector" is not available`; Chatwoot's own compose file uses
    `pgvector/pgvector:pg16`, and so do we.
+
+### Why `db:chatwoot_prepare` is never trusted on its own
+
+It **exits 0 even when it creates nothing.** On a database it considers
+half-prepared it short-circuits without applying the schema, so a bare
+`... && echo ok` reports a successful install for a database the app cannot boot
+against. That is why the `migrate` service reads the table count back from the
+database and fails closed when it cannot parse one. It is the same rule the rest
+of this repository applies: a capability must be judged by its outcome, not by
+its exit code.
 
 ## Database isolation
 

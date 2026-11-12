@@ -1,6 +1,6 @@
 # Chatwoot + Cortoba overlay — the ONE canonical stack.
 #
-# Four services: web (Rails), worker (Sidekiq), postgres, redis.
+# Five services: migrate (one-shot), web (Rails), worker (Sidekiq), postgres, redis.
 #
 # DATABASE ISOLATION IS ABSOLUTE: Chatwoot gets its own postgres container and
 # its own volume. It never sees Cortoba's DATABASE_URL, and Cortoba never reads
@@ -10,14 +10,96 @@
 #
 # Run:
 #   cd chatwoot-cortoba && cp .env.example .env   # then set the secrets
-#   docker compose up -d --build
-#   docker compose exec web bundle exec rails db:chatwoot_prepare
+#   docker compose up -d
+#
+# `docker compose up -d` is the WHOLE install. It used to be two commands
+# (`up -d --build` then `exec web rails db:chatwoot_prepare`), and that order is
+# broken: web and worker boot before the schema exists and crash-loop on
+# `relation "installation_configs" does not exist` until the second command
+# happens to run. A stack that looks dead on a correct install is a defect, so
+# the preparation is now a service that web and worker WAIT FOR.
 #
 # See README.md.
 
 name: chatwoot-cortoba
 
 services:
+  # One-shot schema preparation. Runs to completion, verifies its own work, and
+  # exits — so `up -d` is correct in a single command and a failure is visible
+  # as a non-zero exit instead of an app that quietly cannot boot.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cortoba/chatwoot:4.19.1
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    env_file: .env
+    environment: &chatwoot_env
+      RAILS_ENV: production
+      NODE_ENV: production
+      INSTALLATION_ENV: docker
+      # A separate database, on a separate container. Not Cortoba's.
+      DATABASE_URL: postgres://chatwoot:${POSTGRES_PASSWORD}@postgres:5432/chatwoot
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      # Local install: no TLS termination in front of this compose file.
+      FORCE_SSL: ${FORCE_SSL:-false}
+      # Employees sign in to Cortoba only; they never get a Chatwoot password.
+      ENABLE_ACCOUNT_SIGNUP: "false"
+      DISABLE_TELEMETRY: "true"
+      ACTIVE_STORAGE_SERVICE: local
+      DEFAULT_LOCALE: ar
+      RAILS_LOG_TO_STDOUT: "true"
+      RAILS_LOG_LEVEL: ${RAILS_LOG_LEVEL:-info}
+      # Cortoba wiring (read by the overlay initializer).
+      CORTOBA_APP_URL: ${CORTOBA_APP_URL:-}
+      CORTOBA_OWNER_ATTRIBUTE_KEY: ${CORTOBA_OWNER_ATTRIBUTE_KEY:-cortoba_owner_name}
+      CORTOBA_RFQ_ATTRIBUTE_KEY: ${CORTOBA_RFQ_ATTRIBUTE_KEY:-cortoba_rfq_no}
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "[migrate] preparing the Chatwoot schema"
+        bundle exec rails db:chatwoot_prepare
+        # VERIFY, do not trust the exit code. `db:chatwoot_prepare` reports
+        # success even when it created nothing (it short-circuits on a
+        # half-applied schema, and an interrupted first run leaves exactly that
+        # state), which is how a "successful" install ends up with an app that
+        # cannot boot. Asking the database directly is the only proof.
+        #
+        # The count is taken from a SENTINEL line, not from raw output: Rails
+        # logs to stdout too, so capturing the whole stream yields a string like
+        # "W, [2026-...] INFO -- ... 110" and the numeric test then fails with
+        # "out of range" — and a failing test inside `if` does NOT trip
+        # `set -e`, so the check silently reported success. Extracting the marker
+        # and failing closed on anything unparsable is what makes this a guard.
+        count=$$(bundle exec rails runner 'puts "CORTOBA_TABLES=#{ActiveRecord::Base.connection.tables.size}"' 2>/dev/null \
+          | grep -o 'CORTOBA_TABLES=[0-9]*' | tail -1 | cut -d= -f2)
+        # No shell default-expansion syntax here: compose interpolates that form
+        # even inside a comment and warns "variable is not set" on every command,
+        # so the default is spelled out instead.
+        if [ -z "$$count" ]; then
+          echo "[migrate] tables present: <unparsable>"
+        else
+          echo "[migrate] tables present: $$count"
+        fi
+        case "$$count" in
+          ''|*[!0-9]*)
+            echo "[migrate] FAILED: could not read the table count from the database." >&2
+            exit 1
+            ;;
+        esac
+        if [ "$$count" -lt 50 ]; then
+          echo "[migrate] FAILED: only $$count tables — the schema was not applied." >&2
+          echo "[migrate] If this is a half-prepared volume, remove it and retry:" >&2
+          echo "[migrate]   docker compose down -v && docker compose up -d" >&2
+          exit 1
+        fi
+        echo "[migrate] schema ready"
+
   postgres:
     # Chatwoot v4.19+ requires the `vector` extension (db/schema.rb:
     # `enable_extension "vector"`), so plain postgres fails at db:chatwoot_prepare
@@ -58,6 +140,8 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      # The schema must exist BEFORE Rails boots, or the app crash-loops.
+      migrate: { condition: service_completed_successfully }
     ports:
       - "${CHATWOOT_PORT:-3000}:3000"
     env_file: .env
