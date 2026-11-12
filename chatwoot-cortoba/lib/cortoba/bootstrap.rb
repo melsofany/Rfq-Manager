@@ -78,6 +78,10 @@ module Cortoba
       inbox = account.inboxes.find_by(name: API_INBOX_NAME)
       if inbox
         result[:reused] << "inbox #{inbox.id}"
+        # An inbox that already exists still needs its webhook: the FIRST deploy
+        # created the inbox before this step existed, and a re-run must repair it
+        # rather than report success on a dead-end console.
+        configure_inbox_webhook(inbox, result)
         return inbox
       end
       # The channel row must be persisted BEFORE the inbox references it:
@@ -88,7 +92,33 @@ module Cortoba
       inbox = account.inboxes.create!(name: API_INBOX_NAME, channel_id: channel.id,
                                       channel_type: "Channel::Api")
       result[:created] << "inbox #{inbox.id}"
+      configure_inbox_webhook(inbox, result)
       inbox
+    end
+
+    # Without this the console is a DEAD END: Chatwoot delivers an agent's reply
+    # by POSTing to the inbox channel's `webhook_url`, so an unset url means the
+    # employee types an answer and nothing ever reaches the supplier — with no
+    # error anywhere. It is set here, not documented as a manual step, because a
+    # missing webhook looks exactly like a working console.
+    #
+    # The url carries the shared secret the Cortoba route checks, which is how a
+    # public endpoint stays gated.
+    def configure_inbox_webhook(inbox, result)
+      base = ENV["CORTOBA_APP_URL"].to_s.strip.chomp("/")
+      secret = ENV["CORTOBA_CHATWOOT_WEBHOOK_SECRET"].to_s.strip
+      if base.blank? || secret.blank?
+        result[:errors] << "inbox webhook NOT set (need CORTOBA_APP_URL + CORTOBA_CHATWOOT_WEBHOOK_SECRET)"
+        return
+      end
+      url = "#{base}/api/webhook/chatwoot?token=#{secret}"
+      channel = inbox.channel
+      if channel.webhook_url == url
+        result[:reused] << "inbox webhook"
+        return
+      end
+      channel.update!(webhook_url: url)
+      result[:created] << "inbox webhook"
     end
 
     # Tokens are pinned from the environment when supplied, so the values on the
