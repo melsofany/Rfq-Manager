@@ -4771,3 +4771,115 @@ pointing Meta at Chatwoot silently breaks all of them.
 - **Status**: PR #437 updated (`d699369`), all 4 CI checks green
   (Type Check / Format Check / Tests / Build+E2E), `mergeable_state: clean`.
 
+
+## Chatwoot CE embedded natively — vendor as container, own the thread (PR #437)
+
+The console is Chatwoot Community Edition running **from this repository**, not a
+service we call. `chatwoot/` is the upstream tree vendored byte-for-byte
+(v4.19.1 @ `caab07a8f00032d5205b5a5d7e2eb0ba2f3d2d82`, recorded in
+`chatwoot/UPSTREAM.md`); `chatwoot-cortoba/` is the **only** thing we own.
+
+- **Never edit `chatwoot/`.** Bumping Chatwoot must stay a change of one Docker
+  tag plus one line of `UPSTREAM.md`. Anything we add lives in
+  `chatwoot-cortoba/`, so a future upgrade diff is readable.
+- **Two configuration traps, both measured**: plain `postgres` fails
+  `db:chatwoot_prepare` with `extension "vector" is not available` (use
+  `pgvector/pgvector:pg16`), and production Rails aborts at boot without
+  `SECRET_KEY_BASE`.
+- **`CREATE TABLE IF NOT EXISTS` is a no-op on an existing table** (again). The
+  overlay's attributes and the idempotency columns must be `ALTER TABLE ... ADD
+  COLUMN IF NOT EXISTS`, or a pre-existing database silently lacks them.
+
+### The defect the test caught, not the code review
+
+**`external_source_ids` duplicated every message.** `Message` declares
+`store :external_source_ids, accessors: [:slack], coder: JSON`, which serialises
+an assigned **Hash into a JSON *string*** in the jsonb column. A guard written as
+`external_source_ids ->> 'cortoba' = ?` therefore never matched — every re-import
+appended a full duplicate set. Measured: three imports left **6** messages where
+3 were expected, with identical `"{\"cortoba\":\"wamid.TEST1\"}"` values.
+
+The fix is `messages.source_id` — the indexed **text** column Chatwoot's own
+WhatsApp integration stores the inbound message id in
+(`app/services/whatsapp/contact_info_response_service.rb`). After the change:
+three imports → `1 contact / 1 conversation / 3 messages`, timestamps preserved.
+
+**Rule**: before using a jsonb column as an idempotency key, check the model for
+`store ... coder: JSON` — it turns structured values into strings and makes
+`->>` comparisons silently never match. Prefer a plain indexed text column.
+
+### A failed resolution must never be cached
+
+`ensureAgentForEmail` caches resolved agents so a busy thread does not re-list
+the roster. The first cut cached on failure too, which would have made that
+employee **permanently unassignable** for the life of the process — a transient
+Chatwoot blip becoming a permanent one. Only successes are cached; the guard
+fails against the caching version (verified by injecting it).
+
+### Routing priority, and why each rung is deliberate
+
+`pickAssignee` decides who owns a supplier thread: **owner** (they know the
+request) → **online agent** (a supplier should not wait for someone away) →
+**administrator** (CE has no supervisor role, so admins are the escalation tier)
+→ **unassigned, LABELLED** so it appears in the console's unassigned view rather
+than disappearing. Nobody-available is a routing OUTCOME, not an error to retry
+forever — that distinction is what keeps the retry honest.
+
+`availability_status` is **computed** (stored `availability` + live Redis
+presence via `AvailabilityStatusable`), so a freshly provisioned agent always
+reports `offline` even with an online preference. Do not read it as a stored
+column — it is not one, and the API's `role` enum in CE is only
+`agent`/`administrator`.
+
+### Two facts that cost time, recorded so they cost nothing next time
+
+- **The conversation API id is `display_id`, not the primary key.**
+  `_conversation.json.jbuilder` emits `json.id conversation.display_id` and
+  `Conversations::BaseController` resolves with `find_by!(display_id:)`. A SQL
+  check against `conversations.id` will "prove" an assignment is missing when it
+  is not — compare `display_id`.
+- **`AccessToken` has no `name` column** (`id, owner_type, owner_id, token,
+  created_at, updated_at`). `AccessToken.create!(owner:, name:)` raises
+  `unknown attribute 'name'`.
+
+### Verification that actually proves it
+
+A mocked guard proves the policy, not the integration. The bridge client was
+driven against the **real running Chatwoot** (`listAgents` → `createAgent` →
+`findAgentByEmail` uppercase → `createContact` → `createConversation` →
+`setConversationCustomAttributes` → `assignConversation` → `createMessage`), and
+the routing ladder was exercised live: nobody online → the administrator was
+assigned and the thread labelled `cortoba:مشرف`. Both probe files were deleted
+afterwards.
+
+### Where the business rules live — deliberately in ONE place
+
+Which pricing request a reply answers, and who owns it, are decided in
+`artifacts/api-server/src/modules/chatwoot/bridge.ts`, next to the WhatsApp
+gateway. They are **not** re-implemented in the Ruby overlay: two copies of one
+truth is how they drift apart. The overlay only does what can *only* be done
+inside Chatwoot — console configuration and a faithful historical import (the
+REST API cannot set `created_at` or a message id).
+
+### CI / repo hygiene for a 9.7k-file vendor tree
+
+- `.prettierignore` **and** `.gitignore` both need `chatwoot/`; the format gate is
+  repo-wide, and 9.7k upstream files would fail it instantly.
+- Exclude heavy non-code assets (`spec/`, `public/videos/`, `*.onnx`,
+  `node_modules/`, `public/packs/`) — that is what takes the commit from 232 MB
+  to **60.1 MB / 8597 files** (largest blob 1.38 MB).
+- `.oh-cost-governor/` is untracked and absent from a fresh CI checkout, so the
+  12 prettier warnings it produces are **CI-irrelevant**. To check the real gate
+  without committing anything: `git ls-files -z | grep -zE
+  '\.(ts|tsx|js|mjs|json|css|md)$' | xargs -0 prettier --check`.
+- CI runs only **typecheck + tests + format** (no eslint), so an eslint error
+  cannot block a deploy — but the format gate absolutely can.
+- `pnpm` is not on PATH; use the corepack shim
+  (`/acp-node/lib/node_modules/corepack/shims`) with
+  `COREPACK_ENABLE_DOWNLOAD_PROMPT=0`.
+- Run the suite with `env -i PATH="$PATH" HOME="$HOME"` — exported
+  `SMTP_*`/`AI_*`/`GOOGLE_*`/`CHATWOOT_*` make unrelated tests fail.
+
+**Tests**: 2300 api-server (chatwoot-assignment 21, up from 0) + 78 portal pass;
+tsc (libs + api-server + portal) clean; tracked-file format gate clean; eslint
+clean on the changed files. Committed `fb7fcd9` on `feat/chatwoot-agent-console`.
