@@ -45,6 +45,7 @@ const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50
 
 import { resolveCustomerPoLinks } from "../../shared/po-links";
 import { guardFor } from "../../shared/permissions";
+import { mirrorInboundMessage, mirrorOutboundMessage } from "../chatwoot/bridge";
 
 const router = Router();
 router.use("/whatsapp", guardFor("/whatsapp"));
@@ -1633,6 +1634,16 @@ async function handleInboundMessage(
     "WhatsApp inbound message saved",
   );
   broadcastWaEvent({ type: "new_message", phone, senderName });
+
+  // Mirror into the Chatwoot console so agents can read and reply. Best-effort:
+  // a Chatwoot outage must never affect the inbound pipeline.
+  void mirrorInboundMessage({
+    phone,
+    body,
+    contactName: senderName ?? null,
+    supplierId: matchedSupplier?.id ?? null,
+  });
+
   void reply;
 }
 
@@ -1940,6 +1951,7 @@ router.post("/whatsapp/send", requireAuth, async (req, res): Promise<void> => {
     replyToMessageId: replyToWaMessageId ?? null,
     isRead: true,
   });
+  void mirrorOutboundMessage({ phone: normalized, body: message, supplierId: supplierId ?? null });
   res.json({ ok: true });
 });
 

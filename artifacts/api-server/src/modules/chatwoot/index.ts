@@ -6,15 +6,18 @@
  * يُسجّل دخول المستخدم الحالي تلقائياً داخل iframe يعرض واجهة Chatwoot.
  *
  * Routes mounted:
- *   GET /chatwoot/sso          — يُرجع رابط SSO لمرة واحدة للمستخدم الحالي
- *   GET /chatwoot/status       — هل Chatwoot مُعدّ؟ (للواجهة الأمامية)
+ *   GET  /chatwoot/sso          — يُرجع رابط SSO لمرة واحدة للمستخدم الحالي
+ *   GET  /chatwoot/status       — هل Chatwoot مُعدّ؟ (للواجهة الأمامية)
+ *   POST /chatwoot/webhook      — يستقبل رسائل الوكلاء من Chatwoot ويُرسلها واتساب
  */
 import { Router, type IRouter } from "express";
-import { db, employeesTable } from "@workspace/db";
+import { db, employeesTable, whatsappChatsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../../middlewares/auth";
 import { logger } from "../../shared/logger";
 import { guardFor } from "../../shared/permissions";
+import { sendWhatsAppText } from "../communications/service";
+import { isChatwootConfigured as isBridgeConfigured, phoneForConversation } from "./bridge";
 
 const router: IRouter = Router();
 router.use("/chatwoot", guardFor("/chatwoot"));
@@ -165,6 +168,73 @@ router.get("/chatwoot/sso", requireAuth, async (req, res): Promise<void> => {
   } catch (err) {
     logger.error({ err, employeeId }, "Chatwoot SSO failed");
     res.status(500).json({ error: "فشل الاتصال بـ Chatwoot" });
+  }
+});
+
+// ─── POST /api/webhook/chatwoot ──────────────────────────────────────────
+// Chatwoot posts here when a human agent replies in the console. We forward
+// that text to the supplier through OUR OWN Meta plumbing and record it in
+// whatsapp_chats, so the conversation stays in one place and no second WhatsApp
+// channel is involved.
+//
+// Lives under /webhook (not /chatwoot) because it must be public — Chatwoot
+// cannot present a session — and /webhook has no route guard. Gated by a shared
+// secret in the URL that Chatwoot is configured with.
+router.post("/webhook/chatwoot", async (req, res): Promise<void> => {
+  // Acknowledge first: Chatwoot retries a slow webhook, which would double-send.
+  res.sendStatus(200);
+
+  if (!isBridgeConfigured) return;
+  const secret = process.env.CHATWOOT_WEBHOOK_SECRET;
+  if (!secret || req.query.token !== secret) {
+    logger.warn("Chatwoot webhook: rejected (missing or wrong token)");
+    return;
+  }
+
+  try {
+    const payload = req.body as {
+      event?: string;
+      message_type?: string;
+      content?: string;
+      conversation?: { id?: number };
+      id?: number;
+      private?: boolean;
+      sender?: { type?: string };
+    };
+
+    // Only real agent replies: outgoing (us → contact), not private notes, and
+    // not the messages we ourselves mirrored into the thread.
+    if (payload.event !== "message_created") return;
+    if (payload.message_type !== "outgoing") return;
+    // A private note is an INTERNAL note. Forwarding it would send the team's
+    // internal discussion straight to the supplier.
+    if (payload.private) return;
+    if (!payload.content || !payload.conversation?.id) return;
+    if (payload.sender?.type !== "user") return; // ignore bot/API echoes
+
+    const { isOwnChatwootMessage } = await import("./bridge");
+    if (isOwnChatwootMessage(payload.id)) return;
+
+    const phone = await phoneForConversation(payload.conversation.id);
+    if (!phone) {
+      logger.warn(
+        { conversationId: payload.conversation.id },
+        "Chatwoot webhook: no linked phone for conversation",
+      );
+      return;
+    }
+
+    const waId = await sendWhatsAppText(phone, payload.content);
+    await db.insert(whatsappChatsTable).values({
+      waMessageId: waId,
+      direction: "outbound",
+      phone,
+      body: payload.content,
+      isRead: true,
+    });
+    logger.info({ phone, conversationId: payload.conversation.id }, "Chatwoot agent reply sent");
+  } catch (err) {
+    logger.error({ err }, "Chatwoot webhook: agent reply forwarding failed");
   }
 });
 

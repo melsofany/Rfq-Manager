@@ -21,6 +21,7 @@ import { generateOffersPdf } from "./offers-pdf.js";
 import { generateDispatchReportPdf } from "../reports/dispatch-pdf.js";
 import { sendRfqEmail, sendSupplierGreetingEmail } from "../../shared/email";
 import { sendRfqWhatsApp, sendSupplierGreetingWhatsApp } from "../communications/service";
+import { mirrorOutboundMessage } from "../chatwoot/bridge";
 import {
   GREETING_REASON_LABEL,
   GREETING_TIER_LABEL,
@@ -1193,6 +1194,11 @@ router.post("/rfq/:id/send", requireAuth, async (req, res): Promise<void> => {
             supplierId: supplier.id,
             body: `[RFQ ${rfq.internalRfqNo}] تم إرسال طلب عرض السعر — ${pricingUrl}`,
             isRead: true,
+          });
+          void mirrorOutboundMessage({
+            phone: normalizedPhone,
+            body: `[RFQ ${rfq.internalRfqNo}] تم إرسال طلب عرض السعر — ${pricingUrl}`,
+            supplierId: supplier.id,
           });
         } catch (chatErr) {
           req.log.warn(

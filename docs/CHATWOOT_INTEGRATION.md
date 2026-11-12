@@ -1,132 +1,197 @@
-# دمج Chatwoot كبديل لصفحة الدردشة `/whatsapp`
+# Chatwoot — صندوق دردشة الوكلاء على `/whatsapp`
 
 يستبدل هذا الدمج صفحة الدردشة المبنية يدوياً (`/whatsapp`) بواجهة **Chatwoot**
-الجاهزة والقوية، مع الحفاظ على كل البيانات التاريخية (لا تُحذف أي بيانة).
-
-صفحة `/whatsapp` أصبحت تعرض **Chatwoot داخل iframe** مع تسجيل دخول تلقائي (SSO)
-للمستخدم الحالي. الصفحة القديمة بقيت متاحة للقراءة فقط على `/whatsapp-legacy`.
+الجاهزة (مفتوحة المصدر، تقييم عالٍ، بلا اشتراك)، مع الحفاظ الكامل على كل
+البيانات التاريخية وعلى مسارات إرسال طلبات التسعير وأوامر الشراء.
 
 ---
 
-## 1) المكوّنات المُضافة في هذا المشروع
+## 1) القاعدة المعمارية الحاكمة (اقرأ هذا أولاً)
 
-| الملف                                                                | الدور                                                         |
-| -------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `artifacts/api-server/src/modules/chatwoot/index.ts`                 | جسر SSO: `GET /api/chatwoot/sso` و `GET /api/chatwoot/status` |
-| `artifacts/rfq-portal/src/modules/communications/pages/chatwoot.tsx` | مكوّن iframe الذي يعرض Chatwoot عند `/whatsapp`               |
-| `scripts/migrate-whatsapp-to-chatwoot.mjs`                           | سكربت ترحيل البيانات (قراءة فقط من DB → Chatwoot API)         |
+> **الـ webhook الخاص بنا يظل هو البوابة الوحيدة إلى Meta.**
 
-جداول الـ WhatsApp القديمة (`whatsapp_chats` / `whatsapp_media` / `whatsapp_reactions`)
+`POST /api/webhook/whatsapp` هو ما يشغّل:
 
-- مسارات `/api/whatsapp/*` **لم تُحذف ولم تُعدَّل** — تبقى كنسخة احتياطية.
+- إرسال طلبات التسعير واستقبال ردود التسعير من الموردين،
+- إرسال أوامر الشراء وبوت المندوبين (استلام/تسليم)،
+- المساعد الذكي (AI assistant).
 
----
+لذلك **لا يجوز** ضبط قناة WhatsApp داخل Chatwoot ولا تحويل الـ webhook إليه:
+ذلك يعطّل كل ما سبق. ولهذا فشل المحاولة الأولى (PR #5 ثم التراجع في PR #6).
 
-## 2) المتغيرات البيئية المطلوبة (على خدمة التطبيق في Render)
+Chatwoot هنا **صندوق وارد للوكلاء فقط** (Agent Console)، متصل عبر قناة **API**
+لا عبر قناة WhatsApp:
 
 ```
-CHATWOOT_URL=https://chatwoot.xxx.onrender.com   # عنوان خدمة Chatwoot
-CHATWOOT_ACCOUNT_ID=1                            # رقم الحساب في Chatwoot
-CHATWOOT_PLATFORM_TOKEN=...                      # Platform App access token (super-admin)
-CHATWOOT_INBOX_ID=1                              # (اختياري) رقم صندوق الوارد
+المورد ──واتساب──► Meta ──► /api/webhook/whatsapp (بوابتنا)  ──►  قاعدة بياناتنا
+                                      │
+                                      └── نسخ (mirror) ──► Chatwoot (قراءة الوكلاء)
+                                                                     │
+الوكيل يردّ في Chatwoot ──► /api/webhook/chatwoot ──► إرسال عبر بوابتنا ──► المورد
 ```
 
-> عند عدم ضبط هذه المتغيرات، تعرض صفحة `/whatsapp` رسالة واضحة بأن Chatwoot
-> غير مُعدّ بدلاً من الانهيار.
+- **الرسائل الواردة** تُنسخ إلى Chatwoot ليراها الوكلاء.
+- **رسائلنا الصادرة** (طلبات التسعير، أوامر الشراء) تُنسخ أيضاً فيرى الوكيل
+  السياق كاملاً.
+- **ردّ الوكيل** من داخل Chatwoot يُرسل للمورد عبر نفس بوابتنا، ويُسجَّل في
+  `whatsapp_chats` — فلا تتفرّق المحادثة بين نظامين.
 
 ---
 
-## 3) نشر Chatwoot (خدمة منفصلة)
+## 2) سلوك آمن افتراضياً (بلا Chatwoot)
 
-Chatwoot تطبيق Rails+Vue يحتاج Postgres + Redis + Sidekiq. أبسط طريقة على Render:
+بدون ضبط متغيّرات `CHATWOOT_*` تعمل `/whatsapp` **بالصفحة المدمجة الحالية
+تماماً كما اليوم** — لا تغيير في السلوك ولا خطر. بمجرد ضبط المتغيّرات تتحول
+الصفحة إلى Chatwoot تلقائياً.
 
-### الخيار أ: عبر Docker image الرسمي (موصى به)
-
-1. أنشئ خدمة **Web Service** جديدة على Render من صورة Docker:
-   `chatwoot/chatwoot:latest`
-2. أضف متغيرات Chatwoot البيئية (انظر `docker-compose.yml` الرسمي في
-   https://github.com/chatwoot/chatwoot) وأهمها:
-   ```
-   SECRET_KEY_BASE=...          # generate via: rake secret
-   RAILS_ENV=production
-   REDIS_URL=...                # Redis instance على Render
-   POSTGRES_HOST/PORT/USER/PASSWORD/DATABASE=...
-   FRONTEND_URL=https://chatwoot.xxx.onrender.com
-   DEFAULT_LOCALE=ar
-   ```
-3. أنشئ **Redis** instance و **PostgreSQL** instance على Render (أو أعد استخدام
-   قاعدة بيانات منفصلة — لا تشارك قاعدة بيانات التطبيق).
-4. نفّذ أوامر إعداد قاعدة البيانات مرة واحدة (via Render Shell):
-   ```bash
-   rake db:chatwoot_prepare db:migrate
-   ```
-5. أنشئ أول حساب أدمن عبر صفحة `/app` ثم سجّل الدخول.
-
-### الخيار ب: استضافة على خادم خارجي عبر docker-compose
-
-استخدم `docker-compose.yaml` الرسمي من مستودع Chatwoot.
+لو تعذّر الوصول إلى Chatwoot (خدمة متوقفة) تُعرض رسالة خطأ واضحة مع زر
+«فتح صندوق الدردشة المدمج» — لا قفلة أبداً.
 
 ---
 
-## 4) إعداد WhatsApp channel داخل Chatwoot
+## 3) المكوّنات
 
-1. في Chatwoot: **Settings → Inboxes → Add inbox → WhatsApp**.
-2. اختر **WhatsApp Cloud API** وأدخل:
-   - `Phone Number ID` = نفس قيمة `WHATSAPP_PHONE_NUMBER_ID` الحالية.
-   - `Business Account ID` = نفس قيمة `WHATSAPP_BUSINESS_ACCOUNT_ID`.
-   - `API Key` (Permanent System User Access Token) = نفس `WHATSAPP_TOKEN`.
-3. ستُعطيك Chatwoot **Callback URL** — أضِفها في Meta Developer Portal ضمن
-   Webhook subscription للرقم، مع رفع الأحداث `messages` و `message_status`.
-4. ⚠️ **أوقف الـ webhook القديم** المؤشّر لتطبيقك الحالي
-   (`https://cortoba-rfq.onrender.com/api/webhook/whatsapp`) لتجنّب تكرار
-   استقبال الرسائل، إلا لو أردت تشغيل النظامين بالتوازي مؤقتاً.
+| الملف                                      | الدور                                                              |
+| ------------------------------------------ | ------------------------------------------------------------------ |
+| `modules/chatwoot/client.ts`               | عميل REST (اتصال/محادثة/رسالة)                                     |
+| `modules/chatwoot/bridge.ts`               | النسخ (mirror) + جدول الربط `chatwoot_links`                       |
+| `modules/chatwoot/index.ts`                | `GET /api/chatwoot/sso` · `/status` · `POST /api/webhook/chatwoot` |
+| `rfq-portal/.../pages/chatwoot.tsx`        | واجهة iframe مع SSO + تراجع تلقائي للصفحة المدمجة                  |
+| `lib/db/src/schema/chatwoot.ts`            | جدول `chatwoot_links`                                              |
+| `scripts/migrate-whatsapp-to-chatwoot.mjs` | ترحيل السجل التاريخي (قراءة فقط من قاعدتنا)                        |
 
-> ملاحظة: قيود الـ 24 ساعة وقوالب Meta تنطبق على Chatwoot أيضاً لأنها تستخدم
-> نفس Official Cloud API — هذه سياسات Meta وليست مشاكل في Chatwoot.
+جداولنا (`whatsapp_chats` / `whatsapp_media` / `whatsapp_reactions`) ومسارات
+`/api/whatsapp/*` **لم تُحذف ولم تُعدَّل** — تبقى مصدر الحقيقة ونسخة احتياطية.
 
 ---
 
-## 5) إنشاء Platform App لـ SSO
+## 4) استضافة Chatwoot — الخيارات والتكلفة
 
-1. سجّل الدخول لـ Chatwoot كـ **super admin** (المسار `/super_admin`).
-2. اذهب لـ `super_admin/platform_apps` → **New platform app**.
-3. انسخ **access token** الناتج وضعه في `CHATWOOT_PLATFORM_TOKEN`.
-4. امنح الـ Platform App صلاحية على حسابك مرة واحدة عبر Rails console:
+Chatwoot تطبيق **Rails + Sidekiq + Postgres + Redis**، ولا يمكن تشغيله كخدمة
+Node على Render بجانب التطبيق. (وهذا سبب تعثّر المحاولة الأولى: Render API لا
+يُنشئ خدمة Rails من صورة Docker بسهولة.)
+
+### الخيار أ — Render: خدمة Docker + Redis + قاعدة بيانات منفصلة (مُوصى به)
+
+| المكوّن                  | الخطة الأدنى  | التكلفة التقريبية/شهر |
+| ------------------------ | ------------- | --------------------- |
+| Chatwoot web (Docker)    | Starter 512MB | ~$7                   |
+| Chatwoot worker (Docker) | Starter 512MB | ~$7                   |
+| Redis                    | Starter       | ~$3                   |
+| PostgreSQL (منفصلة!)     | Basic 256MB   | ~$6                   |
+| **الإجمالي**             |               | **~$23/شهر**          |
+
+> ⚠️ **لا تشارك قاعدة بيانات التطبيق** — Chatwoot يحتاج قاعدة خاصة.
+> خدمة مجانية (Free 512MB) تنام بعد 15 دقيقة وتُبطئ الردود؛ الأفضل Starter.
+
+الخطوات:
+
+1. أنشئ **PostgreSQL** و **Redis** منفصلين على Render.
+2. أنشئ **Web Service** من صورة Docker: `chatwoot/chatwoot:latest` بالأمر
+   `bundle exec rails s -b 0.0.0.0`.
+3. أنشئ **Background Worker** من نفس الصورة بالأمر
+   `bundle exec sidekiq -C config/sidekiq.yml`.
+4. اضبط متغيّرات Chatwoot (انظر `deploy/chatwoot/.env.example`)، وأهمها
+   `SECRET_KEY_BASE` (من `rake secret`)، `FRONTEND_URL`، `REDIS_URL`،
+   وبيانات Postgres المنفصلة.
+5. نفّذ مرة واحدة من Render Shell: `bundle exec rails db:chatwoot_prepare`.
+
+### الخيار ب — خادم VPS (أرخص للاستخدام الصغير)
+
+جهاز واحد 2GB RAM (~$6/شهر) عبر `deploy/chatwoot/docker-compose.chatwoot.yml`
+الموجود في المستودع. يشغّل كل المكوّنات بأمر واحد:
+
+```bash
+cd deploy/chatwoot && cp .env.example .env   # اضبط القيم
+docker compose -f docker-compose.chatwoot.yml up -d
+```
+
+### الخيار ج — Chatwoot Cloud (مدفوع، بلا إعداد)
+
+مناسب لو أردت البدء فوراً دون تشغيل خدمة؛ لكنه **بمقابل مالي** وليس مجانياً.
+
+---
+
+## 5) ضبط متغيّرات البيئة على خدمة التطبيق (Render)
+
+على خدمة `cortoba-rfq` أضف:
+
+```
+CHATWOOT_URL=https://chatwoot.xxx.onrender.com
+CHATWOOT_ACCOUNT_ID=1
+CHATWOOT_API_TOKEN=<agent/user access token>
+CHATWOOT_INBOX_ID=<رقم قناة الـ API inbox>
+CHATWOOT_PLATFORM_TOKEN=<Platform App token — لـ SSO فقط>
+CHATWOOT_WEBHOOK_SECRET=<سر عشوائي طويل>
+```
+
+- `CHATWOOT_API_TOKEN` يُستخدم للنسخ والردود.
+- `CHATWOOT_PLATFORM_TOKEN` لـ SSO (تسجيل دخول تلقائي داخل iframe).
+- عند غياب أي منها تبقى الصفحة المدمجة هي المعروضة.
+
+---
+
+## 6) إنشاء قناة **API** داخل Chatwoot (وليس WhatsApp)
+
+1. **Settings → Inboxes → Add inbox → API**.
+2. انسخ رقم القناة إلى `CHATWOOT_INBOX_ID`.
+3. **Settings → Integrations → Webhooks** وأضف:
+   - الرابط: `https://cortoba-rfq.onrender.com/api/webhook/chatwoot?token=<CHATWOOT_WEBHOOK_SECRET>`
+   - الحدث: `message_created`.
+4. ⛔ **لا تضبط قناة WhatsApp في Chatwoot، ولا تغيّر webhook في Meta.**
+   البوابة تبقى `/api/webhook/whatsapp` كما هي.
+
+> الردّ داخل Chatwoot يمرّ عبر بوابتنا، لذا تخضع الرسائل لسياسات Meta
+> (نافذة 24 ساعة/القوالب) تماماً كالسابق — سلوك متوقّع لا خلل.
+
+---
+
+## 7) SSO (تسجيل دخول تلقائي)
+
+1. سجّل الدخول كـ **super admin** (`/super_admin`).
+2. `super_admin/platform_apps` → **New platform app** → انسخ التوكن إلى
+   `CHATWOOT_PLATFORM_TOKEN`.
+3. امنح الصلاحية على الحساب مرة واحدة (Rails console):
+
    ```ruby
    PlatformAppPermissible.create!(platform_app: PlatformApp.find(1), permissible: Account.find(1))
    ```
 
-بهذا يستطيع التطبيق: إيجاد/إنشاء مستخدم Chatwoot لكل موظف عبر البريد، ثم توليد
-رابط SSO لمرة واحدة يفتح داخل الـ iframe دون تسجيل دخول ثانٍ.
-
 ---
 
-## 6) ترحيل البيانات التاريخية (بدون فقدان أي بيانات)
+## 8) ترحيل السجل التاريخي (بلا فقدان بيانات)
 
-> السكربت **يقرأ فقط** من قاعدة البيانات الحالية ولا يعدّلها أبداً.
+> السكربت **يقرأ فقط** من قاعدتنا ولا يعدّلها أو يحذفها.
 
 ```bash
 DATABASE_URL=<db-التطبيق> \
 CHATWOOT_URL=https://chatwoot.xxx.onrender.com \
 CHATWOOT_ACCOUNT_ID=1 \
 CHATWOOT_INBOX_ID=1 \
-CHATWOOT_API_TOKEN=<user-access-token-أدمن-Chatwoot> \
+CHATWOOT_API_TOKEN=<token> \
 node scripts/migrate-whatsapp-to-chatwoot.mjs
 ```
 
-السكربت ينشئ:
+ينشئ: جهات اتصال، محادثة لكل رقم، وكل الرسائل بطابعها الزمني واتجاهها،
+والمرفقات. الجداول الأصلية تبقى سليمة.
 
-- **جهات اتصال** (contacts) للموردين حسب رقم الهاتف.
-- **محادثة** (conversation) لكل رقم هاتف.
-- **رسائل** بالطابع الزمني والمحتوى والاتجاه الأصليين.
-- **مرفقات** من الميديا المخزّنة (bytea) على الرسائل.
-
-الجداول الأصلية تبقى سليمة كنسخة احتياطية للقراءة فقط.
+بعد الترحيل يعمل ردّ الوكيل على المحادثات القديمة أيضاً: لو لم يوجد صف ربط في
+`chatwoot_links` يُقرأ رقم الهاتف من Chatwoot نفسه.
 
 ---
 
-## 7) ما الذي تغيّر في واجهة المستخدم
+## 9) ما الذي يتغيّر في الواجهة
 
-- `/whatsapp` → تعرض Chatwoot داخل iframe (الواجهة الجديدة).
-- `/whatsapp-legacy` → صفحة الدردشة القديمة (للقراءة/المرجع).
-- شريط التنقل الجانبي يبقى كما هو (أيقونة «واتساب» تؤدي إلى `/whatsapp`).
+- `/whatsapp` → Chatwoot (مع تراجع تلقائي للصفحة المدمجة إن لم يُضبط).
+- `/whatsapp-legacy` → الصفحة المدمجة مباشرةً (مرجع/احتياطي).
+- شريط التنقّل كما هو.
+
+---
+
+## 10) فحوصات ما بعد النشر
+
+- `/api/healthz` = 200.
+- `/api/chatwoot/status` = 200 (أو 401 غير مسجّل الدخول).
+- `/api/webhook/chatwoot?token=wrong` لا يُرسل شيئاً (200 مع تجاهل).
+- أرسل رسالة تجريبية من رقم مورد وتأكّد من ظهورها في Chatwoot، ثم ردّ من
+  Chatwoot وتأكّد من وصولها للمورد وظهورها في `whatsapp_chats`.

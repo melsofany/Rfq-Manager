@@ -623,6 +623,20 @@ export async function initDb(): Promise<void> {
     await client.query(`
         ALTER TABLE whatsapp_media ADD COLUMN IF NOT EXISTS filename TEXT;
       `);
+
+    // Chatwoot console bridge: maps a phone number to its Chatwoot
+    // contact/conversation so agent replies land in the same thread.
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS chatwoot_links (
+          phone TEXT PRIMARY KEY,
+          contact_id INTEGER,
+          conversation_id INTEGER,
+          display_name TEXT,
+          supplier_id INTEGER,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
     // Migrate old RFQ status values to new unified status workflow (idempotent)
     await client.query(`
         UPDATE rfq SET status = 'DRAFT' WHERE status = 'draft';

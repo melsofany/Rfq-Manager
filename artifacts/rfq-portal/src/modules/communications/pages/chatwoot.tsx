@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
+import WhatsAppPage from "./index";
 
 /**
  * Chatwoot Inbox — يدمج واجهة Chatwoot داخل التطبيق عند مسار /whatsapp.
@@ -10,19 +11,35 @@ import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
  * داخل iframe يملأ المساحة المتاحة داخل قشرة التطبيق (Layout). المستخدم
  * يُسجَّل دخوله تلقائياً عبر SSO فلا حاجة لتسجيل دخول ثانٍ.
  *
- * تظل بيانات الـ WhatsApp القديمة محفوظة في قاعدة البيانات (للقراءة فقط)
- * ولا تُحذف — هذا المكوّن فقط يغيّر الواجهة المعروضة للمستخدم.
+ * Chatwoot صندوق وارد للوكلاء فقط: رسائل الواتساب تظل تمر عبر الـ webhook
+ * الخاص بنا (وهو ما يشغّل إرسال طلبات التسعير وأوامر الشراء وبوت المندوبين
+ * والمساعد الذكي)، ويتم نسخ المحادثات إلى Chatwoot للعرض والرد.
+ *
+ * لو Chatwoot غير مُعدّ (أو تعذّر الاتصال) نُعيد المستخدم تلقائياً إلى صفحة
+ * الدردشة الأصلية — فلا يفقد أحد إمكانية مراسلة الموردين أبداً.
  */
 export default function ChatwootInboxPage() {
   const { t } = useLanguage();
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [useLegacy, setUseLegacy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        // Check configuration first: an unconfigured deployment must render the
+        // built-in chat immediately, not a flash of an error screen.
+        const statusRes = await fetch("/api/chatwoot/status", { credentials: "include" });
+        const status = statusRes.ok
+          ? ((await statusRes.json()) as { configured?: boolean })
+          : { configured: false };
+        if (!status.configured) {
+          if (!cancelled) setUseLegacy(true);
+          return;
+        }
+
         const res = await fetch("/api/chatwoot/sso", { credentials: "include" });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -45,6 +62,9 @@ export default function ChatwootInboxPage() {
       cancelled = true;
     };
   }, []);
+
+  // Chatwoot unavailable → fall back to the proven built-in chat, never a dead end.
+  if (useLegacy) return <WhatsAppPage />;
 
   return (
     <Layout>
@@ -95,12 +115,20 @@ export default function ChatwootInboxPage() {
                   CHATWOOT_PLATFORM_TOKEN
                 </code>
               </p>
-              <button
-                onClick={() => window.location.reload()}
-                className="mt-2 px-4 py-1.5 text-xs bg-gray-800 text-white rounded-md hover:bg-gray-700"
-              >
-                إعادة المحاولة
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-2 px-4 py-1.5 text-xs bg-gray-800 text-white rounded-md hover:bg-gray-700"
+                >
+                  إعادة المحاولة
+                </button>
+                <button
+                  onClick={() => setUseLegacy(true)}
+                  className="mt-2 px-4 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                >
+                  فتح صندوق الدردشة المدمج
+                </button>
+              </div>
             </div>
           )}
 
